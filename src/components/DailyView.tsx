@@ -92,12 +92,22 @@ export function DailyView({ projectId }: { projectId?: number }) {
       <section className="rounded-lg border p-4">
         <div className="mb-2 flex items-center gap-2">
           <h2 className="text-sm font-medium">Summary</h2>
+          {data && data.activity.length === 0 && (
+            <span className="ml-auto text-xs text-muted-foreground">
+              nothing happened yet, so nothing to summarize
+            </span>
+          )}
           <Button
             variant="outline"
             size="xs"
-            className="ml-auto"
+            className={data?.activity.length ? 'ml-auto' : ''}
             onClick={() => generate.mutate()}
             disabled={generate.isPending || !data?.activity.length}
+            title={
+              data?.activity.length
+                ? 'Ask claude for a three-line summary of this day'
+                : 'No activity on this day yet'
+            }
           >
             <Sparkles data-icon="inline-start" />{' '}
             {generate.isPending ? 'Asking claude…' : 'Summarize with claude'}
