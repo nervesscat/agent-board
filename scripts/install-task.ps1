@@ -20,7 +20,12 @@
 .PARAMETER Interactive
   Register as "run only when user is logged on" (no password needed).
 #>
-param([switch]$Interactive)
+param(
+  [switch]$Interactive,
+  # The account the board runs as: yours, so the task sees your gh/claude logins. Carried into the
+  # elevated re-launch, which otherwise runs as whichever administrator approved the UAC prompt.
+  [string]$RunAs = "$env:USERDOMAIN\$env:USERNAME"
+)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -32,7 +37,7 @@ $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIden
   [Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $Interactive -and -not $isAdmin) {
   Write-Host 'Registering a task that runs without a logged-on user needs Administrator rights. Re-launching elevated...'
-  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoExit', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoExit', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-RunAs', "`"$RunAs`"")
   exit
 }
 
@@ -63,7 +68,7 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 }
 
-$user = "$env:USERDOMAIN\$env:USERNAME"
+$user = $RunAs
 if ($Interactive) {
   # An interactive task cannot start at boot (no session yet), so it starts the moment you log on.
   $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
@@ -71,7 +76,7 @@ if ($Interactive) {
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
 } else {
   $trigger = New-ScheduledTaskTrigger -AtStartup
-  $cred = Get-Credential -UserName $user -Message 'Windows password, so the task can run whether you are logged on or not'
+  $cred = Get-Credential -UserName $user -Message "Password for $user (the account the board runs as), so the task can run whether you are logged on or not"
   try {
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
       -User $cred.UserName -Password $cred.GetNetworkCredential().Password -RunLevel Limited -ErrorAction Stop | Out-Null
