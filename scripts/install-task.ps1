@@ -12,7 +12,8 @@
     - restarts itself up to 3 times if it dies; never stops for being "too long"
   Logs go to data\logs\board.out.log and board.err.log.
 
-  You will be prompted for your Windows password once: that is what lets the task run without
+  Needs an elevated shell (it re-launches itself as Administrator if not). You will be prompted for
+  your Windows password once: that is what lets the task run without
   an interactive session. If your account has no password, use -Interactive instead (then the
   task only runs while you are logged on).
 
@@ -26,11 +27,20 @@ $root = Split-Path -Parent $PSScriptRoot
 $taskName = 'AgentBoard'
 $node = (Get-Command node).Source
 
+# Storing a password with the task ("run whether user is logged on or not") needs an elevated shell.
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+  [Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $Interactive -and -not $isAdmin) {
+  Write-Host 'Registering a task that runs without a logged-on user needs Administrator rights. Re-launching elevated...'
+  Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoExit', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"")
+  exit
+}
+
 Push-Location $root
 try {
   if (-not (Test-Path '.env')) { Copy-Item '.env.example' '.env' }
-  Write-Host 'Building the production bundle…'
-  npm run build | Out-Null
+  Write-Host 'Building the production bundle...'
+  npm run build 2>&1 | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'npm run build failed' }
   New-Item -ItemType Directory -Force -Path (Join-Path $root 'data\logs') | Out-Null
 } finally { Pop-Location }
@@ -59,11 +69,15 @@ if ($Interactive) {
 } else {
   $trigger = New-ScheduledTaskTrigger -AtStartup
   $cred = Get-Credential -UserName $user -Message 'Windows password, so the task can run whether you are logged on or not'
-  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
-    -User $cred.UserName -Password $cred.GetNetworkCredential().Password -RunLevel Limited | Out-Null
+  try {
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
+      -User $cred.UserName -Password $cred.GetNetworkCredential().Password -RunLevel Limited -ErrorAction Stop | Out-Null
+  } catch {
+    throw "Register-ScheduledTask failed: $($_.Exception.Message) (wrong password, or the account lacks the 'Log on as a batch job' right)"
+  }
 }
 
-Start-ScheduledTask -TaskName $taskName
+Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
 Start-Sleep -Seconds 3
 $task = Get-ScheduledTask -TaskName $taskName
 Write-Host "Task '$taskName' registered ($($task.Principal.LogonType)) and started: $($task.State)"
