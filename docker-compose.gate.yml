@@ -1,0 +1,25 @@
+# A local passkey-gate for the board: plain http on localhost, no Traefik.
+# Build context is the sibling checkout of passkey-gate. Port 47110 on the host
+# so it never collides with a project you are running on 8000.
+#
+#   docker compose -f docker-compose.gate.yml up -d --build
+#   docker compose -f docker-compose.gate.yml logs gate    # first enrollment link
+#   docker compose -f docker-compose.gate.yml exec gate python -m gate enroll-link
+services:
+  gate:
+    build: ../passkey-gate
+    restart: unless-stopped
+    ports:
+      - '47110:8000'
+    volumes:
+      - gate_data:/data
+    environment:
+      - GATE_INSECURE=1
+      - GATE_DOMAIN=localhost
+      - GATE_HOST=localhost:47110
+      - GATE_USER=${GATE_USER:-me}
+      - GATE_SESSION_DAYS=${GATE_SESSION_DAYS:-90}
+      - TZ=${TZ:-America/Tegucigalpa}
+
+volumes:
+  gate_data:

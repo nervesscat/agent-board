@@ -1,0 +1,12 @@
+node_modules
+.output
+.nitro
+.tanstack
+.vite
+dist
+data/
+.env
+.env.local
+*.local
+.DS_Store
+__unconfig*
