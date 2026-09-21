@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
+import { BranchSelect } from '#/components/BranchSelect'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
 import {
@@ -122,12 +123,7 @@ function NewProject() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="base">Base branch</Label>
-            <Input
-              id="base"
-              value={baseBranch}
-              onChange={(e) => setBaseBranch(e.target.value)}
-              className="font-mono"
-            />
+            <BranchSelect id="base" value={baseBranch} onChange={setBaseBranch} repoPath={repoPath} />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>

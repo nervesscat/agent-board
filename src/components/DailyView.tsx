@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
+import { DatePicker } from '#/components/DatePicker'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
 import { Button } from '#/components/ui/button'
@@ -32,7 +33,8 @@ export function DailyView({ projectId }: { projectId?: number }) {
   const { data } = useQuery({
     queryKey: key,
     queryFn: () => get<DailyPayload>(`/api/daily?date=${date}${projectId ? `&projectId=${projectId}` : ''}`),
-    refetchInterval: 15_000,
+    // While claude is writing the summary, poll fast so it shows up as soon as it lands.
+    refetchInterval: (q) => (q.state.data?.generating ? 2_000 : 15_000),
   })
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const [body, setBody] = useState('')
@@ -46,9 +48,13 @@ export function DailyView({ projectId }: { projectId?: number }) {
   })
   const generate = useMutation({
     mutationFn: () => post('/api/daily/summaries/generate', { date, projectId: projectId ?? null }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['daily'] }),
+    onMutate: () =>
+      qc.setQueryData(key, (old: DailyPayload | undefined) => old && { ...old, generating: true }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['daily'] }),
     onError,
   })
+  // Server-side flag, so the state survives navigating away and back while claude is still writing.
+  const busy = generate.isPending || Boolean(data?.generating)
 
   const hours = new Map<string, DailyPayload['activity']>()
   for (const a of data?.activity ?? []) {
@@ -72,12 +78,7 @@ export function DailyView({ projectId }: { projectId?: number }) {
           <Button variant="ghost" size="icon-sm" onClick={() => setDate(shiftDate(date, -1))}>
             <ChevronLeft />
           </Button>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => e.target.value && setDate(e.target.value)}
-            className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
-          />
+          <DatePicker value={date} onChange={setDate} />
           <Button
             variant="ghost"
             size="icon-sm"
@@ -102,15 +103,14 @@ export function DailyView({ projectId }: { projectId?: number }) {
             size="xs"
             className={data?.activity.length ? 'ml-auto' : ''}
             onClick={() => generate.mutate()}
-            disabled={generate.isPending || !data?.activity.length}
+            disabled={busy || !data?.activity.length}
             title={
               data?.activity.length
                 ? 'Ask claude for a three-line summary of this day'
                 : 'No activity on this day yet'
             }
           >
-            <Sparkles data-icon="inline-start" />{' '}
-            {generate.isPending ? 'Asking claude…' : 'Summarize with claude'}
+            <Sparkles data-icon="inline-start" /> {busy ? 'Asking claude…' : 'Summarize with claude'}
           </Button>
         </div>
         {data?.summaries.length ? (

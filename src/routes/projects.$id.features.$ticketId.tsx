@@ -5,6 +5,8 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
+import { BranchSelect } from '#/components/BranchSelect'
+import { StatusSelect } from '#/components/StatusSelect'
 import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
@@ -24,8 +26,8 @@ import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { Input } from '#/components/ui/input'
+import { Label } from '#/components/ui/label'
 import { Textarea } from '#/components/ui/textarea'
-import { TICKET_STATUSES } from '#/lib/constants'
 import {
   del,
   errorMessage,
@@ -37,7 +39,7 @@ import {
   type TicketGit,
   type UpdateRow,
 } from '#/lib/api'
-import { STATUS_LABEL, ago, shortSha, stamp } from '#/lib/format'
+import { ago, shortSha, stamp } from '#/lib/format'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({ component: TicketPage })
 
@@ -103,17 +105,7 @@ function TicketPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={t.status}
-            onChange={(e) => update.mutate({ status: e.target.value })}
-            className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
-          >
-            {TICKET_STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
+          <StatusSelect value={t.status} onChange={(status) => update.mutate({ status })} />
           <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>
             <Pencil data-icon="inline-start" /> Edit
           </Button>
@@ -200,23 +192,23 @@ function EditTicket({
         placeholder="Instructions (markdown)"
       />
       <div className="grid gap-3 sm:grid-cols-3">
-        <Input
-          value={assignee}
-          onChange={(e) => setAssignee(e.target.value)}
-          placeholder="assignee (claude, codex…)"
-        />
-        <Input
-          value={branch}
-          onChange={(e) => setBranch(e.target.value)}
-          placeholder="branch"
-          className="font-mono"
-        />
-        <Input
-          value={baseBranch}
-          onChange={(e) => setBaseBranch(e.target.value)}
-          placeholder="base branch"
-          className="font-mono"
-        />
+        <div className="space-y-1">
+          <Label htmlFor="assignee">Assignee</Label>
+          <Input
+            id="assignee"
+            value={assignee}
+            onChange={(e) => setAssignee(e.target.value)}
+            placeholder="claude, codex…"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="branch">Branch</Label>
+          <BranchSelect id="branch" value={branch} onChange={setBranch} projectId={t.projectId} optional />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="base">Base branch</Label>
+          <BranchSelect id="base" value={baseBranch} onChange={setBaseBranch} projectId={t.projectId} />
+        </div>
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>

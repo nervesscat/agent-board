@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   Builds the production bundle, then registers task "AgentBoard":
-    - trigger: at system startup (plus you can start it by hand: Start-ScheduledTask AgentBoard)
+    - trigger: at system startup, or at your logon with -Interactive (Start-ScheduledTask AgentBoard starts it by hand)
     - action:  node --env-file-if-exists=.env .output/server/index.mjs, in this checkout
     - runs as: the current user, "run whether user is logged on or not", so `claude` and `gh`
                find this user's credentials
@@ -40,7 +40,6 @@ $logOut = Join-Path $root 'data\logs\board.out.log'
 $logErr = Join-Path $root 'data\logs\board.err.log'
 $cmdLine = "/c `"`"$node`" --env-file-if-exists=.env .output\server\index.mjs >> `"$logOut`" 2>> `"$logErr`"`""
 $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $cmdLine -WorkingDirectory $root
-$trigger = New-ScheduledTaskTrigger -AtStartup
 $settings = New-ScheduledTaskSettingsSet `
   -ExecutionTimeLimit ([TimeSpan]::Zero) `
   -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
@@ -53,9 +52,12 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
 
 $user = "$env:USERDOMAIN\$env:USERNAME"
 if ($Interactive) {
+  # An interactive task cannot start at boot (no session yet), so it starts the moment you log on.
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
   $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
 } else {
+  $trigger = New-ScheduledTaskTrigger -AtStartup
   $cred = Get-Credential -UserName $user -Message 'Windows password, so the task can run whether you are logged on or not'
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
     -User $cred.UserName -Password $cred.GetNetworkCredential().Password -RunLevel Limited | Out-Null

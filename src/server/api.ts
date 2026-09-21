@@ -5,7 +5,7 @@ import { COMMENT_PARENTS, TICKET_STATUSES } from '#/lib/constants'
 import { addSummary } from './activity'
 import { dailyReport, generateSummary, today } from './daily'
 import * as features from './features'
-import { listBranches } from './git'
+import { assertRepo, listBranches } from './git'
 import { HttpError, intParam, readJson } from './http'
 import { handleMcp } from './mcp'
 import * as prs from './prs'
@@ -68,6 +68,12 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
 api.delete('/api/projects/:id', ({ params, actor }) => {
   projects.deleteProject(id(params), actor)
   return json({ ok: true })
+})
+// Local branches of any checkout, so the new-project dialog can offer them before the project exists.
+api.get('/api/branches', async ({ url }) => {
+  const repoPath = url.searchParams.get('path') ?? ''
+  assertRepo(repoPath)
+  return json(await listBranches(repoPath))
 })
 api.get('/api/projects/:id/branches', async ({ params }) =>
   json(await listBranches(projects.getProject(id(params)).repoPath)),

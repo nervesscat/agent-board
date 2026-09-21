@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
+import { BranchSelect } from '#/components/BranchSelect'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -160,13 +161,7 @@ function NewTicket({ projectId }: { projectId: string }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="br">Branch (optional)</Label>
-            <Input
-              id="br"
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-              className="font-mono"
-              placeholder="feat/…"
-            />
+            <BranchSelect id="br" value={branch} onChange={setBranch} projectId={projectId} optional />
           </div>
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>

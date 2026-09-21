@@ -118,4 +118,5 @@ export interface DailyPayload {
   projects: { id: number; name: string }[]
   activity: (Activity & { project: string | null })[]
   summaries: DailySummary[]
+  generating: boolean
 }

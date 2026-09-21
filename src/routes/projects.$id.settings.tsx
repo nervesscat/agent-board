@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
+import { BranchSelect } from '#/components/BranchSelect'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
@@ -101,13 +102,7 @@ function Settings() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="b">Base branch</Label>
-          <Input
-            id="b"
-            value={baseBranch}
-            onChange={(e) => setBaseBranch(e.target.value)}
-            className="font-mono"
-            required
-          />
+          <BranchSelect id="b" value={baseBranch} onChange={setBaseBranch} projectId={id} />
         </div>
       </div>
       <div className="flex items-center gap-2">
