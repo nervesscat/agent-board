@@ -33,13 +33,31 @@ Add a project (name + path of a local checkout), open its PR queue, and you are 
 Agents: mint a token per agent on `http://localhost:47110/devices` and follow `AGENTS.md`
 (`claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer gate_…"`).
 
+## Running it from WSL (projects, git, gh and claude live there)
+
+Keep this checkout as the source of truth and run a clone inside the distro:
+
+```bash
+# inside WSL, once
+git clone /mnt/f/Programming/WebDev/agent-board ~/agent-board && cd ~/agent-board
+cp .env.example .env   # set CLAUDE_BIN=$HOME/.local/bin/claude and FEATURE_REVIEW_DIR=$HOME/.claude/feature-review
+npm install && npm run build
+curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh auth login` likewise
+```
+
+Project repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
+the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and the
+gate cookie work unchanged. After a change here: `git -C ~/agent-board pull && npm run build`, or
+re-run the task installer below, which does that.
+
 ## Run whether you are logged on or not
 
 The review schedules fire from inside the board process, so the board has to be up at 9am. On
 Windows:
 
 ```powershell
-scripts\install-task.ps1        # asks for your Windows password once; builds and registers "AgentBoard"
+scripts\install-task.ps1        # re-launches as Administrator, asks your Windows password once, builds + registers "AgentBoard"
+scripts\install-task.ps1 -Wsl kali-linux -WslPath /home/you/agent-board   # same, but the board runs inside WSL
 Get-ScheduledTask AgentBoard    # LogonType Password = runs with nobody logged on
 scripts\uninstall-task.ps1
 ```

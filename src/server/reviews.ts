@@ -205,7 +205,8 @@ export function entryBelongsTo(
   project: Pick<schema.Project, 'repoPath' | 'githubRepo'>,
 ): boolean {
   if (project.githubRepo && entry.repo.toLowerCase().includes(project.githubRepo.toLowerCase())) return true
-  const dir = path.basename(project.repoPath).toLowerCase()
+  // Both separators: a Windows checkout path may be matched from Linux and vice versa.
+  const dir = project.repoPath.split(/[\\/]/).filter(Boolean).pop()!.toLowerCase()
   return entry.path.toLowerCase().includes(`/${dir}-pr-`) || entry.path.toLowerCase().includes(`\\${dir}-pr-`)
 }
 
