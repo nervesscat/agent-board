@@ -40,9 +40,12 @@ Push-Location $root
 try {
   if (-not (Test-Path '.env')) { Copy-Item '.env.example' '.env' }
   Write-Host 'Building the production bundle...'
-  npm run build 2>&1 | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw 'npm run build failed' }
+  # cmd.exe swallows the bundler's stderr chatter; in PowerShell 5.1 a native stderr line under
+  # $ErrorActionPreference = 'Stop' would abort the script even though the build succeeded.
+  $buildLog = Join-Path $root 'data\logs\build.log'
   New-Item -ItemType Directory -Force -Path (Join-Path $root 'data\logs') | Out-Null
+  cmd.exe /c "npm run build > `"$buildLog`" 2>&1"
+  if ($LASTEXITCODE -ne 0) { throw "npm run build failed, see $buildLog" }
 } finally { Pop-Location }
 
 # cmd.exe does the log redirection; node itself is the process the task tracks.
