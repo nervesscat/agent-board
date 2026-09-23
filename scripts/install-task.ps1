@@ -109,6 +109,25 @@ if ($Interactive) {
   $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal | Out-Null
 } else {
+  # A stored-password task logs on as a batch job. Windows grants that right only to Administrators,
+  # Backup Operators and Performance Log Users, and registering the task does not add you: without it
+  # every run fails in LogonUserExEx with 0x80070569 and the task stays "has not yet run".
+  $sid = (New-Object Security.Principal.NTAccount $user).Translate([Security.Principal.SecurityIdentifier]).Value
+  $rights = Join-Path $env:TEMP 'agentboard-rights.inf'
+  secedit.exe /export /cfg $rights /areas USER_RIGHTS | Out-Null
+  $batch = Get-Content $rights | Where-Object { $_ -match '^SeBatchLogonRight\s*=' }
+  $deny = Get-Content $rights | Where-Object { $_ -match '^SeDenyBatchLogonRight\s*=' }
+  if ($deny -match "\*$sid\b") { throw "$user is listed under 'Deny log on as a batch job' (secpol.msc); remove it there first" }
+  if ($batch -notmatch "\*$sid\b") {
+    Write-Host "Granting $user 'Log on as a batch job'..."
+    $line = if ($batch) { "$batch,*$sid" } else { "SeBatchLogonRight = *$sid" }
+    @('[Unicode]', 'Unicode=yes', '[Version]', 'signature="$CHICAGO$"', 'Revision=1', '[Privilege Rights]', $line) |
+      Set-Content $rights -Encoding Unicode
+    secedit.exe /configure /db (Join-Path $env:TEMP 'agentboard-rights.sdb') /cfg $rights /areas USER_RIGHTS | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "could not grant 'Log on as a batch job' to $user, see $env:windir\security\logs\scesrv.log" }
+  }
+  Remove-Item $rights -ErrorAction SilentlyContinue
+
   $trigger = New-ScheduledTaskTrigger -AtStartup
   $cred = Get-Credential -UserName $user -Message "Password for $user (the account the board runs as), so the task can run whether you are logged on or not"
   try {
@@ -122,6 +141,11 @@ if ($Interactive) {
 Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
 Start-Sleep -Seconds 3
 $task = Get-ScheduledTask -TaskName $taskName
+# Start-ScheduledTask returns fine even when the logon fails; only the run record tells.
+$info = Get-ScheduledTaskInfo -TaskName $taskName
+if ($info.LastTaskResult -eq 267011) {
+  throw "Task '$taskName' was registered but did not start (logon failed). Enable Task Scheduler history (wevtutil sl Microsoft-Windows-TaskScheduler/Operational /e:true) and run Start-ScheduledTask $taskName to see why."
+}
 Write-Host "Task '$taskName' registered ($($task.Principal.LogonType)) and started: $($task.State)"
 Write-Host "Board: http://localhost:47100   Logs: $logOut"
 Write-Host "Later: Start-ScheduledTask $taskName / Stop-ScheduledTask $taskName / scripts\uninstall-task.ps1"

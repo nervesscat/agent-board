@@ -64,10 +64,14 @@ scripts\uninstall-task.ps1
 
 The task starts at boot, restarts on failure, and logs to `data\logs\board.*.log`. After a
 `git pull` or dependency change, re-run `install-task.ps1` (it rebuilds). Use `-Interactive` if
-your account has no password (then it only runs while you are logged on).
+your account has no password (then it only runs while you are logged on). A stored-password task
+logs on as a batch job, a right Windows gives only to administrators; the installer grants it to
+your account. If the task still shows `LastTaskResult 267011` ("has not yet run"), enable the
+Task Scheduler history and start it once to see the logon error.
 
-The gate must also be up: `docker compose … up -d` uses `restart: unless-stopped`, so it comes
-back with Docker Desktop.
+The gate only answers logins and agent tokens; scheduled reviews do not need it. It comes up with
+Docker Desktop at sign-in (`restart: unless-stopped`), so before anyone signs in the board runs
+its schedules but answers requests with 401.
 
 ## Reviews
 
