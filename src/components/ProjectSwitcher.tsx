@@ -1,8 +1,20 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
+import { Check, ChevronsUpDown, FolderGit2, Plus, Settings2, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -13,19 +25,13 @@ import {
   DialogTitle,
 } from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select'
-import { errorMessage, post, type Project } from '#/lib/api'
+import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
+import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
 import { useProjects } from '#/lib/project'
 
-const NEW = '__new__'
 const MODULES = ['prs', 'features', 'reviews', 'daily', 'settings'] as const
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /** The project everything below the top bar is about. Switching keeps you on the same module. */
 export function ProjectSwitcher() {
@@ -33,39 +39,81 @@ export function ProjectSwitcher() {
   const { id } = useParams({ strict: false }) as { id?: string }
   const { pathname } = useLocation()
   const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [managing, setManaging] = useState(false)
+  const current = projects?.find((p) => String(p.id) === id)
   const module = MODULES.find((m) => pathname.split('/')[3] === m) ?? 'prs'
   const go = (projectId: number | string) =>
     navigate({ to: `/projects/$id/${module}`, params: { id: String(projectId) } })
+  const item =
+    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground'
 
-  const items = Object.fromEntries([
-    ...(projects ?? []).map((p) => [String(p.id), p.name]),
-    [NEW, 'New project…'],
-  ])
   return (
     <>
-      <Select
-        value={id ?? null}
-        onValueChange={(v) => (v === NEW ? setCreating(true) : v && go(v as string))}
-        items={items}
-      >
-        <SelectTrigger size="sm" className="min-w-40" aria-label="Project">
-          <SelectValue placeholder="Select a project" />
-        </SelectTrigger>
-        <SelectContent alignItemWithTrigger={false} align="start">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger
+          render={<Button variant="outline" size="sm" className="min-w-44 justify-between font-normal" />}
+          aria-label="Project"
+        >
+          <span className={current ? 'truncate' : 'truncate text-muted-foreground'}>
+            {current?.name ?? 'Select a project'}
+          </span>
+          <ChevronsUpDown className="text-muted-foreground" />
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-64 gap-0 p-1">
+          {projects?.length ? (
+            <div className="px-2 pt-1 pb-1.5 text-xs font-medium text-muted-foreground">Projects</div>
+          ) : null}
           {projects?.map((p) => (
-            <SelectItem key={p.id} value={String(p.id)}>
-              {p.name}
-              <span className="text-xs text-muted-foreground">
-                {p.repos.length} repo{p.repos.length === 1 ? '' : 's'}
+            <button
+              key={p.id}
+              type="button"
+              className={item}
+              onClick={() => {
+                setOpen(false)
+                go(p.id)
+              }}
+            >
+              <Check className={`size-4 shrink-0 ${p.id === current?.id ? '' : 'invisible'}`} />
+              <span className="truncate">{p.name}</span>
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+                {plural(p.repos.length, 'repo')}
               </span>
-            </SelectItem>
+            </button>
           ))}
-          {projects?.length ? <SelectSeparator /> : null}
-          <SelectItem value={NEW}>New project…</SelectItem>
-        </SelectContent>
-      </Select>
+          {projects?.length ? <div className="-mx-1 my-1 h-px bg-border" /> : null}
+          <button
+            type="button"
+            className={item}
+            onClick={() => {
+              setOpen(false)
+              setCreating(true)
+            }}
+          >
+            <Plus className="size-4 shrink-0" /> New project…
+          </button>
+          {projects?.length ? (
+            <button
+              type="button"
+              className={item}
+              onClick={() => {
+                setOpen(false)
+                setManaging(true)
+              }}
+            >
+              <Settings2 className="size-4 shrink-0" /> Manage projects…
+            </button>
+          ) : null}
+        </PopoverContent>
+      </Popover>
       <NewProject open={creating} onOpenChange={setCreating} onCreated={(p) => go(p.id)} />
+      <ManageProjects
+        open={managing}
+        onOpenChange={setManaging}
+        projects={projects ?? []}
+        onDeleted={(p) => p.id === current?.id && navigate({ to: '/' })}
+      />
     </>
   )
 }
@@ -122,5 +170,125 @@ function NewProject({
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Rename and delete projects in one place. Repos are added and moved on the Repositories page. */
+function ManageProjects({
+  open,
+  onOpenChange,
+  projects,
+  onDeleted,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  projects: ProjectRow[]
+  onDeleted: (p: ProjectRow) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Projects</DialogTitle>
+          <DialogDescription>
+            Rename or delete a project. Add, move or remove its repos on the Repositories page.
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="max-h-[60vh] divide-y overflow-y-auto rounded-md border">
+          {projects.map((p) => (
+            <ProjectRowEditor key={p.id} p={p} onDeleted={() => onDeleted(p)} />
+          ))}
+        </ul>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => void }) {
+  const qc = useQueryClient()
+  const [name, setName] = useState(p.name)
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['projects'] })
+    qc.invalidateQueries({ queryKey: ['project', String(p.id)] })
+  }
+  const onError = (err: unknown) => toast.error(errorMessage(err))
+  const rename = useMutation({
+    mutationFn: () => patch(`/api/projects/${p.id}`, { name }),
+    onSuccess: () => {
+      refresh()
+      toast.success(`Renamed to ${name}`)
+    },
+    onError,
+  })
+  const remove = useMutation({
+    mutationFn: () => del(`/api/projects/${p.id}`),
+    onSuccess: () => {
+      refresh()
+      qc.invalidateQueries({ queryKey: ['repos'] })
+      onDeleted()
+    },
+    onError,
+  })
+  const goes = [
+    plural(p.repos.length, 'repo'),
+    plural(p.counts.tickets, 'ticket'),
+    plural(p.counts.openPrs, 'open PR'),
+  ].join(', ')
+
+  return (
+    <li className="space-y-1.5 p-3">
+      <form
+        className="flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (name.trim() && name !== p.name) rename.mutate()
+        }}
+      >
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="h-8"
+          aria-label={`Name of ${p.name}`}
+          required
+        />
+        <Button type="submit" size="sm" variant="outline" disabled={!name.trim() || name === p.name}>
+          Rename
+        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger
+            render={<Button type="button" variant="ghost" size="icon-sm" title={`Delete ${p.name}`} />}
+          >
+            <Trash2 className="text-destructive" />
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {p.name}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Goes with it: {goes}, and its reviews, schedules and daily log. The checkouts on disk are
+                untouched. To keep a repo, move it to another project first.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep</AlertDialogCancel>
+              <AlertDialogAction onClick={() => remove.mutate()}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </form>
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+        {p.repos.length ? (
+          p.repos.map((r) => (
+            <span key={r.id} className="inline-flex items-center gap-1 font-mono" title={r.repoPath}>
+              <FolderGit2 className="size-3" /> {r.name}
+            </span>
+          ))
+        ) : (
+          <span>no repos</span>
+        )}
+        <span className="ml-auto">
+          {plural(p.counts.tickets, 'ticket')} · {plural(p.counts.openPrs, 'open PR')}
+        </span>
+      </div>
+    </li>
   )
 }

@@ -16,11 +16,16 @@ import type {
 } from '#/db/schema'
 import type { TicketFull } from '#/server/features'
 import type { BranchInfo, Worktree } from '#/server/git'
-import type { ProjectFull } from '#/server/projects'
+import type { DirListing } from '#/server/fs'
+import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
+/** A row of `/api/projects`: the project, its repos, and how many tickets and open PRs it holds. */
+export type ProjectRow = ReturnType<typeof listProjects>[number]
+
+export type { DirListing }
 
 export type {
   Attachment,

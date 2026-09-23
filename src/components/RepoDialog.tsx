@@ -1,8 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { FolderOpen } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
 import { BranchSelect } from '#/components/BranchSelect'
+import { FolderPicker } from '#/components/FolderPicker'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +52,7 @@ export function RepoDialog({
   const [name, setName] = useState('')
   const [repoPath, setRepoPath] = useState('')
   const [baseBranch, setBaseBranch] = useState('main')
+  const [browsing, setBrowsing] = useState(false)
   useEffect(() => {
     if (!open) return
     setProjectId(String(repo?.projectId ?? defaultProjectId ?? projects?.[0]?.id ?? NEW))
@@ -136,14 +139,19 @@ export function RepoDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="path">Repository path</Label>
-            <Input
-              id="path"
-              value={repoPath}
-              onChange={(e) => setRepoPath(e.target.value)}
-              placeholder="/home/you/code/… or F:\Programming\…"
-              required
-              className="font-mono"
-            />
+            <div className="flex gap-2">
+              <Input
+                id="path"
+                value={repoPath}
+                onChange={(e) => setRepoPath(e.target.value)}
+                placeholder="/home/you/code/… or F:\Programming\…"
+                required
+                className="font-mono"
+              />
+              <Button type="button" variant="outline" onClick={() => setBrowsing(true)}>
+                <FolderOpen data-icon="inline-start" /> Browse…
+              </Button>
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -194,6 +202,13 @@ export function RepoDialog({
             </Button>
           </DialogFooter>
         </form>
+        <FolderPicker
+          open={browsing}
+          onOpenChange={setBrowsing}
+          // Start next to the current checkout, so picking a sibling repo is one click.
+          start={repoPath ? repoPath.replace(/[\\/]+[^\\/]*[\\/]*$/, '') || undefined : undefined}
+          onPick={setRepoPath}
+        />
       </DialogContent>
     </Dialog>
   )

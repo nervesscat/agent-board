@@ -1,25 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
 import { FolderGit2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
-import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Textarea } from '#/components/ui/textarea'
-import { del, errorMessage, patch } from '#/lib/api'
+import { errorMessage, patch } from '#/lib/api'
 import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id/settings')({ component: Settings })
@@ -27,29 +15,17 @@ export const Route = createFileRoute('/projects/$id/settings')({ component: Sett
 function Settings() {
   const { id } = Route.useParams()
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const { data: p } = useProject(id)
-  const [name, setName] = useState('')
   const [instructions, setInstructions] = useState('')
   useEffect(() => {
-    if (!p) return
-    setName(p.name)
-    setInstructions(p.instructions)
+    if (p) setInstructions(p.instructions)
   }, [p])
   const save = useMutation({
-    mutationFn: () => patch(`/api/projects/${id}`, { name, instructions }),
+    mutationFn: () => patch(`/api/projects/${id}`, { instructions }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project', id] })
       qc.invalidateQueries({ queryKey: ['projects'] })
       toast.success('Saved')
-    },
-    onError: (err) => toast.error(errorMessage(err)),
-  })
-  const remove = useMutation({
-    mutationFn: () => del(`/api/projects/${id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['projects'] })
-      navigate({ to: '/' })
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -79,52 +55,31 @@ function Settings() {
           className="font-mono text-xs"
         />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="n">Name</Label>
-          <Input id="n" value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label>Repositories</Label>
-          <ul className="space-y-1 text-sm">
+      <div className="flex items-start gap-4">
+        <Button type="submit" disabled={save.isPending || instructions === p.instructions}>
+          Save
+        </Button>
+        <div className="ml-auto space-y-1 text-right text-sm">
+          <ul className="space-y-0.5">
             {p.repos.map((r) => (
-              <li key={r.id} className="flex items-center gap-1.5 truncate" title={r.repoPath}>
-                <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" /> {r.name}
-                <span className="truncate font-mono text-xs text-muted-foreground">
-                  {r.githubRepo ?? r.repoPath}
-                </span>
+              <li
+                key={r.id}
+                className="flex items-center justify-end gap-1.5 text-muted-foreground"
+                title={r.repoPath}
+              >
+                <FolderGit2 className="size-3.5 shrink-0" />
+                <span className="font-mono text-xs">{r.githubRepo ?? r.repoPath}</span>
               </li>
             ))}
           </ul>
-          <Link to="/" className="text-xs text-muted-foreground underline hover:text-foreground">
-            Add, move or remove repos on the Repositories page
-          </Link>
+          <p className="text-xs text-muted-foreground">
+            Repos:{' '}
+            <Link to="/" className="underline hover:text-foreground">
+              Repositories page
+            </Link>
+            . Rename or delete the project: project menu → Manage projects.
+          </p>
         </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button type="submit" disabled={save.isPending}>
-          Save
-        </Button>
-        <AlertDialog>
-          <AlertDialogTrigger
-            render={<Button type="button" variant="ghost" className="ml-auto text-destructive" />}
-          >
-            Delete project
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete {p.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                Its repos, and every ticket, PR note, review and activity line of this project go with it. The
-                checkouts on disk are untouched.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Keep</AlertDialogCancel>
-              <AlertDialogAction onClick={() => remove.mutate()}>Delete</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </form>
   )

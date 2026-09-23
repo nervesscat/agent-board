@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { get, type Project } from '#/lib/api'
+import { get, type Project, type ProjectRow } from '#/lib/api'
 
 export const useProjects = () =>
-  useQuery({ queryKey: ['projects'], queryFn: () => get<Project[]>('/api/projects') })
+  useQuery({ queryKey: ['projects'], queryFn: () => get<ProjectRow[]>('/api/projects') })
 
 /** The project with its repos; every module of a project reads repo names from here. */
 export const useProject = (id: string | number) =>

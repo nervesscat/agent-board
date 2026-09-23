@@ -5,6 +5,7 @@ import { COMMENT_PARENTS, TICKET_STATUSES } from '#/lib/constants'
 import { addSummary } from './activity'
 import { dailyReport, generateSummary, today } from './daily'
 import * as features from './features'
+import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { HttpError, intParam, readJson } from './http'
 import { handleMcp } from './mcp'
@@ -102,6 +103,8 @@ api.get('/api/branches', async ({ url }) => {
 api.get('/api/repos/:id/branches', async ({ params }) =>
   json(await listBranches(repos.getRepo(id(params)).repoPath)),
 )
+// Subfolders of a folder on the board's machine (default: home), for the repo path picker.
+api.get('/api/fs/dirs', ({ url }) => json(listDirs(url.searchParams.get('path') ?? undefined)))
 
 // --- PR queue ---
 api.get('/api/projects/:id/prs', async ({ params, url }) =>

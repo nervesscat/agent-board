@@ -1,19 +1,35 @@
-import { asc, eq } from 'drizzle-orm'
+import { asc, count, eq, type SQL } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import { notFound } from './http'
 import { listRepos } from './repos'
 
-/** Projects with their repos, for the top-bar selector and agents' `list_projects`. */
+/** Projects with their repos and what they hold, for the top-bar menu and agents' `list_projects`. */
 export function listProjects() {
   const repos = listRepos()
+  const tickets = countBy(schema.tickets.projectId, schema.tickets)
+  const prs = countBy(schema.prs.projectId, schema.prs, eq(schema.prs.open, true))
   return db
     .select()
     .from(schema.projects)
     .orderBy(asc(schema.projects.name))
     .all()
-    .map((p) => ({ ...p, repos: repos.filter((r) => r.projectId === p.id) }))
+    .map((p) => ({
+      ...p,
+      repos: repos.filter((r) => r.projectId === p.id),
+      counts: { tickets: tickets.get(p.id) ?? 0, openPrs: prs.get(p.id) ?? 0 },
+    }))
+}
+
+function countBy(
+  column: typeof schema.tickets.projectId | typeof schema.prs.projectId,
+  table: typeof schema.tickets | typeof schema.prs,
+  where?: SQL,
+) {
+  const q = db.select({ projectId: column, n: count() }).from(table)
+  const rows = (where ? q.where(where) : q).groupBy(column).all()
+  return new Map(rows.map((r) => [r.projectId, r.n]))
 }
 
 export function getProject(id: number) {
