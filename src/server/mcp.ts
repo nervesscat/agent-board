@@ -30,8 +30,25 @@ const fail = (err: unknown) => ({
   ],
 })
 
+/** Sent to every client on connect, so agents in any repo know the rhythm without reading AGENTS.md. */
+const INSTRUCTIONS = `The board is where the human and every agent coordinate work. You read work from it and report back to it. Git and GitHub are read-only through the board: never push, merge, approve or comment on GitHub on its behalf.
+
+Work only in the project of the repo you are in, and never read or write another project's tickets, PRs, reviews or daily log. If a board skill or the repo's own instructions name your projectId, use it directly. Only otherwise, call list_projects once and pick the project whose repos include yours (match the GitHub slug from git remote get-url origin, then the folder name; the board may list Linux paths while you are on Windows); if none does, do not use the board for this repo.
+
+The rhythm:
+1. get_project before touching it; its instructions override your defaults.
+2. Pick up work from list_tickets (todo, unassigned or assigned to you); read it with get_ticket; then update_ticket with assignee = your name (whoami), status in_progress, and the branch.
+3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each.
+4. add_workspace for each worktree, sub-branch or subagent; remove_workspace when it is gone.
+5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files.
+6. Ask and answer in threads with comment; check list_comments on your ticket when you resume.
+7. Hand off: final post_update with the PR link, then update_ticket to review. done is the human's call.
+8. End of session: post_daily_summary, at most three short lines.
+
+When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.`
+
 function buildServer(actor: string) {
-  const server = new McpServer({ name: 'agent-board', version: '0.1.0' })
+  const server = new McpServer({ name: 'agent-board', version: '0.1.0' }, { instructions: INSTRUCTIONS })
   const tool = <S extends z.ZodRawShape>(
     name: string,
     description: string,

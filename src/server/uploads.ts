@@ -48,8 +48,19 @@ export function saveUpload(file: File, actor: string) {
     .then((buf) => store(file.name, file.type || mimeFor(file.name), Buffer.from(buf), actor))
 }
 
+/**
+ * An agent on Windows hands over `C:\…` paths; a board running inside WSL reads that file at
+ * `/mnt/c/…`. Other paths pass through unchanged.
+ */
+export function localPath(p: string, platform: NodeJS.Platform = process.platform): string {
+  const m = /^([a-zA-Z]):[\\/](.*)$/.exec(p)
+  if (platform === 'win32' || !m) return p
+  return `/mnt/${m[1]!.toLowerCase()}/${m[2]!.replace(/\\/g, '/')}`
+}
+
 /** Agents run on this machine, so they can hand over a path instead of streaming the bytes. */
-export function saveFromPath(filePath: string, actor: string) {
+export function saveFromPath(given: string, actor: string) {
+  const filePath = localPath(given)
   if (!path.isAbsolute(filePath)) throw new HttpError(400, 'path must be absolute')
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile())
     throw new HttpError(400, `${filePath} is not a file`)
