@@ -21,8 +21,8 @@ import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Textarea } from '#/components/ui/textarea'
-import { TICKET_STATUSES } from '#/lib/constants'
-import { errorMessage, get, post, type Ticket, type TicketRow } from '#/lib/api'
+import { TICKET_STATUSES, type TicketStatus } from '#/lib/constants'
+import { errorMessage, get, patch, post, type Ticket, type TicketRow } from '#/lib/api'
 import { STATUS_LABEL, ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 
@@ -31,11 +31,43 @@ export const Route = createFileRoute('/projects/$id/features/')({ component: Fea
 function Features() {
   const { id } = Route.useParams()
   const { data: project } = useProject(id)
+  const qc = useQueryClient()
+  const key = ['tickets', id]
   const { data, isLoading } = useQuery({
-    queryKey: ['tickets', id],
+    queryKey: key,
     queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets`),
     refetchInterval: 10_000,
   })
+  // Drag a card onto another column to change its status. The card moves at once; a failed save
+  // puts it back.
+  const [dragging, setDragging] = useState<number | null>(null)
+  const [over, setOver] = useState<TicketStatus | null>(null)
+  const move = useMutation({
+    mutationFn: (v: { ticketId: number; status: TicketStatus }) =>
+      patch(`/api/tickets/${v.ticketId}`, { status: v.status }),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: key })
+      const before = qc.getQueryData<TicketRow[]>(key)
+      qc.setQueryData<TicketRow[]>(key, (rows) =>
+        rows?.map((t) => (t.id === v.ticketId ? { ...t, status: v.status } : t)),
+      )
+      return { before }
+    },
+    onError: (err, _v, ctx) => {
+      qc.setQueryData(key, ctx?.before)
+      toast.error(errorMessage(err))
+    },
+    onSettled: (_d, _e, v) => {
+      qc.invalidateQueries({ queryKey: key })
+      qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
+    },
+  })
+  const drop = (status: TicketStatus) => {
+    const t = data?.find((x) => x.id === dragging)
+    if (t && t.status !== status) move.mutate({ ticketId: t.id, status })
+    setDragging(null)
+    setOver(null)
+  }
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -43,6 +75,7 @@ function Features() {
           <h1 className="text-xl font-semibold tracking-tight">Ongoing features</h1>
           <p className="text-sm text-muted-foreground">
             Tickets agents pick up. Each one carries its todo list, branch, workspaces, updates and a thread.
+            Drag a card to another column to change its status.
           </p>
         </div>
         <NewTicket projectId={id} />
@@ -54,17 +87,50 @@ function Features() {
           {TICKET_STATUSES.map((status) => {
             const items = data?.filter((t) => t.status === status) ?? []
             return (
-              <div key={status} className="rounded-lg bg-muted/40 p-2">
+              <div
+                key={status}
+                onDragOver={(e) => {
+                  if (dragging === null) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (over !== status) setOver(status)
+                }}
+                onDragLeave={(e) => {
+                  // Leaving for a card inside the same column is not leaving the column.
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  drop(status)
+                }}
+                className={`rounded-lg bg-muted/40 p-2 transition-colors ${
+                  over === status && data?.find((x) => x.id === dragging)?.status !== status
+                    ? 'bg-primary/10 ring-2 ring-primary/40'
+                    : ''
+                }`}
+              >
                 <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   {STATUS_LABEL[status]} <span className="tabular-nums">{items.length}</span>
                 </div>
-                <div className="space-y-2">
+                <div className="min-h-16 space-y-2">
                   {items.map((t) => (
                     <Link
                       key={t.id}
                       to="/projects/$id/features/$ticketId"
                       params={{ id, ticketId: String(t.id) }}
-                      className="block rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
+                        setDragging(t.id)
+                      }}
+                      onDragEnd={() => {
+                        setDragging(null)
+                        setOver(null)
+                      }}
+                      className={`block cursor-grab rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
+                        dragging === t.id ? 'opacity-40' : ''
+                      }`}
                     >
                       <div className="font-medium leading-snug">
                         <span className="text-muted-foreground">#{t.id}</span> {t.title}
