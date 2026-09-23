@@ -10,6 +10,7 @@ import { HttpError, intParam, readJson } from './http'
 import { handleMcp } from './mcp'
 import * as prs from './prs'
 import * as projects from './projects'
+import * as repos from './repos'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as uploads from './uploads'
@@ -25,6 +26,7 @@ const TicketPatch = z.object({
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
+  repoId: z.number().int().optional(),
 })
 const ScheduleBody = z.object({
   time: z.string().regex(/^\d{2}:\d{2}$/, 'HH:MM'),
@@ -43,25 +45,15 @@ api.get('/api/projects', () => json(projects.listProjects()))
 api.post('/api/projects', async ({ request, actor }) => {
   const body = await readJson(
     request,
-    z.object({
-      name: z.string().min(1).max(100),
-      repoPath: z.string().min(1),
-      baseBranch: z.string().max(200).optional(),
-      instructions: Instructions.optional(),
-    }),
+    z.object({ name: z.string().min(1).max(100), instructions: Instructions.optional() }),
   )
-  return json(await projects.createProject(body, actor), 201)
+  return json(projects.createProject(body, actor), 201)
 })
-api.get('/api/projects/:id', ({ params }) => json(projects.getProject(id(params))))
+api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
 api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({
-      name: z.string().min(1).max(100).optional(),
-      repoPath: z.string().min(1).optional(),
-      baseBranch: z.string().max(200).optional(),
-      instructions: Instructions.optional(),
-    }),
+    z.object({ name: z.string().min(1).max(100).optional(), instructions: Instructions.optional() }),
   )
   return json(projects.updateProject(id(params), body, actor))
 })
@@ -69,14 +61,46 @@ api.delete('/api/projects/:id', ({ params, actor }) => {
   projects.deleteProject(id(params), actor)
   return json({ ok: true })
 })
-// Local branches of any checkout, so the new-project dialog can offer them before the project exists.
+
+// --- repos ---
+api.get('/api/repos', () => json(repos.listRepos()))
+api.post('/api/repos', async ({ request, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      projectId: z.number().int().optional(),
+      projectName: z.string().min(1).max(100).optional(),
+      name: z.string().max(100).optional(),
+      repoPath: z.string().min(1),
+      baseBranch: z.string().max(200).optional(),
+    }),
+  )
+  return json(await repos.createRepo(body, actor), 201)
+})
+api.patch('/api/repos/:id', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      projectId: z.number().int().optional(),
+      name: z.string().min(1).max(100).optional(),
+      repoPath: z.string().min(1).optional(),
+      baseBranch: z.string().max(200).optional(),
+    }),
+  )
+  return json(await repos.updateRepo(id(params), body, actor))
+})
+api.delete('/api/repos/:id', ({ params, actor }) => {
+  repos.deleteRepo(id(params), actor)
+  return json({ ok: true })
+})
+// Local branches of any checkout, so the new-repo dialog can offer them before the repo is registered.
 api.get('/api/branches', async ({ url }) => {
   const repoPath = url.searchParams.get('path') ?? ''
   assertRepo(repoPath)
   return json(await listBranches(repoPath))
 })
-api.get('/api/projects/:id/branches', async ({ params }) =>
-  json(await listBranches(projects.getProject(id(params)).repoPath)),
+api.get('/api/repos/:id/branches', async ({ params }) =>
+  json(await listBranches(repos.getRepo(id(params)).repoPath)),
 )
 
 // --- PR queue ---
@@ -239,6 +263,7 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
       summaryMd: z.string().max(100_000),
       checks: z.record(z.string(), z.string()).optional(),
       counts: z.record(z.string(), z.number()).optional(),
+      repoId: z.number().int().optional(),
     }),
   )
   return json(reviews.postResult(id(params), body, actor), 201)

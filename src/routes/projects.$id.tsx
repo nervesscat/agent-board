@@ -1,8 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
 import { Link, Outlet, createFileRoute } from '@tanstack/react-router'
-import { CalendarDays, GitPullRequest, KanbanSquare, Settings, ShieldCheck } from 'lucide-react'
+import { CalendarDays, FolderGit2, GitPullRequest, KanbanSquare, Settings, ShieldCheck } from 'lucide-react'
 
-import { get, type Project } from '#/lib/api'
+import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
 
@@ -14,22 +13,33 @@ const MODULES = [
   { to: '/projects/$id/settings', label: 'Instructions', icon: Settings },
 ] as const
 
-export function useProject() {
-  const { id } = Route.useParams()
-  return useQuery({ queryKey: ['project', id], queryFn: () => get<Project>(`/api/projects/${id}`) })
-}
-
 function ProjectLayout() {
   const { id } = Route.useParams()
-  const { data: project } = useProject()
+  const { data: project } = useProject(id)
   return (
     <div className="flex flex-col gap-6 md:flex-row">
       <aside className="md:w-52 md:shrink-0">
         <div className="mb-3 px-2">
           <div className="truncate font-semibold">{project?.name ?? '…'}</div>
-          <div className="truncate font-mono text-xs text-muted-foreground">
-            {project?.githubRepo ?? project?.repoPath}
-          </div>
+          <ul className="mt-1 space-y-0.5">
+            {project?.repos.map((r) => (
+              <li
+                key={r.id}
+                className="flex items-center gap-1.5 truncate font-mono text-xs text-muted-foreground"
+                title={r.repoPath}
+              >
+                <FolderGit2 className="size-3 shrink-0" /> {r.githubRepo ?? r.name}
+              </li>
+            ))}
+            {project && !project.repos.length && (
+              <li className="text-xs text-muted-foreground">
+                No repos yet.{' '}
+                <Link to="/" className="underline">
+                  Add one
+                </Link>
+              </li>
+            )}
+          </ul>
         </div>
         <nav className="flex gap-1 overflow-x-auto md:flex-col">
           {MODULES.map((m) => (

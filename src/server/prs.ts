@@ -5,6 +5,7 @@ import { logActivity } from './activity'
 import { currentGithubLogin, listMyPrs } from './git'
 import { notFound } from './http'
 import { getProject } from './projects'
+import { listRepos } from './repos'
 
 export type PrStatus = 'pending' | 'reviewed' | 'on_hold'
 
@@ -16,10 +17,26 @@ export function prStatus(pr: Pick<schema.Pr, 'hold' | 'myReview'>): PrStatus {
 const REFRESH_MS = 5 * 60_000
 const lastRefresh = new Map<number, number>()
 
-/** Pull the PRs assigned to me from GitHub and upsert the snapshot; board-side fields (hold) are kept. */
+/**
+ * Every repo of the project, refreshed side by side; the queue is their union. A repo gh cannot see
+ * (no GitHub remote) is skipped, and one failing repo does not hide the others' PRs.
+ */
 export async function refreshPrs(projectId: number) {
-  const project = getProject(projectId)
-  const [ghPrs, me] = await Promise.all([listMyPrs(project.repoPath), currentGithubLogin(project.repoPath)])
+  getProject(projectId)
+  const repos = listRepos(projectId).filter((r) => r.githubRepo)
+  const results = await Promise.allSettled(repos.map((r) => refreshRepoPrs(r)))
+  const failed = results.flatMap((r, i) =>
+    r.status === 'rejected' ? [{ repo: repos[i]!, err: r.reason }] : [],
+  )
+  for (const f of failed) console.error(`PR refresh failed for ${f.repo.name}:`, f.err)
+  if (repos.length && failed.length === repos.length) throw failed[0]!.err
+  lastRefresh.set(projectId, Date.now())
+}
+
+/** Pull the PRs assigned to me from GitHub and upsert the snapshot; board-side fields (hold) are kept. */
+async function refreshRepoPrs(repo: schema.Repo) {
+  const { projectId } = repo
+  const [ghPrs, me] = await Promise.all([listMyPrs(repo.repoPath), currentGithubLogin(repo.repoPath)])
   const fetchedAt = new Date().toISOString()
   const seen = new Set<number>()
   for (const pr of ghPrs) {
@@ -45,25 +62,28 @@ export async function refreshPrs(projectId: number) {
     const existing = db
       .select({ id: schema.prs.id })
       .from(schema.prs)
-      .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.number, pr.number)))
+      .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.number, pr.number)))
       .get()
-    if (existing) db.update(schema.prs).set(values).where(eq(schema.prs.id, existing.id)).run()
+    if (existing)
+      db.update(schema.prs)
+        .set({ ...values, projectId })
+        .where(eq(schema.prs.id, existing.id))
+        .run()
     else
       db.insert(schema.prs)
-        .values({ ...values, projectId, number: pr.number })
+        .values({ ...values, projectId, repoId: repo.id, number: pr.number })
         .run()
   }
   // A PR that left both searches was merged, closed, or unassigned: keep the row, mark it closed.
   const open = db
     .select()
     .from(schema.prs)
-    .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true)))
+    .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.open, true)))
     .all()
   for (const row of open) {
     if (!seen.has(row.number))
       db.update(schema.prs).set({ open: false, fetchedAt }).where(eq(schema.prs.id, row.id)).run()
   }
-  lastRefresh.set(projectId, Date.now())
 }
 
 export async function listPrs(projectId: number, opts: { refresh?: boolean } = {}) {
@@ -82,10 +102,13 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
     .where(eq(schema.reviewResults.projectId, projectId))
     .orderBy(desc(schema.reviewResults.createdAt))
     .all()
+  const repos = listRepos(projectId)
   return rows.map((pr) => {
-    const r = results.find((x) => x.prNumber === pr.number)
+    // PR numbers repeat across repos; an agent-posted result without a repo counts for any of them.
+    const r = results.find((x) => x.prNumber === pr.number && (x.repoId ?? pr.repoId) === pr.repoId)
     return {
       ...pr,
+      repo: repos.find((x) => x.id === pr.repoId)?.name ?? null,
       status: prStatus(pr),
       latestReview: r
         ? { id: r.id, verdict: r.verdict, sha: r.sha, fresh: r.sha === pr.headSha, createdAt: r.createdAt }

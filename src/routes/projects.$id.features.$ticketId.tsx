@@ -27,6 +27,7 @@ import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Textarea } from '#/components/ui/textarea'
 import {
   del,
@@ -40,6 +41,7 @@ import {
   type UpdateRow,
 } from '#/lib/api'
 import { ago, shortSha, stamp } from '#/lib/format'
+import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({ component: TicketPage })
 
@@ -176,12 +178,15 @@ function EditTicket({
   const [assignee, setAssignee] = useState(t.assignee)
   const [branch, setBranch] = useState(t.branch)
   const [baseBranch, setBaseBranch] = useState(t.baseBranch)
+  const { data: project } = useProject(t.projectId)
+  const repos = project?.repos ?? []
+  const [repoId, setRepoId] = useState(String(t.repoId ?? repos[0]?.id ?? ''))
   return (
     <form
       className="space-y-3 rounded-lg border p-4"
       onSubmit={(e) => {
         e.preventDefault()
-        onSave({ title, body, assignee, branch, baseBranch })
+        onSave({ title, body, assignee, branch, baseBranch, ...(repoId ? { repoId: Number(repoId) } : {}) })
       }}
     >
       <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
@@ -191,7 +196,27 @@ function EditTicket({
         rows={10}
         placeholder="Instructions (markdown)"
       />
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <div className="space-y-1">
+          <Label htmlFor="repo">Repository</Label>
+          <Select
+            value={repoId}
+            onValueChange={(v) => setRepoId(v as string)}
+            items={Object.fromEntries(repos.map((r) => [String(r.id), r.name]))}
+            disabled={repos.length < 2}
+          >
+            <SelectTrigger id="repo" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {repos.map((r) => (
+                <SelectItem key={r.id} value={String(r.id)}>
+                  {r.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="space-y-1">
           <Label htmlFor="assignee">Assignee</Label>
           <Input
@@ -203,11 +228,11 @@ function EditTicket({
         </div>
         <div className="space-y-1">
           <Label htmlFor="branch">Branch</Label>
-          <BranchSelect id="branch" value={branch} onChange={setBranch} projectId={t.projectId} optional />
+          <BranchSelect id="branch" value={branch} onChange={setBranch} repoId={repoId} optional />
         </div>
         <div className="space-y-1">
           <Label htmlFor="base">Base branch</Label>
-          <BranchSelect id="base" value={baseBranch} onChange={setBaseBranch} projectId={t.projectId} />
+          <BranchSelect id="base" value={baseBranch} onChange={setBaseBranch} repoId={repoId} />
         </div>
       </div>
       <div className="flex justify-end gap-2">
@@ -419,7 +444,14 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
   return (
     <>
       <section className="rounded-lg border p-3">
-        <h2 className="mb-2 text-sm font-medium">Branch</h2>
+        <h2 className="mb-2 flex items-center text-sm font-medium">
+          Branch
+          {git?.repo && (
+            <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
+              {git.repo.name}
+            </span>
+          )}
+        </h2>
         {t.branch ? (
           <>
             <div className="inline-flex items-center gap-1 font-mono text-sm">

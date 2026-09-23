@@ -18,16 +18,19 @@ import {
 } from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Textarea } from '#/components/ui/textarea'
 import { TICKET_STATUSES } from '#/lib/constants'
 import { errorMessage, get, post, type Ticket, type TicketRow } from '#/lib/api'
 import { STATUS_LABEL, ago } from '#/lib/format'
+import { repoLabel, useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id/features/')({ component: Features })
 
 function Features() {
   const { id } = Route.useParams()
+  const { data: project } = useProject(id)
   const { data, isLoading } = useQuery({
     queryKey: ['tickets', id],
     queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets`),
@@ -67,6 +70,9 @@ function Features() {
                         <span className="text-muted-foreground">#{t.id}</span> {t.title}
                       </div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        {repoLabel(project, t.repoId) && (
+                          <span className="rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>
+                        )}
                         {t.assignee && <Actor name={t.assignee} />}
                         {t.branch && (
                           <span className="inline-flex items-center gap-1 font-mono">
@@ -107,12 +113,17 @@ function NewTicket({ projectId }: { projectId: string }) {
   const [body, setBody] = useState('')
   const [tasks, setTasks] = useState('')
   const [branch, setBranch] = useState('')
+  const { data: project } = useProject(projectId)
+  const [picked, setPicked] = useState('')
+  const repos = project?.repos ?? []
+  const repoId = picked || String(repos[0]?.id ?? '')
   const create = useMutation({
     mutationFn: () =>
       post<Ticket>(`/api/projects/${projectId}/tickets`, {
         title,
         body,
         branch,
+        repoId: repoId ? Number(repoId) : undefined,
         tasks: tasks
           .split('\n')
           .map((s) => s.trim())
@@ -159,9 +170,35 @@ function NewTicket({ projectId }: { projectId: string }) {
             <Label htmlFor="tasks">Initial tasks, one per line</Label>
             <Textarea id="tasks" value={tasks} onChange={(e) => setTasks(e.target.value)} rows={3} />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="br">Branch (optional)</Label>
-            <BranchSelect id="br" value={branch} onChange={setBranch} projectId={projectId} optional />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {repos.length > 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="repo">Repository</Label>
+                <Select
+                  value={repoId}
+                  onValueChange={(v) => {
+                    setPicked(v as string)
+                    setBranch('')
+                  }}
+                  items={Object.fromEntries(repos.map((r) => [String(r.id), r.name]))}
+                >
+                  <SelectTrigger id="repo" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {repos.map((r) => (
+                      <SelectItem key={r.id} value={String(r.id)}>
+                        {r.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="br">Branch (optional)</Label>
+              <BranchSelect id="br" value={branch} onChange={setBranch} repoId={repoId} optional />
+            </div>
           </div>
           <DialogFooter>
             <Button type="submit" disabled={create.isPending}>

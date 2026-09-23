@@ -9,8 +9,8 @@ const NONE = '__none__'
 interface Props {
   value: string
   onChange: (branch: string) => void
-  /** Either a project id (branches of a registered project) or a raw checkout path (new-project dialog). */
-  projectId?: string | number
+  /** Either a repo id (branches of a registered repo) or a raw checkout path (new-repo dialog). */
+  repoId?: string | number | null
   repoPath?: string
   id?: string
   /** Allow "no branch" as a choice (ticket branches); base branches never are. */
@@ -19,9 +19,9 @@ interface Props {
 }
 
 /** The local branches of a checkout as a dropdown; a plain text box until the branches are known. */
-export function BranchSelect({ value, onChange, projectId, repoPath, id, optional, className = '' }: Props) {
-  const source = projectId
-    ? `/api/projects/${projectId}/branches`
+export function BranchSelect({ value, onChange, repoId, repoPath, id, optional, className = '' }: Props) {
+  const source = repoId
+    ? `/api/repos/${repoId}/branches`
     : repoPath
       ? `/api/branches?path=${encodeURIComponent(repoPath)}`
       : null

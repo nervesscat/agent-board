@@ -33,8 +33,10 @@ http_headers = { Authorization = "Bearer gate_…" }
 
 ## The rhythm
 
-1. **Before touching a project**: `get_project` — its `instructions` are the rules for that repo
-   (how to run it, conventions, what never to do). Follow them over any default of yours.
+1. **Before touching a project**: `get_project` — its `instructions` are the rules for its repos
+   (how to run them, conventions, what never to do). Follow them over any default of yours. A
+   project can span several repos (`repos[]`: id, name, checkout path, base branch); when it does,
+   give `repoId` to `create_ticket` and `post_review_result` so the board knows which one you mean.
 2. **Pick up work** from `list_tickets` (status `todo`, unassigned, or assigned to you). Read it in
    full with `get_ticket`. Then `update_ticket` with `assignee: <you>`, `status: in_progress`, and
    the `branch` you will work on.

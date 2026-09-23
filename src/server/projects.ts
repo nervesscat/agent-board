@@ -2,10 +2,19 @@ import { asc, eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
-import { assertRepo, repoNameWithOwner } from './git'
 import { notFound } from './http'
+import { listRepos } from './repos'
 
-export const listProjects = () => db.select().from(schema.projects).orderBy(asc(schema.projects.name)).all()
+/** Projects with their repos, for the top-bar selector and agents' `list_projects`. */
+export function listProjects() {
+  const repos = listRepos()
+  return db
+    .select()
+    .from(schema.projects)
+    .orderBy(asc(schema.projects.name))
+    .all()
+    .map((p) => ({ ...p, repos: repos.filter((r) => r.projectId === p.id) }))
+}
 
 export function getProject(id: number) {
   const p = db.select().from(schema.projects).where(eq(schema.projects.id, id)).get()
@@ -13,21 +22,17 @@ export function getProject(id: number) {
   return p
 }
 
-export async function createProject(
-  input: { name: string; repoPath: string; baseBranch?: string; instructions?: string },
-  actor: string,
-) {
-  assertRepo(input.repoPath)
-  const githubRepo = await repoNameWithOwner(input.repoPath)
+/** The project plus its repos: what agents read before working on it. */
+export function getProjectFull(id: number) {
+  return { ...getProject(id), repos: listRepos(id) }
+}
+
+export type ProjectFull = ReturnType<typeof getProjectFull>
+
+export function createProject(input: { name: string; instructions?: string }, actor: string) {
   const row = db
     .insert(schema.projects)
-    .values({
-      name: input.name,
-      repoPath: input.repoPath,
-      githubRepo,
-      baseBranch: input.baseBranch || 'main',
-      instructions: input.instructions || '',
-    })
+    .values({ name: input.name, instructions: input.instructions || '' })
     .returning()
     .get()
   logActivity({
@@ -43,11 +48,10 @@ export async function createProject(
 
 export function updateProject(
   id: number,
-  patch: Partial<Pick<schema.Project, 'name' | 'baseBranch' | 'instructions' | 'repoPath'>>,
+  patch: Partial<Pick<schema.Project, 'name' | 'instructions'>>,
   actor: string,
 ) {
   getProject(id)
-  if (patch.repoPath) assertRepo(patch.repoPath)
   const row = db.update(schema.projects).set(patch).where(eq(schema.projects.id, id)).returning().get()!
   logActivity({
     projectId: id,

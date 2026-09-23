@@ -1,44 +1,37 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { FolderGit2, Plus } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
-import { BranchSelect } from '#/components/BranchSelect'
+import { RepoDialog } from '#/components/RepoDialog'
+import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '#/components/ui/dialog'
-import { Input } from '#/components/ui/input'
-import { Label } from '#/components/ui/label'
 import { Skeleton } from '#/components/ui/skeleton'
-import { errorMessage, get, post, type Project } from '#/lib/api'
+import type { Repo } from '#/lib/api'
+import { useProjects } from '#/lib/project'
 
-export const Route = createFileRoute('/')({ component: Projects })
+export const Route = createFileRoute('/')({ component: Repositories })
 
-function Projects() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => get<Project[]>('/api/projects'),
-  })
+function Repositories() {
+  const { data: projects, isLoading } = useProjects()
+  const [editing, setEditing] = useState<Repo | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const repos = (projects ?? []).flatMap((p) => p.repos.map((r) => ({ ...r, project: p.name })))
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Repositories</h1>
           <p className="text-sm text-muted-foreground">
-            Pick a project to see its PR queue, ongoing features, reviews and daily log.
+            The checkouts the board reads. Each belongs to a project; pick the project in the top bar to see
+            its PR queue, features, reviews and daily log across all its repos.
           </p>
         </div>
-        <NewProject />
+        <Button onClick={() => setAdding(true)}>
+          <Plus data-icon="inline-start" /> New repository
+        </Button>
       </div>
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -46,92 +39,45 @@ function Projects() {
             <Skeleton key={i} className="h-28" />
           ))}
         </div>
-      ) : data?.length ? (
+      ) : repos.length ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {data.map((p) => (
-            <Link key={p.id} to="/projects/$id/prs" params={{ id: String(p.id) }} className="group">
+          {repos.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => {
+                setEditing(r)
+                setEditOpen(true)
+              }}
+              className="group text-left"
+            >
               <Card className="h-full transition-colors group-hover:border-foreground/30">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <FolderGit2 className="size-4 text-muted-foreground" /> {p.name}
+                    <FolderGit2 className="size-4 text-muted-foreground" /> {r.name}
+                    <Badge variant="secondary" className="ml-auto">
+                      {r.project}
+                    </Badge>
                   </CardTitle>
                   <CardDescription className="truncate font-mono text-xs">
-                    {p.githubRepo ?? p.repoPath}
+                    {r.githubRepo ?? r.repoPath}
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="text-xs text-muted-foreground">base {p.baseBranch}</CardContent>
+                <CardContent className="truncate text-xs text-muted-foreground">
+                  base {r.baseBranch} · <span className="font-mono">{r.repoPath}</span>
+                </CardContent>
               </Card>
-            </Link>
+            </button>
           ))}
         </div>
       ) : (
-        <Empty>No projects yet. Add one: a name and the path of a local git checkout.</Empty>
+        <Empty>
+          No repositories yet. Add one: the path of a local git checkout and the project it belongs to.
+        </Empty>
       )}
+      <RepoDialog open={adding} onOpenChange={setAdding} />
+      {/* The repo stays set while the dialog animates closed, so its title does not flip. */}
+      {editing && <RepoDialog open={editOpen} onOpenChange={setEditOpen} repo={editing} />}
     </div>
-  )
-}
-
-function NewProject() {
-  const qc = useQueryClient()
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [repoPath, setRepoPath] = useState('')
-  const [baseBranch, setBaseBranch] = useState('main')
-  const create = useMutation({
-    mutationFn: () => post<Project>('/api/projects', { name, repoPath, baseBranch }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['projects'] })
-      setOpen(false)
-      setName('')
-      setRepoPath('')
-    },
-    onError: (err) => toast.error(errorMessage(err)),
-  })
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button />}>
-        <Plus data-icon="inline-start" /> New project
-      </DialogTrigger>
-      <DialogContent>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            create.mutate()
-          }}
-          className="space-y-4"
-        >
-          <DialogHeader>
-            <DialogTitle>New project</DialogTitle>
-            <DialogDescription>
-              The board reads the checkout with git and gh; it never writes to it.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="path">Repository path</Label>
-            <Input
-              id="path"
-              value={repoPath}
-              onChange={(e) => setRepoPath(e.target.value)}
-              placeholder="F:\Programming\…"
-              required
-              className="font-mono"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="base">Base branch</Label>
-            <BranchSelect id="base" value={baseBranch} onChange={setBaseBranch} repoPath={repoPath} />
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={create.isPending}>
-              {create.isPending ? 'Adding…' : 'Add project'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }

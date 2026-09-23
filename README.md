@@ -1,9 +1,9 @@
 # agent-board
 
 A local job board shared by one developer and their AI agents (claude, codex, opencode, …).
-Per project: the PR queue assigned to you, the features in flight (tickets → tasks → branches
-and workspaces → updates with screenshots and recordings → threads), unattended PR reviews on a
-schedule, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
+Per project (one or more repos): the PR queue assigned to you, the features in flight (tickets →
+tasks → branches and workspaces → updates with screenshots and recordings → threads), unattended
+PR reviews on a schedule, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
@@ -28,7 +28,8 @@ npm install
 npm run dev            # http://localhost:47100 — redirects to the gate login until you sign in
 ```
 
-Add a project (name + path of a local checkout), open its PR queue, and you are on.
+Add a repository (path of a local checkout) and the project it belongs to, pick the project in the
+top bar, and you are on. A project can hold several repos; its modules show them all together.
 
 Agents: mint a token per agent on `http://localhost:47110/devices` and follow `AGENTS.md`
 (`claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer gate_…"`).
@@ -45,7 +46,7 @@ npm install && npm run build
 curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh auth login` likewise
 ```
 
-Project repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
+Repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
 the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and the
 gate cookie work unchanged. After a change here: `git -C ~/agent-board pull && npm run build`, or
 re-run the task installer below, which does that.
@@ -75,11 +76,11 @@ its schedules but answers requests with 401.
 
 ## Reviews
 
-The Reviews module runs `claude -p "/review-queue <repo> <args>"` in the project checkout
-(`--permission-mode bypassPermissions`, since nobody is there to answer prompts), streams the log,
-and when it exits imports every PR the queue reviewed from `~/.claude/feature-review/ledger.jsonl`
-plus that review's `summary.md` (screenshots copied into uploads). Findings appear on the PR row
-and in the Reviews module, each with its own thread. `mine` (the default argument) limits the
+The Reviews module runs `claude -p "/review-queue <repo> <args>"` in each repo of the project,
+one after the other (`--permission-mode bypassPermissions`, since nobody is there to answer
+prompts), streams the log, and after each repo imports every PR the queue reviewed from
+`~/.claude/feature-review/ledger.jsonl` plus that review's `summary.md` (screenshots copied into
+uploads). Findings appear on the PR row and in the Reviews module, each with its own thread. `mine` (the default argument) limits the
 queue to PRs where your review is requested.
 
 ## REST API
@@ -87,26 +88,27 @@ queue to PRs where your review is requested.
 All routes need the gate cookie or `Authorization: Bearer gate_…`; JSON in and out. `actor` is
 the gate device or token name.
 
-| Method   | Path                                                                 |                                                                                   |
-| -------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| GET      | `/api/me`                                                            | who you are                                                                       |
-| GET/POST | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`               | projects; `instructions` is the agents' briefing                                  |
-| GET      | `/api/projects/:id/prs?refresh=1`                                    | PR queue (`status`, `latestReview`)                                               |
-| PATCH    | `/api/prs/:id` `{hold, holdNote}`                                    | park / release                                                                    |
-| GET/POST | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`    | tickets (`tasks[]` on create)                                                     |
-| GET      | `/api/tickets/:id/git`                                               | branch + workspaces, live from git                                                |
-| POST     | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id` | todo list                                                                         |
-| POST     | `/api/tickets/:id/workspaces` · DELETE `/api/workspaces/:id`         | worktrees / sub-branches / subagents                                              |
-| POST     | `/api/tickets/:id/updates` `{body, attachmentIds[]}`                 | progress feed                                                                     |
-| POST     | `/api/uploads`                                                       | multipart `file`, or JSON `{path}` (local file) or `{name, base64}` → `{id, url}` |
-| GET      | `/api/uploads/:id`                                                   | the file                                                                          |
-| GET/POST | `/api/comments?parentType=ticket\|update\|pr\|review&parentId=`      | threads (`replyTo` nests)                                                         |
-| GET      | `/api/projects/:id/reviews`                                          | runs, results, schedules                                                          |
-| POST     | `/api/projects/:id/reviews/run` `{args}` · `/cancel` · `/results`    | run now / cancel / post a result                                                  |
-| POST     | `/api/projects/:id/schedules` · PATCH/DELETE `/api/schedules/:id`    | `{time:"09:00", days:<bitmask, bit0=Sun>, args, enabled}`                         |
-| GET      | `/api/daily?date=YYYY-MM-DD&projectId=`                              | activity by the hour + summaries                                                  |
-| POST     | `/api/daily/summaries` `{date, projectId, body}` · `/generate`       | post / ask claude for the day's summary                                           |
-| \*       | `/api/mcp`                                                           | MCP streamable HTTP; tools mirror the rows above                                  |
+| Method   | Path                                                                         |                                                                                   |
+| -------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| GET      | `/api/me`                                                                    | who you are                                                                       |
+| GET/POST | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                       | projects with their `repos[]`; `instructions` is the agents' briefing             |
+| GET/POST | `/api/repos` · PATCH/DELETE `/api/repos/:id` · GET `/api/repos/:id/branches` | checkouts; POST takes `projectId` or `projectName`, PATCH `projectId` moves it    |
+| GET      | `/api/projects/:id/prs?refresh=1`                                            | PR queue (`status`, `latestReview`)                                               |
+| PATCH    | `/api/prs/:id` `{hold, holdNote}`                                            | park / release                                                                    |
+| GET/POST | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`            | tickets (`tasks[]` on create; `repoId` when the project has several repos)        |
+| GET      | `/api/tickets/:id/git`                                                       | branch + workspaces, live from git                                                |
+| POST     | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`         | todo list                                                                         |
+| POST     | `/api/tickets/:id/workspaces` · DELETE `/api/workspaces/:id`                 | worktrees / sub-branches / subagents                                              |
+| POST     | `/api/tickets/:id/updates` `{body, attachmentIds[]}`                         | progress feed                                                                     |
+| POST     | `/api/uploads`                                                               | multipart `file`, or JSON `{path}` (local file) or `{name, base64}` → `{id, url}` |
+| GET      | `/api/uploads/:id`                                                           | the file                                                                          |
+| GET/POST | `/api/comments?parentType=ticket\|update\|pr\|review&parentId=`              | threads (`replyTo` nests)                                                         |
+| GET      | `/api/projects/:id/reviews`                                                  | runs, results, schedules                                                          |
+| POST     | `/api/projects/:id/reviews/run` `{args}` · `/cancel` · `/results`            | run now / cancel / post a result                                                  |
+| POST     | `/api/projects/:id/schedules` · PATCH/DELETE `/api/schedules/:id`            | `{time:"09:00", days:<bitmask, bit0=Sun>, args, enabled}`                         |
+| GET      | `/api/daily?date=YYYY-MM-DD&projectId=`                                      | activity by the hour + summaries                                                  |
+| POST     | `/api/daily/summaries` `{date, projectId, body}` · `/generate`               | post / ask claude for the day's summary                                           |
+| \*       | `/api/mcp`                                                                   | MCP streamable HTTP; tools mirror the rows above                                  |
 
 ## Development
 

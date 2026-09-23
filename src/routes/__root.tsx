@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { HeadContent, Link, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
 import { useEffect } from 'react'
 
+import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { Toaster } from '#/components/ui/sonner'
 import { followSystemTheme } from '#/lib/theme'
 import appCss from '#/styles.css?url'
@@ -46,12 +47,13 @@ function App() {
           <Link to="/" className="font-semibold tracking-tight">
             Agent Board
           </Link>
+          <ProjectSwitcher />
           <Link
             to="/"
             activeOptions={{ exact: true }}
-            className="text-muted-foreground hover:text-foreground [&.active]:text-foreground"
+            className="ml-auto text-muted-foreground hover:text-foreground [&.active]:text-foreground"
           >
-            Projects
+            Repositories
           </Link>
           <Link
             to="/daily"

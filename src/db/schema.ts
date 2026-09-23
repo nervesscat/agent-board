@@ -11,13 +11,23 @@ const now = () =>
     .notNull()
     .default(sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`)
 
+// A project is the unit of work (PR queue, features, reviews, daily); it spans one or more repos.
 export const projects = sqliteTable('projects', {
   id: id(),
+  name: text().notNull(),
+  instructions: text().notNull().default(''),
+  createdAt: now(),
+})
+
+export const repos = sqliteTable('repos', {
+  id: id(),
+  projectId: integer('project_id')
+    .notNull()
+    .references(() => projects.id, { onDelete: 'cascade' }),
   name: text().notNull(),
   repoPath: text('repo_path').notNull(),
   githubRepo: text('github_repo'),
   baseBranch: text('base_branch').notNull().default('main'),
-  instructions: text().notNull().default(''),
   createdAt: now(),
 })
 
@@ -28,6 +38,7 @@ export const prs = sqliteTable(
     projectId: integer('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
+    repoId: integer('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
     number: integer().notNull(),
     title: text().notNull(),
     url: text().notNull(),
@@ -44,7 +55,7 @@ export const prs = sqliteTable(
     hold: integer({ mode: 'boolean' }).notNull().default(false),
     holdNote: text('hold_note').notNull().default(''),
   },
-  (t) => [index('prs_project_number').on(t.projectId, t.number)],
+  (t) => [index('prs_project_number').on(t.projectId, t.number), index('prs_repo').on(t.repoId)],
 )
 
 export const tickets = sqliteTable('tickets', {
@@ -52,6 +63,8 @@ export const tickets = sqliteTable('tickets', {
   projectId: integer('project_id')
     .notNull()
     .references(() => projects.id, { onDelete: 'cascade' }),
+  // The repo the ticket's branch lives in; null means the project's first repo.
+  repoId: integer('repo_id').references(() => repos.id, { onDelete: 'set null' }),
   title: text().notNull(),
   body: text().notNull().default(''),
   status: text().$type<TicketStatus>().notNull().default('todo'),
@@ -159,6 +172,7 @@ export const reviewResults = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     runId: integer('run_id').references(() => reviewRuns.id, { onDelete: 'set null' }),
+    repoId: integer('repo_id').references(() => repos.id, { onDelete: 'set null' }),
     prNumber: integer('pr_number').notNull(),
     sha: text().notNull(),
     verdict: text().notNull(),
@@ -205,6 +219,7 @@ export const dailySummaries = sqliteTable(
 export type Activity = typeof activity.$inferSelect
 export type DailySummary = typeof dailySummaries.$inferSelect
 export type Project = typeof projects.$inferSelect
+export type Repo = typeof repos.$inferSelect
 export type Pr = typeof prs.$inferSelect
 export type Ticket = typeof tickets.$inferSelect
 export type Task = typeof tasks.$inferSelect

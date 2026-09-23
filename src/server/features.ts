@@ -5,6 +5,7 @@ import { logActivity } from './activity'
 import { branchInfo, listWorktrees } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
+import { resolveRepo, ticketRepo } from './repos'
 import { attachTo, attachmentUrl } from './uploads'
 
 type TicketStatus = schema.TicketStatus
@@ -78,21 +79,24 @@ export function createTicket(
     assignee?: string
     branch?: string
     baseBranch?: string
+    repoId?: number | null
     tasks?: string[]
   },
   actor: string,
 ) {
-  const project = getProject(projectId)
+  getProject(projectId)
+  const repo = resolveRepo(projectId, input.repoId)
   const row = db
     .insert(schema.tickets)
     .values({
       projectId,
+      repoId: repo.id,
       title: input.title,
       body: input.body ?? '',
       status: input.status ?? 'todo',
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
-      baseBranch: input.baseBranch || project.baseBranch,
+      baseBranch: input.baseBranch || repo.baseBranch,
       createdBy: actor,
     })
     .returning()
@@ -118,10 +122,13 @@ const touch = (ticketId: number) =>
 
 export function updateTicket(
   id: number,
-  patch: Partial<Pick<schema.Ticket, 'title' | 'body' | 'status' | 'assignee' | 'branch' | 'baseBranch'>>,
+  patch: Partial<
+    Pick<schema.Ticket, 'title' | 'body' | 'status' | 'assignee' | 'branch' | 'baseBranch' | 'repoId'>
+  >,
   actor: string,
 ) {
   const before = getTicket(id)
+  if (patch.repoId) resolveRepo(before.projectId, patch.repoId)
   const row = db
     .update(schema.tickets)
     .set({ ...patch, updatedAt: new Date().toISOString() })
@@ -257,14 +264,18 @@ export function deleteWorkspace(id: number, actor: string) {
 /** Live, read-only git state for the ticket's branch and each workspace. */
 export async function ticketGit(id: number) {
   const ticket = getTicket(id)
-  const project = getProject(ticket.projectId)
+  const repo = ticketRepo(ticket)
   const workspaces = db.select().from(schema.workspaces).where(eq(schema.workspaces.ticketId, id)).all()
-  const [branch, worktrees, ...wsBranches] = await Promise.all([
-    branchInfo(project.repoPath, ticket.branch, ticket.baseBranch),
-    listWorktrees(project.repoPath).catch(() => []),
-    ...workspaces.map((w) => branchInfo(project.repoPath, w.branch, ticket.branch || ticket.baseBranch)),
-  ])
+  const none = { exists: false, sha: null, subject: null, authoredAt: null, ahead: null, behind: null }
+  const [branch, worktrees, ...wsBranches] = repo
+    ? await Promise.all([
+        branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
+        listWorktrees(repo.repoPath).catch(() => []),
+        ...workspaces.map((w) => branchInfo(repo.repoPath, w.branch, ticket.branch || ticket.baseBranch)),
+      ])
+    : [none, [], ...workspaces.map(() => none)]
   return {
+    repo: repo ? { id: repo.id, name: repo.name } : null,
     branch: ticket.branch,
     baseBranch: ticket.baseBranch,
     info: branch,

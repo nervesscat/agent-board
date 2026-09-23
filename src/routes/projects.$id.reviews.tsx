@@ -26,6 +26,7 @@ import {
   type RunRow,
 } from '#/lib/api'
 import { WEEKDAYS, ago, shortSha, stamp } from '#/lib/format'
+import { repoLabel, useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id/reviews')({
   component: Reviews,
@@ -37,6 +38,7 @@ function Reviews() {
   const search = Route.useSearch()
   const qc = useQueryClient()
   const key = ['reviews', id]
+  const { data: project } = useProject(id)
   const { data, isLoading } = useQuery({
     queryKey: key,
     queryFn: () => get<ReviewsPayload>(`/api/projects/${id}/reviews`),
@@ -64,8 +66,8 @@ function Reviews() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Reviews</h1>
         <p className="text-sm text-muted-foreground">
-          Runs <code className="rounded bg-muted px-1">/review-queue</code> in the checkout unattended and
-          imports each PR's findings here. Nothing is posted to GitHub.
+          Runs <code className="rounded bg-muted px-1">/review-queue</code> unattended in each repo of the
+          project, one after the other, and imports each PR's findings here. Nothing is posted to GitHub.
         </p>
       </div>
 
@@ -105,6 +107,7 @@ function Reviews() {
               <ResultCard
                 key={r.id}
                 r={r}
+                repo={repoLabel(project, r.repoId)}
                 open={openResult === r.id}
                 onToggle={() => setOpenResult(openResult === r.id ? null : r.id)}
               />
@@ -140,7 +143,17 @@ function verdictTone(v: string): 'default' | 'destructive' | 'secondary' {
   return 'destructive'
 }
 
-function ResultCard({ r, open, onToggle }: { r: ReviewResult; open: boolean; onToggle: () => void }) {
+function ResultCard({
+  r,
+  repo,
+  open,
+  onToggle,
+}: {
+  r: ReviewResult
+  repo: string | null
+  open: boolean
+  onToggle: () => void
+}) {
   const counts = r.counts as Record<string, number>
   const checks = r.checks as Record<string, string>
   return (
@@ -151,7 +164,9 @@ function ResultCard({ r, open, onToggle }: { r: ReviewResult; open: boolean; onT
         className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 p-3 text-left"
       >
         <Badge variant={verdictTone(r.verdict)}>{r.verdict}</Badge>
-        <span className="font-medium">PR #{r.prNumber}</span>
+        <span className="font-medium">
+          {repo && <span className="text-muted-foreground">{repo} </span>}PR #{r.prNumber}
+        </span>
         <span className="font-mono text-xs text-muted-foreground">{shortSha(r.sha)}</span>
         <span className="text-xs text-muted-foreground">
           {counts.confirmed ?? 0} confirmed · {counts.plausible ?? 0} plausible · {counts.unverified ?? 0}{' '}

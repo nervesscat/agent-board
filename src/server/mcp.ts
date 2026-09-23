@@ -52,18 +52,23 @@ function buildServer(actor: string) {
   tool('whoami', 'The name the board knows you by (your gate token name).', {}, () => ({ actor }))
 
   // projects
-  tool('list_projects', 'All projects on the board with their repo paths.', {}, () => projects.listProjects())
+  tool(
+    'list_projects',
+    'All projects on the board, each with its repos (id, name, checkout path, GitHub slug, base branch).',
+    {},
+    () => projects.listProjects(),
+  )
   tool(
     'get_project',
-    'One project, including the instructions agents must follow when working on it. Read this before touching a project.',
+    'One project with its repos and the instructions agents must follow when working on it. Read this before touching a project.',
     { projectId: z.number().int() },
-    ({ projectId }) => projects.getProject(projectId),
+    ({ projectId }) => projects.getProjectFull(projectId),
   )
 
   // PR queue
   tool(
     'list_prs',
-    'Open PRs assigned to the human for review, with status pending | reviewed | on_hold and the latest review verdict.',
+    'Open PRs assigned to the human for review across all repos of the project, with status pending | reviewed | on_hold, the repo, and the latest review verdict.',
     {
       projectId: z.number().int(),
       refresh: z.boolean().default(false).describe('re-query GitHub before answering'),
@@ -87,6 +92,7 @@ function buildServer(actor: string) {
       summaryMd: z.string(),
       checks: z.record(z.string(), z.string()).optional(),
       counts: z.record(z.string(), z.number()).optional(),
+      repoId: z.number().int().optional().describe('required when the project has more than one repo'),
     },
     ({ projectId, ...rest }) => reviews.postResult(projectId, rest, actor),
   )
@@ -94,7 +100,7 @@ function buildServer(actor: string) {
   // ongoing features
   tool(
     'list_tickets',
-    'Tickets of a project with status, assignee, branch and task progress.',
+    'Tickets of a project (all its repos) with status, assignee, repoId, branch and task progress.',
     { projectId: z.number().int() },
     ({ projectId }) => features.listTickets(projectId),
   )
@@ -114,7 +120,12 @@ function buildServer(actor: string) {
       status: z.enum(TICKET_STATUSES).default('todo'),
       assignee: z.string().default(''),
       branch: z.string().default(''),
-      baseBranch: z.string().optional(),
+      baseBranch: z.string().optional().describe("defaults to the repo's base branch"),
+      repoId: z
+        .number()
+        .int()
+        .optional()
+        .describe('the repo the branch lives in; required when the project has more than one repo'),
       tasks: z.array(z.string()).default([]),
     },
     ({ projectId, ...rest }) => features.createTicket(projectId, rest, actor),
@@ -130,6 +141,7 @@ function buildServer(actor: string) {
       assignee: z.string().optional(),
       branch: z.string().optional(),
       baseBranch: z.string().optional(),
+      repoId: z.number().int().optional(),
     },
     ({ ticketId, ...patch }) => features.updateTicket(ticketId, patch, actor),
   )

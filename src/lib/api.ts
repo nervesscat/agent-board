@@ -4,7 +4,7 @@ import type {
   Attachment,
   Comment,
   DailySummary,
-  Project,
+  Repo,
   ReviewResult,
   ReviewRun,
   ReviewSchedule,
@@ -16,13 +16,17 @@ import type {
 } from '#/db/schema'
 import type { TicketFull } from '#/server/features'
 import type { BranchInfo, Worktree } from '#/server/git'
+import type { ProjectFull } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
+
+/** A project as the API returns it: always with its repos. */
+export type Project = ProjectFull
 
 export type {
   Attachment,
   Comment,
   DailySummary,
-  Project,
+  Repo,
   ReviewResult,
   ReviewRun,
   ReviewSchedule,
@@ -98,6 +102,7 @@ export type CommentRow = Comment & { attachments: (Attachment & { url: string })
 export type UpdateRow = TicketFull['updates'][number]
 
 export interface TicketGit {
+  repo: { id: number; name: string } | null
   branch: string
   baseBranch: string
   info: BranchInfo

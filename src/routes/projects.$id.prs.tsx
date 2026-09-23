@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
+import { repoLabel, useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id/prs')({ component: PrQueue })
 
@@ -34,6 +35,7 @@ function PrQueue() {
   const { id } = Route.useParams()
   const qc = useQueryClient()
   const key = ['prs', id]
+  const { data: project } = useProject(id)
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: key,
     queryFn: () => get<PrRow[]>(`/api/projects/${id}/prs`),
@@ -51,8 +53,8 @@ function PrQueue() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">PR queue</h1>
           <p className="text-sm text-muted-foreground">
-            Open pull requests where your review is requested. Read-only against GitHub; holds and threads
-            live here.
+            Open pull requests where your review is requested, across every repo of the project. Read-only
+            against GitHub; holds and threads live here.
           </p>
         </div>
         <Button
@@ -84,7 +86,9 @@ function PrQueue() {
               {data?.filter((p) => p.status === t.key).length ? (
                 data
                   .filter((p) => p.status === t.key)
-                  .map((pr) => <PrCard key={pr.id} pr={pr} projectId={id} />)
+                  .map((pr) => (
+                    <PrCard key={pr.id} pr={pr} projectId={id} repo={repoLabel(project, pr.repoId)} />
+                  ))
               ) : (
                 <Empty>Nothing {t.label.toLowerCase()}.</Empty>
               )}
@@ -96,7 +100,7 @@ function PrQueue() {
   )
 }
 
-function PrCard({ pr, projectId }: { pr: PrRow; projectId: string }) {
+function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: string | null }) {
   const qc = useQueryClient()
   const [thread, setThread] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
@@ -124,6 +128,7 @@ function PrCard({ pr, projectId }: { pr: PrRow; projectId: string }) {
               #{pr.number} {pr.title}
             </a>
             <ExternalLink className="size-3 text-muted-foreground" />
+            {repo && <Badge variant="secondary">{repo}</Badge>}
             {pr.isDraft && <Badge variant="outline">draft</Badge>}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
