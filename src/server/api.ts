@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { COMMENT_PARENTS, TICKET_STATUSES } from '#/lib/constants'
 import { addSummary } from './activity'
+import { listActors } from './actors'
 import { dailyReport, generateSummary, today } from './daily'
 import * as features from './features'
 import { listDirs } from './fs'
@@ -40,6 +41,8 @@ export const api = new ApiRouter()
 
 api.get('/api/health', () => json({ ok: true }))
 api.get('/api/me', ({ actor }) => json({ actor }))
+// Every name the board has seen sign in, with whether it is an agent or a human.
+api.get('/api/actors', () => json(listActors()))
 
 // --- projects ---
 api.get('/api/projects', () => json(projects.listProjects()))

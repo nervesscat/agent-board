@@ -153,6 +153,21 @@ describe('localPath', () => {
   })
 })
 
+describe('actors', () => {
+  it('remembers how each name signed in; the last sign-in wins; built-ins fill the gaps', async () => {
+    const { listActors, noteActor } = await import('./actors')
+    noteActor('claude-spark', 'agent')
+    noteActor('laptop', 'human')
+    noteActor('laptop', 'human')
+    const kinds = new Map(listActors().map((a) => [a.name, a.kind]))
+    expect(kinds.get('claude-spark')).toBe('agent')
+    expect(kinds.get('laptop')).toBe('human')
+    expect(kinds.get('scheduler')).toBe('agent')
+    noteActor('laptop', 'agent')
+    expect(new Map(listActors().map((a) => [a.name, a.kind])).get('laptop')).toBe('agent')
+  })
+})
+
 describe('prStatus', () => {
   it('hold wins, then any review of mine, else pending', () => {
     expect(prs.prStatus({ hold: true, myReview: 'approved' })).toBe('on_hold')

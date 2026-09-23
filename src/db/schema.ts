@@ -216,6 +216,14 @@ export const dailySummaries = sqliteTable(
   (t) => [index('daily_summaries_date').on(t.date)],
 )
 
+// Who each name on the board is, learned from how it signs in: a gate token is an agent, a passkey
+// session in the browser is a human. Every author field elsewhere is just the name.
+export const actors = sqliteTable('actors', {
+  name: text().primaryKey(),
+  kind: text().$type<'agent' | 'human'>().notNull(),
+  lastSeenAt: text('last_seen_at').notNull(),
+})
+
 export type Activity = typeof activity.$inferSelect
 export type DailySummary = typeof dailySummaries.$inferSelect
 export type Project = typeof projects.$inferSelect

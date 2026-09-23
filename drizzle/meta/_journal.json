@@ -15,6 +15,13 @@
       "when": 1790178342313,
       "tag": "0001_repos",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790199216150,
+      "tag": "0002_actors",
+      "breakpoints": true
     }
   ]
 }

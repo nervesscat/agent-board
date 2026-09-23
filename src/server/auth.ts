@@ -1,3 +1,4 @@
+import { noteActor } from './actors'
 import { config } from './config'
 
 /**
@@ -28,13 +29,20 @@ async function askGate(header: string, value: string): Promise<string | null> {
   return actor
 }
 
-/** Resolve who is calling, or null when the gate says no (or is unreachable). */
+/**
+ * Resolve who is calling, or null when the gate says no (or is unreachable). How they got in also
+ * says what they are: a gate token is an agent, the browser's passkey session is a human.
+ */
 export async function authenticate(request: Request): Promise<string | null> {
   const auth = request.headers.get('authorization')
-  if (auth?.toLowerCase().startsWith('bearer ')) return askGate('authorization', auth)
   const cookie = request.headers.get('cookie')
-  if (cookie?.includes('gate_session=')) return askGate('cookie', cookie)
-  return null
+  const [actor, kind] = auth?.toLowerCase().startsWith('bearer ')
+    ? [await askGate('authorization', auth), 'agent' as const]
+    : cookie?.includes('gate_session=')
+      ? [await askGate('cookie', cookie), 'human' as const]
+      : [null, null]
+  if (actor && kind) noteActor(actor, kind)
+  return actor
 }
 
 export function rememberActor(request: Request, actor: string) {
