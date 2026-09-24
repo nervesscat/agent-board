@@ -12,7 +12,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -413,6 +413,53 @@ const STAGE_TAG: Record<TicketStatus, string> = {
   backlog: 'bg-muted text-muted-foreground',
 }
 
+/** One row of filter chips: "All" clears it, each chip toggles; a chip with nothing to show dims. */
+function FilterRow<K extends string>({
+  label,
+  chips,
+  active,
+  onToggle,
+  onClear,
+}: {
+  label: string
+  chips: { key: K; label: ReactNode; count: number }[]
+  active: K[]
+  onToggle: (key: K) => void
+  onClear: () => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      <span className="w-12 shrink-0 text-muted-foreground">{label}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        className={`rounded-full border px-2.5 py-0.5 transition-colors ${
+          active.length ? 'text-muted-foreground hover:text-foreground' : 'border-foreground/40 bg-muted'
+        }`}
+      >
+        All
+      </button>
+      {chips.map((c) => {
+        const on = active.includes(c.key)
+        return (
+          <button
+            key={c.key}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onToggle(c.key)}
+            className={`inline-flex items-center gap-1 rounded-full border px-1 py-0.5 pr-2.5 transition-colors ${
+              on ? 'border-foreground/40 bg-muted' : 'border-transparent hover:border-border'
+            } ${(active.length && !on) || c.count === 0 ? 'opacity-50 hover:opacity-100' : ''}`}
+          >
+            {c.label}
+            <span className="tabular-nums text-muted-foreground">{c.count}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const done = t.lanes.filter((l) => l.status === 'done').length
   const approved = t.lanes.filter((l) => l.approvedAt).length
@@ -422,22 +469,40 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     onSuccess: onChange,
     onError: (err) => toast.error(errorMessage(err)),
   })
-  // Tags across the lanes, with how many lanes carry each; picking some shows lanes with any of them.
-  const [picked, setPicked] = useState<string[]>([])
+  // Filter by stage and by tag: within a row any picked chip matches, across rows all must. Each
+  // row counts the lanes the other row lets through, so a number is what clicking it would show.
+  const [pickedStages, setStages] = useState<TicketStatus[]>([])
+  const [pickedTags, setPicked] = useState<string[]>([])
+  const toggle = <T,>(set: (fn: (v: T[]) => T[]) => void, key: T) =>
+    set((v) => (v.includes(key) ? v.filter((x) => x !== key) : [...v, key]))
+  // A pick whose stage or tag no longer appears on any lane stops filtering (its chip is gone too).
+  const stages = pickedStages.filter((s) => t.lanes.some((l) => l.status === s))
+  const picked = pickedTags.filter((k) => t.lanes.some((l) => l.tags.some((x) => x.toLowerCase() === k)))
+  const stageOk = (l: TicketFull['lanes'][number]) => !stages.length || stages.includes(l.status)
+  const tagOk = (l: TicketFull['lanes'][number]) =>
+    !picked.length || l.tags.some((tag) => picked.includes(tag.toLowerCase()))
+
   const tagCounts = new Map<string, { tag: string; count: number }>()
   for (const l of t.lanes)
     for (const tag of l.tags) {
       const key = tag.toLowerCase()
       const entry = tagCounts.get(key) ?? { tag, count: 0 }
-      entry.count++
+      if (stageOk(l)) entry.count++
       tagCounts.set(key, entry)
     }
   const tags = [...tagCounts.values()].sort((a, b) => compareTags(a.tag, b.tag))
-  const active = picked.filter((p) => tagCounts.has(p))
-  const toggle = (key: string) =>
-    setPicked((p) => (p.includes(key) ? p.filter((x) => x !== key) : [...p, key]))
+  const stageChips = LANE_ORDER.filter((s) => t.lanes.some((l) => l.status === s)).map((s) => ({
+    key: s,
+    label: (
+      <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${STAGE_TAG[s]}`}>
+        {STATUS_LABEL[s]}
+      </span>
+    ),
+    count: t.lanes.filter((l) => l.status === s && tagOk(l)).length,
+  }))
+  const filtering = stages.length > 0 || picked.length > 0
   const lanes = t.lanes
-    .filter((l) => !active.length || l.tags.some((tag) => active.includes(tag.toLowerCase())))
+    .filter((l) => stageOk(l) && tagOk(l))
     .sort((a, b) => LANE_ORDER.indexOf(a.status) - LANE_ORDER.indexOf(b.status) || a.id - b.id)
   return (
     <section className="rounded-lg border p-4">
@@ -462,43 +527,43 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
         </p>
       ) : (
         <>
-          {tags.length > 0 && (
-            <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setPicked([])}
-                className={`rounded-full border px-2.5 py-0.5 transition-colors ${
-                  active.length
-                    ? 'text-muted-foreground hover:text-foreground'
-                    : 'border-foreground/40 bg-muted'
-                }`}
-              >
-                All <span className="tabular-nums text-muted-foreground">{t.lanes.length}</span>
-              </button>
-              {tags.map(({ tag, count }) => {
-                const on = active.includes(tag.toLowerCase())
-                return (
-                  <button
-                    key={tag}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => toggle(tag.toLowerCase())}
-                    className={`inline-flex items-center gap-1 rounded-full border px-1 py-0.5 pr-2.5 transition-colors ${
-                      on ? 'border-foreground/40 bg-muted' : 'border-transparent hover:border-border'
-                    } ${active.length && !on ? 'opacity-60 hover:opacity-100' : ''}`}
-                  >
-                    <Tag tag={tag} className="rounded-full" />
-                    <span className="tabular-nums text-muted-foreground">{count}</span>
-                  </button>
-                )
-              })}
-              {active.length > 0 && (
-                <span className="ml-auto text-muted-foreground">
-                  showing {lanes.length} of {t.lanes.length}
-                </span>
-              )}
-            </div>
-          )}
+          <div className="mb-3 space-y-1.5">
+            <FilterRow
+              label="Stage"
+              chips={stageChips}
+              active={stages}
+              onToggle={(s) => toggle(setStages, s)}
+              onClear={() => setStages([])}
+            />
+            {tags.length > 0 && (
+              <FilterRow
+                label="Tags"
+                chips={tags.map(({ tag, count }) => ({
+                  key: tag.toLowerCase(),
+                  label: <Tag tag={tag} className="rounded-full" />,
+                  count,
+                }))}
+                active={picked}
+                onToggle={(key) => toggle(setPicked, key)}
+                onClear={() => setPicked([])}
+              />
+            )}
+            {filtering && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                showing {lanes.length} of {t.lanes.length}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:text-foreground"
+                  onClick={() => {
+                    setStages([])
+                    setPicked([])
+                  }}
+                >
+                  clear filters
+                </button>
+              </div>
+            )}
+          </div>
           <ul className="max-h-[36rem] divide-y overflow-y-auto rounded-md border">
             {lanes.map((l) => (
               <li key={l.id} className="flex items-start transition-colors hover:bg-muted/50">
