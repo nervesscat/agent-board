@@ -1,6 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, GitBranch, Paperclip, Pencil, Plus, Trash2, X } from 'lucide-react'
+import {
+  ChevronRight,
+  GitBranch,
+  Layers,
+  Paperclip,
+  Pencil,
+  Plus,
+  Trash2,
+  TriangleAlert,
+  X,
+} from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -10,6 +20,8 @@ import { StatusSelect } from '#/components/StatusSelect'
 import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
+import { NewTicket } from '#/components/NewTicket'
+import { TicketBoard } from '#/components/TicketBoard'
 import { Thread } from '#/components/Thread'
 import {
   AlertDialog,
@@ -25,6 +37,7 @@ import {
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
+import { Switch } from '#/components/ui/switch'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
@@ -40,6 +53,7 @@ import {
   type TicketGit,
   type UpdateRow,
 } from '#/lib/api'
+import type { TicketStatus } from '#/lib/constants'
 import { ago, shortSha, stamp } from '#/lib/format'
 import { useProject } from '#/lib/project'
 
@@ -50,9 +64,12 @@ function TicketPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const key = ['ticket', ticketId]
+  // Fold the lanes' updates into this ticket's feed.
+  const [laneFeed, setLaneFeed] = useState(false)
   const { data: t, error } = useQuery({
-    queryKey: key,
-    queryFn: () => get<TicketFull>(`/api/tickets/${ticketId}`),
+    queryKey: [...key, laneFeed],
+    queryFn: () => get<TicketFull>(`/api/tickets/${ticketId}${laneFeed ? '?lanes=1' : ''}`),
+    placeholderData: keepPreviousData,
     refetchInterval: 10_000,
   })
   const { data: git } = useQuery({
@@ -72,10 +89,22 @@ function TicketPage() {
     onError,
   })
   const remove = useMutation({
-    mutationFn: () => del(`/api/tickets/${ticketId}`),
+    mutationFn: (keepLanes: boolean) => del(`/api/tickets/${ticketId}${keepLanes ? '?keepLanes=1' : ''}`),
     onSuccess: () => {
       invalidate()
-      navigate({ to: '/projects/$id/features', params: { id } })
+      const parent = t?.ancestors.at(-1)
+      if (parent)
+        navigate({ to: '/projects/$id/features/$ticketId', params: { id, ticketId: String(parent.id) } })
+      else navigate({ to: '/projects/$id/features', params: { id } })
+    },
+    onError,
+  })
+  const moveLane = useMutation({
+    mutationFn: (v: { ticketId: number; status: TicketStatus }) =>
+      patch(`/api/tickets/${v.ticketId}`, { status: v.status }),
+    onSuccess: (_d, v) => {
+      invalidate()
+      qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
     },
     onError,
   })
@@ -83,16 +112,30 @@ function TicketPage() {
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
+  const openLanes = t.lanes.filter((l) => l.status !== 'done').length
+  const lanesWarning = openLanes > 0 && (t.status === 'review' || t.status === 'done')
 
   return (
     <div className="space-y-6">
-      <Link
-        to="/projects/$id/features"
-        params={{ id }}
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="size-3.5" /> Ongoing features
-      </Link>
+      <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+        <Link to="/projects/$id/features" params={{ id }} className="hover:text-foreground">
+          Ongoing features
+        </Link>
+        {t.ancestors.map((a) => (
+          <span key={a.id} className="inline-flex min-w-0 items-center gap-1">
+            <ChevronRight className="size-3.5 shrink-0" />
+            <Link
+              to="/projects/$id/features/$ticketId"
+              params={{ id, ticketId: String(a.id) }}
+              className="max-w-64 truncate hover:text-foreground"
+            >
+              #{a.id} {a.title}
+            </Link>
+          </span>
+        ))}
+        <ChevronRight className="size-3.5" />
+        <span className="text-foreground">#{t.id}</span>
+      </nav>
 
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
@@ -107,6 +150,14 @@ function TicketPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {lanesWarning && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400"
+              title="This ticket is marked further along than its lanes"
+            >
+              <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
+            </span>
+          )}
           <StatusSelect value={t.status} onChange={(status) => update.mutate({ status })} />
           <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>
             <Pencil data-icon="inline-start" /> Edit
@@ -120,11 +171,20 @@ function TicketPage() {
                 <AlertDialogTitle>Delete this ticket?</AlertDialogTitle>
                 <AlertDialogDescription>
                   Tasks, updates, attachments and the thread go with it.
+                  {t.lanes.length > 0 &&
+                    ` It has ${t.lanes.length} lane${t.lanes.length === 1 ? '' : 's'}: delete them too, or keep them and move them up a level.`}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Keep</AlertDialogCancel>
-                <AlertDialogAction onClick={() => remove.mutate()}>Delete</AlertDialogAction>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                {t.lanes.length > 0 && (
+                  <AlertDialogAction variant="outline" onClick={() => remove.mutate(true)}>
+                    Delete, keep lanes
+                  </AlertDialogAction>
+                )}
+                <AlertDialogAction onClick={() => remove.mutate(false)}>
+                  {t.lanes.length > 0 ? 'Delete with lanes' : 'Delete'}
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -149,7 +209,8 @@ function TicketPage() {
               )}
             </section>
             <Tasks t={t} onChange={invalidate} />
-            <Updates t={t} onChange={invalidate} />
+            <Lanes t={t} onMove={(ticketId, status) => moveLane.mutate({ ticketId, status })} />
+            <Updates t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
             <section>
               <h2 className="mb-3 text-sm font-medium">Thread</h2>
               <Thread parentType="ticket" parentId={t.id} />
@@ -318,7 +379,47 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   )
 }
 
-function Updates({ t, onChange }: { t: TicketFull; onChange: () => void }) {
+function Lanes({ t, onMove }: { t: TicketFull; onMove: (ticketId: number, status: TicketStatus) => void }) {
+  const done = t.lanes.filter((l) => l.status === 'done').length
+  return (
+    <section className="rounded-lg border p-4">
+      <div className="mb-3 flex items-center gap-3">
+        <h2 className="inline-flex items-center gap-1.5 text-sm font-medium">
+          <Layers className="size-4 text-muted-foreground" /> Lanes
+        </h2>
+        {t.lanes.length > 0 && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {done}/{t.lanes.length} done
+            {t.rollup.total > t.progress.total && ` · all tasks ${t.rollup.done}/${t.rollup.total}`}
+          </span>
+        )}
+        <div className="ml-auto">
+          <NewTicket projectId={String(t.projectId)} parent={t} />
+        </div>
+      </div>
+      {t.lanes.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No lanes. Split this ticket into lanes when parts of it run in parallel: each lane gets its own
+          branch, assignee, tasks and updates.
+        </p>
+      ) : (
+        <TicketBoard projectId={String(t.projectId)} items={t.lanes} onMove={onMove} compact />
+      )}
+    </section>
+  )
+}
+
+function Updates({
+  t,
+  onChange,
+  laneFeed,
+  onLaneFeed,
+}: {
+  t: TicketFull
+  onChange: () => void
+  laneFeed: boolean
+  onLaneFeed: (v: boolean) => void
+}) {
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
@@ -336,7 +437,14 @@ function Updates({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   })
   return (
     <section>
-      <h2 className="mb-3 text-sm font-medium">Updates</h2>
+      <div className="mb-3 flex items-center gap-3">
+        <h2 className="text-sm font-medium">Updates</h2>
+        {t.lanes.length > 0 && (
+          <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
+            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lanes
+          </label>
+        )}
+      </div>
       <form
         className="mb-4 space-y-2 rounded-lg border p-3"
         onSubmit={(e) => {
@@ -377,7 +485,7 @@ function Updates({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       ) : (
         <div className="space-y-3">
           {t.updates.map((u) => (
-            <UpdateCard key={u.id} u={u} />
+            <UpdateCard key={u.id} u={u} projectId={String(t.projectId)} />
           ))}
         </div>
       )}
@@ -385,13 +493,22 @@ function Updates({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   )
 }
 
-function UpdateCard({ u }: { u: UpdateRow }) {
+function UpdateCard({ u, projectId }: { u: UpdateRow; projectId: string }) {
   const [thread, setThread] = useState(false)
   return (
     <article className="rounded-lg border p-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Actor name={u.author} className="text-foreground" />
         <span title={stamp(u.createdAt)}>{ago(u.createdAt)}</span>
+        {u.lane && (
+          <Link
+            to="/projects/$id/features/$ticketId"
+            params={{ id: projectId, ticketId: String(u.lane.id) }}
+            className="inline-flex min-w-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 hover:text-foreground"
+          >
+            <Layers className="size-3 shrink-0" /> <span className="max-w-48 truncate">{u.lane.title}</span>
+          </Link>
+        )}
         <button type="button" className="ml-auto hover:text-foreground" onClick={() => setThread((v) => !v)}>
           {thread ? 'hide thread' : 'thread'}
         </button>

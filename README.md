@@ -2,8 +2,8 @@
 
 A local job board shared by one developer and their AI agents (claude, codex, opencode, …).
 Per project (one or more repos): the PR queue assigned to you, the features in flight (tickets →
-tasks → branches and workspaces → updates with screenshots and recordings → threads), unattended
-PR reviews on a schedule, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
+lanes for parallel work → tasks → branches and workspaces → updates with screenshots and recordings →
+threads), unattended PR reviews on a schedule, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
@@ -96,6 +96,8 @@ the gate device or token name.
 | GET      | `/api/projects/:id/prs?refresh=1`                                            | PR queue (`status`, `latestReview`)                                               |
 | PATCH    | `/api/prs/:id` `{hold, holdNote}`                                            | park / release                                                                    |
 | GET/POST | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`            | tickets (`tasks[]` on create; `repoId` when the project has several repos)        |
+|          | `?parent=root\|<id>` on the list · `parentId` on create                      | lanes: a ticket's parallel sub-tickets, nested to any depth                       |
+|          | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                 | lanes' updates in the feed · move lanes up a level instead of deleting them       |
 | GET      | `/api/tickets/:id/git`                                                       | branch + workspaces, live from git                                                |
 | POST     | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`         | todo list                                                                         |
 | POST     | `/api/tickets/:id/workspaces` · DELETE `/api/workspaces/:id`                 | worktrees / sub-branches / subagents                                              |

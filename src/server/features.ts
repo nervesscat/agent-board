@@ -12,8 +12,14 @@ type TicketStatus = schema.TicketStatus
 
 // --- tickets ---
 
-export function listTickets(projectId: number) {
-  getProject(projectId)
+type Progress = { done: number; total: number }
+export type LaneCounts = { total: number } & Partial<Record<TicketStatus, number>>
+
+/**
+ * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
+ * theirs), and how many lanes it has in each status. One pass over the project keeps this cheap.
+ */
+function projectTickets(projectId: number) {
   const rows = db
     .select()
     .from(schema.tickets)
@@ -24,10 +30,39 @@ export function listTickets(projectId: number) {
   const allTasks = ids.length
     ? db.select().from(schema.tasks).where(inArray(schema.tasks.ticketId, ids)).all()
     : []
+  const own = new Map<number, Progress>(rows.map((t) => [t.id, { done: 0, total: 0 }]))
+  for (const task of allTasks) {
+    const p = own.get(task.ticketId)!
+    p.total++
+    if (task.done) p.done++
+  }
+  const children = new Map<number, schema.Ticket[]>()
+  for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
+  const rollup = (id: number): Progress =>
+    (children.get(id) ?? []).reduce(
+      (acc, lane) => {
+        const p = rollup(lane.id)
+        return { done: acc.done + p.done, total: acc.total + p.total }
+      },
+      { ...own.get(id)! },
+    )
   return rows.map((t) => {
-    const mine = allTasks.filter((x) => x.ticketId === t.id)
-    return { ...t, progress: { done: mine.filter((x) => x.done).length, total: mine.length } }
+    const lanes: LaneCounts = { total: 0 }
+    for (const lane of children.get(t.id) ?? []) {
+      lanes.total++
+      lanes[lane.status] = (lanes[lane.status] ?? 0) + 1
+    }
+    return { ...t, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
   })
+}
+
+export type TicketRow = ReturnType<typeof projectTickets>[number]
+
+/** A project's tickets; `parentId` narrows to the lanes of one ticket, `null` to the top level. */
+export function listTickets(projectId: number, filter: { parentId?: number | null } = {}) {
+  getProject(projectId)
+  const rows = projectTickets(projectId)
+  return filter.parentId === undefined ? rows : rows.filter((t) => t.parentId === filter.parentId)
 }
 
 export function getTicket(id: number) {
@@ -36,9 +71,30 @@ export function getTicket(id: number) {
   return t
 }
 
-/** The whole ticket page in one read: tasks, workspaces, updates with their attachments. */
-export function getTicketFull(id: number) {
+/**
+ * The whole ticket page in one read: tasks, workspaces, the parent chain, its lanes with their last
+ * update, and the update feed with attachments (with `laneUpdates`, the lanes' updates too, all the way
+ * down).
+ */
+export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) {
   const ticket = getTicket(id)
+  const all = projectTickets(ticket.projectId)
+  const byId = new Map(all.map((t) => [t.id, t]))
+  const self = byId.get(id)!
+  const ancestors: { id: number; title: string }[] = []
+  for (let p = ticket.parentId; p; p = byId.get(p)?.parentId ?? null) {
+    const parent = byId.get(p)
+    if (!parent) break
+    ancestors.unshift({ id: parent.id, title: parent.title })
+  }
+  const lanes = all.filter((t) => t.parentId === id)
+  const descendants: number[] = []
+  for (let queue = lanes.map((l) => l.id); queue.length; ) {
+    const next = queue.shift()!
+    descendants.push(next)
+    queue.push(...all.filter((t) => t.parentId === next).map((t) => t.id))
+  }
+
   const tasks = db
     .select()
     .from(schema.tasks)
@@ -49,10 +105,22 @@ export function getTicketFull(id: number) {
   const updates = db
     .select()
     .from(schema.updates)
-    .where(eq(schema.updates.ticketId, id))
+    .where(inArray(schema.updates.ticketId, [id, ...descendants]))
     .orderBy(desc(schema.updates.createdAt))
     .all()
-  const updateIds = updates.map((u) => u.id)
+  // Each lane's newest update from anywhere under it, its own lanes included.
+  const laneOf = (ticketId: number) => {
+    let t = byId.get(ticketId)
+    while (t && t.parentId !== id) t = t.parentId ? byId.get(t.parentId) : undefined
+    return t?.id
+  }
+  const lastUpdate = new Map<number, (typeof updates)[number]>()
+  for (const u of updates) {
+    const lane = u.ticketId === id ? undefined : laneOf(u.ticketId)
+    if (lane && !lastUpdate.has(lane)) lastUpdate.set(lane, u)
+  }
+  const feed = opts.laneUpdates ? updates : updates.filter((u) => u.ticketId === id)
+  const updateIds = feed.map((u) => u.id)
   const files = updateIds.length
     ? db.select().from(schema.attachments).where(inArray(schema.attachments.updateId, updateIds)).all()
     : []
@@ -60,9 +128,20 @@ export function getTicketFull(id: number) {
     ...ticket,
     tasks,
     workspaces,
-    progress: { done: tasks.filter((t) => t.done).length, total: tasks.length },
-    updates: updates.map((u) => ({
+    progress: self.progress,
+    rollup: self.rollup,
+    ancestors,
+    lanes: lanes.map((l) => {
+      const u = lastUpdate.get(l.id)
+      return {
+        ...l,
+        lastUpdate: u ? { author: u.author, text: firstLine(u.body), createdAt: u.createdAt } : null,
+      }
+    }),
+    updates: feed.map((u) => ({
       ...u,
+      // Set on a lane's update shown in its parent's feed.
+      lane: u.ticketId === id ? null : { id: u.ticketId, title: byId.get(u.ticketId)?.title ?? '' },
       attachments: files.filter((f) => f.updateId === u.id).map((f) => ({ ...f, url: attachmentUrl(f) })),
     })),
   }
@@ -80,45 +159,59 @@ export function createTicket(
     branch?: string
     baseBranch?: string
     repoId?: number | null
+    parentId?: number | null
     tasks?: string[]
   },
   actor: string,
 ) {
   getProject(projectId)
-  const repo = resolveRepo(projectId, input.repoId)
+  const parent = input.parentId ? getTicket(input.parentId) : null
+  if (parent && parent.projectId !== projectId)
+    throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
+  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
+  // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
+  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
   const row = db
     .insert(schema.tickets)
     .values({
       projectId,
       repoId: repo.id,
+      parentId: parent?.id ?? null,
       title: input.title,
       body: input.body ?? '',
       status: input.status ?? 'todo',
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
-      baseBranch: input.baseBranch || repo.baseBranch,
+      baseBranch: input.baseBranch || parentBase || repo.baseBranch,
       createdBy: actor,
     })
     .returning()
     .get()
   if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
+  if (parent) touch(parent.id)
   logActivity({
     projectId,
     actor,
     kind: 'ticket',
-    text: `created ticket #${row.id} ${row.title}`,
+    text: parent
+      ? `opened lane #${row.id} ${row.title} under #${parent.id} ${parent.title}`
+      : `created ticket #${row.id} ${row.title}`,
     refType: 'ticket',
     refId: row.id,
   })
   return row
 }
 
-const touch = (ticketId: number) =>
-  db
+/** Bump a ticket and its parents, so a busy lane keeps its parent near the top of the board. */
+function touch(ticketId: number) {
+  const row = db
     .update(schema.tickets)
     .set({ updatedAt: new Date().toISOString() })
     .where(eq(schema.tickets.id, ticketId))
-    .run()
+    .returning({ parentId: schema.tickets.parentId })
+    .get()
+  if (row?.parentId) touch(row.parentId)
+}
 
 export function updateTicket(
   id: number,
@@ -155,8 +248,11 @@ export function updateTicket(
   return row
 }
 
-export function deleteTicket(id: number, actor: string) {
+/** Lanes go with the ticket unless `keepLanes`, which moves them up to the ticket's own parent. */
+export function deleteTicket(id: number, actor: string, opts: { keepLanes?: boolean } = {}) {
   const t = getTicket(id)
+  if (opts.keepLanes)
+    db.update(schema.tickets).set({ parentId: t.parentId }).where(eq(schema.tickets.parentId, id)).run()
   db.delete(schema.tickets).where(eq(schema.tickets.id, id)).run()
   logActivity({ projectId: t.projectId, actor, kind: 'ticket', text: `deleted ticket #${id} ${t.title}` })
 }

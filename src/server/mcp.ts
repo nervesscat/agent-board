@@ -39,7 +39,7 @@ The rhythm:
 1. get_project before touching it; its instructions override your defaults.
 2. Pick up work from list_tickets (todo, unassigned or assigned to you); read it with get_ticket; then update_ticket with assignee = your name (whoami), status in_progress, and the branch.
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each.
-4. add_workspace for each worktree, sub-branch or subagent; remove_workspace when it is gone.
+4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox); remove_workspace when it is gone.
 5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files.
 6. Ask and answer in threads with comment; check list_comments on your ticket when you resume.
 7. Hand off: final post_update with the PR link, then update_ticket to review. done is the human's call.
@@ -119,19 +119,30 @@ function buildServer(actor: string) {
   // ongoing features
   tool(
     'list_tickets',
-    'Tickets of a project (all its repos) with status, assignee, repoId, branch and task progress.',
-    { projectId: z.number().int() },
-    ({ projectId }) => features.listTickets(projectId),
+    'Tickets of a project (all its repos) with status, assignee, repoId, branch, parentId, task progress (own and rolled up over lanes) and lane counts by status.',
+    {
+      projectId: z.number().int(),
+      parentId: z
+        .number()
+        .int()
+        .nullable()
+        .optional()
+        .describe("a ticket's id for its lanes, null for top-level tickets only; omit for all"),
+    },
+    ({ projectId, parentId }) => features.listTickets(projectId, { parentId }),
   )
   tool(
     'get_ticket',
-    'A ticket in full: instructions, tasks, workspaces, and the update feed with attachments.',
-    { ticketId: z.number().int() },
-    ({ ticketId }) => features.getTicketFull(ticketId),
+    'A ticket in full: instructions, tasks, workspaces, its parent chain, its lanes with their last update, and the update feed with attachments.',
+    {
+      ticketId: z.number().int(),
+      laneUpdates: z.boolean().default(false).describe("include the lanes' updates in the feed"),
+    },
+    ({ ticketId, laneUpdates }) => features.getTicketFull(ticketId, { laneUpdates }),
   )
   tool(
     'create_ticket',
-    'Create a ticket (a feature or piece of work) with optional initial tasks.',
+    'Create a ticket (a feature or piece of work) with optional initial tasks. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, branch, tasks and updates.',
     {
       projectId: z.number().int(),
       title: z.string(),
@@ -145,6 +156,13 @@ function buildServer(actor: string) {
         .int()
         .optional()
         .describe('the repo the branch lives in; required when the project has more than one repo'),
+      parentId: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          "make this a lane of that ticket; repo and base branch default to the parent's repo and branch",
+        ),
       tasks: z.array(z.string()).default([]),
     },
     ({ projectId, ...rest }) => features.createTicket(projectId, rest, actor),

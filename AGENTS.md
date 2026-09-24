@@ -42,8 +42,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    the `branch` you will work on.
 3. **Break it down**: `add_tasks` with the concrete steps if the ticket does not have them;
    `set_task_done` as you finish each one. The progress bar the human sees is those tasks.
-4. **Sub-branches, worktrees, subagents**: register each with `add_workspace` (name, branch,
-   path) so the board can show what is running where; `remove_workspace` when it is gone.
+4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
+   agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and
+   `assignee`. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its
+   own; its repo and base branch default to the parent's repo and branch. Register where code runs
+   (worktree, sub-branch, sandbox) with `add_workspace`; `remove_workspace` when it is gone.
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
    the board copies them). One update per meaningful step, not per keystroke.

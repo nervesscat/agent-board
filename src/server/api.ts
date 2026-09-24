@@ -122,23 +122,33 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 })
 
 // --- ongoing features ---
-api.get('/api/projects/:id/tickets', ({ params }) => json(features.listTickets(id(params))))
+// ?parent=root for the top level, ?parent=<ticketId> for one ticket's lanes; all tickets otherwise.
+api.get('/api/projects/:id/tickets', ({ params, url }) => {
+  const parent = url.searchParams.get('parent')
+  const parentId = parent === null ? undefined : parent === 'root' ? null : intParam(parent, 'parent')
+  return json(features.listTickets(id(params), { parentId }))
+})
 api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
     TicketPatch.extend({
       title: z.string().min(1).max(200),
       tasks: z.array(z.string().min(1).max(500)).optional(),
+      parentId: z.number().int().optional(),
     }),
   )
   return json(features.createTicket(id(params), body, actor), 201)
 })
-api.get('/api/tickets/:id', ({ params }) => json(features.getTicketFull(id(params))))
+// ?lanes=1 folds the lanes' updates into the feed.
+api.get('/api/tickets/:id', ({ params, url }) =>
+  json(features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' })),
+)
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
   json(features.updateTicket(id(params), await readJson(request, TicketPatch), actor)),
 )
-api.delete('/api/tickets/:id', ({ params, actor }) => {
-  features.deleteTicket(id(params), actor)
+// ?keepLanes=1 moves the lanes up a level instead of deleting them.
+api.delete('/api/tickets/:id', ({ params, url, actor }) => {
+  features.deleteTicket(id(params), actor, { keepLanes: url.searchParams.get('keepLanes') === '1' })
   return json({ ok: true })
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))

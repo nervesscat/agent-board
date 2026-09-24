@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { type AnySQLiteColumn, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 import { COMMENT_PARENTS, TICKET_STATUSES, type CommentParent, type TicketStatus } from '#/lib/constants'
 
@@ -58,23 +58,29 @@ export const prs = sqliteTable(
   (t) => [index('prs_project_number').on(t.projectId, t.number), index('prs_repo').on(t.repoId)],
 )
 
-export const tickets = sqliteTable('tickets', {
-  id: id(),
-  projectId: integer('project_id')
-    .notNull()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  // The repo the ticket's branch lives in; null means the project's first repo.
-  repoId: integer('repo_id').references(() => repos.id, { onDelete: 'set null' }),
-  title: text().notNull(),
-  body: text().notNull().default(''),
-  status: text().$type<TicketStatus>().notNull().default('todo'),
-  assignee: text().notNull().default(''),
-  branch: text().notNull().default(''),
-  baseBranch: text('base_branch').notNull().default('main'),
-  createdBy: text('created_by').notNull(),
-  createdAt: now(),
-  updatedAt: now(),
-})
+export const tickets = sqliteTable(
+  'tickets',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // The repo the ticket's branch lives in; null means the project's first repo.
+    repoId: integer('repo_id').references(() => repos.id, { onDelete: 'set null' }),
+    // A lane: a parallel piece of the parent ticket, worked like any ticket. Null at the top level.
+    parentId: integer('parent_id').references((): AnySQLiteColumn => tickets.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    body: text().notNull().default(''),
+    status: text().$type<TicketStatus>().notNull().default('todo'),
+    assignee: text().notNull().default(''),
+    branch: text().notNull().default(''),
+    baseBranch: text('base_branch').notNull().default('main'),
+    createdBy: text('created_by').notNull(),
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  (t) => [index('tickets_parent').on(t.parentId)],
+)
 
 export const tasks = sqliteTable('tasks', {
   id: id(),

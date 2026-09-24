@@ -14,7 +14,7 @@ import type {
   Workspace,
   Activity,
 } from '#/db/schema'
-import type { TicketFull } from '#/server/features'
+import type { TicketFull, TicketRow } from '#/server/features'
 import type { BranchInfo, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
 import type { ProjectFull, listProjects } from '#/server/projects'
@@ -41,6 +41,7 @@ export type {
   Workspace,
   Activity,
   TicketFull,
+  TicketRow,
   PrRow,
   BranchInfo,
   Worktree,
@@ -102,9 +103,9 @@ export function errorMessage(err: unknown, fallback = 'something went wrong'): s
 
 // --- payload shapes the server composes ---
 
-export type TicketRow = Ticket & { progress: { done: number; total: number } }
 export type CommentRow = Comment & { attachments: (Attachment & { url: string })[] }
 export type UpdateRow = TicketFull['updates'][number]
+export type LaneRow = TicketFull['lanes'][number]
 
 export interface TicketGit {
   repo: { id: number; name: string } | null
