@@ -101,6 +101,15 @@ function TicketPage() {
     },
     onError,
   })
+  const approve = useMutation({
+    mutationFn: (approved: boolean) => put(`/api/tickets/${ticketId}/approval`, { approved }),
+    onSuccess: () => {
+      invalidate()
+      // The parent's lanes list shows the same check.
+      if (t?.parentId) qc.invalidateQueries({ queryKey: ['ticket', String(t.parentId)] })
+    },
+    onError,
+  })
   const [editing, setEditing] = useState(false)
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
@@ -158,13 +167,25 @@ function TicketPage() {
               <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
             </span>
           )}
-          {t.approvedAt && (
-            <span
-              className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400"
-              title={`Approved by ${t.approvedBy} ${stamp(t.approvedAt)}`}
+          {(t.parentId || t.approvedAt) && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={approve.isPending}
+              onClick={() => approve.mutate(!t.approvedAt)}
+              title={
+                t.approvedAt
+                  ? `Approved by ${t.approvedBy} ${stamp(t.approvedAt)}. Click to withdraw.`
+                  : 'Approve this lane'
+              }
+              className={
+                t.approvedAt
+                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300'
+                  : ''
+              }
             >
-              <Check className="size-3.5" /> Approved
-            </span>
+              <Check data-icon="inline-start" /> {t.approvedAt ? 'Approved' : 'Approve'}
+            </Button>
           )}
           <StatusSelect value={t.status} onChange={(status) => update.mutate({ status })} />
           <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>
