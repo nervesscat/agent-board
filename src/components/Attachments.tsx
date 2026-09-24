@@ -1,9 +1,10 @@
 import { PlayIcon } from 'lucide-react'
 
 import { galleryItem } from '#/components/Gallery'
+import { PdfThumb } from '#/components/PdfThumb'
 import type { Attachment } from '#/lib/api'
 
-/** Image and video thumbnails, everything else a link; a click opens the gallery. */
+/** Image, video and PDF thumbnails, everything else a link; a click opens the gallery. */
 export function Attachments({ items }: { items: (Attachment & { url: string })[] }) {
   if (!items.length) return null
   return (
@@ -36,6 +37,8 @@ export function Attachments({ items }: { items: (Attachment & { url: string })[]
               </span>
             </span>
           </a>
+        ) : a.mime === 'application/pdf' ? (
+          <PdfThumb key={a.id} url={a.url} name={a.name} size={a.size} />
         ) : (
           <a
             key={a.id}
