@@ -166,7 +166,7 @@ export function DailyView({ projectId }: { projectId?: number }) {
       ) : (
         <ol className="space-y-4">
           {[...hours].map(([hour, items]) => (
-            <li key={hour} className="grid grid-cols-[3.5rem_1fr] gap-3">
+            <li key={hour} className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3">
               <div className="pt-0.5 text-right font-mono text-xs text-muted-foreground">
                 {hour}
                 <div className="text-[10px]">{items.length}</div>

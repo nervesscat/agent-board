@@ -89,6 +89,8 @@ function TicketPage() {
       params: { id, ticketId },
       search: laneSearch(f),
       replace: true,
+      // A filter change is the same page: stay where the reader is.
+      resetScroll: false,
     })
   const key = ['ticket', ticketId]
   // Fold the lanes' updates into this ticket's feed.
@@ -252,8 +254,10 @@ function TicketPage() {
           onCancel={() => setEditing(false)}
         />
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
-          <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
+              widen the page */}
+          <div className="min-w-0 space-y-6">
             <section className="rounded-lg border p-4">
               <h2 className="mb-2 text-sm font-medium">Instructions</h2>
               {t.body ? (
@@ -276,7 +280,7 @@ function TicketPage() {
               <Thread parentType="ticket" parentId={t.id} />
             </section>
           </div>
-          <aside className="space-y-4">
+          <aside className="min-w-0 space-y-4">
             <GitPanel t={t} git={git} onChange={invalidate} />
           </aside>
         </div>
