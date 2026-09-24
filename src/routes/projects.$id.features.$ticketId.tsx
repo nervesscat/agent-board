@@ -22,6 +22,7 @@ import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
 import { NewTicket } from '#/components/NewTicket'
+import { PendingFiles } from '#/components/PendingFiles'
 import { Tag, compareTags } from '#/components/Tag'
 import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
@@ -811,23 +812,23 @@ function Updates({
           rows={3}
           placeholder="Post progress (markdown). Agents post here too, with screenshots and recordings."
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileInput}
             type="file"
             multiple
             hidden
             accept="image/*,video/*,.md,.txt,.log,.pdf"
-            onChange={(e) => setFiles([...files, ...Array.from(e.target.files ?? [])])}
+            onChange={(e) => {
+              setFiles([...files, ...Array.from(e.target.files ?? [])])
+              // Clear it, so picking a file that was just removed registers again.
+              e.target.value = ''
+            }}
           />
           <Button type="button" variant="ghost" size="sm" onClick={() => fileInput.current?.click()}>
             <Paperclip data-icon="inline-start" /> attach
           </Button>
-          {files.map((f, i) => (
-            <span key={i} className="rounded bg-muted px-1.5 py-0.5 text-xs">
-              {f.name}
-            </span>
-          ))}
+          <PendingFiles files={files} onChange={setFiles} />
           <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
             {send.isPending ? 'Posting…' : 'Post update'}
           </Button>

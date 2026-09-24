@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
 import { Attachments } from '#/components/Attachments'
+import { PendingFiles } from '#/components/PendingFiles'
 import { Markdown } from '#/components/Markdown'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
@@ -108,22 +109,22 @@ export function Thread({
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && body.trim()) send.mutate()
           }}
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileInput}
             type="file"
             multiple
             hidden
-            onChange={(e) => setFiles([...files, ...Array.from(e.target.files ?? [])])}
+            onChange={(e) => {
+              setFiles([...files, ...Array.from(e.target.files ?? [])])
+              // Clear it, so picking a file that was just removed registers again.
+              e.target.value = ''
+            }}
           />
           <Button type="button" variant="ghost" size="sm" onClick={() => fileInput.current?.click()}>
             <Paperclip data-icon="inline-start" /> attach
           </Button>
-          {files.map((f, i) => (
-            <span key={i} className="rounded bg-muted px-1.5 py-0.5 text-xs">
-              {f.name}
-            </span>
-          ))}
+          <PendingFiles files={files} onChange={setFiles} />
           <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
             {send.isPending ? 'Sending…' : 'Comment'}
           </Button>
