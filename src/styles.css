@@ -131,5 +131,45 @@
   }
   html {
     @apply font-sans;
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+}
+
+/*
+ * Scrollbars: a slim rounded thumb on no track, from the theme's muted colour, stronger on hover.
+ * Chromium and Safari take the ::-webkit-scrollbar rules (Chromium ignores them once scrollbar-color
+ * is set, hence the @supports); Firefox only knows scrollbar-width / scrollbar-color.
+ */
+:root {
+  --scrollbar-thumb: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklch, var(--muted-foreground) 65%, transparent);
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--muted-foreground);
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 }
