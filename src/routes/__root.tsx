@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { HeadContent, Link, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
 import { useEffect } from 'react'
 
+import { Gallery } from '#/components/Gallery'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { Toaster } from '#/components/ui/sonner'
 import { followSystemTheme } from '#/lib/theme'
@@ -66,6 +67,7 @@ function App() {
       <main className="mx-auto w-full max-w-7xl px-4 py-6">
         <Outlet />
       </main>
+      <Gallery />
       <Toaster />
     </>
   )
