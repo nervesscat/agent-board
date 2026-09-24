@@ -595,10 +595,13 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
       <section className="rounded-lg border p-3">
         <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
         <p className="mb-2 text-xs text-muted-foreground">
-          Worktrees, sub-branches and subagent sandboxes opened for this ticket.
+          Worktrees, sub-branches and subagent sandboxes opened for this ticket
+          {t.lanes.length > 0 && ' and its lanes'}.
         </p>
         <ul className="space-y-2">
-          {(git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null }))).map((w) => (
+          {(
+            git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))
+          ).map((w) => (
             <li key={w.id} className="group text-sm">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{w.name}</span>
@@ -612,6 +615,15 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
                   <X className="size-3.5 text-muted-foreground" />
                 </button>
               </div>
+              {w.lane && (
+                <Link
+                  to="/projects/$id/features/$ticketId"
+                  params={{ id: String(t.projectId), ticketId: String(w.lane.id) }}
+                  className="mt-0.5 inline-flex max-w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <Layers className="size-3 shrink-0" /> <span className="truncate">{w.lane.title}</span>
+                </Link>
+              )}
               {w.branch && <div className="font-mono text-xs">{w.branch}</div>}
               {w.info && <Info info={w.info} />}
               {w.worktree && (

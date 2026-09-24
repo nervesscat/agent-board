@@ -112,7 +112,11 @@ export interface TicketGit {
   branch: string
   baseBranch: string
   info: BranchInfo
-  workspaces: (Workspace & { info: BranchInfo; worktree: Worktree | null })[]
+  workspaces: (Workspace & {
+    info: BranchInfo
+    worktree: Worktree | null
+    lane: { id: number; title: string } | null
+  })[]
 }
 
 export type RunRow = Omit<ReviewRun, 'log'>

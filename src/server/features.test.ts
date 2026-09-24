@@ -87,6 +87,20 @@ describe('lanes', () => {
     ).toThrow(/not in project/)
   })
 
+  it("show their workspaces in the parent's git panel, tagged with the lane", async () => {
+    const parent = features.createTicket(projectId, { title: 'panel', repoId: otherRepo }, 'me')
+    const lane = features.createTicket(projectId, { title: 'lane', parentId: parent.id }, 'me')
+    const sub = features.createTicket(projectId, { title: 'sub', parentId: lane.id }, 'me')
+    features.addWorkspace(parent.id, { name: 'main-wt' }, 'me')
+    features.addWorkspace(sub.id, { name: 'sub-wt', branch: 'feat/sub' }, 'codex')
+    const git = await features.ticketGit(parent.id)
+    expect(git.workspaces.map((w) => [w.name, w.lane?.id ?? null])).toEqual([
+      ['main-wt', null],
+      ['sub-wt', sub.id],
+    ])
+    expect((await features.ticketGit(sub.id)).workspaces.map((w) => w.lane)).toEqual([null])
+  })
+
   it('go with the ticket, or move up a level with keepLanes', () => {
     const a = features.createTicket(projectId, { title: 'a', repoId: otherRepo }, 'me')
     const b = features.createTicket(projectId, { title: 'b', parentId: a.id }, 'me')

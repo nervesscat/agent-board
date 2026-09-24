@@ -58,6 +58,17 @@ function projectTickets(projectId: number) {
 
 export type TicketRow = ReturnType<typeof projectTickets>[number]
 
+/** The lanes under a ticket, all the way down, nearest first. */
+function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
+  const out: T[] = []
+  for (let queue = all.filter((t) => t.parentId === id); queue.length; ) {
+    const next = queue.shift()!
+    out.push(next)
+    queue.push(...all.filter((t) => t.parentId === next.id))
+  }
+  return out
+}
+
 /** A project's tickets; `parentId` narrows to the lanes of one ticket, `null` to the top level. */
 export function listTickets(projectId: number, filter: { parentId?: number | null } = {}) {
   getProject(projectId)
@@ -88,12 +99,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     ancestors.unshift({ id: parent.id, title: parent.title })
   }
   const lanes = all.filter((t) => t.parentId === id)
-  const descendants: number[] = []
-  for (let queue = lanes.map((l) => l.id); queue.length; ) {
-    const next = queue.shift()!
-    descendants.push(next)
-    queue.push(...all.filter((t) => t.parentId === next).map((t) => t.id))
-  }
+  const descendants = laneTree(all, id).map((t) => t.id)
 
   const tasks = db
     .select()
@@ -357,30 +363,62 @@ export function deleteWorkspace(id: number, actor: string) {
   })
 }
 
-/** Live, read-only git state for the ticket's branch and each workspace. */
+/**
+ * Live, read-only git state for the ticket's branch and each workspace: its own, then its lanes'
+ * (all the way down, each tagged with its lane). A workspace is compared against the branch of the
+ * ticket it belongs to, in that ticket's repo.
+ */
 export async function ticketGit(id: number) {
   const ticket = getTicket(id)
+  const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, ticket.projectId)).all()
+  const owners = [ticket, ...laneTree(all, id)]
+  const rows = db
+    .select()
+    .from(schema.workspaces)
+    .where(
+      inArray(
+        schema.workspaces.ticketId,
+        owners.map((t) => t.id),
+      ),
+    )
+    .all()
+  const workspaces = owners.flatMap((owner) =>
+    rows.filter((w) => w.ticketId === owner.id).map((w) => ({ w, owner, repo: ticketRepo(owner) })),
+  )
   const repo = ticketRepo(ticket)
-  const workspaces = db.select().from(schema.workspaces).where(eq(schema.workspaces.ticketId, id)).all()
   const none = { exists: false, sha: null, subject: null, authoredAt: null, ahead: null, behind: null }
-  const [branch, worktrees, ...wsBranches] = repo
-    ? await Promise.all([
-        branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
-        listWorktrees(repo.repoPath).catch(() => []),
-        ...workspaces.map((w) => branchInfo(repo.repoPath, w.branch, ticket.branch || ticket.baseBranch)),
+  const worktreesOf = new Map<string, ReturnType<typeof listWorktrees>>()
+  const worktrees = (repoPath: string) => {
+    if (!worktreesOf.has(repoPath))
+      worktreesOf.set(
+        repoPath,
+        listWorktrees(repoPath).catch(() => []),
+      )
+    return worktreesOf.get(repoPath)!
+  }
+  const [branch, ...wsState] = await Promise.all([
+    repo ? branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch) : none,
+    ...workspaces.map(async ({ w, owner, repo: r }) => {
+      if (!r) return { info: none, worktree: null }
+      const [info, trees] = await Promise.all([
+        branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
+        worktrees(r.repoPath),
       ])
-    : [none, [], ...workspaces.map(() => none)]
+      const worktree =
+        trees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ?? null
+      return { info, worktree }
+    }),
+  ])
   return {
     repo: repo ? { id: repo.id, name: repo.name } : null,
     branch: ticket.branch,
     baseBranch: ticket.baseBranch,
     info: branch,
-    workspaces: workspaces.map((w, i) => ({
+    workspaces: workspaces.map(({ w, owner }, i) => ({
       ...w,
-      info: wsBranches[i],
-      worktree:
-        worktrees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ??
-        null,
+      ...wsState[i]!,
+      // Set on a lane's workspace shown in its parent's panel.
+      lane: owner.id === id ? null : { id: owner.id, title: owner.title },
     })),
   }
 }
