@@ -35,6 +35,7 @@ export const STATUS_LABEL: Record<string, string> = {
   in_progress: 'In progress',
   review: 'In review',
   done: 'Done',
+  cancelled: 'Cancelled',
   pending: 'Pending',
   reviewed: 'Reviewed',
   on_hold: 'On hold',

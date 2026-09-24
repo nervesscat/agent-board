@@ -84,6 +84,9 @@ export const tickets = sqliteTable(
     // The human's sign-off (on a lane, usually); null until approved. Agents can read it, not set it.
     approvedAt: text('approved_at'),
     approvedBy: text('approved_by').notNull().default(''),
+    // The opposite call: the human rejected it, which also cancels it. At most one of the two is set.
+    disapprovedAt: text('disapproved_at'),
+    disapprovedBy: text('disapproved_by').notNull().default(''),
     createdAt: now(),
     updatedAt: now(),
   },

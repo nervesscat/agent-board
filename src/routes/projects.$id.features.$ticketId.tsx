@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
-  Check,
+  ChevronLeft,
   ChevronRight,
   GitBranch,
   Layers,
@@ -24,6 +24,7 @@ import { Markdown } from '#/components/Markdown'
 import { NewTicket } from '#/components/NewTicket'
 import { Tag, compareTags } from '#/components/Tag'
 import { Thread } from '#/components/Thread'
+import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,14 +58,38 @@ import {
 } from '#/lib/api'
 import type { TicketStatus } from '#/lib/constants'
 import { STATUS_LABEL, ago, shortSha, stamp } from '#/lib/format'
+import {
+  LANE_ORDER,
+  type LaneFilter,
+  effectiveFilter,
+  laneFilter,
+  laneNeighbours,
+  laneSearch,
+  sortLanes,
+  stageOk,
+  tagOk,
+  validateLaneSearch,
+} from '#/lib/lanes'
 import { useProject } from '#/lib/project'
 
-export const Route = createFileRoute('/projects/$id/features/$ticketId')({ component: TicketPage })
+export const Route = createFileRoute('/projects/$id/features/$ticketId')({
+  component: TicketPage,
+  validateSearch: validateLaneSearch,
+})
 
 function TicketPage() {
   const { id, ticketId } = Route.useParams()
+  const search = Route.useSearch()
+  const filter = laneFilter(search)
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const setFilter = (f: LaneFilter) =>
+    navigate({
+      to: '/projects/$id/features/$ticketId',
+      params: { id, ticketId },
+      search: laneSearch(f),
+      replace: true,
+    })
   const key = ['ticket', ticketId]
   // Fold the lanes' updates into this ticket's feed.
   const [laneFeed, setLaneFeed] = useState(false)
@@ -101,20 +126,30 @@ function TicketPage() {
     },
     onError,
   })
-  const approve = useMutation({
-    mutationFn: (approved: boolean) => put(`/api/tickets/${ticketId}/approval`, { approved }),
-    onSuccess: () => {
+  const judge = useMutation({
+    mutationFn: (v: { ticketId: number; verdict: Verdict }) =>
+      put(`/api/tickets/${v.ticketId}/approval`, { verdict: v.verdict }),
+    onSuccess: (_d, v) => {
       invalidate()
-      // The parent's lanes list shows the same check.
+      qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
+      // The parent's lanes list shows the same call.
       if (t?.parentId) qc.invalidateQueries({ queryKey: ['ticket', String(t.parentId)] })
     },
     onError,
+  })
+  // On a lane: the parent's lanes, for previous / next under the same filter. Same query as the
+  // parent's own page, so it is usually cached already.
+  const { data: parent } = useQuery({
+    queryKey: ['ticket', String(t?.parentId), false],
+    queryFn: () => get<TicketFull>(`/api/tickets/${t!.parentId}`),
+    enabled: Boolean(t?.parentId),
+    refetchInterval: 10_000,
   })
   const [editing, setEditing] = useState(false)
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
-  const openLanes = t.lanes.filter((l) => l.status !== 'done').length
+  const openLanes = t.lanes.filter((l) => l.status !== 'done' && l.status !== 'cancelled').length
   const lanesWarning = openLanes > 0 && (t.status === 'review' || t.status === 'done')
 
   return (
@@ -129,6 +164,8 @@ function TicketPage() {
             <Link
               to="/projects/$id/features/$ticketId"
               params={{ id, ticketId: String(a.id) }}
+              // Back to the parent's list with the filter it had.
+              search={a.id === t.parentId ? laneSearch(filter) : {}}
               className="max-w-64 truncate hover:text-foreground"
             >
               #{a.id} {a.title}
@@ -137,6 +174,7 @@ function TicketPage() {
         ))}
         <ChevronRight className="size-3.5" />
         <span className="text-foreground">#{t.id}</span>
+        {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
       </nav>
 
       <div className="flex flex-wrap items-start gap-3">
@@ -167,25 +205,12 @@ function TicketPage() {
               <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
             </span>
           )}
-          {(t.parentId || t.approvedAt) && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={approve.isPending}
-              onClick={() => approve.mutate(!t.approvedAt)}
-              title={
-                t.approvedAt
-                  ? `Approved by ${t.approvedBy} ${stamp(t.approvedAt)}. Click to withdraw.`
-                  : 'Approve this lane'
-              }
-              className={
-                t.approvedAt
-                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 hover:text-emerald-800 dark:text-emerald-400 dark:hover:text-emerald-300'
-                  : ''
-              }
-            >
-              <Check data-icon="inline-start" /> {t.approvedAt ? 'Approved' : 'Approve'}
-            </Button>
+          {(t.parentId || verdictOf(t)) && (
+            <VerdictButtons
+              t={t}
+              disabled={judge.isPending}
+              onSet={(verdict) => judge.mutate({ ticketId: t.id, verdict })}
+            />
           )}
           <StatusSelect value={t.status} onChange={(status) => update.mutate({ status })} />
           <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>
@@ -238,7 +263,13 @@ function TicketPage() {
               )}
             </section>
             <Tasks t={t} onChange={invalidate} />
-            <Lanes t={t} onChange={invalidate} />
+            <Lanes
+              t={t}
+              filter={filter}
+              onFilter={setFilter}
+              onVerdict={(ticketId, verdict) => judge.mutate({ ticketId, verdict })}
+              judging={judge.isPending}
+            />
             <Updates t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
             <section>
               <h2 className="mb-3 text-sm font-medium">Thread</h2>
@@ -424,14 +455,13 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   )
 }
 
-// Finished lanes first, then the ones closest to finishing.
-const LANE_ORDER: TicketStatus[] = ['done', 'review', 'in_progress', 'todo', 'backlog']
 const STAGE_TAG: Record<TicketStatus, string> = {
   done: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
   review: 'bg-violet-500/15 text-violet-700 dark:text-violet-400',
   in_progress: 'bg-sky-500/15 text-sky-700 dark:text-sky-400',
   todo: 'bg-muted text-foreground/80',
   backlog: 'bg-muted text-muted-foreground',
+  cancelled: 'bg-muted text-muted-foreground line-through',
 }
 
 /** One row of filter chips: "All" clears it, each chip toggles; a chip with nothing to show dims. */
@@ -481,34 +511,77 @@ function FilterRow<K extends string>({
   )
 }
 
-function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
+/** "‹ 3 of 12 ›" among the parent's lanes, in the list's order and under its filter. */
+function LaneNav({
+  projectId,
+  lanes,
+  id,
+  filter,
+}: {
+  projectId: string
+  lanes: TicketFull['lanes']
+  id: number
+  filter: LaneFilter
+}) {
+  const { prev, next, index, count, filtered } = laneNeighbours(lanes, id, filter)
+  const step = (lane: (typeof lanes)[number] | null, dir: 'prev' | 'next') =>
+    lane ? (
+      <Link
+        to="/projects/$id/features/$ticketId"
+        params={{ id: projectId, ticketId: String(lane.id) }}
+        search={laneSearch(filter)}
+        title={`#${lane.id} ${lane.title}`}
+        className="inline-flex size-7 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
+        aria-label={dir === 'prev' ? 'Previous lane' : 'Next lane'}
+      >
+        {dir === 'prev' ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+      </Link>
+    ) : (
+      <span className="inline-flex size-7 items-center justify-center rounded-md border opacity-40">
+        {dir === 'prev' ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+      </span>
+    )
+  return (
+    <span className="ml-auto inline-flex items-center gap-2 text-xs">
+      {step(prev, 'prev')}
+      <span className="tabular-nums">
+        {index >= 0 ? `lane ${index + 1} of ${count}` : `${count} lane${count === 1 ? '' : 's'}`}
+        {filtered && ' (filtered)'}
+      </span>
+      {step(next, 'next')}
+    </span>
+  )
+}
+
+function Lanes({
+  t,
+  filter: wanted,
+  onFilter,
+  onVerdict,
+  judging,
+}: {
+  t: TicketFull
+  filter: LaneFilter
+  onFilter: (f: LaneFilter) => void
+  onVerdict: (ticketId: number, verdict: Verdict) => void
+  judging: boolean
+}) {
   const done = t.lanes.filter((l) => l.status === 'done').length
+  const cancelled = t.lanes.filter((l) => l.status === 'cancelled').length
   const approved = t.lanes.filter((l) => l.approvedAt).length
-  const approve = useMutation({
-    mutationFn: (v: { id: number; approved: boolean }) =>
-      put(`/api/tickets/${v.id}/approval`, { approved: v.approved }),
-    onSuccess: onChange,
-    onError: (err) => toast.error(errorMessage(err)),
-  })
+  const disapproved = t.lanes.filter((l) => l.disapprovedAt).length
   // Filter by stage and by tag: within a row any picked chip matches, across rows all must. Each
   // row counts the lanes the other row lets through, so a number is what clicking it would show.
-  const [pickedStages, setStages] = useState<TicketStatus[]>([])
-  const [pickedTags, setPicked] = useState<string[]>([])
-  const toggle = <T,>(set: (fn: (v: T[]) => T[]) => void, key: T) =>
-    set((v) => (v.includes(key) ? v.filter((x) => x !== key) : [...v, key]))
-  // A pick whose stage or tag no longer appears on any lane stops filtering (its chip is gone too).
-  const stages = pickedStages.filter((s) => t.lanes.some((l) => l.status === s))
-  const picked = pickedTags.filter((k) => t.lanes.some((l) => l.tags.some((x) => x.toLowerCase() === k)))
-  const stageOk = (l: TicketFull['lanes'][number]) => !stages.length || stages.includes(l.status)
-  const tagOk = (l: TicketFull['lanes'][number]) =>
-    !picked.length || l.tags.some((tag) => picked.includes(tag.toLowerCase()))
+  const filter = effectiveFilter(t.lanes, wanted)
+  const toggled = <T,>(list: T[], key: T) =>
+    list.includes(key) ? list.filter((x) => x !== key) : [...list, key]
 
   const tagCounts = new Map<string, { tag: string; count: number }>()
   for (const l of t.lanes)
     for (const tag of l.tags) {
       const key = tag.toLowerCase()
       const entry = tagCounts.get(key) ?? { tag, count: 0 }
-      if (stageOk(l)) entry.count++
+      if (stageOk(l, filter)) entry.count++
       tagCounts.set(key, entry)
     }
   const tags = [...tagCounts.values()].sort((a, b) => compareTags(a.tag, b.tag))
@@ -519,12 +592,10 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
         {STATUS_LABEL[s]}
       </span>
     ),
-    count: t.lanes.filter((l) => l.status === s && tagOk(l)).length,
+    count: t.lanes.filter((l) => l.status === s && tagOk(l, filter)).length,
   }))
-  const filtering = stages.length > 0 || picked.length > 0
-  const lanes = t.lanes
-    .filter((l) => stageOk(l) && tagOk(l))
-    .sort((a, b) => LANE_ORDER.indexOf(a.status) - LANE_ORDER.indexOf(b.status) || a.id - b.id)
+  const filtering = filter.stages.length > 0 || filter.tags.length > 0
+  const lanes = sortLanes(t.lanes.filter((l) => stageOk(l, filter) && tagOk(l, filter)))
   return (
     <section className="rounded-lg border p-4">
       <div className="mb-3 flex items-center gap-3">
@@ -533,7 +604,9 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
         </h2>
         {t.lanes.length > 0 && (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {done}/{t.lanes.length} done · {approved} approved
+            {done}/{t.lanes.length - cancelled} done · {approved} approved
+            {disapproved > 0 && ` · ${disapproved} disapproved`}
+            {cancelled > 0 && ` · ${cancelled} cancelled`}
             {t.rollup.total > t.progress.total && ` · all tasks ${t.rollup.done}/${t.rollup.total}`}
           </span>
         )}
@@ -552,9 +625,9 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
             <FilterRow
               label="Stage"
               chips={stageChips}
-              active={stages}
-              onToggle={(s) => toggle(setStages, s)}
-              onClear={() => setStages([])}
+              active={filter.stages}
+              onToggle={(s) => onFilter({ ...filter, stages: toggled(filter.stages, s) })}
+              onClear={() => onFilter({ ...filter, stages: [] })}
             />
             {tags.length > 0 && (
               <FilterRow
@@ -564,9 +637,9 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                   label: <Tag tag={tag} className="rounded-full" />,
                   count,
                 }))}
-                active={picked}
-                onToggle={(key) => toggle(setPicked, key)}
-                onClear={() => setPicked([])}
+                active={filter.tags}
+                onToggle={(key) => onFilter({ ...filter, tags: toggled(filter.tags, key) })}
+                onClear={() => onFilter({ ...filter, tags: [] })}
               />
             )}
             {filtering && (
@@ -575,10 +648,7 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                 <button
                   type="button"
                   className="underline underline-offset-2 hover:text-foreground"
-                  onClick={() => {
-                    setStages([])
-                    setPicked([])
-                  }}
+                  onClick={() => onFilter({ stages: [], tags: [] })}
                 >
                   clear filters
                 </button>
@@ -588,21 +658,18 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
           <ul className="max-h-[36rem] divide-y overflow-y-auto rounded-md border">
             {lanes.map((l) => (
               <li key={l.id} className="flex items-start transition-colors hover:bg-muted/50">
-                <label
-                  className="flex shrink-0 cursor-pointer items-center py-2.5 pr-1 pl-3"
-                  title={
-                    l.approvedAt ? `Approved by ${l.approvedBy} ${ago(l.approvedAt)}` : 'Approve this lane'
-                  }
-                >
-                  <Checkbox
-                    checked={Boolean(l.approvedAt)}
-                    onCheckedChange={(v) => approve.mutate({ id: l.id, approved: Boolean(v) })}
-                    aria-label="Approved"
+                <span className="shrink-0 py-2 pr-1 pl-3">
+                  <VerdictButtons
+                    t={l}
+                    compact
+                    disabled={judging}
+                    onSet={(verdict) => onVerdict(l.id, verdict)}
                   />
-                </label>
+                </span>
                 <Link
                   to="/projects/$id/features/$ticketId"
                   params={{ id: String(t.projectId), ticketId: String(l.id) }}
+                  search={laneSearch(filter)}
                   className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pr-3 pl-2"
                 >
                   <span
@@ -612,7 +679,10 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm leading-snug">
-                      <span className="text-muted-foreground">#{l.id}</span> {l.title}
+                      <span className="text-muted-foreground">#{l.id}</span>{' '}
+                      <span className={l.status === 'cancelled' ? 'text-muted-foreground line-through' : ''}>
+                        {l.title}
+                      </span>
                       {l.tags.length > 0 && (
                         <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
                           {[...l.tags].sort(compareTags).map((tag) => (

@@ -13,7 +13,9 @@ type TicketStatus = schema.TicketStatus
 // --- tickets ---
 
 type Progress = { done: number; total: number }
-export type LaneCounts = { total: number; approved: number } & Partial<Record<TicketStatus, number>>
+export type LaneCounts = { total: number; approved: number; disapproved: number } & Partial<
+  Record<TicketStatus, number>
+>
 
 /**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
@@ -38,19 +40,23 @@ function projectTickets(projectId: number) {
   }
   const children = new Map<number, schema.Ticket[]>()
   for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
+  // A cancelled lane's tasks are no longer part of the work.
   const rollup = (id: number): Progress =>
-    (children.get(id) ?? []).reduce(
-      (acc, lane) => {
-        const p = rollup(lane.id)
-        return { done: acc.done + p.done, total: acc.total + p.total }
-      },
-      { ...own.get(id)! },
-    )
+    (children.get(id) ?? [])
+      .filter((lane) => lane.status !== 'cancelled')
+      .reduce(
+        (acc, lane) => {
+          const p = rollup(lane.id)
+          return { done: acc.done + p.done, total: acc.total + p.total }
+        },
+        { ...own.get(id)! },
+      )
   return rows.map((t) => {
-    const lanes: LaneCounts = { total: 0, approved: 0 }
+    const lanes: LaneCounts = { total: 0, approved: 0, disapproved: 0 }
     for (const lane of children.get(t.id) ?? []) {
       lanes.total++
       if (lane.approvedAt) lanes.approved++
+      if (lane.disapprovedAt) lanes.disapproved++
       lanes[lane.status] = (lanes[lane.status] ?? 0) + 1
     }
     return { ...t, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
@@ -283,25 +289,51 @@ export function updateTicket(
   return row
 }
 
-/** The human's sign-off on a ticket or lane. Callers make sure the actor is the human. */
-export function setApproval(id: number, approved: boolean, actor: string) {
+export type Verdict = 'approved' | 'disapproved' | null
+
+export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>): Verdict =>
+  t.approvedAt ? 'approved' : t.disapprovedAt ? 'disapproved' : null
+
+/**
+ * The human's call on a ticket or lane: approve it, disapprove it (which cancels it), or clear the
+ * call. Taking back a disapproval puts a cancelled ticket back to todo. Callers make sure the actor
+ * is the human.
+ */
+export function setVerdict(id: number, verdict: Verdict, actor: string) {
   const t = getTicket(id)
-  if (Boolean(t.approvedAt) === approved) return t
+  const before = verdictOf(t)
+  if (before === verdict) return t
+  const now = new Date().toISOString()
+  const reopen = before === 'disapproved' && t.status === 'cancelled'
   const row = db
     .update(schema.tickets)
-    .set(
-      approved
-        ? { approvedAt: new Date().toISOString(), approvedBy: actor }
-        : { approvedAt: null, approvedBy: '' },
-    )
+    .set({
+      approvedAt: verdict === 'approved' ? now : null,
+      approvedBy: verdict === 'approved' ? actor : '',
+      disapprovedAt: verdict === 'disapproved' ? now : null,
+      disapprovedBy: verdict === 'disapproved' ? actor : '',
+      ...(verdict === 'disapproved'
+        ? { status: 'cancelled' as const }
+        : reopen
+          ? { status: 'todo' as const }
+          : {}),
+      updatedAt: now,
+    })
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
+  if (t.parentId) touch(t.parentId)
+  const what = `${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`
   logActivity({
     projectId: t.projectId,
     actor,
     kind: 'ticket',
-    text: `${approved ? 'approved' : 'withdrew approval of'} ${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`,
+    text:
+      verdict === 'approved'
+        ? `approved ${what}`
+        : verdict === 'disapproved'
+          ? `disapproved ${what} (cancelled)`
+          : `withdrew the ${before === 'approved' ? 'approval' : 'disapproval'} of ${what}${reopen ? ' (back to todo)' : ''}`,
     refType: 'ticket',
     refId: id,
   })

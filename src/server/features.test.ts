@@ -70,7 +70,7 @@ describe('lanes', () => {
     expect(top.map((t) => t.id)).toEqual([parent.id])
     expect(top[0]!.progress).toEqual({ done: 0, total: 1 })
     expect(top[0]!.rollup).toEqual({ done: 1, total: 4 })
-    expect(top[0]!.lanes).toEqual({ total: 2, approved: 0, in_progress: 1, todo: 1 })
+    expect(top[0]!.lanes).toEqual({ total: 2, approved: 0, disapproved: 0, in_progress: 1, todo: 1 })
 
     features.postUpdate(hooks.id, 'signature check in', [], 'claude')
     const full = features.getTicketFull(hooks.id)
@@ -111,19 +111,31 @@ describe('lanes', () => {
     expect((await features.ticketGit(sub.id)).workspaces.map((w) => w.lane)).toEqual([null])
   })
 
-  it('carry the human approval, counted on the parent', () => {
-    const parent = features.createTicket(projectId, { title: 'approvals', repoId: otherRepo }, 'me')
-    const a = features.createTicket(projectId, { title: 'a', parentId: parent.id }, 'claude')
-    features.createTicket(projectId, { title: 'b', parentId: parent.id }, 'claude')
-    const approved = features.setApproval(a.id, true, 'enrique')
-    expect(approved.approvedBy).toBe('enrique')
-    expect(approved.approvedAt).toBeTruthy()
+  it("carry the human's verdict; disapproving cancels, taking it back reopens", () => {
+    const parent = features.createTicket(projectId, { title: 'verdicts', repoId: otherRepo }, 'me')
+    const a = features.createTicket(projectId, { title: 'a', parentId: parent.id, tasks: ['x'] }, 'claude')
+    const b = features.createTicket(projectId, { title: 'b', parentId: parent.id, tasks: ['y'] }, 'claude')
     const row = () => features.listTickets(projectId).find((t) => t.id === parent.id)!
-    expect(row().lanes.approved).toBe(1)
+
+    const approved = features.setVerdict(a.id, 'approved', 'enrique')
+    expect(approved).toMatchObject({ approvedBy: 'enrique', disapprovedAt: null })
     expect(features.getTicketFull(parent.id).lanes.find((l) => l.id === a.id)!.approvedBy).toBe('enrique')
-    features.setApproval(a.id, false, 'enrique')
-    expect(features.getTicket(a.id)).toMatchObject({ approvedAt: null, approvedBy: '' })
-    expect(row().lanes.approved).toBe(0)
+
+    const rejected = features.setVerdict(b.id, 'disapproved', 'enrique')
+    expect(rejected).toMatchObject({ status: 'cancelled', disapprovedBy: 'enrique', approvedAt: null })
+    expect(row().lanes).toMatchObject({ approved: 1, disapproved: 1, cancelled: 1 })
+    // The cancelled lane's task is no longer part of the work.
+    expect(row().rollup).toEqual({ done: 0, total: 1 })
+
+    // Switching straight to approved clears the disapproval and reopens it.
+    expect(features.setVerdict(b.id, 'approved', 'enrique')).toMatchObject({
+      status: 'todo',
+      disapprovedAt: null,
+      approvedBy: 'enrique',
+    })
+    features.setVerdict(a.id, null, 'enrique')
+    expect(features.getTicket(a.id)).toMatchObject({ approvedAt: null, approvedBy: '', status: 'todo' })
+    expect(row().lanes).toMatchObject({ approved: 1, disapproved: 0 })
   })
 
   it('carry tags: cleaned up, filterable in any casing', () => {

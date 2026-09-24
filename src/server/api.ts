@@ -157,8 +157,9 @@ api.delete('/api/tickets/:id', ({ params, url, actor }) => {
 // Approval is the human's: agents read approvedAt/approvedBy on the ticket but cannot set them.
 api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human approves')
-  const body = await readJson(request, z.object({ approved: z.boolean() }))
-  return json(features.setApproval(id(params), body.approved, actor))
+  // approved, disapproved (which cancels the ticket), or null to take the call back.
+  const body = await readJson(request, z.object({ verdict: z.enum(['approved', 'disapproved']).nullable() }))
+  return json(features.setVerdict(id(params), body.verdict, actor))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
 
