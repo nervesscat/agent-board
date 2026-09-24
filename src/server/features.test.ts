@@ -23,6 +23,16 @@ beforeAll(async () => {
     .get().id
 })
 
+describe('gist', () => {
+  it('skips markdown markers and bare labels', () => {
+    expect(features.gist('**Evidence:**\n- webhook retries now back off\n- more')).toBe(
+      'webhook retries now back off',
+    )
+    expect(features.gist('## Done\n\nShipped the `api` lane.')).toBe('Done')
+    expect(features.gist('Notes:')).toBe('Notes:')
+  })
+})
+
 describe('lanes', () => {
   it('branch off the parent, roll progress up and count by status', () => {
     expect(features.listTickets(projectId)).toEqual([])

@@ -8,22 +8,18 @@ import { TICKET_STATUSES, type TicketStatus } from '#/lib/constants'
 import { STATUS_LABEL, ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 
-type Card = TicketRow & { lastUpdate?: { author: string; text: string; createdAt: string } | null }
-
 /**
  * Tickets in status columns. Drag a card onto another column to change its status; clicking a card
- * opens the ticket. Used for a project's top-level tickets and for one ticket's lanes.
+ * opens the ticket.
  */
 export function TicketBoard({
   projectId,
   items,
   onMove,
-  compact = false,
 }: {
   projectId: string
-  items: Card[]
+  items: TicketRow[]
   onMove: (ticketId: number, status: TicketStatus) => void
-  compact?: boolean
 }) {
   const { data: project } = useProject(projectId)
   const [dragging, setDragging] = useState<number | null>(null)
@@ -36,7 +32,7 @@ export function TicketBoard({
     setOver(null)
   }
   return (
-    <div className={`grid gap-3 ${compact ? 'sm:grid-cols-3 xl:grid-cols-5' : 'md:grid-cols-5'}`}>
+    <div className="grid gap-3 md:grid-cols-5">
       {TICKET_STATUSES.map((status) => {
         const column = items.filter((t) => t.status === status)
         return (
@@ -63,7 +59,7 @@ export function TicketBoard({
             <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {STATUS_LABEL[status]} <span className="tabular-nums">{column.length}</span>
             </div>
-            <div className={`space-y-2 ${compact ? 'min-h-10' : 'min-h-16'}`}>
+            <div className="min-h-16 space-y-2">
               {column.map((t) => (
                 <Link
                   key={t.id}
@@ -87,7 +83,7 @@ export function TicketBoard({
                     <span className="text-muted-foreground">#{t.id}</span> {t.title}
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                    {!compact && repoLabel(project, t.repoId) && (
+                    {repoLabel(project, t.repoId) && (
                       <span className="rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>
                     )}
                     {t.assignee && <Actor name={t.assignee} />}
@@ -99,11 +95,6 @@ export function TicketBoard({
                     <span className="ml-auto">{ago(t.updatedAt)}</span>
                   </div>
                   {t.lanes.total > 0 && <LaneCount lanes={t.lanes} />}
-                  {t.lastUpdate && (
-                    <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">
-                      <span className="text-foreground/80">{t.lastUpdate.author}:</span> {t.lastUpdate.text}
-                    </p>
-                  )}
                   {t.rollup.total > 0 && (
                     <div className="mt-2 flex items-center gap-2">
                       <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">

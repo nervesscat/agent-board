@@ -141,7 +141,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
       const u = lastUpdate.get(l.id)
       return {
         ...l,
-        lastUpdate: u ? { author: u.author, text: firstLine(u.body), createdAt: u.createdAt } : null,
+        lastUpdate: u ? { author: u.author, text: gist(u.body), createdAt: u.createdAt } : null,
       }
     }),
     updates: feed.map((u) => ({
@@ -442,6 +442,21 @@ export function postUpdate(ticketId: number, body: string, attachmentIds: number
     refId: ticketId,
   })
   return row
+}
+
+/** The first line that says something: markdown markers stripped, bare labels ("Evidence:") skipped. */
+export function gist(body: string, max = 120) {
+  const lines = body
+    .split('\n')
+    .map((l) =>
+      l
+        .replace(/^\s*(?:#+|[-*+>]|\d+\.)\s+/, '')
+        .replace(/\*\*|__|`/g, '')
+        .trim(),
+    )
+    .filter(Boolean)
+  const line = lines.find((l) => !/^[^.!?]{0,40}:$/.test(l)) ?? lines[0] ?? ''
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line
 }
 
 export const firstLine = (s: string, max = 120) => {

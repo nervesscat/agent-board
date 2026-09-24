@@ -21,7 +21,6 @@ import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
 import { NewTicket } from '#/components/NewTicket'
-import { TicketBoard } from '#/components/TicketBoard'
 import { Thread } from '#/components/Thread'
 import {
   AlertDialog,
@@ -54,7 +53,7 @@ import {
   type UpdateRow,
 } from '#/lib/api'
 import type { TicketStatus } from '#/lib/constants'
-import { ago, shortSha, stamp } from '#/lib/format'
+import { STATUS_LABEL, ago, shortSha, stamp } from '#/lib/format'
 import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({ component: TicketPage })
@@ -96,15 +95,6 @@ function TicketPage() {
       if (parent)
         navigate({ to: '/projects/$id/features/$ticketId', params: { id, ticketId: String(parent.id) } })
       else navigate({ to: '/projects/$id/features', params: { id } })
-    },
-    onError,
-  })
-  const moveLane = useMutation({
-    mutationFn: (v: { ticketId: number; status: TicketStatus }) =>
-      patch(`/api/tickets/${v.ticketId}`, { status: v.status }),
-    onSuccess: (_d, v) => {
-      invalidate()
-      qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
     },
     onError,
   })
@@ -209,7 +199,7 @@ function TicketPage() {
               )}
             </section>
             <Tasks t={t} onChange={invalidate} />
-            <Lanes t={t} onMove={(ticketId, status) => moveLane.mutate({ ticketId, status })} />
+            <Lanes t={t} />
             <Updates t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
             <section>
               <h2 className="mb-3 text-sm font-medium">Thread</h2>
@@ -379,8 +369,21 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   )
 }
 
-function Lanes({ t, onMove }: { t: TicketFull; onMove: (ticketId: number, status: TicketStatus) => void }) {
+// Finished lanes first, then the ones closest to finishing.
+const LANE_ORDER: TicketStatus[] = ['done', 'review', 'in_progress', 'todo', 'backlog']
+const STAGE_TAG: Record<TicketStatus, string> = {
+  done: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+  review: 'bg-violet-500/15 text-violet-700 dark:text-violet-400',
+  in_progress: 'bg-sky-500/15 text-sky-700 dark:text-sky-400',
+  todo: 'bg-muted text-foreground/80',
+  backlog: 'bg-muted text-muted-foreground',
+}
+
+function Lanes({ t }: { t: TicketFull }) {
   const done = t.lanes.filter((l) => l.status === 'done').length
+  const lanes = [...t.lanes].sort(
+    (a, b) => LANE_ORDER.indexOf(a.status) - LANE_ORDER.indexOf(b.status) || a.id - b.id,
+  )
   return (
     <section className="rounded-lg border p-4">
       <div className="mb-3 flex items-center gap-3">
@@ -403,7 +406,54 @@ function Lanes({ t, onMove }: { t: TicketFull; onMove: (ticketId: number, status
           branch, assignee, tasks and updates.
         </p>
       ) : (
-        <TicketBoard projectId={String(t.projectId)} items={t.lanes} onMove={onMove} compact />
+        <ul className="max-h-[36rem] divide-y overflow-y-auto rounded-md border">
+          {lanes.map((l) => (
+            <li key={l.id}>
+              <Link
+                to="/projects/$id/features/$ticketId"
+                params={{ id: String(t.projectId), ticketId: String(l.id) }}
+                className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50"
+              >
+                <span
+                  className={`mt-px w-20 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${STAGE_TAG[l.status]}`}
+                >
+                  {STATUS_LABEL[l.status]}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm leading-snug">
+                    <span className="text-muted-foreground">#{l.id}</span> {l.title}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    {l.assignee && <Actor name={l.assignee} />}
+                    {l.branch && (
+                      <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                        <GitBranch className="size-3 shrink-0" /> <span className="truncate">{l.branch}</span>
+                      </span>
+                    )}
+                    {l.lanes.total > 0 && (
+                      <span className="inline-flex items-center gap-1">
+                        <Layers className="size-3" /> {l.lanes.total} lane{l.lanes.total === 1 ? '' : 's'}
+                      </span>
+                    )}
+                    {l.lastUpdate && (
+                      <span className="min-w-0 truncate">
+                        {l.lastUpdate.author}: {l.lastUpdate.text}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums text-muted-foreground">
+                  {l.rollup.total > 0 && (
+                    <span>
+                      {l.rollup.done}/{l.rollup.total}
+                    </span>
+                  )}
+                  <span>{ago(l.updatedAt)}</span>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   )
