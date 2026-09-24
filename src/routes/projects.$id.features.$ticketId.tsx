@@ -129,8 +129,8 @@ function TicketPage() {
     onError,
   })
   const judge = useMutation({
-    mutationFn: (v: { ticketId: number; verdict: Verdict }) =>
-      put(`/api/tickets/${v.ticketId}/approval`, { verdict: v.verdict }),
+    mutationFn: (v: { ticketId: number; verdict: Verdict; reopenTo?: TicketStatus }) =>
+      put(`/api/tickets/${v.ticketId}/approval`, { verdict: v.verdict, reopenTo: v.reopenTo }),
     onSuccess: (_d, v) => {
       invalidate()
       qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
@@ -151,6 +151,45 @@ function TicketPage() {
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
+
+  /**
+   * Record a verdict. Disapproving cancels the lane, which can drop it out of the filtered list, so
+   * from inside a lane it moves on to the next one (worked out before the change), and a toast
+   * offers to undo: the lane gets back its stage and earlier call.
+   */
+  const decide = (
+    lane: Pick<TicketFull, 'id' | 'status' | 'approvedAt' | 'approvedBy' | 'disapprovedAt' | 'disapprovedBy'>,
+    verdict: Verdict,
+  ) => {
+    if (verdict !== 'disapproved') return judge.mutate({ ticketId: lane.id, verdict })
+    const before = { verdict: verdictOf(lane), status: lane.status }
+    const around = lane.id === t.id && parent ? laneNeighbours(parent.lanes, lane.id, filter) : null
+    const go = around?.next ?? around?.prev ?? null
+    judge.mutate(
+      { ticketId: lane.id, verdict },
+      {
+        onSuccess: () => {
+          if (go)
+            navigate({
+              to: '/projects/$id/features/$ticketId',
+              params: { id, ticketId: String(go.id) },
+              search: laneSearch(filter),
+            })
+          toast(`#${lane.id} disapproved and cancelled`, {
+            description: `Undo takes back the disapproval and returns it to ${STATUS_LABEL[before.status]}${
+              go ? `. Moved on to #${go.id}.` : '.'
+            }`,
+            duration: 10_000,
+            action: {
+              label: 'Undo',
+              onClick: () =>
+                judge.mutate({ ticketId: lane.id, verdict: before.verdict, reopenTo: before.status }),
+            },
+          })
+        },
+      },
+    )
+  }
   const openLanes = t.lanes.filter((l) => l.status !== 'done' && l.status !== 'cancelled').length
   const lanesWarning = openLanes > 0 && (t.status === 'review' || t.status === 'done')
 
@@ -208,11 +247,7 @@ function TicketPage() {
             </span>
           )}
           {(t.parentId || verdictOf(t)) && (
-            <VerdictButtons
-              t={t}
-              disabled={judge.isPending}
-              onSet={(verdict) => judge.mutate({ ticketId: t.id, verdict })}
-            />
+            <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect value={t.status} onChange={(status) => update.mutate({ status })} />
           <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>
@@ -267,13 +302,7 @@ function TicketPage() {
               )}
             </section>
             <Tasks t={t} onChange={invalidate} />
-            <Lanes
-              t={t}
-              filter={filter}
-              onFilter={setFilter}
-              onVerdict={(ticketId, verdict) => judge.mutate({ ticketId, verdict })}
-              judging={judge.isPending}
-            />
+            <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
             <Updates t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
             <section>
               <h2 className="mb-3 text-sm font-medium">Thread</h2>
@@ -567,7 +596,7 @@ function Lanes({
   t: TicketFull
   filter: LaneFilter
   onFilter: (f: LaneFilter) => void
-  onVerdict: (ticketId: number, verdict: Verdict) => void
+  onVerdict: (lane: TicketFull['lanes'][number], verdict: Verdict) => void
   judging: boolean
 }) {
   const done = t.lanes.filter((l) => l.status === 'done').length
@@ -667,7 +696,7 @@ function Lanes({
                     t={l}
                     compact
                     disabled={judging}
-                    onSet={(verdict) => onVerdict(l.id, verdict)}
+                    onSet={(verdict) => onVerdict(l, verdict)}
                   />
                 </span>
                 <Link

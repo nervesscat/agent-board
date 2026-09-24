@@ -133,6 +133,13 @@ describe('lanes', () => {
       disapprovedAt: null,
       approvedBy: 'enrique',
     })
+    // An undo puts back the stage and the call the lane had before.
+    features.updateTicket(b.id, { status: 'review' }, 'claude')
+    features.setVerdict(b.id, 'disapproved', 'enrique')
+    expect(features.setVerdict(b.id, 'approved', 'enrique', { reopenTo: 'review' })).toMatchObject({
+      status: 'review',
+      approvedBy: 'enrique',
+    })
     features.setVerdict(a.id, null, 'enrique')
     expect(features.getTicket(a.id)).toMatchObject({ approvedAt: null, approvedBy: '', status: 'todo' })
     expect(row().lanes).toMatchObject({ approved: 1, disapproved: 0 })

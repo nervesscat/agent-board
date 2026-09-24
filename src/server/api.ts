@@ -157,9 +157,16 @@ api.delete('/api/tickets/:id', ({ params, url, actor }) => {
 // Approval is the human's: agents read approvedAt/approvedBy on the ticket but cannot set them.
 api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human approves')
-  // approved, disapproved (which cancels the ticket), or null to take the call back.
-  const body = await readJson(request, z.object({ verdict: z.enum(['approved', 'disapproved']).nullable() }))
-  return json(features.setVerdict(id(params), body.verdict, actor))
+  // approved, disapproved (which cancels the ticket), or null to take the call back; reopenTo is the
+  // stage a taken-back disapproval returns to (an undo passes the one it had), todo otherwise.
+  const body = await readJson(
+    request,
+    z.object({
+      verdict: z.enum(['approved', 'disapproved']).nullable(),
+      reopenTo: z.enum(TICKET_STATUSES).optional(),
+    }),
+  )
+  return json(features.setVerdict(id(params), body.verdict, actor, { reopenTo: body.reopenTo }))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
 

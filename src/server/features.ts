@@ -296,15 +296,21 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
 
 /**
  * The human's call on a ticket or lane: approve it, disapprove it (which cancels it), or clear the
- * call. Taking back a disapproval puts a cancelled ticket back to todo. Callers make sure the actor
- * is the human.
+ * call. Taking back a disapproval puts a cancelled ticket back to `reopenTo` (the stage it had,
+ * when an undo knows it) or todo. Callers make sure the actor is the human.
  */
-export function setVerdict(id: number, verdict: Verdict, actor: string) {
+export function setVerdict(
+  id: number,
+  verdict: Verdict,
+  actor: string,
+  opts: { reopenTo?: TicketStatus } = {},
+) {
   const t = getTicket(id)
   const before = verdictOf(t)
   if (before === verdict) return t
   const now = new Date().toISOString()
   const reopen = before === 'disapproved' && t.status === 'cancelled'
+  const reopenTo = opts.reopenTo ?? 'todo'
   const row = db
     .update(schema.tickets)
     .set({
@@ -312,11 +318,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string) {
       approvedBy: verdict === 'approved' ? actor : '',
       disapprovedAt: verdict === 'disapproved' ? now : null,
       disapprovedBy: verdict === 'disapproved' ? actor : '',
-      ...(verdict === 'disapproved'
-        ? { status: 'cancelled' as const }
-        : reopen
-          ? { status: 'todo' as const }
-          : {}),
+      ...(verdict === 'disapproved' ? { status: 'cancelled' as const } : reopen ? { status: reopenTo } : {}),
       updatedAt: now,
     })
     .where(eq(schema.tickets.id, id))
@@ -333,7 +335,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string) {
         ? `approved ${what}`
         : verdict === 'disapproved'
           ? `disapproved ${what} (cancelled)`
-          : `withdrew the ${before === 'approved' ? 'approval' : 'disapproval'} of ${what}${reopen ? ' (back to todo)' : ''}`,
+          : `withdrew the ${before === 'approved' ? 'approval' : 'disapproval'} of ${what}${reopen ? ` (back to ${reopenTo})` : ''}`,
     refType: 'ticket',
     refId: id,
   })
