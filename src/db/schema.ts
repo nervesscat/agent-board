@@ -76,6 +76,11 @@ export const tickets = sqliteTable(
     branch: text().notNull().default(''),
     baseBranch: text('base_branch').notNull().default('main'),
     createdBy: text('created_by').notNull(),
+    // Free labels the agents choose (severity, area, …); the lanes list filters on them.
+    tags: text({ mode: 'json' })
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'`),
     // The human's sign-off (on a lane, usually); null until approved. Agents can read it, not set it.
     approvedAt: text('approved_at'),
     approvedBy: text('approved_by').notNull().default(''),

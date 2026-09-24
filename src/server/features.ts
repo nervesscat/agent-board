@@ -70,11 +70,18 @@ function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id
   return out
 }
 
-/** A project's tickets; `parentId` narrows to the lanes of one ticket, `null` to the top level. */
-export function listTickets(projectId: number, filter: { parentId?: number | null } = {}) {
+/**
+ * A project's tickets; `parentId` narrows to the lanes of one ticket (`null` to the top level), `tag`
+ * to those carrying it (any casing).
+ */
+export function listTickets(projectId: number, filter: { parentId?: number | null; tag?: string } = {}) {
   getProject(projectId)
-  const rows = projectTickets(projectId)
-  return filter.parentId === undefined ? rows : rows.filter((t) => t.parentId === filter.parentId)
+  const tag = filter.tag?.trim().toLowerCase()
+  return projectTickets(projectId).filter(
+    (t) =>
+      (filter.parentId === undefined || t.parentId === filter.parentId) &&
+      (!tag || t.tags.some((x) => x.toLowerCase() === tag)),
+  )
 }
 
 export function getTicket(id: number) {
@@ -167,6 +174,7 @@ export function createTicket(
     baseBranch?: string
     repoId?: number | null
     parentId?: number | null
+    tags?: string[]
     tasks?: string[]
   },
   actor: string,
@@ -190,6 +198,7 @@ export function createTicket(
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
       baseBranch: input.baseBranch || parentBase || repo.baseBranch,
+      tags: cleanTags(input.tags ?? []),
       createdBy: actor,
     })
     .returning()
@@ -220,15 +229,32 @@ function touch(ticketId: number) {
   if (row?.parentId) touch(row.parentId)
 }
 
+/** Trimmed, at most 40 characters each, no repeats in any casing, at most 20. */
+export function cleanTags(tags: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of tags) {
+    const tag = raw.replace(/\s+/g, ' ').trim().slice(0, 40)
+    if (!tag || seen.has(tag.toLowerCase())) continue
+    seen.add(tag.toLowerCase())
+    out.push(tag)
+  }
+  return out.slice(0, 20)
+}
+
 export function updateTicket(
   id: number,
   patch: Partial<
-    Pick<schema.Ticket, 'title' | 'body' | 'status' | 'assignee' | 'branch' | 'baseBranch' | 'repoId'>
+    Pick<
+      schema.Ticket,
+      'title' | 'body' | 'status' | 'assignee' | 'branch' | 'baseBranch' | 'repoId' | 'tags'
+    >
   >,
   actor: string,
 ) {
   const before = getTicket(id)
   if (patch.repoId) resolveRepo(before.projectId, patch.repoId)
+  if (patch.tags) patch = { ...patch, tags: cleanTags(patch.tags) }
   const row = db
     .update(schema.tickets)
     .set({ ...patch, updatedAt: new Date().toISOString() })
@@ -242,6 +268,8 @@ export function updateTicket(
     changes.push(`assignee → ${patch.assignee || 'nobody'}`)
   if (patch.branch !== undefined && patch.branch !== before.branch)
     changes.push(`branch → ${patch.branch || 'none'}`)
+  if (patch.tags && patch.tags.join('\n') !== before.tags.join('\n'))
+    changes.push(`tags → ${patch.tags.join(', ') || 'none'}`)
   if (patch.title && patch.title !== before.title) changes.push('renamed')
   if (patch.body !== undefined && patch.body !== before.body) changes.push('edited the instructions')
   logActivity({

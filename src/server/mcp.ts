@@ -39,7 +39,7 @@ The rhythm:
 1. get_project before touching it; its instructions override your defaults.
 2. Pick up work from list_tickets (todo, unassigned or assigned to you); read it with get_ticket; then update_ticket with assignee = your name (whoami), status in_progress, and the branch.
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each.
-4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox); remove_workspace when it is gone.
+4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox); remove_workspace when it is gone.
 5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files.
 6. Ask and answer in threads with comment; check list_comments on your ticket when you resume.
 7. Hand off: final post_update with the PR link, then update_ticket to review. done is the human's call. A ticket with lanes goes to review once its lanes are in review or done. Approval (approvedAt on a lane or ticket) is the human's sign-off: you can read it, never set it; treat an approved lane as settled and ask in its thread before changing it.
@@ -48,6 +48,9 @@ The rhythm:
 When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.
 
 Keep the board out of the repo. The board, trazic, habits and any other personal tracking tool are private to the human: never mention them, their tool names, their URLs (localhost:47100, 47110) or a board ticket, task or project ("#12", "ticket 12", "per the board") in code comments, docs, READMEs, changelogs, config, commit messages, branch names, PR titles or descriptions, or issues, and never link or screenshot the board there. Describe the change and its reason in the repo's own terms; if the PR needs something from the ticket, restate it instead of pointing at it. Board updates and comments may talk about the repo, branches and PRs freely.`
+
+const TAGS =
+  'Short labels the human filters lanes by: a severity (Critical, High, Medium, Low, Cosmetic), an area (API, UI, Forms…) or a kind (Bug, Refactor…). One or two words each, Title Case; reuse the tags sibling lanes already use, and keep them out of the title (no "[High] …").'
 
 function buildServer(actor: string) {
   const server = new McpServer({ name: 'agent-board', version: '0.1.0' }, { instructions: INSTRUCTIONS })
@@ -119,7 +122,7 @@ function buildServer(actor: string) {
   // ongoing features
   tool(
     'list_tickets',
-    "Tickets of a project (all its repos) with status, assignee, repoId, branch, parentId, task progress (own and rolled up over lanes), lane counts by status and approved, and approvedAt/approvedBy (the human's sign-off).",
+    "Tickets of a project (all its repos) with status, assignee, repoId, branch, parentId, tags, task progress (own and rolled up over lanes), lane counts by status and approved, and approvedAt/approvedBy (the human's sign-off).",
     {
       projectId: z.number().int(),
       parentId: z
@@ -128,8 +131,9 @@ function buildServer(actor: string) {
         .nullable()
         .optional()
         .describe("a ticket's id for its lanes, null for top-level tickets only; omit for all"),
+      tag: z.string().optional().describe('only tickets carrying this tag (any casing)'),
     },
-    ({ projectId, parentId }) => features.listTickets(projectId, { parentId }),
+    ({ projectId, parentId, tag }) => features.listTickets(projectId, { parentId, tag }),
   )
   tool(
     'get_ticket',
@@ -163,13 +167,14 @@ function buildServer(actor: string) {
         .describe(
           "make this a lane of that ticket; repo and base branch default to the parent's repo and branch",
         ),
+      tags: z.array(z.string()).default([]).describe(TAGS),
       tasks: z.array(z.string()).default([]),
     },
     ({ projectId, ...rest }) => features.createTicket(projectId, rest, actor),
   )
   tool(
     'update_ticket',
-    'Change status, assignee, branch, title or instructions. Set assignee to yourself and status to in_progress when you pick a ticket up.',
+    'Change status, assignee, branch, tags, title or instructions. Set assignee to yourself and status to in_progress when you pick a ticket up.',
     {
       ticketId: z.number().int(),
       title: z.string().optional(),
@@ -179,6 +184,7 @@ function buildServer(actor: string) {
       branch: z.string().optional(),
       baseBranch: z.string().optional(),
       repoId: z.number().int().optional(),
+      tags: z.array(z.string()).optional().describe(`replaces the whole list. ${TAGS}`),
     },
     ({ ticketId, ...patch }) => features.updateTicket(ticketId, patch, actor),
   )

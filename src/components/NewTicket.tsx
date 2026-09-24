@@ -30,6 +30,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const [tasks, setTasks] = useState('')
   const [branch, setBranch] = useState('')
   const [assignee, setAssignee] = useState('')
+  const [tags, setTags] = useState('')
   const { data: project } = useProject(projectId)
   const [picked, setPicked] = useState('')
   const repos = project?.repos ?? []
@@ -41,6 +42,10 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         body,
         branch,
         assignee,
+        tags: tags
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
         parentId: parent?.id,
         repoId: repoId ? Number(repoId) : undefined,
         tasks: tasks
@@ -57,6 +62,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       setTasks('')
       setBranch('')
       setAssignee('')
+      setTags('')
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -141,6 +147,15 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
                 />
               </div>
             )}
+            <div className="space-y-2">
+              <Label htmlFor="tags">Tags (optional)</Label>
+              <Input
+                id="tags"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+                placeholder="High, Forms"
+              />
+            </div>
           </div>
           {parent && (parent.branch || parent.baseBranch) && (
             <p className="text-xs text-muted-foreground">

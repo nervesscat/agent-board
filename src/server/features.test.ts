@@ -126,6 +126,24 @@ describe('lanes', () => {
     expect(row().lanes.approved).toBe(0)
   })
 
+  it('carry tags: cleaned up, filterable in any casing', () => {
+    expect(features.cleanTags(['  High ', 'high', '', 'Forms  UI', 'x'.repeat(50)])).toEqual([
+      'High',
+      'Forms UI',
+      'x'.repeat(40),
+    ])
+    const parent = features.createTicket(projectId, { title: 'audit', repoId: otherRepo }, 'me')
+    const a = features.createTicket(projectId, { title: 'a', parentId: parent.id, tags: ['High'] }, 'claude')
+    const b = features.createTicket(projectId, { title: 'b', parentId: parent.id, tags: ['Low'] }, 'claude')
+    features.updateTicket(b.id, { tags: ['Cosmetic', 'cosmetic', 'Forms'] }, 'claude')
+    expect(features.getTicket(b.id).tags).toEqual(['Cosmetic', 'Forms'])
+    const tagged = (tag: string) =>
+      features.listTickets(projectId, { parentId: parent.id, tag }).map((t) => t.id)
+    expect(tagged('high')).toEqual([a.id])
+    expect(tagged('FORMS')).toEqual([b.id])
+    expect(tagged('Low')).toEqual([])
+  })
+
   it('go with the ticket, or move up a level with keepLanes', () => {
     const a = features.createTicket(projectId, { title: 'a', repoId: otherRepo }, 'me')
     const b = features.createTicket(projectId, { title: 'b', parentId: a.id }, 'me')

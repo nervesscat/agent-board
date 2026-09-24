@@ -22,6 +22,7 @@ import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
 import { NewTicket } from '#/components/NewTicket'
+import { Tag, compareTags } from '#/components/Tag'
 import { Thread } from '#/components/Thread'
 import {
   AlertDialog,
@@ -139,6 +140,13 @@ function TicketPage() {
               opened by <Actor name={t.createdBy} /> {ago(t.createdAt)}
             </span>
             <span>updated {ago(t.updatedAt)}</span>
+            {t.tags.length > 0 && (
+              <span className="inline-flex flex-wrap gap-1">
+                {[...t.tags].sort(compareTags).map((tag) => (
+                  <Tag key={tag} tag={tag} />
+                ))}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -239,6 +247,7 @@ function EditTicket({
   const [assignee, setAssignee] = useState(t.assignee)
   const [branch, setBranch] = useState(t.branch)
   const [baseBranch, setBaseBranch] = useState(t.baseBranch)
+  const [tags, setTags] = useState(t.tags.join(', '))
   const { data: project } = useProject(t.projectId)
   const repos = project?.repos ?? []
   const [repoId, setRepoId] = useState(String(t.repoId ?? repos[0]?.id ?? ''))
@@ -247,7 +256,18 @@ function EditTicket({
       className="space-y-3 rounded-lg border p-4"
       onSubmit={(e) => {
         e.preventDefault()
-        onSave({ title, body, assignee, branch, baseBranch, ...(repoId ? { repoId: Number(repoId) } : {}) })
+        onSave({
+          title,
+          body,
+          assignee,
+          branch,
+          baseBranch,
+          tags: tags
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+          ...(repoId ? { repoId: Number(repoId) } : {}),
+        })
       }}
     >
       <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
@@ -295,6 +315,10 @@ function EditTicket({
           <Label htmlFor="base">Base branch</Label>
           <BranchSelect id="base" value={baseBranch} onChange={setBaseBranch} repoId={repoId} />
         </div>
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor="tags">Tags, comma separated</Label>
+        <Input id="tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="High, Forms" />
       </div>
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -398,9 +422,23 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     onSuccess: onChange,
     onError: (err) => toast.error(errorMessage(err)),
   })
-  const lanes = [...t.lanes].sort(
-    (a, b) => LANE_ORDER.indexOf(a.status) - LANE_ORDER.indexOf(b.status) || a.id - b.id,
-  )
+  // Tags across the lanes, with how many lanes carry each; picking some shows lanes with any of them.
+  const [picked, setPicked] = useState<string[]>([])
+  const tagCounts = new Map<string, { tag: string; count: number }>()
+  for (const l of t.lanes)
+    for (const tag of l.tags) {
+      const key = tag.toLowerCase()
+      const entry = tagCounts.get(key) ?? { tag, count: 0 }
+      entry.count++
+      tagCounts.set(key, entry)
+    }
+  const tags = [...tagCounts.values()].sort((a, b) => compareTags(a.tag, b.tag))
+  const active = picked.filter((p) => tagCounts.has(p))
+  const toggle = (key: string) =>
+    setPicked((p) => (p.includes(key) ? p.filter((x) => x !== key) : [...p, key]))
+  const lanes = t.lanes
+    .filter((l) => !active.length || l.tags.some((tag) => active.includes(tag.toLowerCase())))
+    .sort((a, b) => LANE_ORDER.indexOf(a.status) - LANE_ORDER.indexOf(b.status) || a.id - b.id)
   return (
     <section className="rounded-lg border p-4">
       <div className="mb-3 flex items-center gap-3">
@@ -423,66 +461,113 @@ function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
           branch, assignee, tasks and updates.
         </p>
       ) : (
-        <ul className="max-h-[36rem] divide-y overflow-y-auto rounded-md border">
-          {lanes.map((l) => (
-            <li key={l.id} className="flex items-start transition-colors hover:bg-muted/50">
-              <label
-                className="flex shrink-0 cursor-pointer items-center py-2.5 pr-1 pl-3"
-                title={
-                  l.approvedAt ? `Approved by ${l.approvedBy} ${ago(l.approvedAt)}` : 'Approve this lane'
-                }
+        <>
+          {tags.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setPicked([])}
+                className={`rounded-full border px-2.5 py-0.5 transition-colors ${
+                  active.length
+                    ? 'text-muted-foreground hover:text-foreground'
+                    : 'border-foreground/40 bg-muted'
+                }`}
               >
-                <Checkbox
-                  checked={Boolean(l.approvedAt)}
-                  onCheckedChange={(v) => approve.mutate({ id: l.id, approved: Boolean(v) })}
-                  aria-label="Approved"
-                />
-              </label>
-              <Link
-                to="/projects/$id/features/$ticketId"
-                params={{ id: String(t.projectId), ticketId: String(l.id) }}
-                className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pr-3 pl-2"
-              >
-                <span
-                  className={`mt-px w-20 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${STAGE_TAG[l.status]}`}
-                >
-                  {STATUS_LABEL[l.status]}
+                All <span className="tabular-nums text-muted-foreground">{t.lanes.length}</span>
+              </button>
+              {tags.map(({ tag, count }) => {
+                const on = active.includes(tag.toLowerCase())
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggle(tag.toLowerCase())}
+                    className={`inline-flex items-center gap-1 rounded-full border px-1 py-0.5 pr-2.5 transition-colors ${
+                      on ? 'border-foreground/40 bg-muted' : 'border-transparent hover:border-border'
+                    } ${active.length && !on ? 'opacity-60 hover:opacity-100' : ''}`}
+                  >
+                    <Tag tag={tag} className="rounded-full" />
+                    <span className="tabular-nums text-muted-foreground">{count}</span>
+                  </button>
+                )
+              })}
+              {active.length > 0 && (
+                <span className="ml-auto text-muted-foreground">
+                  showing {lanes.length} of {t.lanes.length}
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm leading-snug">
-                    <span className="text-muted-foreground">#{l.id}</span> {l.title}
+              )}
+            </div>
+          )}
+          <ul className="max-h-[36rem] divide-y overflow-y-auto rounded-md border">
+            {lanes.map((l) => (
+              <li key={l.id} className="flex items-start transition-colors hover:bg-muted/50">
+                <label
+                  className="flex shrink-0 cursor-pointer items-center py-2.5 pr-1 pl-3"
+                  title={
+                    l.approvedAt ? `Approved by ${l.approvedBy} ${ago(l.approvedAt)}` : 'Approve this lane'
+                  }
+                >
+                  <Checkbox
+                    checked={Boolean(l.approvedAt)}
+                    onCheckedChange={(v) => approve.mutate({ id: l.id, approved: Boolean(v) })}
+                    aria-label="Approved"
+                  />
+                </label>
+                <Link
+                  to="/projects/$id/features/$ticketId"
+                  params={{ id: String(t.projectId), ticketId: String(l.id) }}
+                  className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pr-3 pl-2"
+                >
+                  <span
+                    className={`mt-px w-20 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${STAGE_TAG[l.status]}`}
+                  >
+                    {STATUS_LABEL[l.status]}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm leading-snug">
+                      <span className="text-muted-foreground">#{l.id}</span> {l.title}
+                      {l.tags.length > 0 && (
+                        <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
+                          {[...l.tags].sort(compareTags).map((tag) => (
+                            <Tag key={tag} tag={tag} />
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      {l.assignee && <Actor name={l.assignee} />}
+                      {l.branch && (
+                        <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                          <GitBranch className="size-3 shrink-0" />{' '}
+                          <span className="truncate">{l.branch}</span>
+                        </span>
+                      )}
+                      {l.lanes.total > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Layers className="size-3" /> {l.lanes.total} lane{l.lanes.total === 1 ? '' : 's'}
+                        </span>
+                      )}
+                      {l.lastUpdate && (
+                        <span className="min-w-0 truncate">
+                          {l.lastUpdate.author}: {l.lastUpdate.text}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    {l.assignee && <Actor name={l.assignee} />}
-                    {l.branch && (
-                      <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-                        <GitBranch className="size-3 shrink-0" /> <span className="truncate">{l.branch}</span>
+                  <div className="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums text-muted-foreground">
+                    {l.rollup.total > 0 && (
+                      <span>
+                        {l.rollup.done}/{l.rollup.total}
                       </span>
                     )}
-                    {l.lanes.total > 0 && (
-                      <span className="inline-flex items-center gap-1">
-                        <Layers className="size-3" /> {l.lanes.total} lane{l.lanes.total === 1 ? '' : 's'}
-                      </span>
-                    )}
-                    {l.lastUpdate && (
-                      <span className="min-w-0 truncate">
-                        {l.lastUpdate.author}: {l.lastUpdate.text}
-                      </span>
-                    )}
+                    <span>{ago(l.updatedAt)}</span>
                   </div>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums text-muted-foreground">
-                  {l.rollup.total > 0 && (
-                    <span>
-                      {l.rollup.done}/{l.rollup.total}
-                    </span>
-                  )}
-                  <span>{ago(l.updatedAt)}</span>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </section>
   )

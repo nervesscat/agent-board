@@ -3,6 +3,7 @@ import { GitBranch, Layers } from 'lucide-react'
 import { useState } from 'react'
 
 import { Actor } from '#/components/Actor'
+import { Tag, compareTags } from '#/components/Tag'
 import type { TicketRow } from '#/lib/api'
 import { TICKET_STATUSES, type TicketStatus } from '#/lib/constants'
 import { STATUS_LABEL, ago } from '#/lib/format'
@@ -94,6 +95,13 @@ export function TicketBoard({
                     )}
                     <span className="ml-auto">{ago(t.updatedAt)}</span>
                   </div>
+                  {t.tags.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {[...t.tags].sort(compareTags).map((tag) => (
+                        <Tag key={tag} tag={tag} />
+                      ))}
+                    </div>
+                  )}
                   {t.lanes.total > 0 && <LaneCount lanes={t.lanes} />}
                   {t.rollup.total > 0 && (
                     <div className="mt-2 flex items-center gap-2">

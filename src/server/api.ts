@@ -30,6 +30,7 @@ const TicketPatch = z.object({
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
   repoId: z.number().int().optional(),
+  tags: z.array(z.string().max(40)).max(20).optional(),
 })
 const ScheduleBody = z.object({
   time: z.string().regex(/^\d{2}:\d{2}$/, 'HH:MM'),
@@ -124,10 +125,11 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 
 // --- ongoing features ---
 // ?parent=root for the top level, ?parent=<ticketId> for one ticket's lanes; all tickets otherwise.
+// ?tag= keeps the ones carrying that tag.
 api.get('/api/projects/:id/tickets', ({ params, url }) => {
   const parent = url.searchParams.get('parent')
   const parentId = parent === null ? undefined : parent === 'root' ? null : intParam(parent, 'parent')
-  return json(features.listTickets(id(params), { parentId }))
+  return json(features.listTickets(id(params), { parentId, tag: url.searchParams.get('tag') ?? undefined }))
 })
 api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   const body = await readJson(
