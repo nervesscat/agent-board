@@ -127,6 +127,7 @@ const LANE_WORDS: [TicketStatus, string][] = [
 /** "3 lanes · 1 active · 1 in review" */
 function LaneCount({ lanes }: { lanes: TicketRow['lanes'] }) {
   const parts = LANE_WORDS.filter(([s]) => lanes[s]).map(([s, word]) => `${lanes[s]} ${word}`)
+  if (lanes.approved) parts.push(`${lanes.approved} approved`)
   return (
     <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
       <Layers className="size-3" />

@@ -54,7 +54,8 @@ http_headers = { Authorization = "Bearer gate_…" }
    result. Check `list_comments` on your ticket when you resume; the human answers there.
 7. **Hand off**: `update_ticket` to `review` with the PR link in a final `post_update`. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
-   its lanes are in `review` or `done`.
+   its lanes are in `review` or `done`. `approvedAt` / `approvedBy` on a lane or ticket is the
+   human's sign-off: read it, never set it, and ask in the thread before changing an approved lane.
 8. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
    what got done, what is open. `daily_report` shows what everyone else did that day.
 

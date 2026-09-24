@@ -88,6 +88,7 @@ const jsonInit = (method: string, body?: unknown): RequestInit => ({
 export const get = <T>(url: string) => request<T>(url, jsonInit('GET'))
 export const post = <T>(url: string, body?: unknown) => request<T>(url, jsonInit('POST', body))
 export const patch = <T>(url: string, body?: unknown) => request<T>(url, jsonInit('PATCH', body))
+export const put = <T>(url: string, body?: unknown) => request<T>(url, jsonInit('PUT', body))
 export const del = <T>(url: string) => request<T>(url, jsonInit('DELETE'))
 
 export function upload(file: File): Promise<Attachment & { url: string }> {

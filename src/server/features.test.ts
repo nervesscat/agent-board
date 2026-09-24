@@ -70,7 +70,7 @@ describe('lanes', () => {
     expect(top.map((t) => t.id)).toEqual([parent.id])
     expect(top[0]!.progress).toEqual({ done: 0, total: 1 })
     expect(top[0]!.rollup).toEqual({ done: 1, total: 4 })
-    expect(top[0]!.lanes).toEqual({ total: 2, in_progress: 1, todo: 1 })
+    expect(top[0]!.lanes).toEqual({ total: 2, approved: 0, in_progress: 1, todo: 1 })
 
     features.postUpdate(hooks.id, 'signature check in', [], 'claude')
     const full = features.getTicketFull(hooks.id)
@@ -109,6 +109,21 @@ describe('lanes', () => {
       ['sub-wt', sub.id],
     ])
     expect((await features.ticketGit(sub.id)).workspaces.map((w) => w.lane)).toEqual([null])
+  })
+
+  it('carry the human approval, counted on the parent', () => {
+    const parent = features.createTicket(projectId, { title: 'approvals', repoId: otherRepo }, 'me')
+    const a = features.createTicket(projectId, { title: 'a', parentId: parent.id }, 'claude')
+    features.createTicket(projectId, { title: 'b', parentId: parent.id }, 'claude')
+    const approved = features.setApproval(a.id, true, 'enrique')
+    expect(approved.approvedBy).toBe('enrique')
+    expect(approved.approvedAt).toBeTruthy()
+    const row = () => features.listTickets(projectId).find((t) => t.id === parent.id)!
+    expect(row().lanes.approved).toBe(1)
+    expect(features.getTicketFull(parent.id).lanes.find((l) => l.id === a.id)!.approvedBy).toBe('enrique')
+    features.setApproval(a.id, false, 'enrique')
+    expect(features.getTicket(a.id)).toMatchObject({ approvedAt: null, approvedBy: '' })
+    expect(row().lanes.approved).toBe(0)
   })
 
   it('go with the ticket, or move up a level with keepLanes', () => {

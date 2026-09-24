@@ -76,6 +76,9 @@ export const tickets = sqliteTable(
     branch: text().notNull().default(''),
     baseBranch: text('base_branch').notNull().default('main'),
     createdBy: text('created_by').notNull(),
+    // The human's sign-off (on a lane, usually); null until approved. Agents can read it, not set it.
+    approvedAt: text('approved_at'),
+    approvedBy: text('approved_by').notNull().default(''),
     createdAt: now(),
     updatedAt: now(),
   },

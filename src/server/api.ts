@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { COMMENT_PARENTS, TICKET_STATUSES } from '#/lib/constants'
 import { addSummary } from './activity'
 import { listActors } from './actors'
+import { isAgent } from './auth'
 import { dailyReport, generateSummary, today } from './daily'
 import * as features from './features'
 import { listDirs } from './fs'
@@ -150,6 +151,12 @@ api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
 api.delete('/api/tickets/:id', ({ params, url, actor }) => {
   features.deleteTicket(id(params), actor, { keepLanes: url.searchParams.get('keepLanes') === '1' })
   return json({ ok: true })
+})
+// Approval is the human's: agents read approvedAt/approvedBy on the ticket but cannot set them.
+api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human approves')
+  const body = await readJson(request, z.object({ approved: z.boolean() }))
+  return json(features.setApproval(id(params), body.approved, actor))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
 

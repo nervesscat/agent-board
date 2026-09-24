@@ -13,7 +13,7 @@ type TicketStatus = schema.TicketStatus
 // --- tickets ---
 
 type Progress = { done: number; total: number }
-export type LaneCounts = { total: number } & Partial<Record<TicketStatus, number>>
+export type LaneCounts = { total: number; approved: number } & Partial<Record<TicketStatus, number>>
 
 /**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
@@ -47,9 +47,10 @@ function projectTickets(projectId: number) {
       { ...own.get(id)! },
     )
   return rows.map((t) => {
-    const lanes: LaneCounts = { total: 0 }
+    const lanes: LaneCounts = { total: 0, approved: 0 }
     for (const lane of children.get(t.id) ?? []) {
       lanes.total++
+      if (lane.approvedAt) lanes.approved++
       lanes[lane.status] = (lanes[lane.status] ?? 0) + 1
     }
     return { ...t, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
@@ -248,6 +249,31 @@ export function updateTicket(
     actor,
     kind: 'ticket',
     text: `updated ticket #${id} ${row.title}${changes.length ? ` (${changes.join(', ')})` : ''}`,
+    refType: 'ticket',
+    refId: id,
+  })
+  return row
+}
+
+/** The human's sign-off on a ticket or lane. Callers make sure the actor is the human. */
+export function setApproval(id: number, approved: boolean, actor: string) {
+  const t = getTicket(id)
+  if (Boolean(t.approvedAt) === approved) return t
+  const row = db
+    .update(schema.tickets)
+    .set(
+      approved
+        ? { approvedAt: new Date().toISOString(), approvedBy: actor }
+        : { approvedAt: null, approvedBy: '' },
+    )
+    .where(eq(schema.tickets.id, id))
+    .returning()
+    .get()!
+  logActivity({
+    projectId: t.projectId,
+    actor,
+    kind: 'ticket',
+    text: `${approved ? 'approved' : 'withdrew approval of'} ${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`,
     refType: 'ticket',
     refId: id,
   })

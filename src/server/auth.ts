@@ -45,6 +45,10 @@ export async function authenticate(request: Request): Promise<string | null> {
   return actor
 }
 
+/** A gate token (an agent), as opposed to the browser's passkey session (the human). */
+export const isAgent = (request: Request) =>
+  request.headers.get('authorization')?.toLowerCase().startsWith('bearer ') ?? false
+
 export function rememberActor(request: Request, actor: string) {
   actors.set(request, actor)
 }

@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
+  Check,
   ChevronRight,
   GitBranch,
   Layers,
@@ -47,6 +48,7 @@ import {
   get,
   patch,
   post,
+  put,
   upload,
   type TicketFull,
   type TicketGit,
@@ -148,6 +150,14 @@ function TicketPage() {
               <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
             </span>
           )}
+          {t.approvedAt && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400"
+              title={`Approved by ${t.approvedBy} ${stamp(t.approvedAt)}`}
+            >
+              <Check className="size-3.5" /> Approved
+            </span>
+          )}
           <StatusSelect value={t.status} onChange={(status) => update.mutate({ status })} />
           <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>
             <Pencil data-icon="inline-start" /> Edit
@@ -199,7 +209,7 @@ function TicketPage() {
               )}
             </section>
             <Tasks t={t} onChange={invalidate} />
-            <Lanes t={t} />
+            <Lanes t={t} onChange={invalidate} />
             <Updates t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
             <section>
               <h2 className="mb-3 text-sm font-medium">Thread</h2>
@@ -379,8 +389,15 @@ const STAGE_TAG: Record<TicketStatus, string> = {
   backlog: 'bg-muted text-muted-foreground',
 }
 
-function Lanes({ t }: { t: TicketFull }) {
+function Lanes({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const done = t.lanes.filter((l) => l.status === 'done').length
+  const approved = t.lanes.filter((l) => l.approvedAt).length
+  const approve = useMutation({
+    mutationFn: (v: { id: number; approved: boolean }) =>
+      put(`/api/tickets/${v.id}/approval`, { approved: v.approved }),
+    onSuccess: onChange,
+    onError: (err) => toast.error(errorMessage(err)),
+  })
   const lanes = [...t.lanes].sort(
     (a, b) => LANE_ORDER.indexOf(a.status) - LANE_ORDER.indexOf(b.status) || a.id - b.id,
   )
@@ -392,7 +409,7 @@ function Lanes({ t }: { t: TicketFull }) {
         </h2>
         {t.lanes.length > 0 && (
           <span className="text-xs tabular-nums text-muted-foreground">
-            {done}/{t.lanes.length} done
+            {done}/{t.lanes.length} done · {approved} approved
             {t.rollup.total > t.progress.total && ` · all tasks ${t.rollup.done}/${t.rollup.total}`}
           </span>
         )}
@@ -408,11 +425,23 @@ function Lanes({ t }: { t: TicketFull }) {
       ) : (
         <ul className="max-h-[36rem] divide-y overflow-y-auto rounded-md border">
           {lanes.map((l) => (
-            <li key={l.id}>
+            <li key={l.id} className="flex items-start transition-colors hover:bg-muted/50">
+              <label
+                className="flex shrink-0 cursor-pointer items-center py-2.5 pr-1 pl-3"
+                title={
+                  l.approvedAt ? `Approved by ${l.approvedBy} ${ago(l.approvedAt)}` : 'Approve this lane'
+                }
+              >
+                <Checkbox
+                  checked={Boolean(l.approvedAt)}
+                  onCheckedChange={(v) => approve.mutate({ id: l.id, approved: Boolean(v) })}
+                  aria-label="Approved"
+                />
+              </label>
               <Link
                 to="/projects/$id/features/$ticketId"
                 params={{ id: String(t.projectId), ticketId: String(l.id) }}
-                className="flex items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50"
+                className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pr-3 pl-2"
               >
                 <span
                   className={`mt-px w-20 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${STAGE_TAG[l.status]}`}

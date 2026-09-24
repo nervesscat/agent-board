@@ -42,7 +42,7 @@ The rhythm:
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox); remove_workspace when it is gone.
 5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files.
 6. Ask and answer in threads with comment; check list_comments on your ticket when you resume.
-7. Hand off: final post_update with the PR link, then update_ticket to review. done is the human's call. A ticket with lanes goes to review once its lanes are in review or done.
+7. Hand off: final post_update with the PR link, then update_ticket to review. done is the human's call. A ticket with lanes goes to review once its lanes are in review or done. Approval (approvedAt on a lane or ticket) is the human's sign-off: you can read it, never set it; treat an approved lane as settled and ask in its thread before changing it.
 8. End of session: post_daily_summary, at most three short lines.
 
 When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.
@@ -119,7 +119,7 @@ function buildServer(actor: string) {
   // ongoing features
   tool(
     'list_tickets',
-    'Tickets of a project (all its repos) with status, assignee, repoId, branch, parentId, task progress (own and rolled up over lanes) and lane counts by status.',
+    "Tickets of a project (all its repos) with status, assignee, repoId, branch, parentId, task progress (own and rolled up over lanes), lane counts by status and approved, and approvedAt/approvedBy (the human's sign-off).",
     {
       projectId: z.number().int(),
       parentId: z
@@ -133,7 +133,7 @@ function buildServer(actor: string) {
   )
   tool(
     'get_ticket',
-    'A ticket in full: instructions, tasks, workspaces, its parent chain, its lanes with their last update, and the update feed with attachments.',
+    "A ticket in full: instructions, tasks, workspaces, its parent chain, its lanes with their last update and approval, and the update feed with attachments. approvedAt/approvedBy is the human's sign-off; null means not approved yet.",
     {
       ticketId: z.number().int(),
       laneUpdates: z.boolean().default(false).describe("include the lanes' updates in the feed"),
