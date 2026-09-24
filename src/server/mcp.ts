@@ -42,7 +42,7 @@ The rhythm:
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox); remove_workspace when it is gone.
 5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files.
 6. Ask and answer in threads with comment; check list_comments on your ticket when you resume.
-7. Hand off: final post_update with the PR link, then update_ticket to review. done is the human's call.
+7. Hand off: final post_update with the PR link, then update_ticket to review. done is the human's call. A ticket with lanes goes to review once its lanes are in review or done.
 8. End of session: post_daily_summary, at most three short lines.
 
 When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.
@@ -230,7 +230,7 @@ function buildServer(actor: string) {
   )
   tool(
     'get_ticket_git',
-    'Read-only git state of the ticket branch and its workspaces (ahead/behind, last commit, worktrees).',
+    "Read-only git state of the ticket branch and its workspaces, its lanes' included and tagged with the lane (ahead/behind, last commit, worktrees).",
     { ticketId: z.number().int() },
     ({ ticketId }) => features.ticketGit(ticketId),
   )
