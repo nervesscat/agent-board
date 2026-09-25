@@ -63,13 +63,19 @@ import { STATUS_LABEL, ago, shortSha, stamp } from '#/lib/format'
 import {
   LANE_ORDER,
   type LaneFilter,
+  type LaneVerdict,
+  LANE_VERDICTS,
+  NO_FILTER,
   effectiveFilter,
+  isFiltering,
+  laneVerdict,
   laneFilter,
   laneNeighbours,
   laneSearch,
   sortLanes,
   stageOk,
   tagOk,
+  verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
 import { useProject } from '#/lib/project'
@@ -500,6 +506,17 @@ const STAGE_TAG: Record<TicketStatus, string> = {
   cancelled: 'bg-muted text-muted-foreground line-through',
 }
 
+const VERDICT_LABEL: Record<LaneVerdict, string> = {
+  approved: 'Approved',
+  disapproved: 'Disapproved',
+  none: 'No call',
+}
+const VERDICT_TAG: Record<LaneVerdict, string> = {
+  approved: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+  disapproved: 'bg-red-500/15 text-red-700 dark:text-red-400',
+  none: 'bg-muted text-muted-foreground',
+}
+
 /** One row of filter chips: "All" clears it, each chip toggles; a chip with nothing to show dims. */
 function FilterRow<K extends string>({
   label,
@@ -606,8 +623,8 @@ function Lanes({
   const cancelled = t.lanes.filter((l) => l.status === 'cancelled').length
   const approved = t.lanes.filter((l) => l.approvedAt).length
   const disapproved = t.lanes.filter((l) => l.disapprovedAt).length
-  // Filter by stage and by tag: within a row any picked chip matches, across rows all must. Each
-  // row counts the lanes the other row lets through, so a number is what clicking it would show.
+  // Filter by stage, tag and verdict: within a row any picked chip matches, across rows all must.
+  // Each row counts the lanes the other rows let through, so a number is what clicking it would show.
   const filter = effectiveFilter(t.lanes, wanted)
   const toggled = <T,>(list: T[], key: T) =>
     list.includes(key) ? list.filter((x) => x !== key) : [...list, key]
@@ -617,7 +634,7 @@ function Lanes({
     for (const tag of l.tags) {
       const key = tag.toLowerCase()
       const entry = tagCounts.get(key) ?? { tag, count: 0 }
-      if (stageOk(l, filter)) entry.count++
+      if (stageOk(l, filter) && verdictOk(l, filter)) entry.count++
       tagCounts.set(key, entry)
     }
   const tags = [...tagCounts.values()].sort((a, b) => compareTags(a.tag, b.tag))
@@ -628,10 +645,21 @@ function Lanes({
         {STATUS_LABEL[s]}
       </span>
     ),
-    count: t.lanes.filter((l) => l.status === s && tagOk(l, filter)).length,
+    count: t.lanes.filter((l) => l.status === s && tagOk(l, filter) && verdictOk(l, filter)).length,
   }))
-  const filtering = filter.stages.length > 0 || filter.tags.length > 0
-  const lanes = sortLanes(t.lanes.filter((l) => stageOk(l, filter) && tagOk(l, filter)))
+  const verdictChips = LANE_VERDICTS.filter((v) => t.lanes.some((l) => laneVerdict(l) === v)).map((v) => ({
+    key: v,
+    label: (
+      <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${VERDICT_TAG[v]}`}>
+        {VERDICT_LABEL[v]}
+      </span>
+    ),
+    count: t.lanes.filter((l) => laneVerdict(l) === v && stageOk(l, filter) && tagOk(l, filter)).length,
+  }))
+  const filtering = isFiltering(filter)
+  const lanes = sortLanes(
+    t.lanes.filter((l) => stageOk(l, filter) && tagOk(l, filter) && verdictOk(l, filter)),
+  )
   return (
     <section className="rounded-lg border p-4">
       <div className="mb-3 flex items-center gap-3">
@@ -665,6 +693,15 @@ function Lanes({
               onToggle={(s) => onFilter({ ...filter, stages: toggled(filter.stages, s) })}
               onClear={() => onFilter({ ...filter, stages: [] })}
             />
+            {verdictChips.length > 1 && (
+              <FilterRow
+                label="Verdict"
+                chips={verdictChips}
+                active={filter.verdicts}
+                onToggle={(v) => onFilter({ ...filter, verdicts: toggled(filter.verdicts, v) })}
+                onClear={() => onFilter({ ...filter, verdicts: [] })}
+              />
+            )}
             {tags.length > 0 && (
               <FilterRow
                 label="Tags"
@@ -684,7 +721,7 @@ function Lanes({
                 <button
                   type="button"
                   className="underline underline-offset-2 hover:text-foreground"
-                  onClick={() => onFilter({ stages: [], tags: [] })}
+                  onClick={() => onFilter(NO_FILTER)}
                 >
                   clear filters
                 </button>
