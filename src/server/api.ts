@@ -31,6 +31,7 @@ const TicketPatch = z.object({
   baseBranch: z.string().max(200).optional(),
   repoId: z.number().int().optional(),
   tags: z.array(z.string().max(40)).max(20).optional(),
+  prNumber: z.number().int().positive().nullable().optional(),
 })
 const ScheduleBody = z.object({
   time: z.string().regex(/^\d{2}:\d{2}$/, 'HH:MM'),
@@ -125,11 +126,22 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 
 // --- ongoing features ---
 // ?parent=root for the top level, ?parent=<ticketId> for one ticket's lanes; all tickets otherwise.
-// ?tag= keeps the ones carrying that tag.
+// ?tag= keeps the ones carrying that tag, ?status=todo,blocked those stages, ?assignee= one name (empty for
+// unassigned), ?q= a text match in the title or instructions.
 api.get('/api/projects/:id/tickets', ({ params, url }) => {
-  const parent = url.searchParams.get('parent')
+  const q = url.searchParams
+  const parent = q.get('parent')
   const parentId = parent === null ? undefined : parent === 'root' ? null : intParam(parent, 'parent')
-  return json(features.listTickets(id(params), { parentId, tag: url.searchParams.get('tag') ?? undefined }))
+  const status = q.get('status')
+  return json(
+    features.listTickets(id(params), {
+      parentId,
+      tag: q.get('tag') ?? undefined,
+      status: status ? z.array(z.enum(TICKET_STATUSES)).parse(status.split(',')) : undefined,
+      assignee: q.get('assignee') ?? undefined,
+      q: q.get('q') ?? undefined,
+    }),
+  )
 })
 api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   const body = await readJson(
@@ -168,6 +180,11 @@ api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
   )
   return json(features.setVerdict(id(params), body.verdict, actor, { reopenTo: body.reopenTo }))
 })
+// Assigns the ticket to the caller unless someone else holds it (409), and starts it.
+api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
+  const body = await readJson(request, z.object({ branch: z.string().max(200).optional() }))
+  return json(features.claimTicket(id(params), actor, body))
+})
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
 
 api.post('/api/tickets/:id/tasks', async ({ request, params, actor }) => {
@@ -181,8 +198,8 @@ api.patch('/api/tasks/:id', async ({ request, params, actor }) => {
   )
   return json(features.updateTask(id(params), body, actor))
 })
-api.delete('/api/tasks/:id', ({ params }) => {
-  features.deleteTask(id(params))
+api.delete('/api/tasks/:id', ({ params, actor }) => {
+  features.deleteTask(id(params), actor)
   return json({ ok: true })
 })
 
@@ -216,6 +233,8 @@ api.get('/api/comments', ({ url }) => {
   const parentType = z.enum(COMMENT_PARENTS).parse(url.searchParams.get('parentType'))
   return json(features.listComments(parentType, intParam(url.searchParams.get('parentId') ?? '', 'parentId')))
 })
+// Threads in a project where someone spoke after the caller, on things the caller owns or spoke in.
+api.get('/api/projects/:id/threads', ({ params, actor }) => json(features.listOpenThreads(id(params), actor)))
 api.post('/api/comments', async ({ request, actor }) => {
   const body = await readJson(
     request,
@@ -253,6 +272,9 @@ api.post('/api/uploads', async ({ request, actor }) => {
       : uploads.saveBase64(body.name, body.base64, actor, body.mime)
   return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
 })
+api.get('/api/uploads/:id/info', ({ params }) =>
+  json(uploads.attachmentView(uploads.getAttachment(id(params)))),
+)
 api.get('/api/uploads/:id', ({ params }) => {
   const a = uploads.getAttachment(id(params))
   const file = uploads.attachmentPath(a)
@@ -269,6 +291,17 @@ api.get('/api/uploads/:id', ({ params }) => {
 })
 
 // --- reviews ---
+// ?pr=&sha=&repoId= narrow the results; the summaries are left out (GET /api/reviews/results/:id has one).
+api.get('/api/projects/:id/reviews/results', ({ params, url }) => {
+  const q = url.searchParams
+  const num = (k: string) => (q.get(k) ? intParam(q.get(k)!, k) : undefined)
+  const rows = reviews.listResults(id(params), num('limit') ?? 20, {
+    prNumber: num('pr'),
+    sha: q.get('sha') || undefined,
+    repoId: num('repoId'),
+  })
+  return json(rows.map(({ summaryMd: _summary, ...r }) => r))
+})
 api.get('/api/projects/:id/reviews', ({ params }) => {
   const pid = id(params)
   return json({

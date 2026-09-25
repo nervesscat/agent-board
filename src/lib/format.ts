@@ -33,6 +33,7 @@ export const STATUS_LABEL: Record<string, string> = {
   backlog: 'Backlog',
   todo: 'To do',
   in_progress: 'In progress',
+  blocked: 'Blocked',
   review: 'In review',
   done: 'Done',
   cancelled: 'Cancelled',

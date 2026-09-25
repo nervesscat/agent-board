@@ -83,6 +83,21 @@ export function attachmentPath(a: schema.Attachment) {
 
 export const attachmentUrl = (a: Pick<schema.Attachment, 'id'>) => `/api/uploads/${a.id}`
 
+/**
+ * An attachment as the board hands it out: the URL for the browser and the file on this machine for
+ * agents, which cannot fetch the URL without the gate. A board inside WSL also gives the path a
+ * Windows agent can open.
+ */
+export function attachmentView(a: schema.Attachment, distro = process.env.WSL_DISTRO_NAME) {
+  const file = attachmentPath(a)
+  return {
+    ...a,
+    url: attachmentUrl(a),
+    path: file,
+    ...(distro ? { windowsPath: `\\\\wsl.localhost\\${distro}${file.replace(/\//g, '\\')}` } : {}),
+  }
+}
+
 /** Bind previously uploaded files to the update or comment that references them. */
 export function attachTo(ids: number[], owner: { updateId?: number; commentId?: number }) {
   for (const id of ids) {

@@ -3,6 +3,7 @@ import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   GitBranch,
   Layers,
   Paperclip,
@@ -493,6 +494,7 @@ const STAGE_TAG: Record<TicketStatus, string> = {
   done: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
   review: 'bg-violet-500/15 text-violet-700 dark:text-violet-400',
   in_progress: 'bg-sky-500/15 text-sky-700 dark:text-sky-400',
+  blocked: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
   todo: 'bg-muted text-foreground/80',
   backlog: 'bg-muted text-muted-foreground',
   cancelled: 'bg-muted text-muted-foreground line-through',
@@ -935,6 +937,34 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
           <p className="text-xs text-muted-foreground">
             No branch yet. Edit the ticket or let the agent set it.
           </p>
+        )}
+        {t.pr && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            {t.pr.url ? (
+              <a
+                href={t.pr.url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 font-medium hover:underline"
+              >
+                PR #{t.pr.number} <ExternalLink className="size-3 text-muted-foreground" />
+              </a>
+            ) : (
+              <span className="font-medium">PR #{t.pr.number}</span>
+            )}
+            {t.pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[t.pr.queue.status]}</span>}
+            {t.pr.latestReview && (
+              <Link
+                to="/projects/$id/reviews"
+                params={{ id: String(t.projectId) }}
+                search={{ result: t.pr.latestReview.id }}
+                className={`rounded bg-muted px-1 hover:underline ${t.pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
+                title={t.pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
+              >
+                {t.pr.latestReview.verdict}
+              </Link>
+            )}
+          </div>
         )}
         <div className="mt-2 flex items-center gap-2 text-xs">
           {t.assignee ? (

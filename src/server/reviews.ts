@@ -3,7 +3,7 @@ import { StringDecoder } from 'node:string_decoder'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq, isNull, like, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
@@ -50,14 +50,30 @@ export function getRun(id: number) {
   return run
 }
 
-export function listResults(projectId: number, limit = 100) {
+export function listResults(
+  projectId: number,
+  limit = 100,
+  filter: { prNumber?: number; sha?: string; repoId?: number } = {},
+) {
   return db
     .select()
     .from(schema.reviewResults)
-    .where(eq(schema.reviewResults.projectId, projectId))
+    .where(
+      and(
+        eq(schema.reviewResults.projectId, projectId),
+        filter.prNumber === undefined ? undefined : eq(schema.reviewResults.prNumber, filter.prNumber),
+        // A result posted without a repo counts for every repo, as in the PR queue.
+        filter.repoId === undefined
+          ? undefined
+          : or(eq(schema.reviewResults.repoId, filter.repoId), isNull(schema.reviewResults.repoId)),
+        // Short and full SHAs both match.
+        filter.sha ? like(schema.reviewResults.sha, `${filter.sha.slice(0, 7)}%`) : undefined,
+      ),
+    )
     .orderBy(desc(schema.reviewResults.createdAt))
     .limit(limit)
     .all()
+    .filter((r) => !filter.sha || r.sha.startsWith(filter.sha) || filter.sha.startsWith(r.sha))
 }
 
 export function getResult(id: number) {

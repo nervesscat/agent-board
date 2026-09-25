@@ -33,7 +33,7 @@ export function TicketBoard({
     setOver(null)
   }
   return (
-    <div className="grid gap-3 md:grid-cols-6">
+    <div className="grid gap-3 md:grid-cols-7">
       {TICKET_STATUSES.map((status) => {
         const column = items.filter((t) => t.status === status)
         return (
@@ -128,6 +128,7 @@ export function TicketBoard({
 
 const LANE_WORDS: [TicketStatus, string][] = [
   ['in_progress', 'active'],
+  ['blocked', 'blocked'],
   ['review', 'in review'],
   ['done', 'done'],
   ['cancelled', 'cancelled'],

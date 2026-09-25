@@ -140,6 +140,20 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
             <span>updated {ago(pr.updatedAt)}</span>
             {pr.myReview !== 'none' && <span>· my review: {pr.myReview.replace('_', ' ')}</span>}
           </div>
+          {pr.tickets.length > 0 && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+              {pr.tickets.map((t) => (
+                <Link
+                  key={t.id}
+                  to="/projects/$id/features/$ticketId"
+                  params={{ id: projectId, ticketId: String(t.id) }}
+                  className="text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  from #{t.id} {t.title}
+                </Link>
+              ))}
+            </div>
+          )}
           {pr.hold && pr.holdNote && <p className="mt-2 text-sm">{pr.holdNote}</p>}
         </div>
         <div className="flex items-center gap-1">

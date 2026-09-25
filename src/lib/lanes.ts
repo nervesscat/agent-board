@@ -1,7 +1,15 @@
 import type { TicketStatus } from '#/lib/constants'
 
 /** Finished lanes first, then the ones closest to finishing; cancelled ones last. */
-export const LANE_ORDER: TicketStatus[] = ['done', 'review', 'in_progress', 'todo', 'backlog', 'cancelled']
+export const LANE_ORDER: TicketStatus[] = [
+  'done',
+  'review',
+  'blocked',
+  'in_progress',
+  'todo',
+  'backlog',
+  'cancelled',
+]
 
 type Lane = { id: number; status: TicketStatus; tags: string[] }
 

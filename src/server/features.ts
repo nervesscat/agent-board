@@ -1,12 +1,13 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import { branchInfo, listWorktrees } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
+import { prForTicket } from './prs'
 import { resolveRepo, ticketRepo } from './repos'
-import { attachTo, attachmentUrl } from './uploads'
+import { attachTo, attachmentView } from './uploads'
 
 type TicketStatus = schema.TicketStatus
 
@@ -76,17 +77,30 @@ function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id
   return out
 }
 
+export interface TicketFilter {
+  parentId?: number | null
+  tag?: string
+  status?: TicketStatus[]
+  assignee?: string
+  q?: string
+}
+
 /**
  * A project's tickets; `parentId` narrows to the lanes of one ticket (`null` to the top level), `tag`
- * to those carrying it (any casing).
+ * to those carrying it (any casing), `status` to those stages, `assignee` to one name (`''` for
+ * unassigned), `q` to a text match in the title or instructions.
  */
-export function listTickets(projectId: number, filter: { parentId?: number | null; tag?: string } = {}) {
+export function listTickets(projectId: number, filter: TicketFilter = {}) {
   getProject(projectId)
   const tag = filter.tag?.trim().toLowerCase()
+  const q = filter.q?.trim().toLowerCase()
   return projectTickets(projectId).filter(
     (t) =>
       (filter.parentId === undefined || t.parentId === filter.parentId) &&
-      (!tag || t.tags.some((x) => x.toLowerCase() === tag)),
+      (!tag || t.tags.some((x) => x.toLowerCase() === tag)) &&
+      (!filter.status?.length || filter.status.includes(t.status)) &&
+      (filter.assignee === undefined || t.assignee === filter.assignee) &&
+      (!q || t.title.toLowerCase().includes(q) || t.body.toLowerCase().includes(q)),
   )
 }
 
@@ -144,8 +158,13 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
   const files = updateIds.length
     ? db.select().from(schema.attachments).where(inArray(schema.attachments.updateId, updateIds)).all()
     : []
+  const ticketThread = threadStats('ticket', [id]).get(id) ?? NO_THREAD
+  const updateThreads = threadStats('update', updateIds)
   return {
     ...ticket,
+    // The ticket's own thread; each update carries its own below.
+    thread: ticketThread,
+    pr: prForTicket(ticket),
     tasks,
     workspaces,
     progress: self.progress,
@@ -162,7 +181,8 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
       ...u,
       // Set on a lane's update shown in its parent's feed.
       lane: u.ticketId === id ? null : { id: u.ticketId, title: byId.get(u.ticketId)?.title ?? '' },
-      attachments: files.filter((f) => f.updateId === u.id).map((f) => ({ ...f, url: attachmentUrl(f) })),
+      attachments: files.filter((f) => f.updateId === u.id).map((f) => attachmentView(f)),
+      thread: updateThreads.get(u.id) ?? NO_THREAD,
     })),
   }
 }
@@ -182,6 +202,7 @@ export function createTicket(
     parentId?: number | null
     tags?: string[]
     tasks?: string[]
+    prNumber?: number | null
   },
   actor: string,
 ) {
@@ -205,6 +226,7 @@ export function createTicket(
       branch: input.branch ?? '',
       baseBranch: input.baseBranch || parentBase || repo.baseBranch,
       tags: cleanTags(input.tags ?? []),
+      prNumber: input.prNumber ?? null,
       createdBy: actor,
     })
     .returning()
@@ -253,12 +275,16 @@ export function updateTicket(
   patch: Partial<
     Pick<
       schema.Ticket,
-      'title' | 'body' | 'status' | 'assignee' | 'branch' | 'baseBranch' | 'repoId' | 'tags'
+      'title' | 'body' | 'status' | 'assignee' | 'branch' | 'baseBranch' | 'repoId' | 'tags' | 'prNumber'
     >
   >,
   actor: string,
+  opts: { guardClaim?: boolean } = {},
 ) {
   const before = getTicket(id)
+  // An agent assigning itself a ticket someone else holds would silently take it from them.
+  if (opts.guardClaim && patch.assignee === actor && before.assignee && before.assignee !== actor)
+    throw new HttpError(409, `ticket ${id} is assigned to ${before.assignee}; ask in its thread first`)
   if (patch.repoId) resolveRepo(before.projectId, patch.repoId)
   if (patch.tags) patch = { ...patch, tags: cleanTags(patch.tags) }
   const row = db
@@ -274,6 +300,8 @@ export function updateTicket(
     changes.push(`assignee → ${patch.assignee || 'nobody'}`)
   if (patch.branch !== undefined && patch.branch !== before.branch)
     changes.push(`branch → ${patch.branch || 'none'}`)
+  if (patch.prNumber !== undefined && patch.prNumber !== before.prNumber)
+    changes.push(`PR → ${patch.prNumber ? `#${patch.prNumber}` : 'none'}`)
   if (patch.tags && patch.tags.join('\n') !== before.tags.join('\n'))
     changes.push(`tags → ${patch.tags.join(', ') || 'none'}`)
   if (patch.title && patch.title !== before.title) changes.push('renamed')
@@ -286,6 +314,46 @@ export function updateTicket(
     refType: 'ticket',
     refId: id,
   })
+  return row
+}
+
+/**
+ * Take a ticket for `actor`: it must be unassigned or already theirs, and still open. The check and
+ * the write are one statement, so two agents claiming at once cannot both win. A ticket waiting in
+ * backlog, todo or blocked moves to in_progress.
+ */
+export function claimTicket(id: number, actor: string, opts: { branch?: string } = {}) {
+  const before = getTicket(id)
+  if (before.status === 'done' || before.status === 'cancelled')
+    throw new HttpError(409, `ticket ${id} is ${before.status}`)
+  const start = before.status === 'backlog' || before.status === 'todo' || before.status === 'blocked'
+  const row = db
+    .update(schema.tickets)
+    .set({
+      assignee: actor,
+      ...(start ? { status: 'in_progress' as const } : {}),
+      ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(
+      and(eq(schema.tickets.id, id), or(eq(schema.tickets.assignee, ''), eq(schema.tickets.assignee, actor))),
+    )
+    .returning()
+    .get()
+  if (!row) {
+    const holder = getTicket(id).assignee
+    throw new HttpError(409, `ticket ${id} is already claimed by ${holder}`)
+  }
+  if (row.parentId) touch(row.parentId)
+  if (before.assignee !== actor || start)
+    logActivity({
+      projectId: row.projectId,
+      actor,
+      kind: 'ticket',
+      text: `claimed ${row.parentId ? 'lane' : 'ticket'} #${id} ${row.title}${start ? ` (status ${before.status} → in_progress)` : ''}`,
+      refType: 'ticket',
+      refId: id,
+    })
   return row
 }
 
@@ -386,23 +454,36 @@ export function updateTask(id: number, patch: { done?: boolean; text?: string },
   const row = db.update(schema.tasks).set(patch).where(eq(schema.tasks.id, id)).returning().get()!
   const ticket = getTicket(task.ticketId)
   touch(ticket.id)
-  if (patch.done !== undefined && patch.done !== task.done)
+  const log = (text: string) =>
     logActivity({
       projectId: ticket.projectId,
       actor,
       kind: 'task',
-      text: `${patch.done ? 'completed' : 'reopened'} "${row.text}" on #${ticket.id} ${ticket.title}`,
+      text,
       refType: 'ticket',
       refId: ticket.id,
     })
+  if (patch.text !== undefined && patch.text !== task.text)
+    log(`reworded "${task.text}" to "${row.text}" on #${ticket.id} ${ticket.title}`)
+  if (patch.done !== undefined && patch.done !== task.done)
+    log(`${patch.done ? 'completed' : 'reopened'} "${row.text}" on #${ticket.id} ${ticket.title}`)
   return row
 }
 
-export function deleteTask(id: number) {
+export function deleteTask(id: number, actor: string) {
   const task = db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).get()
   if (!task) throw notFound('task')
   db.delete(schema.tasks).where(eq(schema.tasks.id, id)).run()
   touch(task.ticketId)
+  const ticket = getTicket(task.ticketId)
+  logActivity({
+    projectId: ticket.projectId,
+    actor,
+    kind: 'task',
+    text: `removed "${task.text}" from #${ticket.id} ${ticket.title}`,
+    refType: 'ticket',
+    refId: ticket.id,
+  })
 }
 
 // --- workspaces (a worktree, a sub-branch, a subagent's sandbox) ---
@@ -567,8 +648,136 @@ export function listComments(parentType: schema.CommentParent, parentId: number)
     : []
   return rows.map((c) => ({
     ...c,
-    attachments: files.filter((f) => f.commentId === c.id).map((f) => ({ ...f, url: attachmentUrl(f) })),
+    attachments: files.filter((f) => f.commentId === c.id).map((f) => attachmentView(f)),
   }))
+}
+
+export type ThreadStats = { count: number; lastAuthor: string | null; lastAt: string | null }
+const NO_THREAD: ThreadStats = { count: 0, lastAuthor: null, lastAt: null }
+
+/** How many comments hang under each of these parents, and who spoke last. */
+function threadStats(parentType: schema.CommentParent, ids: number[]) {
+  const out = new Map<number, ThreadStats>()
+  if (!ids.length) return out
+  const rows = db
+    .select({
+      parentId: schema.comments.parentId,
+      author: schema.comments.author,
+      at: schema.comments.createdAt,
+    })
+    .from(schema.comments)
+    .where(and(eq(schema.comments.parentType, parentType), inArray(schema.comments.parentId, ids)))
+    .orderBy(asc(schema.comments.createdAt), asc(schema.comments.id))
+    .all()
+  for (const c of rows) {
+    const t = out.get(c.parentId) ?? { ...NO_THREAD }
+    out.set(c.parentId, { count: t.count + 1, lastAuthor: c.author, lastAt: c.at })
+  }
+  return out
+}
+
+/**
+ * The threads in a project waiting on `actor`: ones they spoke in or whose subject is theirs (a ticket
+ * assigned to or opened by them, their update, their review), where someone else spoke last. Newest
+ * first; `waiting` counts the comments since the actor last spoke.
+ */
+export function listOpenThreads(projectId: number, actor: string) {
+  getProject(projectId)
+  const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
+  const ticketById = new Map(tickets.map((t) => [t.id, t]))
+  const updates = tickets.length
+    ? db
+        .select({
+          id: schema.updates.id,
+          ticketId: schema.updates.ticketId,
+          author: schema.updates.author,
+          body: schema.updates.body,
+        })
+        .from(schema.updates)
+        .where(
+          inArray(
+            schema.updates.ticketId,
+            tickets.map((t) => t.id),
+          ),
+        )
+        .all()
+    : []
+  const prs = db.select().from(schema.prs).where(eq(schema.prs.projectId, projectId)).all()
+  const reviews = db
+    .select({
+      id: schema.reviewResults.id,
+      prNumber: schema.reviewResults.prNumber,
+      verdict: schema.reviewResults.verdict,
+      author: schema.reviewResults.author,
+    })
+    .from(schema.reviewResults)
+    .where(eq(schema.reviewResults.projectId, projectId))
+    .all()
+
+  type Subject = { ticketId: number | null; title: string; mine: boolean }
+  const subjects = new Map<string, Subject>()
+  for (const t of tickets)
+    subjects.set(`ticket:${t.id}`, {
+      ticketId: t.id,
+      title: t.title,
+      mine: t.assignee === actor || t.createdBy === actor,
+    })
+  for (const u of updates)
+    subjects.set(`update:${u.id}`, {
+      ticketId: u.ticketId,
+      title: `update on #${u.ticketId} ${ticketById.get(u.ticketId)?.title ?? ''}: ${gist(u.body, 60)}`,
+      mine: u.author === actor,
+    })
+  for (const p of prs)
+    subjects.set(`pr:${p.id}`, {
+      ticketId: null,
+      title: `PR #${p.number} ${p.title}`,
+      mine: p.author === actor,
+    })
+  for (const r of reviews)
+    subjects.set(`review:${r.id}`, {
+      ticketId: null,
+      title: `review of PR #${r.prNumber} (${r.verdict})`,
+      mine: r.author === actor,
+    })
+
+  const ids = (type: string) =>
+    [...subjects.keys()].filter((k) => k.startsWith(`${type}:`)).map((k) => Number(k.split(':')[1]))
+  const comments = (['ticket', 'update', 'pr', 'review'] as const).flatMap((type) => {
+    const parentIds = ids(type)
+    return parentIds.length
+      ? db
+          .select()
+          .from(schema.comments)
+          .where(and(eq(schema.comments.parentType, type), inArray(schema.comments.parentId, parentIds)))
+          .orderBy(asc(schema.comments.createdAt), asc(schema.comments.id))
+          .all()
+      : []
+  })
+  const threads = new Map<string, schema.Comment[]>()
+  for (const c of comments) {
+    const key = `${c.parentType}:${c.parentId}`
+    threads.set(key, [...(threads.get(key) ?? []), c])
+  }
+
+  const out = []
+  for (const [key, list] of threads) {
+    const subject = subjects.get(key)!
+    const last = list[list.length - 1]!
+    const spoke = list.some((c) => c.author === actor)
+    if (last.author === actor || !(spoke || subject.mine)) continue
+    const lastMine = list.map((c) => c.author).lastIndexOf(actor)
+    const c = list[0]!
+    out.push({
+      parentType: c.parentType,
+      parentId: c.parentId,
+      ticketId: subject.ticketId,
+      title: subject.title,
+      waiting: list.length - 1 - lastMine,
+      last: { id: last.id, author: last.author, text: gist(last.body), createdAt: last.createdAt },
+    })
+  }
+  return out.sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt))
 }
 
 export function addComment(

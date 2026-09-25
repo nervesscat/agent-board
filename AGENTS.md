@@ -37,11 +37,13 @@ http_headers = { Authorization = "Bearer gate_…" }
    (how to run them, conventions, what never to do). Follow them over any default of yours. A
    project can span several repos (`repos[]`: id, name, checkout path, base branch); when it does,
    give `repoId` to `create_ticket` and `post_review_result` so the board knows which one you mean.
-2. **Pick up work** from `list_tickets` (status `todo`, unassigned, or assigned to you). Read it in
-   full with `get_ticket`. Then `update_ticket` with `assignee: <you>`, `status: in_progress`, and
-   the `branch` you will work on.
+2. **Pick up work** from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
+   you; `q` searches titles and instructions). Read it in full with `get_ticket`. Then
+   `claim_ticket` with the `branch` you will work on: it assigns you and moves it to
+   `in_progress`, and fails if another agent already holds it (pick another one then).
 3. **Break it down**: `add_tasks` with the concrete steps if the ticket does not have them;
-   `set_task_done` as you finish each one. The progress bar the human sees is those tasks.
+   `set_task_done` as you finish each one, `update_task` / `remove_task` when the plan changes.
+   The progress bar the human sees is those tasks.
 4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
    agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and
    `assignee`. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its
@@ -53,8 +55,13 @@ http_headers = { Authorization = "Bearer gate_…" }
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
    the board copies them). One update per meaningful step, not per keystroke.
 6. **Ask and answer in threads**: `comment` on the ticket, on an update, on a PR or on a review
-   result. Check `list_comments` on your ticket when you resume; the human answers there.
-7. **Hand off**: `update_ticket` to `review` with the PR link in a final `post_update`. `done` is
+   result. When you cannot continue without an answer, also move the ticket to `blocked` (back to
+   `in_progress` once answered). `list_my_threads` lists every thread where someone spoke after
+   you; `get_ticket` shows each thread's comment count and last author. Attachments come with a
+   local `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
+7. **Hand off**: `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
+   the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
+   final `post_update`. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
    its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
@@ -66,7 +73,10 @@ http_headers = { Authorization = "Bearer gate_…" }
 ## PR queue and reviews
 
 - `list_prs` shows the PRs waiting for the human's review with status `pending | reviewed |
-on_hold` and the latest review verdict. `set_pr_hold` parks one with a note (board-only).
+on_hold`, the latest review verdict and the tickets it came from. `set_pr_hold` parks one with a
+  note (board-only). `list_review_results` (by `prNumber`, `sha`) tells whether a head SHA was
+  already reviewed; `get_review_result` has the findings.
+- `list_actors` gives the names to use for `assignee`.
 - Scheduled reviews run `/review-queue` unattended and their findings land in the Reviews module
   by themselves. If you review a PR yourself, record it with `post_review_result` (verdict,
   markdown summary with findings, how to test, checks). Never post the review to GitHub.

@@ -5,7 +5,7 @@ import { logActivity } from './activity'
 import { currentGithubLogin, listMyPrs } from './git'
 import { notFound } from './http'
 import { getProject } from './projects'
-import { listRepos } from './repos'
+import { listRepos, ticketRepo } from './repos'
 
 export type PrStatus = 'pending' | 'reviewed' | 'on_hold'
 
@@ -103,9 +103,9 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
     .orderBy(desc(schema.reviewResults.createdAt))
     .all()
   const repos = listRepos(projectId)
+  const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
   return rows.map((pr) => {
-    // PR numbers repeat across repos; an agent-posted result without a repo counts for any of them.
-    const r = results.find((x) => x.prNumber === pr.number && (x.repoId ?? pr.repoId) === pr.repoId)
+    const r = latestResult(results, pr.number, pr.repoId)
     return {
       ...pr,
       repo: repos.find((x) => x.id === pr.repoId)?.name ?? null,
@@ -113,8 +113,83 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
       latestReview: r
         ? { id: r.id, verdict: r.verdict, sha: r.sha, fresh: r.sha === pr.headSha, createdAt: r.createdAt }
         : null,
+      // The tickets this PR came from: named by their PR number, or on its head branch when they name none.
+      tickets: tickets
+        .filter(
+          (t) =>
+            (t.repoId ?? repos[0]?.id) === pr.repoId &&
+            (t.prNumber === pr.number || (t.prNumber === null && !!t.branch && t.branch === pr.headRef)),
+        )
+        .map((t) => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          assignee: t.assignee,
+          parentId: t.parentId,
+        })),
     }
   })
+}
+
+// PR numbers repeat across repos; an agent-posted result without a repo counts for any of them.
+const latestResult = (results: schema.ReviewResult[], prNumber: number, repoId: number | null) =>
+  results.find((x) => x.prNumber === prNumber && (x.repoId ?? repoId) === repoId)
+
+/**
+ * The PR a ticket was opened as: the one it names with `prNumber`, else the open one on its branch,
+ * in the ticket's repo. A PR outside the review queue (not assigned to the human) still comes back
+ * with its number and GitHub link, without the queue's fields.
+ */
+export function prForTicket(ticket: schema.Ticket) {
+  const repo = ticketRepo(ticket)
+  if (!repo || (!ticket.prNumber && !ticket.branch)) return null
+  const row = ticket.prNumber
+    ? db
+        .select()
+        .from(schema.prs)
+        .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.number, ticket.prNumber)))
+        .get()
+    : db
+        .select()
+        .from(schema.prs)
+        .where(
+          and(
+            eq(schema.prs.repoId, repo.id),
+            eq(schema.prs.headRef, ticket.branch),
+            eq(schema.prs.open, true),
+          ),
+        )
+        .orderBy(desc(schema.prs.updatedAt))
+        .get()
+  const number = ticket.prNumber ?? row?.number
+  if (!number) return null
+  const results = db
+    .select()
+    .from(schema.reviewResults)
+    .where(
+      and(eq(schema.reviewResults.projectId, ticket.projectId), eq(schema.reviewResults.prNumber, number)),
+    )
+    .orderBy(desc(schema.reviewResults.createdAt))
+    .all()
+  const r = latestResult(results, number, repo.id)
+  return {
+    number,
+    linkedBy: ticket.prNumber ? ('prNumber' as const) : ('branch' as const),
+    url: row?.url ?? (repo.githubRepo ? `https://github.com/${repo.githubRepo}/pull/${number}` : null),
+    // Set when the PR is in the review queue: its board id (for threads and holds), title and state.
+    queue: row
+      ? { id: row.id, title: row.title, open: row.open, status: prStatus(row), headSha: row.headSha }
+      : null,
+    latestReview: r
+      ? {
+          id: r.id,
+          verdict: r.verdict,
+          sha: r.sha,
+          fresh: row ? r.sha === row.headSha : null,
+          createdAt: r.createdAt,
+        }
+      : null,
+  }
 }
 
 export type PrRow = Awaited<ReturnType<typeof listPrs>>[number]

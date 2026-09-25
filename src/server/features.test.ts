@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -171,5 +172,156 @@ describe('lanes', () => {
     expect(features.getTicket(c.id).parentId).toBe(a.id)
     features.deleteTicket(a.id, 'me')
     expect(() => features.getTicket(c.id)).toThrow()
+  })
+})
+
+describe('the agent loop', () => {
+  // A project of its own, so the other tests' tickets do not show up in its lists.
+  let pid: number
+  let repoId: number
+  beforeAll(async () => {
+    const { db, schema } = await import('#/db')
+    pid = db.insert(schema.projects).values({ name: 'loop' }).returning().get().id
+    repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/app', githubRepo: 'acme/app' })
+      .returning()
+      .get().id
+  })
+
+  it('lets one agent claim a ticket, and only one', () => {
+    const t = features.createTicket(pid, { title: 'claim me' }, 'enrique')
+    expect(features.claimTicket(t.id, 'claude', { branch: 'feat/claim' })).toMatchObject({
+      assignee: 'claude',
+      status: 'in_progress',
+      branch: 'feat/claim',
+    })
+    // Claiming again is harmless; someone else claiming or self-assigning is refused.
+    expect(features.claimTicket(t.id, 'claude').assignee).toBe('claude')
+    expect(() => features.claimTicket(t.id, 'codex')).toThrow(/already claimed by claude/)
+    expect(() => features.updateTicket(t.id, { assignee: 'codex' }, 'codex', { guardClaim: true })).toThrow(
+      /assigned to claude/,
+    )
+    // The human reassigning from the UI is not guarded.
+    expect(features.updateTicket(t.id, { assignee: 'codex' }, 'enrique').assignee).toBe('codex')
+    features.updateTicket(t.id, { status: 'done' }, 'enrique')
+    expect(() => features.claimTicket(t.id, 'codex')).toThrow(/is done/)
+  })
+
+  it('filters tickets by status, assignee and text', () => {
+    const a = features.createTicket(
+      pid,
+      { title: 'Stripe webhooks', status: 'blocked', assignee: 'claude' },
+      'me',
+    )
+    const b = features.createTicket(pid, { title: 'b', body: 'retry the WEBHOOK', status: 'todo' }, 'me')
+    const ids = (f: import('./features').TicketFilter) => features.listTickets(pid, f).map((t) => t.id)
+    expect(ids({ status: ['blocked'] })).toEqual([a.id])
+    expect(ids({ status: ['todo'], assignee: '' })).toEqual([b.id])
+    expect(ids({ q: 'webhook' }).sort()).toEqual([a.id, b.id].sort())
+    expect(ids({ q: 'webhook', assignee: 'claude' })).toEqual([a.id])
+  })
+
+  it('rewords and removes tasks, logging both', async () => {
+    const { dailyReport, today } = await import('./daily')
+    const t = features.createTicket(pid, { title: 'plan', tasks: ['a', 'b'] }, 'me')
+    const [a, b] = features.getTicketFull(t.id).tasks
+    features.updateTask(a!.id, { text: 'a, properly' }, 'claude')
+    features.deleteTask(b!.id, 'claude')
+    expect(features.getTicketFull(t.id).tasks.map((x) => x.text)).toEqual(['a, properly'])
+    expect(features.listTickets(pid).find((x) => x.id === t.id)!.progress).toEqual({ done: 0, total: 1 })
+    const texts = JSON.stringify(dailyReport(today(), pid))
+    expect(texts).toContain('reworded \\"a\\" to \\"a, properly\\"')
+    expect(texts).toContain('removed \\"b\\"')
+  })
+
+  it('shows thread counts on the ticket and its updates, and the threads waiting on an agent', () => {
+    const t = features.createTicket(pid, { title: 'threads', assignee: 'claude' }, 'enrique')
+    const u = features.postUpdate(t.id, 'first pass done', [], 'claude')
+    const other = features.createTicket(pid, { title: 'not mine', assignee: 'codex' }, 'enrique')
+    features.addComment({ parentType: 'ticket', parentId: other.id, body: 'hi codex' }, 'enrique')
+
+    expect(features.listOpenThreads(pid, 'claude')).toEqual([])
+    // The human answers under the update: the agent owns it, so it waits on the agent.
+    features.addComment({ parentType: 'update', parentId: u.id, body: 'looks off on mobile' }, 'enrique')
+    features.addComment({ parentType: 'update', parentId: u.id, body: 'see the header' }, 'enrique')
+    const full = features.getTicketFull(t.id)
+    expect(full.thread).toEqual({ count: 0, lastAuthor: null, lastAt: null })
+    expect(full.updates[0]!.thread).toMatchObject({ count: 2, lastAuthor: 'enrique' })
+    expect(features.listOpenThreads(pid, 'claude')).toMatchObject([
+      { parentType: 'update', parentId: u.id, ticketId: t.id, waiting: 2, last: { text: 'see the header' } },
+    ])
+
+    // Answering closes it; a new word from the human reopens it with one waiting.
+    features.addComment({ parentType: 'update', parentId: u.id, body: 'fixed' }, 'claude')
+    expect(features.listOpenThreads(pid, 'claude')).toEqual([])
+    features.addComment({ parentType: 'update', parentId: u.id, body: 'thanks' }, 'enrique')
+    expect(features.listOpenThreads(pid, 'claude')).toMatchObject([{ waiting: 1 }])
+    // Codex's thread is codex's.
+    expect(features.listOpenThreads(pid, 'codex')).toMatchObject([
+      { parentType: 'ticket', parentId: other.id },
+    ])
+  })
+
+  it('links a ticket to its PR both ways, by number or by branch', async () => {
+    const { db, schema } = await import('#/db')
+    const prs = await import('./prs')
+    const reviews = await import('./reviews')
+    const now = new Date().toISOString()
+    const pr = (number: number, headRef: string) => ({
+      projectId: pid,
+      repoId,
+      number,
+      title: `pr ${number}`,
+      url: `https://github.com/acme/app/pull/${number}`,
+      author: 'claude',
+      headRef,
+      baseRef: 'main',
+      headSha: `abc${number}def0123`,
+      updatedAt: now,
+      fetchedAt: now,
+    })
+    db.insert(schema.prs)
+      .values([pr(7, 'feat/seven'), pr(8, 'feat/eight')])
+      .run()
+
+    const byNumber = features.createTicket(pid, { title: 'seven', branch: 'other', prNumber: 7 }, 'claude')
+    const byBranch = features.createTicket(pid, { title: 'eight', branch: 'feat/eight' }, 'claude')
+    const outside = features.createTicket(pid, { title: 'nine', prNumber: 9 }, 'claude')
+    reviews.postResult(pid, { prNumber: 7, sha: 'abc7def0123', verdict: 'SHIP', summaryMd: 'ok' }, 'claude')
+
+    expect(features.getTicketFull(byNumber.id).pr).toMatchObject({
+      number: 7,
+      linkedBy: 'prNumber',
+      queue: { status: 'pending' },
+      latestReview: { verdict: 'SHIP', fresh: true },
+    })
+    expect(features.getTicketFull(byBranch.id).pr).toMatchObject({ number: 8, linkedBy: 'branch' })
+    expect(features.getTicketFull(outside.id).pr).toMatchObject({
+      number: 9,
+      url: 'https://github.com/acme/app/pull/9',
+      queue: null,
+    })
+
+    // Without a GitHub slug the queue has no repo to refresh, so listPrs reads only what is stored.
+    db.update(schema.repos).set({ githubRepo: null }).where(eq(schema.repos.id, repoId)).run()
+    const queue = await prs.listPrs(pid)
+    expect(queue.find((p) => p.number === 7)!.tickets.map((t) => t.id)).toEqual([byNumber.id])
+    expect(queue.find((p) => p.number === 8)!.tickets.map((t) => t.id)).toEqual([byBranch.id])
+
+    expect(reviews.listResults(pid, 20, { prNumber: 7, sha: 'abc7def' })).toHaveLength(1)
+    expect(reviews.listResults(pid, 20, { prNumber: 7, sha: 'fff0000' })).toHaveLength(0)
+  })
+
+  it('gives attachments a path an agent can open', async () => {
+    const uploads = await import('./uploads')
+    const file = path.join(tmp, 'shot.png')
+    fs.writeFileSync(file, 'png')
+    const a = uploads.saveFromPath(file, 'enrique')
+    const view = uploads.attachmentView(a, 'kali-linux')
+    expect(fs.readFileSync(view.path, 'utf8')).toBe('png')
+    expect(view.url).toBe(`/api/uploads/${a.id}`)
+    expect(view.windowsPath).toBe(`\\\\wsl.localhost\\kali-linux${view.path.replace(/\//g, '\\')}`)
+    expect(uploads.attachmentView(a, '')).not.toHaveProperty('windowsPath')
   })
 })
