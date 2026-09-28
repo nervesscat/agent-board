@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
 import { Attachments } from '#/components/Attachments'
-import { PendingFiles } from '#/components/PendingFiles'
+import { cn } from '#/lib/utils'
+import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Markdown } from '#/components/Markdown'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
@@ -35,6 +36,7 @@ export function Thread({
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
+  const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
 
   const send = useMutation({
     mutationFn: async () => {
@@ -86,7 +88,8 @@ export function Thread({
         <Item key={c.id} c={c} depth={0} />
       ))}
       <form
-        className="space-y-2"
+        {...drop.props}
+        className={cn('space-y-2 rounded-md', drop.className)}
         onSubmit={(e) => {
           e.preventDefault()
           if (body.trim()) send.mutate()

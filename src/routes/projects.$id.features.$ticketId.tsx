@@ -23,7 +23,8 @@ import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
 import { NewTicket } from '#/components/NewTicket'
-import { PendingFiles } from '#/components/PendingFiles'
+import { cn } from '#/lib/utils'
+import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Tag, compareTags } from '#/components/Tag'
 import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
@@ -816,6 +817,7 @@ function Updates({
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
+  const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
   const send = useMutation({
     mutationFn: async () => {
       const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
@@ -839,7 +841,8 @@ function Updates({
         )}
       </div>
       <form
-        className="mb-4 space-y-2 rounded-lg border p-3"
+        {...drop.props}
+        className={cn('mb-4 space-y-2 rounded-lg border p-3', drop.className)}
         onSubmit={(e) => {
           e.preventDefault()
           if (body.trim()) send.mutate()
