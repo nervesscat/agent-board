@@ -1,9 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import { GitBranch, Layers } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronLeft, ChevronRight, GitBranch, Layers } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
 import { Tag, compareTags } from '#/components/Tag'
+import { Button } from '#/components/ui/button'
 import type { TicketRow } from '#/lib/api'
 import { TICKET_STATUSES, type TicketStatus } from '#/lib/constants'
 import { STAGE_TAG, STATUS_LABEL, ago } from '#/lib/format'
@@ -32,88 +33,142 @@ export function TicketBoard({
     setDragging(null)
     setOver(null)
   }
+  const scroller = useRef<HTMLDivElement>(null)
+  const edges = useScrollEdges(scroller)
+  // One column (w-72) plus the gap (gap-3), landing on a column's left edge.
+  const step = (dir: -1 | 1) => {
+    const el = scroller.current
+    if (!el) return
+    const col = 288 + 12
+    el.scrollTo({ left: (Math.round(el.scrollLeft / col) + dir) * col, behavior: 'smooth' })
+  }
   return (
-    // Fixed-width columns side by side, scrolling sideways; each column is as tall as its own cards.
-    <div className="flex items-start gap-3 overflow-x-auto pb-2">
-      {TICKET_STATUSES.map((status) => {
-        const column = items.filter((t) => t.status === status)
-        return (
-          <div
-            key={status}
-            onDragOver={(e) => {
-              if (dragging === null) return
-              e.preventDefault()
-              e.dataTransfer.dropEffect = 'move'
-              if (over !== status) setOver(status)
-            }}
-            onDragLeave={(e) => {
-              // Leaving for a card inside the same column is not leaving the column.
-              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null)
-            }}
-            onDrop={(e) => {
-              e.preventDefault()
-              drop(status)
-            }}
-            className={`w-72 shrink-0 rounded-lg bg-muted/40 p-2 transition-colors ${
-              over === status && draggedStatus !== status ? 'bg-primary/10 ring-2 ring-primary/40' : ''
-            }`}
+    <div>
+      {(edges.left || edges.right) && (
+        <div className="mb-2 flex justify-end gap-1">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={!edges.left}
+            onClick={() => step(-1)}
+            aria-label="Previous stage"
           >
-            <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {STATUS_LABEL[status]} <span className="tabular-nums">{column.length}</span>
-            </div>
-            <div className="min-h-12 space-y-2">
-              {column.map((t) => (
-                <Link
-                  key={t.id}
-                  to="/projects/$id/features/$ticketId"
-                  params={{ id: projectId, ticketId: String(t.id) }}
-                  draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.effectAllowed = 'move'
-                    e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
-                    setDragging(t.id)
-                  }}
-                  onDragEnd={() => {
-                    setDragging(null)
-                    setOver(null)
-                  }}
-                  className={`flex h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
-                    dragging === t.id ? 'opacity-40' : ''
-                  }`}
-                  title={t.title}
-                >
-                  <div className="line-clamp-2 font-medium leading-snug">
-                    <span className="text-muted-foreground">#{t.id}</span> {t.title}
-                  </div>
-                  <div className="mt-1.5 flex min-w-0 items-center gap-x-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground">
-                    {repoLabel(project, t.repoId) && (
-                      <span className="shrink-0 rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>
-                    )}
-                    {t.assignee && <Actor name={t.assignee} className="shrink-0" />}
-                    {t.branch && (
-                      <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-                        <GitBranch className="size-3 shrink-0" /> <span className="truncate">{t.branch}</span>
-                      </span>
-                    )}
-                    <span className="ml-auto shrink-0">{ago(t.updatedAt)}</span>
-                  </div>
-                  {t.tags.length > 0 && (
-                    <div className="mt-1.5 flex min-w-0 gap-1 overflow-hidden">
-                      {[...t.tags].sort(compareTags).map((tag) => (
-                        <Tag key={tag} tag={tag} className="shrink-0" />
-                      ))}
+            <ChevronLeft />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            disabled={!edges.right}
+            onClick={() => step(1)}
+            aria-label="Next stage"
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+      )}
+      {/* Fixed-width columns side by side, scrolling sideways; each column is as tall as its own cards. */}
+      <div ref={scroller} className="flex items-start gap-3 overflow-x-auto pb-2">
+        {TICKET_STATUSES.map((status) => {
+          const column = items.filter((t) => t.status === status)
+          return (
+            <div
+              key={status}
+              onDragOver={(e) => {
+                if (dragging === null) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                if (over !== status) setOver(status)
+              }}
+              onDragLeave={(e) => {
+                // Leaving for a card inside the same column is not leaving the column.
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(null)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                drop(status)
+              }}
+              className={`w-72 shrink-0 rounded-lg bg-muted/40 p-2 transition-colors ${
+                over === status && draggedStatus !== status ? 'bg-primary/10 ring-2 ring-primary/40' : ''
+              }`}
+            >
+              <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {STATUS_LABEL[status]} <span className="tabular-nums">{column.length}</span>
+              </div>
+              <div className="min-h-12 space-y-2">
+                {column.map((t) => (
+                  <Link
+                    key={t.id}
+                    to="/projects/$id/features/$ticketId"
+                    params={{ id: projectId, ticketId: String(t.id) }}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = 'move'
+                      e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
+                      setDragging(t.id)
+                    }}
+                    onDragEnd={() => {
+                      setDragging(null)
+                      setOver(null)
+                    }}
+                    className={`flex h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
+                      dragging === t.id ? 'opacity-40' : ''
+                    }`}
+                    title={t.title}
+                  >
+                    <div className="line-clamp-2 font-medium leading-snug">
+                      <span className="text-muted-foreground">#{t.id}</span> {t.title}
                     </div>
-                  )}
-                  {t.lanes.total > 0 && <LaneCount lanes={t.lanes} />}
-                  {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
-                </Link>
-              ))}
+                    <div className="mt-1.5 flex min-w-0 items-center gap-x-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground">
+                      {repoLabel(project, t.repoId) && (
+                        <span className="shrink-0 rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>
+                      )}
+                      {t.assignee && <Actor name={t.assignee} className="shrink-0" />}
+                      {t.branch && (
+                        <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                          <GitBranch className="size-3 shrink-0" />{' '}
+                          <span className="truncate">{t.branch}</span>
+                        </span>
+                      )}
+                      <span className="ml-auto shrink-0">{ago(t.updatedAt)}</span>
+                    </div>
+                    {t.tags.length > 0 && (
+                      <div className="mt-1.5 flex min-w-0 gap-1 overflow-hidden">
+                        {[...t.tags].sort(compareTags).map((tag) => (
+                          <Tag key={tag} tag={tag} className="shrink-0" />
+                        ))}
+                      </div>
+                    )}
+                    {t.lanes.total > 0 && <LaneCount lanes={t.lanes} />}
+                    {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
+                  </Link>
+                ))}
+              </div>
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
+}
+
+/** Whether a sideways scroller has more to show on its left and on its right. */
+function useScrollEdges(ref: React.RefObject<HTMLDivElement | null>) {
+  const [edges, setEdges] = useState({ left: false, right: false })
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const update = () =>
+      setEdges({ left: el.scrollLeft > 1, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 })
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', update)
+      ro.disconnect()
+    }
+  }, [ref])
+  return edges
 }
 
 const LANE_WORDS: [TicketStatus, string][] = [
