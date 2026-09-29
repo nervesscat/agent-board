@@ -1,15 +1,18 @@
 import { FileText, X } from 'lucide-react'
-import { type ClipboardEvent, type DragEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type ClipboardEvent, type DragEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
+
+import { galleryItem } from '#/components/Gallery'
 import { cn } from '#/lib/utils'
 
-/** Files picked for an update or comment but not posted yet: a chip each, with a way to drop it. */
+/**
+ * Files picked for an update or comment but not posted yet: a chip each, which opens the file in
+ * the gallery (stepping through this form's files only), with a way to drop it.
+ */
 export function PendingFiles({ files, onChange }: { files: File[]; onChange: (files: File[]) => void }) {
-  // Image previews as object URLs, released when the list changes or the form goes away.
-  const previews = useMemo(
-    () => files.map((f) => (f.type.startsWith('image/') ? URL.createObjectURL(f) : null)),
-    [files],
-  )
-  useEffect(() => () => previews.forEach((u) => u && URL.revokeObjectURL(u)), [previews])
+  // Object URLs for the thumbnails and the gallery, released when the list changes or the form goes away.
+  const urls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files])
+  useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls])
+  const group = `pending-${useId()}`
 
   return (
     <>
@@ -19,13 +22,23 @@ export function PendingFiles({ files, onChange }: { files: File[]; onChange: (fi
           className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-muted/60 py-0.5 pr-0.5 pl-1 text-xs"
           title={f.name}
         >
-          {previews[i] ? (
-            <img src={previews[i]!} alt="" className="size-5 shrink-0 rounded-sm object-cover" />
-          ) : (
-            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-          )}
-          <span className="truncate">{f.name}</span>
-          <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
+          <button
+            type="button"
+            className="inline-flex min-w-0 cursor-zoom-in items-center gap-1.5 rounded-sm hover:underline"
+            aria-label={`Preview ${f.name}`}
+            {...galleryItem(
+              { src: urls[i]!, name: f.name, mime: f.type || 'application/octet-stream' },
+              group,
+            )}
+          >
+            {f.type.startsWith('image/') ? (
+              <img src={urls[i]} alt="" className="size-5 shrink-0 rounded-sm object-cover" />
+            ) : (
+              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+            )}
+            <span className="truncate">{f.name}</span>
+            <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
+          </button>
           <button
             type="button"
             onClick={() => onChange(files.filter((_, j) => j !== i))}

@@ -13,7 +13,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -26,7 +26,7 @@ import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Tag, compareTags } from '#/components/Tag'
-import { Thread } from '#/components/Thread'
+import { CommentItem, Thread, useComments } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
 import {
   AlertDialog,
@@ -48,6 +48,7 @@ import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Textarea } from '#/components/ui/textarea'
 import {
+  type CommentRow,
   del,
   errorMessage,
   get,
@@ -60,7 +61,7 @@ import {
   type UpdateRow,
 } from '#/lib/api'
 import type { TicketStatus } from '#/lib/constants'
-import { STAGE_TAG, STATUS_LABEL, ago, shortSha, stamp } from '#/lib/format'
+import { STAGE_TAG, STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
   LANE_ORDER,
   type LaneFilter,
@@ -312,11 +313,7 @@ function TicketPage() {
             </section>
             <Tasks t={t} onChange={invalidate} />
             <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
-            <Updates t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
-            <section>
-              <h2 className="mb-3 text-sm font-medium">Thread</h2>
-              <Thread parentType="ticket" parentId={t.id} />
-            </section>
+            <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
           </div>
           <aside className="min-w-0 space-y-4">
             <GitPanel t={t} git={git} onChange={invalidate} />
@@ -793,7 +790,13 @@ function Lanes({
   )
 }
 
-function Updates({
+type Entry = { kind: 'update'; at: string; u: UpdateRow } | { kind: 'comment'; at: string; c: CommentRow }
+
+/**
+ * The ticket's updates and comments in one timeline, newest first, with one box to post either.
+ * Replying to a comment goes through the same box.
+ */
+function Activity({
   t,
   onChange,
   laneFeed,
@@ -804,29 +807,49 @@ function Updates({
   laneFeed: boolean
   onLaneFeed: (v: boolean) => void
 }) {
+  const qc = useQueryClient()
+  const { key: commentsKey, comments } = useComments('ticket', t.id)
+  const [kind, setKind] = useState<'update' | 'comment'>('update')
+  const [replyTo, setReplyTo] = useState<number | null>(null)
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
+  const textarea = useRef<HTMLTextAreaElement>(null)
   const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
+  const asComment = kind === 'comment' || replyTo !== null
+
   const send = useMutation({
     mutationFn: async () => {
       const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
-      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds })
+      return asComment
+        ? post('/api/comments', { parentType: 'ticket', parentId: t.id, replyTo, body, attachmentIds })
+        : post(`/api/tickets/${t.id}/updates`, { body, attachmentIds })
     },
     onSuccess: () => {
       setBody('')
       setFiles([])
-      onChange()
+      setReplyTo(null)
+      if (asComment) {
+        qc.invalidateQueries({ queryKey: commentsKey })
+        qc.invalidateQueries({ queryKey: ['daily'] })
+      } else onChange()
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
+  const submit = () => body.trim() && !send.isPending && send.mutate()
+
+  const entries: Entry[] = [
+    ...t.updates.map((u) => ({ kind: 'update' as const, at: u.createdAt, u })),
+    ...comments.filter((c) => !c.replyTo).map((c) => ({ kind: 'comment' as const, at: c.createdAt, c })),
+  ].sort((x, y) => y.at.localeCompare(x.at))
+
   return (
     <section>
       <div className="mb-3 flex items-center gap-3">
-        <h2 className="text-sm font-medium">Updates</h2>
+        <h2 className="text-sm font-medium">Activity</h2>
         {t.lanes.length > 0 && (
           <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lanes
+            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lane updates
           </label>
         )}
       </div>
@@ -835,14 +858,30 @@ function Updates({
         className={cn('mb-4 space-y-2 rounded-lg border p-3', drop.className)}
         onSubmit={(e) => {
           e.preventDefault()
-          if (body.trim()) send.mutate()
+          submit()
         }}
       >
+        {replyTo !== null && (
+          <div className="text-xs text-muted-foreground">
+            replying to {comments.find((c) => c.id === replyTo)?.author} ·{' '}
+            <button type="button" className="underline" onClick={() => setReplyTo(null)}>
+              cancel
+            </button>
+          </div>
+        )}
         <Textarea
+          ref={textarea}
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit()
+          }}
           rows={3}
-          placeholder="Post progress (markdown). Agents post here too, with screenshots and recordings."
+          placeholder={
+            asComment
+              ? 'Comment or ask something (markdown). Agents answer in the thread.'
+              : 'Post progress (markdown). Agents post here too, with screenshots and recordings.'
+          }
         />
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -850,7 +889,7 @@ function Updates({
             type="file"
             multiple
             hidden
-            accept="image/*,video/*,.md,.txt,.log,.pdf"
+            accept={asComment ? undefined : 'image/*,video/*,.md,.txt,.log,.pdf'}
             onChange={(e) => {
               setFiles([...files, ...Array.from(e.target.files ?? [])])
               // Clear it, so picking a file that was just removed registers again.
@@ -861,21 +900,128 @@ function Updates({
             <Paperclip data-icon="inline-start" /> attach
           </Button>
           <PendingFiles files={files} onChange={setFiles} />
-          <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
-            {send.isPending ? 'Posting…' : 'Post update'}
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            {replyTo === null && (
+              <div
+                className="inline-flex rounded-md border p-0.5 text-xs"
+                role="radiogroup"
+                aria-label="Post as"
+              >
+                {(['update', 'comment'] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="radio"
+                    aria-checked={kind === k}
+                    onClick={() => setKind(k)}
+                    className={cn(
+                      'rounded px-2 py-0.5 capitalize',
+                      kind === k
+                        ? 'bg-muted font-medium text-foreground'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            )}
+            <Button type="submit" size="sm" disabled={!body.trim() || send.isPending}>
+              {send.isPending
+                ? 'Posting…'
+                : replyTo !== null
+                  ? 'Reply'
+                  : asComment
+                    ? 'Comment'
+                    : 'Post update'}
+            </Button>
+          </div>
         </div>
       </form>
-      {t.updates.length === 0 ? (
-        <Empty>No updates yet.</Empty>
+      {entries.length === 0 ? (
+        <Empty>No activity yet.</Empty>
       ) : (
-        <div className="space-y-3">
-          {t.updates.map((u) => (
-            <UpdateCard key={u.id} u={u} projectId={String(t.projectId)} />
-          ))}
-        </div>
+        <Timeline>
+          {entries.map((e) =>
+            e.kind === 'update' ? (
+              <TimelineRow key={`u${e.u.id}`} at={e.at}>
+                <UpdateCard u={e.u} projectId={String(t.projectId)} />
+              </TimelineRow>
+            ) : (
+              <TimelineRow key={`c${e.c.id}`} at={e.at} dot="bg-sky-500/70">
+                <article className="rounded-lg border bg-muted/30 p-3">
+                  <CommentItem
+                    c={e.c}
+                    comments={comments}
+                    hideTime
+                    label="comment"
+                    onReply={() => {
+                      setReplyTo(e.c.id)
+                      textarea.current?.focus()
+                    }}
+                  />
+                </article>
+              </TimelineRow>
+            ),
+          )}
+        </Timeline>
       )}
     </section>
+  )
+}
+
+/** A rail down the left of its rows; re-renders every minute so "5 minutes ago" keeps counting. */
+function Timeline({ children }: { children: ReactNode }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 60_000)
+    return () => clearInterval(id)
+  }, [])
+  return <ol>{children}</ol>
+}
+
+/** One row of a Timeline: how long ago on the left (the exact time on hover), a dot on the rail. */
+function TimelineRow({
+  at,
+  dot = 'bg-muted-foreground/60',
+  children,
+}: {
+  at: string
+  dot?: string
+  children: ReactNode
+}) {
+  const today = new Date(at).toDateString() === new Date().toDateString()
+  return (
+    <li className="group grid grid-cols-[5.5rem_1.25rem_minmax(0,1fr)] sm:grid-cols-[7rem_1.5rem_minmax(0,1fr)]">
+      <time
+        dateTime={at}
+        title={stamp(at)}
+        suppressHydrationWarning
+        className="pt-3 text-right text-xs text-muted-foreground"
+      >
+        {agoLong(at)}
+        <span className="block text-[11px] opacity-70" suppressHydrationWarning>
+          {today
+            ? clock(at)
+            : new Date(at).toLocaleString([], {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+        </span>
+      </time>
+      <div className="relative">
+        <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border group-first:top-4 group-last:bottom-auto group-last:h-4" />
+        <span
+          className={cn(
+            'absolute top-3.5 left-1/2 size-2.5 -translate-x-1/2 rounded-full border-2 border-background ring-1 ring-border',
+            dot,
+          )}
+        />
+      </div>
+      <div className="min-w-0 pb-3">{children}</div>
+    </li>
   )
 }
 
@@ -885,7 +1031,7 @@ function UpdateCard({ u, projectId }: { u: UpdateRow; projectId: string }) {
     <article className="rounded-lg border p-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Actor name={u.author} className="text-foreground" />
-        <span title={stamp(u.createdAt)}>{ago(u.createdAt)}</span>
+        <span>update</span>
         {u.lane && (
           <Link
             to="/projects/$id/features/$ticketId"
