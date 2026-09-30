@@ -74,7 +74,8 @@ http_headers = { Authorization = "Bearer gate_…" }
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
    its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
-   `disapprovedAt` / `disapprovedBy` (disapproving also cancels it): read it, never set it, and ask
+   `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a ticket tagged `PR`,
+   a PR review, also moves it to `done`): read it, never set it, and ask
    in the thread before touching an approved or disapproved lane.
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,

@@ -378,7 +378,8 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
 
 /**
  * The human's call on a ticket or lane: approve it, disapprove it (which moves it to the project's
- * first cancelled stage), or clear the call. Taking back a disapproval puts a cancelled ticket back
+ * first cancelled stage), or clear the call. Approving a PR review (a ticket tagged `PR`) also moves
+ * it to the first done stage; taking that back returns it to `reopenTo` or the first review stage. Taking back a disapproval puts a cancelled ticket back
  * to `reopenTo` (the stage it had, when an undo knows it) or the stage new tickets start in. Callers make sure
  * the actor is the human.
  */
@@ -389,8 +390,18 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
   const now = new Date().toISOString()
   const stages = listStages(t.projectId)
   const cancel = firstOfKind(stages, 'cancelled')
-  const reopen = before === 'disapproved' && kindOf(stages, t.status) === 'cancelled'
-  const reopenTo = opts.reopenTo ? resolveStage(stages, opts.reopenTo) : startStage(stages)
+  // A PR review (tagged PR) is finished by the call: approving it closes it as done.
+  const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
+  const finish = verdict === 'approved' && pr ? firstOfKind(stages, 'done') : undefined
+  const kind = kindOf(stages, t.status)
+  const reopen =
+    (before === 'disapproved' && kind === 'cancelled') ||
+    (before === 'approved' && pr && kind === 'done' && verdict === null)
+  const reopenTo = opts.reopenTo
+    ? resolveStage(stages, opts.reopenTo)
+    : before === 'approved'
+      ? (firstOfKind(stages, 'review') ?? startStage(stages))
+      : startStage(stages)
   const row = db
     .update(schema.tickets)
     .set({
@@ -400,9 +411,11 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
       disapprovedBy: verdict === 'disapproved' ? actor : '',
       ...(verdict === 'disapproved' && cancel
         ? { status: cancel.key }
-        : reopen
-          ? { status: reopenTo.key }
-          : {}),
+        : finish
+          ? { status: finish.key }
+          : reopen
+            ? { status: reopenTo.key }
+            : {}),
       updatedAt: now,
     })
     .where(eq(schema.tickets.id, id))
@@ -416,7 +429,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     kind: 'ticket',
     text:
       verdict === 'approved'
-        ? `approved ${what}`
+        ? `approved ${what}${finish ? ` (${finish.name})` : ''}`
         : verdict === 'disapproved'
           ? `disapproved ${what}${cancel ? ` (${cancel.name})` : ''}`
           : `withdrew the ${before === 'approved' ? 'approval' : 'disapproval'} of ${what}${reopen ? ` (back to ${reopenTo.name})` : ''}`,

@@ -331,6 +331,31 @@ describe('the agent loop', () => {
   })
 })
 
+describe('PR reviews', () => {
+  it('close as done when approved, cancelled when disapproved', async () => {
+    const { db, schema } = await import('#/db')
+    const pid = db.insert(schema.projects).values({ name: 'reviews' }).returning().get().id
+    db.insert(schema.repos).values({ projectId: pid, name: 'app', repoPath: '/r/reviews' }).run()
+    const queue = features.createTicket(pid, { title: 'Review queue', tags: ['PR'] }, 'claude')
+    const ok = features.createTicket(
+      pid,
+      { title: 'PR #7: retries', parentId: queue.id, tags: ['pr'], prNumber: 7, status: 'review' },
+      'claude',
+    )
+    const bad = features.createTicket(
+      pid,
+      { title: 'PR #8: login', parentId: queue.id, tags: ['PR'], prNumber: 8, status: 'review' },
+      'claude',
+    )
+    expect(features.setVerdict(ok.id, 'approved', 'enrique').status).toBe('done')
+    expect(features.setVerdict(bad.id, 'disapproved', 'enrique').status).toBe('cancelled')
+    // Taking the approval back returns it to review; a ticket without the tag keeps its stage.
+    expect(features.setVerdict(ok.id, null, 'enrique').status).toBe('review')
+    const plain = features.createTicket(pid, { title: 'feature', status: 'review' }, 'me')
+    expect(features.setVerdict(plain.id, 'approved', 'enrique').status).toBe('review')
+  })
+})
+
 describe('custom stages', () => {
   let stages: typeof import('./stages')
   let pid: number
