@@ -6,13 +6,13 @@ import { Actor } from '#/components/Actor'
 import { Tag, compareTags } from '#/components/Tag'
 import { Button } from '#/components/ui/button'
 import type { TicketRow } from '#/lib/api'
-import { TICKET_STATUSES, type TicketStatus } from '#/lib/constants'
-import { STAGE_TAG, STATUS_LABEL, ago } from '#/lib/format'
+import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
+import { type StageLike, stageBadge, stageOf } from '#/lib/stages'
 
 /**
- * Tickets in status columns. Drag a card onto another column to change its status; clicking a card
- * opens the ticket.
+ * Tickets in the project's stage columns. Drag a card onto another column to change its stage;
+ * clicking a card opens the ticket.
  */
 export function TicketBoard({
   projectId,
@@ -21,13 +21,14 @@ export function TicketBoard({
 }: {
   projectId: string
   items: TicketRow[]
-  onMove: (ticketId: number, status: TicketStatus) => void
+  onMove: (ticketId: number, status: string) => void
 }) {
   const { data: project } = useProject(projectId)
+  const stages = project?.stages ?? []
   const [dragging, setDragging] = useState<number | null>(null)
-  const [over, setOver] = useState<TicketStatus | null>(null)
+  const [over, setOver] = useState<string | null>(null)
   const draggedStatus = items.find((x) => x.id === dragging)?.status
-  const drop = (status: TicketStatus) => {
+  const drop = (status: string) => {
     const t = items.find((x) => x.id === dragging)
     if (t && t.status !== status) onMove(t.id, status)
     setDragging(null)
@@ -68,7 +69,7 @@ export function TicketBoard({
       )}
       {/* Fixed-width columns side by side, scrolling sideways; each column is as tall as its own cards. */}
       <div ref={scroller} className="flex items-start gap-3 overflow-x-auto pb-2">
-        {TICKET_STATUSES.map((status) => {
+        {stages.map(({ key: status, name }) => {
           const column = items.filter((t) => t.status === status)
           return (
             <div
@@ -92,7 +93,7 @@ export function TicketBoard({
               }`}
             >
               <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {STATUS_LABEL[status]} <span className="tabular-nums">{column.length}</span>
+                <span className="truncate">{name}</span> <span className="tabular-nums">{column.length}</span>
               </div>
               <div className="min-h-12 space-y-2">
                 {column.map((t) => (
@@ -138,7 +139,7 @@ export function TicketBoard({
                         ))}
                       </div>
                     )}
-                    {t.lanes.total > 0 && <LaneCount lanes={t.lanes} />}
+                    {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
                     {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
                   </Link>
                 ))}
@@ -171,17 +172,11 @@ function useScrollEdges(ref: React.RefObject<HTMLDivElement | null>) {
   return edges
 }
 
-const LANE_WORDS: [TicketStatus, string][] = [
-  ['in_progress', 'active'],
-  ['blocked', 'blocked'],
-  ['review', 'in review'],
-  ['done', 'done'],
-  ['cancelled', 'cancelled'],
-]
-
-/** "3 lanes · 1 active · 1 in review" */
-function LaneCount({ lanes }: { lanes: TicketRow['lanes'] }) {
-  const parts = LANE_WORDS.filter(([s]) => lanes[s]).map(([s, word]) => `${lanes[s]} ${word}`)
+/** "3 lanes · 1 in progress · 1 in review": lanes per stage, leaving out the ones still waiting. */
+function LaneCount({ lanes, stages }: { lanes: TicketRow['lanes']; stages: StageLike[] }) {
+  const parts = stages
+    .filter((s) => s.kind !== 'open' && lanes.byStage[s.key])
+    .map((s) => `${lanes.byStage[s.key]} ${s.name.toLowerCase()}`)
   if (lanes.approved) parts.push(`${lanes.approved} approved`)
   return (
     <div className="mt-1.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
@@ -209,68 +204,75 @@ function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup']; cla
 /** The same tickets as rows, in column order (newest first within a status), like the lanes list. */
 export function TicketList({ projectId, items }: { projectId: string; items: TicketRow[] }) {
   const { data: project } = useProject(projectId)
+  const stages = project?.stages ?? []
+  const rank = (key: string) => {
+    const i = stages.findIndex((s) => s.key === key)
+    return i < 0 ? stages.length : i
+  }
   const rows = [...items].sort(
-    (a, b) =>
-      TICKET_STATUSES.indexOf(a.status) - TICKET_STATUSES.indexOf(b.status) ||
-      b.updatedAt.localeCompare(a.updatedAt),
+    (a, b) => rank(a.status) - rank(b.status) || b.updatedAt.localeCompare(a.updatedAt),
   )
   if (!rows.length) return <p className="text-sm text-muted-foreground">No tickets.</p>
   return (
     <ul className="divide-y rounded-md border">
-      {rows.map((t) => (
-        <li key={t.id} className="transition-colors hover:bg-muted/50">
-          <Link
-            to="/projects/$id/features/$ticketId"
-            params={{ id: projectId, ticketId: String(t.id) }}
-            className="flex min-w-0 items-start gap-3 px-3 py-2.5"
-          >
-            <span
-              className={`mt-px w-20 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${STAGE_TAG[t.status]}`}
+      {rows.map((t) => {
+        const stage = stageOf(stages, t.status)
+        return (
+          <li key={t.id} className="transition-colors hover:bg-muted/50">
+            <Link
+              to="/projects/$id/features/$ticketId"
+              params={{ id: projectId, ticketId: String(t.id) }}
+              className="flex min-w-0 items-start gap-3 px-3 py-2.5"
             >
-              {STATUS_LABEL[t.status]}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm leading-snug">
-                <span className="text-muted-foreground">#{t.id}</span>{' '}
-                <span className={t.status === 'cancelled' ? 'text-muted-foreground line-through' : ''}>
-                  {t.title}
-                </span>
-                {t.tags.length > 0 && (
-                  <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
-                    {[...t.tags].sort(compareTags).map((tag) => (
-                      <Tag key={tag} tag={tag} />
-                    ))}
+              <span
+                className={`mt-px w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stage)}`}
+                title={stage.name}
+              >
+                {stage.name}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm leading-snug">
+                  <span className="text-muted-foreground">#{t.id}</span>{' '}
+                  <span className={stage.kind === 'cancelled' ? 'text-muted-foreground line-through' : ''}>
+                    {t.title}
                   </span>
-                )}
+                  {t.tags.length > 0 && (
+                    <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
+                      {[...t.tags].sort(compareTags).map((tag) => (
+                        <Tag key={tag} tag={tag} />
+                      ))}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                  {repoLabel(project, t.repoId) && (
+                    <span className="rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>
+                  )}
+                  {t.assignee && <Actor name={t.assignee} />}
+                  {t.branch && (
+                    <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                      <GitBranch className="size-3 shrink-0" /> <span className="truncate">{t.branch}</span>
+                    </span>
+                  )}
+                  {t.lanes.total > 0 && (
+                    <span className="inline-flex items-center gap-1">
+                      <Layers className="size-3" /> {t.lanes.total} lane{t.lanes.total === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                {repoLabel(project, t.repoId) && (
-                  <span className="rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>
-                )}
-                {t.assignee && <Actor name={t.assignee} />}
-                {t.branch && (
-                  <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-                    <GitBranch className="size-3 shrink-0" /> <span className="truncate">{t.branch}</span>
+              <div className="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums text-muted-foreground">
+                {t.rollup.total > 0 && (
+                  <span>
+                    {t.rollup.done}/{t.rollup.total}
                   </span>
                 )}
-                {t.lanes.total > 0 && (
-                  <span className="inline-flex items-center gap-1">
-                    <Layers className="size-3" /> {t.lanes.total} lane{t.lanes.total === 1 ? '' : 's'}
-                  </span>
-                )}
+                <span>{ago(t.updatedAt)}</span>
               </div>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums text-muted-foreground">
-              {t.rollup.total > 0 && (
-                <span>
-                  {t.rollup.done}/{t.rollup.total}
-                </span>
-              )}
-              <span>{ago(t.updatedAt)}</span>
-            </div>
-          </Link>
-        </li>
-      ))}
+            </Link>
+          </li>
+        )
+      })}
     </ul>
   )
 }

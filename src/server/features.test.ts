@@ -71,7 +71,12 @@ describe('lanes', () => {
     expect(top.map((t) => t.id)).toEqual([parent.id])
     expect(top[0]!.progress).toEqual({ done: 0, total: 1 })
     expect(top[0]!.rollup).toEqual({ done: 1, total: 4 })
-    expect(top[0]!.lanes).toEqual({ total: 2, approved: 0, disapproved: 0, in_progress: 1, todo: 1 })
+    expect(top[0]!.lanes).toEqual({
+      total: 2,
+      approved: 0,
+      disapproved: 0,
+      byStage: { in_progress: 1, todo: 1 },
+    })
 
     features.postUpdate(hooks.id, 'signature check in', [], 'claude')
     const full = features.getTicketFull(hooks.id)
@@ -124,7 +129,7 @@ describe('lanes', () => {
 
     const rejected = features.setVerdict(b.id, 'disapproved', 'enrique')
     expect(rejected).toMatchObject({ status: 'cancelled', disapprovedBy: 'enrique', approvedAt: null })
-    expect(row().lanes).toMatchObject({ approved: 1, disapproved: 1, cancelled: 1 })
+    expect(row().lanes).toMatchObject({ approved: 1, disapproved: 1, byStage: { cancelled: 1 } })
     // The cancelled lane's task is no longer part of the work.
     expect(row().rollup).toEqual({ done: 0, total: 1 })
 
@@ -205,7 +210,7 @@ describe('the agent loop', () => {
     // The human reassigning from the UI is not guarded.
     expect(features.updateTicket(t.id, { assignee: 'codex' }, 'enrique').assignee).toBe('codex')
     features.updateTicket(t.id, { status: 'done' }, 'enrique')
-    expect(() => features.claimTicket(t.id, 'codex')).toThrow(/is done/)
+    expect(() => features.claimTicket(t.id, 'codex')).toThrow(/is done \(Done\)/)
   })
 
   it('filters tickets by status, assignee and text', () => {
@@ -323,5 +328,93 @@ describe('the agent loop', () => {
     expect(view.url).toBe(`/api/uploads/${a.id}`)
     expect(view.windowsPath).toBe(`\\\\wsl.localhost\\kali-linux${view.path.replace(/\//g, '\\')}`)
     expect(uploads.attachmentView(a, '')).not.toHaveProperty('windowsPath')
+  })
+})
+
+describe('custom stages', () => {
+  let stages: typeof import('./stages')
+  let pid: number
+  beforeAll(async () => {
+    stages = await import('./stages')
+    const { db, schema } = await import('#/db')
+    pid = db.insert(schema.projects).values({ name: 'stages' }).returning().get().id
+    db.insert(schema.repos).values({ projectId: pid, name: 'app', repoPath: '/r/stages' }).run()
+  })
+  const keys = () => stages.listStages(pid).map((s) => s.key)
+
+  it('start from the defaults, with new tickets in To do', () => {
+    expect(keys()).toEqual(['backlog', 'todo', 'in_progress', 'blocked', 'review', 'done', 'cancelled'])
+    const t = features.createTicket(pid, { title: 'first' }, 'me')
+    expect(t.status).toBe('todo')
+    features.deleteTicket(t.id, 'me')
+  })
+
+  it('replace the defaults with a layout of their own', () => {
+    for (const s of stages.listStages(pid)) if (s.key !== 'todo') stages.deleteStage(pid, s.id, {}, 'enrique')
+    expect(() => stages.deleteStage(pid, stages.listStages(pid)[0]!.id, {}, 'enrique')).toThrow(
+      /at least one/,
+    )
+    const add = (name: string, kind: import('#/lib/constants').StageKind) =>
+      stages.createStage(pid, { name, kind }, 'enrique')
+    add('Ideas', 'open')
+    const build = add('Build', 'active')
+    add('QA review', 'review')
+    add('Ship', 'done')
+    add('Dropped', 'cancelled')
+    // Renaming keeps the key; the old To do becomes Spec, moved after Ideas.
+    const todo = stages.listStages(pid).find((s) => s.key === 'todo')!
+    stages.updateStage(pid, todo.id, { name: 'Spec' }, 'enrique')
+    const byKey = new Map(stages.listStages(pid).map((s) => [s.key, s.id]))
+    const order = ['ideas', 'todo', 'build', 'qa_review', 'ship', 'dropped']
+    expect(() => stages.reorderStages(pid, [build.id], 'enrique')).toThrow(/every stage/)
+    stages.reorderStages(
+      pid,
+      order.map((k) => byKey.get(k)!),
+      'enrique',
+    )
+    expect(stages.listStages(pid).map((s) => s.name)).toEqual([
+      'Ideas',
+      'Spec',
+      'Build',
+      'QA review',
+      'Ship',
+      'Dropped',
+    ])
+    expect(add('Build', 'active').key).toBe('build_2')
+  })
+
+  it('resolve keys, names and kinds, and keep the rules by kind', () => {
+    const t = features.createTicket(pid, { title: 'feature' }, 'me')
+    // The last open stage is where new tickets start.
+    expect(t.status).toBe('todo')
+    expect(features.createTicket(pid, { title: 'idea', status: 'Ideas' }, 'me').status).toBe('ideas')
+    expect(() => features.createTicket(pid, { title: 'x', status: 'nowhere' }, 'me')).toThrow(
+      /no stage "nowhere"/,
+    )
+    expect(features.claimTicket(t.id, 'claude').status).toBe('build')
+    expect(features.updateTicket(t.id, { status: 'review' }, 'claude').status).toBe('qa_review')
+    expect(features.updateTicket(t.id, { status: 'qa review' }, 'claude').status).toBe('qa_review')
+    const ids = (status: string[]) =>
+      features
+        .listTickets(pid, { status })
+        .map((x) => x.title)
+        .sort()
+    expect(ids(['open'])).toEqual(['idea'])
+    expect(ids(['review'])).toEqual(['feature'])
+    features.setVerdict(t.id, 'disapproved', 'enrique')
+    expect(features.getTicket(t.id).status).toBe('dropped')
+    features.setVerdict(t.id, null, 'enrique', { reopenTo: 'qa_review' })
+    expect(features.getTicket(t.id).status).toBe('qa_review')
+    features.updateTicket(t.id, { status: 'Ship' }, 'enrique')
+    expect(() => features.claimTicket(t.id, 'codex')).toThrow(/is done \(Ship\)/)
+  })
+
+  it("move a deleted stage's tickets where they are told", () => {
+    const ship = stages.listStages(pid).find((s) => s.key === 'ship')!
+    expect(() => stages.deleteStage(pid, ship.id, {}, 'enrique')).toThrow(/1 ticket in Ship/)
+    expect(() => stages.deleteStage(pid, ship.id, { moveTo: 'ship' }, 'enrique')).toThrow(/no other stage/)
+    stages.deleteStage(pid, ship.id, { moveTo: 'dropped' }, 'enrique')
+    expect(features.listTickets(pid, { status: ['dropped'] }).map((t) => t.title)).toEqual(['feature'])
+    expect(keys()).not.toContain('ship')
   })
 })

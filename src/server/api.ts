@@ -1,8 +1,9 @@
 import fs from 'node:fs'
 import { z } from 'zod'
 
-import { COMMENT_PARENTS, TICKET_STATUSES } from '#/lib/constants'
+import { AGENT_CLIENTS, COMMENT_PARENTS, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
 import { addSummary } from './activity'
+import * as agents from './agents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { dailyReport, generateSummary, today } from './daily'
@@ -16,16 +17,19 @@ import * as projects from './projects'
 import * as repos from './repos'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
+import * as stages from './stages'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
 const id = (p: Record<string, string>, k = 'id') => intParam(p[k]!, k)
 
 const Instructions = z.string().max(50_000)
+// A stage key, name or kind; the server resolves it against the project's stages.
+const Status = z.string().min(1).max(60)
 const TicketPatch = z.object({
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(50_000).optional(),
-  status: z.enum(TICKET_STATUSES).optional(),
+  status: Status.optional(),
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
@@ -47,6 +51,22 @@ api.get('/api/me', ({ actor }) => json({ actor }))
 // Every name the board has seen sign in, with whether it is an agent or a human.
 api.get('/api/actors', () => json(listActors()))
 
+// --- connecting agents: board settings, and the skill each CLI installs ---
+api.get('/api/agent-setup', () => json(agents.agentSetup()))
+// The board skill as a SKILL.md, with today's projects and repos; the install commands curl this.
+api.get('/api/agent-setup/skill', ({ url }) => {
+  const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
+  return new Response(agents.renderSkill(client), {
+    headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
+api.get('/api/settings', () => json(agents.getSettings()))
+api.patch('/api/settings', async ({ request }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human changes the settings')
+  const body = await readJson(request, z.object({ defaultAgent: z.enum(AGENT_CLIENTS).optional() }))
+  return json(agents.updateSettings(body))
+})
+
 // --- projects ---
 api.get('/api/projects', () => json(projects.listProjects()))
 api.post('/api/projects', async ({ request, actor }) => {
@@ -66,6 +86,49 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
   projects.deleteProject(id(params), actor)
+  return json({ ok: true })
+})
+
+// --- stages (the board's columns); laid out by the human, read by everyone via the project ---
+const StageBody = z.object({
+  name: z.string().trim().min(1).max(40),
+  kind: z.enum(STAGE_KINDS),
+  color: z.enum(STAGE_COLORS).optional(),
+})
+const humanOnly = (request: Request) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human lays out the stages')
+}
+api.get('/api/projects/:id/stages', ({ params }) => {
+  const pid = id(params)
+  projects.getProject(pid)
+  const counts = stages.stageCounts(pid)
+  return json(stages.listStages(pid).map((s) => ({ ...s, tickets: counts[s.key] ?? 0 })))
+})
+api.post('/api/projects/:id/stages', async ({ request, params, actor }) => {
+  humanOnly(request)
+  projects.getProject(id(params))
+  return json(stages.createStage(id(params), await readJson(request, StageBody), actor), 201)
+})
+// Body: every stage id of the project, in the new order.
+api.put('/api/projects/:id/stages/order', async ({ request, params, actor }) => {
+  humanOnly(request)
+  const body = await readJson(request, z.object({ ids: z.array(z.number().int()) }))
+  return json(stages.reorderStages(id(params), body.ids, actor))
+})
+api.patch('/api/projects/:id/stages/:stageId', async ({ request, params, actor }) => {
+  humanOnly(request)
+  const body = await readJson(request, StageBody.partial())
+  return json(stages.updateStage(id(params), id(params, 'stageId'), body, actor))
+})
+// ?moveTo=<key> is where its tickets go; required when it has any.
+api.delete('/api/projects/:id/stages/:stageId', ({ request, params, url, actor }) => {
+  humanOnly(request)
+  stages.deleteStage(
+    id(params),
+    id(params, 'stageId'),
+    { moveTo: url.searchParams.get('moveTo') ?? undefined },
+    actor,
+  )
   return json({ ok: true })
 })
 
@@ -137,7 +200,7 @@ api.get('/api/projects/:id/tickets', ({ params, url }) => {
     features.listTickets(id(params), {
       parentId,
       tag: q.get('tag') ?? undefined,
-      status: status ? z.array(z.enum(TICKET_STATUSES)).parse(status.split(',')) : undefined,
+      status: status ? z.array(Status).parse(status.split(',')) : undefined,
       assignee: q.get('assignee') ?? undefined,
       q: q.get('q') ?? undefined,
     }),
@@ -170,12 +233,12 @@ api.delete('/api/tickets/:id', ({ params, url, actor }) => {
 api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human approves')
   // approved, disapproved (which cancels the ticket), or null to take the call back; reopenTo is the
-  // stage a taken-back disapproval returns to (an undo passes the one it had), todo otherwise.
+  // stage a taken-back disapproval returns to (an undo passes the one it had), the stage new tickets start in otherwise.
   const body = await readJson(
     request,
     z.object({
       verdict: z.enum(['approved', 'disapproved']).nullable(),
-      reopenTo: z.enum(TICKET_STATUSES).optional(),
+      reopenTo: Status.optional(),
     }),
   )
   return json(features.setVerdict(id(params), body.verdict, actor, { reopenTo: body.reopenTo }))

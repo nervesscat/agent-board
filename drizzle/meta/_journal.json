@@ -57,6 +57,20 @@
       "when": 1790277671017,
       "tag": "0007_ticket_pr",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790790490257,
+      "tag": "0008_stages",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1790805975949,
+      "tag": "0009_settings",
+      "breakpoints": true
     }
   ]
 }

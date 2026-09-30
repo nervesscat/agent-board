@@ -2,7 +2,7 @@ import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 
-import { COMMENT_PARENTS, TICKET_STATUSES } from '#/lib/constants'
+import { COMMENT_PARENTS } from '#/lib/constants'
 import { addSummary } from './activity'
 import { listActors } from './actors'
 import { dailyReport, today } from './daily'
@@ -37,7 +37,7 @@ const INSTRUCTIONS = `The board is where the human and every agent coordinate wo
 Work only in the project of the repo you are in, and never read or write another project's tickets, PRs, reviews or daily log. If a board skill or the repo's own instructions name your projectId, use it directly. Only otherwise, call list_projects once and pick the project whose repos include yours (match the GitHub slug from git remote get-url origin, then the folder name; the board may list Linux paths while you are on Windows); if none does, do not use the board for this repo.
 
 The rhythm:
-1. get_project before touching it; its instructions override your defaults.
+1. get_project before touching it; its instructions override your defaults. Its stages are the board's columns, in order, each with a key, a name and a kind (open, active, blocked, review, done, cancelled). A ticket's status is a stage key; wherever status is asked for you can also give a stage's name or a kind (the first stage of that kind; todo and in_progress mean open and active). Below, todo, in_progress, blocked, review, done and cancelled mean the stage of that kind.
 2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. It fails if another agent holds the ticket: pick another one instead of taking it.
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each; update_task or remove_task when the plan changes.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox); remove_workspace when it is gone.
@@ -50,6 +50,8 @@ When a project has several repos, pass repoId to create_ticket and post_review_r
 
 Keep the board out of the repo. The board, trazic, habits and any other personal tracking tool are private to the human: never mention them, their tool names, their URLs (localhost:47100, 47110) or a board ticket, task or project ("#12", "ticket 12", "per the board") in code comments, docs, READMEs, changelogs, config, commit messages, branch names, PR titles or descriptions, or issues, and never link or screenshot the board there. Describe the change and its reason in the repo's own terms; if the PR needs something from the ticket, restate it instead of pointing at it. Board updates and comments may talk about the repo, branches and PRs freely.`
 
+const STATUS =
+  'a stage key from get_project, a stage name, or a kind (open, active, blocked, review, done, cancelled; todo and in_progress also work): the first stage of that kind'
 const TAGS =
   'Short labels the human filters lanes by: a severity (Critical, High, Medium, Low, Cosmetic), an area (API, UI, Forms…) or a kind (Bug, Refactor…). One or two words each, Title Case; reuse the tags sibling lanes already use, and keep them out of the title (no "[High] …").'
 
@@ -83,7 +85,7 @@ function buildServer(actor: string) {
   )
   tool(
     'get_project',
-    'One project with its repos and the instructions agents must follow when working on it. Read this before touching a project.',
+    "One project with its repos, its stages (the board's columns in order: key, name, kind) and the instructions agents must follow when working on it. Read this before touching a project.",
     { projectId: z.number().int() },
     ({ projectId }) => projects.getProjectFull(projectId),
   )
@@ -142,7 +144,7 @@ function buildServer(actor: string) {
   // ongoing features
   tool(
     'list_tickets',
-    "Tickets of a project (all its repos) with status, assignee, repoId, branch, parentId, tags, task progress (own and rolled up over lanes), lane counts by status, approved and disapproved, and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is cancelled). Cancelled lanes' tasks are left out of the rolled-up progress.",
+    "Tickets of a project (all its repos) with status, assignee, repoId, branch, parentId, tags, task progress (own and rolled up over lanes), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage). status is a stage key (see get_project). Cancelled lanes' tasks are left out of the rolled-up progress.",
     {
       projectId: z.number().int(),
       parentId: z
@@ -152,7 +154,10 @@ function buildServer(actor: string) {
         .optional()
         .describe("a ticket's id for its lanes, null for top-level tickets only; omit for all"),
       tag: z.string().optional().describe('only tickets carrying this tag (any casing)'),
-      status: z.array(z.enum(TICKET_STATUSES)).optional().describe('only tickets in these statuses'),
+      status: z
+        .array(z.string())
+        .optional()
+        .describe('only tickets in these stages: keys, names, or kinds (a kind takes in every stage of it)'),
       assignee: z.string().optional().describe('only tickets assigned to this name; "" for unassigned'),
       q: z.string().optional().describe('text to find in the title or instructions (any casing)'),
     },
@@ -174,7 +179,10 @@ function buildServer(actor: string) {
       projectId: z.number().int(),
       title: z.string(),
       body: z.string().default('').describe('markdown instructions'),
-      status: z.enum(TICKET_STATUSES).default('todo'),
+      status: z
+        .string()
+        .optional()
+        .describe(`${STATUS}. Defaults to the last open stage (To do rather than Backlog)`),
       assignee: z.string().default(''),
       branch: z.string().default(''),
       baseBranch: z.string().optional().describe("defaults to the repo's base branch"),
@@ -203,7 +211,7 @@ function buildServer(actor: string) {
       ticketId: z.number().int(),
       title: z.string().optional(),
       body: z.string().optional(),
-      status: z.enum(TICKET_STATUSES).optional(),
+      status: z.string().optional().describe(STATUS),
       assignee: z.string().optional(),
       branch: z.string().optional(),
       baseBranch: z.string().optional(),
@@ -220,7 +228,7 @@ function buildServer(actor: string) {
   )
   tool(
     'claim_ticket',
-    'Pick a ticket up: assigns it to you and moves backlog, todo or blocked to in_progress, optionally setting the branch. Fails if someone else is assigned or it is done or cancelled, so two agents never work the same ticket.',
+    'Pick a ticket up: assigns it to you and moves it from an open or blocked stage to the first active stage, optionally setting the branch. Fails if someone else is assigned or it is in a done or cancelled stage, so two agents never work the same ticket.',
     { ticketId: z.number().int(), branch: z.string().optional() },
     ({ ticketId, branch }) => features.claimTicket(ticketId, actor, { branch }),
   )

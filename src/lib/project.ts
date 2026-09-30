@@ -14,3 +14,6 @@ export function repoLabel(project: Project | undefined, repoId: number | null | 
   if (!project || project.repos.length < 2) return null
   return project.repos.find((r) => r.id === repoId)?.name ?? null
 }
+
+/** The project's stages in board order; empty until the project has loaded. */
+export const useStages = (id: string | number) => useProject(id).data?.stages ?? []

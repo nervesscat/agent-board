@@ -15,7 +15,10 @@ You authenticate with a passkey-gate CLI token, minted by the human on the gate'
   `Authorization: Bearer gate_…`
 - REST: same header against `http://localhost:47100/api/*` (the routes are listed in `README.md`)
 
-Connect once per client:
+Connect once per client. The board's Agents page (`http://localhost:47100/agents`) has these
+ready to copy for Claude Code, Codex and OpenCode, with your token filled in, plus a one-line
+install of the board skill (generated with the current projects and repos; install it again after
+adding one):
 
 ```
 # Claude Code
@@ -37,6 +40,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    (how to run them, conventions, what never to do). Follow them over any default of yours. A
    project can span several repos (`repos[]`: id, name, checkout path, base branch); when it does,
    give `repoId` to `create_ticket` and `post_review_result` so the board knows which one you mean.
+   Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
+   (`open`, `active`, `blocked`, `review`, `done`, `cancelled`). A ticket's `status` is a stage key;
+   wherever a status is asked for you can also give a stage's name or a kind (`todo` and
+   `in_progress` mean `open` and `active`). Below, `todo`, `in_progress`, `blocked`, `review`,
+   `done` and `cancelled` mean the project's stage of that kind.
 2. **Pick up work** from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
    you; `q` searches titles and instructions). Read it in full with `get_ticket`. Then
    `claim_ticket` with the `branch` you will work on: it assigns you and moves it to

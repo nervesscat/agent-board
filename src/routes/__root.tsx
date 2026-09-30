@@ -62,6 +62,18 @@ function App() {
           >
             Daily
           </Link>
+          <Link
+            to="/agents"
+            className="text-muted-foreground hover:text-foreground [&.active]:text-foreground"
+          >
+            Agents
+          </Link>
+          <Link
+            to="/settings"
+            className="text-muted-foreground hover:text-foreground [&.active]:text-foreground"
+          >
+            Settings
+          </Link>
         </nav>
       </header>
       <main className="mx-auto w-full max-w-7xl px-4 py-6">

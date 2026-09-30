@@ -8,7 +8,6 @@ import { NewTicket } from '#/components/NewTicket'
 import { TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
-import type { TicketStatus } from '#/lib/constants'
 import { errorMessage, get, patch, type TicketRow } from '#/lib/api'
 
 export const Route = createFileRoute('/projects/$id/features/')({ component: Features })
@@ -42,7 +41,7 @@ function Features() {
   })
   // The card moves at once; a failed save puts it back.
   const move = useMutation({
-    mutationFn: (v: { ticketId: number; status: TicketStatus }) =>
+    mutationFn: (v: { ticketId: number; status: string }) =>
       patch(`/api/tickets/${v.ticketId}`, { status: v.status }),
     onMutate: async (v) => {
       await qc.cancelQueries({ queryKey: key })
@@ -69,7 +68,7 @@ function Features() {
           <p className="text-sm text-muted-foreground">
             Tickets agents pick up. Each one carries its todo list, branch, workspaces, updates, a thread, and
             lanes for work running in parallel. On the board, drag a card to another column to change its
-            status.
+            stage; the stages themselves are set in Settings.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

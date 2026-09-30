@@ -7,22 +7,26 @@ import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { prForTicket } from './prs'
 import { resolveRepo, ticketRepo } from './repos'
+import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
 import { attachTo, attachmentView } from './uploads'
-
-type TicketStatus = schema.TicketStatus
 
 // --- tickets ---
 
 type Progress = { done: number; total: number }
-export type LaneCounts = { total: number; approved: number; disapproved: number } & Partial<
-  Record<TicketStatus, number>
->
+export type LaneCounts = {
+  total: number
+  approved: number
+  disapproved: number
+  /** Lanes per stage key. */
+  byStage: Record<string, number>
+}
 
 /**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
- * theirs), and how many lanes it has in each status. One pass over the project keeps this cheap.
+ * theirs), and how many lanes it has in each stage. One pass over the project keeps this cheap.
  */
 function projectTickets(projectId: number) {
+  const stages = listStages(projectId)
   const rows = db
     .select()
     .from(schema.tickets)
@@ -44,7 +48,7 @@ function projectTickets(projectId: number) {
   // A cancelled lane's tasks are no longer part of the work.
   const rollup = (id: number): Progress =>
     (children.get(id) ?? [])
-      .filter((lane) => lane.status !== 'cancelled')
+      .filter((lane) => kindOf(stages, lane.status) !== 'cancelled')
       .reduce(
         (acc, lane) => {
           const p = rollup(lane.id)
@@ -53,12 +57,12 @@ function projectTickets(projectId: number) {
         { ...own.get(id)! },
       )
   return rows.map((t) => {
-    const lanes: LaneCounts = { total: 0, approved: 0, disapproved: 0 }
+    const lanes: LaneCounts = { total: 0, approved: 0, disapproved: 0, byStage: {} }
     for (const lane of children.get(t.id) ?? []) {
       lanes.total++
       if (lane.approvedAt) lanes.approved++
       if (lane.disapprovedAt) lanes.disapproved++
-      lanes[lane.status] = (lanes[lane.status] ?? 0) + 1
+      lanes.byStage[lane.status] = (lanes.byStage[lane.status] ?? 0) + 1
     }
     return { ...t, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
   })
@@ -80,7 +84,8 @@ function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id
 export interface TicketFilter {
   parentId?: number | null
   tag?: string
-  status?: TicketStatus[]
+  /** Stage keys, names or kinds (`review` takes in every stage of that kind). */
+  status?: string[]
   assignee?: string
   q?: string
 }
@@ -94,11 +99,12 @@ export function listTickets(projectId: number, filter: TicketFilter = {}) {
   getProject(projectId)
   const tag = filter.tag?.trim().toLowerCase()
   const q = filter.q?.trim().toLowerCase()
+  const stages = filter.status?.length ? matchStages(listStages(projectId), filter.status) : null
   return projectTickets(projectId).filter(
     (t) =>
       (filter.parentId === undefined || t.parentId === filter.parentId) &&
       (!tag || t.tags.some((x) => x.toLowerCase() === tag)) &&
-      (!filter.status?.length || filter.status.includes(t.status)) &&
+      (!stages || stages.has(t.status)) &&
       (filter.assignee === undefined || t.assignee === filter.assignee) &&
       (!q || t.title.toLowerCase().includes(q) || t.body.toLowerCase().includes(q)),
   )
@@ -194,7 +200,8 @@ export function createTicket(
   input: {
     title: string
     body?: string
-    status?: TicketStatus
+    /** A stage key, name or kind; the project's last open stage when left out. */
+    status?: string
     assignee?: string
     branch?: string
     baseBranch?: string
@@ -213,6 +220,7 @@ export function createTicket(
   const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
   // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
   const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
+  const stages = listStages(projectId)
   const row = db
     .insert(schema.tickets)
     .values({
@@ -221,7 +229,7 @@ export function createTicket(
       parentId: parent?.id ?? null,
       title: input.title,
       body: input.body ?? '',
-      status: input.status ?? 'todo',
+      status: (input.status ? resolveStage(stages, input.status) : startStage(stages)).key,
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
       baseBranch: input.baseBranch || parentBase || repo.baseBranch,
@@ -287,6 +295,8 @@ export function updateTicket(
     throw new HttpError(409, `ticket ${id} is assigned to ${before.assignee}; ask in its thread first`)
   if (patch.repoId) resolveRepo(before.projectId, patch.repoId)
   if (patch.tags) patch = { ...patch, tags: cleanTags(patch.tags) }
+  const stages = listStages(before.projectId)
+  if (patch.status) patch = { ...patch, status: resolveStage(stages, patch.status).key }
   const row = db
     .update(schema.tickets)
     .set({ ...patch, updatedAt: new Date().toISOString() })
@@ -295,7 +305,7 @@ export function updateTicket(
     .get()!
   const changes: string[] = []
   if (patch.status && patch.status !== before.status)
-    changes.push(`status ${before.status} → ${patch.status}`)
+    changes.push(`status ${stageOf(stages, before.status).name} → ${stageOf(stages, patch.status).name}`)
   if (patch.assignee !== undefined && patch.assignee !== before.assignee)
     changes.push(`assignee → ${patch.assignee || 'nobody'}`)
   if (patch.branch !== undefined && patch.branch !== before.branch)
@@ -318,20 +328,23 @@ export function updateTicket(
 }
 
 /**
- * Take a ticket for `actor`: it must be unassigned or already theirs, and still open. The check and
- * the write are one statement, so two agents claiming at once cannot both win. A ticket waiting in
- * backlog, todo or blocked moves to in_progress.
+ * Take a ticket for `actor`: it must be unassigned or already theirs, and not in a done or cancelled
+ * stage. The check and the write are one statement, so two agents claiming at once cannot both win. A
+ * ticket waiting in an open or blocked stage moves to the project's first active stage, if it has one.
  */
 export function claimTicket(id: number, actor: string, opts: { branch?: string } = {}) {
   const before = getTicket(id)
-  if (before.status === 'done' || before.status === 'cancelled')
-    throw new HttpError(409, `ticket ${id} is ${before.status}`)
-  const start = before.status === 'backlog' || before.status === 'todo' || before.status === 'blocked'
+  const stages = listStages(before.projectId)
+  const from = stageOf(stages, before.status)
+  if (from.kind === 'done' || from.kind === 'cancelled')
+    throw new HttpError(409, `ticket ${id} is ${from.kind} (${from.name})`)
+  const active = firstOfKind(stages, 'active')
+  const start = (from.kind === 'open' || from.kind === 'blocked') && active ? active : null
   const row = db
     .update(schema.tickets)
     .set({
       assignee: actor,
-      ...(start ? { status: 'in_progress' as const } : {}),
+      ...(start ? { status: start.key } : {}),
       ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
       updatedAt: new Date().toISOString(),
     })
@@ -350,7 +363,7 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string }
       projectId: row.projectId,
       actor,
       kind: 'ticket',
-      text: `claimed ${row.parentId ? 'lane' : 'ticket'} #${id} ${row.title}${start ? ` (status ${before.status} → in_progress)` : ''}`,
+      text: `claimed ${row.parentId ? 'lane' : 'ticket'} #${id} ${row.title}${start ? ` (status ${from.name} → ${start.name})` : ''}`,
       refType: 'ticket',
       refId: id,
     })
@@ -363,22 +376,20 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
   t.approvedAt ? 'approved' : t.disapprovedAt ? 'disapproved' : null
 
 /**
- * The human's call on a ticket or lane: approve it, disapprove it (which cancels it), or clear the
- * call. Taking back a disapproval puts a cancelled ticket back to `reopenTo` (the stage it had,
- * when an undo knows it) or todo. Callers make sure the actor is the human.
+ * The human's call on a ticket or lane: approve it, disapprove it (which moves it to the project's
+ * first cancelled stage), or clear the call. Taking back a disapproval puts a cancelled ticket back
+ * to `reopenTo` (the stage it had, when an undo knows it) or the stage new tickets start in. Callers make sure
+ * the actor is the human.
  */
-export function setVerdict(
-  id: number,
-  verdict: Verdict,
-  actor: string,
-  opts: { reopenTo?: TicketStatus } = {},
-) {
+export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { reopenTo?: string } = {}) {
   const t = getTicket(id)
   const before = verdictOf(t)
   if (before === verdict) return t
   const now = new Date().toISOString()
-  const reopen = before === 'disapproved' && t.status === 'cancelled'
-  const reopenTo = opts.reopenTo ?? 'todo'
+  const stages = listStages(t.projectId)
+  const cancel = firstOfKind(stages, 'cancelled')
+  const reopen = before === 'disapproved' && kindOf(stages, t.status) === 'cancelled'
+  const reopenTo = opts.reopenTo ? resolveStage(stages, opts.reopenTo) : startStage(stages)
   const row = db
     .update(schema.tickets)
     .set({
@@ -386,7 +397,11 @@ export function setVerdict(
       approvedBy: verdict === 'approved' ? actor : '',
       disapprovedAt: verdict === 'disapproved' ? now : null,
       disapprovedBy: verdict === 'disapproved' ? actor : '',
-      ...(verdict === 'disapproved' ? { status: 'cancelled' as const } : reopen ? { status: reopenTo } : {}),
+      ...(verdict === 'disapproved' && cancel
+        ? { status: cancel.key }
+        : reopen
+          ? { status: reopenTo.key }
+          : {}),
       updatedAt: now,
     })
     .where(eq(schema.tickets.id, id))
@@ -402,8 +417,8 @@ export function setVerdict(
       verdict === 'approved'
         ? `approved ${what}`
         : verdict === 'disapproved'
-          ? `disapproved ${what} (cancelled)`
-          : `withdrew the ${before === 'approved' ? 'approval' : 'disapproval'} of ${what}${reopen ? ` (back to ${reopenTo})` : ''}`,
+          ? `disapproved ${what}${cancel ? ` (${cancel.name})` : ''}`
+          : `withdrew the ${before === 'approved' ? 'approval' : 'disapproval'} of ${what}${reopen ? ` (back to ${reopenTo.name})` : ''}`,
     refType: 'ticket',
     refId: id,
   })

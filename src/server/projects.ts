@@ -4,6 +4,7 @@ import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import { notFound } from './http'
 import { listRepos } from './repos'
+import { listStages } from './stages'
 
 /** Projects with their repos and what they hold, for the top-bar menu and agents' `list_projects`. */
 export function listProjects() {
@@ -38,9 +39,9 @@ export function getProject(id: number) {
   return p
 }
 
-/** The project plus its repos: what agents read before working on it. */
+/** The project plus its repos and its stages in board order: what agents read before working on it. */
 export function getProjectFull(id: number) {
-  return { ...getProject(id), repos: listRepos(id) }
+  return { ...getProject(id), repos: listRepos(id), stages: listStages(id) }
 }
 
 export type ProjectFull = ReturnType<typeof getProjectFull>

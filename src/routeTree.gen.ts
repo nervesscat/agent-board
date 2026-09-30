@@ -10,7 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as DailyRouteImport } from './routes/daily'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiSplatRouteImport } from './routes/api/$'
 import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
 import { Route as ProjectsIdIndexRouteImport } from './routes/projects.$id.index'
@@ -26,9 +28,19 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentsRoute = AgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DailyRoute = DailyRouteImport.update({
   id: '/daily',
   path: '/daily',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSplatRoute = ApiSplatRouteImport.update({
@@ -80,7 +92,9 @@ const ProjectsIdFeaturesTicketIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
   '/daily': typeof DailyRoute
+  '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
@@ -93,7 +107,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
   '/daily': typeof DailyRoute
+  '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
@@ -106,7 +122,9 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agents': typeof AgentsRoute
   '/daily': typeof DailyRoute
+  '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
@@ -121,7 +139,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agents'
     | '/daily'
+    | '/settings'
     | '/api/$'
     | '/projects/$id'
     | '/projects/$id/daily'
@@ -134,7 +154,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agents'
     | '/daily'
+    | '/settings'
     | '/api/$'
     | '/projects/$id/daily'
     | '/projects/$id/prs'
@@ -146,7 +168,9 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agents'
     | '/daily'
+    | '/settings'
     | '/api/$'
     | '/projects/$id'
     | '/projects/$id/daily'
@@ -160,7 +184,9 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentsRoute: typeof AgentsRoute
   DailyRoute: typeof DailyRoute
+  SettingsRoute: typeof SettingsRoute
   ApiSplatRoute: typeof ApiSplatRoute
   ProjectsIdRoute: typeof ProjectsIdRouteWithChildren
 }
@@ -174,11 +200,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agents': {
+      id: '/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/daily': {
       id: '/daily'
       path: '/daily'
       fullPath: '/daily'
       preLoaderRoute: typeof DailyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/$': {
@@ -273,7 +313,9 @@ const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentsRoute: AgentsRoute,
   DailyRoute: DailyRoute,
+  SettingsRoute: SettingsRoute,
   ApiSplatRoute: ApiSplatRoute,
   ProjectsIdRoute: ProjectsIdRouteWithChildren,
 }

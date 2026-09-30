@@ -60,10 +60,9 @@ import {
   type TicketGit,
   type UpdateRow,
 } from '#/lib/api'
-import type { TicketStatus } from '#/lib/constants'
-import { STAGE_TAG, STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
+import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
-  LANE_ORDER,
+  laneStageOrder,
   type LaneFilter,
   type LaneVerdict,
   LANE_VERDICTS,
@@ -80,7 +79,8 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
-import { useProject } from '#/lib/project'
+import { useProject, useStages } from '#/lib/project'
+import { isClosed, stageBadge, stageOf } from '#/lib/stages'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
   component: TicketPage,
@@ -93,6 +93,7 @@ function TicketPage() {
   const filter = laneFilter(search)
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const stages = useStages(id)
   const setFilter = (f: LaneFilter) =>
     navigate({
       to: '/projects/$id/features/$ticketId',
@@ -139,7 +140,7 @@ function TicketPage() {
     onError,
   })
   const judge = useMutation({
-    mutationFn: (v: { ticketId: number; verdict: Verdict; reopenTo?: TicketStatus }) =>
+    mutationFn: (v: { ticketId: number; verdict: Verdict; reopenTo?: string }) =>
       put(`/api/tickets/${v.ticketId}/approval`, { verdict: v.verdict, reopenTo: v.reopenTo }),
     onSuccess: (_d, v) => {
       invalidate()
@@ -173,7 +174,7 @@ function TicketPage() {
   ) => {
     if (verdict !== 'disapproved') return judge.mutate({ ticketId: lane.id, verdict })
     const before = { verdict: verdictOf(lane), status: lane.status }
-    const around = lane.id === t.id && parent ? laneNeighbours(parent.lanes, lane.id, filter) : null
+    const around = lane.id === t.id && parent ? laneNeighbours(parent.lanes, stages, lane.id, filter) : null
     const go = around?.next ?? around?.prev ?? null
     judge.mutate(
       { ticketId: lane.id, verdict },
@@ -186,7 +187,7 @@ function TicketPage() {
               search: laneSearch(filter),
             })
           toast(`#${lane.id} disapproved and cancelled`, {
-            description: `Undo takes back the disapproval and returns it to ${STATUS_LABEL[before.status]}${
+            description: `Undo takes back the disapproval and returns it to ${stageOf(stages, before.status).name}${
               go ? `. Moved on to #${go.id}.` : '.'
             }`,
             duration: 10_000,
@@ -200,8 +201,9 @@ function TicketPage() {
       },
     )
   }
-  const openLanes = t.lanes.filter((l) => l.status !== 'done' && l.status !== 'cancelled').length
-  const lanesWarning = openLanes > 0 && (t.status === 'review' || t.status === 'done')
+  const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
+  const kind = stageOf(stages, t.status).kind
+  const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
 
   return (
     <div className="space-y-6">
@@ -259,7 +261,7 @@ function TicketPage() {
           {(t.parentId || verdictOf(t)) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
-          <StatusSelect value={t.status} onChange={(status) => update.mutate({ status })} />
+          <StatusSelect stages={stages} value={t.status} onChange={(status) => update.mutate({ status })} />
           <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>
             <Pencil data-icon="inline-start" /> Edit
           </Button>
@@ -564,7 +566,8 @@ function LaneNav({
   id: number
   filter: LaneFilter
 }) {
-  const { prev, next, index, count, filtered } = laneNeighbours(lanes, id, filter)
+  const stages = useStages(projectId)
+  const { prev, next, index, count, filtered } = laneNeighbours(lanes, stages, id, filter)
   const step = (lane: (typeof lanes)[number] | null, dir: 'prev' | 'next') =>
     lane ? (
       <Link
@@ -607,8 +610,10 @@ function Lanes({
   onVerdict: (lane: TicketFull['lanes'][number], verdict: Verdict) => void
   judging: boolean
 }) {
-  const done = t.lanes.filter((l) => l.status === 'done').length
-  const cancelled = t.lanes.filter((l) => l.status === 'cancelled').length
+  const stages = useStages(t.projectId)
+  const kindOf = (l: { status: string }) => stageOf(stages, l.status).kind
+  const done = t.lanes.filter((l) => kindOf(l) === 'done').length
+  const cancelled = t.lanes.filter((l) => kindOf(l) === 'cancelled').length
   const approved = t.lanes.filter((l) => l.approvedAt).length
   const disapproved = t.lanes.filter((l) => l.disapprovedAt).length
   // Filter by stage, tag and verdict: within a row any picked chip matches, across rows all must.
@@ -626,15 +631,15 @@ function Lanes({
       tagCounts.set(key, entry)
     }
   const tags = [...tagCounts.values()].sort((a, b) => compareTags(a.tag, b.tag))
-  const stageChips = LANE_ORDER.filter((s) => t.lanes.some((l) => l.status === s)).map((s) => ({
-    key: s,
-    label: (
-      <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${STAGE_TAG[s]}`}>
-        {STATUS_LABEL[s]}
-      </span>
-    ),
-    count: t.lanes.filter((l) => l.status === s && tagOk(l, filter) && verdictOk(l, filter)).length,
-  }))
+  const stageChips = laneStageOrder(stages)
+    .filter((s) => t.lanes.some((l) => l.status === s.key))
+    .map((s) => ({
+      key: s.key,
+      label: (
+        <span className={`rounded-full px-1.5 py-px text-[11px] font-medium ${stageBadge(s)}`}>{s.name}</span>
+      ),
+      count: t.lanes.filter((l) => l.status === s.key && tagOk(l, filter) && verdictOk(l, filter)).length,
+    }))
   const verdictChips = LANE_VERDICTS.filter((v) => t.lanes.some((l) => laneVerdict(l) === v)).map((v) => ({
     key: v,
     label: (
@@ -647,6 +652,7 @@ function Lanes({
   const filtering = isFiltering(filter)
   const lanes = sortLanes(
     t.lanes.filter((l) => stageOk(l, filter) && tagOk(l, filter) && verdictOk(l, filter)),
+    stages,
   )
   return (
     <section className="rounded-lg border p-4">
@@ -734,14 +740,15 @@ function Lanes({
                   className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pr-3 pl-2"
                 >
                   <span
-                    className={`mt-px w-20 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${STAGE_TAG[l.status]}`}
+                    className={`mt-px w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stageOf(stages, l.status))}`}
+                    title={stageOf(stages, l.status).name}
                   >
-                    {STATUS_LABEL[l.status]}
+                    {stageOf(stages, l.status).name}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm leading-snug">
                       <span className="text-muted-foreground">#{l.id}</span>{' '}
-                      <span className={l.status === 'cancelled' ? 'text-muted-foreground line-through' : ''}>
+                      <span className={kindOf(l) === 'cancelled' ? 'text-muted-foreground line-through' : ''}>
                         {l.title}
                       </span>
                       {l.tags.length > 0 && (

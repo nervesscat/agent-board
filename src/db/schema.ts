@@ -1,9 +1,15 @@
 import { sql } from 'drizzle-orm'
-import { type AnySQLiteColumn, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { type AnySQLiteColumn, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
-import { COMMENT_PARENTS, TICKET_STATUSES, type CommentParent, type TicketStatus } from '#/lib/constants'
+import {
+  COMMENT_PARENTS,
+  STAGE_KINDS,
+  type CommentParent,
+  type StageColor,
+  type StageKind,
+} from '#/lib/constants'
 
-export { COMMENT_PARENTS, TICKET_STATUSES, type CommentParent, type TicketStatus }
+export { COMMENT_PARENTS, STAGE_KINDS, type CommentParent, type StageColor, type StageKind }
 
 const id = () => integer().primaryKey({ autoIncrement: true })
 const now = () =>
@@ -18,6 +24,24 @@ export const projects = sqliteTable('projects', {
   instructions: text().notNull().default(''),
   createdAt: now(),
 })
+
+// The columns of a project's board, in order. A ticket's status is the key of one of them; the key
+// stays when the stage is renamed. The kind is what the board's rules go by.
+export const stages = sqliteTable(
+  'stages',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    key: text().notNull(),
+    name: text().notNull(),
+    kind: text().$type<StageKind>().notNull(),
+    color: text().$type<StageColor>().notNull().default('gray'),
+    position: integer().notNull().default(0),
+  },
+  (t) => [uniqueIndex('stages_project_key').on(t.projectId, t.key)],
+)
 
 export const repos = sqliteTable('repos', {
   id: id(),
@@ -71,7 +95,8 @@ export const tickets = sqliteTable(
     parentId: integer('parent_id').references((): AnySQLiteColumn => tickets.id, { onDelete: 'cascade' }),
     title: text().notNull(),
     body: text().notNull().default(''),
-    status: text().$type<TicketStatus>().notNull().default('todo'),
+    // The key of one of the project's stages.
+    status: text().notNull().default('todo'),
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
     baseBranch: text('base_branch').notNull().default('main'),
@@ -235,6 +260,12 @@ export const dailySummaries = sqliteTable(
   (t) => [index('daily_summaries_date').on(t.date)],
 )
 
+// Board-wide preferences the human sets in Settings, one row per key (the value is JSON).
+export const settings = sqliteTable('settings', {
+  key: text().primaryKey(),
+  value: text({ mode: 'json' }).notNull(),
+})
+
 // Who each name on the board is, learned from how it signs in: a gate token is an agent, a passkey
 // session in the browser is a human. Every author field elsewhere is just the name.
 export const actors = sqliteTable('actors', {
@@ -246,6 +277,7 @@ export const actors = sqliteTable('actors', {
 export type Activity = typeof activity.$inferSelect
 export type DailySummary = typeof dailySummaries.$inferSelect
 export type Project = typeof projects.$inferSelect
+export type Stage = typeof stages.$inferSelect
 export type Repo = typeof repos.$inferSelect
 export type Pr = typeof prs.$inferSelect
 export type Ticket = typeof tickets.$inferSelect

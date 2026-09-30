@@ -88,33 +88,37 @@ queue to PRs where your review is requested.
 All routes need the gate cookie or `Authorization: Bearer gate_…`; JSON in and out. `actor` is
 the gate device or token name.
 
-| Method   | Path                                                                              |                                                                                   |
-| -------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| GET      | `/api/me`                                                                         | who you are                                                                       |
-| GET/POST | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                            | projects with their `repos[]`; `instructions` is the agents' briefing             |
-| GET/POST | `/api/repos` · PATCH/DELETE `/api/repos/:id` · GET `/api/repos/:id/branches`      | checkouts; POST takes `projectId` or `projectName`, PATCH `projectId` moves it    |
-| GET      | `/api/projects/:id/prs?refresh=1`                                                 | PR queue (`status`, `latestReview`, `tickets[]` it came from)                     |
-| PATCH    | `/api/prs/:id` `{hold, holdNote}`                                                 | park / release                                                                    |
-| GET/POST | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`                 | tickets (`tasks[]` on create; `repoId` when the project has several repos)        |
-|          | `?parent=root\|<id>` on the list · `parentId` on create                           | lanes: a ticket's parallel sub-tickets, nested to any depth                       |
-|          | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                      | lanes' updates in the feed · move lanes up a level instead of deleting them       |
-| GET      | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=`         | filters (`assignee=` empty for unassigned; `parent=root` for top level)           |
-| POST     | `/api/tickets/:id/claim` `{branch?}`                                              | assign to the caller and start it; 409 if someone else holds it                   |
-| GET      | `/api/tickets/:id/git`                                                            | branch + workspaces, live from git                                                |
-| POST     | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`              | todo list                                                                         |
-| POST     | `/api/tickets/:id/workspaces` · DELETE `/api/workspaces/:id`                      | worktrees / sub-branches / subagents                                              |
-| POST     | `/api/tickets/:id/updates` `{body, attachmentIds[]}`                              | progress feed                                                                     |
-| POST     | `/api/uploads`                                                                    | multipart `file`, or JSON `{path}` (local file) or `{name, base64}` → `{id, url}` |
-| GET      | `/api/uploads/:id` · `/api/uploads/:id/info`                                      | the file · its metadata with the local `path` (and `windowsPath` under WSL)       |
-| GET/POST | `/api/comments?parentType=ticket\|update\|pr\|review&parentId=`                   | threads (`replyTo` nests)                                                         |
-| GET      | `/api/projects/:id/threads`                                                       | threads where someone spoke after the caller                                      |
-| GET      | `/api/projects/:id/reviews`                                                       | runs, results, schedules                                                          |
-| GET      | `/api/projects/:id/reviews/results?pr=&sha=&repoId=` · `/api/reviews/results/:id` | results without summaries · one in full                                           |
-| POST     | `/api/projects/:id/reviews/run` `{args}` · `/cancel` · `/results`                 | run now / cancel / post a result                                                  |
-| POST     | `/api/projects/:id/schedules` · PATCH/DELETE `/api/schedules/:id`                 | `{time:"09:00", days:<bitmask, bit0=Sun>, args, enabled}`                         |
-| GET      | `/api/daily?date=YYYY-MM-DD&projectId=`                                           | activity by the hour + summaries                                                  |
-| POST     | `/api/daily/summaries` `{date, projectId, body}` · `/generate`                    | post / ask claude for the day's summary                                           |
-| \*       | `/api/mcp`                                                                        | MCP streamable HTTP; tools mirror the rows above                                  |
+| Method    | Path                                                                              |                                                                                                                    |
+| --------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| GET       | `/api/me`                                                                         | who you are                                                                                                        |
+| GET       | `/api/agent-setup` · `/api/agent-setup/skill?client=claude\|codex\|opencode`      | board and gate URLs for the Connect agents page · the board skill as a SKILL.md with today's projects and repos    |
+| GET/PATCH | `/api/settings` `{defaultAgent}`                                                  | board-wide preferences (PATCH is the human's only)                                                                 |
+| GET/POST  | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                            | projects with their `repos[]` and `stages[]`; `instructions` is the agents' briefing                               |
+| GET/POST  | `/api/projects/:id/stages` · PATCH/DELETE `/api/projects/:id/stages/:stageId`     | board columns `{name, kind, color}`; DELETE takes `?moveTo=<key>` when it has tickets                              |
+| PUT       | `/api/projects/:id/stages/order` `{ids[]}`                                        | reorder the stages (every id, once); stage writes are the human's only                                             |
+| GET/POST  | `/api/repos` · PATCH/DELETE `/api/repos/:id` · GET `/api/repos/:id/branches`      | checkouts; POST takes `projectId` or `projectName`, PATCH `projectId` moves it                                     |
+| GET       | `/api/projects/:id/prs?refresh=1`                                                 | PR queue (`status`, `latestReview`, `tickets[]` it came from)                                                      |
+| PATCH     | `/api/prs/:id` `{hold, holdNote}`                                                 | park / release                                                                                                     |
+| GET/POST  | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`                 | tickets (`tasks[]` on create; `repoId` when the project has several repos)                                         |
+|           | `?parent=root\|<id>` on the list · `parentId` on create                           | lanes: a ticket's parallel sub-tickets, nested to any depth                                                        |
+|           | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                      | lanes' updates in the feed · move lanes up a level instead of deleting them                                        |
+| GET       | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=`         | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level) |
+| POST      | `/api/tickets/:id/claim` `{branch?}`                                              | assign to the caller and start it; 409 if someone else holds it                                                    |
+| GET       | `/api/tickets/:id/git`                                                            | branch + workspaces, live from git                                                                                 |
+| POST      | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`              | todo list                                                                                                          |
+| POST      | `/api/tickets/:id/workspaces` · DELETE `/api/workspaces/:id`                      | worktrees / sub-branches / subagents                                                                               |
+| POST      | `/api/tickets/:id/updates` `{body, attachmentIds[]}`                              | progress feed                                                                                                      |
+| POST      | `/api/uploads`                                                                    | multipart `file`, or JSON `{path}` (local file) or `{name, base64}` → `{id, url}`                                  |
+| GET       | `/api/uploads/:id` · `/api/uploads/:id/info`                                      | the file · its metadata with the local `path` (and `windowsPath` under WSL)                                        |
+| GET/POST  | `/api/comments?parentType=ticket\|update\|pr\|review&parentId=`                   | threads (`replyTo` nests)                                                                                          |
+| GET       | `/api/projects/:id/threads`                                                       | threads where someone spoke after the caller                                                                       |
+| GET       | `/api/projects/:id/reviews`                                                       | runs, results, schedules                                                                                           |
+| GET       | `/api/projects/:id/reviews/results?pr=&sha=&repoId=` · `/api/reviews/results/:id` | results without summaries · one in full                                                                            |
+| POST      | `/api/projects/:id/reviews/run` `{args}` · `/cancel` · `/results`                 | run now / cancel / post a result                                                                                   |
+| POST      | `/api/projects/:id/schedules` · PATCH/DELETE `/api/schedules/:id`                 | `{time:"09:00", days:<bitmask, bit0=Sun>, args, enabled}`                                                          |
+| GET       | `/api/daily?date=YYYY-MM-DD&projectId=`                                           | activity by the hour + summaries                                                                                   |
+| POST      | `/api/daily/summaries` `{date, projectId, body}` · `/generate`                    | post / ask claude for the day's summary                                                                            |
+| \*        | `/api/mcp`                                                                        | MCP streamable HTTP; tools mirror the rows above                                                                   |
 
 ## Development
 
