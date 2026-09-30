@@ -157,3 +157,84 @@ export async function listBranches(repoPath: string): Promise<string[]> {
   const out = await git(repoPath, ['branch', '--list', '--format=%(refname:short)'])
   return out ? out.split('\n') : []
 }
+
+export interface Refs {
+  /** Local branch → sha. */
+  local: Map<string, string>
+  /** Branch on origin → sha, as of the last fetch (the board never fetches). */
+  remote: Map<string, string>
+}
+
+export async function listRefs(repoPath: string): Promise<Refs> {
+  const out = await git(repoPath, [
+    'for-each-ref',
+    '--format=%(refname) %(objectname)',
+    'refs/heads',
+    'refs/remotes/origin',
+  ])
+  const refs: Refs = { local: new Map(), remote: new Map() }
+  for (const line of out ? out.split('\n') : []) {
+    const [name, sha] = line.split(' ')
+    if (name!.startsWith('refs/heads/')) refs.local.set(name!.slice(11), sha!)
+    else if (name !== 'refs/remotes/origin/HEAD') refs.remote.set(name!.slice(20), sha!)
+  }
+  return refs
+}
+
+/**
+ * How far a branch's work got into a base, best first:
+ * - `merged`: every commit is in the base as is;
+ * - `rebased`: the commits differ but each one's patch is in the base (rebased, cherry-picked);
+ * - `edited`: some patches differ, yet merging the branch would change nothing (squashed, reworded,
+ *   edited on the way in);
+ * - `unique`: the branch still holds work the base does not have.
+ */
+export type ReachState = 'merged' | 'rebased' | 'edited' | 'unique'
+
+export interface Reach {
+  state: ReachState
+  /** The base ref the verdict is against: the first that holds the work, else the nearest. */
+  into: string
+  /** The branch's commits whose patch is not in `into` (only for `edited` and `unique`). */
+  unique: { sha: string; subject: string }[]
+}
+
+const REACH_ORDER: ReachState[] = ['merged', 'rebased', 'edited', 'unique']
+
+/**
+ * Checks `ref` against each of `bases` (refs, nearest first) and keeps the best verdict. `merge-tree`
+ * writes no ref and touches no checkout: it only leaves loose objects that `git gc` reaps.
+ */
+export async function branchReach(repoPath: string, ref: string, bases: string[]): Promise<Reach | null> {
+  let best: Reach | null = null
+  for (const base of bases) {
+    const reach = await reachInto(repoPath, ref, base).catch(() => null)
+    if (!reach) continue
+    if (!best || REACH_ORDER.indexOf(reach.state) < REACH_ORDER.indexOf(best.state)) best = reach
+    if (best.state === 'merged') break
+  }
+  return best
+}
+
+async function reachInto(repoPath: string, ref: string, base: string): Promise<Reach> {
+  const ancestor = await git(repoPath, ['merge-base', '--is-ancestor', ref, base]).then(
+    () => true,
+    () => false,
+  )
+  if (ancestor) return { state: 'merged', into: base, unique: [] }
+  const cherry = await git(repoPath, ['cherry', '-v', base, ref])
+  const unique = (cherry ? cherry.split('\n') : [])
+    .filter((l) => l.startsWith('+ '))
+    .map((l) => {
+      const [sha, ...subject] = l.slice(2).split(' ')
+      return { sha: sha!, subject: subject.join(' ') }
+    })
+  if (!unique.length) return { state: 'rebased', into: base, unique }
+  // A conflicting merge exits non-zero: that branch surely still has something of its own.
+  const [merged, baseTree] = await Promise.all([
+    git(repoPath, ['merge-tree', '--write-tree', base, ref]).catch(() => ''),
+    git(repoPath, ['rev-parse', `${base}^{tree}`]),
+  ])
+  const tree = merged.split('\n')[0]
+  return { state: tree === baseTree ? 'edited' : 'unique', into: base, unique }
+}

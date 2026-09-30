@@ -1,0 +1,217 @@
+import { eq, inArray } from 'drizzle-orm'
+
+import { db, schema } from '#/db'
+import { isClosed } from '#/lib/stages'
+import { branchReach, listRefs, listWorktrees, type Reach, type Refs, type Worktree } from './git'
+import { getProject } from './projects'
+import { listRepos } from './repos'
+import { kindOf, listStages } from './stages'
+
+/**
+ * What is left behind by finished work: branches, worktrees and registered workspaces of tickets in
+ * a done or cancelled stage, and whether each branch's work reached where it was meant to land. The
+ * board only reads git; deleting is the agents' and the human's job.
+ */
+
+type Chainable = Pick<schema.Ticket, 'id' | 'parentId' | 'repoId' | 'baseBranch'>
+type RepoRow = schema.Repo
+
+/** One `for-each-ref` and one `worktree list` per repo, however many tickets ask. */
+export function gitCache() {
+  const cache = new Map<string, Promise<{ refs: Refs; worktrees: Worktree[] }>>()
+  return (repoPath: string) => {
+    if (!cache.has(repoPath))
+      cache.set(
+        repoPath,
+        Promise.all([
+          listRefs(repoPath).catch((): Refs => ({ local: new Map(), remote: new Map() })),
+          listWorktrees(repoPath).catch(() => []),
+        ]).then(([refs, worktrees]) => ({ refs, worktrees })),
+      )
+    return cache.get(repoPath)!
+  }
+}
+
+/**
+ * Where a ticket's work should end up, nearest first: its base (for a lane, the parent's branch),
+ * then the base of each ticket above it in the same repo, then the repo's base branch. A lane is done
+ * with once it reached its parent's branch; the parent once it reached dev.
+ */
+export function baseChain(ticket: Chainable, byId: Map<number, Chainable>, repo: RepoRow | null): string[] {
+  const repoOf = (t: Chainable) => t.repoId ?? repo?.id ?? null
+  const chain = [ticket.baseBranch]
+  for (let p = ticket.parentId ? byId.get(ticket.parentId) : undefined; p; ) {
+    if (repoOf(p) === repoOf(ticket)) chain.push(p.baseBranch)
+    p = p.parentId ? byId.get(p.parentId) : undefined
+  }
+  if (repo) chain.push(repo.baseBranch)
+  return [...new Set(chain.filter(Boolean))]
+}
+
+/** The refs a base name stands for: the local branch, then origin's copy; either may be ahead. */
+export function baseRefs(chain: string[], refs: Refs): string[] {
+  return chain.flatMap((b) => [
+    ...(refs.local.has(b) ? [b] : []),
+    ...(refs.remote.has(b) ? [`origin/${b}`] : []),
+  ])
+}
+
+/** The ref a branch is read from: the local branch, else origin's. */
+export const branchRef = (branch: string, refs: Refs) =>
+  refs.local.has(branch) ? branch : refs.remote.has(branch) ? `origin/${branch}` : null
+
+export async function reachOf(repoPath: string, branch: string, chain: string[], refs: Refs) {
+  const ref = branch ? branchRef(branch, refs) : null
+  if (!ref) return null
+  // A branch is not its own destination (a workspace on the ticket's own branch).
+  return branchReach(
+    repoPath,
+    ref,
+    baseRefs(chain, refs).filter((b) => b !== ref && b !== branch),
+  )
+}
+
+const samePath = (a: string, b: string) =>
+  a.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() ===
+  b.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+
+export interface LeftoverBranch {
+  name: string
+  /** Sha of the local branch; null when it is gone locally. */
+  local: string | null
+  /** Sha of origin's branch as of the last fetch; null when origin has none. */
+  remote: string | null
+  /** Worktrees with this branch checked out. `main` is the repo's own checkout, not a worktree. */
+  worktrees: { path: string; main: boolean }[]
+  reach: Reach | null
+  /** Recreates the branch after it was deleted. */
+  restore: string | null
+}
+
+export interface LeftoverTicket {
+  id: number
+  title: string
+  status: string
+  parentId: number | null
+  repo: { id: number; name: string; path: string } | null
+  /** Where the work should have landed, nearest first. */
+  chain: string[]
+  workspaces: schema.Workspace[]
+  branches: LeftoverBranch[]
+  /** True when nothing on it holds work its bases lack (every branch merged, rebased or edited in). */
+  safe: boolean
+}
+
+export interface CleanupReport {
+  tickets: LeftoverTicket[]
+  /** Worktrees no ticket or workspace on the board accounts for: register them or remove them. */
+  untracked: { repo: string; path: string; branch: string | null; head: string | null }[]
+  counts: { tickets: number; workspaces: number; worktrees: number; branches: number; remote: number }
+}
+
+/**
+ * The project's closed tickets that still have a registered workspace, a local or origin branch, or a
+ * worktree, each branch checked against the ticket's base chain (skip that with `reach: false` for a
+ * quick count).
+ */
+export async function cleanupReport(
+  projectId: number,
+  opts: { reach?: boolean } = {},
+): Promise<CleanupReport> {
+  getProject(projectId)
+  const reach = opts.reach ?? true
+  const stages = listStages(projectId)
+  const repos = listRepos(projectId)
+  const repoById = new Map(repos.map((r) => [r.id, r]))
+  const repoOf = (t: Pick<schema.Ticket, 'repoId'>) => (t.repoId ? repoById.get(t.repoId) : repos[0]) ?? null
+  const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
+  const byId = new Map(all.map((t) => [t.id, t]))
+  const workspaces = all.length
+    ? db
+        .select()
+        .from(schema.workspaces)
+        .where(
+          inArray(
+            schema.workspaces.ticketId,
+            all.map((t) => t.id),
+          ),
+        )
+        .all()
+    : []
+  const git = gitCache()
+
+  const closed = all.filter((t) => isClosed(kindOf(stages, t.status)))
+  const tickets = await Promise.all(
+    closed.map(async (t): Promise<LeftoverTicket> => {
+      const repo = repoOf(t)
+      const own = workspaces.filter((w) => w.ticketId === t.id)
+      const chain = baseChain(t, byId, repo)
+      const names = [...new Set([t.branch, ...own.map((w) => w.branch)].filter(Boolean))]
+      const state = repo ? await git(repo.repoPath) : null
+      const branches = await Promise.all(
+        names.map(async (name): Promise<LeftoverBranch> => {
+          const local = state?.refs.local.get(name) ?? null
+          const remote = state?.refs.remote.get(name) ?? null
+          const paths = own.filter((w) => w.branch === name && w.path).map((w) => w.path)
+          const worktrees = (state?.worktrees ?? [])
+            .map((tree, i) => ({ tree, main: i === 0 }))
+            .filter(({ tree }) => tree.branch === name || paths.some((p) => samePath(p, tree.path)))
+            .map(({ tree, main }) => ({ path: tree.path, main }))
+          // A workspace on its own sub-branch should land in the ticket's branch first.
+          const into = name === t.branch || !t.branch ? chain : [t.branch, ...chain]
+          return {
+            name,
+            local,
+            remote,
+            worktrees,
+            reach: reach && repo && state ? await reachOf(repo.repoPath, name, into, state.refs) : null,
+            restore: local || remote ? `git branch ${name} ${local ?? remote}` : null,
+          }
+        }),
+      )
+      return {
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        parentId: t.parentId,
+        repo: repo ? { id: repo.id, name: repo.name, path: repo.repoPath } : null,
+        chain,
+        workspaces: own,
+        branches: branches.filter((b) => b.local || b.remote || b.worktrees.length),
+        safe: branches.every((b) => !b.reach || b.reach.state !== 'unique'),
+      }
+    }),
+  )
+  const leftovers = tickets.filter((t) => t.workspaces.length || t.branches.length)
+
+  const known = new Set(
+    all.flatMap((t) => [t.branch, ...workspaces.filter((w) => w.ticketId === t.id).map((w) => w.branch)]),
+  )
+  const untracked = (
+    await Promise.all(
+      repos.map(async (r) =>
+        (await git(r.repoPath)).worktrees
+          .slice(1)
+          .filter(
+            (tree) =>
+              !(tree.branch && known.has(tree.branch)) &&
+              !workspaces.some((w) => w.path && samePath(w.path, tree.path)),
+          )
+          .map((tree) => ({ repo: r.name, ...tree })),
+      ),
+    )
+  ).flat()
+
+  const branches = leftovers.flatMap((t) => t.branches)
+  return {
+    tickets: leftovers,
+    untracked,
+    counts: {
+      tickets: leftovers.length,
+      workspaces: leftovers.reduce((n, t) => n + t.workspaces.length, 0),
+      worktrees: branches.reduce((n, b) => n + b.worktrees.filter((w) => !w.main).length, 0),
+      branches: branches.filter((b) => b.local).length,
+      remote: branches.filter((b) => b.remote).length,
+    },
+  }
+}

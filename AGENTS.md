@@ -58,7 +58,8 @@ http_headers = { Authorization = "Bearer gate_…" }
    own; its repo and base branch default to the parent's repo and branch. Give each lane `tags` the
    human can filter by (severity such as `High` or `Cosmetic`, area, kind), the same words across
    sibling lanes and never in the title. Register where code runs
-   (worktree, sub-branch, sandbox) with `add_workspace`; `remove_workspace` when it is gone.
+   (worktree, sub-branch, sandbox) with `add_workspace`, every worktree as soon as you open it:
+   the registered workspaces are the cleanup list. `remove_workspace` when it is gone.
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
    the board copies them). One update per meaningful step, not per keystroke.
@@ -75,7 +76,14 @@ http_headers = { Authorization = "Bearer gate_…" }
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
    `disapprovedAt` / `disapprovedBy` (disapproving also cancels it): read it, never set it, and ask
    in the thread before touching an approved or disapproved lane.
-8. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
+8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
+   in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
+   `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
+   remove its worktree and local branch, `remove_workspace`, and `post_update` the deleted branches
+   as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
+   origin branches: list them for the human. `cleanup_report` lists every leftover of the project's
+   closed tickets; the board skill's `/board cleanup` walks it with the human.
+9. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
    what got done, what is open. `daily_report` shows what everyone else did that day.
 
 ## PR queue and reviews

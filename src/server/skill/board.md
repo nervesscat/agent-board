@@ -1,6 +1,6 @@
 ---
 name: board
-description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, post the daily summary. Use when the user says "pick up a ticket", "next ticket", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
+description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, post the daily summary. Use when the user says "pick up a ticket", "next ticket", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
 ---
 
 # Working through the agent board
@@ -90,8 +90,10 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   sibling lanes already carry, and keep them out of the title (no `[High] …`). `update_ticket`
   with `tags` replaces the list; `list_tickets` takes `tag` to filter.
 - `add_workspace` for every worktree, sub-branch or sandbox where code runs (name, branch, path),
-  on the ticket or lane whose code it holds; `remove_workspace` when it is gone. The parent's git
-  panel lists its lanes' workspaces too, tagged with the lane.
+  on the ticket or lane whose code it holds, as soon as you open it; `remove_workspace` when it is
+  gone. No exceptions for short-lived worktrees: the registered workspaces are the cleanup list, and
+  a worktree the board does not know about shows up as `untracked` in `cleanup_report`. The
+  parent's git panel lists its lanes' workspaces too, tagged with the lane.
 - Keeping track of lanes: `get_ticket` on the parent lists them with status, branch, progress and
   their last update; `laneUpdates: true` folds their updates into the feed; `get_ticket_git` shows
   every workspace under the ticket.
@@ -122,12 +124,59 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
    it covers.
 5. Dropping work: `status: cancelled`, with a comment saying why. Cancelled lanes' tasks leave the
    parent's progress.
+6. Clean up your lane before it goes to `done` (or when the human moves it there): see
+   [Clean up](#6-clean-up) for the rule. A ticket in `review` keeps its branch and worktree.
 
 ## 5. End of session
 
 `post_daily_summary` with your `projectId`: at most three short lines, highest level: what got
 done, what is open. `daily_report` with your `projectId` shows what else happened in the project
 today.
+
+## 6. Clean up
+
+Finished work leaves worktrees and branches behind. The rule, for every ticket and lane you
+worked:
+
+- A **lane** can go once its work is on its parent's branch (a lane's base branch is the parent's
+  branch). A **ticket** can go once its branch is in its base (dev, main).
+- `get_ticket_git` answers that per branch with `reach`, against the base chain (the lane's
+  parent branch, then the parent's base, then the repo's base):
+  - `merged`: every commit is there as is. Safe to delete (`git branch -d`).
+  - `rebased`: the commits were rebased or cherry-picked, same patches. Safe (`git branch -D`).
+  - `edited`: patches differ (squashed, reworded, edited on the way in) but merging the branch
+    would change nothing. Safe (`git branch -D`); say so in the update.
+  - `unique`: the branch still has work its bases lack; the commits are listed. Do not delete it
+    without the human's go-ahead.
+- Deleting: `git worktree remove <path>`, then `git branch -d|-D <name>`, then `remove_workspace`
+  for each workspace, then **one** `post_update` on the ticket listing every deleted branch with
+  its commit hash, as `branch @ sha` (e.g. `lane/47 @ 9ec12e8b`). That line is the only way back:
+  `git branch lane/47 9ec12e8b` restores it.
+- Branches on origin: never delete them (git and GitHub stay read-only for you). List the ones
+  left for closed tickets in the update, so the human deletes them.
+
+### `/board cleanup`
+
+When the human asks to clean up (`/board cleanup`, "clean up branches", "clean up worktrees"):
+
+1. `git fetch --prune` in each repo of the project, so origin's branches are current.
+2. `cleanup_report` with your `projectId`: every ticket in a done or cancelled stage that still
+   has workspaces, local or origin branches, or worktrees, each branch with its sha, worktrees,
+   `reach` and `restore` command, plus `untracked` worktrees no ticket accounts for.
+3. For each `unique` branch, check it yourself before calling it: `git cherry -v <base> <branch>`
+   and `git range-diff` or `git diff <base>...<branch>` show whether the listed commits' changes
+   landed in another shape (split, squashed with others, moved to another branch). If they did,
+   call it `edited` and say where.
+4. Show the human one table, grouped as **safe to delete** (merged, rebased), **edited but
+   present** and **still has unique work**, with columns: ticket, branch, sha, reach and base,
+   worktree path, on origin. Below it, the `untracked` worktrees and the origin branches left for
+   the human to delete (`git push origin --delete …` is theirs to run).
+5. Wait for the human's approval (all, a group, or named rows). Then, per ticket: remove the
+   worktrees, delete the branches, `remove_workspace` each registered workspace, and `post_update`
+   on the ticket with the deleted `branch @ sha` lines. Finish with a short summary: what was
+   removed, what is left and why.
+
+Nothing here touches a ticket in any other stage, even when its branch looks merged.
 
 ## Reviews and the PR queue
 

@@ -1,5 +1,13 @@
 import { Link, Outlet, createFileRoute } from '@tanstack/react-router'
-import { CalendarDays, FolderGit2, GitPullRequest, KanbanSquare, Settings, ShieldCheck } from 'lucide-react'
+import {
+  BrushCleaning,
+  CalendarDays,
+  FolderGit2,
+  GitPullRequest,
+  KanbanSquare,
+  Settings,
+  ShieldCheck,
+} from 'lucide-react'
 
 import { useProject } from '#/lib/project'
 
@@ -10,6 +18,7 @@ const MODULES = [
   { to: '/projects/$id/features', label: 'Ongoing features', icon: KanbanSquare },
   { to: '/projects/$id/reviews', label: 'Reviews', icon: ShieldCheck },
   { to: '/projects/$id/daily', label: 'Daily', icon: CalendarDays },
+  { to: '/projects/$id/cleanup', label: 'Cleanup', icon: BrushCleaning },
   { to: '/projects/$id/settings', label: 'Instructions', icon: Settings },
 ] as const
 

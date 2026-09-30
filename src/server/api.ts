@@ -6,6 +6,7 @@ import { addSummary } from './activity'
 import * as agents from './agents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
+import { cleanupReport } from './cleanup'
 import { dailyReport, generateSummary, today } from './daily'
 import * as features from './features'
 import { listDirs } from './fs'
@@ -249,6 +250,10 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   return json(features.claimTicket(id(params), actor, body))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
+// Closed tickets that still have workspaces, branches or worktrees; `reach=0` skips the merge checks.
+api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
+  json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),
+)
 
 api.post('/api/tickets/:id/tasks', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ tasks: z.array(z.string().min(1).max(500)).min(1) }))

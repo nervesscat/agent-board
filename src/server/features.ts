@@ -2,7 +2,8 @@ import { and, asc, desc, eq, inArray, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
-import { branchInfo, listWorktrees } from './git'
+import { baseChain, gitCache, reachOf } from './cleanup'
+import { branchInfo } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { prForTicket } from './prs'
@@ -550,7 +551,8 @@ export function deleteWorkspace(id: number, actor: string) {
 /**
  * Live, read-only git state for the ticket's branch and each workspace: its own, then its lanes'
  * (all the way down, each tagged with its lane). A workspace is compared against the branch of the
- * ticket it belongs to, in that ticket's repo.
+ * ticket it belongs to, in that ticket's repo. Each branch carries `reach`: whether its work is in
+ * the base chain (a lane's parent branch, then dev), so it can be deleted.
  */
 export async function ticketGit(id: number) {
   const ticket = getTicket(id)
@@ -571,26 +573,30 @@ export async function ticketGit(id: number) {
   )
   const repo = ticketRepo(ticket)
   const none = { exists: false, sha: null, subject: null, authoredAt: null, ahead: null, behind: null }
-  const worktreesOf = new Map<string, ReturnType<typeof listWorktrees>>()
-  const worktrees = (repoPath: string) => {
-    if (!worktreesOf.has(repoPath))
-      worktreesOf.set(
-        repoPath,
-        listWorktrees(repoPath).catch(() => []),
-      )
-    return worktreesOf.get(repoPath)!
-  }
+  const byId = new Map(all.map((t) => [t.id, t]))
+  const repoGit = gitCache()
   const [branch, ...wsState] = await Promise.all([
-    repo ? branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch) : none,
-    ...workspaces.map(async ({ w, owner, repo: r }) => {
-      if (!r) return { info: none, worktree: null }
-      const [info, trees] = await Promise.all([
-        branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
-        worktrees(r.repoPath),
+    (async () => {
+      if (!repo) return { ...none, reach: null }
+      const [info, { refs }] = await Promise.all([
+        branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
+        repoGit(repo.repoPath),
       ])
+      const chain = baseChain(ticket, byId, repo)
+      return { ...info, reach: await reachOf(repo.repoPath, ticket.branch, chain, refs) }
+    })(),
+    ...workspaces.map(async ({ w, owner, repo: r }) => {
+      if (!r) return { info: { ...none, reach: null }, worktree: null }
+      const [info, { refs, worktrees }] = await Promise.all([
+        branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
+        repoGit(r.repoPath),
+      ])
+      const chain = baseChain(owner, byId, r)
+      const into = w.branch === owner.branch || !owner.branch ? chain : [owner.branch, ...chain]
       const worktree =
-        trees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ?? null
-      return { info, worktree }
+        worktrees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ??
+        null
+      return { info: { ...info, reach: await reachOf(r.repoPath, w.branch, into, refs) }, worktree }
     }),
   ])
   return {

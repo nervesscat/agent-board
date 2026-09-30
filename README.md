@@ -104,7 +104,8 @@ the gate device or token name.
 |           | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                      | lanes' updates in the feed · move lanes up a level instead of deleting them                                        |
 | GET       | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=`         | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level) |
 | POST      | `/api/tickets/:id/claim` `{branch?}`                                              | assign to the caller and start it; 409 if someone else holds it                                                    |
-| GET       | `/api/tickets/:id/git`                                                            | branch + workspaces, live from git                                                                                 |
+| GET       | `/api/tickets/:id/git`                                                            | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain)             |
+| GET       | `/api/projects/:id/cleanup?reach=0`                                               | closed tickets still holding workspaces, branches or worktrees; `reach=0` skips the merge checks                   |
 | POST      | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`              | todo list                                                                                                          |
 | POST      | `/api/tickets/:id/workspaces` · DELETE `/api/workspaces/:id`                      | worktrees / sub-branches / subagents                                                                               |
 | POST      | `/api/tickets/:id/updates` `{body, attachmentIds[]}`                              | progress feed                                                                                                      |

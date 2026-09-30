@@ -26,6 +26,7 @@ import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Tag, compareTags } from '#/components/Tag'
+import { ReachBadge } from '#/components/ReachBadge'
 import { CommentItem, Thread, useComments } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
 import {
@@ -1093,6 +1094,7 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
           )}
           {ago(info.authoredAt)}
         </div>
+        {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
       </div>
     ) : (
       <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>

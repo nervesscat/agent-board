@@ -15,7 +15,8 @@ import type {
   Activity,
 } from '#/db/schema'
 import type { TicketFull, TicketRow } from '#/server/features'
-import type { BranchInfo, Worktree } from '#/server/git'
+import type { CleanupReport } from '#/server/cleanup'
+import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
 import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
@@ -45,6 +46,8 @@ export type {
   PrRow,
   BranchInfo,
   Worktree,
+  Reach,
+  CleanupReport,
 }
 
 export class ApiError extends Error {
@@ -112,9 +115,9 @@ export interface TicketGit {
   repo: { id: number; name: string } | null
   branch: string
   baseBranch: string
-  info: BranchInfo
+  info: BranchInfo & { reach: Reach | null }
   workspaces: (Workspace & {
-    info: BranchInfo
+    info: BranchInfo & { reach: Reach | null }
     worktree: Worktree | null
     lane: { id: number; title: string } | null
   })[]
