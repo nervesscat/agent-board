@@ -5,14 +5,75 @@ import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
 import { Attachments } from '#/components/Attachments'
-import { PendingFiles } from '#/components/PendingFiles'
+import { cn } from '#/lib/utils'
+import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Markdown } from '#/components/Markdown'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, get, post, upload, type CommentRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 
-type Parent = 'ticket' | 'update' | 'pr' | 'review'
+export type Parent = 'ticket' | 'update' | 'pr' | 'review'
+
+/** The comments under one parent, all levels, refreshed every 10 s. */
+export function useComments(parentType: Parent, parentId: number) {
+  const key = ['comments', parentType, parentId]
+  const { data: comments = [] } = useQuery({
+    queryKey: key,
+    queryFn: () => get<CommentRow[]>(`/api/comments?parentType=${parentType}&parentId=${parentId}`),
+    refetchInterval: 10_000,
+  })
+  return { key, comments }
+}
+
+/**
+ * A comment with its replies (from `comments`, the whole thread). `onReply` puts a reply button on
+ * it; `hideTime` leaves its own time out, for when a timeline shows it already; `label` names its
+ * kind next to the author.
+ */
+export function CommentItem({
+  c,
+  comments,
+  onReply,
+  hideTime = false,
+  label,
+  depth = 0,
+}: {
+  c: CommentRow
+  comments: CommentRow[]
+  onReply?: () => void
+  hideTime?: boolean
+  label?: string
+  depth?: number
+}) {
+  return (
+    <div className={depth ? 'ml-6 border-l pl-3' : ''}>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Actor name={c.author} className="text-foreground" />
+        {label && <span>{label}</span>}
+        {!hideTime && <span>{ago(c.createdAt)}</span>}
+        {depth === 0 && onReply && (
+          <button
+            type="button"
+            className="ml-auto inline-flex items-center gap-1 hover:text-foreground"
+            onClick={onReply}
+          >
+            <Reply className="size-3" /> reply
+          </button>
+        )}
+      </div>
+      <Markdown className="mt-1">{c.body}</Markdown>
+      <Attachments items={c.attachments} />
+      {comments
+        .filter((r) => r.replyTo === c.id)
+        .map((r) => (
+          <div key={r.id} className="mt-3">
+            <CommentItem c={r} comments={comments} depth={depth + 1} />
+          </div>
+        ))}
+    </div>
+  )
+}
 
 /** A comment thread under anything: tickets, updates, PRs, review results. Replies nest one level. */
 export function Thread({
@@ -25,16 +86,12 @@ export function Thread({
   compact?: boolean
 }) {
   const qc = useQueryClient()
-  const key = ['comments', parentType, parentId]
-  const { data: comments = [] } = useQuery({
-    queryKey: key,
-    queryFn: () => get<CommentRow[]>(`/api/comments?parentType=${parentType}&parentId=${parentId}`),
-    refetchInterval: 10_000,
-  })
+  const { key, comments } = useComments(parentType, parentId)
   const [replyTo, setReplyTo] = useState<number | null>(null)
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
+  const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
 
   const send = useMutation({
     mutationFn: async () => {
@@ -52,41 +109,15 @@ export function Thread({
   })
 
   const roots = comments.filter((c) => !c.replyTo)
-  const replies = (id: number) => comments.filter((c) => c.replyTo === id)
-
-  const Item = ({ c, depth }: { c: CommentRow; depth: number }) => (
-    <div className={depth ? 'ml-6 border-l pl-3' : ''}>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Actor name={c.author} className="text-foreground" />
-        <span>{ago(c.createdAt)}</span>
-        {depth === 0 && (
-          <button
-            type="button"
-            className="ml-auto inline-flex items-center gap-1 hover:text-foreground"
-            onClick={() => setReplyTo(c.id)}
-          >
-            <Reply className="size-3" /> reply
-          </button>
-        )}
-      </div>
-      <Markdown className="mt-1">{c.body}</Markdown>
-      <Attachments items={c.attachments} />
-      {replies(c.id).map((r) => (
-        <div key={r.id} className="mt-3">
-          <Item c={r} depth={depth + 1} />
-        </div>
-      ))}
-    </div>
-  )
-
   return (
     <div className="space-y-4">
       {roots.length === 0 && !compact && <p className="text-sm text-muted-foreground">No comments yet.</p>}
       {roots.map((c) => (
-        <Item key={c.id} c={c} depth={0} />
+        <CommentItem key={c.id} c={c} comments={comments} onReply={() => setReplyTo(c.id)} />
       ))}
       <form
-        className="space-y-2"
+        {...drop.props}
+        className={cn('space-y-2 rounded-md', drop.className)}
         onSubmit={(e) => {
           e.preventDefault()
           if (body.trim()) send.mutate()

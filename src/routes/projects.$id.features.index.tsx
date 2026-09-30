@@ -1,18 +1,39 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
+import { Columns3, List } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { NewTicket } from '#/components/NewTicket'
-import { TicketBoard } from '#/components/TicketBoard'
+import { TicketBoard, TicketList } from '#/components/TicketBoard'
+import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import type { TicketStatus } from '#/lib/constants'
 import { errorMessage, get, patch, type TicketRow } from '#/lib/api'
 
 export const Route = createFileRoute('/projects/$id/features/')({ component: Features })
 
+type View = 'board' | 'list'
+// The last view picked is remembered in this browser; storage can be unavailable, so board is the fallback.
+const VIEW_KEY = 'features.view'
+function savedView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'board'
+  } catch {
+    return 'board'
+  }
+}
+
 function Features() {
   const { id } = Route.useParams()
   const qc = useQueryClient()
+  const [view, setView] = useState<View>(savedView)
+  const pickView = (v: View) => {
+    setView(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {}
+  }
   const key = ['tickets', id]
   const { data, isLoading } = useQuery({
     queryKey: key,
@@ -47,13 +68,28 @@ function Features() {
           <h1 className="text-xl font-semibold tracking-tight">Ongoing features</h1>
           <p className="text-sm text-muted-foreground">
             Tickets agents pick up. Each one carries its todo list, branch, workspaces, updates, a thread, and
-            lanes for work running in parallel. Drag a card to another column to change its status.
+            lanes for work running in parallel. On the board, drag a card to another column to change its
+            status.
           </p>
         </div>
-        <NewTicket projectId={id} />
+        <div className="flex shrink-0 items-center gap-2">
+          <Tabs value={view} onValueChange={(v) => pickView(v as View)}>
+            <TabsList>
+              <TabsTrigger value="board" aria-label="Board">
+                <Columns3 /> Board
+              </TabsTrigger>
+              <TabsTrigger value="list" aria-label="List">
+                <List /> List
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <NewTicket projectId={id} />
+        </div>
       </div>
       {isLoading ? (
         <Skeleton className="h-64" />
+      ) : view === 'list' ? (
+        <TicketList projectId={id} items={data ?? []} />
       ) : (
         <TicketBoard
           projectId={id}

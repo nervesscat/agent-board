@@ -75,6 +75,8 @@ export const tickets = sqliteTable(
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
     baseBranch: text('base_branch').notNull().default('main'),
+    // The PR the ticket's branch was opened as, in the ticket's repo; null until there is one.
+    prNumber: integer('pr_number'),
     createdBy: text('created_by').notNull(),
     // Free labels the agents choose (severity, area, …); the lanes list filters on them.
     tags: text({ mode: 'json' })

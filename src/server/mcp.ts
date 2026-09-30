@@ -4,6 +4,7 @@ import { z } from 'zod'
 
 import { COMMENT_PARENTS, TICKET_STATUSES } from '#/lib/constants'
 import { addSummary } from './activity'
+import { listActors } from './actors'
 import { dailyReport, today } from './daily'
 import * as features from './features'
 import { HttpError } from './http'
@@ -37,12 +38,12 @@ Work only in the project of the repo you are in, and never read or write another
 
 The rhythm:
 1. get_project before touching it; its instructions override your defaults.
-2. Pick up work from list_tickets (todo, unassigned or assigned to you); read it with get_ticket; then update_ticket with assignee = your name (whoami), status in_progress, and the branch.
-3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each.
+2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. It fails if another agent holds the ticket: pick another one instead of taking it.
+3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each; update_task or remove_task when the plan changes.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox); remove_workspace when it is gone.
 5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files.
-6. Ask and answer in threads with comment; check list_comments on your ticket when you resume.
-7. Hand off: final post_update with the PR link, then update_ticket to review. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either.
+6. Ask and answer in threads with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When you resume, and between steps, list_my_threads shows every thread where someone spoke after you; get_ticket shows each thread's comment count and last author. Files in threads and updates come with a local path you can open.
+7. Hand off: open the PR, update_ticket with its prNumber (links the ticket and the PR queue both ways), a final post_update with the PR link, then update_ticket to review. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either.
 8. End of session: post_daily_summary, at most three short lines.
 
 When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.
@@ -118,6 +119,25 @@ function buildServer(actor: string) {
     },
     ({ projectId, ...rest }) => reviews.postResult(projectId, rest, actor),
   )
+  tool(
+    'list_review_results',
+    'Review results recorded for a project, newest first, without their summary (get_review_result has it). Filter by prNumber, sha (short or full) and repoId to check whether a head SHA was already reviewed.',
+    {
+      projectId: z.number().int(),
+      prNumber: z.number().int().optional(),
+      sha: z.string().optional(),
+      repoId: z.number().int().optional(),
+      limit: z.number().int().min(1).max(100).default(20),
+    },
+    ({ projectId, limit, ...filter }) =>
+      reviews.listResults(projectId, limit, filter).map(({ summaryMd: _summary, ...r }) => r),
+  )
+  tool(
+    'get_review_result',
+    'One review result in full: verdict, markdown summary, checks and counts.',
+    { resultId: z.number().int() },
+    ({ resultId }) => reviews.getResult(resultId),
+  )
 
   // ongoing features
   tool(
@@ -132,12 +152,15 @@ function buildServer(actor: string) {
         .optional()
         .describe("a ticket's id for its lanes, null for top-level tickets only; omit for all"),
       tag: z.string().optional().describe('only tickets carrying this tag (any casing)'),
+      status: z.array(z.enum(TICKET_STATUSES)).optional().describe('only tickets in these statuses'),
+      assignee: z.string().optional().describe('only tickets assigned to this name; "" for unassigned'),
+      q: z.string().optional().describe('text to find in the title or instructions (any casing)'),
     },
-    ({ projectId, parentId, tag }) => features.listTickets(projectId, { parentId, tag }),
+    ({ projectId, ...filter }) => features.listTickets(projectId, filter),
   )
   tool(
     'get_ticket',
-    "A ticket in full: instructions, tasks, workspaces, its parent chain, its lanes with their last update and verdict, and the update feed with attachments. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled).",
+    "A ticket in full: instructions, tasks, workspaces, its parent chain, its lanes with their last update and verdict,, the update feed with attachments (each with a local path), thread (comment count, last author and time) on the ticket and on each update, and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled).",
     {
       ticketId: z.number().int(),
       laneUpdates: z.boolean().default(false).describe("include the lanes' updates in the feed"),
@@ -169,12 +192,13 @@ function buildServer(actor: string) {
         ),
       tags: z.array(z.string()).default([]).describe(TAGS),
       tasks: z.array(z.string()).default([]),
+      prNumber: z.number().int().optional().describe("the PR opened from this ticket's branch"),
     },
     ({ projectId, ...rest }) => features.createTicket(projectId, rest, actor),
   )
   tool(
     'update_ticket',
-    'Change status, assignee, branch, tags, title or instructions. Set assignee to yourself and status to in_progress when you pick a ticket up.',
+    'Change status, assignee, branch, tags, prNumber, title or instructions. Use claim_ticket to pick a ticket up; assigning yourself one someone else holds fails. Status blocked means you are waiting on the human: say what for in a comment on the ticket.',
     {
       ticketId: z.number().int(),
       title: z.string().optional(),
@@ -185,8 +209,20 @@ function buildServer(actor: string) {
       baseBranch: z.string().optional(),
       repoId: z.number().int().optional(),
       tags: z.array(z.string()).optional().describe(`replaces the whole list. ${TAGS}`),
+      prNumber: z
+        .number()
+        .int()
+        .nullable()
+        .optional()
+        .describe("the PR opened from this ticket's branch, in the ticket's repo; null unlinks it"),
     },
-    ({ ticketId, ...patch }) => features.updateTicket(ticketId, patch, actor),
+    ({ ticketId, ...patch }) => features.updateTicket(ticketId, patch, actor, { guardClaim: true }),
+  )
+  tool(
+    'claim_ticket',
+    'Pick a ticket up: assigns it to you and moves backlog, todo or blocked to in_progress, optionally setting the branch. Fails if someone else is assigned or it is done or cancelled, so two agents never work the same ticket.',
+    { ticketId: z.number().int(), branch: z.string().optional() },
+    ({ ticketId, branch }) => features.claimTicket(ticketId, actor, { branch }),
   )
   tool(
     'add_tasks',
@@ -199,6 +235,21 @@ function buildServer(actor: string) {
     'Tick or untick a task.',
     { taskId: z.number().int(), done: z.boolean().default(true) },
     ({ taskId, done }) => features.updateTask(taskId, { done }, actor),
+  )
+  tool(
+    'update_task',
+    'Reword a task, or tick / untick it.',
+    { taskId: z.number().int(), text: z.string().min(1).optional(), done: z.boolean().optional() },
+    ({ taskId, ...patch }) => features.updateTask(taskId, patch, actor),
+  )
+  tool(
+    'remove_task',
+    'Remove a task that is no longer part of the plan, so it stops counting in the progress bar.',
+    { taskId: z.number().int() },
+    ({ taskId }) => {
+      features.deleteTask(taskId, actor)
+      return { ok: true }
+    },
   )
   tool(
     'add_workspace',
@@ -243,8 +294,14 @@ function buildServer(actor: string) {
 
   // threads
   tool(
+    'list_my_threads',
+    'Threads in a project waiting on you: on a ticket assigned to or opened by you, your update or review, or any thread you spoke in, where someone else spoke last. Newest first, each with its parent (for list_comments and comment), the ticket, how many comments came since you last spoke, and the last one.',
+    { projectId: z.number().int() },
+    ({ projectId }) => features.listOpenThreads(projectId, actor),
+  )
+  tool(
     'list_comments',
-    'The thread under a ticket, an update, a PR (board id, not number) or a review result.',
+    'The thread under a ticket, an update, a PR (board id, not number) or a review result. Attachments come with a local path you can open.',
     { parentType: z.enum(COMMENT_PARENTS), parentId: z.number().int() },
     ({ parentType, parentId }) => features.listComments(parentType, parentId),
   )
@@ -263,6 +320,19 @@ function buildServer(actor: string) {
         { ...rest, attachmentIds: files.map((f) => uploads.saveFromPath(f, actor).id) },
         actor,
       ),
+  )
+
+  tool(
+    'get_attachment',
+    'A file someone attached to an update or comment: name, type, size and the absolute path to open it on this machine (windowsPath too when the board runs in WSL).',
+    { attachmentId: z.number().int() },
+    ({ attachmentId }) => uploads.attachmentView(uploads.getAttachment(attachmentId)),
+  )
+  tool(
+    'list_actors',
+    'Every name the board knows (agents by token name, the human by passkey). Use these exact names for assignee.',
+    {},
+    () => listActors(),
   )
 
   // daily
