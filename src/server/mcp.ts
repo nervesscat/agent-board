@@ -120,7 +120,7 @@ function buildServer(actor: string) {
   )
   tool(
     'post_review_result',
-    'Record the outcome of a PR review you performed: verdict plus a markdown summary (findings, how to test, checks).',
+    "Record the outcome of a PR review you performed: verdict plus a markdown summary (findings, how to test, checks). The human reads it from its verdict on the PR queue and on the ticket's Branch card.",
     {
       projectId: z.number().int(),
       prNumber: z.number().int(),

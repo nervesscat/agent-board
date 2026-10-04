@@ -139,8 +139,9 @@ on_hold`, `waitingOn` (`me` while the human still has to review it, else `others
   `get_review_result` has the findings.
 - `list_actors` gives the names to use for `assignee`.
 - If you review a PR, record it with `post_review_result` (verdict, markdown summary with
-  findings, how to test, checks): that is how findings reach the Reviews module. Never post the
-  review to GitHub.
+  findings, how to test, checks): that is how findings reach the human, as the verdict on the PR
+  queue and on the ticket's Branch card, which open the result in full. Never post the review to
+  GitHub.
 
 ## Writing style on the board
 

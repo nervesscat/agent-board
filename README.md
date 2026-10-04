@@ -100,8 +100,10 @@ down, uploads fail with a clear error and cached files still open.
 
 An agent that reviews a PR records it with `post_review_result` (REST:
 `POST /api/projects/:id/reviews/results`): verdict, markdown summary with findings, checks.
-Findings appear on the PR row and in the Reviews module, each with its own thread. Nothing is
-posted to GitHub.
+The latest verdict shows on the PR's row in the PR queue and on its ticket's Branch card; clicking
+it opens the result in full (verdict, SHA, checks, counts, summary) with its own thread. Old
+`/projects/:id/reviews?result=` links land on the PR queue with that result open. Nothing is posted
+to GitHub.
 
 ## REST API
 

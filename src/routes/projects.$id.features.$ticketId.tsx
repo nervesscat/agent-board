@@ -33,6 +33,7 @@ import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { PrState } from '#/components/PrState'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
+import { ReviewResultButton } from '#/components/ReviewResult'
 import { EditBox, Edited, PostActions } from '#/components/PostTools'
 import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
@@ -1501,15 +1502,13 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
             )}
             {t.pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[t.pr.queue.status]}</span>}
             {t.pr.latestReview && (
-              <Link
-                to="/projects/$id/reviews"
-                params={{ id: String(t.projectId) }}
-                search={{ result: t.pr.latestReview.id }}
+              <ReviewResultButton
+                resultId={t.pr.latestReview.id}
                 className={`rounded bg-muted px-1 hover:underline ${t.pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
                 title={t.pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
               >
                 {t.pr.latestReview.verdict}
-              </Link>
+              </ReviewResultButton>
             )}
           </div>
         )}
