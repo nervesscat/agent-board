@@ -114,17 +114,20 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 
 ## 4. Hand off
 
-1. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
+1. Open the PR assigned to the human: `gh pr create --assignee <their login>`, or `--assignee @me`
+   when you push with their account. GitHub never lets a PR's author be its requested reviewer;
+   the PR queue also lists PRs assigned to the human, so this is how it gets there.
+2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
-2. Final `post_update` with the PR link and how to test.
-3. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
+3. Final `post_update` with the PR link and how to test.
+4. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
    say otherwise.
-4. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
+5. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
    board flags a ticket that is further along than its lanes. Say in the final update which lanes
    it covers.
-5. Dropping work: `status: cancelled`, with a comment saying why. Cancelled lanes' tasks leave the
+6. Dropping work: `status: cancelled`, with a comment saying why. Cancelled lanes' tasks leave the
    parent's progress.
-6. Clean up your lane before it goes to `done` (or when the human moves it there): see
+7. Clean up your lane before it goes to `done` (or when the human moves it there): see
    [Clean up](#6-clean-up) for the rule. A ticket in `review` keeps its branch and worktree.
 
 ## 5. End of session

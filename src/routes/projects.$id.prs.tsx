@@ -53,8 +53,8 @@ function PrQueue() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">PR queue</h1>
           <p className="text-sm text-muted-foreground">
-            Open pull requests where your review is requested, across every repo of the project. Read-only
-            against GitHub; holds and threads live here.
+            Open pull requests where your review is requested or that are assigned to you, across every repo
+            of the project. Read-only against GitHub; holds and threads live here.
           </p>
         </div>
         <Button

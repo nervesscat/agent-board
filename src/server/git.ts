@@ -61,36 +61,31 @@ export interface GhPr {
 const PR_FIELDS =
   'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,updatedAt,reviews'
 
-/** Open PRs where my review was requested, plus the ones I already reviewed and are still open. */
+/**
+ * Open PRs where my review was requested, the ones I already reviewed, and the ones assigned to me.
+ * Assignment is how a PR I opened myself (agents push with my account) gets in: GitHub does not let
+ * its author be requested as a reviewer.
+ */
 export async function listMyPrs(repoPath: string): Promise<GhPr[]> {
-  const [requested, reviewed] = await Promise.all([
-    gh<GhPr[]>(repoPath, [
-      'pr',
-      'list',
-      '--state',
-      'open',
-      '--limit',
-      '100',
-      '--search',
-      'review-requested:@me',
-      '--json',
-      PR_FIELDS,
-    ]),
-    gh<GhPr[]>(repoPath, [
-      'pr',
-      'list',
-      '--state',
-      'open',
-      '--limit',
-      '100',
-      '--search',
-      'reviewed-by:@me',
-      '--json',
-      PR_FIELDS,
-    ]),
-  ])
+  const searches = ['review-requested:@me', 'reviewed-by:@me', 'assignee:@me']
+  const found = await Promise.all(
+    searches.map((search) =>
+      gh<GhPr[]>(repoPath, [
+        'pr',
+        'list',
+        '--state',
+        'open',
+        '--limit',
+        '100',
+        '--search',
+        search,
+        '--json',
+        PR_FIELDS,
+      ]),
+    ),
+  )
   const byNumber = new Map<number, GhPr>()
-  for (const pr of [...requested, ...reviewed]) byNumber.set(pr.number, pr)
+  for (const pr of found.flat()) byNumber.set(pr.number, pr)
   return [...byNumber.values()]
 }
 
