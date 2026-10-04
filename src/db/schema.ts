@@ -195,11 +195,13 @@ export const comments = sqliteTable(
   (t) => [index('comments_parent').on(t.parentType, t.parentId)],
 )
 
-// An attachment belongs to an update or a comment; unattached rows are uploads waiting to be referenced.
+// An attachment belongs to a post, a reply, or a ticket's instructions; unattached rows are uploads
+// waiting to be referenced.
 export const attachments = sqliteTable('attachments', {
   id: id(),
   updateId: integer('update_id').references(() => updates.id, { onDelete: 'cascade' }),
   commentId: integer('comment_id').references(() => comments.id, { onDelete: 'cascade' }),
+  ticketId: integer('ticket_id').references(() => tickets.id, { onDelete: 'cascade' }),
   name: text().notNull(),
   mime: text().notNull(),
   size: integer().notNull(),

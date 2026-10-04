@@ -9,8 +9,8 @@ import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Markdown } from '#/components/Markdown'
 import { EditBox, Edited, PostActions } from '#/components/PostTools'
+import { RichEditor } from '#/components/RichEditor'
 import { Button } from '#/components/ui/button'
-import { Textarea } from '#/components/ui/textarea'
 import { del, errorMessage, get, patch, post, upload, type CommentRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { useProjectAgents } from '#/lib/project'
@@ -168,14 +168,14 @@ export function Thread({
             </button>
           </div>
         )}
-        <Textarea
+        <RichEditor
           value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder={compact ? `Comment…${ask}` : `Leave a comment (markdown)${ask}`}
-          rows={compact ? 2 : 3}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && body.trim()) send.mutate()
-          }}
+          onChange={setBody}
+          onFiles={(added) => setFiles((prev) => [...prev, ...added])}
+          onSubmit={() => body.trim() && !send.isPending && send.mutate()}
+          minHeight={compact ? 'min-h-12' : 'min-h-20'}
+          label="Reply"
+          placeholder={compact ? `Reply…${ask}` : `Leave a reply${ask}`}
         />
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -194,7 +194,7 @@ export function Thread({
           </Button>
           <PendingFiles files={files} onChange={setFiles} />
           <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
-            {send.isPending ? 'Sending…' : 'Comment'}
+            {send.isPending ? 'Sending…' : 'Reply'}
           </Button>
         </div>
       </form>

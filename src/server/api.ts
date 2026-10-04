@@ -259,6 +259,15 @@ api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
     }),
   ),
 )
+// Files for the instructions: uploads (POST /api/uploads) bound to the ticket.
+api.post('/api/tickets/:id/attachments', async ({ request, params, actor }) => {
+  const body = await readJson(request, z.object({ attachmentIds: z.array(z.number().int()).min(1) }))
+  return json(features.attachToTicket(id(params), body.attachmentIds, actor), 201)
+})
+api.delete('/api/tickets/:id/attachments/:attachmentId', ({ params, actor }) => {
+  features.removeTicketFile(id(params), id(params, 'attachmentId'), actor)
+  return json({ ok: true })
+})
 // ?keepLanes=1 moves the lanes up a level instead of deleting them.
 api.delete('/api/tickets/:id', ({ params, url, actor }) => {
   features.deleteTicket(id(params), actor, { keepLanes: url.searchParams.get('keepLanes') === '1' })

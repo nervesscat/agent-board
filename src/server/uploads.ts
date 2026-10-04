@@ -99,10 +99,11 @@ export function attachmentView(a: schema.Attachment, distro = process.env.WSL_DI
 }
 
 /** Bind previously uploaded files to the update or comment that references them. */
-export function attachTo(ids: number[], owner: { updateId?: number; commentId?: number }) {
+export function attachTo(ids: number[], owner: { updateId?: number; commentId?: number; ticketId?: number }) {
   for (const id of ids) {
     const a = getAttachment(id)
-    if (a.updateId || a.commentId) throw new HttpError(409, `attachment ${id} is already attached`)
+    if (a.updateId || a.commentId || a.ticketId)
+      throw new HttpError(409, `attachment ${id} is already attached`)
     db.update(schema.attachments).set(owner).where(eq(schema.attachments.id, id)).run()
   }
 }

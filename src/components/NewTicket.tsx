@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
+import { RichEditor } from '#/components/RichEditor'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -101,8 +102,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             <Input id="t" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="b">Instructions (markdown)</Label>
-            <Textarea id="b" value={body} onChange={(e) => setBody(e.target.value)} rows={6} />
+            <Label>Instructions</Label>
+            <RichEditor value={body} onChange={setBody} minHeight="min-h-32" label="Instructions" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="tasks">Initial tasks, one per line</Label>
