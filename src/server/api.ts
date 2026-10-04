@@ -246,12 +246,14 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 // --- ongoing features ---
 // ?parent=root for the top level, ?parent=<ticketId> for one ticket's lanes; all tickets otherwise.
 // ?tag= keeps the ones carrying that tag, ?status=todo,blocked those stages, ?assignee= one name (empty for
-// unassigned), ?q= a text match in the title or instructions.
+// unassigned), ?q= a text match in the title or instructions. Archived tickets are left out; ?archived=include
+// adds them, ?archived=only lists just those.
 api.get('/api/projects/:id/tickets', ({ params, url }) => {
   const q = url.searchParams
   const parent = q.get('parent')
   const parentId = parent === null ? undefined : parent === 'root' ? null : intParam(parent, 'parent')
   const status = q.get('status')
+  const archived = q.get('archived')
   return json(
     features.listTickets(id(params), {
       parentId,
@@ -259,6 +261,7 @@ api.get('/api/projects/:id/tickets', ({ params, url }) => {
       status: status ? z.array(Status).parse(status.split(',')) : undefined,
       assignee: q.get('assignee') ?? undefined,
       q: q.get('q') ?? undefined,
+      archived: archived ? z.enum(['include', 'only']).parse(archived) : undefined,
     }),
   )
 })
@@ -320,6 +323,25 @@ api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
 })
 // Assigns the ticket to the caller (or, with `as`, to the project agent the caller works it as) and starts
 // it; 409 when it is reserved for another of the project's agents.
+// The archive is the human's, like the board's layout: finished tickets come off the board, lanes with them.
+const humanArchive = (request: Request) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human archives and restores tickets')
+}
+// Every top-level ticket in one done or cancelled stage (status: its key, name or kind).
+api.post('/api/projects/:id/tickets/archive', async ({ request, params, actor }) => {
+  humanArchive(request)
+  const body = await readJson(request, z.object({ status: Status }))
+  return json(features.archiveStage(id(params), body.status, actor))
+})
+// One top-level ticket in a done or cancelled stage; its page keeps working.
+api.post('/api/tickets/:id/archive', ({ request, params, actor }) => {
+  humanArchive(request)
+  return json(features.archiveTicket(id(params), actor))
+})
+api.post('/api/tickets/:id/restore', ({ request, params, actor }) => {
+  humanArchive(request)
+  return json(features.restoreTicket(id(params), actor))
+})
 api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   const body = await readJson(
     request,

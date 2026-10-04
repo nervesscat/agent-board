@@ -1,6 +1,8 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
+  Archive,
+  ArchiveRestore,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -150,6 +152,15 @@ function TicketPage() {
     },
     onError,
   })
+  // The archive is the human's: a finished top-level ticket comes off the board, its lanes with it.
+  const archive = useMutation({
+    mutationFn: (to: 'archive' | 'restore') => post(`/api/tickets/${ticketId}/${to}`),
+    onSuccess: (_d, to) => {
+      invalidate()
+      toast.success(to === 'archive' ? 'Archived: off the board, under Archived' : 'Restored to the board')
+    },
+    onError,
+  })
   const judge = useMutation({
     mutationFn: (v: { ticketId: number; verdict: Verdict; reopenTo?: string }) =>
       put(`/api/tickets/${v.ticketId}/approval`, { verdict: v.verdict, reopenTo: v.reopenTo }),
@@ -260,7 +271,25 @@ function TicketPage() {
             <InlineTags key={t.id} t={t} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {t.archivedAt && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+              title={`Archived by ${t.archivedBy || 'someone'} ${ago(t.archivedAt)}${t.parentId ? ', with the ticket it is a lane of' : ''}`}
+            >
+              <Archive className="size-3.5" /> Archived
+            </span>
+          )}
+          {t.archivedAt && !t.parentId && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={archive.isPending}
+              onClick={() => archive.mutate('restore')}
+            >
+              <ArchiveRestore /> Restore
+            </Button>
+          )}
           {lanesWarning && (
             <span
               className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400"
@@ -278,6 +307,17 @@ function TicketPage() {
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect stages={stages} value={t.status} onChange={(status) => update.mutate({ status })} />
+          {!t.archivedAt && !t.parentId && isClosed(kind) && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={archive.isPending}
+              onClick={() => archive.mutate('archive')}
+              title="Take it off the board, with its lanes; Archived on the features page brings it back"
+            >
+              <Archive /> Archive
+            </Button>
+          )}
           <AlertDialog>
             <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
               <Trash2 />

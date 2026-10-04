@@ -1,27 +1,40 @@
 import { Link } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight, GitBranch, Layers, Scale } from 'lucide-react'
+import { Archive, ArchiveRestore, ChevronLeft, ChevronRight, GitBranch, Layers, Scale } from 'lucide-react'
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
 import { Tag, compareTags } from '#/components/Tag'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import type { TicketRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
-import { type StageLike, stageBadge, stageColumn, stageOf } from '#/lib/stages'
+import { type StageLike, isClosed, stageBadge, stageColumn, stageOf } from '#/lib/stages'
 
 /**
  * Tickets in the project's stage columns. Drag a card onto another column to change its stage;
- * clicking a card opens the ticket.
+ * clicking a card opens the ticket. A done or cancelled column can archive all its tickets at once.
  */
 export function TicketBoard({
   projectId,
   items,
   onMove,
+  onArchiveAll,
 }: {
   projectId: string
   items: TicketRow[]
   onMove: (ticketId: number, status: string) => void
+  onArchiveAll?: (status: string) => void
 }) {
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
@@ -72,7 +85,7 @@ export function TicketBoard({
       )}
       {/* Fixed-width columns side by side, scrolling sideways; each one as tall as the board, scrolling its own cards. */}
       <div ref={scroller} className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
-        {stages.map(({ key: status, name }) => {
+        {stages.map(({ key: status, name, kind }) => {
           const column = stageColumn(items, status)
           return (
             <div
@@ -96,7 +109,13 @@ export function TicketBoard({
               }`}
             >
               <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <span className="truncate">{name}</span> <span className="tabular-nums">{column.length}</span>
+                <span className="truncate">{name}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {onArchiveAll && isClosed(kind) && column.length > 0 && (
+                    <ArchiveAll stage={name} n={column.length} onConfirm={() => onArchiveAll(status)} />
+                  )}
+                  <span className="tabular-nums">{column.length}</span>
+                </span>
               </div>
               <div data-column={status} className="min-h-12 flex-1 space-y-2 overflow-y-auto">
                 {column.map((t) => (
@@ -168,6 +187,41 @@ export function TicketBoard({
         })}
       </div>
     </div>
+  )
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/** The column's "Archive all", asking first. */
+function ArchiveAll({ stage, n, onConfirm }: { stage: string; n: number; onConfirm: () => void }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="xs"
+            className="h-5 px-1.5 font-normal tracking-normal normal-case"
+            title={`Archive the ${plural(n, 'ticket')} in ${stage}`}
+          />
+        }
+      >
+        <Archive /> Archive all
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Archive {plural(n, 'ticket')}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Every ticket in {stage} comes off the board, with its lanes. They stay under Archived, where each
+            can be restored, and their pages still open.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>Archive</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -410,6 +464,70 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                 <span>{ago(t.updatedAt)}</span>
               </div>
             </Link>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+/** Archived tickets, last archived first, each with who put it away and when, and Restore. */
+export function ArchivedList({
+  projectId,
+  items,
+  onRestore,
+  restoring,
+}: {
+  projectId: string
+  items: TicketRow[]
+  onRestore: (ticketId: number) => void
+  /** The ticket being restored right now, if any. */
+  restoring?: number
+}) {
+  const { data: project } = useProject(projectId)
+  const stages = project?.stages ?? []
+  const rows = [...items].sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? ''))
+  if (!rows.length) return <p className="text-sm text-muted-foreground">Nothing archived.</p>
+  return (
+    <ul className="divide-y rounded-md border">
+      {rows.map((t) => {
+        const stage = stageOf(stages, t.status)
+        return (
+          <li key={t.id} className="flex min-w-0 items-center gap-3 px-3 py-2.5">
+            <span
+              className={`w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stage)}`}
+              title={stage.name}
+            >
+              {stage.name}
+            </span>
+            <div className="min-w-0 flex-1">
+              <Link
+                to="/projects/$id/features/$ticketId"
+                params={{ id: projectId, ticketId: String(t.id) }}
+                className="text-sm leading-snug hover:underline"
+              >
+                <span className="text-muted-foreground">#{t.id}</span> {t.title}
+              </Link>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  archived {ago(t.archivedAt)}
+                  {t.archivedBy && (
+                    <>
+                      {' '}
+                      by <Actor name={t.archivedBy} />
+                    </>
+                  )}
+                </span>
+                {t.lanes.total > 0 && (
+                  <span className="inline-flex items-center gap-1">
+                    <Layers className="size-3" /> {plural(t.lanes.total, 'lane')}
+                  </span>
+                )}
+              </div>
+            </div>
+            <Button variant="outline" size="sm" disabled={restoring === t.id} onClick={() => onRestore(t.id)}>
+              <ArchiveRestore /> Restore
+            </Button>
           </li>
         )
       })}

@@ -9,8 +9,8 @@ import { kindOf, listStages } from './stages'
 
 /**
  * What is left behind by finished work: branches, worktrees and registered workspaces of tickets in
- * a done or cancelled stage, and whether each branch's work reached where it was meant to land. The
- * board only reads git; deleting is the agents' and the human's job.
+ * a done or cancelled stage or archived, and whether each branch's work reached where it was meant to
+ * land. The board only reads git; deleting is the agents' and the human's job.
  */
 
 type Chainable = Pick<schema.Ticket, 'id' | 'parentId' | 'repoId' | 'baseBranch'>
@@ -140,7 +140,8 @@ export async function cleanupReport(
     : []
   const git = gitCache()
 
-  const closed = all.filter((t) => isClosed(kindOf(stages, t.status)))
+  // An archived ticket is finished work too, whatever stage it was left in.
+  const closed = all.filter((t) => t.archivedAt || isClosed(kindOf(stages, t.status)))
   const tickets = await Promise.all(
     closed.map(async (t): Promise<LeftoverTicket> => {
       const repo = repoOf(t)

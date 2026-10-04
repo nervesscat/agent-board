@@ -698,3 +698,111 @@ describe('custom stages', () => {
     expect(keys()).not.toContain('ship')
   })
 })
+
+describe('the archive', () => {
+  let pid: number
+  let cleanup: typeof import('./cleanup')
+  beforeAll(async () => {
+    cleanup = await import('./cleanup')
+    const { db, schema } = await import('#/db')
+    pid = db.insert(schema.projects).values({ name: 'archive' }).returning().get().id
+    db.insert(schema.repos).values({ projectId: pid, name: 'app', repoPath: '/r/archive' }).run()
+  })
+  const titles = (filter: import('./features').TicketFilter = {}) =>
+    features
+      .listTickets(pid, filter)
+      .map((t) => t.title)
+      .sort()
+
+  it('archives one done ticket with its lanes, and restores them', () => {
+    const shipped = features.createTicket(pid, { title: 'shipped', status: 'done' }, 'me')
+    const lane = features.createTicket(pid, { title: 'shipped lane', parentId: shipped.id }, 'claude')
+    const sub = features.createTicket(pid, { title: 'shipped sub', parentId: lane.id }, 'claude')
+    const open = features.createTicket(pid, { title: 'open' }, 'me')
+
+    // Only finished top-level tickets: a lane goes with its ticket.
+    expect(() => features.archiveTicket(open.id, 'enrique')).toThrow(/only done or cancelled/)
+    expect(() => features.archiveTicket(lane.id, 'enrique')).toThrow(/is a lane/)
+
+    const archived = features.archiveTicket(shipped.id, 'enrique')
+    expect(archived.archivedAt).not.toBeNull()
+    expect(archived.archivedBy).toBe('enrique')
+    for (const id of [lane.id, sub.id]) expect(features.getTicket(id).archivedBy).toBe('enrique')
+    expect(titles()).toEqual(['open'])
+    expect(titles({ archived: 'only' })).toEqual(['shipped', 'shipped lane', 'shipped sub'])
+    expect(titles({ archived: 'include', parentId: null })).toEqual(['open', 'shipped'])
+    // Its page still opens, lanes and all.
+    const full = features.getTicketFull(shipped.id)
+    expect(full.archivedAt).toBe(archived.archivedAt)
+    expect(full.lanes.map((l) => l.id)).toEqual([lane.id])
+    // Nobody picks up an archived lane.
+    expect(() => features.claimTicket(lane.id, 'codex')).toThrow(/archived/)
+
+    features.restoreTicket(shipped.id, 'enrique')
+    for (const id of [shipped.id, lane.id, sub.id]) {
+      expect(features.getTicket(id).archivedAt).toBeNull()
+      expect(features.getTicket(id).archivedBy).toBe('')
+    }
+    expect(titles()).toEqual(['open', 'shipped', 'shipped lane', 'shipped sub'])
+    expect(titles({ archived: 'only' })).toEqual([])
+  })
+
+  it("archives every ticket in one done stage, that stage's only", async () => {
+    const { db, schema } = await import('#/db')
+    const { createStage } = await import('./stages')
+    createStage(pid, { name: 'Released', kind: 'done' }, 'enrique')
+    for (const t of features.listTickets(pid, { parentId: null })) features.deleteTicket(t.id, 'me')
+    const a = features.createTicket(pid, { title: 'a', status: 'done', branch: 'feat/a' }, 'me')
+    const aLane = features.createTicket(pid, { title: 'a lane', parentId: a.id, status: 'review' }, 'me')
+    features.createTicket(pid, { title: 'b', status: 'done' }, 'me')
+    features.createTicket(pid, { title: 'released', status: 'Released' }, 'me')
+    features.createTicket(pid, { title: 'dropped', status: 'cancelled' }, 'me')
+    features.createTicket(pid, { title: 'review', status: 'review' }, 'me')
+
+    expect(() => features.archiveStage(pid, 'review', 'enrique')).toThrow(/not a done or cancelled/)
+    const res = features.archiveStage(pid, 'done', 'enrique')
+    expect(res.stage).toBe('done')
+    expect(res.ids).toHaveLength(2)
+    expect(features.getTicket(aLane.id).archivedAt).not.toBeNull()
+    expect(titles({ parentId: null })).toEqual(['dropped', 'released', 'review'])
+    expect(titles({ archived: 'only' })).toEqual(['a', 'a lane', 'b'])
+    // Again: nothing left in that stage.
+    expect(features.archiveStage(pid, 'done', 'enrique').ids).toEqual([])
+    expect(features.archiveStage(pid, 'Released', 'enrique').ids).toHaveLength(1)
+
+    const log = db
+      .select()
+      .from(schema.activity)
+      .where(eq(schema.activity.projectId, pid))
+      .all()
+      .map((r) => r.text)
+    expect(log).toContain(`archived 2 tickets from Done (#${res.ids.join(', #')}), with 1 lane`)
+
+    // Archived work is still finished work for the cleanup report, whatever stage a lane was in.
+    const report = await cleanup.cleanupReport(pid, { reach: false })
+    expect(report.tickets).toEqual([])
+    features.addWorkspace(aLane.id, { name: 'wt', branch: 'lane/a' }, 'claude')
+    expect((await cleanup.cleanupReport(pid, { reach: false })).tickets.map((t) => t.id)).toEqual([aLane.id])
+  })
+
+  it("is the human's: agents get 403", async () => {
+    const { api } = await import('./api')
+    const t = features.createTicket(pid, { title: 'agent try', status: 'done' }, 'me')
+    const call = (path: string, body?: unknown) =>
+      api.handle(
+        new Request(`http://board${path}`, {
+          method: 'POST',
+          headers: { authorization: 'Bearer gate_x', 'content-type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        }),
+        'claude',
+      )
+    for (const [path, body] of [
+      [`/api/tickets/${t.id}/archive`],
+      [`/api/tickets/${t.id}/restore`],
+      [`/api/projects/${pid}/tickets/archive`, { status: 'done' }],
+    ] as const)
+      await expect(call(path, body)).rejects.toMatchObject({ status: 403 })
+    expect(features.getTicket(t.id).archivedAt).toBeNull()
+  })
+})
