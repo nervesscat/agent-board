@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { AGENT_CLIENTS, COMMENT_PARENTS, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
 import { addSummary } from './activity'
 import * as agents from './agents'
+import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
@@ -63,6 +64,17 @@ api.get('/api/agent-setup/skill', ({ url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
   return new Response(agents.renderSkill(client), {
     headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
+// feature-review, review-queue and their agents, as a tar to extract into ~/.claude.
+api.get('/api/agent-setup/review-skills', ({ url }) => {
+  if (url.searchParams.get('list') !== null) return json(agents.reviewBundlePaths())
+  return new Response(new Uint8Array(agents.reviewBundle()), {
+    headers: {
+      'content-type': 'application/x-tar',
+      'content-disposition': 'attachment; filename="review-skills.tar"',
+      'cache-control': 'no-store',
+    },
   })
 })
 api.get('/api/settings', () => json(agents.getSettings()))
@@ -141,6 +153,8 @@ api.delete('/api/projects/:id/stages/:stageId', ({ request, params, url, actor }
 const AgentBody = z.object({
   name: AgentName,
   instructions: Instructions.optional(),
+  // For the orchestrator: when to delegate to this agent, what to give it, what comes back.
+  delegation: Instructions.optional(),
   // An upload from POST /api/uploads, shown as the agent's picture.
   avatarId: z.number().int().nullable().optional(),
 })
@@ -154,6 +168,12 @@ api.get('/api/projects/:id/agents', ({ params }) => {
 api.post('/api/projects/:id/agents', async ({ request, params, actor }) => {
   humanAgents(request)
   return json(projectAgents.createAgent(id(params), await readJson(request, AgentBody), actor), 201)
+})
+// The default agents (the build and review cycle); the ones the project already has are kept.
+api.post('/api/projects/:id/agents/defaults', ({ request, params, actor }) => {
+  humanAgents(request)
+  projects.getProject(id(params))
+  return json(addDefaultAgents(id(params), actor), 201)
 })
 api.patch('/api/agents/:id', async ({ request, params, actor }) => {
   humanAgents(request)

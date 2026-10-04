@@ -8,7 +8,8 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
-import { AGENTS, type Shell, mcpSetup, skillInstall } from '#/lib/agents'
+import { ReviewSkills } from '#/components/ReviewSkills'
+import { AGENTS, type Shell, mcpSetup, savedShell, saveShell, skillInstall } from '#/lib/agents'
 import { errorMessage, get } from '#/lib/api'
 import type { AgentClient } from '#/lib/constants'
 import type { Settings } from '#/server/agents'
@@ -16,16 +17,6 @@ import type { Settings } from '#/server/agents'
 export const Route = createFileRoute('/agents')({ component: ConnectAgents })
 
 type Setup = { boardUrl: string; gateUrl: string; settings: Settings }
-
-// The shell picked last is remembered in this browser; storage can be unavailable, so bash is the fallback.
-const SHELL_KEY = 'agents.shell'
-function savedShell(): Shell {
-  try {
-    return localStorage.getItem(SHELL_KEY) === 'powershell' ? 'powershell' : 'bash'
-  } catch {
-    return 'bash'
-  }
-}
 
 function ConnectAgents() {
   const { data: setup } = useQuery({
@@ -53,9 +44,7 @@ function ConnectAgents() {
   const mcp = mcpSetup(client, setup.boardUrl, token.trim())
   const pickShell = (s: Shell) => {
     setShell(s)
-    try {
-      localStorage.setItem(SHELL_KEY, s)
-    } catch {}
+    saveShell(s)
   }
   return (
     <div className="max-w-3xl space-y-6">
@@ -157,6 +146,11 @@ function ConnectAgents() {
             </pre>
           </details>
         )}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium">3. Install the review skills (Claude Code)</h2>
+        <ReviewSkills boardUrl={setup.boardUrl} token={token} />
       </section>
     </div>
   )

@@ -76,7 +76,7 @@ function checkAvatar(avatarId: number | null | undefined) {
 
 export function createAgent(
   projectId: number,
-  input: { name: string; instructions?: string; avatarId?: number | null },
+  input: { name: string; instructions?: string; delegation?: string; avatarId?: number | null },
   actor: string,
 ) {
   getProject(projectId)
@@ -89,6 +89,7 @@ export function createAgent(
       projectId,
       name,
       instructions: input.instructions ?? '',
+      delegation: input.delegation ?? '',
       avatarId: input.avatarId ?? null,
       createdBy: actor,
     })
@@ -108,7 +109,7 @@ export function createAgent(
 /** A rename carries the tickets reserved for the agent along; past updates keep the name they were posted under. */
 export function updateAgent(
   id: number,
-  patch: { name?: string; instructions?: string; avatarId?: number | null },
+  patch: { name?: string; instructions?: string; delegation?: string; avatarId?: number | null },
   actor: string,
 ) {
   const before = getAgent(id)

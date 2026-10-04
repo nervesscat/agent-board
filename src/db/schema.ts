@@ -53,7 +53,11 @@ export const agents = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     name: text().notNull(),
+    // What the agent reads: who it is, how it works, what it never does.
     instructions: text().notNull().default(''),
+    // What the orchestrator reads: when to hand work to this agent, what to give it, what comes back
+    // and what comes next.
+    delegation: text().notNull().default(''),
     avatarId: integer('avatar_id').references((): AnySQLiteColumn => attachments.id, {
       onDelete: 'set null',
     }),
