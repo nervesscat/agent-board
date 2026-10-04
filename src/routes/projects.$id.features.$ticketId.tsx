@@ -67,6 +67,7 @@ import {
   type PreviewState,
   type TicketFull,
   type TicketGit,
+  type TicketRow,
   type UpdateRow,
   type Workspace,
 } from '#/lib/api'
@@ -74,6 +75,7 @@ import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format
 import {
   laneStageOrder,
   type LaneFilter,
+  type LaneSearch,
   type LaneVerdict,
   LANE_VERDICTS,
   NO_FILTER,
@@ -90,7 +92,7 @@ import {
   validateLaneSearch,
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
-import { isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
   component: TicketPage,
@@ -177,6 +179,14 @@ function TicketPage() {
     enabled: Boolean(t?.parentId),
     refetchInterval: 10_000,
   })
+  // On a top-level ticket: the board's tickets, for previous / next in the same column. Same query
+  // as the board, so it is usually cached already.
+  const { data: board } = useQuery({
+    queryKey: ['tickets', id],
+    queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets?parent=root`),
+    enabled: Boolean(t) && !t?.parentId,
+    refetchInterval: 10_000,
+  })
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
@@ -246,6 +256,7 @@ function TicketPage() {
         <ChevronRight className="size-3.5" />
         <span className="text-foreground">#{t.id}</span>
         {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
+        {!t.parentId && board && <StageNav projectId={id} tickets={board} t={t} />}
       </nav>
 
       <div className="flex flex-wrap items-start gap-3">
@@ -817,29 +828,101 @@ function LaneNav({
 }) {
   const stages = useStages(projectId)
   const { prev, next, index, count, filtered } = laneNeighbours(lanes, stages, id, filter)
-  const step = (lane: (typeof lanes)[number] | null, dir: 'prev' | 'next') =>
-    lane ? (
+  return (
+    <StepNav projectId={projectId} prev={prev} next={next} search={laneSearch(filter)} noun="lane">
+      {index >= 0 ? `lane ${index + 1} of ${count}` : `${count} lane${count === 1 ? '' : 's'}`}
+      {filtered && ' (filtered)'}
+    </StepNav>
+  )
+}
+
+/** "‹ 3 of 7 in In progress ›" among the top-level tickets in this ticket's board column, in its order. */
+function StageNav({ projectId, tickets, t }: { projectId: string; tickets: TicketRow[]; t: TicketFull }) {
+  const stages = useStages(projectId)
+  // This ticket as its own page has it, so a stage change shows here before the board's list catches up.
+  const rows = [...tickets.filter((x) => x.id !== t.id && x.parentId === null), t]
+  const around = columnNeighbours(rows, t.id)
+  if (!around) return null
+  const stage = stageOf(stages, t.status)
+  return (
+    <StepNav projectId={projectId} prev={around.prev} next={around.next} noun={`ticket in ${stage.name}`}>
+      {around.index + 1} of {around.count} in {stage.name}
+    </StepNav>
+  )
+}
+
+type Step = { id: number; title: string } | null
+
+/** Focus on something that takes typing or its own keys: `[` and `]` are left to it. */
+const keepsKeys = (el: EventTarget | null) =>
+  el instanceof HTMLElement &&
+  (el.isContentEditable ||
+    Boolean(
+      el.closest(
+        'input, textarea, select, [role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"]',
+      ),
+    ))
+
+/**
+ * "‹ label ›": links to the previous and next ticket, each titled with its ticket, greyed out at the
+ * ends. `[` and `]` follow them too, unless the reader is typing.
+ */
+function StepNav({
+  projectId,
+  prev,
+  next,
+  search = {},
+  noun,
+  children,
+}: {
+  projectId: string
+  prev: Step
+  next: Step
+  search?: LaneSearch
+  noun: string
+  children: ReactNode
+}) {
+  const navigate = useNavigate()
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat || e.ctrlKey || e.metaKey || e.altKey || keepsKeys(e.target)) return
+      const to = e.key === '[' ? prev : e.key === ']' ? next : null
+      if (!to) return
+      e.preventDefault()
+      navigate({
+        to: '/projects/$id/features/$ticketId',
+        params: { id: projectId, ticketId: String(to.id) },
+        search,
+      })
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navigate, projectId, prev, next, search])
+  const step = (to: Step, dir: 'prev' | 'next') => {
+    const icon = dir === 'prev' ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />
+    return to ? (
       <Link
         to="/projects/$id/features/$ticketId"
-        params={{ id: projectId, ticketId: String(lane.id) }}
-        search={laneSearch(filter)}
-        title={`#${lane.id} ${lane.title}`}
+        params={{ id: projectId, ticketId: String(to.id) }}
+        search={search}
+        title={`#${to.id} ${to.title}`}
         className="inline-flex size-7 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
-        aria-label={dir === 'prev' ? 'Previous lane' : 'Next lane'}
+        aria-label={`${dir === 'prev' ? 'Previous' : 'Next'} ${noun}`}
+        aria-keyshortcuts={dir === 'prev' ? '[' : ']'}
       >
-        {dir === 'prev' ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+        {icon}
       </Link>
     ) : (
       <span className="inline-flex size-7 items-center justify-center rounded-md border opacity-40">
-        {dir === 'prev' ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+        {icon}
       </span>
     )
+  }
   return (
     <span className="ml-auto inline-flex items-center gap-2 text-xs">
       {step(prev, 'prev')}
-      <span className="tabular-nums">
-        {index >= 0 ? `lane ${index + 1} of ${count}` : `${count} lane${count === 1 ? '' : 's'}`}
-        {filtered && ' (filtered)'}
+      <span className="tabular-nums" title="[ and ] step back and forward">
+        {children}
       </span>
       {step(next, 'next')}
     </span>

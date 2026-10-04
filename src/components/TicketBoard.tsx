@@ -19,7 +19,7 @@ import { Button } from '#/components/ui/button'
 import type { TicketRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
-import { type StageLike, isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { type StageLike, isClosed, stageBadge, stageColumn, stageOf } from '#/lib/stages'
 
 /**
  * Tickets in the project's stage columns. Drag a card onto another column to change its stage;
@@ -86,7 +86,7 @@ export function TicketBoard({
       {/* Fixed-width columns side by side, scrolling sideways; each one as tall as the board, scrolling its own cards. */}
       <div ref={scroller} className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
         {stages.map(({ key: status, name, kind }) => {
-          const column = items.filter((t) => t.status === status)
+          const column = stageColumn(items, status)
           return (
             <div
               key={status}
