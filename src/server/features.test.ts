@@ -117,6 +117,27 @@ describe('lanes', () => {
     expect((await features.ticketGit(sub.id)).workspaces.map((w) => w.lane)).toEqual([null])
   })
 
+  it('carry a preview link agents set, change and clear', () => {
+    const t = features.createTicket(projectId, { title: 'preview', repoId: otherRepo }, 'me')
+    expect(() =>
+      features.addWorkspace(t.id, { name: 'wt', previewUrl: 'javascript:alert(1)' }, 'codex'),
+    ).toThrow(/http/)
+    const ws = features.addWorkspace(t.id, { name: 'wt', previewUrl: 'http://localhost:47101' }, 'codex')
+    expect(ws.previewUrl).toBe('http://localhost:47101')
+    expect(features.getTicketFull(t.id).workspaces.map((w) => w.previewUrl)).toEqual([
+      'http://localhost:47101',
+    ])
+    expect(features.setWorkspacePreview(ws.id, 'http://example.com:3000', 'codex').previewUrl).toBe(
+      'http://example.com:3000',
+    )
+    // Only links on this machine are checked.
+    expect(() => features.workspacePreview(ws.id)).toThrow(/localhost/)
+    expect(() => features.setWorkspacePreview(ws.id, 'ftp://localhost', 'codex')).toThrow(/http/)
+    expect(features.setWorkspacePreview(ws.id, null, 'codex').previewUrl).toBe('')
+    expect(() => features.workspacePreview(ws.id)).toThrow(/no preview/)
+    expect(() => features.setWorkspacePreview(999_999, '', 'codex')).toThrow(/not found/)
+  })
+
   it("carry the human's verdict; disapproving cancels, taking it back reopens", () => {
     const parent = features.createTicket(projectId, { title: 'verdicts', repoId: otherRepo }, 'me')
     const a = features.createTicket(projectId, { title: 'a', parentId: parent.id, tasks: ['x'] }, 'claude')
@@ -240,7 +261,7 @@ describe('the agent loop', () => {
     expect(texts).toContain('removed \\"b\\"')
   })
 
-  it('shows thread counts on the ticket and its updates, and the threads waiting on an agent', () => {
+  it('shows thread counts on the ticket and its posts, and the threads waiting on an agent', () => {
     const t = features.createTicket(pid, { title: 'threads', assignee: 'claude' }, 'enrique')
     const u = features.postUpdate(t.id, 'first pass done', [], 'claude')
     const other = features.createTicket(pid, { title: 'not mine', assignee: 'codex' }, 'enrique')
@@ -251,7 +272,8 @@ describe('the agent loop', () => {
     features.addComment({ parentType: 'update', parentId: u.id, body: 'looks off on mobile' }, 'enrique')
     features.addComment({ parentType: 'update', parentId: u.id, body: 'see the header' }, 'enrique')
     const full = features.getTicketFull(t.id)
-    expect(full.thread).toEqual({ count: 0, lastAuthor: null, lastAt: null })
+    // The ticket's own thread is its posts.
+    expect(full.thread).toMatchObject({ count: 1, lastAuthor: 'claude' })
     expect(full.updates[0]!.thread).toMatchObject({ count: 2, lastAuthor: 'enrique' })
     expect(features.listOpenThreads(pid, 'claude')).toMatchObject([
       { parentType: 'update', parentId: u.id, ticketId: t.id, waiting: 2, last: { text: 'see the header' } },
@@ -266,6 +288,158 @@ describe('the agent loop', () => {
     expect(features.listOpenThreads(pid, 'codex')).toMatchObject([
       { parentType: 'ticket', parentId: other.id },
     ])
+  })
+
+  it('keeps one feed of posts: progress or discussion, with replies under each', () => {
+    const t = features.createTicket(pid, { title: 'one feed', assignee: 'claude' }, 'enrique')
+    const step = features.postUpdate(t.id, 'did X', [], 'claude')
+    expect(step.progress).toBe(true)
+    // A comment on the ticket is a post, not progress; with replyTo it is a reply under that post.
+    const question = features.addComment({ parentType: 'ticket', parentId: t.id, body: 'why X?' }, 'enrique')
+    expect(question).toMatchObject({ ticketId: t.id, progress: false, author: 'enrique' })
+    const answer = features.addComment(
+      { parentType: 'ticket', parentId: t.id, replyTo: question.id, body: 'because Y' },
+      'claude',
+    )
+    expect(answer).toMatchObject({ parentType: 'update', parentId: question.id, replyTo: null })
+    const elsewhere = features.createTicket(pid, { title: 'elsewhere' }, 'enrique')
+    expect(() =>
+      features.addComment(
+        { parentType: 'ticket', parentId: elsewhere.id, replyTo: question.id, body: 'x' },
+        'claude',
+      ),
+    ).toThrow(/is not on ticket/)
+
+    const full = features.getTicketFull(t.id)
+    expect(full.updates.map((u) => [u.body, u.progress, u.thread.count])).toEqual([
+      ['why X?', false, 1],
+      ['did X', true, 0],
+    ])
+    expect(full.thread).toMatchObject({ count: 2, lastAuthor: 'enrique' })
+    expect(features.listComments('ticket', t.id).map((c) => [c.body, 'progress' in c && c.progress])).toEqual(
+      [
+        ['did X', true],
+        ['why X?', false],
+      ],
+    )
+  })
+
+  it("counts only progress posts as a lane's last update", () => {
+    const parent = features.createTicket(pid, { title: 'parent' }, 'enrique')
+    const lane = features.createTicket(pid, { title: 'lane', parentId: parent.id }, 'claude')
+    features.postUpdate(lane.id, 'built the form', [], 'claude')
+    features.postUpdate(lane.id, 'which colour?', [], 'claude', { progress: false })
+    expect(features.getTicketFull(parent.id).lanes[0]!.lastUpdate).toMatchObject({ text: 'built the form' })
+  })
+
+  it('lets the author or the human edit and delete a post or reply, nobody else', () => {
+    const t = features.createTicket(pid, { title: 'edits' }, 'enrique')
+    const p = features.postUpdate(t.id, 'first draft', [], 'claude')
+    expect(() => features.editPost(p.id, { body: 'mine now' }, 'codex')).toThrow(/only claude or the human/)
+    const edited = features.editPost(p.id, { body: 'second draft' }, 'claude')
+    expect(edited.body).toBe('second draft')
+    expect(edited.editedAt).toBeTruthy()
+    // Flipping the mark alone is not an edit of the text.
+    expect(features.editPost(p.id, { progress: false }, 'enrique', { human: true })).toMatchObject({
+      progress: false,
+      editedAt: edited.editedAt,
+    })
+    const r = features.addComment({ parentType: 'update', parentId: p.id, body: 'nice' }, 'enrique')
+    features.addComment({ parentType: 'update', parentId: p.id, replyTo: r.id, body: 'thanks' }, 'claude')
+    expect(() => features.deleteComment(r.id, 'claude')).toThrow(/only enrique or the human/)
+    expect(features.editComment(r.id, 'very nice', 'enrique').body).toBe('very nice')
+    features.deleteComment(r.id, 'enrique')
+    expect(features.listComments('update', p.id)).toEqual([])
+    // Deleting a post takes its replies with it.
+    features.addComment({ parentType: 'update', parentId: p.id, body: 'one more' }, 'enrique')
+    features.deletePost(p.id, 'enrique', { human: true })
+    expect(features.getTicketFull(t.id).updates).toEqual([])
+    expect(features.listComments('update', p.id)).toEqual([])
+  })
+
+  it("puts a question on an agent's ticket in its threads until it answers on the ticket", () => {
+    const t = features.createTicket(pid, { title: 'ask me', assignee: 'claude' }, 'enrique')
+    features.postUpdate(t.id, 'started', [], 'claude')
+    features.addComment({ parentType: 'ticket', parentId: t.id, body: 'can you also do Y?' }, 'enrique')
+    expect(features.listOpenThreads(pid, 'claude').filter((th) => th.ticketId === t.id)).toMatchObject([
+      { parentType: 'ticket', parentId: t.id, waiting: 1, last: { author: 'enrique' } },
+    ])
+    features.addComment({ parentType: 'ticket', parentId: t.id, body: 'yes, on it' }, 'claude')
+    expect(features.listOpenThreads(pid, 'claude').filter((th) => th.ticketId === t.id)).toEqual([])
+  })
+
+  it("keeps files with a ticket's instructions, with local paths, until removed or the ticket goes", async () => {
+    const uploads = await import('./uploads')
+    const { db, schema } = await import('#/db')
+    const t = features.createTicket(pid, { title: 'with files' }, 'enrique')
+    const a = await uploads.saveBase64('spec.md', Buffer.from('# spec').toString('base64'), 'enrique')
+    const b = await uploads.saveBase64('mock.png', Buffer.from([0x89, 0x50]).toString('base64'), 'enrique')
+    const files = features.attachToTicket(t.id, [a.id, b.id], 'enrique')
+    expect(files.map((x) => [x.name, Boolean(x.path)])).toEqual([
+      ['spec.md', true],
+      ['mock.png', true],
+    ])
+    // A file already on something else is refused.
+    expect(() => features.attachToTicket(t.id, [a.id], 'enrique')).toThrow(/already attached/)
+    features.removeTicketFile(t.id, a.id, 'enrique')
+    expect(features.getTicketFull(t.id).attachments.map((x) => x.name)).toEqual(['mock.png'])
+    const other = features.createTicket(pid, { title: 'other' }, 'enrique')
+    expect(() => features.removeTicketFile(other.id, b.id, 'enrique')).toThrow(/not found/)
+    // Deleting the ticket takes its files' rows with it.
+    features.deleteTicket(t.id, 'enrique')
+    expect(db.select().from(schema.attachments).where(eq(schema.attachments.id, b.id)).get()).toBeUndefined()
+  })
+
+  it('asks the human for a decision: blocks the ticket, and unblocks it once nothing is left open', () => {
+    const t = features.createTicket(pid, { title: 'decide me', assignee: 'claude' }, 'enrique')
+    features.claimTicket(t.id, 'claude')
+    const options = [
+      { label: 'Postgres', detail: 'one more service to run' },
+      { label: 'SQLite', recommended: true },
+    ]
+    expect(() => features.askDecision(t.id, { body: 'which db?', options: [options[0]!] }, 'claude')).toThrow(
+      /2 to 5/,
+    )
+    expect(() =>
+      features.askDecision(
+        t.id,
+        { body: 'which db?', options: options.map((o) => ({ ...o, recommended: true })) },
+        'claude',
+      ),
+    ).toThrow(/at most one/)
+
+    const q1 = features.askDecision(t.id, { body: 'which db?', options }, 'claude')
+    const q2 = features.askDecision(t.id, { body: 'which cache?', options }, 'claude')
+    expect(q1).toMatchObject({
+      progress: false,
+      decision: [{ label: 'Postgres' }, { label: 'SQLite', recommended: true }],
+    })
+    expect(features.getTicket(t.id).status).toBe('blocked')
+    expect(features.listTickets(pid, { q: 'decide me' })[0]!.decisions).toBe(2)
+
+    // Deciding one: answered as a reply under the card; the other keeps the ticket blocked.
+    expect(() => features.decide(q1.id, 5, '', 'enrique')).toThrow(/no option 5/)
+    features.decide(q1.id, 1, 'keep it simple', 'enrique')
+    expect(features.getPost(q1.id)).toMatchObject({ decidedOption: 1, decidedBy: 'enrique' })
+    expect(features.listComments('update', q1.id).map((c) => c.body)).toEqual([
+      'Decided: **SQLite**\n\nkeep it simple',
+    ])
+    expect(features.getTicket(t.id).status).toBe('blocked')
+    // The agent sees the answer waiting on it.
+    expect(features.listOpenThreads(pid, 'claude').some((th) => th.parentId === q1.id)).toBe(true)
+
+    features.decide(q2.id, 0, '', 'enrique')
+    expect(features.getTicket(t.id).status).toBe('in_progress')
+    expect(features.listTickets(pid, { q: 'decide me' })[0]!.decisions).toBe(0)
+    // Changing an answer says so.
+    features.decide(q2.id, 1, '', 'enrique')
+    expect(features.listComments('update', q2.id).at(-1)!.body).toBe('Changed the decision to: **SQLite**')
+    // A plain post is not a decision.
+    const plain = features.postUpdate(t.id, 'just a note', [], 'claude')
+    expect(() => features.decide(plain.id, 0, '', 'enrique')).toThrow(/not a decision/)
+    // block: false leaves the stage alone.
+    features.askDecision(t.id, { body: 'naming?', options, block: false }, 'claude')
+    expect(features.getTicket(t.id).status).toBe('in_progress')
   })
 
   it('links a ticket to its PR both ways, by number or by branch', async () => {
@@ -322,7 +496,7 @@ describe('the agent loop', () => {
     const uploads = await import('./uploads')
     const file = path.join(tmp, 'shot.png')
     fs.writeFileSync(file, 'png')
-    const a = uploads.saveFromPath(file, 'enrique')
+    const a = await uploads.saveFromPath(file, 'enrique')
     const view = uploads.attachmentView(a, 'kali-linux')
     expect(fs.readFileSync(view.path, 'utf8')).toBe('png')
     expect(view.url).toBe(`/api/uploads/${a.id}`)

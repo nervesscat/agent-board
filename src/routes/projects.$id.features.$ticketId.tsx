@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -10,6 +11,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  Scale,
   Trash2,
   TriangleAlert,
   X,
@@ -18,6 +20,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
+import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
 import { StatusSelect } from '#/components/StatusSelect'
@@ -30,7 +33,8 @@ import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { PrState } from '#/components/PrState'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
-import { CommentItem, Thread, useComments } from '#/components/Thread'
+import { EditBox, Edited, PostActions } from '#/components/PostTools'
+import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
 import {
   AlertDialog,
@@ -44,15 +48,13 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Badge } from '#/components/ui/badge'
-import { Button } from '#/components/ui/button'
+import { Button, buttonVariants } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { Switch } from '#/components/ui/switch'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
-import { Textarea } from '#/components/ui/textarea'
 import {
-  type CommentRow,
   del,
   errorMessage,
   get,
@@ -60,9 +62,11 @@ import {
   post,
   put,
   upload,
+  type PreviewState,
   type TicketFull,
   type TicketGit,
   type UpdateRow,
+  type Workspace,
 } from '#/lib/api'
 import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
@@ -162,7 +166,6 @@ function TicketPage() {
     enabled: Boolean(t?.parentId),
     refetchInterval: 10_000,
   })
-  const [editing, setEditing] = useState(false)
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
@@ -236,21 +239,13 @@ function TicketPage() {
 
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold tracking-tight">
-            <span className="text-muted-foreground">#{t.id}</span> {t.title}
-          </h1>
+          <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>
               opened by <Actor name={t.createdBy} /> {ago(t.createdAt)}
             </span>
             <span>updated {ago(t.updatedAt)}</span>
-            {t.tags.length > 0 && (
-              <span className="inline-flex flex-wrap gap-1">
-                {[...t.tags].sort(compareTags).map((tag) => (
-                  <Tag key={tag} tag={tag} />
-                ))}
-              </span>
-            )}
+            <InlineTags key={t.id} t={t} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -262,13 +257,15 @@ function TicketPage() {
               <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
             </span>
           )}
+          {t.updates.some((u) => u.decision && !u.decidedAt) && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+              <Scale className="size-3.5" /> decision needed
+            </span>
+          )}
           {(t.parentId || verdictOf(t)) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect stages={stages} value={t.status} onChange={(status) => update.mutate({ status })} />
-          <Button variant="outline" size="sm" onClick={() => setEditing((v) => !v)}>
-            <Pencil data-icon="inline-start" /> Edit
-          </Button>
           <AlertDialog>
             <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
               <Trash2 />
@@ -298,90 +295,296 @@ function TicketPage() {
         </div>
       </div>
 
-      {editing ? (
-        <EditTicket
-          t={t}
-          onSave={(p) => update.mutate(p, { onSuccess: () => setEditing(false) })}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
               widen the page */}
-          <div className="min-w-0 space-y-6">
-            <section className="rounded-lg border p-4">
-              <h2 className="mb-2 text-sm font-medium">Instructions</h2>
-              {t.body ? (
-                <Markdown>{t.body}</Markdown>
-              ) : (
-                <p className="text-sm text-muted-foreground">No instructions yet.</p>
-              )}
-            </section>
-            <Tasks t={t} onChange={invalidate} />
-            <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
-            <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
-          </div>
-          <aside className="min-w-0 space-y-4">
-            <GitPanel t={t} git={git} onChange={invalidate} />
-          </aside>
+        <div className="min-w-0 space-y-6">
+          <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+          <Tasks t={t} onChange={invalidate} />
+          <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
+          <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
         </div>
-      )}
+        <aside className="min-w-0 space-y-4">
+          <Previews t={t} git={git} />
+          <Details key={t.id} t={t} onSave={(p) => update.mutate(p)} />
+          <GitPanel t={t} git={git} onChange={invalidate} />
+        </aside>
+      </div>
     </div>
   )
 }
 
-function EditTicket({
+/** The title, renamed where it is: click it, Enter or leaving the field saves, Esc cancels. */
+function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(t.title)
+  const done = (save: boolean) => {
+    setEditing(false)
+    const title = value.trim()
+    if (save && title && title !== t.title) onSave(title)
+  }
+  if (editing)
+    return (
+      <Input
+        aria-label="Title"
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => done(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') done(true)
+          if (e.key === 'Escape') done(false)
+        }}
+        className="h-9 text-lg font-semibold"
+      />
+    )
+  return (
+    <h1 className="text-xl font-semibold tracking-tight">
+      <span className="text-muted-foreground">#{t.id}</span>{' '}
+      <button
+        type="button"
+        title="Click to rename"
+        onClick={() => {
+          setValue(t.title)
+          setEditing(true)
+        }}
+        className="cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
+      >
+        {t.title}
+      </button>
+    </h1>
+  )
+}
+
+/** The tags, edited where they are: comma separated, Enter or leaving the field saves, Esc cancels. */
+function InlineTags({ t, onSave }: { t: TicketFull; onSave: (tags: string[]) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const done = (save: boolean) => {
+    setEditing(false)
+    const tags = value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (save && tags.join('\n') !== t.tags.join('\n')) onSave(tags)
+  }
+  if (editing)
+    return (
+      <Input
+        aria-label="Tags, comma separated"
+        autoFocus
+        value={value}
+        placeholder="High, Forms"
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => done(true)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') done(true)
+          if (e.key === 'Escape') done(false)
+        }}
+        className="h-6 w-56 text-xs"
+      />
+    )
+  const open = () => {
+    setValue(t.tags.join(', '))
+    setEditing(true)
+  }
+  return t.tags.length > 0 ? (
+    <button
+      type="button"
+      title="Click to edit the tags"
+      onClick={open}
+      className="inline-flex flex-wrap gap-1"
+    >
+      {[...t.tags].sort(compareTags).map((tag) => (
+        <Tag key={tag} tag={tag} />
+      ))}
+    </button>
+  ) : (
+    <button type="button" onClick={open} className="hover:text-foreground">
+      + tags
+    </button>
+  )
+}
+
+/**
+ * The instructions, edited where they are with the rich text editor (click the text, or "edit"), and
+ * the files that go with them: attach, paste or drop to add, × to remove. Files are kept as soon as
+ * they are added; the text when saved.
+ */
+function Instructions({
   t,
   onSave,
-  onCancel,
+  onChange,
 }: {
   t: TicketFull
-  onSave: (p: Record<string, unknown>) => void
-  onCancel: () => void
+  onSave: (body: string) => void
+  onChange: () => void
 }) {
-  const [title, setTitle] = useState(t.title)
+  const [editing, setEditing] = useState(false)
   const [body, setBody] = useState(t.body)
-  const [assignee, setAssignee] = useState(t.assignee)
-  const [branch, setBranch] = useState(t.branch)
-  const [baseBranch, setBaseBranch] = useState(t.baseBranch)
-  const [tags, setTags] = useState(t.tags.join(', '))
+  const fileInput = useRef<HTMLInputElement>(null)
+  const onError = (err: unknown) => toast.error(errorMessage(err))
+  const attach = useMutation({
+    mutationFn: async (files: File[]) => {
+      const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
+      return post(`/api/tickets/${t.id}/attachments`, { attachmentIds })
+    },
+    onSuccess: onChange,
+    onError,
+  })
+  const detach = useMutation({
+    mutationFn: (attachmentId: number) => del(`/api/tickets/${t.id}/attachments/${attachmentId}`),
+    onSuccess: onChange,
+    onError,
+  })
+  const drop = useFileDrop((files) => attach.mutate(files))
+  const open = () => {
+    setBody(t.body)
+    setEditing(true)
+  }
+  const save = () => {
+    if (body !== t.body) onSave(body)
+    setEditing(false)
+  }
+  return (
+    <section
+      {...drop.props}
+      className={cn('rounded-lg border p-4', drop.className)}
+      aria-label="Instructions"
+    >
+      <div className="mb-2 flex items-center gap-3">
+        <h2 className="text-sm font-medium">Instructions</h2>
+        <div className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+          <input
+            ref={fileInput}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? [])
+              if (files.length) attach.mutate(files)
+              e.target.value = ''
+            }}
+          />
+          <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
+            <Paperclip data-icon="inline-start" /> {attach.isPending ? 'attaching…' : 'attach'}
+          </Button>
+          {!editing && (
+            <Button type="button" variant="ghost" size="xs" onClick={open}>
+              <Pencil data-icon="inline-start" /> edit
+            </Button>
+          )}
+        </div>
+      </div>
+      {editing ? (
+        <div className="space-y-2">
+          <RichEditor
+            value={body}
+            onChange={setBody}
+            onFiles={(files) => attach.mutate(files)}
+            onSubmit={save}
+            onCancel={() => setEditing(false)}
+            autoFocus
+            minHeight="min-h-40"
+            label="Instructions"
+            placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button type="button" size="sm" onClick={save}>
+              Save
+            </Button>
+          </div>
+        </div>
+      ) : t.body ? (
+        // Clicking the text edits it; a link inside still opens.
+        <div
+          role="button"
+          tabIndex={0}
+          title="Click to edit"
+          className="cursor-text rounded-md hover:bg-muted/30"
+          onClick={(e) => {
+            if (!(e.target as HTMLElement).closest('a, img')) open()
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') open()
+          }}
+        >
+          <Markdown>{t.body}</Markdown>
+        </div>
+      ) : (
+        <button type="button" onClick={open} className="text-sm text-muted-foreground hover:text-foreground">
+          No instructions yet. Click to write them.
+        </button>
+      )}
+      {t.attachments.length > 0 && (
+        <div className="mt-3 border-t pt-3">
+          <Attachments items={t.attachments} />
+          <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            {t.attachments.map((a) => (
+              <li key={a.id} className="inline-flex items-center gap-1">
+                <span className="max-w-48 truncate">{a.name}</span>
+                <button
+                  type="button"
+                  title={`Remove ${a.name}`}
+                  aria-label={`Remove ${a.name}`}
+                  className="hover:text-destructive"
+                  onClick={() => detach.mutate(a.id)}
+                >
+                  <X className="size-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Who and where: each field saves as soon as it changes. */
+function Details({ t, onSave }: { t: TicketFull; onSave: (p: Record<string, unknown>) => void }) {
   const { data: project } = useProject(t.projectId)
   const repos = project?.repos ?? []
-  const [repoId, setRepoId] = useState(String(t.repoId ?? repos[0]?.id ?? ''))
+  const repoId = String(t.repoId ?? repos[0]?.id ?? '')
+  const [branch, setBranch] = useState(t.branch)
+  const [baseBranch, setBaseBranch] = useState(t.baseBranch)
+  // A branch typed by hand (when the repo's branches cannot be listed) saves once typing stops.
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const later = (field: 'branch' | 'baseBranch', value: string) => {
+    clearTimeout(timers.current[field])
+    timers.current[field] = setTimeout(() => onSave({ [field]: value }), 700)
+  }
+  // Agents change these too; follow the ticket unless a field is being typed in.
+  useEffect(() => setBranch(t.branch), [t.branch])
+  useEffect(() => setBaseBranch(t.baseBranch), [t.baseBranch])
   return (
-    <form
-      className="space-y-3 rounded-lg border p-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        onSave({
-          title,
-          body,
-          assignee,
-          branch,
-          baseBranch,
-          tags: tags
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
-          ...(repoId ? { repoId: Number(repoId) } : {}),
-        })
-      }}
-    >
-      <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
-      <Textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={10}
-        placeholder="Instructions (markdown)"
-      />
-      <div className="grid gap-3 sm:grid-cols-4">
+    <section className="space-y-3 rounded-lg border p-3" aria-label="Details">
+      <div className="space-y-1">
+        <Label htmlFor="assignee" className="text-xs text-muted-foreground">
+          Assignee
+          {t.reserved && (
+            <span
+              className="ml-auto inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-normal"
+              title="Reserved for this project agent: other agents cannot take it, only you can reassign it"
+            >
+              <Lock className="size-3" /> reserved
+            </span>
+          )}
+        </Label>
+        <AssigneeSelect id="assignee" value={t.assignee} onChange={(assignee) => onSave({ assignee })} />
+      </div>
+      {repos.length > 1 && (
         <div className="space-y-1">
-          <Label htmlFor="repo">Repository</Label>
+          <Label htmlFor="repo" className="text-xs text-muted-foreground">
+            Repository
+          </Label>
           <Select
             value={repoId}
-            onValueChange={(v) => setRepoId(v as string)}
+            onValueChange={(v) => v && v !== repoId && onSave({ repoId: Number(v) })}
             items={Object.fromEntries(repos.map((r) => [String(r.id), r.name]))}
-            disabled={repos.length < 2}
           >
             <SelectTrigger id="repo" className="w-full">
               <SelectValue />
@@ -395,30 +598,37 @@ function EditTicket({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="assignee">Assignee</Label>
-          <AssigneeSelect id="assignee" value={assignee} onChange={setAssignee} />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="branch">Branch</Label>
-          <BranchSelect id="branch" value={branch} onChange={setBranch} repoId={repoId} optional />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="base">Base branch</Label>
-          <BranchSelect id="base" value={baseBranch} onChange={setBaseBranch} repoId={repoId} />
-        </div>
+      )}
+      <div className="space-y-1">
+        <Label htmlFor="branch" className="text-xs text-muted-foreground">
+          Branch
+        </Label>
+        <BranchSelect
+          id="branch"
+          value={branch}
+          repoId={repoId}
+          optional
+          onChange={(v) => {
+            setBranch(v)
+            if (v !== t.branch) later('branch', v)
+          }}
+        />
       </div>
       <div className="space-y-1">
-        <Label htmlFor="tags">Tags, comma separated</Label>
-        <Input id="tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="High, Forms" />
+        <Label htmlFor="base" className="text-xs text-muted-foreground">
+          Base branch
+        </Label>
+        <BranchSelect
+          id="base"
+          value={baseBranch}
+          repoId={repoId}
+          onChange={(v) => {
+            setBaseBranch(v)
+            if (v && v !== t.baseBranch) later('baseBranch', v)
+          }}
+        />
       </div>
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit">Save</Button>
-      </div>
-    </form>
+    </section>
   )
 }
 
@@ -796,11 +1006,9 @@ function Lanes({
   )
 }
 
-type Entry = { kind: 'update'; at: string; u: UpdateRow } | { kind: 'comment'; at: string; c: CommentRow }
-
 /**
- * The ticket's updates and comments in one timeline, newest first, with one box to post either.
- * Replying to a comment goes through the same box.
+ * The ticket's feed: one kind of post, newest first, with one box to write one. A post marked
+ * progress is a step of the work (what agents post as they go); any post can have replies.
  */
 function Activity({
   t,
@@ -813,41 +1021,26 @@ function Activity({
   laneFeed: boolean
   onLaneFeed: (v: boolean) => void
 }) {
-  const qc = useQueryClient()
-  const { key: commentsKey, comments } = useComments('ticket', t.id)
-  const [kind, setKind] = useState<'update' | 'comment'>('update')
-  const [replyTo, setReplyTo] = useState<number | null>(null)
   const [body, setBody] = useState('')
+  const [progress, setProgress] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
-  const textarea = useRef<HTMLTextAreaElement>(null)
   const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
-  const asComment = kind === 'comment' || replyTo !== null
 
   const send = useMutation({
     mutationFn: async () => {
       const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
-      return asComment
-        ? post('/api/comments', { parentType: 'ticket', parentId: t.id, replyTo, body, attachmentIds })
-        : post(`/api/tickets/${t.id}/updates`, { body, attachmentIds })
+      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress })
     },
     onSuccess: () => {
       setBody('')
       setFiles([])
-      setReplyTo(null)
-      if (asComment) {
-        qc.invalidateQueries({ queryKey: commentsKey })
-        qc.invalidateQueries({ queryKey: ['daily'] })
-      } else onChange()
+      setProgress(false)
+      onChange()
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   const submit = () => body.trim() && !send.isPending && send.mutate()
-
-  const entries: Entry[] = [
-    ...t.updates.map((u) => ({ kind: 'update' as const, at: u.createdAt, u })),
-    ...comments.filter((c) => !c.replyTo).map((c) => ({ kind: 'comment' as const, at: c.createdAt, c })),
-  ].sort((x, y) => y.at.localeCompare(x.at))
 
   return (
     <section>
@@ -855,7 +1048,7 @@ function Activity({
         <h2 className="text-sm font-medium">Activity</h2>
         {t.lanes.length > 0 && (
           <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lane updates
+            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lane posts
           </label>
         )}
       </div>
@@ -867,27 +1060,13 @@ function Activity({
           submit()
         }}
       >
-        {replyTo !== null && (
-          <div className="text-xs text-muted-foreground">
-            replying to {comments.find((c) => c.id === replyTo)?.author} ·{' '}
-            <button type="button" className="underline" onClick={() => setReplyTo(null)}>
-              cancel
-            </button>
-          </div>
-        )}
-        <Textarea
-          ref={textarea}
+        <RichEditor
           value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit()
-          }}
-          rows={3}
-          placeholder={
-            asComment
-              ? 'Comment or ask something (markdown). Agents answer in the thread.'
-              : 'Post progress (markdown). Agents post here too, with screenshots and recordings.'
-          }
+          onChange={setBody}
+          onFiles={(added) => setFiles((prev) => [...prev, ...added])}
+          onSubmit={submit}
+          label="New post"
+          placeholder="Write a post: a question, an answer, progress. Paste or drop screenshots and recordings."
         />
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -895,7 +1074,6 @@ function Activity({
             type="file"
             multiple
             hidden
-            accept={asComment ? undefined : 'image/*,video/*,.md,.txt,.log,.pdf'}
             onChange={(e) => {
               setFiles([...files, ...Array.from(e.target.files ?? [])])
               // Clear it, so picking a file that was just removed registers again.
@@ -906,70 +1084,28 @@ function Activity({
             <Paperclip data-icon="inline-start" /> attach
           </Button>
           <PendingFiles files={files} onChange={setFiles} />
-          <div className="ml-auto flex items-center gap-2">
-            {replyTo === null && (
-              <div
-                className="inline-flex rounded-md border p-0.5 text-xs"
-                role="radiogroup"
-                aria-label="Post as"
-              >
-                {(['update', 'comment'] as const).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    role="radio"
-                    aria-checked={kind === k}
-                    onClick={() => setKind(k)}
-                    className={cn(
-                      'rounded px-2 py-0.5 capitalize',
-                      kind === k
-                        ? 'bg-muted font-medium text-foreground'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {k}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="ml-auto flex items-center gap-3">
+            <label
+              className="inline-flex items-center gap-2 text-xs text-muted-foreground"
+              title="A step of the work: lane summaries and the Daily view pick these out"
+            >
+              <Switch size="sm" checked={progress} onCheckedChange={setProgress} /> progress
+            </label>
             <Button type="submit" size="sm" disabled={!body.trim() || send.isPending}>
-              {send.isPending
-                ? 'Posting…'
-                : replyTo !== null
-                  ? 'Reply'
-                  : asComment
-                    ? 'Comment'
-                    : 'Post update'}
+              {send.isPending ? 'Posting…' : 'Post'}
             </Button>
           </div>
         </div>
       </form>
-      {entries.length === 0 ? (
-        <Empty>No activity yet.</Empty>
+      {t.updates.length === 0 ? (
+        <Empty>No posts yet.</Empty>
       ) : (
         <Timeline>
-          {entries.map((e) =>
-            e.kind === 'update' ? (
-              <TimelineRow key={`u${e.u.id}`} at={e.at}>
-                <UpdateCard u={e.u} projectId={String(t.projectId)} />
-              </TimelineRow>
-            ) : (
-              <TimelineRow key={`c${e.c.id}`} at={e.at} dot="bg-sky-500/70">
-                <article className="rounded-lg border bg-muted/30 p-3">
-                  <CommentItem
-                    c={e.c}
-                    comments={comments}
-                    hideTime
-                    label="comment"
-                    onReply={() => {
-                      setReplyTo(e.c.id)
-                      textarea.current?.focus()
-                    }}
-                  />
-                </article>
-              </TimelineRow>
-            ),
-          )}
+          {t.updates.map((u) => (
+            <TimelineRow key={u.id} at={u.createdAt} dot={u.progress ? undefined : 'bg-sky-500/70'}>
+              <PostCard u={u} projectId={String(t.projectId)} onChange={onChange} />
+            </TimelineRow>
+          ))}
         </Timeline>
       )}
     </section>
@@ -1031,13 +1167,34 @@ function TimelineRow({
   )
 }
 
-function UpdateCard({ u, projectId }: { u: UpdateRow; projectId: string }) {
+/** One post: who, progress or not, the text and files, and its replies behind a toggle. */
+function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string; onChange: () => void }) {
   const [thread, setThread] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const onError = (err: unknown) => toast.error(errorMessage(err))
+  const edit = useMutation({
+    mutationFn: (p: { body?: string; progress?: boolean }) => patch(`/api/updates/${u.id}`, p),
+    onSuccess: () => {
+      setEditing(false)
+      onChange()
+    },
+    onError,
+  })
+  const remove = useMutation({ mutationFn: () => del(`/api/updates/${u.id}`), onSuccess: onChange, onError })
+  const replies = u.thread.count
   return (
-    <article className="rounded-lg border p-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+    <article
+      className={cn(
+        'rounded-lg border p-3',
+        !u.progress && 'bg-muted/30',
+        u.decision && !u.decidedAt && 'border-amber-500/60 bg-amber-500/5',
+      )}
+    >
+      <div className="group/post flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Actor name={u.author} via={u.via} className="text-foreground" />
-        <span>update</span>
+        {u.progress && (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
+        )}
         {u.lane && (
           <Link
             to="/projects/$id/features/$ticketId"
@@ -1047,11 +1204,39 @@ function UpdateCard({ u, projectId }: { u: UpdateRow; projectId: string }) {
             <Layers className="size-3 shrink-0" /> <span className="max-w-48 truncate">{u.lane.title}</span>
           </Link>
         )}
-        <button type="button" className="ml-auto hover:text-foreground" onClick={() => setThread((v) => !v)}>
-          {thread ? 'hide thread' : 'thread'}
-        </button>
+        <Edited at={u.editedAt} />
+        <span className="ml-auto inline-flex items-center gap-2">
+          {!u.lane && (
+            <PostActions what="this post" onEdit={() => setEditing(true)} onDelete={() => remove.mutate()}>
+              <button
+                type="button"
+                className="hover:text-foreground"
+                onClick={() => edit.mutate({ progress: !u.progress })}
+              >
+                {u.progress ? 'not progress' : 'mark progress'}
+              </button>
+            </PostActions>
+          )}
+          <button type="button" className="hover:text-foreground" onClick={() => setThread((v) => !v)}>
+            {thread
+              ? 'hide replies'
+              : replies
+                ? `${replies} ${replies === 1 ? 'reply' : 'replies'}`
+                : 'reply'}
+          </button>
+        </span>
       </div>
-      <Markdown className="mt-2">{u.body}</Markdown>
+      {editing ? (
+        <EditBox
+          value={u.body}
+          pending={edit.isPending}
+          onSave={(body) => edit.mutate({ body })}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <Markdown className="mt-2">{u.body}</Markdown>
+      )}
+      {u.decision && <DecisionCard u={u} onChange={onChange} />}
       <Attachments items={u.attachments} />
       {thread && (
         <div className="mt-3 border-t pt-3">
@@ -1062,19 +1247,198 @@ function UpdateCard({ u, projectId }: { u: UpdateRow; projectId: string }) {
   )
 }
 
-function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
-  const [name, setName] = useState('')
-  const [branch, setBranch] = useState('')
-  const onError = (err: unknown) => toast.error(errorMessage(err))
-  const add = useMutation({
-    mutationFn: () => post(`/api/tickets/${t.id}/workspaces`, { name, branch }),
+/**
+ * A decision an agent asked the human to make: its options as choices, one maybe recommended. Picking
+ * one (and an optional note) answers it; once decided the choice stays marked and can be changed.
+ */
+function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
+  const options = u.decision!
+  const decided = u.decidedOption !== null && u.decidedAt !== null
+  const [changing, setChanging] = useState(false)
+  const [picked, setPicked] = useState<number | null>(null)
+  const [note, setNote] = useState('')
+  const choosing = !decided || changing
+  const decide = useMutation({
+    mutationFn: () => put(`/api/updates/${u.id}/decision`, { option: picked, note }),
     onSuccess: () => {
-      setName('')
-      setBranch('')
+      setChanging(false)
+      setPicked(null)
+      setNote('')
       onChange()
     },
-    onError,
+    onError: (err) => toast.error(errorMessage(err)),
   })
+  return (
+    <div className="mt-3 space-y-2" role="group" aria-label="Decision">
+      <div className="flex items-center gap-2 text-xs">
+        <Scale className="size-3.5 text-amber-600 dark:text-amber-400" />
+        {decided && !changing ? (
+          <span className="text-muted-foreground">
+            decided by <Actor name={u.decidedBy} /> {ago(u.decidedAt!)} ·{' '}
+            <button
+              type="button"
+              className="underline hover:text-foreground"
+              onClick={() => setChanging(true)}
+            >
+              change
+            </button>
+          </span>
+        ) : (
+          <span className="font-medium text-amber-700 dark:text-amber-400">Your decision is needed</span>
+        )}
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {options.map((o, i) => {
+          const chosen = decided && u.decidedOption === i
+          const selected = choosing ? picked === i : chosen
+          return (
+            <li key={i}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                disabled={!choosing}
+                onClick={() => setPicked(i)}
+                className={cn(
+                  'flex h-full w-full flex-col items-start gap-1 rounded-md border p-3 text-left text-sm transition-colors',
+                  choosing && 'hover:border-foreground/40',
+                  selected && 'border-primary ring-2 ring-primary/30',
+                  !choosing && !chosen && 'opacity-50',
+                )}
+              >
+                <span className="flex w-full items-center gap-2 font-medium">
+                  {chosen && !choosing && <Check className="size-4 text-primary" />}
+                  {o.label}
+                  {o.recommended && (
+                    <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
+                      recommended
+                    </span>
+                  )}
+                </span>
+                {o.detail && <span className="text-xs text-muted-foreground">{o.detail}</span>}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      {choosing && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="A note for the agent (optional)"
+            aria-label="Note for the agent"
+            className="h-8 min-w-48 flex-1 text-sm"
+          />
+          {changing && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setChanging(false)}>
+              Cancel
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            disabled={picked === null || decide.isPending}
+            onClick={() => decide.mutate()}
+          >
+            {decide.isPending ? 'Saving…' : 'Decide'}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Where the ticket's work runs for the human to try: a row per workspace with a preview link. */
+function Previews({ t, git }: { t: TicketFull; git?: TicketGit }) {
+  const rows = [
+    ...t.workspaces.filter((w) => w.previewUrl).map((w) => ({ ...w, lane: null })),
+    // The lanes' come with the git state, tagged with their lane.
+    ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
+  ]
+  if (!rows.length) return null
+  return (
+    <section className="rounded-lg border p-3" aria-label="Preview">
+      <h2 className="mb-2 text-sm font-medium">Preview</h2>
+      <ul className="space-y-3">
+        {rows.map((w) => (
+          <PreviewRow key={w.id} w={w} projectId={t.projectId} />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function PreviewRow({
+  w,
+  projectId,
+}: {
+  w: Workspace & { lane: { id: number; title: string } | null }
+  projectId: number
+}) {
+  // Polled only while the page is in view: TanStack Query pauses intervals in a hidden tab.
+  const { data, error } = useQuery({
+    queryKey: ['preview', w.id, w.previewUrl],
+    queryFn: () => get<PreviewState>(`/api/workspaces/${w.id}/preview`),
+    refetchInterval: 15_000,
+    retry: false,
+  })
+  const state = data
+    ? data.running
+      ? {
+          label: 'Running',
+          title: `Answered with HTTP ${data.status} at ${clock(data.checkedAt)}`,
+          className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+        }
+      : {
+          label: 'Not running',
+          title: `No answer at ${clock(data.checkedAt)}`,
+          className: 'bg-muted text-muted-foreground',
+        }
+    : error
+      ? { label: 'Not checked', title: errorMessage(error), className: 'bg-muted text-muted-foreground' }
+      : { label: 'Checking…', title: 'Checking whether it answers', className: 'text-muted-foreground' }
+  return (
+    <li className="space-y-1.5 text-sm">
+      <div className="flex items-center gap-2">
+        <a href={w.previewUrl} target="_blank" rel="noreferrer" className={buttonVariants({ size: 'sm' })}>
+          Open preview <ExternalLink />
+        </a>
+        <span
+          className={cn(
+            'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
+            state.className,
+          )}
+          title={state.title}
+        >
+          {data && <span className="size-1.5 rounded-full bg-current" />}
+          {state.label}
+        </span>
+      </div>
+      <div className="truncate font-mono text-xs text-muted-foreground" title={w.previewUrl}>
+        {w.previewUrl}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <span className="inline-flex min-w-0 items-center gap-1 font-mono" title={`workspace ${w.name}`}>
+          <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
+        </span>
+        {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
+      </div>
+      {w.lane && (
+        <Link
+          to="/projects/$id/features/$ticketId"
+          params={{ id: String(projectId), ticketId: String(w.lane.id) }}
+          className="inline-flex max-w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <Layers className="size-3 shrink-0" /> <span className="truncate">{w.lane.title}</span>
+        </Link>
+      )}
+    </li>
+  )
+}
+
+function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+  const onError = (err: unknown) => toast.error(errorMessage(err))
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/workspaces/${id}`),
     onSuccess: onChange,
@@ -1118,7 +1482,7 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
           </>
         ) : (
           <p className="text-xs text-muted-foreground">
-            No branch yet. Edit the ticket or let the agent set it.
+            No branch yet: pick one above, or the agent sets it.
           </p>
         )}
         {t.pr && (
@@ -1150,28 +1514,11 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
           </div>
         )}
         {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
-        <div className="mt-2 flex items-center gap-2 text-xs">
-          {t.assignee ? (
-            <>
-              <span className="text-muted-foreground">assignee</span> <Actor name={t.assignee} />
-              {t.reserved && (
-                <span
-                  className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
-                  title="Reserved for this project agent: other agents cannot take it, only you can reassign it"
-                >
-                  <Lock className="size-3" /> reserved
-                </span>
-              )}
-            </>
-          ) : (
-            <span className="text-muted-foreground">unassigned</span>
-          )}
-        </div>
       </section>
       <section className="rounded-lg border p-3">
         <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
         <p className="mb-2 text-xs text-muted-foreground">
-          Worktrees, sub-branches and subagent sandboxes opened for this ticket
+          Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
           {t.lanes.length > 0 && ' and its lanes'}.
         </p>
         <ul className="space-y-2">
@@ -1210,29 +1557,9 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
             </li>
           ))}
         </ul>
-        <form
-          className="mt-3 space-y-1.5"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (name.trim()) add.mutate()
-          }}
-        >
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="name"
-            className="h-7 text-xs"
-          />
-          <Input
-            value={branch}
-            onChange={(e) => setBranch(e.target.value)}
-            placeholder="branch"
-            className="h-7 font-mono text-xs"
-          />
-          <Button type="submit" size="xs" variant="outline" disabled={!name.trim()}>
-            <Plus data-icon="inline-start" /> Add workspace
-          </Button>
-        </form>
+        {t.workspaces.length === 0 && !git?.workspaces.length && (
+          <p className="text-xs text-muted-foreground">None yet.</p>
+        )}
       </section>
     </>
   )

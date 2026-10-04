@@ -16,6 +16,7 @@ import type { TicketFull, TicketRow } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
+import type { PreviewState } from '#/server/preview'
 import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
 import type { ProjectAgent } from '#/server/projectAgents'
@@ -25,7 +26,7 @@ export type Project = ProjectFull
 /** A row of `/api/projects`: the project, its repos, and how many tickets and open PRs it holds. */
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
-export type { DirListing, ProjectAgent }
+export type { DirListing, PreviewState, ProjectAgent }
 
 export type {
   Attachment,

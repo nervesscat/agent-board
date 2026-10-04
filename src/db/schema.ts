@@ -54,7 +54,11 @@ export const agents = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
     name: text().notNull(),
+    // What the agent reads: who it is, how it works, what it never does.
     instructions: text().notNull().default(''),
+    // What the orchestrator reads: when to hand work to this agent, what to give it, what comes back
+    // and what comes next.
+    delegation: text().notNull().default(''),
     avatarId: integer('avatar_id').references((): AnySQLiteColumn => attachments.id, {
       onDelete: 'set null',
     }),
@@ -170,9 +174,13 @@ export const workspaces = sqliteTable('workspaces', {
   branch: text().notNull().default(''),
   path: text().notNull().default(''),
   agent: text().notNull().default(''),
+  // Where the branch runs for the human to try (`http://localhost:<port>`); '' when nothing runs.
+  previewUrl: text('preview_url').notNull().default(''),
   createdAt: now(),
 })
 
+// A post on a ticket: progress (`progress`, what agents report as they go) or discussion. Its replies
+// are the comments whose parent is the post (parent_type 'update', the table's historical name).
 export const updates = sqliteTable('updates', {
   id: id(),
   ticketId: integer('ticket_id')
@@ -182,8 +190,19 @@ export const updates = sqliteTable('updates', {
   // The connected agent that posted it on `author`'s behalf when `author` is one of the project's agents.
   via: text().notNull().default(''),
   body: text().notNull(),
+  progress: integer({ mode: 'boolean' }).notNull().default(true),
+  // A decision the human is asked to make: the post's body is the question, these are the answers
+  // to pick from. Null on any other post.
+  decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),
+  // The human's pick (an index into `decision`), who and when; null until decided.
+  decidedOption: integer('decided_option'),
+  decidedBy: text('decided_by').notNull().default(''),
+  decidedAt: text('decided_at'),
   createdAt: now(),
+  editedAt: text('edited_at'),
 })
+
+export type DecisionOption = { label: string; detail?: string; recommended?: boolean }
 
 export const comments = sqliteTable(
   'comments',
@@ -196,15 +215,18 @@ export const comments = sqliteTable(
     via: text().notNull().default(''),
     body: text().notNull(),
     createdAt: now(),
+    editedAt: text('edited_at'),
   },
   (t) => [index('comments_parent').on(t.parentType, t.parentId)],
 )
 
-// An attachment belongs to an update or a comment; unattached rows are uploads waiting to be referenced.
+// An attachment belongs to a post, a reply, or a ticket's instructions; unattached rows are uploads
+// waiting to be referenced.
 export const attachments = sqliteTable('attachments', {
   id: id(),
   updateId: integer('update_id').references(() => updates.id, { onDelete: 'cascade' }),
   commentId: integer('comment_id').references(() => comments.id, { onDelete: 'cascade' }),
+  ticketId: integer('ticket_id').references(() => tickets.id, { onDelete: 'cascade' }),
   name: text().notNull(),
   mime: text().notNull(),
   size: integer().notNull(),

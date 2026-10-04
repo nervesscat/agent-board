@@ -42,13 +42,14 @@ The rhythm:
 2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. Tickets are shared: you may take over one another agent holds (the board logs it), so prefer unassigned ones and take over only what is clearly stalled or handed to you. A ticket with reserved: true belongs to one of the project's agents (see below).
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each; update_task or remove_task when the plan changes.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox): register every worktree you open, since that list is what gets cleaned up later; remove_workspace when it is gone.
-5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. When the change can be tried (a page, an API), start a preview the human can open before anything is merged: your branch, from your worktree, on a free port, with a copy of the data rather than the real one (the project's instructions say how). Post its link (http://localhost:<port>) with what to try, say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped.
+5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket has one feed of posts: post_update adds one marked as progress (lane summaries and the Daily view pick those out); questions and answers are posts too (comment on the ticket, or post_update with progress: false). Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. When the change can be tried (a page, an API), start a preview the human can open before anything is merged: your branch, from your worktree, on a free port, with a copy of the data rather than the real one (the project's instructions say how). Post its link (http://localhost:<port>) with what to try and register it on that worktree's workspace (set_preview, or previewUrl on add_workspace): the ticket page then shows it with an Open button and whether it is running. Say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped, clearing it with set_preview "".
+6. Ask and answer with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When it is a choice between clear options (an approach, a trade-off, a scope call), ask_decision instead: the human answers with one click, and the ticket blocks and unblocks by itself. When you resume, and between steps, list_my_threads shows every ticket feed or reply thread where someone spoke after you; get_ticket shows each post's reply count and last author. Files on posts and replies come with a local path you can open.
 6. Ask and answer in threads with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When you resume, and between steps, list_my_threads shows every thread where someone spoke after you; get_ticket shows each thread's comment count and last author. Files in threads and updates come with a local path you can open.
 7. Hand off: open the PR assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), update_ticket with its prNumber (links the ticket and the PR queue both ways), a final post_update with the PR link, then update_ticket to review. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either.
 8. Clean up after yourself: once a lane's work is in its parent's branch (or a ticket's in its base), and before moving it to done, remove its worktree and delete its local branch, remove_workspace, and post_update the deleted branch names with their commit hashes (e.g. lane/47 @ 9ec12e8b) so any of them can be restored. get_ticket_git says whether each branch's work arrived (reach); cleanup_report lists every leftover in the project. Never delete a branch whose reach is unique without the human's go-ahead, and never delete branches on origin: list them for the human.
 9. End of session: post_daily_summary, at most three short lines.
 
-The project's agents: get_project lists them (agents: name, instructions, picture). They are personas the human defined, not connected tools; you work for them. A ticket assigned to one (reserved: true; get_ticket's agent has its instructions) is that agent's alone: claim_ticket with as: <its name>, brief a subagent with its instructions (and the ticket's), and post that work with post_update and comment using as: <its name>, so it shows under the agent's name, via you. Never take a reserved ticket as yourself, reassign it, or work it without the agent's instructions; only the human reassigns it. A thread can wait on an agent too: when someone @mentions it, or replies on its ticket or post, list_my_threads returns that thread with as: <its name>; answer it with comment as: <its name>, in that agent's voice and instructions.
+The project's agents: get_project lists them (agents: name, instructions, delegation notes, picture). They are personas the human defined, not connected tools; you work for them. A ticket assigned to one (reserved: true; get_ticket's agent has its instructions) is that agent's alone: claim_ticket with as: <its name>, brief a subagent with its instructions (and the ticket's), and post that work with post_update and comment using as: <its name>, so it shows under the agent's name, via you. Never take a reserved ticket as yourself, reassign it, or work it without the agent's instructions; only the human reassigns it. A thread can wait on an agent too: when someone @mentions it, or replies on its ticket or post, list_my_threads returns that thread with as: <its name>; answer it with comment as: <its name>, in that agent's voice and instructions. Orchestrating: each agent's delegation notes say when to call it, what to give it, what it returns and what comes next. With them you can work a ticket as its orchestrator instead of doing the work yourself: run each step as a subagent briefed with that agent's instructions, the project's instructions and the ticket; post what it returns on the ticket as that agent (as: <its name>, progress: true); go where its notes say next. The default set (spec, builder, runner, and the review phases env, verify, hunt, refute, merge) is the cycle spec → build → review that tries to break it → build again with the confirmed findings (at most three rounds) → hand off; the /review-queue skill runs it (/feature-review is its review). Ask the human with ask_decision instead of guessing, never run two builders on one branch, and never delegate to an agent without delegation notes. The board skill has the full routine.
 
 When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.
 
@@ -60,6 +61,8 @@ const AS = z
   .string()
   .optional()
   .describe("one of the project's agents (get_project): post under its name, as the work you did for it")
+const PREVIEW_URL =
+  'where the branch runs for the human to try, http(s) only: http://localhost:<port> (the board checks whether localhost links are up)'
 const TAGS =
   'Short labels the human filters lanes by: a severity (Critical, High, Medium, Low, Cosmetic), an area (API, UI, Forms…) or a kind (Bug, Refactor…). One or two words each, Title Case; reuse the tags sibling lanes already use, and keep them out of the title (no "[High] …").'
 
@@ -73,7 +76,8 @@ function buildServer(actor: string) {
   ) => {
     const cb = (async (args: unknown) => {
       try {
-        return text(await run(args as z.infer<z.ZodObject<S>>))
+        // Every file handed to an agent is on this machine to open (with STORAGE=s3, fetched if needed).
+        return text(await uploads.ensureLocalFiles(await run(args as z.infer<z.ZodObject<S>>)))
       } catch (err) {
         if (!(err instanceof HttpError)) console.error(`mcp ${name} failed:`, err)
         return fail(err)
@@ -93,7 +97,7 @@ function buildServer(actor: string) {
   )
   tool(
     'get_project',
-    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions and picture, that tickets can be reserved for) and the instructions agents must follow when working on it. Read this before touching a project.",
+    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, and a picture; tickets can be reserved for them) and the instructions agents must follow when working on it. Read this before touching a project.",
     { projectId: z.number().int() },
     ({ projectId }) => projects.getProjectFull(projectId),
   )
@@ -173,10 +177,10 @@ function buildServer(actor: string) {
   )
   tool(
     'get_ticket',
-    "A ticket in full: instructions, agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces, its parent chain, its lanes with their last update and verdict,, the update feed with attachments (each with a local path), thread (comment count, last author and time) on the ticket and on each update, and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled).",
+    "A ticket in full: instructions and the files attached to them (attachments, each with a local path), agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces, its parent chain, its lanes with their last progress post and verdict, the feed of posts (updates: newest first, each with progress true for a step of the work or false for discussion, editedAt, attachments with a local path, and thread: its reply count, last author and time), thread on the ticket (how many posts, who posted last), and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled).",
     {
       ticketId: z.number().int(),
-      laneUpdates: z.boolean().default(false).describe("include the lanes' updates in the feed"),
+      laneUpdates: z.boolean().default(false).describe("include the lanes' posts in the feed"),
     },
     ({ ticketId, laneUpdates }) => features.getTicketFull(ticketId, { laneUpdates }),
   )
@@ -273,19 +277,29 @@ function buildServer(actor: string) {
   )
   tool(
     'add_workspace',
-    'Register a worktree / sub-branch / subagent sandbox you opened for a ticket, so the board can show it.',
+    'Register a worktree / sub-branch / subagent sandbox you opened for a ticket, so the board can show it. previewUrl is where its branch runs for the human to try, if it does already (set_preview sets it later).',
     {
       ticketId: z.number().int(),
       name: z.string(),
       branch: z.string().default(''),
       path: z.string().default(''),
       agent: z.string().optional(),
+      previewUrl: z.string().optional().describe(PREVIEW_URL),
     },
     ({ ticketId, ...rest }) => features.addWorkspace(ticketId, rest, actor),
   )
   tool(
+    'set_preview',
+    'Set the link where a workspace\'s branch runs for the human to try (after you start its server), or clear it with "" once you stop the server. The ticket page shows it as a Preview card with an Open button and whether it is running.',
+    {
+      workspaceId: z.number().int(),
+      previewUrl: z.string().describe(`${PREVIEW_URL}; "" clears it`),
+    },
+    ({ workspaceId, previewUrl }) => features.setWorkspacePreview(workspaceId, previewUrl, actor),
+  )
+  tool(
     'remove_workspace',
-    'Remove a workspace you closed.',
+    'Remove a workspace you closed (its preview goes with it).',
     { workspaceId: z.number().int() },
     ({ workspaceId }) => {
       features.deleteWorkspace(workspaceId, actor)
@@ -294,16 +308,66 @@ function buildServer(actor: string) {
   )
   tool(
     'post_update',
-    'Post progress on a ticket: markdown plus optional files (screenshots, recordings) given as absolute paths on this machine.',
+    'Post on a ticket: markdown plus optional files (screenshots, recordings) given as absolute paths on this machine. progress (default true) marks it as a step of the work; false makes it discussion, like comment on the ticket.',
     {
       ticketId: z.number().int(),
       body: z.string(),
       files: z.array(z.string()).default([]).describe('absolute paths to attach'),
       as: AS,
+      progress: z.boolean().default(true),
     },
-    ({ ticketId, body, files, as }) => {
-      const ids = files.map((f) => uploads.saveFromPath(f, actor).id)
-      return features.postUpdate(ticketId, body, ids, actor, { as })
+    async ({ ticketId, body, files, as, progress }) => {
+      const ids = (await Promise.all(files.map((f) => uploads.saveFromPath(f, actor)))).map((a) => a.id)
+      return features.postUpdate(ticketId, body, ids, actor, { as, progress })
+    },
+  )
+  tool(
+    'ask_decision',
+    'Ask the human to make a call you should not make alone, as a decision card on the ticket: body is the question (markdown: the context, what each choice means for the work), options are 2 to 5 answers, each a short label with an optional detail; mark at most one recommended. The ticket moves to blocked (block: false to keep it where it is) and goes back to in progress once decided. The answer arrives as a reply under the card (list_my_threads); get_ticket shows decision and decidedOption on the post.',
+    {
+      ticketId: z.number().int(),
+      body: z.string().describe('the question, with the context needed to answer it'),
+      options: z
+        .array(
+          z.object({
+            label: z.string(),
+            detail: z.string().optional().describe('what choosing it means'),
+            recommended: z.boolean().optional(),
+          }),
+        )
+        .min(2)
+        .max(5),
+      as: AS,
+      block: z.boolean().default(true),
+    },
+    ({ ticketId, ...input }) => features.askDecision(ticketId, input, actor),
+  )
+  tool(
+    'edit_post',
+    'Change a post you made on a ticket (its body, or whether it is progress), or a reply (kind reply: its body). Edits show as edited.',
+    {
+      kind: z.enum(['post', 'reply']).default('post'),
+      id: z
+        .number()
+        .int()
+        .describe('the post id (from get_ticket updates) or the reply id (from list_comments)'),
+      body: z.string().min(1).optional(),
+      progress: z.boolean().optional().describe('posts only'),
+    },
+    ({ kind, id, body, progress }) => {
+      if (kind === 'post') return features.editPost(id, { body, progress }, actor)
+      if (body === undefined) throw new HttpError(400, 'give the new body')
+      return features.editComment(id, body, actor)
+    },
+  )
+  tool(
+    'delete_post',
+    'Delete a post you made on a ticket (its replies and files go with it), or a reply (kind reply).',
+    { kind: z.enum(['post', 'reply']).default('post'), id: z.number().int() },
+    ({ kind, id }) => {
+      if (kind === 'post') features.deletePost(id, actor)
+      else features.deleteComment(id, actor)
+      return { ok: true }
     },
   )
   tool(
@@ -328,13 +392,13 @@ function buildServer(actor: string) {
   )
   tool(
     'list_comments',
-    'The thread under a ticket, an update, a PR (board id, not number) or a review result. Attachments come with a local path you can open.',
+    "A conversation, oldest first: on a ticket, its posts (with progress); under a post (parentType update, the post's id), its replies; under a PR (board id, not number) or a review result, its comments. Attachments come with a local path you can open.",
     { parentType: z.enum(COMMENT_PARENTS), parentId: z.number().int() },
     ({ parentType, parentId }) => features.listComments(parentType, parentId),
   )
   tool(
     'comment',
-    "Leave a comment in a thread; replyTo nests it under another comment. @name mentions one of the project's agents, which puts the thread in list_my_threads for whoever answers as it.",
+    "Say something. On a ticket it becomes a post in its feed (not progress); with replyTo it is a reply under that post instead. Under a post (parentType update, the post's id), a PR or a review result it is a reply; replyTo nests it under another reply. @name mentions one of the project's agents, which puts the thread in list_my_threads for whoever answers as it.",
     {
       parentType: z.enum(COMMENT_PARENTS),
       parentId: z.number().int(),
@@ -343,16 +407,21 @@ function buildServer(actor: string) {
       files: z.array(z.string()).default([]),
       as: AS,
     },
-    ({ files, ...rest }) =>
+    async ({ files, ...rest }) =>
       features.addComment(
-        { ...rest, attachmentIds: files.map((f) => uploads.saveFromPath(f, actor).id) },
+        {
+          ...rest,
+          attachmentIds: (await Promise.all(files.map((f) => uploads.saveFromPath(f, actor)))).map(
+            (a) => a.id,
+          ),
+        },
         actor,
       ),
   )
 
   tool(
     'get_attachment',
-    'A file someone attached to an update or comment: name, type, size and the absolute path to open it on this machine (windowsPath too when the board runs in WSL).',
+    'A file someone attached to a post or reply: name, type, size and the absolute path to open it on this machine (windowsPath too when the board runs in WSL).',
     { attachmentId: z.number().int() },
     ({ attachmentId }) => uploads.attachmentView(uploads.getAttachment(attachmentId)),
   )

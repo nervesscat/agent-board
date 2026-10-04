@@ -4,10 +4,10 @@ import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 
-import { config, logsDir, uploadsDir } from '#/server/config'
+import { cacheDir, config, logsDir, uploadsDir } from '#/server/config'
 import * as schema from './schema'
 
-for (const dir of [config.dataDir, uploadsDir, logsDir]) fs.mkdirSync(dir, { recursive: true })
+for (const dir of [config.dataDir, uploadsDir, cacheDir, logsDir]) fs.mkdirSync(dir, { recursive: true })
 
 const sqlite = new Database(path.join(config.dataDir, 'board.db'))
 sqlite.pragma('journal_mode = WAL')

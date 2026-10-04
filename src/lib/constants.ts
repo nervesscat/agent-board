@@ -40,6 +40,21 @@ export const DEFAULT_STAGES: { key: string; name: string; kind: StageKind; color
 export const AGENT_CLIENTS = ['claude', 'codex', 'opencode'] as const
 export type AgentClient = (typeof AGENT_CLIENTS)[number]
 
+/**
+ * The default agents (the build and review cycle of the feature-review and review-queue skills), in
+ * the order the cycle uses them. Their texts live on the server (defaultAgents.ts).
+ */
+export const DEFAULT_AGENT_NAMES = [
+  'spec',
+  'builder',
+  'runner',
+  'env',
+  'verify',
+  'hunt',
+  'refute',
+  'merge',
+] as const
+
 export const COMMENT_PARENTS = ['ticket', 'update', 'pr', 'review'] as const
 export type CommentParent = (typeof COMMENT_PARENTS)[number]
 

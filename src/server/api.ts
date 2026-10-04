@@ -1,9 +1,10 @@
-import fs from 'node:fs'
+import { Readable } from 'node:stream'
 import { z } from 'zod'
 
 import { AGENT_CLIENTS, COMMENT_PARENTS, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
 import { addSummary } from './activity'
 import * as agents from './agents'
+import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
@@ -20,6 +21,7 @@ import * as repos from './repos'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
+import { fileStore, parseRange } from './storage'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -28,7 +30,12 @@ const id = (p: Record<string, string>, k = 'id') => intParam(p[k]!, k)
 const Instructions = z.string().max(50_000)
 // A stage key, name or kind; the server resolves it against the project's stages.
 const Status = z.string().min(1).max(60)
+/** An agent opens the files it is handed from disk: with STORAGE=s3, have them there first. */
+const forAgent = <T>(request: Request, value: T) =>
+  isAgent(request) ? uploads.ensureLocalFiles(value) : Promise.resolve(value)
 const AgentName = z.string().min(1).max(40)
+// Checked for http(s) where it is stored; null or '' clears it.
+const PreviewUrl = z.string().max(500).nullable()
 // Speaking as one of the project's agents is how a connected agent delegates; the human speaks as themself.
 const agentOnly = (request: Request) => {
   if (!isAgent(request)) throw new HttpError(403, 'only a connected agent posts as one of the project agents')
@@ -59,6 +66,17 @@ api.get('/api/agent-setup/skill', ({ url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
   return new Response(agents.renderSkill(client), {
     headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
+// feature-review, review-queue and their agents, as a tar to extract into ~/.claude.
+api.get('/api/agent-setup/review-skills', ({ url }) => {
+  if (url.searchParams.get('list') !== null) return json(agents.reviewBundlePaths())
+  return new Response(new Uint8Array(agents.reviewBundle()), {
+    headers: {
+      'content-type': 'application/x-tar',
+      'content-disposition': 'attachment; filename="review-skills.tar"',
+      'cache-control': 'no-store',
+    },
   })
 })
 api.get('/api/settings', () => json(agents.getSettings()))
@@ -137,6 +155,8 @@ api.delete('/api/projects/:id/stages/:stageId', ({ request, params, url, actor }
 const AgentBody = z.object({
   name: AgentName,
   instructions: Instructions.optional(),
+  // For the orchestrator: when to delegate to this agent, what to give it, what comes back.
+  delegation: Instructions.optional(),
   // An upload from POST /api/uploads, shown as the agent's picture.
   avatarId: z.number().int().nullable().optional(),
 })
@@ -150,6 +170,12 @@ api.get('/api/projects/:id/agents', ({ params }) => {
 api.post('/api/projects/:id/agents', async ({ request, params, actor }) => {
   humanAgents(request)
   return json(projectAgents.createAgent(id(params), await readJson(request, AgentBody), actor), 201)
+})
+// The default agents (the build and review cycle); the ones the project already has are kept.
+api.post('/api/projects/:id/agents/defaults', ({ request, params, actor }) => {
+  humanAgents(request)
+  projects.getProject(id(params))
+  return json(addDefaultAgents(id(params), actor), 201)
 })
 api.patch('/api/agents/:id', async ({ request, params, actor }) => {
   humanAgents(request)
@@ -248,8 +274,13 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   return json(features.createTicket(id(params), body, actor), 201)
 })
 // ?lanes=1 folds the lanes' updates into the feed.
-api.get('/api/tickets/:id', ({ params, url }) =>
-  json(features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' })),
+api.get('/api/tickets/:id', async ({ request, params, url }) =>
+  json(
+    await forAgent(
+      request,
+      features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' }),
+    ),
+  ),
 )
 // An agent cannot reassign a ticket reserved for one of the project's agents; the human can.
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
@@ -259,6 +290,15 @@ api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
     }),
   ),
 )
+// Files for the instructions: uploads (POST /api/uploads) bound to the ticket.
+api.post('/api/tickets/:id/attachments', async ({ request, params, actor }) => {
+  const body = await readJson(request, z.object({ attachmentIds: z.array(z.number().int()).min(1) }))
+  return json(features.attachToTicket(id(params), body.attachmentIds, actor), 201)
+})
+api.delete('/api/tickets/:id/attachments/:attachmentId', ({ params, actor }) => {
+  features.removeTicketFile(id(params), id(params, 'attachmentId'), actor)
+  return json({ ok: true })
+})
 // ?keepLanes=1 moves the lanes up a level instead of deleting them.
 api.delete('/api/tickets/:id', ({ params, url, actor }) => {
   features.deleteTicket(id(params), actor, { keepLanes: url.searchParams.get('keepLanes') === '1' })
@@ -317,15 +357,26 @@ api.post('/api/tickets/:id/workspaces', async ({ request, params, actor }) => {
       branch: z.string().max(200).optional(),
       path: z.string().max(500).optional(),
       agent: z.string().max(80).optional(),
+      previewUrl: PreviewUrl.optional(),
     }),
   )
   return json(features.addWorkspace(id(params), body, actor), 201)
 })
+// Set or clear (null, '') the link where the workspace's branch runs for the human to try.
+api.patch('/api/workspaces/:id', async ({ request, params, actor }) => {
+  const body = await readJson(request, z.object({ previewUrl: PreviewUrl }))
+  return json(features.setWorkspacePreview(id(params), body.previewUrl, actor))
+})
+// Whether that preview answers right now: `{running, status?, checkedAt}`; localhost URLs only.
+api.get('/api/workspaces/:id/preview', async ({ params }) =>
+  json(await features.workspacePreview(id(params))),
+)
 api.delete('/api/workspaces/:id', ({ params, actor }) => {
   features.deleteWorkspace(id(params), actor)
   return json({ ok: true })
 })
 
+// A post on the ticket; `progress` (default true, as agents post) marks a step of the work.
 api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
@@ -333,16 +384,68 @@ api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
       body: z.string().min(1).max(50_000),
       attachmentIds: z.array(z.number().int()).default([]),
       as: AgentName.optional(),
+      progress: z.boolean().default(true),
     }),
   )
   if (body.as) agentOnly(request)
-  return json(features.postUpdate(id(params), body.body, body.attachmentIds, actor, { as: body.as }), 201)
+  return json(
+    features.postUpdate(id(params), body.body, body.attachmentIds, actor, {
+      as: body.as,
+      progress: body.progress,
+    }),
+    201,
+  )
+})
+// A decision for the human: the question (body) and 2 to 5 options; blocks the ticket unless block: false.
+api.post('/api/tickets/:id/decisions', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      body: z.string().min(1).max(50_000),
+      options: z
+        .array(
+          z.object({
+            label: z.string().min(1).max(200),
+            detail: z.string().max(2_000).optional(),
+            recommended: z.boolean().optional(),
+          }),
+        )
+        .min(2)
+        .max(5),
+      as: AgentName.optional(),
+      block: z.boolean().default(true),
+    }),
+  )
+  if (body.as) agentOnly(request)
+  return json(features.askDecision(id(params), body, actor), 201)
+})
+// Only the human decides; agents read the answer.
+api.put('/api/updates/:id/decision', async ({ request, params, actor }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human decides')
+  const body = await readJson(
+    request,
+    z.object({ option: z.number().int().min(0), note: z.string().max(5_000).default('') }),
+  )
+  return json(features.decide(id(params), body.option, body.note, actor))
+})
+// Its author edits or deletes a post or reply; the human (passkey) any.
+api.patch('/api/updates/:id', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ body: z.string().min(1).max(50_000).optional(), progress: z.boolean().optional() }),
+  )
+  return json(features.editPost(id(params), body, actor, { human: !isAgent(request) }))
+})
+api.delete('/api/updates/:id', ({ request, params, actor }) => {
+  features.deletePost(id(params), actor, { human: !isAgent(request) })
+  return json({ ok: true })
 })
 
 // --- comments ---
-api.get('/api/comments', ({ url }) => {
+api.get('/api/comments', async ({ request, url }) => {
   const parentType = z.enum(COMMENT_PARENTS).parse(url.searchParams.get('parentType'))
-  return json(features.listComments(parentType, intParam(url.searchParams.get('parentId') ?? '', 'parentId')))
+  const parentId = intParam(url.searchParams.get('parentId') ?? '', 'parentId')
+  return json(await forAgent(request, features.listComments(parentType, parentId)))
 })
 // Threads in a project where someone spoke after the caller, on things the caller owns or spoke in.
 api.get('/api/projects/:id/threads', ({ params, actor }) => json(features.listOpenThreads(id(params), actor)))
@@ -360,6 +463,14 @@ api.post('/api/comments', async ({ request, actor }) => {
   )
   if (body.as) agentOnly(request)
   return json(features.addComment(body, actor), 201)
+})
+api.patch('/api/comments/:id', async ({ request, params, actor }) => {
+  const body = await readJson(request, z.object({ body: z.string().min(1).max(20_000) }))
+  return json(features.editComment(id(params), body.body, actor, { human: !isAgent(request) }))
+})
+api.delete('/api/comments/:id', ({ request, params, actor }) => {
+  features.deleteComment(id(params), actor, { human: !isAgent(request) })
+  return json({ ok: true })
 })
 
 // --- uploads ---
@@ -381,24 +492,33 @@ api.post('/api/uploads', async ({ request, actor }) => {
   )
   const a =
     'path' in body
-      ? uploads.saveFromPath(body.path, actor)
-      : uploads.saveBase64(body.name, body.base64, actor, body.mime)
+      ? await uploads.saveFromPath(body.path, actor)
+      : await uploads.saveBase64(body.name, body.base64, actor, body.mime)
   return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
 })
-api.get('/api/uploads/:id/info', ({ params }) =>
-  json(uploads.attachmentView(uploads.getAttachment(id(params)))),
+// For agents: the file's local path is there to open (fetched into the cache first with STORAGE=s3).
+api.get('/api/uploads/:id/info', async ({ params }) =>
+  json(await uploads.ensureLocalFiles(uploads.attachmentView(uploads.getAttachment(id(params))))),
 )
-api.get('/api/uploads/:id', ({ params }) => {
+// The bytes, whole or the one range asked for (videos seek with Range).
+api.get('/api/uploads/:id', async ({ request, params }) => {
   const a = uploads.getAttachment(id(params))
-  const file = uploads.attachmentPath(a)
-  if (!fs.existsSync(file)) throw new HttpError(404, 'file is gone')
-  const stream = fs.createReadStream(file)
-  return new Response(stream as unknown as ReadableStream, {
+  const range = parseRange(request.headers.get('range'), a.size)
+  const stream = await fileStore.read(a.storedAs, range ?? undefined)
+  const headers: Record<string, string> = {
+    'content-type': a.mime,
+    'accept-ranges': 'bytes',
+    'cache-control': 'private, max-age=31536000, immutable',
+    'content-disposition': `inline; filename="${encodeURIComponent(a.name)}"`,
+  }
+  const body = Readable.toWeb(stream) as ReadableStream
+  if (!range) return new Response(body, { headers: { ...headers, 'content-length': String(a.size) } })
+  return new Response(body, {
+    status: 206,
     headers: {
-      'content-type': a.mime,
-      'content-length': String(a.size),
-      'cache-control': 'private, max-age=31536000, immutable',
-      'content-disposition': `inline; filename="${encodeURIComponent(a.name)}"`,
+      ...headers,
+      'content-length': String(range.end - range.start + 1),
+      'content-range': `bytes ${range.start}-${range.end}/${a.size}`,
     },
   })
 })

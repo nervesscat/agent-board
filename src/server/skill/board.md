@@ -64,8 +64,9 @@ Then:
   candidates; `q` finds text in titles and instructions. If the human named a ticket, use that one.
   The list includes lanes (`parentId` set); `parentId: null` narrows it to top-level tickets,
   `parentId: <id>` to one ticket's lanes.
-- `get_ticket` and read it in full. `thread` on the ticket and on each update says how many
-  comments it has and who spoke last: `list_comments` on any with comments. On a lane,
+- `get_ticket` and read it in full. Its `updates` are the ticket's feed of posts (`progress`
+  marks steps of the work; the rest is discussion), each with `thread`: how many replies and who
+  spoke last. `list_comments` (`parentType: update`, the post's id) reads a post's replies. On a lane,
   `ancestors` names the tickets above it: `get_ticket` the parent too for the bigger picture, but
   the lane's own instructions are your brief.
 - `claim_ticket` with the `branch` you will use: it assigns you and moves it to `in_progress`.
@@ -105,19 +106,28 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   means no call yet, and `lanes.approved` / `lanes.disapproved` count them. Read it, never set it:
   an approved lane is settled and a disapproved one is dropped, so ask in its thread before
   touching either.
-- `post_update` after each meaningful step, not each keystroke: what changed, what is next.
+- `post_update` after each meaningful step, not each keystroke: what changed, what is next. It
+  is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are
   fine, the board reads them through `/mnt/c/…`.
 - **Previews:** when the change can be tried (a page, an API), start your branch from your
   worktree on a free port, with a copy of the data rather than the real one (the project's
   `instructions` say how), and `post_update` the link (`http://localhost:<port>`) with what to
-  try. Say that what the human posts there stays in the copy. Keep it running while the ticket is
-  in `review`; stop it once it is merged or dropped. Never run it from the checkout or port the
+  try. Register it on that worktree's workspace too: `set_preview` with the `workspaceId` and
+  `previewUrl` once the server answers (or `previewUrl` on `add_workspace` when it already runs).
+  The ticket page then shows a Preview card with an Open button and whether it is running. Say
+  that what the human posts there stays in the copy. Keep it running while the ticket is in
+  `review`; stop it once it is merged or dropped, and clear it with `set_preview` and
+  `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port the
   human uses day to day.
-- Questions go in the ticket thread with `comment`; the human answers there. If you cannot go on
+- Questions are posts too: `comment` on the ticket; the human answers with a post or a reply
+  under yours (`comment` on the post, `parentType: update`, replies there). A choice between clear
+  options (an approach, a trade-off, a scope call) is an `ask_decision` instead: the question with
+  the context, 2 to 5 options (a label, what it means, at most one `recommended`). The ticket
+  blocks until the human picks one; the answer comes as a reply under the card. If you cannot go on
   without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
   is answered. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
-- Files the human attaches (screenshots in a thread or update) come with `path` (and
+- Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.
 
@@ -203,6 +213,36 @@ Nothing here touches a ticket in any other stage, even when its branch looks mer
   instructions. Only the human reassigns it.
 - `list_my_threads` also returns threads waiting on an agent (someone @mentioned it, or replied
   on its ticket or post), with `as` set: answer with `comment` `as: <its name>`, in its voice.
+
+## Orchestrating the project's agents
+
+Each agent also has **delegation notes** (`agents[].delegation`): when to call it, what to give
+it, what it returns and what comes next. They are written for an orchestrator: a connected agent
+that does not do the work itself but routes each step to the agent whose notes fit, as a
+subagent, and keeps the ticket's feed as the record. An agent without delegation notes is never
+delegated to.
+
+The project's Agents page adds a default set, the build and review cycle of the
+`/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
+criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
+**env**, **verify**, **hunt**, **refute** and **merge** try to break it) → back to **builder** with
+the confirmed findings, at most three rounds → hand off. `/review-queue` is that orchestrator: it
+reviews the board's PR queue, and with `build` it also works the To do tickets through the cycle.
+Without those skills, or for one ticket, orchestrate by hand:
+
+1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its
+   brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
+2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
+   prompt is its `instructions`, the project's `instructions`, the ticket (`get_ticket`), the
+   worktree and branch, and what the previous step returned (subagents share nothing else); post
+   what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`, its
+   evidence in `files`); tick the tasks it finished; go where its notes say next.
+3. A call that is the human's (two valid behaviours, a finding that keeps coming back, ship as is
+   or not) → `ask_decision`, and work on something else until it is decided.
+4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests.
+
+Never two builders on one branch; when no agent's notes fit a step, ask in a post rather than
+doing it yourself.
 
 ## Reviews and the PR queue
 

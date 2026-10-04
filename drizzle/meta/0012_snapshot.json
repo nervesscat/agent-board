@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b06a068e-3bea-4c48-b75a-bf129b475462",
+  "id": "abafea8a-a63b-4b0a-bc62-85a5d43b2dfd",
   "prevId": "dd67c17d-296a-4dab-8fae-b90b7719fae3",
   "tables": {
     "activity": {
@@ -391,6 +391,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "edited_at": {
+          "name": "edited_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -618,38 +625,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'none'"
-        },
-        "waiting_on": {
-          "name": "waiting_on",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'me'"
-        },
-        "mergeable": {
-          "name": "mergeable",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'UNKNOWN'"
-        },
-        "merge_state_status": {
-          "name": "merge_state_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'UNKNOWN'"
-        },
-        "checks": {
-          "name": "checks",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
         },
         "updated_at": {
           "name": "updated_at",
@@ -1350,6 +1325,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "progress": {
+          "name": "progress",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "text",
@@ -1357,6 +1340,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "edited_at": {
+          "name": "edited_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},

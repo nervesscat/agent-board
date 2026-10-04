@@ -64,17 +64,26 @@ http_headers = { Authorization = "Bearer gate_…" }
    the registered workspaces are the cleanup list. `remove_workspace` when it is gone.
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
-   the board copies them). One update per meaningful step, not per keystroke.
+   the board copies them). One update per meaningful step, not per keystroke. A ticket has one
+   feed of **posts**: `post_update` adds one marked as progress (lane summaries and the Daily view
+   pick those out); questions and answers are posts too, not marked. `edit_post` / `delete_post`
+   change what you posted.
    **Previews:** when the change can be tried (a page, an API), start your branch from your
    worktree on a free port, with a copy of the data rather than the real one (the project's
-   instructions say how), and post the link (`http://localhost:<port>`) with what to try. Say that
+   instructions say how), and post the link (`http://localhost:<port>`) with what to try. Register
+   it on that worktree's workspace as well (`set_preview`, or `previewUrl` on `add_workspace`): the
+   ticket page shows it as a Preview card with an Open button and whether it is running. Say that
    what the human posts there stays in the copy. Keep it running while the ticket is in review;
-   stop it once it is merged or dropped.
-6. **Ask and answer in threads**: `comment` on the ticket, on an update, on a PR or on a review
-   result. When you cannot continue without an answer, also move the ticket to `blocked` (back to
-   `in_progress` once answered). `list_my_threads` lists every thread where someone spoke after
-   you; `get_ticket` shows each thread's comment count and last author. Attachments come with a
-   local `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
+   stop it once it is merged or dropped, and clear it (`set_preview` with `previewUrl: ""`).
+6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
+   (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
+   continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
+   answered). When the answer is a choice between clear options (an approach, a trade-off, a scope
+   call), use `ask_decision` instead: a card with 2 to 5 options (one may be recommended) that the
+   human answers with one click; it blocks the ticket and unblocks it once decided, and the answer
+   arrives as a reply under the card. `list_my_threads` lists every feed or reply thread where someone spoke after you;
+   `get_ticket` shows each post's reply count and last author. Attachments come with a local
+   `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
 7. **Hand off**: open the PR assigned to the human (`gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
    requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
@@ -108,6 +117,17 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 - Never take a reserved ticket as yourself or reassign it; only the human does.
 - `@name` in a thread asks that agent: `list_my_threads` returns threads waiting on an agent with
   `as` set, for you to answer as it.
+
+**Orchestrating.** Each agent also carries **delegation notes** (`agents[].delegation`): when to
+call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
+orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
+agent's instructions, the project's and the ticket's; its result is posted on the ticket as that
+agent; the notes pick the next agent. The Agents page adds a default set (spec, builder, runner, and
+the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
+→ build again with the confirmed findings (at most three rounds) → hand off. The `/review-queue`
+skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with
+`ask_decision` instead of guessing; never two builders on one branch. The board skill has the full
+routine.
 
 ## PR queue and reviews
 

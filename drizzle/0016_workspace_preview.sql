@@ -1,0 +1,1 @@
+ALTER TABLE `workspaces` ADD `preview_url` text DEFAULT '' NOT NULL;
