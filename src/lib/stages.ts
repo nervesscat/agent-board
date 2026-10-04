@@ -53,3 +53,18 @@ export const STAGE_DOT: Record<StageColor, string> = {
 /** Badge classes for a stage; a cancelled stage is struck through. */
 export const stageBadge = (s: Pick<StageLike, 'color' | 'kind'>) =>
   `${BADGE[s.color] ?? BADGE.gray}${s.kind === 'cancelled' ? ' line-through' : ''}`
+
+type Card = { id: number; status: string; updatedAt: string }
+
+/** The tickets in one stage's board column, in the column's order: last updated first. */
+export const stageColumn = <T extends Card>(items: T[], status: string): T[] =>
+  items.filter((t) => t.status === status).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+
+/** The tickets before and after `id` in its board column, and where it sits there (null if absent). */
+export function columnNeighbours<T extends Card>(items: T[], id: number) {
+  const self = items.find((t) => t.id === id)
+  if (!self) return null
+  const column = stageColumn(items, self.status)
+  const index = column.indexOf(self)
+  return { prev: column[index - 1] ?? null, next: column[index + 1] ?? null, index, count: column.length }
+}
