@@ -1,6 +1,6 @@
 ---
 name: board
-description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, post the daily summary. Use when the user says "pick up a ticket", "next ticket", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
+description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, post the daily summary and the project's report. Use when the user says "pick up a ticket", "next ticket", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "daily report", "weekly report", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
 ---
 
 # Working through the agent board
@@ -158,6 +158,25 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 `post_daily_summary` with your `projectId`: at most three short lines, highest level: what got
 done, what is open. `daily_report` with your `projectId` shows what else happened in the project
 today.
+
+Then the project's report, if it keeps one:
+
+1. `get_report_settings`: `cadence` `off` means no reports; stop here. Otherwise it is `daily` or
+   `weekly` (due on `weekday`, 1 Monday to 7 Sunday), by `dueTime` (local; null is the end of the
+   day), as `format` `text` or `file`, and `prompt` says what the report must contain and how (by
+   the hour, sections, who reads it, tone, a two-line text or a PDF).
+2. `list_reports`: each recent period with `status` `done`, `missing` (due, nothing posted) or
+   `upcoming` (not due yet), newest first, and `current`, the period you are in.
+3. For the current period, and any `missing` one the activity lets you write: write the report
+   exactly as the prompt says (`daily_report` for the days it covers) and `post_report` with
+   `period` (any day of it), `body`, and `files` as absolute paths. The board does not make PDFs:
+   when the prompt or `format: file` asks for one, make it yourself and attach it. Posting again
+   for a period replaces its report; the old one stays as history.
+4. On a daily text project the day's `post_daily_summary` already counts as its report until one
+   is posted; post a report anyway when the prompt asks for more than the summary.
+
+`set_report_settings` changes the prompt or the schedule, and the change shows in the project's
+activity: only when the human asks for it.
 
 ## 6. Clean up
 

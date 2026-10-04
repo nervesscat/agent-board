@@ -5,6 +5,7 @@ import type {
   Comment,
   DailySummary,
   Repo,
+  ReportSettings,
   ReviewResult,
   Task,
   Ticket,
@@ -12,6 +13,7 @@ import type {
   Workspace,
   Activity,
 } from '#/db/schema'
+import type { ReportList, ReportPeriod, ReportView } from '#/server/reports'
 import type { TicketFull, TicketRow } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
@@ -27,6 +29,7 @@ export type Project = ProjectFull
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
 export type { DirListing, PreviewState, ProjectAgent }
+export type { ReportList, ReportPeriod, ReportSettings, ReportView }
 
 export type {
   Attachment,

@@ -106,6 +106,15 @@ http_headers = { Authorization = "Bearer gate_…" }
    closed tickets; the board skill's `/board cleanup` walks it with the human.
 9. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
    what got done, what is open. `daily_report` shows what everyone else did that day.
+10. **Reports**: a project can ask for a report every day or once a week (`get_report_settings`:
+    `cadence`, the `weekday` and `dueTime` it is due by, `format` text or file, and the `prompt`
+    saying what it must contain and how: by the hour, sections, audience, a short text or a PDF).
+    At the end of a session, `list_reports` shows each recent period as `done`, `missing` (due,
+    nothing posted) or `upcoming`; write the current or missing one exactly as the prompt says and
+    `post_report` it (`body`, and `files` as absolute paths: the board does not make PDFs; a `file`
+    project needs one). Posting again for a period replaces its report and keeps the old one as
+    history. For a daily text project the day's summary counts as its report until one is posted.
+    `set_report_settings` changes the prompt or schedule; do that only when the human asks.
 
 ## The project's agents
 

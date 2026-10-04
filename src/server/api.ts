@@ -17,6 +17,7 @@ import { handleMcp } from './mcp'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import * as projects from './projects'
+import * as reports from './reports'
 import * as repos from './repos'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
@@ -600,6 +601,41 @@ api.post('/api/daily/summaries/generate', async ({ request }) => {
   )
   return json(await generateSummary(body.date, body.projectId), 201)
 })
+
+// --- reports: the prompt and schedule of a project's reports, and the reports per period ---
+api.get('/api/projects/:id/report-settings', ({ params }) => json(reports.getReportSettings(id(params))))
+// Agents may change them too (the prompt included); every change shows in the activity feed.
+api.patch('/api/projects/:id/report-settings', async ({ request, params, actor }) =>
+  json(reports.setReportSettings(id(params), await readJson(request, reports.ReportSettingsPatch), actor)),
+)
+// ?from=&to= (YYYY-MM-DD): the periods in between, newest first, each with its status and latest report.
+api.get('/api/projects/:id/reports', async ({ request, params, url }) =>
+  json(
+    await forAgent(
+      request,
+      reports.listReports(id(params), {
+        from: url.searchParams.get('from') || undefined,
+        to: url.searchParams.get('to') || undefined,
+      }),
+    ),
+  ),
+)
+// period defaults to the current one; attachmentIds are uploads (POST /api/uploads) to attach.
+api.post('/api/projects/:id/reports', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      period: Day.optional(),
+      body: z.string().max(100_000).optional(),
+      attachmentIds: z.array(z.number().int()).default([]),
+    }),
+  )
+  return json(await reports.postReport(id(params), body, actor), 201)
+})
+// Every version posted for a period, newest first.
+api.get('/api/projects/:id/reports/:period', async ({ request, params }) =>
+  json(await forAgent(request, reports.reportVersions(id(params), params.period!))),
+)
 
 // --- MCP ---
 api.on('POST', '/api/mcp', ({ request, actor }) => handleMcp(request, actor))

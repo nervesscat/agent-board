@@ -11,6 +11,7 @@ import * as features from './features'
 import { HttpError } from './http'
 import * as prs from './prs'
 import * as projects from './projects'
+import * as reports from './reports'
 import * as reviews from './reviews'
 import * as uploads from './uploads'
 
@@ -47,7 +48,7 @@ The rhythm:
 6. Ask and answer in threads with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When you resume, and between steps, list_my_threads shows every thread where someone spoke after you; get_ticket shows each thread's comment count and last author. Files in threads and updates come with a local path you can open.
 7. Hand off: open the PR assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), update_ticket with its prNumber (links the ticket and the PR queue both ways), a final post_update with the PR link, then update_ticket to review. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either. Archiving is the human's too: archivedAt set means the ticket (lanes included) is finished and off the board, and list_tickets leaves it out unless you pass archived.
 8. Clean up after yourself: once a lane's work is in its parent's branch (or a ticket's in its base), and before moving it to done, remove its worktree and delete its local branch, remove_workspace, and post_update the deleted branch names with their commit hashes (e.g. lane/47 @ 9ec12e8b) so any of them can be restored. get_ticket_git says whether each branch's work arrived (reach); cleanup_report lists every leftover in the project. Never delete a branch whose reach is unique without the human's go-ahead, and never delete branches on origin: list them for the human.
-9. End of session: post_daily_summary, at most three short lines.
+9. End of session: post_daily_summary, at most three short lines. If the project tracks reports (get_report_settings: cadence daily or weekly), list_reports shows which periods are done, missing or upcoming; write the missing or current one exactly as its prompt says (by the hour, sections, a short text or a PDF) and post_report it, files as absolute paths.
 
 The project's agents: get_project lists them (agents: name, instructions, delegation notes, picture). They are personas the human defined, not connected tools; you work for them. A ticket assigned to one (reserved: true; get_ticket's agent has its instructions) is that agent's alone: claim_ticket with as: <its name>, brief a subagent with its instructions (and the ticket's), and post that work with post_update and comment using as: <its name>, so it shows under the agent's name, via you. Never take a reserved ticket as yourself, reassign it, or work it without the agent's instructions; only the human reassigns it. A thread can wait on an agent too: when someone @mentions it, or replies on its ticket or post, list_my_threads returns that thread with as: <its name>; answer it with comment as: <its name>, in that agent's voice and instructions. Orchestrating: each agent's delegation notes say when to call it, what to give it, what it returns and what comes next. With them you can work a ticket as its orchestrator instead of doing the work yourself: run each step as a subagent briefed with that agent's instructions, the project's instructions and the ticket; post what it returns on the ticket as that agent (as: <its name>, progress: true); go where its notes say next. The default set (spec, builder, runner, and the review phases env, verify, hunt, refute, merge) is the cycle spec → build → review that tries to break it → build again with the confirmed findings (at most three rounds) → hand off; the /review-queue skill runs it (/feature-review is its review). Ask the human with ask_decision instead of guessing, never run two builders on one branch, and never delegate to an agent without delegation notes. The board skill has the full routine.
 
@@ -448,13 +449,48 @@ function buildServer(actor: string) {
   )
   tool(
     'post_daily_summary',
-    'Post the highest-level summary of a day: at most three short lines, what got done and what is open.',
+    "Post the highest-level summary of a day: at most three short lines, what got done and what is open. For a project with daily text reports it also counts as that day's report until a report is posted with post_report.",
     {
       date: z.string().default(today()),
       projectId: z.number().int().nullable().default(null),
       body: z.string(),
     },
     ({ date, projectId, body }) => addSummary({ date, projectId, body, author: actor }),
+  )
+
+  // reports
+  tool(
+    'get_report_settings',
+    "How the project's reports are made: prompt (markdown: what each report must contain and how: by the hour, sections, audience, tone, a short text or a PDF), cadence (off, daily, or weekly due on weekday 1 Monday to 7 Sunday), dueTime (local HH:MM on the due day; null is by the end of it) and format (text, or file: the report is an attached file such as a PDF). Follow the prompt when you write a report.",
+    { projectId: z.number().int() },
+    ({ projectId }) => reports.getReportSettings(projectId),
+  )
+  tool(
+    'set_report_settings',
+    "Change how the project's reports are made: any of prompt, cadence, weekday, dueTime and format; what you leave out stays. The change shows in the project's activity. Change the prompt only when the human asked for it or agreed.",
+    { projectId: z.number().int(), ...reports.reportSettingsShape },
+    ({ projectId, ...patch }) => reports.setReportSettings(projectId, patch, actor),
+  )
+  tool(
+    'post_report',
+    "Post the project's report for a period: body (markdown, may be a single line) and/or files (absolute paths on this machine, e.g. the PDF you made; the board does not make PDFs). A file-format project needs a file. period is a day, YYYY-MM-DD (for a weekly cadence any day of the week; the week's Monday is kept), by default the current one. Posting again for a period replaces its report (the earlier version stays as history).",
+    {
+      projectId: z.number().int(),
+      period: z.string().optional().describe('YYYY-MM-DD, local; defaults to the current period'),
+      body: z.string().optional(),
+      files: z.array(z.string()).default([]).describe('absolute paths to attach'),
+    },
+    ({ projectId, ...input }) => reports.postReport(projectId, input, actor),
+  )
+  tool(
+    'list_reports',
+    "The project's report periods, newest first, from from to to (YYYY-MM-DD; by default the last two weeks of a daily cadence or eight weeks of a weekly one, up to today), each with due (when it is due), status (done: it has a report; missing: due and none posted; upcoming: not due yet), its latest report (body, author, attachments with a local path; source summary when a daily summary stands in for a daily text report) and how many versions were posted. Also the schedule and the current period. Periods before tracking began are left out unless they have a report.",
+    {
+      projectId: z.number().int(),
+      from: z.string().optional().describe('YYYY-MM-DD'),
+      to: z.string().optional().describe('YYYY-MM-DD'),
+    },
+    ({ projectId, from, to }) => reports.listReports(projectId, { from, to }),
   )
 
   return server
