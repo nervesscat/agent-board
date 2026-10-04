@@ -48,7 +48,9 @@ http_headers = { Authorization = "Bearer gate_…" }
 2. **Pick up work** from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
    you; `q` searches titles and instructions). Read it in full with `get_ticket`. Then
    `claim_ticket` with the `branch` you will work on: it assigns you and moves it to
-   `in_progress`, and fails if another agent already holds it (pick another one then).
+   `in_progress`. Tickets are shared: claiming one another agent holds takes it over (the board
+   logs it), so prefer unassigned ones. A ticket with `reserved: true` belongs to one of the
+   project's agents (below): claim it only with `as`.
 3. **Break it down**: `add_tasks` with the concrete steps if the ticket does not have them;
    `set_task_done` as you finish each one, `update_task` / `remove_task` when the plan changes.
    The progress bar the human sees is those tasks.
@@ -86,6 +88,19 @@ http_headers = { Authorization = "Bearer gate_…" }
    closed tickets; the board skill's `/board cleanup` walks it with the human.
 9. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
    what got done, what is open. `daily_report` shows what everyone else did that day.
+
+## The project's agents
+
+A project can define its own agents (`get_project` → `agents`: name, instructions, picture):
+personas the human sets up on the board's Agents page. A ticket the human assigns to one is
+**reserved** for it (`reserved: true`; `get_ticket` → `agent` has its instructions):
+
+- `claim_ticket` with `as: <its name>`, brief a subagent with the agent's instructions plus the
+  ticket's, and post that work with `post_update` / `comment` using `as: <its name>`. It shows
+  under the agent's name, via your token name.
+- Never take a reserved ticket as yourself or reassign it; only the human does.
+- `@name` in a thread asks that agent: `list_my_threads` returns threads waiting on an agent with
+  `as` set, for you to answer as it.
 
 ## PR queue and reviews
 

@@ -39,7 +39,7 @@ Work only in the project of the repo you are in, and never read or write another
 
 The rhythm:
 1. get_project before touching it; its instructions override your defaults. Its stages are the board's columns, in order, each with a key, a name and a kind (open, active, blocked, review, done, cancelled). A ticket's status is a stage key; wherever status is asked for you can also give a stage's name or a kind (the first stage of that kind; todo and in_progress mean open and active). Below, todo, in_progress, blocked, review, done and cancelled mean the stage of that kind.
-2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. It fails if another agent holds the ticket: pick another one instead of taking it.
+2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. Tickets are shared: you may take over one another agent holds (the board logs it), so prefer unassigned ones and take over only what is clearly stalled or handed to you. A ticket with reserved: true belongs to one of the project's agents (see below).
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each; update_task or remove_task when the plan changes.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox): register every worktree you open, since that list is what gets cleaned up later; remove_workspace when it is gone.
 5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files.
@@ -48,12 +48,18 @@ The rhythm:
 8. Clean up after yourself: once a lane's work is in its parent's branch (or a ticket's in its base), and before moving it to done, remove its worktree and delete its local branch, remove_workspace, and post_update the deleted branch names with their commit hashes (e.g. lane/47 @ 9ec12e8b) so any of them can be restored. get_ticket_git says whether each branch's work arrived (reach); cleanup_report lists every leftover in the project. Never delete a branch whose reach is unique without the human's go-ahead, and never delete branches on origin: list them for the human.
 9. End of session: post_daily_summary, at most three short lines.
 
+The project's agents: get_project lists them (agents: name, instructions, picture). They are personas the human defined, not connected tools; you work for them. A ticket assigned to one (reserved: true; get_ticket's agent has its instructions) is that agent's alone: claim_ticket with as: <its name>, brief a subagent with its instructions (and the ticket's), and post that work with post_update and comment using as: <its name>, so it shows under the agent's name, via you. Never take a reserved ticket as yourself, reassign it, or work it without the agent's instructions; only the human reassigns it. A thread can wait on an agent too: when someone @mentions it, or replies on its ticket or post, list_my_threads returns that thread with as: <its name>; answer it with comment as: <its name>, in that agent's voice and instructions.
+
 When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.
 
 Keep the board out of the repo. The board, trazic, habits and any other personal tracking tool are private to the human: never mention them, their tool names, their URLs (localhost:47100, 47110) or a board ticket, task or project ("#12", "ticket 12", "per the board") in code comments, docs, READMEs, changelogs, config, commit messages, branch names, PR titles or descriptions, or issues, and never link or screenshot the board there. Describe the change and its reason in the repo's own terms; if the PR needs something from the ticket, restate it instead of pointing at it. Board updates and comments may talk about the repo, branches and PRs freely.`
 
 const STATUS =
   'a stage key from get_project, a stage name, or a kind (open, active, blocked, review, done, cancelled; todo and in_progress also work): the first stage of that kind'
+const AS = z
+  .string()
+  .optional()
+  .describe("one of the project's agents (get_project): post under its name, as the work you did for it")
 const TAGS =
   'Short labels the human filters lanes by: a severity (Critical, High, Medium, Low, Cosmetic), an area (API, UI, Forms…) or a kind (Bug, Refactor…). One or two words each, Title Case; reuse the tags sibling lanes already use, and keep them out of the title (no "[High] …").'
 
@@ -87,7 +93,7 @@ function buildServer(actor: string) {
   )
   tool(
     'get_project',
-    "One project with its repos, its stages (the board's columns in order: key, name, kind) and the instructions agents must follow when working on it. Read this before touching a project.",
+    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions and picture, that tickets can be reserved for) and the instructions agents must follow when working on it. Read this before touching a project.",
     { projectId: z.number().int() },
     ({ projectId }) => projects.getProjectFull(projectId),
   )
@@ -146,7 +152,7 @@ function buildServer(actor: string) {
   // ongoing features
   tool(
     'list_tickets',
-    "Tickets of a project (all its repos) with status, assignee, repoId, branch, parentId, tags, task progress (own and rolled up over lanes), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage). status is a stage key (see get_project). Cancelled lanes' tasks are left out of the rolled-up progress.",
+    "Tickets of a project (all its repos) with status, assignee, reserved (assigned to one of the project's agents: only that agent works it), repoId, branch, parentId, tags, task progress (own and rolled up over lanes), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage). status is a stage key (see get_project). Cancelled lanes' tasks are left out of the rolled-up progress.",
     {
       projectId: z.number().int(),
       parentId: z
@@ -167,7 +173,7 @@ function buildServer(actor: string) {
   )
   tool(
     'get_ticket',
-    "A ticket in full: instructions, tasks, workspaces, its parent chain, its lanes with their last update and verdict,, the update feed with attachments (each with a local path), thread (comment count, last author and time) on the ticket and on each update, and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled).",
+    "A ticket in full: instructions, agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces, its parent chain, its lanes with their last update and verdict,, the update feed with attachments (each with a local path), thread (comment count, last author and time) on the ticket and on each update, and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled).",
     {
       ticketId: z.number().int(),
       laneUpdates: z.boolean().default(false).describe("include the lanes' updates in the feed"),
@@ -208,7 +214,7 @@ function buildServer(actor: string) {
   )
   tool(
     'update_ticket',
-    'Change status, assignee, branch, tags, prNumber, title or instructions. Use claim_ticket to pick a ticket up; assigning yourself one someone else holds fails. Status blocked means you are waiting on the human: say what for in a comment on the ticket.',
+    "Change status, assignee, branch, tags, prNumber, title or instructions. Use claim_ticket to pick a ticket up. Changing the assignee of a ticket reserved for one of the project's agents fails: only the human reassigns those. Status blocked means you are waiting on the human: say what for in a comment on the ticket.",
     {
       ticketId: z.number().int(),
       title: z.string().optional(),
@@ -226,13 +232,17 @@ function buildServer(actor: string) {
         .optional()
         .describe("the PR opened from this ticket's branch, in the ticket's repo; null unlinks it"),
     },
-    ({ ticketId, ...patch }) => features.updateTicket(ticketId, patch, actor, { guardClaim: true }),
+    ({ ticketId, ...patch }) => features.updateTicket(ticketId, patch, actor, { agent: true }),
   )
   tool(
     'claim_ticket',
-    'Pick a ticket up: assigns it to you and moves it from an open or blocked stage to the first active stage, optionally setting the branch. Fails if someone else is assigned or it is in a done or cancelled stage, so two agents never work the same ticket.',
-    { ticketId: z.number().int(), branch: z.string().optional() },
-    ({ ticketId, branch }) => features.claimTicket(ticketId, actor, { branch }),
+    "Pick a ticket up: assigns it to you (or, with as, to the project agent you work it as) and moves it from an open or blocked stage to the first active stage, optionally setting the branch. A shared ticket someone else holds is taken over from them. Fails when the ticket is reserved for one of the project's agents and as is not that agent, or when it is in a done or cancelled stage.",
+    {
+      ticketId: z.number().int(),
+      branch: z.string().optional(),
+      as: AS.describe('the project agent you work this ticket as; required when it is reserved for one'),
+    },
+    ({ ticketId, branch, as }) => features.claimTicket(ticketId, actor, { branch, as }),
   )
   tool(
     'add_tasks',
@@ -289,10 +299,11 @@ function buildServer(actor: string) {
       ticketId: z.number().int(),
       body: z.string(),
       files: z.array(z.string()).default([]).describe('absolute paths to attach'),
+      as: AS,
     },
-    ({ ticketId, body, files }) => {
+    ({ ticketId, body, files, as }) => {
       const ids = files.map((f) => uploads.saveFromPath(f, actor).id)
-      return features.postUpdate(ticketId, body, ids, actor)
+      return features.postUpdate(ticketId, body, ids, actor, { as })
     },
   )
   tool(
@@ -311,7 +322,7 @@ function buildServer(actor: string) {
   // threads
   tool(
     'list_my_threads',
-    'Threads in a project waiting on you: on a ticket assigned to or opened by you, your update or review, or any thread you spoke in, where someone else spoke last. Newest first, each with its parent (for list_comments and comment), the ticket, how many comments came since you last spoke, and the last one.',
+    "Threads in a project waiting on you: on a ticket assigned to or opened by you, your update or review, or any thread you spoke in, where someone else spoke last. Also threads waiting on one of the project's agents (it was @mentioned last, or it spoke there, or it is its ticket or post), with as set to that agent: answer those with comment as: <it>. Newest first, each with its parent (for list_comments and comment), the ticket, how many comments came since you (or the agent) last spoke, and the last one.",
     { projectId: z.number().int() },
     ({ projectId }) => features.listOpenThreads(projectId, actor),
   )
@@ -323,13 +334,14 @@ function buildServer(actor: string) {
   )
   tool(
     'comment',
-    'Leave a comment in a thread; replyTo nests it under another comment.',
+    "Leave a comment in a thread; replyTo nests it under another comment. @name mentions one of the project's agents, which puts the thread in list_my_threads for whoever answers as it.",
     {
       parentType: z.enum(COMMENT_PARENTS),
       parentId: z.number().int(),
       body: z.string(),
       replyTo: z.number().int().optional(),
       files: z.array(z.string()).default([]),
+      as: AS,
     },
     ({ files, ...rest }) =>
       features.addComment(
@@ -346,7 +358,7 @@ function buildServer(actor: string) {
   )
   tool(
     'list_actors',
-    'Every name the board knows (agents by token name, the human by passkey). Use these exact names for assignee.',
+    "Every name that signs in to the board (connected agents by token name, the human by passkey). The project's own agents are in get_project. Use these exact names for assignee.",
     {},
     () => listActors(),
   )

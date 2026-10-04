@@ -3,6 +3,7 @@ import { asc, count, eq, type SQL } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import { notFound } from './http'
+import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
 import { listStages } from './stages'
 
@@ -39,9 +40,12 @@ export function getProject(id: number) {
   return p
 }
 
-/** The project plus its repos and its stages in board order: what agents read before working on it. */
+/**
+ * The project plus its repos, its stages in board order and its agents (name, picture, instructions):
+ * what agents read before working on it.
+ */
 export function getProjectFull(id: number) {
-  return { ...getProject(id), repos: listRepos(id), stages: listStages(id) }
+  return { ...getProject(id), repos: listRepos(id), stages: listStages(id), agents: listAgents(id) }
 }
 
 export type ProjectFull = ReturnType<typeof getProjectFull>

@@ -6,6 +6,7 @@ import {
   ExternalLink,
   GitBranch,
   Layers,
+  Lock,
   Paperclip,
   Pencil,
   Plus,
@@ -17,6 +18,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
+import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
 import { StatusSelect } from '#/components/StatusSelect'
 import { Attachments } from '#/components/Attachments'
@@ -394,12 +396,7 @@ function EditTicket({
         </div>
         <div className="space-y-1">
           <Label htmlFor="assignee">Assignee</Label>
-          <Input
-            id="assignee"
-            value={assignee}
-            onChange={(e) => setAssignee(e.target.value)}
-            placeholder="claude, codex…"
-          />
+          <AssigneeSelect id="assignee" value={assignee} onChange={setAssignee} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="branch">Branch</Label>
@@ -1038,7 +1035,7 @@ function UpdateCard({ u, projectId }: { u: UpdateRow; projectId: string }) {
   return (
     <article className="rounded-lg border p-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Actor name={u.author} className="text-foreground" />
+        <Actor name={u.author} via={u.via} className="text-foreground" />
         <span>update</span>
         {u.lane && (
           <Link
@@ -1155,6 +1152,14 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
           {t.assignee ? (
             <>
               <span className="text-muted-foreground">assignee</span> <Actor name={t.assignee} />
+              {t.reserved && (
+                <span
+                  className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
+                  title="Reserved for this project agent: other agents cannot take it, only you can reassign it"
+                >
+                  <Lock className="size-3" /> reserved
+                </span>
+              )}
             </>
           ) : (
             <span className="text-muted-foreground">unassigned</span>
