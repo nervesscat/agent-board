@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
+  Check,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -10,6 +11,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  Scale,
   Trash2,
   TriangleAlert,
   X,
@@ -250,6 +252,11 @@ function TicketPage() {
               title="This ticket is marked further along than its lanes"
             >
               <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
+            </span>
+          )}
+          {t.updates.some((u) => u.decision && !u.decidedAt) && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+              <Scale className="size-3.5" /> decision needed
             </span>
           )}
           {(t.parentId || verdictOf(t)) && (
@@ -1172,7 +1179,13 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
   const remove = useMutation({ mutationFn: () => del(`/api/updates/${u.id}`), onSuccess: onChange, onError })
   const replies = u.thread.count
   return (
-    <article className={cn('rounded-lg border p-3', !u.progress && 'bg-muted/30')}>
+    <article
+      className={cn(
+        'rounded-lg border p-3',
+        !u.progress && 'bg-muted/30',
+        u.decision && !u.decidedAt && 'border-amber-500/60 bg-amber-500/5',
+      )}
+    >
       <div className="group/post flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Actor name={u.author} via={u.via} className="text-foreground" />
         {u.progress && (
@@ -1219,6 +1232,7 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
       ) : (
         <Markdown className="mt-2">{u.body}</Markdown>
       )}
+      {u.decision && <DecisionCard u={u} onChange={onChange} />}
       <Attachments items={u.attachments} />
       {thread && (
         <div className="mt-3 border-t pt-3">
@@ -1226,6 +1240,108 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
         </div>
       )}
     </article>
+  )
+}
+
+/**
+ * A decision an agent asked the human to make: its options as choices, one maybe recommended. Picking
+ * one (and an optional note) answers it; once decided the choice stays marked and can be changed.
+ */
+function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
+  const options = u.decision!
+  const decided = u.decidedOption !== null && u.decidedAt !== null
+  const [changing, setChanging] = useState(false)
+  const [picked, setPicked] = useState<number | null>(null)
+  const [note, setNote] = useState('')
+  const choosing = !decided || changing
+  const decide = useMutation({
+    mutationFn: () => put(`/api/updates/${u.id}/decision`, { option: picked, note }),
+    onSuccess: () => {
+      setChanging(false)
+      setPicked(null)
+      setNote('')
+      onChange()
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    <div className="mt-3 space-y-2" role="group" aria-label="Decision">
+      <div className="flex items-center gap-2 text-xs">
+        <Scale className="size-3.5 text-amber-600 dark:text-amber-400" />
+        {decided && !changing ? (
+          <span className="text-muted-foreground">
+            decided by <Actor name={u.decidedBy} /> {ago(u.decidedAt!)} ·{' '}
+            <button
+              type="button"
+              className="underline hover:text-foreground"
+              onClick={() => setChanging(true)}
+            >
+              change
+            </button>
+          </span>
+        ) : (
+          <span className="font-medium text-amber-700 dark:text-amber-400">Your decision is needed</span>
+        )}
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2">
+        {options.map((o, i) => {
+          const chosen = decided && u.decidedOption === i
+          const selected = choosing ? picked === i : chosen
+          return (
+            <li key={i}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                disabled={!choosing}
+                onClick={() => setPicked(i)}
+                className={cn(
+                  'flex h-full w-full flex-col items-start gap-1 rounded-md border p-3 text-left text-sm transition-colors',
+                  choosing && 'hover:border-foreground/40',
+                  selected && 'border-primary ring-2 ring-primary/30',
+                  !choosing && !chosen && 'opacity-50',
+                )}
+              >
+                <span className="flex w-full items-center gap-2 font-medium">
+                  {chosen && !choosing && <Check className="size-4 text-primary" />}
+                  {o.label}
+                  {o.recommended && (
+                    <span className="ml-auto rounded bg-muted px-1.5 py-0.5 text-[11px] font-normal text-muted-foreground">
+                      recommended
+                    </span>
+                  )}
+                </span>
+                {o.detail && <span className="text-xs text-muted-foreground">{o.detail}</span>}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      {choosing && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="A note for the agent (optional)"
+            aria-label="Note for the agent"
+            className="h-8 min-w-48 flex-1 text-sm"
+          />
+          {changing && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => setChanging(false)}>
+              Cancel
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            disabled={picked === null || decide.isPending}
+            onClick={() => decide.mutate()}
+          >
+            {decide.isPending ? 'Saving…' : 'Decide'}
+          </Button>
+        </div>
+      )}
+    </div>
   )
 }
 

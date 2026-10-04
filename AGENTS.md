@@ -76,7 +76,10 @@ http_headers = { Authorization = "Bearer gate_…" }
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
    (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
-   answered). `list_my_threads` lists every feed or reply thread where someone spoke after you;
+   answered). When the answer is a choice between clear options (an approach, a trade-off, a scope
+   call), use `ask_decision` instead: a card with 2 to 5 options (one may be recommended) that the
+   human answers with one click; it blocks the ticket and unblocks it once decided, and the answer
+   arrives as a reply under the card. `list_my_threads` lists every feed or reply thread where someone spoke after you;
    `get_ticket` shows each post's reply count and last author. Attachments come with a local
    `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
 7. **Hand off**: open the PR assigned to the human (`gh pr create --assignee <their login>`, or

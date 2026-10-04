@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight, GitBranch, Layers } from 'lucide-react'
+import { ChevronLeft, ChevronRight, GitBranch, Layers, Scale } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
@@ -120,6 +120,7 @@ export function TicketBoard({
                     <div className="line-clamp-2 font-medium leading-snug">
                       <span className="text-muted-foreground">#{t.id}</span> {t.title}
                     </div>
+                    {t.decisions > 0 && <DecisionBadge n={t.decisions} className="mt-1.5" />}
                     {/* The time sits at the end of the last of these rows, so it always shares a line. */}
                     {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
                       <div className={INFO_ROW}>
@@ -164,6 +165,17 @@ export function TicketBoard({
         })}
       </div>
     </div>
+  )
+}
+
+/** Decisions an agent asked the human to make that are still open. */
+function DecisionBadge({ n, className = '' }: { n: number; className?: string }) {
+  return (
+    <span
+      className={`inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 ${className}`}
+    >
+      <Scale className="size-3" /> {n === 1 ? 'decision needed' : `${n} decisions needed`}
+    </span>
   )
 }
 
@@ -256,6 +268,7 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                   <span className={stage.kind === 'cancelled' ? 'text-muted-foreground line-through' : ''}>
                     {t.title}
                   </span>
+                  {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
                   {t.tags.length > 0 && (
                     <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
                       {[...t.tags].sort(compareTags).map((tag) => (

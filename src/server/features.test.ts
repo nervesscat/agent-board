@@ -369,6 +369,58 @@ describe('the agent loop', () => {
     expect(db.select().from(schema.attachments).where(eq(schema.attachments.id, b.id)).get()).toBeUndefined()
   })
 
+  it('asks the human for a decision: blocks the ticket, and unblocks it once nothing is left open', () => {
+    const t = features.createTicket(pid, { title: 'decide me', assignee: 'claude' }, 'enrique')
+    features.claimTicket(t.id, 'claude')
+    const options = [
+      { label: 'Postgres', detail: 'one more service to run' },
+      { label: 'SQLite', recommended: true },
+    ]
+    expect(() => features.askDecision(t.id, { body: 'which db?', options: [options[0]!] }, 'claude')).toThrow(
+      /2 to 5/,
+    )
+    expect(() =>
+      features.askDecision(
+        t.id,
+        { body: 'which db?', options: options.map((o) => ({ ...o, recommended: true })) },
+        'claude',
+      ),
+    ).toThrow(/at most one/)
+
+    const q1 = features.askDecision(t.id, { body: 'which db?', options }, 'claude')
+    const q2 = features.askDecision(t.id, { body: 'which cache?', options }, 'claude')
+    expect(q1).toMatchObject({
+      progress: false,
+      decision: [{ label: 'Postgres' }, { label: 'SQLite', recommended: true }],
+    })
+    expect(features.getTicket(t.id).status).toBe('blocked')
+    expect(features.listTickets(pid, { q: 'decide me' })[0]!.decisions).toBe(2)
+
+    // Deciding one: answered as a reply under the card; the other keeps the ticket blocked.
+    expect(() => features.decide(q1.id, 5, '', 'enrique')).toThrow(/no option 5/)
+    features.decide(q1.id, 1, 'keep it simple', 'enrique')
+    expect(features.getPost(q1.id)).toMatchObject({ decidedOption: 1, decidedBy: 'enrique' })
+    expect(features.listComments('update', q1.id).map((c) => c.body)).toEqual([
+      'Decided: **SQLite**\n\nkeep it simple',
+    ])
+    expect(features.getTicket(t.id).status).toBe('blocked')
+    // The agent sees the answer waiting on it.
+    expect(features.listOpenThreads(pid, 'claude').some((th) => th.parentId === q1.id)).toBe(true)
+
+    features.decide(q2.id, 0, '', 'enrique')
+    expect(features.getTicket(t.id).status).toBe('in_progress')
+    expect(features.listTickets(pid, { q: 'decide me' })[0]!.decisions).toBe(0)
+    // Changing an answer says so.
+    features.decide(q2.id, 1, '', 'enrique')
+    expect(features.listComments('update', q2.id).at(-1)!.body).toBe('Changed the decision to: **SQLite**')
+    // A plain post is not a decision.
+    const plain = features.postUpdate(t.id, 'just a note', [], 'claude')
+    expect(() => features.decide(plain.id, 0, '', 'enrique')).toThrow(/not a decision/)
+    // block: false leaves the stage alone.
+    features.askDecision(t.id, { body: 'naming?', options, block: false }, 'claude')
+    expect(features.getTicket(t.id).status).toBe('in_progress')
+  })
+
   it('links a ticket to its PR both ways, by number or by branch', async () => {
     const { db, schema } = await import('#/db')
     const prs = await import('./prs')
