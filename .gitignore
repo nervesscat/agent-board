@@ -11,3 +11,9 @@ data/
 *.local
 .DS_Store
 __unconfig*
+
+# e2e
+.output-e2e
+test-results
+playwright-report
+blob-report

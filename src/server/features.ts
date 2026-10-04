@@ -8,8 +8,10 @@ import { branchHead, branchInfo } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
-import { previewState, previewUrl } from './preview'
+import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
+import { previewState, previewUrl, type PreviewState } from './preview'
 import { prForTicket } from './prs'
+import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
 import { type WithResume, type WithResumeBrief, resumeState, withoutResume } from './resume'
 import {
@@ -22,7 +24,7 @@ import {
   startedPatch,
   stageOf,
 } from './stages'
-import { attachTo, attachmentView } from './uploads'
+import { assertUnattached, attachTo, attachmentView } from './uploads'
 
 // --- tickets ---
 
@@ -231,7 +233,8 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     thread: ticketThread,
     pr: prForTicket(ticket),
     tasks,
-    workspaces,
+    // managedPreview: the preview the board builds and runs from the workspace, if it ever ran one.
+    workspaces: workspaces.map((w) => ({ ...w, managedPreview: managedPreview(w.id) })),
     progress: self.progress,
     rollup: self.rollup,
     ancestors,
@@ -270,6 +273,21 @@ export function placement(
   return { parent, repo, baseBranch: input.baseBranch || parentBase || repo.baseBranch }
 }
 
+/**
+ * `getTicketFull` with whether each branch is on origin: `push` on the ticket (its branch) and on each
+ * of its workspaces, from one batch of git in the ticket's checkout.
+ */
+export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
+  const t = getTicketFull(id, opts)
+  const repo = ticketRepo(t)
+  const push = repo ? await pushStates(repo.repoPath, [t.branch, ...t.workspaces.map((w) => w.branch)]) : null
+  return {
+    ...t,
+    push: push?.get(t.branch) ?? NO_PUSH,
+    workspaces: t.workspaces.map((w) => ({ ...w, push: push?.get(w.branch) ?? NO_PUSH })),
+  }
+}
+
 export function createTicket(
   projectId: number,
   input: {
@@ -285,10 +303,15 @@ export function createTicket(
     tags?: string[]
     tasks?: string[]
     prNumber?: number | null
+    /** Uploads (POST /api/uploads) that go with the instructions. */
+    attachmentIds?: number[]
   },
   actor: string,
 ) {
   const { parent, repo, baseBranch } = placement(projectId, input)
+  // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
+  const attachmentIds = input.attachmentIds ?? []
+  assertUnattached(attachmentIds)
   const stages = listStages(projectId)
   const status = (input.status ? resolveStage(stages, input.status) : startStage(stages)).key
   const row = db
@@ -311,6 +334,7 @@ export function createTicket(
     .returning()
     .get()
   if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
+  if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
   if (parent) touch(parent.id)
   logActivity({
     projectId,
@@ -384,8 +408,10 @@ export function updateTicket(
     .returning()
     .get()!
   const changes: string[] = []
-  if (patch.status && patch.status !== before.status)
+  if (patch.status && patch.status !== before.status) {
     changes.push(`status ${stageOf(stages, before.status).name} → ${stageOf(stages, patch.status).name}`)
+    stopIfClosed(row, stages, actor)
+  }
   if (patch.assignee !== undefined && patch.assignee !== before.assignee)
     changes.push(`assignee → ${patch.assignee || 'nobody'}`)
   if (patch.branch !== undefined && patch.branch !== before.branch)
@@ -405,6 +431,13 @@ export function updateTicket(
     refId: id,
   })
   return row
+}
+
+/** A ticket that reached a done or cancelled stage has nothing left to preview. */
+function stopIfClosed(t: schema.Ticket, stages: ReturnType<typeof listStages>, actor: string) {
+  const stage = stageOf(stages, t.status)
+  if (stage.kind === 'done' || stage.kind === 'cancelled')
+    stopPreviewsFor([t.id], `the ticket moved to ${stage.name}`, actor)
 }
 
 /**
@@ -508,6 +541,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     .returning()
     .get()!
   if (t.parentId) touch(t.parentId)
+  if (row.status !== t.status) stopIfClosed(row, stages, actor)
   const what = `${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`
   logActivity({
     projectId: t.projectId,
@@ -528,6 +562,11 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
 /** Lanes go with the ticket unless `keepLanes`, which moves them up to the ticket's own parent. */
 export function deleteTicket(id: number, actor: string, opts: { keepLanes?: boolean } = {}) {
   const t = getTicket(id)
+  // Its workspaces go with it (and its lanes', unless they are kept).
+  const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, t.projectId)).all()
+  const gone = [id, ...(opts.keepLanes ? [] : laneTree(all, id).map((l) => l.id))]
+  for (const w of db.select().from(schema.workspaces).where(inArray(schema.workspaces.ticketId, gone)).all())
+    forgetPreview(w.id, actor)
   if (opts.keepLanes)
     db.update(schema.tickets).set({ parentId: t.parentId }).where(eq(schema.tickets.parentId, id)).run()
   db.delete(schema.tickets).where(eq(schema.tickets.id, id)).run()
@@ -574,6 +613,7 @@ export function archiveTicket(id: number, actor: string) {
   if (stage.kind !== 'done' && stage.kind !== 'cancelled')
     throw new HttpError(409, `ticket ${id} is in ${stage.name}; only done or cancelled tickets are archived`)
   const lanes = markArchived(t.projectId, [id], new Date().toISOString(), actor)
+  stopPreviewsFor([id], 'the ticket was archived', actor)
   logActivity({
     projectId: t.projectId,
     actor,
@@ -609,6 +649,7 @@ export function archiveStage(projectId: number, status: string, actor: string) {
     .map((t) => t.id)
   if (!ids.length) return { stage: stage.key, ids }
   const lanes = markArchived(projectId, ids, new Date().toISOString(), actor)
+  stopPreviewsFor(ids, 'the ticket was archived', actor)
   logActivity({
     projectId,
     actor,
@@ -767,15 +808,24 @@ export function setWorkspacePreview(id: number, value: string | null, actor: str
   return row
 }
 
-/** Whether the workspace's preview answers right now (checked on this machine, cached a few seconds). */
-export function workspacePreview(id: number) {
+/**
+ * Whether the workspace's preview answers right now (checked on this machine, cached a few seconds;
+ * `running: false` without a link), the preview the board runs from it (`managed`, null when it never
+ * ran one), and `cannotStart`: why the board would refuse to start one, null when it would.
+ */
+export async function workspacePreview(id: number) {
   const ws = getWorkspace(id)
-  if (!ws.previewUrl) throw new HttpError(404, 'workspace has no preview')
-  return previewState(ws.previewUrl)
+  const state: PreviewState = ws.previewUrl
+    ? await previewState(ws.previewUrl)
+    : { running: false, checkedAt: new Date().toISOString() }
+  return { ...state, url: ws.previewUrl, managed: managedPreview(id), cannotStart: cannotStart(id) }
 }
+
+export type WorkspacePreview = Awaited<ReturnType<typeof workspacePreview>>
 
 export function deleteWorkspace(id: number, actor: string) {
   const ws = getWorkspace(id)
+  forgetPreview(id, actor)
   db.delete(schema.workspaces).where(eq(schema.workspaces.id, id)).run()
   const ticket = getTicket(ws.ticketId)
   logActivity({
@@ -792,7 +842,8 @@ export function deleteWorkspace(id: number, actor: string) {
  * Live, read-only git state for the ticket's branch and each workspace: its own, then its lanes'
  * (all the way down, each tagged with its lane). A workspace is compared against the branch of the
  * ticket it belongs to, in that ticket's repo. Each branch carries `reach`: whether its work is in
- * the base chain (a lane's parent branch, then dev), so it can be deleted.
+ * the base chain (a lane's parent branch, then dev), so it can be deleted, and `push`: whether it is
+ * on origin.
  */
 export async function ticketGit(id: number) {
   const ticket = getTicket(id)
@@ -817,26 +868,39 @@ export async function ticketGit(id: number) {
   const repoGit = gitCache()
   const [branch, ...wsState] = await Promise.all([
     (async () => {
-      if (!repo) return { ...none, reach: null }
-      const [info, { refs }] = await Promise.all([
+      if (!repo) return { ...none, reach: null, push: NO_PUSH }
+      const [info, { refs }, push] = await Promise.all([
         branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
         repoGit(repo.repoPath),
+        pushStates(repo.repoPath, [ticket.branch]),
       ])
       const chain = baseChain(ticket, byId, repo)
-      return { ...info, reach: await reachOf(repo.repoPath, ticket.branch, chain, refs) }
+      return {
+        ...info,
+        reach: await reachOf(repo.repoPath, ticket.branch, chain, refs),
+        push: push.get(ticket.branch) ?? NO_PUSH,
+      }
     })(),
     ...workspaces.map(async ({ w, owner, repo: r }) => {
-      if (!r) return { info: { ...none, reach: null }, worktree: null }
-      const [info, { refs, worktrees }] = await Promise.all([
+      if (!r) return { info: { ...none, reach: null, push: NO_PUSH }, worktree: null }
+      const [info, { refs, worktrees }, push] = await Promise.all([
         branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
         repoGit(r.repoPath),
+        pushStates(r.repoPath, [w.branch]),
       ])
       const chain = baseChain(owner, byId, r)
       const into = w.branch === owner.branch || !owner.branch ? chain : [owner.branch, ...chain]
       const worktree =
         worktrees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ??
         null
-      return { info: { ...info, reach: await reachOf(r.repoPath, w.branch, into, refs) }, worktree }
+      return {
+        info: {
+          ...info,
+          reach: await reachOf(r.repoPath, w.branch, into, refs),
+          push: push.get(w.branch) ?? NO_PUSH,
+        },
+        worktree,
+      }
     }),
   ])
   return {
@@ -1153,6 +1217,45 @@ export function listOpenThreads(projectId: number, actor: string) {
     if (agent) out.push(entry(agent.name, agent.name))
   }
   return out.sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt))
+}
+
+/**
+ * The threads waiting on `actor`, from a cursor the caller keeps: with `since` (an ISO time), only the
+ * ones whose last word, by someone else, came after it. `cursor` is the newest last word seen, or
+ * `since` when nothing new came (null until there is one): pass it as `since` next time. Read-only;
+ * nothing is stored per caller.
+ */
+export function myThreads(projectId: number, actor: string, since?: string | null) {
+  const from = since ? sinceTime(since) : null
+  const all = listOpenThreads(projectId, actor)
+  const threads = from === null ? all : all.filter((t) => Date.parse(t.last.createdAt) > from)
+  // Newest first, and each one after `since`, so the cursor only moves forward.
+  const cursor = threads[0]?.last.createdAt ?? (from === null ? null : new Date(from).toISOString())
+  return { cursor, threads }
+}
+
+function sinceTime(since: string) {
+  const t = Date.parse(since)
+  if (Number.isNaN(t)) throw new HttpError(400, `since must be an ISO time, not "${since}"`)
+  return t
+}
+
+/** The cheap poll for new comments: what myThreads finds, without bodies. */
+export function checkInbox(projectId: number, actor: string, since?: string | null) {
+  const { cursor, threads } = myThreads(projectId, actor, since)
+  return {
+    count: threads.length,
+    cursor,
+    threads: threads.map((t) => ({
+      ticketId: t.ticketId,
+      title: t.title,
+      parentType: t.parentType,
+      parentId: t.parentId,
+      as: t.as,
+      lastAuthor: t.last.author,
+      lastAt: t.last.createdAt,
+    })),
+  }
 }
 
 export function addComment(

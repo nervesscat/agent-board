@@ -8,15 +8,26 @@ import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
+import { authMode } from './config'
 import { dailyReport, generateSummary, today } from './daily'
 import * as features from './features'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { HttpError, intParam, readJson } from './http'
+import {
+  isActive,
+  managedPreview,
+  previewLog,
+  restartPreview,
+  startPreview,
+  stopPreview,
+  stopProjectPreviews,
+} from './managedPreview'
 import { handleMcp } from './mcp'
 import * as needs from './needs'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
+import { projectPush, refreshProjectPush } from './push'
 import * as projects from './projects'
 import * as reports from './reports'
 import * as repos from './repos'
@@ -25,6 +36,7 @@ import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import { deleteUnattachedUploads } from './unattached'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -60,7 +72,10 @@ const TicketPatch = z.object({
 export const api = new ApiRouter()
 
 api.get('/api/health', () => json({ ok: true }))
-api.get('/api/me', ({ actor }) => json({ actor }))
+// `authOff` (test, or development with AUTH=off) puts a badge in the top bar: this is not the live board.
+api.get('/api/me', ({ request, actor }) =>
+  json({ actor, agent: isAgent(request), boardEnv: authMode().boardEnv, authOff: authMode().off }),
+)
 // Every name the board has seen sign in, with whether it is an agent or a human.
 api.get('/api/actors', () => json(listActors()))
 
@@ -109,6 +124,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   return json(projects.updateProject(id(params), body, actor))
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
+  stopProjectPreviews(id(params), actor)
   projects.deleteProject(id(params), actor)
   return json({ ok: true })
 })
@@ -278,6 +294,7 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
       title: z.string().min(1).max(200),
       tasks: z.array(z.string().min(1).max(500)).optional(),
       parentId: z.number().int().optional(),
+      attachmentIds: z.array(z.number().int()).optional(),
     }),
   )
   return json(await needs.newTicket(id(params), body, actor, { agent: isAgent(request) }), 201)
@@ -373,6 +390,9 @@ api.put('/api/tickets/:id/resume', async ({ request, params, actor }) => {
   return json(await features.setResumeNote(id(params), body.note, actor, { as: body.as }))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await needs.ticketGitView(id(params))))
+// Whether the branch of every ticket in work is on origin, one batch of git per repo; refresh fetches now.
+api.get('/api/projects/:id/push', async ({ params }) => json(await projectPush(id(params))))
+api.post('/api/projects/:id/push/refresh', async ({ params }) => json(await refreshProjectPush(id(params))))
 // Closed tickets that still have workspaces, branches or worktrees; `reach=0` skips the merge checks.
 api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
   json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),
@@ -412,10 +432,30 @@ api.patch('/api/workspaces/:id', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ previewUrl: PreviewUrl }))
   return json(features.setWorkspacePreview(id(params), body.previewUrl, actor))
 })
-// Whether that preview answers right now: `{running, status?, checkedAt}`; localhost URLs only.
+// Whether that preview answers right now: `{running, status?, checkedAt, url}`, localhost URLs only;
+// `managed`, the preview the board runs from the workspace; `cannotStart`, why it would not start one.
 api.get('/api/workspaces/:id/preview', async ({ params }) =>
   json(await features.workspacePreview(id(params))),
 )
+// The board builds and runs the workspace's worktree as a preview (in the background; poll the GET).
+api.post('/api/workspaces/:id/preview/start', ({ params, actor }) =>
+  json(startPreview(id(params), actor), 202),
+)
+api.post('/api/workspaces/:id/preview/stop', async ({ params, actor }) => {
+  if (!isActive(managedPreview(id(params))))
+    throw new HttpError(409, 'the board runs no preview of this workspace')
+  return json(await stopPreview(id(params), `stopped by ${actor}`, actor))
+})
+api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
+  json(await restartPreview(id(params), actor), 202),
+)
+// ?name=build (install and build) or server.
+api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
+  const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))
+  return new Response(previewLog(id(params), name), {
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
 api.delete('/api/workspaces/:id', ({ params, actor }) => {
   features.deleteWorkspace(id(params), actor)
   return json({ ok: true })
@@ -492,8 +532,14 @@ api.get('/api/comments', async ({ request, url }) => {
   const parentId = intParam(url.searchParams.get('parentId') ?? '', 'parentId')
   return json(await forAgent(request, features.listComments(parentType, parentId)))
 })
-// Threads in a project where someone spoke after the caller, on things the caller owns or spoke in.
-api.get('/api/projects/:id/threads', ({ params, actor }) => json(features.listOpenThreads(id(params), actor)))
+// Threads in a project where someone spoke after the caller, on things the caller owns or spoke in;
+// ?since=<cursor> keeps only the ones with something new. /inbox is the same without bodies.
+api.get('/api/projects/:id/threads', ({ params, url, actor }) =>
+  json(features.myThreads(id(params), actor, url.searchParams.get('since'))),
+)
+api.get('/api/projects/:id/inbox', ({ params, url, actor }) =>
+  json(features.checkInbox(id(params), actor, url.searchParams.get('since'))),
+)
 api.post('/api/comments', async ({ request, actor }) => {
   const body = await readJson(
     request,
@@ -540,6 +586,11 @@ api.post('/api/uploads', async ({ request, actor }) => {
       ? await uploads.saveFromPath(body.path, actor)
       : await uploads.saveBase64(body.name, body.base64, actor, body.mime)
   return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
+})
+// Uploads nothing points at, older than a day (the board also does this hourly); the human's call.
+api.delete('/api/uploads/unattached', async ({ request }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human deletes unattached uploads')
+  return json(await deleteUnattachedUploads())
 })
 // For agents: the file's local path is there to open (fetched into the cache first with STORAGE=s3).
 api.get('/api/uploads/:id/info', async ({ params }) =>
