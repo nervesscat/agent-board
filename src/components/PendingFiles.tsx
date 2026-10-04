@@ -9,65 +9,106 @@ import { cn } from '#/lib/utils'
 /**
  * Files picked for an update or comment but not posted yet: a chip each, which opens the file in
  * the gallery (stepping through this form's files only), with a way to drop it. `uploading` marks
- * the ones still on their way to the server.
+ * the ones still on their way to the server. With `thumbnails`, images show as a picture you can
+ * see rather than a chip, the way they will look once attached.
  */
 export function PendingFiles({
   files,
   onChange,
   uploading,
+  thumbnails = false,
 }: {
   files: File[]
   onChange: (files: File[]) => void
   uploading?: (file: File) => boolean
+  thumbnails?: boolean
 }) {
   // Object URLs for the thumbnails and the gallery, released when the list changes or the form goes away.
   const urls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files])
   useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls])
   const group = `pending-${useId()}`
 
+  const remove = (i: number) => onChange(files.filter((_, j) => j !== i))
+
   return (
     <>
-      {files.map((f, i) => (
-        <span
-          key={`${f.name}-${f.size}-${f.lastModified}-${i}`}
-          className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-muted/60 py-0.5 pr-0.5 pl-1 text-xs"
-          title={f.name}
-        >
-          <button
-            type="button"
-            className="inline-flex min-w-0 cursor-zoom-in items-center gap-1.5 rounded-sm hover:underline"
-            aria-label={`Preview ${f.name}`}
-            {...galleryItem(
-              { src: urls[i]!, name: f.name, mime: f.type || 'application/octet-stream' },
-              group,
-            )}
+      {files.map((f, i) =>
+        thumbnails && f.type.startsWith('image/') ? (
+          <span
+            key={`${f.name}-${f.size}-${f.lastModified}-${i}`}
+            className="relative inline-block"
+            title={f.name}
           >
-            {f.type.startsWith('image/') ? (
-              <img src={urls[i]} alt="" className="size-5 shrink-0 rounded-sm object-cover" />
-            ) : (
-              <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-            )}
-            <span className="truncate">{f.name}</span>
-            {uploading?.(f) ? (
+            <button
+              type="button"
+              className="block cursor-zoom-in"
+              aria-label={`Preview ${f.name}`}
+              {...galleryItem({ src: urls[i]!, name: f.name, mime: f.type }, group)}
+            >
+              <img
+                src={urls[i]}
+                alt={f.name}
+                className={cn('h-28 max-w-56 rounded-md border object-cover', uploading?.(f) && 'opacity-60')}
+              />
+            </button>
+            {uploading?.(f) && (
               <Loader2
-                className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                className="pointer-events-none absolute top-1/2 left-1/2 size-5 -translate-1/2 animate-spin text-foreground"
                 aria-label="uploading"
               />
-            ) : (
-              <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
             )}
-          </button>
-          <button
-            type="button"
-            onClick={() => onChange(files.filter((_, j) => j !== i))}
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
-            aria-label={`Remove ${f.name}`}
-            title="Remove"
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="absolute -top-2 -right-2 inline-flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground hover:text-foreground"
+              aria-label={`Remove ${f.name}`}
+              title="Remove"
+            >
+              <X className="size-3" />
+            </button>
+          </span>
+        ) : (
+          <span
+            key={`${f.name}-${f.size}-${f.lastModified}-${i}`}
+            className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-muted/60 py-0.5 pr-0.5 pl-1 text-xs"
+            title={f.name}
           >
-            <X className="size-3.5" />
-          </button>
-        </span>
-      ))}
+            <button
+              type="button"
+              className="inline-flex min-w-0 cursor-zoom-in items-center gap-1.5 rounded-sm hover:underline"
+              aria-label={`Preview ${f.name}`}
+              {...galleryItem(
+                { src: urls[i]!, name: f.name, mime: f.type || 'application/octet-stream' },
+                group,
+              )}
+            >
+              {f.type.startsWith('image/') ? (
+                <img src={urls[i]} alt="" className="size-5 shrink-0 rounded-sm object-cover" />
+              ) : (
+                <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+              )}
+              <span className="truncate">{f.name}</span>
+              {uploading?.(f) ? (
+                <Loader2
+                  className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                  aria-label="uploading"
+                />
+              ) : (
+                <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
+              aria-label={`Remove ${f.name}`}
+              title="Remove"
+            >
+              <X className="size-3.5" />
+            </button>
+          </span>
+        ),
+      )}
     </>
   )
 }

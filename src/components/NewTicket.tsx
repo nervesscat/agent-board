@@ -146,8 +146,13 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
               placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."
             />
             {files.files.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                <PendingFiles files={files.files} onChange={files.setFiles} uploading={files.isUploading} />
+              <div className="flex flex-wrap items-end gap-3 pt-1">
+                <PendingFiles
+                  files={files.files}
+                  onChange={files.setFiles}
+                  uploading={files.isUploading}
+                  thumbnails
+                />
               </div>
             )}
           </div>
