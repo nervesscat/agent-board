@@ -42,11 +42,15 @@ human:<name>` or `agent:<name>` says who calls (CI, Playwright). The server refu
 
 ```
 pnpm typecheck && pnpm lint && pnpm test
+pnpm check:migrations
+pnpm test:e2e
 pnpm exec prettier --check --end-of-line auto <changed files>
 ```
 
-On a Windows checkout two tests fail regardless of the change: `agents.test.ts` (CRLF line endings)
-and `cleanup.test.ts` (path separators). Prettier without `--end-of-line auto` flags every CRLF file.
+`pnpm test:e2e` (Playwright, `e2e/`) builds into `.output-e2e` and starts that build in test mode on a
+free loopback port above 47140 with throwaway data, so it is safe beside the live board, in the main
+checkout too. CI (`.github/workflows/ci.yml`) runs all of these on every pull request. Prettier
+without `--end-of-line auto` flags every CRLF file.
 
 ## Files
 

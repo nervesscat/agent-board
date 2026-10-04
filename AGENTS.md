@@ -91,7 +91,10 @@ http_headers = { Authorization = "Bearer gate_…" }
    `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
    requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
    the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
-   final `post_update`. `done` is
+   final `post_update`. Before that post, run the repo's checks and its end-to-end suite when it
+   has one (the project's instructions say how; here `pnpm test:e2e`), and attach the result to
+   the post (the run's summary, or its report when something failed), with screenshots of what
+   changed for a UI change. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
    its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or

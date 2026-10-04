@@ -113,9 +113,12 @@ describe('cleanupReport', () => {
     expect(byTitle.edited!.branches[0]!.reach?.state).toBe('edited')
     expect(byTitle.edited!.safe).toBe(true)
     expect(byTitle.unique!.safe).toBe(false)
-    expect(byTitle.unique!.branches[0]!.worktrees).toEqual([
-      { path: path.join(tmp, 'wt-unique'), main: false },
-    ])
+    // git lists worktree paths with forward slashes, also on Windows.
+    const worktrees = byTitle.unique!.branches[0]!.worktrees.map((w) => ({
+      ...w,
+      path: path.resolve(w.path),
+    }))
+    expect(worktrees).toEqual([{ path: path.join(tmp, 'wt-unique'), main: false }])
     expect(byTitle.merged!.branches[0]!.restore).toBe(
       `git branch lane/merged ${git('rev-parse', 'lane/merged')}`,
     )

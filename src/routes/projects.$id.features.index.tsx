@@ -87,7 +87,7 @@ function Features() {
   })
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Ongoing features</h1>
           <p className="text-sm text-muted-foreground">
@@ -97,7 +97,7 @@ function Features() {
             tickets, which then wait under Archived.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Tabs value={view} onValueChange={(v) => pickView(v as View)}>
             <TabsList>
               <TabsTrigger value="board" aria-label="Board">

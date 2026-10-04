@@ -142,7 +142,10 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
    the PR queue also lists PRs assigned to the human, so this is how it gets there.
 2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
-3. Final `post_update` with the PR link, how to test, and the preview link if there is one.
+3. Final `post_update` with the PR link, how to test, and the preview link if there is one. Run the
+   repo's checks first, its end-to-end suite too when it has one (the project instructions say how,
+   e.g. `pnpm test:e2e`), and attach the result to that post with `files`: the run's summary (or
+   its report when something failed) and, for a UI change, screenshots of what changed.
 4. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
    say otherwise.
 5. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
