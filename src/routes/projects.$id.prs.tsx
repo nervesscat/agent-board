@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
+import { PrAlert, PrState } from '#/components/PrState'
 import { Thread } from '#/components/Thread'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
@@ -31,11 +32,43 @@ const TABS = [
   { key: 'on_hold', label: 'On hold' },
 ] as const
 
+type Filter = 'me' | 'others' | 'all'
+const FILTERS: { key: Filter; label: string; title: string }[] = [
+  {
+    key: 'me',
+    label: 'To review',
+    title: 'Your review is requested, or it is assigned to you and you have not reviewed its latest commit',
+  },
+  {
+    key: 'others',
+    label: 'Waiting on others',
+    title: 'You reviewed its latest commit, or reviewed it before and nobody asks you again',
+  },
+  { key: 'all', label: 'All', title: 'Every PR in the queue' },
+]
+// The last filter picked is remembered in this browser; storage can be unavailable, so all is the fallback.
+const FILTER_KEY = 'prs.filter'
+function savedFilter(): Filter {
+  try {
+    const v = localStorage.getItem(FILTER_KEY)
+    return v === 'me' || v === 'others' ? v : 'all'
+  } catch {
+    return 'all'
+  }
+}
+
 function PrQueue() {
   const { id } = Route.useParams()
   const qc = useQueryClient()
   const key = ['prs', id]
   const { data: project } = useProject(id)
+  const [filter, setFilter] = useState<Filter>(savedFilter)
+  const pickFilter = (f: Filter) => {
+    setFilter(f)
+    try {
+      localStorage.setItem(FILTER_KEY, f)
+    } catch {}
+  }
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: key,
     queryFn: () => get<PrRow[]>(`/api/projects/${id}/prs`),
@@ -46,6 +79,9 @@ function PrQueue() {
     onSuccess: (rows) => qc.setQueryData(key, rows),
     onError: (err) => toast.error(errorMessage(err)),
   })
+  const inFilter = (p: PrRow, f: Filter) => f === 'all' || p.waitingOn === f
+  const shown = data?.filter((p) => inFilter(p, filter)) ?? []
+  const suffix = filter === 'all' ? '' : ` ${FILTERS.find((f) => f.key === filter)!.label.toLowerCase()}`
 
   return (
     <div className="space-y-4">
@@ -57,14 +93,28 @@ function PrQueue() {
             of the project. Read-only against GitHub; holds and threads live here.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refresh.mutate()}
-          disabled={refresh.isPending || isFetching}
-        >
-          <RefreshCw data-icon="inline-start" className={refresh.isPending ? 'animate-spin' : ''} /> Refresh
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Tabs value={filter} onValueChange={(v) => pickFilter(v as Filter)}>
+            <TabsList>
+              {FILTERS.map((f) => (
+                <TabsTrigger key={f.key} value={f.key} title={f.title}>
+                  {f.label}
+                  <span className="ml-1 rounded-full bg-background px-1.5 text-xs tabular-nums">
+                    {data?.filter((p) => inFilter(p, f.key)).length ?? 0}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refresh.mutate()}
+            disabled={refresh.isPending || isFetching}
+          >
+            <RefreshCw data-icon="inline-start" className={refresh.isPending ? 'animate-spin' : ''} /> Refresh
+          </Button>
+        </div>
       </div>
       {error && <p className="text-sm text-destructive">{errorMessage(error)}</p>}
       {isLoading ? (
@@ -76,21 +126,24 @@ function PrQueue() {
               <TabsTrigger key={t.key} value={t.key}>
                 {t.label}
                 <span className="ml-1.5 rounded-full bg-background px-1.5 text-xs tabular-nums">
-                  {data?.filter((p) => p.status === t.key).length ?? 0}
+                  {shown.filter((p) => p.status === t.key).length}
                 </span>
               </TabsTrigger>
             ))}
           </TabsList>
           {TABS.map((t) => (
             <TabsContent key={t.key} value={t.key} className="space-y-2">
-              {data?.filter((p) => p.status === t.key).length ? (
-                data
+              {shown.filter((p) => p.status === t.key).length ? (
+                shown
                   .filter((p) => p.status === t.key)
                   .map((pr) => (
                     <PrCard key={pr.id} pr={pr} projectId={id} repo={repoLabel(project, pr.repoId)} />
                   ))
               ) : (
-                <Empty>Nothing {t.label.toLowerCase()}.</Empty>
+                <Empty>
+                  Nothing {t.label.toLowerCase()}
+                  {suffix}.
+                </Empty>
               )}
             </TabsContent>
           ))}
@@ -124,12 +177,12 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
+            <PrAlert pr={pr} />
             <a href={pr.url} target="_blank" rel="noreferrer" className="font-medium hover:underline">
               #{pr.number} {pr.title}
             </a>
             <ExternalLink className="size-3 text-muted-foreground" />
             {repo && <Badge variant="secondary">{repo}</Badge>}
-            {pr.isDraft && <Badge variant="outline">draft</Badge>}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
             <span>{pr.author}</span>
@@ -139,7 +192,11 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
             <span className="font-mono">{shortSha(pr.headSha)}</span>
             <span>updated {ago(pr.updatedAt)}</span>
             {pr.myReview !== 'none' && <span>· my review: {pr.myReview.replace('_', ' ')}</span>}
+            <span className={pr.waitingOn === 'me' ? 'font-medium text-foreground' : ''}>
+              · waiting on {pr.waitingOn === 'me' ? 'you' : 'others'}
+            </span>
           </div>
+          <PrState pr={pr} className="mt-1.5" />
           {pr.tickets.length > 0 && (
             <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
               {pr.tickets.map((t) => (

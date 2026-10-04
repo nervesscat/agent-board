@@ -246,8 +246,10 @@ doing it yourself.
 
 ## Reviews and the PR queue
 
-`list_prs` is the human's review queue; each PR lists the `tickets` it came from. Before
-reviewing a PR, `list_review_results` with its `prNumber` and head `sha`: if that SHA was already
+`list_prs` is the human's review queue; each PR lists the `tickets` it came from, whether it
+waits on the human (`waitingOn`), and its `merge` and `ci` state: conflicts or failed `checks` on
+a PR from your ticket are yours to fix. Before reviewing a PR, `list_review_results` with its
+`prNumber` and head `sha`: if that SHA was already
 reviewed, `get_review_result` has the findings. If you review a PR, record it with
 `post_review_result` (verdict, markdown summary with findings, how to test, checks, `repoId` when
 the project has several repos). Never post the review to GitHub.

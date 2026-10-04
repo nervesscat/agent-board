@@ -57,3 +57,6 @@ export const DEFAULT_AGENT_NAMES = [
 
 export const COMMENT_PARENTS = ['ticket', 'update', 'pr', 'review'] as const
 export type CommentParent = (typeof COMMENT_PARENTS)[number]
+
+/** One CI check on a PR's head commit, sorted into the buckets `gh pr checks` uses. */
+export type PrCheck = { name: string; state: 'pass' | 'fail' | 'pending' | 'skipped'; url: string | null }

@@ -44,6 +44,19 @@ export async function currentGithubLogin(repoPath: string): Promise<string | nul
   }
 }
 
+/** A check run (GitHub Actions and apps) or a commit status, as `statusCheckRollup` lists them. */
+export type GhCheck =
+  | {
+      __typename: 'CheckRun'
+      name: string
+      workflowName?: string
+      status: string
+      conclusion: string
+      detailsUrl: string
+      startedAt: string
+    }
+  | { __typename: 'StatusContext'; context: string; state: string; targetUrl: string; startedAt: string }
+
 export interface GhPr {
   number: number
   title: string
@@ -54,20 +67,31 @@ export interface GhPr {
   headRefOid: string
   isDraft: boolean
   reviewDecision: string
+  mergeable: string
+  mergeStateStatus: string
+  statusCheckRollup: GhCheck[] | null
   updatedAt: string
-  reviews: { author: { login: string }; state: string; submittedAt: string }[]
+  reviews: { author: { login: string }; state: string; submittedAt: string; commit?: { oid: string } }[]
+}
+
+/** A PR of the queue, with the searches that found it. */
+export interface MyGhPr extends GhPr {
+  /** My review is requested (directly or through a team). */
+  requested: boolean
+  /** I am one of its assignees. */
+  assigned: boolean
 }
 
 const PR_FIELDS =
-  'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,updatedAt,reviews'
+  'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,reviews'
 
 /**
  * Open PRs where my review was requested, the ones I already reviewed, and the ones assigned to me.
  * Assignment is how a PR I opened myself (agents push with my account) gets in: GitHub does not let
  * its author be requested as a reviewer.
  */
-export async function listMyPrs(repoPath: string): Promise<GhPr[]> {
-  const searches = ['review-requested:@me', 'reviewed-by:@me', 'assignee:@me']
+export async function listMyPrs(repoPath: string): Promise<MyGhPr[]> {
+  const searches = ['review-requested:@me', 'reviewed-by:@me', 'assignee:@me'] as const
   const found = await Promise.all(
     searches.map((search) =>
       gh<GhPr[]>(repoPath, [
@@ -84,8 +108,15 @@ export async function listMyPrs(repoPath: string): Promise<GhPr[]> {
       ]),
     ),
   )
-  const byNumber = new Map<number, GhPr>()
-  for (const pr of found.flat()) byNumber.set(pr.number, pr)
+  const byNumber = new Map<number, MyGhPr>()
+  found.forEach((prs, i) => {
+    for (const pr of prs) {
+      const seen = byNumber.get(pr.number) ?? { ...pr, requested: false, assigned: false }
+      if (searches[i] === 'review-requested:@me') seen.requested = true
+      if (searches[i] === 'assignee:@me') seen.assigned = true
+      byNumber.set(pr.number, seen)
+    }
+  })
   return [...byNumber.values()]
 }
 

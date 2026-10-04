@@ -1,8 +1,9 @@
 import { and, desc, eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import type { PrCheck } from '#/lib/constants'
 import { logActivity } from './activity'
-import { currentGithubLogin, listMyPrs } from './git'
+import { currentGithubLogin, listMyPrs, type GhCheck, type MyGhPr } from './git'
 import { notFound } from './http'
 import { getProject } from './projects'
 import { listRepos, ticketRepo } from './repos'
@@ -13,6 +14,76 @@ export function prStatus(pr: Pick<schema.Pr, 'hold' | 'myReview'>): PrStatus {
   if (pr.hold) return 'on_hold'
   return pr.myReview === 'none' ? 'pending' : 'reviewed'
 }
+
+export type PrWaitingOn = schema.Pr['waitingOn']
+
+/**
+ * Whose move a PR waits on: mine while my review is requested, or while it is assigned to me (how
+ * agents' PRs, opened with my account, reach me) and my latest review is not of its head commit.
+ * Everything else in the queue (reviewed at the head, or only reviewed by me once) waits on others.
+ */
+export function prWaitingOn(
+  pr: Pick<MyGhPr, 'requested' | 'assigned' | 'headRefOid'>,
+  myLatest: Pick<MyGhPr['reviews'][number], 'commit'> | undefined,
+): PrWaitingOn {
+  if (pr.requested) return 'me'
+  return pr.assigned && myLatest?.commit?.oid !== pr.headRefOid ? 'me' : 'others'
+}
+
+/** Whether GitHub would merge it now; `checking` while GitHub is still working it out after a push. */
+export type MergeState = 'clean' | 'conflicts' | 'behind' | 'blocked' | 'checking'
+
+export function mergeState(pr: Pick<schema.Pr, 'mergeable' | 'mergeStateStatus'>): MergeState {
+  if (pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY') return 'conflicts'
+  if (pr.mergeable !== 'MERGEABLE' || pr.mergeStateStatus === 'UNKNOWN') return 'checking'
+  if (pr.mergeStateStatus === 'BEHIND') return 'behind'
+  // Branch protection: a required review or check is missing.
+  if (pr.mergeStateStatus === 'BLOCKED') return 'blocked'
+  return 'clean'
+}
+
+const FAILED = new Set(['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE'])
+
+function checkState(c: GhCheck): PrCheck['state'] {
+  const s = c.__typename === 'CheckRun' ? (c.status === 'COMPLETED' ? c.conclusion : c.status) : c.state
+  if (s === 'SUCCESS') return 'pass'
+  if (s === 'SKIPPED' || s === 'NEUTRAL') return 'skipped'
+  return FAILED.has(s) ? 'fail' : 'pending'
+}
+
+/** The head commit's checks, one per name: a re-run lists a check again, and its latest start wins. */
+export function prChecks(rollup: GhCheck[] | null): PrCheck[] {
+  const latest = new Map<string, GhCheck>()
+  for (const c of rollup ?? []) {
+    const key = c.__typename === 'CheckRun' ? `run:${c.workflowName ?? ''}/${c.name}` : `status:${c.context}`
+    const before = latest.get(key)
+    if (!before || (c.startedAt ?? '') >= (before.startedAt ?? '')) latest.set(key, c)
+  }
+  return [...latest.values()].map((c) =>
+    c.__typename === 'CheckRun'
+      ? { name: c.name, state: checkState(c), url: c.detailsUrl || null }
+      : { name: c.context, state: checkState(c), url: c.targetUrl || null },
+  )
+}
+
+/** CI at a glance: any failed check fails it, then any still running keeps it pending. */
+export type CiState = 'passing' | 'failing' | 'pending' | 'none'
+
+export function ciState(checks: PrCheck[]): CiState {
+  if (checks.some((c) => c.state === 'fail')) return 'failing'
+  if (checks.some((c) => c.state === 'pending')) return 'pending'
+  return checks.some((c) => c.state === 'pass') ? 'passing' : 'none'
+}
+
+/** What the queue and a ticket's PR show of a stored PR's state on GitHub. */
+const prState = (pr: schema.Pr) => ({
+  waitingOn: pr.waitingOn,
+  isDraft: pr.isDraft,
+  reviewDecision: pr.reviewDecision,
+  merge: mergeState(pr),
+  ci: ciState(pr.checks),
+  checks: pr.checks,
+})
 
 const REFRESH_MS = 5 * 60_000
 const lastRefresh = new Map<number, number>()
@@ -55,6 +126,10 @@ async function refreshRepoPrs(repo: schema.Repo) {
       isDraft: pr.isDraft,
       reviewDecision: pr.reviewDecision || null,
       myReview,
+      waitingOn: prWaitingOn(pr, mine[0]),
+      mergeable: pr.mergeable,
+      mergeStateStatus: pr.mergeStateStatus,
+      checks: prChecks(pr.statusCheckRollup),
       updatedAt: pr.updatedAt,
       fetchedAt,
       open: true,
@@ -108,6 +183,7 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
     const r = latestResult(results, pr.number, pr.repoId)
     return {
       ...pr,
+      ...prState(pr),
       repo: repos.find((x) => x.id === pr.repoId)?.name ?? null,
       status: prStatus(pr),
       latestReview: r
@@ -176,9 +252,17 @@ export function prForTicket(ticket: schema.Ticket) {
     number,
     linkedBy: ticket.prNumber ? ('prNumber' as const) : ('branch' as const),
     url: row?.url ?? (repo.githubRepo ? `https://github.com/${repo.githubRepo}/pull/${number}` : null),
-    // Set when the PR is in the review queue: its board id (for threads and holds), title and state.
+    // Set when the PR is in the review queue: its board id (for threads and holds), title, state, and
+    // where it stands on GitHub (whose move, merge state, CI) as of the last refresh.
     queue: row
-      ? { id: row.id, title: row.title, open: row.open, status: prStatus(row), headSha: row.headSha }
+      ? {
+          id: row.id,
+          title: row.title,
+          open: row.open,
+          status: prStatus(row),
+          headSha: row.headSha,
+          ...prState(row),
+        }
       : null,
     latestReview: r
       ? {

@@ -30,6 +30,7 @@ import { Markdown } from '#/components/Markdown'
 import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
+import { PrState } from '#/components/PrState'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
 import { EditBox, Edited, PostActions } from '#/components/PostTools'
@@ -1512,6 +1513,7 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
             )}
           </div>
         )}
+        {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
       </section>
       <section className="rounded-lg border p-3">
         <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
