@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
-import { useState } from 'react'
+import { Paperclip, Plus } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
+import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { Button } from '#/components/ui/button'
 import {
@@ -22,8 +23,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { useProject } from '#/lib/project'
+import { ticketsKey } from '#/lib/tickets'
+import { cn } from '#/lib/utils'
 
-/** A new top-level ticket, or with `parent` a new lane of that ticket. */
+/**
+ * A new top-level ticket, or with `parent` a new lane of that ticket. Files for the instructions
+ * (attach, paste or drop anywhere on the dialog) upload as they are added and go with the ticket
+ * when it is created.
+ */
 export function NewTicket({ projectId, parent }: { projectId: string; parent?: TicketFull }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -37,6 +44,9 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const [picked, setPicked] = useState('')
   const repos = project?.repos ?? []
   const repoId = picked || String(parent?.repoId ?? repos[0]?.id ?? '')
+  const files = useUploads()
+  const fileInput = useRef<HTMLInputElement>(null)
+  const drop = useFileDrop(files.add)
   const create = useMutation({
     mutationFn: () =>
       post<Ticket>(`/api/projects/${projectId}/tickets`, {
@@ -54,9 +64,10 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
           .split('\n')
           .map((s) => s.trim())
           .filter(Boolean),
+        attachmentIds: files.ids,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tickets', projectId] })
+      qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
       if (parent) qc.invalidateQueries({ queryKey: ['ticket', String(parent.id)] })
       setOpen(false)
       setTitle('')
@@ -65,6 +76,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       setBranch('')
       setAssignee('')
       setTags('')
+      files.clear()
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -76,12 +88,12 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       >
         <Plus data-icon="inline-start" /> New {noun}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent {...drop.props} className={cn('sm:max-w-xl', drop.className)}>
         <form
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
-            create.mutate()
+            if (!files.uploading) create.mutate()
           }}
         >
           <DialogHeader>
@@ -102,8 +114,48 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             <Input id="t" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
           </div>
           <div className="space-y-2">
-            <Label>Instructions</Label>
-            <RichEditor value={body} onChange={setBody} minHeight="min-h-32" label="Instructions" />
+            <div className="flex items-center justify-between gap-2">
+              <Label>Instructions</Label>
+              <input
+                ref={fileInput}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files ?? [])
+                  if (picked.length) files.add(picked)
+                  // Clear it, so picking a file that was just removed registers again.
+                  e.target.value = ''
+                }}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="text-muted-foreground"
+                onClick={() => fileInput.current?.click()}
+              >
+                <Paperclip data-icon="inline-start" /> attach
+              </Button>
+            </div>
+            <RichEditor
+              value={body}
+              onChange={setBody}
+              onFiles={files.add}
+              minHeight="min-h-32"
+              label="Instructions"
+              placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."
+            />
+            {files.files.length > 0 && (
+              <div className="flex flex-wrap items-end gap-3 pt-1">
+                <PendingFiles
+                  files={files.files}
+                  onChange={files.setFiles}
+                  uploading={files.isUploading}
+                  thumbnails
+                />
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="tasks">Initial tasks, one per line</Label>
@@ -161,8 +213,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             </p>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={create.isPending}>
-              Create
+            <Button type="submit" disabled={create.isPending || files.uploading}>
+              {files.uploading ? 'Uploading…' : 'Create'}
             </Button>
           </DialogFooter>
         </form>
