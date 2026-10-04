@@ -1,5 +1,5 @@
 import { FileText, Loader2, X } from 'lucide-react'
-import { type ClipboardEvent, type DragEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { type ClipboardEvent, type DragEvent, useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { galleryItem } from '#/components/Gallery'
@@ -23,9 +23,15 @@ export function PendingFiles({
   uploading?: (file: File) => boolean
   thumbnails?: boolean
 }) {
-  // Object URLs for the thumbnails and the gallery, released when the list changes or the form goes away.
-  const urls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files])
-  useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls])
+  // Object URLs for the thumbnails and the gallery, released when the list changes or the form goes
+  // away. They are made in the same effect that releases them: React may run an effect, clean it up
+  // and run it again (it does in development), and URLs made once outside it would be revoked by then.
+  const [urls, setUrls] = useState<ReadonlyMap<File, string>>(new Map())
+  useEffect(() => {
+    const made = new Map(files.map((f) => [f, URL.createObjectURL(f)] as const))
+    setUrls(made)
+    return () => made.forEach((u) => URL.revokeObjectURL(u))
+  }, [files])
   const group = `pending-${useId()}`
 
   const remove = (i: number) => onChange(files.filter((_, j) => j !== i))
@@ -43,10 +49,10 @@ export function PendingFiles({
               type="button"
               className="block cursor-zoom-in"
               aria-label={`Preview ${f.name}`}
-              {...galleryItem({ src: urls[i]!, name: f.name, mime: f.type }, group)}
+              {...galleryItem({ src: urls.get(f) ?? '', name: f.name, mime: f.type }, group)}
             >
               <img
-                src={urls[i]}
+                src={urls.get(f)}
                 alt={f.name}
                 className={cn('h-28 max-w-56 rounded-md border object-cover', uploading?.(f) && 'opacity-60')}
               />
@@ -78,12 +84,12 @@ export function PendingFiles({
               className="inline-flex min-w-0 cursor-zoom-in items-center gap-1.5 rounded-sm hover:underline"
               aria-label={`Preview ${f.name}`}
               {...galleryItem(
-                { src: urls[i]!, name: f.name, mime: f.type || 'application/octet-stream' },
+                { src: urls.get(f) ?? '', name: f.name, mime: f.type || 'application/octet-stream' },
                 group,
               )}
             >
               {f.type.startsWith('image/') ? (
-                <img src={urls[i]} alt="" className="size-5 shrink-0 rounded-sm object-cover" />
+                <img src={urls.get(f)} alt="" className="size-5 shrink-0 rounded-sm object-cover" />
               ) : (
                 <FileText className="size-3.5 shrink-0 text-muted-foreground" />
               )}
