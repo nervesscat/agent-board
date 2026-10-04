@@ -47,7 +47,7 @@ export default defineConfig({
   plugins: [
     refuseUnsafeAuth(),
     apiIsNeverAnAsset(),
-    nitro({ plugins: ['./src/server/startup.ts'] }),
+    nitro({ plugins: ['./src/server/startup.ts', './src/server/plugins/uploadSweep.ts'] }),
     tailwindcss(),
     tanstackStart(),
     viteReact(),

@@ -75,6 +75,7 @@ if (!fs.existsSync(path.join(dev, 'board.db')) && fs.existsSync(path.join(live, 
 console.log(`Preview: http://localhost:${port} (a copy of the data, in ${path.join(root, dev)})`)
 // PORT has to be set here: the PORT in .env would otherwise win over --port. BOARD_ENV is always
 // development, whatever the shell says; AUTH (off turns the gate off) comes through as it is.
+// BOARD_DATA_COPY keeps the copy from deleting files in an S3 bucket it shares with the live board.
 const child = spawn(`pnpm exec vite dev --port ${port} --strictPort`, {
   stdio: 'inherit',
   shell: true,
@@ -84,6 +85,7 @@ const child = spawn(`pnpm exec vite dev --port ${port} --strictPort`, {
     PORT: String(port),
     BOARD_URL: `http://localhost:${port}`,
     DATA_DIR: `./${dev}`,
+    BOARD_DATA_COPY: '1',
   },
 })
 child.on('exit', (code) => process.exit(code ?? 0))

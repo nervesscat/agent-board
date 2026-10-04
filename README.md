@@ -129,6 +129,20 @@ are written through to `data/cache`, and any file an agent is handed (MCP, or RE
 fetched there first if it has gone; copies nobody opened for 30 days leave the cache. While MinIO is
 down, uploads fail with a clear error and cached files still open.
 
+## Cleanup
+
+A project's Cleanup page (MCP `cleanup_report`) lists what its finished tickets left behind:
+registered workspaces, local and origin branches and worktrees, each branch checked against where its
+work should have landed. The board never deletes those; agents do with the human's go-ahead.
+
+It also counts the board's **unattached uploads**: files no post, reply, ticket or agent picture
+holds and no text links to (`/api/uploads/<id>`), such as images added to a New ticket window that was
+closed without creating, or a file removed from a post before sending. The board deletes those once
+they are a day old, every hour in the background (the file from disk or the bucket, its cached copy,
+then the row; a file the store cannot delete keeps its row for the next run). Younger files are never
+touched: they may be an upload about to be attached. **Delete now** on the Cleanup page runs it at
+once. A `pnpm dev` copy on `STORAGE=s3` shares the bucket with the live board, so it deletes nothing.
+
 ## Reviews
 
 An agent that reviews a PR records it with `post_review_result` (REST:
@@ -157,14 +171,16 @@ the gate device or token name.
 | GET/POST     | `/api/repos` · PATCH/DELETE `/api/repos/:id` · GET `/api/repos/:id/branches`                                  | checkouts; POST takes `projectId` or `projectName`, PATCH `projectId` moves it                                                                                |
 | GET          | `/api/projects/:id/prs?refresh=1`                                                                             | PR queue (`status`, `waitingOn` me/others, `merge`, `ci` + `checks[]`, `latestReview`, `tickets[]` it came from)                                              |
 | PATCH        | `/api/prs/:id` `{hold, holdNote}`                                                                             | park / release                                                                                                                                                |
-| GET/POST     | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`                                             | tickets (`tasks[]` on create; `repoId` when the project has several repos)                                                                                    |
+| GET/POST     | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`                                             | tickets (`tasks[]`, `attachmentIds[]` on create; `repoId` when the project has several repos)                                                                 |
 |              | `?parent=root\|<id>` on the list · `parentId` on create                                                       | lanes: a ticket's parallel sub-tickets, nested to any depth                                                                                                   |
 |              | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                                                  | lanes' updates in the feed · move lanes up a level instead of deleting them                                                                                   |
 | GET          | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=&archived=`                           | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level; `archived=include` or `only`)              |
 | POST         | `/api/tickets/:id/archive` · `/restore` · `/api/projects/:id/tickets/archive` `{status}`                      | archive a done or cancelled top-level ticket, its lanes with it · put it back · archive a whole done or cancelled stage (the human's)                         |
 | POST         | `/api/tickets/:id/claim` `{branch?, as?}`                                                                     | assign to the caller (or the project agent it works as) and start it; 409 if reserved for another agent                                                       |
-| GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain)                                                        |
-| GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches or worktrees; `reach=0` skips the merge checks                                                              |
+| GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain) and `push`                                             |
+| GET/POST     | `/api/projects/:id/push` · `/api/projects/:id/push/refresh`                                                   | whether each ticket in work has its branch on origin (`push`: below), one batch of git per repo · fetch origin now, then the same                             |
+| GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches or worktrees; `reach=0` skips the merge checks; `uploads` counts the unattached ones                        |
+| DELETE       | `/api/uploads/unattached`                                                                                     | delete the unattached uploads older than a day now `{deleted, bytes, failed}` (the human's)                                                                   |
 | POST         | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`                                          | todo list                                                                                                                                                     |
 | POST         | `/api/tickets/:id/workspaces` `{name, branch?, path?, agent?, previewUrl?}` · DELETE `/api/workspaces/:id`    | worktrees / sub-branches / subagents                                                                                                                          |
 | PATCH/GET    | `/api/workspaces/:id` `{previewUrl}` · `/api/workspaces/:id/preview`                                          | set or clear (`null`, `""`) where the branch runs for the human to try (http/https) · whether it answers: `{running, status?, checkedAt}`, localhost only     |
@@ -175,7 +191,7 @@ the gate device or token name.
 | POST         | `/api/uploads`                                                                                                | multipart `file`, or JSON `{path}` (local file) or `{name, base64}` → `{id, url}`                                                                             |
 | GET          | `/api/uploads/:id` · `/api/uploads/:id/info`                                                                  | the file · its metadata with the local `path` (and `windowsPath` under WSL)                                                                                   |
 | GET/POST     | `/api/comments?parentType=ticket\|update\|pr\|review&parentId=`                                               | on a ticket: its posts (POST adds one, not progress); else replies (`replyTo` nests; `as`, `@name` as before)                                                 |
-| GET          | `/api/projects/:id/threads`                                                                                   | threads where someone spoke after the caller                                                                                                                  |
+| GET          | `/api/projects/:id/threads?since=` · `/api/projects/:id/inbox?since=`                                         | `{cursor, threads}` where someone spoke after the caller (with `since`, only newer) · `{count, cursor, threads}` without bodies                               |
 | GET          | `/api/projects/:id/reviews`                                                                                   | results                                                                                                                                                       |
 | GET          | `/api/projects/:id/reviews/results?pr=&sha=&repoId=` · `/api/reviews/results/:id`                             | results without summaries · one in full                                                                                                                       |
 | POST         | `/api/projects/:id/reviews/results`                                                                           | post a result                                                                                                                                                 |
@@ -196,4 +212,16 @@ pnpm redeploy        # put this checkout live on the built board
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
-`src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read.
+`src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read, but
+for `git fetch --prune origin`, which only refreshes the checkout's copy of origin's branches.
+
+## Pushed or not
+
+A branch's `push` (on `GET /api/tickets/:id` for the ticket and its workspaces, on
+`/api/tickets/:id/git` for every branch, and per ticket on `/api/projects/:id/push`) is
+`{state, ahead, behind, checkedAt}`: `pushed` (green; origin has every commit, `behind` counts what it
+has on top), `ahead` (red; `ahead` commits only here), `local-only` (red; no such branch on origin),
+`remote-only` (only on origin, e.g. after cleanup) or `none` (no branch, or it exists nowhere). It is
+read from the checkout's `origin/*` refs, so the board fetches each repo in the background at most
+every 5 minutes (never prompting, never holding up a request); `checkedAt` is the last fetch, and
+the refresh action fetches at once. The board never pushes.
