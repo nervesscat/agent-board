@@ -23,6 +23,33 @@ test('the PR queue renders with its filter (no GitHub: empty)', async ({ page, p
   await expect(page.getByText('Nothing on hold waiting on others.')).toBeVisible()
 })
 
+test('the PR queue filter survives a reload, kept in the URL and remembered', async ({ page, project }) => {
+  const filter = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
+  await page.goto(`/projects/${project.id}/prs`)
+  await expect(filter('All')).toHaveAttribute('aria-selected', 'true')
+  await filter('To review').click()
+  await expect(page).toHaveURL(/[?&]filter=me(&|$)/)
+
+  // A full load renders the filter in the URL, on the server and in the browser alike: the tab and the
+  // list agree.
+  await page.reload()
+  await expect(filter('To review')).toHaveAttribute('aria-selected', 'true')
+  await expect(filter('All')).toHaveAttribute('aria-selected', 'false')
+  await expect(page.getByText('Nothing pending to review.')).toBeVisible()
+
+  // Without one in the URL, the filter this browser remembers comes back, and the URL says so.
+  await page.goto(`/projects/${project.id}/prs`)
+  await expect(page).toHaveURL(/[?&]filter=me(&|$)/)
+  await expect(filter('To review')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByText('Nothing pending to review.')).toBeVisible()
+
+  // A link that names one wins over what is remembered.
+  await page.goto(`/projects/${project.id}/prs?filter=others`)
+  await expect(filter('Waiting on others')).toHaveAttribute('aria-selected', 'true')
+  await expect(filter('To review')).toHaveAttribute('aria-selected', 'false')
+  await expect(page.getByText('Nothing pending waiting on others.')).toBeVisible()
+})
+
 test('edits the project instructions with the rich editor', async ({ page, project, human }) => {
   await page.goto(`/projects/${project.id}/settings`)
   const section = page.getByRole('region', { name: 'Project instructions' })
@@ -58,6 +85,44 @@ test('edits the project instructions with the rich editor', async ({ page, proje
   await expect(editor).toBeHidden()
   await expect(section).not.toContainText('Always.')
   expect((await ok<Project>(human.get(`/api/projects/${project.id}`))).instructions).toBe(saved)
+})
+
+test('Esc in the instructions editor asks once and waits for an answer', async ({ page, project, human }) => {
+  await page.goto(`/projects/${project.id}/settings`)
+  const section = page.getByRole('region', { name: 'Project instructions' })
+  await section.getByRole('button', { name: 'No instructions yet. Click to write them.' }).click()
+  const editor = section.getByRole('textbox', { name: 'Project instructions' })
+  await expect(editor).toBeFocused()
+  await page.keyboard.type('A first draft.')
+
+  await page.keyboard.press('Escape')
+  const ask = page.getByRole('alertdialog')
+  await expect(ask).toContainText('Discard your changes?')
+  // The same Esc used to reach the dialog as it opened and close it again at once.
+  await page.waitForTimeout(500)
+  await expect(ask).toBeVisible()
+  await ask.getByRole('button', { name: 'Keep editing' }).click()
+  await expect(ask).toBeHidden()
+  await expect(editor).toContainText('A first draft.')
+
+  await editor.click()
+  await page.keyboard.press('Escape')
+  await expect(ask).toContainText('Discard your changes?')
+  await page.waitForTimeout(500)
+  await expect(ask).toBeVisible()
+  await ask.getByRole('button', { name: 'Discard' }).click()
+  await expect(editor).toBeHidden()
+  await expect(
+    section.getByRole('button', { name: 'No instructions yet. Click to write them.' }),
+  ).toBeVisible()
+  expect((await ok<Project>(human.get(`/api/projects/${project.id}`))).instructions).toBe('')
+
+  // With nothing changed, Esc just closes the editor.
+  await section.getByRole('button', { name: 'No instructions yet. Click to write them.' }).click()
+  await expect(editor).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(editor).toBeHidden()
+  await expect(ask).toBeHidden()
 })
 
 test('the human adds the default agents; an agent gets 403 doing it', async ({ page, project, agent }) => {

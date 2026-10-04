@@ -105,6 +105,9 @@ export function RichEditor({
           return true
         }
         if (event.key === 'Escape' && handlers.current.onCancel) {
+          // Taken here: `onCancel` may open a dialog ("Discard your changes?"), which listens for Esc
+          // on the document as soon as it opens, and would close again on this same keypress.
+          event.stopPropagation()
           handlers.current.onCancel()
           return true
         }
