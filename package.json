@@ -11,6 +11,7 @@
     "build": "vite build",
     "start": "node --env-file-if-exists=.env .output/server/index.mjs",
     "redeploy": "node scripts/redeploy.mjs",
+    "move-uploads": "node scripts/move-uploads-to-s3.mjs",
     "generate-routes": "tsr generate",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src",
@@ -21,6 +22,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1146.0",
     "@base-ui/react": "^1.8.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@modelcontextprotocol/sdk": "^1.30.0",

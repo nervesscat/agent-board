@@ -15,7 +15,18 @@ export const config = {
   gateUrl: env('GATE_URL', 'http://localhost:47110').replace(/\/$/, ''),
   dataDir: expandPath(env('DATA_DIR', './data')),
   claudeBin: env('CLAUDE_BIN', 'claude'),
+  // Where attachment files live: 'local' (data/uploads) or 's3' (MinIO or any S3-compatible store).
+  storage: env('STORAGE', 'local') === 's3' ? ('s3' as const) : ('local' as const),
+  s3: {
+    endpoint: env('S3_ENDPOINT', ''),
+    region: env('S3_REGION', 'us-east-1'),
+    bucket: env('S3_BUCKET', ''),
+    accessKey: env('S3_ACCESS_KEY', ''),
+    secretKey: env('S3_SECRET_KEY', ''),
+  },
 }
 
 export const uploadsDir = path.join(config.dataDir, 'uploads')
+// With STORAGE=s3, the local copies agents open (written as files come in, fetched again when gone).
+export const cacheDir = path.join(config.dataDir, 'cache')
 export const logsDir = path.join(config.dataDir, 'logs')

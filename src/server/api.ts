@@ -1,4 +1,4 @@
-import fs from 'node:fs'
+import { Readable } from 'node:stream'
 import { z } from 'zod'
 
 import { AGENT_CLIENTS, COMMENT_PARENTS, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
@@ -20,6 +20,7 @@ import * as repos from './repos'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
+import { fileStore, parseRange } from './storage'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -28,6 +29,9 @@ const id = (p: Record<string, string>, k = 'id') => intParam(p[k]!, k)
 const Instructions = z.string().max(50_000)
 // A stage key, name or kind; the server resolves it against the project's stages.
 const Status = z.string().min(1).max(60)
+/** An agent opens the files it is handed from disk: with STORAGE=s3, have them there first. */
+const forAgent = <T>(request: Request, value: T) =>
+  isAgent(request) ? uploads.ensureLocalFiles(value) : Promise.resolve(value)
 const AgentName = z.string().min(1).max(40)
 // Speaking as one of the project's agents is how a connected agent delegates; the human speaks as themself.
 const agentOnly = (request: Request) => {
@@ -248,8 +252,13 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   return json(features.createTicket(id(params), body, actor), 201)
 })
 // ?lanes=1 folds the lanes' updates into the feed.
-api.get('/api/tickets/:id', ({ params, url }) =>
-  json(features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' })),
+api.get('/api/tickets/:id', async ({ request, params, url }) =>
+  json(
+    await forAgent(
+      request,
+      features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' }),
+    ),
+  ),
 )
 // An agent cannot reassign a ticket reserved for one of the project's agents; the human can.
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
@@ -401,9 +410,10 @@ api.delete('/api/updates/:id', ({ request, params, actor }) => {
 })
 
 // --- comments ---
-api.get('/api/comments', ({ url }) => {
+api.get('/api/comments', async ({ request, url }) => {
   const parentType = z.enum(COMMENT_PARENTS).parse(url.searchParams.get('parentType'))
-  return json(features.listComments(parentType, intParam(url.searchParams.get('parentId') ?? '', 'parentId')))
+  const parentId = intParam(url.searchParams.get('parentId') ?? '', 'parentId')
+  return json(await forAgent(request, features.listComments(parentType, parentId)))
 })
 // Threads in a project where someone spoke after the caller, on things the caller owns or spoke in.
 api.get('/api/projects/:id/threads', ({ params, actor }) => json(features.listOpenThreads(id(params), actor)))
@@ -450,24 +460,33 @@ api.post('/api/uploads', async ({ request, actor }) => {
   )
   const a =
     'path' in body
-      ? uploads.saveFromPath(body.path, actor)
-      : uploads.saveBase64(body.name, body.base64, actor, body.mime)
+      ? await uploads.saveFromPath(body.path, actor)
+      : await uploads.saveBase64(body.name, body.base64, actor, body.mime)
   return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
 })
-api.get('/api/uploads/:id/info', ({ params }) =>
-  json(uploads.attachmentView(uploads.getAttachment(id(params)))),
+// For agents: the file's local path is there to open (fetched into the cache first with STORAGE=s3).
+api.get('/api/uploads/:id/info', async ({ params }) =>
+  json(await uploads.ensureLocalFiles(uploads.attachmentView(uploads.getAttachment(id(params))))),
 )
-api.get('/api/uploads/:id', ({ params }) => {
+// The bytes, whole or the one range asked for (videos seek with Range).
+api.get('/api/uploads/:id', async ({ request, params }) => {
   const a = uploads.getAttachment(id(params))
-  const file = uploads.attachmentPath(a)
-  if (!fs.existsSync(file)) throw new HttpError(404, 'file is gone')
-  const stream = fs.createReadStream(file)
-  return new Response(stream as unknown as ReadableStream, {
+  const range = parseRange(request.headers.get('range'), a.size)
+  const stream = await fileStore.read(a.storedAs, range ?? undefined)
+  const headers: Record<string, string> = {
+    'content-type': a.mime,
+    'accept-ranges': 'bytes',
+    'cache-control': 'private, max-age=31536000, immutable',
+    'content-disposition': `inline; filename="${encodeURIComponent(a.name)}"`,
+  }
+  const body = Readable.toWeb(stream) as ReadableStream
+  if (!range) return new Response(body, { headers: { ...headers, 'content-length': String(a.size) } })
+  return new Response(body, {
+    status: 206,
     headers: {
-      'content-type': a.mime,
-      'content-length': String(a.size),
-      'cache-control': 'private, max-age=31536000, immutable',
-      'content-disposition': `inline; filename="${encodeURIComponent(a.name)}"`,
+      ...headers,
+      'content-length': String(range.end - range.start + 1),
+      'content-range': `bytes ${range.start}-${range.end}/${a.size}`,
     },
   })
 })
