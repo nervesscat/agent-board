@@ -111,7 +111,8 @@ export function TicketBoard({
                       setDragging(null)
                       setOver(null)
                     }}
-                    className={`flex h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
+                    // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
+                    className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
                       dragging === t.id ? 'opacity-40' : ''
                     }`}
                     title={t.title}
