@@ -1,5 +1,4 @@
-import { and, eq, isNull, notExists, sql } from 'drizzle-orm'
-import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
+import { and, eq, sql } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { HttpError } from './http'
@@ -18,41 +17,59 @@ const HOUR = 60 * 60 * 1000
 
 const a = schema.attachments
 
-/** Held by no post, reply, ticket or agent picture. */
-const loose = () =>
-  and(
-    isNull(a.updateId),
-    isNull(a.commentId),
-    isNull(a.ticketId),
-    notExists(
-      db
-        .select({ one: sql`1` })
-        .from(schema.agents)
-        .where(eq(schema.agents.avatarId, a.id)),
-    ),
-  )
+/*
+ * What can hold an upload is read from the database itself rather than listed here, so a table or
+ * column added later (a report's files, say) can never leave its files looking unattached:
+ * - an owner column on the upload's own row: every `*_id` column of attachments (post, reply,
+ *   ticket, …);
+ * - a foreign key from another table to attachments (an agent's picture, …);
+ * - a link in any text column of any table (`/api/uploads/12`: markdown that links a file by URL).
+ */
+const quote = (name: string) => `"${name.replace(/"/g, '""')}"`
 
-// Text that may link a file by its URL instead of attaching it: markdown in bodies and instructions.
-const TEXTS: [SQLiteTable, SQLiteColumn][] = [
-  [schema.projects, schema.projects.instructions],
-  [schema.agents, schema.agents.instructions],
-  [schema.agents, schema.agents.delegation],
-  [schema.tickets, schema.tickets.body],
-  [schema.updates, schema.updates.body],
-  [schema.comments, schema.comments.body],
-  [schema.reviewResults, schema.reviewResults.summaryMd],
-  [schema.dailySummaries, schema.dailySummaries.body],
-]
+function tables(): string[] {
+  return db
+    .all<{
+      name: string
+    }>(sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not like '__drizzle%'`)
+    .map((r) => r.name)
+}
+
+/** Held by nothing: no owner column set on its row, and no row elsewhere pointing at it. */
+const loose = () => {
+  const owners = db
+    .all<{ name: string }>(sql`select name from pragma_table_info('attachments')`)
+    .map((c) => c.name)
+    .filter((c) => c.endsWith('_id'))
+  const refs = tables().flatMap((t) =>
+    db
+      .all<{ table: string; from: string }>(sql`select "table", "from" from pragma_foreign_key_list(${t})`)
+      .filter((k) => k.table === 'attachments')
+      .map((k) => [t, k.from] as const),
+  )
+  const held = [
+    ...owners.map((c) => `"attachments".${quote(c)} is null`),
+    ...refs.map(
+      ([t, c]) => `not exists (select 1 from ${quote(t)} where ${quote(t)}.${quote(c)} = "attachments"."id")`,
+    ),
+  ]
+  return sql.raw(held.join(' and ') || '1')
+}
 
 /** Every upload some text links to (`/api/uploads/12`, relative or with the board's address). */
 function linkedFromText(): Set<number> {
   const ids = new Set<number>()
-  for (const [table, column] of TEXTS) {
-    const rows = db.all<{ text: string }>(
-      sql`select ${column} as text from ${table} where ${column} like '%/api/uploads/%'`,
-    )
-    for (const { text } of rows)
-      for (const m of text.matchAll(/\/api\/uploads\/(\d+)/g)) ids.add(Number(m[1]))
+  for (const t of tables()) {
+    const columns = db
+      .all<{ name: string; type: string }>(sql`select name, type from pragma_table_info(${t})`)
+      .filter((c) => /text|char|clob/i.test(c.type))
+    for (const { name } of columns) {
+      const rows = db.all<{ text: string }>(
+        sql.raw(`select ${quote(name)} as text from ${quote(t)} where ${quote(name)} like '%/api/uploads/%'`),
+      )
+      for (const { text } of rows)
+        for (const m of String(text).matchAll(/\/api\/uploads\/(\d+)/g)) ids.add(Number(m[1]))
+    }
   }
   return ids
 }

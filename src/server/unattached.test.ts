@@ -164,3 +164,30 @@ describe('unattached uploads', () => {
     db.delete(schema.attachments).where(eq(schema.attachments.id, shared.id)).run()
   })
 })
+
+describe('what holds an upload comes from the schema', () => {
+  // Last in the file: it adds a column and tables the other tests never expect.
+  it('keeps uploads held by a column, foreign key or text it was never told about', async () => {
+    const { sql } = await import('drizzle-orm')
+    const dir = fs.mkdtempSync(path.join(tmp, 'uploads-'))
+    const store = storage.localStore(dir)
+    // What a later feature might add: an owner column, a table pointing at uploads, a text linking one.
+    db.run(sql`alter table attachments add column report_id integer`)
+    db.run(sql`create table pinned (id integer primary key, file_id integer references attachments(id))`)
+    db.run(sql`create table memos (id integer primary key, text text not null)`)
+
+    const byColumn = upload(dir, 'report.pdf')
+    db.run(sql`update attachments set report_id = 1 where id = ${byColumn.id}`)
+    const byKey = upload(dir, 'pinned.png')
+    db.run(sql`insert into pinned (file_id) values (${byKey.id})`)
+    const byText = upload(dir, 'linked.png')
+    db.run(sql`insert into memos (text) values (${`see ![x](/api/uploads/${byText.id})`})`)
+    const loose = upload(dir, 'loose.png')
+
+    await unattached.deleteUnattachedUploads({ store })
+    expect(row(byColumn.id)).toBeDefined()
+    expect(row(byKey.id)).toBeDefined()
+    expect(row(byText.id)).toBeDefined()
+    expect(row(loose.id)).toBeUndefined()
+  })
+})
