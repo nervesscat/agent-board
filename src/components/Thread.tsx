@@ -12,6 +12,7 @@ import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, get, post, upload, type CommentRow } from '#/lib/api'
 import { ago } from '#/lib/format'
+import { useProjectAgents } from '#/lib/project'
 
 export type Parent = 'ticket' | 'update' | 'pr' | 'review'
 
@@ -49,7 +50,7 @@ export function CommentItem({
   return (
     <div className={depth ? 'ml-6 border-l pl-3' : ''}>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Actor name={c.author} className="text-foreground" />
+        <Actor name={c.author} via={c.via} className="text-foreground" />
         {label && <span>{label}</span>}
         {!hideTime && <span>{ago(c.createdAt)}</span>}
         {depth === 0 && onReply && (
@@ -92,6 +93,8 @@ export function Thread({
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
+  const agents = useProjectAgents()
+  const ask = agents.length ? ` · @${agents[0]!.name} asks that agent` : ''
 
   const send = useMutation({
     mutationFn: async () => {
@@ -134,7 +137,7 @@ export function Thread({
         <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder={compact ? 'Comment…' : 'Leave a comment (markdown)'}
+          placeholder={compact ? `Comment…${ask}` : `Leave a comment (markdown)${ask}`}
           rows={compact ? 2 : 3}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && body.trim()) send.mutate()

@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { Bot, User } from 'lucide-react'
 
+import { AgentAvatar } from '#/components/AgentAvatar'
 import { get } from '#/lib/api'
+import { useProjectAgent } from '#/lib/project'
 
 type Kind = 'agent' | 'human'
 
@@ -21,9 +23,24 @@ export function useActorKinds() {
   return (name: string): Kind => kinds.get(name) ?? guess(name)
 }
 
-/** Who did it: agents get a bot glyph, the human signed in through the browser an "admin" badge. */
-export function Actor({ name, className = '' }: { name: string; className?: string }) {
+/**
+ * Who did it: one of the project's agents gets its picture (and the connected agent it posted `via`),
+ * other agents a bot glyph, the human signed in through the browser an "admin" badge.
+ */
+export function Actor({ name, via, className = '' }: { name: string; via?: string; className?: string }) {
   const kind = useActorKinds()(name)
+  const agent = useProjectAgent(name)
+  if (agent)
+    return (
+      <span
+        className={`inline-flex items-center gap-1 font-medium ${className}`}
+        title={`${agent.name} (one of the project's agents${via ? `, posted via ${via}` : ''})`}
+      >
+        <AgentAvatar agent={agent} />
+        {agent.name}
+        {via && <span className="font-normal text-muted-foreground">via {via}</span>}
+      </span>
+    )
   const Icon = kind === 'agent' ? Bot : User
   return (
     <span

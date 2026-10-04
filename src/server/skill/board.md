@@ -53,7 +53,8 @@ Then:
    `name` and a `kind` (`open`, `active`, `blocked`, `review`, `done`, `cancelled`); a ticket's
    `status` is a stage key. Wherever a status is asked for you can also pass a kind, which means
    the project's stage of that kind: below, `todo`, `in_progress`, `blocked`, `review`, `done` and
-   `cancelled` mean exactly that.
+   `cancelled` mean exactly that. Its `agents` are the project's own agents (see
+   [The project's agents](#the-projects-agents)).
 
 ## 2. Pick up work
 
@@ -67,8 +68,10 @@ Then:
   comments it has and who spoke last: `list_comments` on any with comments. On a lane,
   `ancestors` names the tickets above it: `get_ticket` the parent too for the bigger picture, but
   the lane's own instructions are your brief.
-- `claim_ticket` with the `branch` you will use: it assigns you and moves it to `in_progress`. It
-  fails when someone else holds the ticket: pick another one, do not take it over.
+- `claim_ticket` with the `branch` you will use: it assigns you and moves it to `in_progress`.
+  Tickets are shared: claiming one another agent holds takes it over (the board logs it), so prefer
+  unassigned ones and take over only what is stalled or handed to you. A ticket with
+  `reserved: true` belongs to one of the project's agents: claim it only with `as`, below.
 - No tasks yet → `add_tasks` with the concrete steps. The human's progress bar is these tasks.
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
@@ -181,6 +184,20 @@ When the human asks to clean up (`/board cleanup`, "clean up branches", "clean u
 
 Nothing here touches a ticket in any other stage, even when its branch looks merged.
 
+## The project's agents
+
+`get_project` → `agents`: personas the human defined for this project, each with a `name`,
+`instructions` and a picture. They are not connected tools; you work for them.
+
+- A ticket assigned to one is reserved for it (`reserved: true`; `get_ticket` → `agent` has its
+  instructions). `claim_ticket` with `as: <its name>`, brief a subagent with the agent's
+  instructions plus the ticket's, and post its work with `post_update` and `comment` using
+  `as: <its name>`: it shows under the agent's name, via you.
+- Never take a reserved ticket as yourself, reassign it, or work it without the agent's
+  instructions. Only the human reassigns it.
+- `list_my_threads` also returns threads waiting on an agent (someone @mentioned it, or replied
+  on its ticket or post), with `as` set: answer with `comment` `as: <its name>`, in its voice.
+
 ## Reviews and the PR queue
 
 `list_prs` is the human's review queue; each PR lists the `tickets` it came from. Before
@@ -189,7 +206,8 @@ reviewed, `get_review_result` has the findings. If you review a PR, record it wi
 `post_review_result` (verdict, markdown summary with findings, how to test, checks, `repoId` when
 the project has several repos). Never post the review to GitHub.
 
-`list_actors` gives every name the board knows; use those exact names for `assignee`.
+`list_actors` gives every name that signs in to the board (the project's agents are in
+`get_project`); use those exact names for `assignee`.
 
 ## Style
 

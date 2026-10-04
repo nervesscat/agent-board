@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
@@ -6,6 +6,7 @@ import { baseChain, gitCache, reachOf } from './cleanup'
 import { branchInfo } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
+import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { prForTicket } from './prs'
 import { resolveRepo, ticketRepo } from './repos'
 import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
@@ -44,6 +45,7 @@ function projectTickets(projectId: number) {
     p.total++
     if (task.done) p.done++
   }
+  const agentNames = new Set(listAgents(projectId).map((a) => a.name.toLowerCase()))
   const children = new Map<number, schema.Ticket[]>()
   for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
   // A cancelled lane's tasks are no longer part of the work.
@@ -65,9 +67,15 @@ function projectTickets(projectId: number) {
       if (lane.disapprovedAt) lanes.disapproved++
       lanes.byStage[lane.status] = (lanes.byStage[lane.status] ?? 0) + 1
     }
-    return { ...t, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
+    // Assigned to one of the project's agents: only that agent works it.
+    const reserved = agentNames.has(t.assignee.toLowerCase())
+    return { ...t, reserved, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
   })
 }
+
+/** The project agent a ticket is reserved for, or null when it is shared. */
+export const reservedFor = (t: Pick<schema.Ticket, 'projectId' | 'assignee'>) =>
+  findAgent(t.projectId, t.assignee)
 
 export type TicketRow = ReturnType<typeof projectTickets>[number]
 
@@ -167,8 +175,14 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     : []
   const ticketThread = threadStats('ticket', [id]).get(id) ?? NO_THREAD
   const updateThreads = threadStats('update', updateIds)
+  const agent = reservedFor(ticket)
   return {
     ...ticket,
+    reserved: self.reserved,
+    // Set when the ticket is reserved for one of the project's agents: who to brief, and with what.
+    agent: agent
+      ? { id: agent.id, name: agent.name, instructions: agent.instructions, avatarUrl: agent.avatarUrl }
+      : null,
     // The ticket's own thread; each update carries its own below.
     thread: ticketThread,
     pr: prForTicket(ticket),
@@ -288,12 +302,17 @@ export function updateTicket(
     >
   >,
   actor: string,
-  opts: { guardClaim?: boolean } = {},
+  opts: { agent?: boolean } = {},
 ) {
   const before = getTicket(id)
-  // An agent assigning itself a ticket someone else holds would silently take it from them.
-  if (opts.guardClaim && patch.assignee === actor && before.assignee && before.assignee !== actor)
-    throw new HttpError(409, `ticket ${id} is assigned to ${before.assignee}; ask in its thread first`)
+  if (patch.assignee !== undefined && patch.assignee !== before.assignee) {
+    // Tickets are shared between agents, except one the human reserved for one of the project's agents.
+    const holder = opts.agent ? reservedFor(before) : null
+    if (holder)
+      throw new HttpError(409, `ticket ${id} is reserved for ${holder.name}; only the human reassigns it`)
+    const agent = findAgent(before.projectId, patch.assignee)
+    if (agent) patch = { ...patch, assignee: agent.name }
+  }
   if (patch.repoId) resolveRepo(before.projectId, patch.repoId)
   if (patch.tags) patch = { ...patch, tags: cleanTags(patch.tags) }
   const stages = listStages(before.projectId)
@@ -329,42 +348,50 @@ export function updateTicket(
 }
 
 /**
- * Take a ticket for `actor`: it must be unassigned or already theirs, and not in a done or cancelled
- * stage. The check and the write are one statement, so two agents claiming at once cannot both win. A
- * ticket waiting in an open or blocked stage moves to the project's first active stage, if it has one.
+ * Take a ticket, for `actor` or, with `as`, for one of the project's agents that `actor` works it as. A
+ * shared ticket can be taken over from whoever holds it; one reserved for a project agent only by acting
+ * as that agent. Not in a done or cancelled stage. The write only lands if nobody reassigned the ticket
+ * since it was read, so two agents claiming at once cannot both win. A ticket waiting in an open or
+ * blocked stage moves to the project's first active stage, if it has one.
  */
-export function claimTicket(id: number, actor: string, opts: { branch?: string } = {}) {
+export function claimTicket(id: number, actor: string, opts: { branch?: string; as?: string } = {}) {
   const before = getTicket(id)
   const stages = listStages(before.projectId)
   const from = stageOf(stages, before.status)
   if (from.kind === 'done' || from.kind === 'cancelled')
     throw new HttpError(409, `ticket ${id} is ${from.kind} (${from.name})`)
+  const as = opts.as ? actingAs(before.projectId, opts.as) : null
+  const holder = reservedFor(before)
+  if (holder && holder.id !== as?.id)
+    throw new HttpError(
+      409,
+      as
+        ? `ticket ${id} is reserved for ${holder.name}, not ${as.name}`
+        : `ticket ${id} is reserved for ${holder.name}: claim it with as: "${holder.name}" and work it as that agent, briefed with its instructions`,
+    )
+  const assignee = as?.name ?? actor
   const active = firstOfKind(stages, 'active')
   const start = (from.kind === 'open' || from.kind === 'blocked') && active ? active : null
   const row = db
     .update(schema.tickets)
     .set({
-      assignee: actor,
+      assignee,
       ...(start ? { status: start.key } : {}),
       ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
       updatedAt: new Date().toISOString(),
     })
-    .where(
-      and(eq(schema.tickets.id, id), or(eq(schema.tickets.assignee, ''), eq(schema.tickets.assignee, actor))),
-    )
+    .where(and(eq(schema.tickets.id, id), eq(schema.tickets.assignee, before.assignee)))
     .returning()
     .get()
-  if (!row) {
-    const holder = getTicket(id).assignee
-    throw new HttpError(409, `ticket ${id} is already claimed by ${holder}`)
-  }
+  if (!row) throw new HttpError(409, `ticket ${id} was reassigned while claiming it; read it again`)
   if (row.parentId) touch(row.parentId)
-  if (before.assignee !== actor || start)
+  const tookOver = before.assignee && before.assignee !== assignee ? ` from ${before.assignee}` : ''
+  if (before.assignee !== assignee || start)
     logActivity({
       projectId: row.projectId,
-      actor,
+      actor: assignee,
       kind: 'ticket',
-      text: `claimed ${row.parentId ? 'lane' : 'ticket'} #${id} ${row.title}${start ? ` (status ${from.name} → ${start.name})` : ''}`,
+      text: `${tookOver ? 'took over' : 'claimed'} ${row.parentId ? 'lane' : 'ticket'} #${id} ${row.title}${tookOver}${as ? ` (via ${actor})` : ''}${start ? ` (status ${from.name} → ${start.name})` : ''}`,
       refType: 'ticket',
       refId: id,
     })
@@ -631,16 +658,29 @@ const samePath = (a: string, b: string) =>
 
 // --- updates (the "advances" feed) ---
 
-export function postUpdate(ticketId: number, body: string, attachmentIds: number[], actor: string) {
+/** Who a post is signed with: `actor`, or with `as` one of the project's agents, posted via `actor`. */
+function signer(projectId: number, actor: string, as?: string) {
+  if (!as) return { author: actor, via: '' }
+  return { author: actingAs(projectId, as).name, via: actor }
+}
+
+export function postUpdate(
+  ticketId: number,
+  body: string,
+  attachmentIds: number[],
+  actor: string,
+  opts: { as?: string } = {},
+) {
   const ticket = getTicket(ticketId)
-  const row = db.insert(schema.updates).values({ ticketId, author: actor, body }).returning().get()
+  const { author, via } = signer(ticket.projectId, actor, opts.as)
+  const row = db.insert(schema.updates).values({ ticketId, author, via, body }).returning().get()
   attachTo(attachmentIds, { updateId: row.id })
   touch(ticketId)
   logActivity({
     projectId: ticket.projectId,
-    actor,
+    actor: author,
     kind: 'update',
-    text: `posted an update on #${ticketId} ${ticket.title}: ${firstLine(body)}`,
+    text: `posted an update on #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${firstLine(body)}`,
     refType: 'ticket',
     refId: ticketId,
   })
@@ -712,8 +752,9 @@ function threadStats(parentType: schema.CommentParent, ids: number[]) {
 
 /**
  * The threads in a project waiting on `actor`: ones they spoke in or whose subject is theirs (a ticket
- * assigned to or opened by them, their update, their review), where someone else spoke last. Newest
- * first; `waiting` counts the comments since the actor last spoke.
+ * assigned to or opened by them, their update, their review), where someone else spoke last. Threads
+ * waiting on one of the project's agents come too, with `as` set to it, for `actor` to answer as that
+ * agent. Newest first; `waiting` counts the comments since the actor (or agent) last spoke.
  */
 export function listOpenThreads(projectId: number, actor: string) {
   getProject(projectId)
@@ -748,31 +789,32 @@ export function listOpenThreads(projectId: number, actor: string) {
     .where(eq(schema.reviewResults.projectId, projectId))
     .all()
 
-  type Subject = { ticketId: number | null; title: string; mine: boolean }
+  // owners: whose subject it is (a ticket's assignee and opener, a post's author).
+  type Subject = { ticketId: number | null; title: string; owners: string[] }
   const subjects = new Map<string, Subject>()
   for (const t of tickets)
     subjects.set(`ticket:${t.id}`, {
       ticketId: t.id,
       title: t.title,
-      mine: t.assignee === actor || t.createdBy === actor,
+      owners: [t.assignee, t.createdBy],
     })
   for (const u of updates)
     subjects.set(`update:${u.id}`, {
       ticketId: u.ticketId,
       title: `update on #${u.ticketId} ${ticketById.get(u.ticketId)?.title ?? ''}: ${gist(u.body, 60)}`,
-      mine: u.author === actor,
+      owners: [u.author],
     })
   for (const p of prs)
     subjects.set(`pr:${p.id}`, {
       ticketId: null,
       title: `PR #${p.number} ${p.title}`,
-      mine: p.author === actor,
+      owners: [p.author],
     })
   for (const r of reviews)
     subjects.set(`review:${r.id}`, {
       ticketId: null,
       title: `review of PR #${r.prNumber} (${r.verdict})`,
-      mine: r.author === actor,
+      owners: [r.author],
     })
 
   const ids = (type: string) =>
@@ -794,22 +836,39 @@ export function listOpenThreads(projectId: number, actor: string) {
     threads.set(key, [...(threads.get(key) ?? []), c])
   }
 
+  const agents = listAgents(projectId)
   const out = []
   for (const [key, list] of threads) {
     const subject = subjects.get(key)!
     const last = list[list.length - 1]!
-    const spoke = list.some((c) => c.author === actor)
-    if (last.author === actor || !(spoke || subject.mine)) continue
-    const lastMine = list.map((c) => c.author).lastIndexOf(actor)
-    const c = list[0]!
-    out.push({
-      parentType: c.parentType,
-      parentId: c.parentId,
+    const entry = (who: string, as: string | null) => ({
+      parentType: last.parentType,
+      parentId: last.parentId,
       ticketId: subject.ticketId,
       title: subject.title,
-      waiting: list.length - 1 - lastMine,
+      // Set when the thread waits on one of the project's agents: answer with comment as: <that name>.
+      as,
+      waiting: list.length - 1 - list.map((c) => c.author).lastIndexOf(who),
       last: { id: last.id, author: last.author, text: gist(last.body), createdAt: last.createdAt },
     })
+    const spoke = list.some((c) => c.author === actor)
+    if (last.author !== actor && (spoke || subject.owners.includes(actor))) {
+      out.push(entry(actor, null))
+      continue
+    }
+    // Else it may wait on one of the project's agents: mentioned last, or it spoke there, or it is its subject.
+    const named = mentions(last.body)
+    const lower = (s: string) => s.toLowerCase()
+    const agent = agents.find((a) => {
+      const n = lower(a.name)
+      if (lower(last.author) === n) return false
+      return (
+        named.includes(n) ||
+        list.some((c) => lower(c.author) === n) ||
+        subject.owners.some((o) => lower(o) === n)
+      )
+    })
+    if (agent) out.push(entry(agent.name, agent.name))
   }
   return out.sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt))
 }
@@ -821,17 +880,21 @@ export function addComment(
     replyTo?: number | null
     body: string
     attachmentIds?: number[]
+    /** One of the project's agents, answering through the connected agent `actor`. */
+    as?: string
   },
   actor: string,
 ) {
   const projectId = commentProject(input.parentType, input.parentId)
+  const { author, via } = signer(projectId, actor, input.as)
   const row = db
     .insert(schema.comments)
     .values({
       parentType: input.parentType,
       parentId: input.parentId,
       replyTo: input.replyTo ?? null,
-      author: actor,
+      author,
+      via,
       body: input.body,
     })
     .returning()
@@ -839,9 +902,9 @@ export function addComment(
   attachTo(input.attachmentIds ?? [], { commentId: row.id })
   logActivity({
     projectId,
-    actor,
+    actor: author,
     kind: 'comment',
-    text: `commented on ${input.parentType} #${input.parentId}: ${firstLine(input.body)}`,
+    text: `commented on ${input.parentType} #${input.parentId}${via ? ` (via ${via})` : ''}: ${firstLine(input.body)}`,
     refType: input.parentType,
     refId: input.parentId,
   })

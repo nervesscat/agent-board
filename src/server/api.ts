@@ -13,6 +13,7 @@ import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { HttpError, intParam, readJson } from './http'
 import { handleMcp } from './mcp'
+import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import * as projects from './projects'
 import * as repos from './repos'
@@ -27,6 +28,11 @@ const id = (p: Record<string, string>, k = 'id') => intParam(p[k]!, k)
 const Instructions = z.string().max(50_000)
 // A stage key, name or kind; the server resolves it against the project's stages.
 const Status = z.string().min(1).max(60)
+const AgentName = z.string().min(1).max(40)
+// Speaking as one of the project's agents is how a connected agent delegates; the human speaks as themself.
+const agentOnly = (request: Request) => {
+  if (!isAgent(request)) throw new HttpError(403, 'only a connected agent posts as one of the project agents')
+}
 const TicketPatch = z.object({
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(50_000).optional(),
@@ -127,6 +133,35 @@ api.delete('/api/projects/:id/stages/:stageId', ({ request, params, url, actor }
   return json({ ok: true })
 })
 
+// --- the project's agents (personas a connected agent delegates to) ---
+const AgentBody = z.object({
+  name: AgentName,
+  instructions: Instructions.optional(),
+  // An upload from POST /api/uploads, shown as the agent's picture.
+  avatarId: z.number().int().nullable().optional(),
+})
+const humanAgents = (request: Request) => {
+  if (isAgent(request)) throw new HttpError(403, "only the human edits the project's agents")
+}
+api.get('/api/projects/:id/agents', ({ params }) => {
+  projects.getProject(id(params))
+  return json(projectAgents.listAgents(id(params)))
+})
+api.post('/api/projects/:id/agents', async ({ request, params, actor }) => {
+  humanAgents(request)
+  return json(projectAgents.createAgent(id(params), await readJson(request, AgentBody), actor), 201)
+})
+api.patch('/api/agents/:id', async ({ request, params, actor }) => {
+  humanAgents(request)
+  return json(projectAgents.updateAgent(id(params), await readJson(request, AgentBody.partial()), actor))
+})
+// Its reserved tickets become shared and unassigned.
+api.delete('/api/agents/:id', ({ request, params, actor }) => {
+  humanAgents(request)
+  projectAgents.deleteAgent(id(params), actor)
+  return json({ ok: true })
+})
+
 // --- repos ---
 api.get('/api/repos', () => json(repos.listRepos()))
 api.post('/api/repos', async ({ request, actor }) => {
@@ -216,8 +251,13 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
 api.get('/api/tickets/:id', ({ params, url }) =>
   json(features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' })),
 )
+// An agent cannot reassign a ticket reserved for one of the project's agents; the human can.
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
-  json(features.updateTicket(id(params), await readJson(request, TicketPatch), actor)),
+  json(
+    features.updateTicket(id(params), await readJson(request, TicketPatch), actor, {
+      agent: isAgent(request),
+    }),
+  ),
 )
 // ?keepLanes=1 moves the lanes up a level instead of deleting them.
 api.delete('/api/tickets/:id', ({ params, url, actor }) => {
@@ -238,9 +278,13 @@ api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
   )
   return json(features.setVerdict(id(params), body.verdict, actor, { reopenTo: body.reopenTo }))
 })
-// Assigns the ticket to the caller unless someone else holds it (409), and starts it.
+// Assigns the ticket to the caller (or, with `as`, to the project agent the caller works it as) and starts
+// it; 409 when it is reserved for another of the project's agents.
 api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
-  const body = await readJson(request, z.object({ branch: z.string().max(200).optional() }))
+  const body = await readJson(
+    request,
+    z.object({ branch: z.string().max(200).optional(), as: AgentName.optional() }),
+  )
   return json(features.claimTicket(id(params), actor, body))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
@@ -285,9 +329,14 @@ api.delete('/api/workspaces/:id', ({ params, actor }) => {
 api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({ body: z.string().min(1).max(50_000), attachmentIds: z.array(z.number().int()).default([]) }),
+    z.object({
+      body: z.string().min(1).max(50_000),
+      attachmentIds: z.array(z.number().int()).default([]),
+      as: AgentName.optional(),
+    }),
   )
-  return json(features.postUpdate(id(params), body.body, body.attachmentIds, actor), 201)
+  if (body.as) agentOnly(request)
+  return json(features.postUpdate(id(params), body.body, body.attachmentIds, actor, { as: body.as }), 201)
 })
 
 // --- comments ---
@@ -306,8 +355,10 @@ api.post('/api/comments', async ({ request, actor }) => {
       replyTo: z.number().int().nullable().optional(),
       body: z.string().min(1).max(20_000),
       attachmentIds: z.array(z.number().int()).optional(),
+      as: AgentName.optional(),
     }),
   )
+  if (body.as) agentOnly(request)
   return json(features.addComment(body, actor), 201)
 })
 

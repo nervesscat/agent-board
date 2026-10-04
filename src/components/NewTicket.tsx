@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
 import { Button } from '#/components/ui/button'
 import {
@@ -139,12 +140,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             {parent && (
               <div className="space-y-2">
                 <Label htmlFor="assignee">Assignee (optional)</Label>
-                <Input
-                  id="assignee"
-                  value={assignee}
-                  onChange={(e) => setAssignee(e.target.value)}
-                  placeholder="claude, codex…"
-                />
+                <AssigneeSelect id="assignee" value={assignee} onChange={setAssignee} />
               </div>
             )}
             <div className="space-y-2">

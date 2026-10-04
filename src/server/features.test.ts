@@ -194,20 +194,20 @@ describe('the agent loop', () => {
       .get().id
   })
 
-  it('lets one agent claim a ticket, and only one', () => {
+  it('shares tickets: an agent claims one, another can take it over', () => {
     const t = features.createTicket(pid, { title: 'claim me' }, 'enrique')
     expect(features.claimTicket(t.id, 'claude', { branch: 'feat/claim' })).toMatchObject({
       assignee: 'claude',
       status: 'in_progress',
       branch: 'feat/claim',
     })
-    // Claiming again is harmless; someone else claiming or self-assigning is refused.
+    // Claiming again is harmless; another agent claiming or self-assigning takes it over.
     expect(features.claimTicket(t.id, 'claude').assignee).toBe('claude')
-    expect(() => features.claimTicket(t.id, 'codex')).toThrow(/already claimed by claude/)
-    expect(() => features.updateTicket(t.id, { assignee: 'codex' }, 'codex', { guardClaim: true })).toThrow(
-      /assigned to claude/,
+    expect(features.claimTicket(t.id, 'codex').assignee).toBe('codex')
+    expect(features.updateTicket(t.id, { assignee: 'claude' }, 'claude', { agent: true }).assignee).toBe(
+      'claude',
     )
-    // The human reassigning from the UI is not guarded.
+    // The human reassigning from the UI.
     expect(features.updateTicket(t.id, { assignee: 'codex' }, 'enrique').assignee).toBe('codex')
     features.updateTicket(t.id, { status: 'done' }, 'enrique')
     expect(() => features.claimTicket(t.id, 'codex')).toThrow(/is done \(Done\)/)
@@ -328,6 +328,87 @@ describe('the agent loop', () => {
     expect(view.url).toBe(`/api/uploads/${a.id}`)
     expect(view.windowsPath).toBe(`\\\\wsl.localhost\\kali-linux${view.path.replace(/\//g, '\\')}`)
     expect(uploads.attachmentView(a, '')).not.toHaveProperty('windowsPath')
+  })
+})
+
+describe("the project's agents", () => {
+  let pid: number
+  beforeAll(async () => {
+    const { db, schema } = await import('#/db')
+    pid = db.insert(schema.projects).values({ name: 'crew' }).returning().get().id
+    db.insert(schema.repos).values({ projectId: pid, name: 'site', repoPath: '/r/site' }).run()
+  })
+
+  it("reserves a ticket assigned to one of the project's agents", async () => {
+    const agents = await import('./projectAgents')
+    agents.createAgent(pid, { name: 'Reviewer', instructions: 'Review like a hawk.' }, 'enrique')
+    // The human assigns it (any casing); the ticket carries the agent's name and instructions.
+    const t = features.createTicket(pid, { title: 'review the auth flow' }, 'enrique')
+    features.updateTicket(t.id, { assignee: 'reviewer' }, 'enrique')
+    const full = features.getTicketFull(t.id)
+    expect(full).toMatchObject({ assignee: 'Reviewer', reserved: true })
+    expect(full.agent).toMatchObject({ name: 'Reviewer', instructions: 'Review like a hawk.' })
+    expect(features.listTickets(pid, { q: 'auth flow' })[0]!.reserved).toBe(true)
+
+    // No other agent takes it, as itself or as another agent, and agents cannot reassign it.
+    agents.createAgent(pid, { name: 'Writer' }, 'enrique')
+    expect(() => features.claimTicket(t.id, 'codex')).toThrow(
+      /reserved for Reviewer: claim it with as: "Reviewer"/,
+    )
+    expect(() => features.claimTicket(t.id, 'codex', { as: 'Writer' })).toThrow(
+      /reserved for Reviewer, not Writer/,
+    )
+    expect(() => features.updateTicket(t.id, { assignee: 'codex' }, 'codex', { agent: true })).toThrow(
+      /only the human reassigns it/,
+    )
+    expect(() => features.claimTicket(t.id, 'codex', { as: 'nobody' })).toThrow(
+      /not one of this project's agents/,
+    )
+
+    // Any connected agent works it as the reviewer; its posts carry the reviewer's name, via the agent.
+    expect(features.claimTicket(t.id, 'codex', { as: 'reviewer' })).toMatchObject({
+      assignee: 'Reviewer',
+      status: 'in_progress',
+    })
+    expect(features.postUpdate(t.id, 'looked at it', [], 'codex', { as: 'Reviewer' })).toMatchObject({
+      author: 'Reviewer',
+      via: 'codex',
+    })
+
+    // The human can still hand it to anyone; a rename carries the reservation along, a removal frees it.
+    const r = agents.findAgent(pid, 'reviewer')!
+    agents.updateAgent(r.id, { name: 'Auditor' }, 'enrique')
+    expect(features.getTicket(t.id).assignee).toBe('Auditor')
+    agents.deleteAgent(r.id, 'enrique')
+    expect(features.getTicketFull(t.id)).toMatchObject({ assignee: '', reserved: false, agent: null })
+  })
+
+  it("validates the project's agents' names", async () => {
+    const agents = await import('./projectAgents')
+    agents.createAgent(pid, { name: 'qa-bot' }, 'enrique')
+    expect(() => agents.createAgent(pid, { name: 'QA-Bot' }, 'enrique')).toThrow(
+      /already has an agent called/,
+    )
+    expect(() => agents.createAgent(pid, { name: 'two words' }, 'enrique')).toThrow(/letters, digits/)
+    expect(agents.mentions('ask @QA-bot and @qa-bot, not me@mail.com or @@x')).toEqual(['qa-bot'])
+  })
+
+  it('lists the threads waiting on one of the project agents for whoever answers as it', async () => {
+    const agents = await import('./projectAgents')
+    agents.createAgent(pid, { name: 'Designer' }, 'enrique')
+    const t = features.createTicket(pid, { title: 'new logo' }, 'enrique')
+    features.addComment(
+      { parentType: 'ticket', parentId: t.id, body: '@designer can you take a look?' },
+      'enrique',
+    )
+    const waiting = () => features.listOpenThreads(pid, 'codex').filter((th) => th.ticketId === t.id)
+    expect(waiting()).toMatchObject([{ as: 'Designer', waiting: 1, last: { author: 'enrique' } }])
+    // A human cannot speak as an agent through the API, but a connected agent answering as it clears the thread.
+    features.addComment({ parentType: 'ticket', parentId: t.id, body: 'On it.', as: 'Designer' }, 'codex')
+    expect(waiting()).toEqual([])
+    // Someone replying to the agent puts it back on the list.
+    features.addComment({ parentType: 'ticket', parentId: t.id, body: 'thanks!' }, 'enrique')
+    expect(waiting()).toMatchObject([{ as: 'Designer', waiting: 1 }])
   })
 })
 

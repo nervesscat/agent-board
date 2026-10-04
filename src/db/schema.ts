@@ -43,6 +43,27 @@ export const stages = sqliteTable(
   (t) => [uniqueIndex('stages_project_key').on(t.projectId, t.key)],
 )
 
+// The project's own agents: a name, a picture and the instructions an orchestrator briefs a subagent
+// with. A ticket assigned to one is reserved for it; anything else is shared by every connected agent.
+export const agents = sqliteTable(
+  'agents',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    instructions: text().notNull().default(''),
+    avatarId: integer('avatar_id').references((): AnySQLiteColumn => attachments.id, {
+      onDelete: 'set null',
+    }),
+    createdBy: text('created_by').notNull(),
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  (t) => [uniqueIndex('agents_project_name').on(t.projectId, t.name)],
+)
+
 export const repos = sqliteTable('repos', {
   id: id(),
   projectId: integer('project_id')
@@ -148,6 +169,8 @@ export const updates = sqliteTable('updates', {
     .notNull()
     .references(() => tickets.id, { onDelete: 'cascade' }),
   author: text().notNull(),
+  // The connected agent that posted it on `author`'s behalf when `author` is one of the project's agents.
+  via: text().notNull().default(''),
   body: text().notNull(),
   createdAt: now(),
 })
@@ -160,6 +183,7 @@ export const comments = sqliteTable(
     parentId: integer('parent_id').notNull(),
     replyTo: integer('reply_to'),
     author: text().notNull(),
+    via: text().notNull().default(''),
     body: text().notNull(),
     createdAt: now(),
   },
@@ -246,6 +270,7 @@ export const actors = sqliteTable('actors', {
 export type Activity = typeof activity.$inferSelect
 export type DailySummary = typeof dailySummaries.$inferSelect
 export type Project = typeof projects.$inferSelect
+export type Agent = typeof agents.$inferSelect
 export type Stage = typeof stages.$inferSelect
 export type Repo = typeof repos.$inferSelect
 export type Pr = typeof prs.$inferSelect
