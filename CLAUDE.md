@@ -14,12 +14,22 @@ reload: code reaches it only through a build.
 - **Never `pnpm build` while the board runs on Windows.** The running server holds the SQLite driver
   in `.output` open, so the build fails halfway and leaves `.output` wiped under the live board. Use
   `pnpm redeploy`, or build in a separate worktree to check that it builds.
-- **Hot reload while working on the board itself:** `pnpm dev` runs a second copy on
-  http://localhost:47101 with its own data in `data/dev`, so the live board and its database stay
-  untouched. The first run copies the live database and uploads there; `pnpm dev --fresh` copies
-  them again; `DEV_PORT` picks another port. Do not run `vite dev` on 47100 by hand: the built board
-  holds `127.0.0.1:47100` and Vite would quietly take `[::1]:47100`, so `localhost` would reach one
-  or the other depending on the client.
+- **Hot reload while working on the board itself:** `pnpm dev` runs a second copy on the first
+  free port from 47101 (`DEV_PORT` to choose) with its own data in `data/dev`, so the live board
+  and its database stay untouched. The first run copies the live database and uploads there (from
+  the main checkout when run in a worktree); `pnpm dev --fresh` copies them again. Do not run
+  `vite dev` on 47100 by hand: the built board holds `127.0.0.1:47100` and Vite would quietly take
+  `[::1]:47100`, so `localhost` would reach one or the other depending on the client.
+- **Previews of a branch:** work in a worktree, never by switching branches in the main checkout
+  (a running preview or the human's own `pnpm dev` would change code underneath them):
+
+  ```
+  git worktree add ../agent-board-<branch> <branch>
+  cd ../agent-board-<branch> && pnpm install && pnpm dev
+  ```
+
+  It prints `Preview: http://localhost:<port>`; post that link on the ticket. Remove the worktree
+  (`git worktree remove`) once the branch is merged or dropped.
 
 ## Checks
 

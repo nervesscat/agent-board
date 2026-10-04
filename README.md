@@ -116,7 +116,7 @@ the gate device or token name.
 ## Development
 
 ```
-pnpm dev             # hot-reload copy on 47101 with its own data (data/dev, copied from data/ the first time; --fresh copies again)
+pnpm dev             # hot-reload copy on the first free port from 47101, with its own data (data/dev, a copy of the live data; --fresh copies again)
 pnpm typecheck       # tsc
 pnpm lint            # oxlint
 pnpm format          # prettier

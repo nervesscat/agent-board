@@ -110,6 +110,12 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are
   fine, the board reads them through `/mnt/c/…`.
+- **Previews:** when the change can be tried (a page, an API), start your branch from your
+  worktree on a free port, with a copy of the data rather than the real one (the project's
+  `instructions` say how), and `post_update` the link (`http://localhost:<port>`) with what to
+  try. Say that what the human posts there stays in the copy. Keep it running while the ticket is
+  in `review`; stop it once it is merged or dropped. Never run it from the checkout or port the
+  human uses day to day.
 - Questions are posts too: `comment` on the ticket; the human answers with a post or a reply
   under yours (`comment` on the post, `parentType: update`, replies there). If you cannot go on
   without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
@@ -125,7 +131,7 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
    the PR queue also lists PRs assigned to the human, so this is how it gets there.
 2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
-3. Final `post_update` with the PR link and how to test.
+3. Final `post_update` with the PR link, how to test, and the preview link if there is one.
 4. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
    say otherwise.
 5. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the

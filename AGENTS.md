@@ -68,6 +68,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    feed of **posts**: `post_update` adds one marked as progress (lane summaries and the Daily view
    pick those out); questions and answers are posts too, not marked. `edit_post` / `delete_post`
    change what you posted.
+   **Previews:** when the change can be tried (a page, an API), start your branch from your
+   worktree on a free port, with a copy of the data rather than the real one (the project's
+   instructions say how), and post the link (`http://localhost:<port>`) with what to try. Say that
+   what the human posts there stays in the copy. Keep it running while the ticket is in review;
+   stop it once it is merged or dropped.
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
    (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
