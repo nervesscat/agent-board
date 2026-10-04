@@ -41,6 +41,15 @@ pnpm exec prettier --check --end-of-line auto <changed files>
 On a Windows checkout two tests fail regardless of the change: `agents.test.ts` (CRLF line endings)
 and `cleanup.test.ts` (path separators). Prettier without `--end-of-line auto` flags every CRLF file.
 
+## Files
+
+All attachment bytes go through `src/server/storage.ts` (`fileStore`: local `data/uploads`, or S3 with
+`STORAGE=s3`). Never read or write `data/uploads` directly. A path handed to an agent must exist:
+MCP tool results and agents' REST reads pass through `ensureLocalFiles`. The S3 tests in
+`storage.test.ts` run against a real MinIO when `S3_TEST_ENDPOINT` (with `S3_TEST_ACCESS_KEY`,
+`S3_TEST_SECRET_KEY`) is set, e.g. `docker compose -f docker-compose.minio.yml up -d` and
+`http://127.0.0.1:47120`.
+
 ## Database
 
 Edit `src/db/schema.ts`, then `pnpm db:generate`. Give the generated migration a descriptive name

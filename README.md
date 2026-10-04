@@ -67,6 +67,35 @@ again. Logs: `data/logs/build.log`, `board.out.log`, `board.err.log`.
 The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
 starting after a reboot.
 
+## Storing files in MinIO
+
+Attachments (screenshots, recordings, files on posts and instructions, agent pictures) live in
+`data/uploads` by default. To keep them in MinIO, or any S3-compatible store, instead:
+
+```powershell
+docker compose -f docker-compose.minio.yml up -d   # the board's own MinIO, loopback only (API 47120, console 47121)
+```
+
+```
+# .env
+STORAGE=s3
+S3_ENDPOINT=http://127.0.0.1:47120
+S3_BUCKET=agent-board
+S3_ACCESS_KEY=agent-board
+S3_SECRET_KEY=<a long secret; the compose file uses it as MinIO's root password>
+```
+
+Then `pnpm move-uploads` copies the existing files into the bucket under the same keys, checking each
+one (it skips those already there, so it can run again; `--delete-local` removes each checked local
+file, `--dry-run` only says what it would do), and `pnpm redeploy` puts the board on the bucket. The
+board creates the bucket on first use.
+
+The bucket stays private: the browser gets files from the board, which streams them from MinIO
+(Range requests included, so videos seek). Agents still get a file on this machine to open: new files
+are written through to `data/cache`, and any file an agent is handed (MCP, or REST with a token) is
+fetched there first if it has gone; copies nobody opened for 30 days leave the cache. While MinIO is
+down, uploads fail with a clear error and cached files still open.
+
 ## Reviews
 
 An agent that reviews a PR records it with `post_review_result` (REST:

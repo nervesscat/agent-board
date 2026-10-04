@@ -351,8 +351,8 @@ describe('the agent loop', () => {
     const uploads = await import('./uploads')
     const { db, schema } = await import('#/db')
     const t = features.createTicket(pid, { title: 'with files' }, 'enrique')
-    const a = uploads.saveBase64('spec.md', Buffer.from('# spec').toString('base64'), 'enrique')
-    const b = uploads.saveBase64('mock.png', Buffer.from([0x89, 0x50]).toString('base64'), 'enrique')
+    const a = await uploads.saveBase64('spec.md', Buffer.from('# spec').toString('base64'), 'enrique')
+    const b = await uploads.saveBase64('mock.png', Buffer.from([0x89, 0x50]).toString('base64'), 'enrique')
     const files = features.attachToTicket(t.id, [a.id, b.id], 'enrique')
     expect(files.map((x) => [x.name, Boolean(x.path)])).toEqual([
       ['spec.md', true],
@@ -475,7 +475,7 @@ describe('the agent loop', () => {
     const uploads = await import('./uploads')
     const file = path.join(tmp, 'shot.png')
     fs.writeFileSync(file, 'png')
-    const a = uploads.saveFromPath(file, 'enrique')
+    const a = await uploads.saveFromPath(file, 'enrique')
     const view = uploads.attachmentView(a, 'kali-linux')
     expect(fs.readFileSync(view.path, 'utf8')).toBe('png')
     expect(view.url).toBe(`/api/uploads/${a.id}`)

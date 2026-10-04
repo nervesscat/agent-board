@@ -74,7 +74,8 @@ function buildServer(actor: string) {
   ) => {
     const cb = (async (args: unknown) => {
       try {
-        return text(await run(args as z.infer<z.ZodObject<S>>))
+        // Every file handed to an agent is on this machine to open (with STORAGE=s3, fetched if needed).
+        return text(await uploads.ensureLocalFiles(await run(args as z.infer<z.ZodObject<S>>)))
       } catch (err) {
         if (!(err instanceof HttpError)) console.error(`mcp ${name} failed:`, err)
         return fail(err)
@@ -303,8 +304,8 @@ function buildServer(actor: string) {
       as: AS,
       progress: z.boolean().default(true),
     },
-    ({ ticketId, body, files, as, progress }) => {
-      const ids = files.map((f) => uploads.saveFromPath(f, actor).id)
+    async ({ ticketId, body, files, as, progress }) => {
+      const ids = (await Promise.all(files.map((f) => uploads.saveFromPath(f, actor)))).map((a) => a.id)
       return features.postUpdate(ticketId, body, ids, actor, { as, progress })
     },
   )
@@ -394,9 +395,14 @@ function buildServer(actor: string) {
       files: z.array(z.string()).default([]),
       as: AS,
     },
-    ({ files, ...rest }) =>
+    async ({ files, ...rest }) =>
       features.addComment(
-        { ...rest, attachmentIds: files.map((f) => uploads.saveFromPath(f, actor).id) },
+        {
+          ...rest,
+          attachmentIds: (await Promise.all(files.map((f) => uploads.saveFromPath(f, actor)))).map(
+            (a) => a.id,
+          ),
+        },
         actor,
       ),
   )

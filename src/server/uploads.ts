@@ -5,8 +5,8 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { uploadsDir } from './config'
 import { HttpError, notFound } from './http'
+import { fileStore } from './storage'
 
 const MAX_BYTES = 200 * 1024 * 1024
 
@@ -31,10 +31,11 @@ export function mimeFor(name: string, fallback = 'application/octet-stream') {
   return MIME_BY_EXT[path.extname(name).toLowerCase()] ?? fallback
 }
 
-function store(name: string, mime: string, bytes: Buffer, actor: string) {
+/** The bytes go to the file store first: if it cannot take them, no attachment row is left behind. */
+async function store(name: string, mime: string, bytes: Buffer, actor: string) {
   if (bytes.length > MAX_BYTES) throw new HttpError(413, `file exceeds ${MAX_BYTES / 1024 / 1024} MB`)
   const storedAs = `${crypto.randomUUID()}${path.extname(name).toLowerCase()}`
-  fs.writeFileSync(path.join(uploadsDir, storedAs), bytes)
+  await fileStore.put(storedAs, bytes, mime)
   return db
     .insert(schema.attachments)
     .values({ name: path.basename(name), mime, size: bytes.length, storedAs, uploadedBy: actor })
@@ -42,10 +43,8 @@ function store(name: string, mime: string, bytes: Buffer, actor: string) {
     .get()
 }
 
-export function saveUpload(file: File, actor: string) {
-  return file
-    .arrayBuffer()
-    .then((buf) => store(file.name, file.type || mimeFor(file.name), Buffer.from(buf), actor))
+export async function saveUpload(file: File, actor: string) {
+  return store(file.name, file.type || mimeFor(file.name), Buffer.from(await file.arrayBuffer()), actor)
 }
 
 /**
@@ -59,7 +58,7 @@ export function localPath(p: string, platform: NodeJS.Platform = process.platfor
 }
 
 /** Agents run on this machine, so they can hand over a path instead of streaming the bytes. */
-export function saveFromPath(given: string, actor: string) {
+export async function saveFromPath(given: string, actor: string) {
   const filePath = localPath(given)
   if (!path.isAbsolute(filePath)) throw new HttpError(400, 'path must be absolute')
   if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile())
@@ -77,8 +76,9 @@ export function getAttachment(id: number) {
   return a
 }
 
+/** Where the file is on this machine (with STORAGE=s3, its cached copy: see ensureLocalFiles). */
 export function attachmentPath(a: schema.Attachment) {
-  return path.join(uploadsDir, a.storedAs)
+  return fileStore.localPath(a.storedAs)
 }
 
 export const attachmentUrl = (a: Pick<schema.Attachment, 'id'>) => `/api/uploads/${a.id}`
@@ -96,6 +96,26 @@ export function attachmentView(a: schema.Attachment, distro = process.env.WSL_DI
     path: file,
     ...(distro ? { windowsPath: `\\\\wsl.localhost\\${distro}${file.replace(/\//g, '\\')}` } : {}),
   }
+}
+
+/**
+ * Make sure every attachment found in `value` (anything with `storedAs` and `path`, at any depth) is a
+ * file on this machine before an agent is handed its path. A no-op for local storage; with s3 it
+ * fetches the copies the cache no longer has.
+ */
+export async function ensureLocalFiles<T>(value: T): Promise<T> {
+  if (fileStore.kind === 'local') return value
+  const keys = new Set<string>()
+  const walk = (v: unknown) => {
+    if (Array.isArray(v)) return v.forEach(walk)
+    if (!v || typeof v !== 'object') return
+    const o = v as Record<string, unknown>
+    if (typeof o.storedAs === 'string' && typeof o.path === 'string') keys.add(o.storedAs)
+    Object.values(o).forEach(walk)
+  }
+  walk(value)
+  await Promise.all([...keys].map((k) => fileStore.ensureLocal(k)))
+  return value
 }
 
 /** Bind previously uploaded files to the update or comment that references them. */
