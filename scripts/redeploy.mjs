@@ -77,6 +77,13 @@ async function stop() {
   if (listeners().length) fail(`something still listens on :${port}; stop it and run this again`)
 }
 
+/** The live board always asks the gate, whatever BOARD_ENV or AUTH the shell running this has. */
+function liveEnv() {
+  const env = { ...process.env, BOARD_ENV: 'production' }
+  for (const key of ['AUTH', 'DEV_HUMAN', 'TEST_HUMAN']) delete env[key]
+  return env
+}
+
 function start() {
   const out = fs.openSync(path.join(logs, 'board.out.log'), 'a')
   const err = fs.openSync(path.join(logs, 'board.err.log'), 'a')
@@ -84,6 +91,7 @@ function start() {
     detached: true,
     windowsHide: true,
     stdio: ['ignore', out, err],
+    env: liveEnv(),
   }).unref()
 }
 

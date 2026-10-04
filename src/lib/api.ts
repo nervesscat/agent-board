@@ -13,12 +13,15 @@ import type {
   Activity,
 } from '#/db/schema'
 import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
+import type { WorkspacePreview } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
+import type { ManagedPreview } from '#/server/managedPreview'
 import type { PreviewState } from '#/server/preview'
 import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
+import type { ProjectPush, Push } from '#/server/push'
 import type { ProjectAgent } from '#/server/projectAgents'
 
 /** A project as the API returns it: always with its repos. */
@@ -26,7 +29,7 @@ export type Project = ProjectFull
 /** A row of `/api/projects`: the project, its repos, and how many tickets and open PRs it holds. */
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
-export type { DirListing, PreviewState, ProjectAgent }
+export type { DirListing, ManagedPreview, PreviewState, ProjectAgent, WorkspacePreview }
 
 export type {
   Attachment,
@@ -48,6 +51,8 @@ export type {
   Worktree,
   Reach,
   CleanupReport,
+  Push,
+  ProjectPush,
 }
 
 export class ApiError extends Error {
@@ -114,6 +119,14 @@ export function errorMessage(err: unknown, fallback = 'something went wrong'): s
 
 // --- payload shapes the server composes ---
 
+/** `/api/me`: who you are, and whether this board runs without the passkey gate (never the live one). */
+export interface Me {
+  actor: string
+  agent: boolean
+  boardEnv: 'production' | 'development' | 'test'
+  authOff: boolean
+}
+
 export type CommentRow = Comment & { attachments: (Attachment & { url: string })[] }
 export type UpdateRow = TicketFull['updates'][number]
 export type LaneRow = TicketFull['lanes'][number]
@@ -122,9 +135,9 @@ export interface TicketGit {
   repo: { id: number; name: string } | null
   branch: string
   baseBranch: string
-  info: BranchInfo & { reach: Reach | null }
+  info: BranchInfo & { reach: Reach | null; push: Push }
   workspaces: (Workspace & {
-    info: BranchInfo & { reach: Reach | null }
+    info: BranchInfo & { reach: Reach | null; push: Push }
     worktree: Worktree | null
     lane: { id: number; title: string } | null
   })[]

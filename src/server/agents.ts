@@ -2,7 +2,10 @@ import { db, schema } from '#/db'
 import { AGENT_CLIENTS, type AgentClient } from '#/lib/constants'
 import { config } from './config'
 import { listProjects } from './projects'
-import template from './skill/board.md?raw'
+import rawTemplate from './skill/board.md?raw'
+
+// Agents get the skill with LF line endings, also from a Windows checkout where the file has CRLF.
+const template = rawTemplate.replace(/\r\n/g, '\n')
 
 // --- settings (board-wide preferences) ---
 

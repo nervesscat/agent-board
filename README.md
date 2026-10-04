@@ -67,6 +67,70 @@ again. Logs: `data/logs/build.log`, `board.out.log`, `board.err.log`.
 The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
 starting after a reboot.
 
+## Test mode
+
+`BOARD_ENV` says what a running board is, and so whether it asks the gate:
+
+| `BOARD_ENV`                | Who calls                                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `production` (unset too)   | The gate, always, as above. The live board (`pnpm start`, `pnpm redeploy`) always runs this way, whatever the shell says.                                                                   |
+| `development` (`pnpm dev`) | The gate, unless `AUTH=off`: then every request is the human, named `DEV_HUMAN` (by default the human the board last saw sign in, else `human`), with no login redirect.                    |
+| `test` (CI, Playwright)    | Nobody asks the gate. A request says who it is with `X-Test-Actor: human:<name>` or `agent:<name>` (REST and `/api/mcp` alike); without it, it is the human `TEST_HUMAN` (default `human`). |
+
+`agent:` callers are agents for every human-only check (403 on the project's agents, stages,
+settings, archive, decisions…), so both sides can be tested. To try a branch without the gate:
+
+```
+AUTH=off pnpm dev                       # a preview on the first free port from 47101, with a copy of the live data
+$env:AUTH='off'; pnpm dev               # the same from PowerShell
+BOARD_ENV=test HOST=127.0.0.1 PORT=47131 DATA_DIR=<a throwaway dir> node .output/server/index.mjs   # a build, for e2e
+```
+
+Guardrails, checked as the server starts (before it accepts a request, under `vite dev` too); any of
+them stops it with a clear error and a non-zero exit:
+
+- an unknown `BOARD_ENV`, or `AUTH` other than `on` / `off`, is refused; `AUTH=off` with
+  `BOARD_ENV=production` (or unset) is refused;
+- with the gate off, the board only listens on loopback (`HOST` 127.0.0.1, ::1 or localhost; the built
+  server's default, every interface, is refused) and never on 47100, the live board's port;
+- `X-Test-Actor` is only read in test; in production and development it changes nothing;
+- `pnpm start` and `pnpm redeploy` run the board as production even from a shell with another
+  `BOARD_ENV`;
+- with the gate off, the server prints `AUTH OFF: <mode>, signed in as <name>, do not expose this` on
+  stderr as it starts, and the top bar shows a red **test mode** / **auth off** badge (`/api/me` says
+  `authOff`), so a screenshot is never taken for the live board.
+
+## Previews
+
+The board runs previews of its own branches for the human to try, from the worktree a ticket's
+workspace registers (Start on the ticket's Preview card, `POST /api/workspaces/:id/preview/start`,
+or `start_preview` over MCP). In the background it:
+
+1. runs `pnpm install --frozen-lockfile --prefer-offline` in the worktree, only when the lockfile
+   changed since the last install there, then `pnpm build`;
+2. copies the live data into `<worktree>/data/preview` (the database through SQLite's backup, the
+   uploads as files), fresh on every start;
+3. starts the build (`node .output/server/index.mjs`) with `BOARD_ENV=development AUTH=off`,
+   `HOST=127.0.0.1` and the first port from 47101 to 47199 free on both loopbacks, and sets the
+   workspace's `previewUrl` once it answers.
+
+Logs: `<worktree>/data/preview/logs/build.log` and `server.log`. The state (`building`, `starting`,
+`running`, `failed` with the last log lines, `stopped`) lives in the board's memory; `previews.json` in
+the data dir only remembers it across a restart. Stop kills the process tree (`taskkill /T /F` on
+Windows, the process group elsewhere), clears `previewUrl` and frees the port; restart is stop, then
+build again.
+
+A preview stops by itself when the ticket's PR is merged (the PR queue's refresh notices), the
+ticket moves to a done or cancelled stage or is archived, its workspace or ticket is deleted, and
+when the board stops; it exits on its own within seconds of the board even when the board is killed.
+Nothing is started again when the board starts; the ticket page says it was stopped when the board
+restarted. The cleanup report lists previews still running for closed tickets.
+
+Only a git worktree of the ticket's repo that sits next to its main checkout
+(`../agent-board-<branch>`) and is a checkout of the board is run, never the main checkout or the
+board's own folder; one preview per workspace and per worktree, at most 8 at once. A preview board
+(development) does not start previews of its own.
+
 ## Storing files in MinIO
 
 Attachments (screenshots, recordings, files on posts and instructions, agent pictures) live in
@@ -96,6 +160,20 @@ are written through to `data/cache`, and any file an agent is handed (MCP, or RE
 fetched there first if it has gone; copies nobody opened for 30 days leave the cache. While MinIO is
 down, uploads fail with a clear error and cached files still open.
 
+## Cleanup
+
+A project's Cleanup page (MCP `cleanup_report`) lists what its finished tickets left behind:
+registered workspaces, local and origin branches and worktrees, each branch checked against where its
+work should have landed. The board never deletes those; agents do with the human's go-ahead.
+
+It also counts the board's **unattached uploads**: files no post, reply, ticket or agent picture
+holds and no text links to (`/api/uploads/<id>`), such as images added to a New ticket window that was
+closed without creating, or a file removed from a post before sending. The board deletes those once
+they are a day old, every hour in the background (the file from disk or the bucket, its cached copy,
+then the row; a file the store cannot delete keeps its row for the next run). Younger files are never
+touched: they may be an upload about to be attached. **Delete now** on the Cleanup page runs it at
+once. A `pnpm dev` copy on `STORAGE=s3` shares the bucket with the live board, so it deletes nothing.
+
 ## Reviews
 
 An agent that reviews a PR records it with `post_review_result` (REST:
@@ -112,7 +190,7 @@ the gate device or token name.
 
 | Method       | Path                                                                                                          |                                                                                                                                                                                                                                                                                                           |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET          | `/api/me`                                                                                                     | who you are                                                                                                                                                                                                                                                                                               |
+| GET          | `/api/me`                                                                                                     | who you are `{actor, agent, boardEnv, authOff}`; `authOff` outside production only (see Test mode)                                                                                                                                                                                                        |
 | GET          | `/api/agent-setup` · `/api/agent-setup/skill?client=claude\|codex\|opencode`                                  | board and gate URLs for the Connect agents page · the board skill as a SKILL.md with today's projects and repos                                                                                                                                                                                           |
 | GET          | `/api/agent-setup/review-skills` · `?list`                                                                    | the feature-review and review-queue skills with their agents, as a tar to extract into `~/.claude` · the paths it holds                                                                                                                                                                                   |
 | GET/PATCH    | `/api/settings` `{defaultAgent}`                                                                              | board-wide preferences (PATCH is the human's only)                                                                                                                                                                                                                                                        |
@@ -124,18 +202,21 @@ the gate device or token name.
 | GET/POST     | `/api/repos` · PATCH/DELETE `/api/repos/:id` · GET `/api/repos/:id/branches`                                  | checkouts; POST takes `projectId` or `projectName`, PATCH `projectId` moves it                                                                                                                                                                                                                            |
 | GET          | `/api/projects/:id/prs?refresh=1`                                                                             | PR queue (`status`, `waitingOn` me/others, `merge`, `ci` + `checks[]`, `latestReview`, `tickets[]` it came from, `mergeAfter[]`: open PRs its tickets need merged first)                                                                                                                                  |
 | PATCH        | `/api/prs/:id` `{hold, holdNote}`                                                                             | park / release                                                                                                                                                                                                                                                                                            |
-| GET/POST     | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`                                             | tickets (`tasks[]` on create; `repoId` when the project has several repos)                                                                                                                                                                                                                                |
+| GET/POST     | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`                                             | tickets (`tasks[]`, `attachmentIds[]` on create; `repoId` when the project has several repos)                                                                                                                                                                                                             |
 |              | `?parent=root\|<id>` on the list · `parentId` on create                                                       | lanes: a ticket's parallel sub-tickets, nested to any depth                                                                                                                                                                                                                                               |
-|              | `needs[]` on create and PATCH · `force` on PATCH                                                              | the tickets whose branches must be merged into its base first (same project, no cycles); GET returns `needs[]` with `merged` and `neededBy[]`, the list `needs[]`. A move to a done stage is a 409 (`code: needs`) while one is not merged; `force: true` (the human's only) marks it done anyway, logged |
 |              | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                                                  | lanes' updates in the feed · move lanes up a level instead of deleting them                                                                                                                                                                                                                               |
+|              | `needs[]` on create and PATCH · `force` on PATCH                                                              | the tickets whose branches must be merged into its base first (same project, no cycles); GET returns `needs[]` with `merged` and `neededBy[]`, the list `needs[]`. A move to a done stage is a 409 (`code: needs`) while one is not merged; `force: true` (the human's only) marks it done anyway, logged |
 | GET          | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=&archived=`                           | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level; `archived=include` or `only`)                                                                                                                                                          |
 | POST         | `/api/tickets/:id/archive` · `/restore` · `/api/projects/:id/tickets/archive` `{status}`                      | archive a done or cancelled top-level ticket, its lanes with it · put it back · archive a whole done or cancelled stage (the human's)                                                                                                                                                                     |
 | POST         | `/api/tickets/:id/claim` `{branch?, as?}`                                                                     | assign to the caller (or the project agent it works as) and start it; 409 if reserved for another agent                                                                                                                                                                                                   |
-| GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain); `includes[]`: open tickets whose unmerged work its branch holds                                                                                                                                   |
-| GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches or worktrees; `reach=0` skips the merge checks                                                                                                                                                                                                          |
+| GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain) and `push`; `includes[]`: open tickets whose unmerged work its branch holds                                                                                                                        |
+| GET/POST     | `/api/projects/:id/push` · `/api/projects/:id/push/refresh`                                                   | whether each ticket in work has its branch on origin (`push`: below), one batch of git per repo · fetch origin now, then the same                                                                                                                                                                         |
+| GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches, worktrees or running previews; `reach=0` skips the merge checks; `uploads` counts the unattached ones                                                                                                                                                  |
+| DELETE       | `/api/uploads/unattached`                                                                                     | delete the unattached uploads older than a day now `{deleted, bytes, failed}` (the human's)                                                                                                                                                                                                               |
 | POST         | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`                                          | todo list                                                                                                                                                                                                                                                                                                 |
 | POST         | `/api/tickets/:id/workspaces` `{name, branch?, path?, agent?, previewUrl?}` · DELETE `/api/workspaces/:id`    | worktrees / sub-branches / subagents                                                                                                                                                                                                                                                                      |
-| PATCH/GET    | `/api/workspaces/:id` `{previewUrl}` · `/api/workspaces/:id/preview`                                          | set or clear (`null`, `""`) where the branch runs for the human to try (http/https) · whether it answers: `{running, status?, checkedAt}`, localhost only                                                                                                                                                 |
+| PATCH/GET    | `/api/workspaces/:id` `{previewUrl}` · `/api/workspaces/:id/preview`                                          | set or clear (`null`, `""`) where the branch runs for the human to try (http/https) · whether it answers: `{running, status?, checkedAt, url}`, localhost only; `managed` (the board's own preview of it) and `cannotStart` (why it would not start one, null when it would)                              |
+| POST/GET     | `/api/workspaces/:id/preview/start` · `/stop` · `/restart` · GET `/preview/log?name=build\|server`            | the board builds and runs the workspace's worktree as a preview (see Previews) · stop it · stop and build again · its logs                                                                                                                                                                                |
 | POST         | `/api/tickets/:id/updates` `{body, attachmentIds[], as?, progress?}`                                          | a post on the ticket's feed (`progress` default true); `as` posts under one of the project's agents (agents only)                                                                                                                                                                                         |
 | POST/DELETE  | `/api/tickets/:id/attachments` `{attachmentIds}` · `/api/tickets/:id/attachments/:attachmentId`               | files that go with the ticket's instructions (uploads first); `GET /api/tickets/:id` lists them as `attachments`                                                                                                                                                                                          |
 | POST/PUT     | `/api/tickets/:id/decisions` `{body, options[], as?, block?}` · `/api/updates/:id/decision` `{option, note?}` | ask the human to decide (2–5 options; blocks the ticket) · the human's answer (humans only; unblocks once none is open)                                                                                                                                                                                   |
@@ -143,7 +224,7 @@ the gate device or token name.
 | POST         | `/api/uploads`                                                                                                | multipart `file`, or JSON `{path}` (local file) or `{name, base64}` → `{id, url}`                                                                                                                                                                                                                         |
 | GET          | `/api/uploads/:id` · `/api/uploads/:id/info`                                                                  | the file · its metadata with the local `path` (and `windowsPath` under WSL)                                                                                                                                                                                                                               |
 | GET/POST     | `/api/comments?parentType=ticket\|update\|pr\|review&parentId=`                                               | on a ticket: its posts (POST adds one, not progress); else replies (`replyTo` nests; `as`, `@name` as before)                                                                                                                                                                                             |
-| GET          | `/api/projects/:id/threads`                                                                                   | threads where someone spoke after the caller                                                                                                                                                                                                                                                              |
+| GET          | `/api/projects/:id/threads?since=` · `/api/projects/:id/inbox?since=`                                         | `{cursor, threads}` where someone spoke after the caller (with `since`, only newer) · `{count, cursor, threads}` without bodies                                                                                                                                                                           |
 | GET          | `/api/projects/:id/reviews`                                                                                   | results                                                                                                                                                                                                                                                                                                   |
 | GET          | `/api/projects/:id/reviews/results?pr=&sha=&repoId=` · `/api/reviews/results/:id`                             | results without summaries · one in full                                                                                                                                                                                                                                                                   |
 | POST         | `/api/projects/:id/reviews/results`                                                                           | post a result                                                                                                                                                                                                                                                                                             |
@@ -155,12 +236,48 @@ the gate device or token name.
 
 ```
 pnpm dev             # hot-reload copy on the first free port from 47101, with its own data (data/dev, a copy of the live data; --fresh copies again)
+AUTH=off pnpm dev    # the same without the passkey gate: you are the human (Test mode, above)
 pnpm typecheck       # tsc
 pnpm lint            # oxlint
 pnpm format          # prettier
 pnpm test            # vitest (path mapping, actors, PR status, …)
+pnpm test:e2e        # Playwright against a built board in test mode (Testing, below)
+pnpm check:migrations # the drizzle folder and its journal agree
 pnpm redeploy        # put this checkout live on the built board
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
-`src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read.
+`src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read, but
+for `git fetch --prune origin`, which only refreshes the checkout's copy of origin's branches.
+
+## Testing
+
+- **Unit** (`pnpm test`): vitest, `src/**/*.test.ts` and `scripts/**/*.test.mjs`. Server tests open
+  their own SQLite in a temp folder; the S3 ones run only with `S3_TEST_ENDPOINT` set (CLAUDE.md).
+- **End to end** (`pnpm test:e2e`): Playwright, `e2e/`. It builds the board into `.output-e2e`
+  (never `.output`, so the live board's build is left alone) and starts it in test mode (above) on
+  a free loopback port above 47140, with its data and a scratch git repo in a temp folder. Global
+  setup seeds a project through the REST API; each test makes a project of its own. The browser is
+  the human (no `X-Test-Actor`); tests call the API as `human:enrique` or `agent:claude` to set
+  things up and to check what agents may do. Failures keep a screenshot and a trace under
+  `test-results/`, and `playwright-report/` has the HTML report (`pnpm exec playwright show-report`).
+  First run: `pnpm exec playwright install chromium`. `E2E_SKIP_BUILD=1` reuses the last build;
+  `E2E_PORT` picks the port.
+- **Migrations** (`pnpm check:migrations`): every `drizzle/NNNN_*.sql` has a number of its own and
+  a journal entry, every entry its file, `idx` matches, and `when` grows down the journal. Drizzle
+  applies only migrations dated after the last one applied, so one merged with an older `when`
+  would be skipped on every existing database without an error.
+- **CI** (`.github/workflows/ci.yml`, on pull requests and pushes to `main`): install, typecheck,
+  lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
+  Playwright report and traces are uploaded as the `playwright-report` artifact.
+
+## Pushed or not
+
+A branch's `push` (on `GET /api/tickets/:id` for the ticket and its workspaces, on
+`/api/tickets/:id/git` for every branch, and per ticket on `/api/projects/:id/push`) is
+`{state, ahead, behind, checkedAt}`: `pushed` (green; origin has every commit, `behind` counts what it
+has on top), `ahead` (red; `ahead` commits only here), `local-only` (red; no such branch on origin),
+`remote-only` (only on origin, e.g. after cleanup) or `none` (no branch, or it exists nowhere). It is
+read from the checkout's `origin/*` refs, so the board fetches each repo in the background at most
+every 5 minutes (never prompting, never holding up a request); `checkedAt` is the last fetch, and
+the refresh action fetches at once. The board never pushes.

@@ -4,6 +4,7 @@ import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 're
 
 import { Actor } from '#/components/Actor'
 import { NeedsBadge } from '#/components/Needs'
+import { PushDot } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
 import {
   AlertDialog,
@@ -17,7 +18,7 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
-import type { TicketRow } from '#/lib/api'
+import type { Push, TicketRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 import { type StageLike, isClosed, stageBadge, stageColumn, stageOf } from '#/lib/stages'
@@ -25,15 +26,18 @@ import { type StageLike, isClosed, stageBadge, stageColumn, stageOf } from '#/li
 /**
  * Tickets in the project's stage columns. Drag a card onto another column to change its stage;
  * clicking a card opens the ticket. A done or cancelled column can archive all its tickets at once.
+ * `push` colours each branch by whether it is on origin.
  */
 export function TicketBoard({
   projectId,
   items,
+  push,
   onMove,
   onArchiveAll,
 }: {
   projectId: string
   items: TicketRow[]
+  push?: Map<number, Push>
   onMove: (ticketId: number, status: string) => void
   onArchiveAll?: (status: string) => void
 }) {
@@ -156,6 +160,7 @@ export function TicketBoard({
                         {t.assignee && <Actor name={t.assignee} className="shrink-0" />}
                         {t.branch && (
                           <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                            {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
                             <GitBranch className="size-3 shrink-0" />{' '}
                             <span className="truncate">{t.branch}</span>
                           </span>
@@ -396,7 +401,15 @@ function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup']; cla
 }
 
 /** The same tickets as rows, in column order (newest first within a status), like the lanes list. */
-export function TicketList({ projectId, items }: { projectId: string; items: TicketRow[] }) {
+export function TicketList({
+  projectId,
+  items,
+  push,
+}: {
+  projectId: string
+  items: TicketRow[]
+  push?: Map<number, Push>
+}) {
   useRememberedPageScroll(`features.list.${projectId}`)
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
@@ -448,6 +461,7 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                   {t.assignee && <Actor name={t.assignee} />}
                   {t.branch && (
                     <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                      {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
                       <GitBranch className="size-3 shrink-0" /> <span className="truncate">{t.branch}</span>
                     </span>
                   )}

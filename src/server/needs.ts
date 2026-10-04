@@ -206,9 +206,9 @@ async function needsFor(rows: Ticket[], ctx: Context) {
   return out
 }
 
-/** The ticket page's read: `getTicketFull` with what it needs (each with `merged`) and what needs it. */
+/** The ticket page's read: `getTicketWithPush` with what it needs (each with `merged`) and what needs it. */
 export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {}) {
-  const full = features.getTicketFull(id, opts)
+  const full = await features.getTicketWithPush(id, opts)
   const ctx = context(full.projectId)
   const needs = await needsOf(full, needIds(id), ctx)
   const neededBy: NeededBy[] = db
