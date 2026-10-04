@@ -64,17 +64,21 @@ http_headers = { Authorization = "Bearer gate_…" }
    the registered workspaces are the cleanup list. `remove_workspace` when it is gone.
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
-   the board copies them). One update per meaningful step, not per keystroke.
+   the board copies them). One update per meaningful step, not per keystroke. A ticket has one
+   feed of **posts**: `post_update` adds one marked as progress (lane summaries and the Daily view
+   pick those out); questions and answers are posts too, not marked. `edit_post` / `delete_post`
+   change what you posted.
    **Previews:** when the change can be tried (a page, an API), start your branch from your
    worktree on a free port, with a copy of the data rather than the real one (the project's
    instructions say how), and post the link (`http://localhost:<port>`) with what to try. Say that
    what the human posts there stays in the copy. Keep it running while the ticket is in review;
    stop it once it is merged or dropped.
-6. **Ask and answer in threads**: `comment` on the ticket, on an update, on a PR or on a review
-   result. When you cannot continue without an answer, also move the ticket to `blocked` (back to
-   `in_progress` once answered). `list_my_threads` lists every thread where someone spoke after
-   you; `get_ticket` shows each thread's comment count and last author. Attachments come with a
-   local `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
+6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
+   (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
+   continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
+   answered). `list_my_threads` lists every feed or reply thread where someone spoke after you;
+   `get_ticket` shows each post's reply count and last author. Attachments come with a local
+   `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
 7. **Hand off**: open the PR assigned to the human (`gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
    requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and

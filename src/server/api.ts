@@ -326,6 +326,7 @@ api.delete('/api/workspaces/:id', ({ params, actor }) => {
   return json({ ok: true })
 })
 
+// A post on the ticket; `progress` (default true, as agents post) marks a step of the work.
 api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
@@ -333,10 +334,29 @@ api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
       body: z.string().min(1).max(50_000),
       attachmentIds: z.array(z.number().int()).default([]),
       as: AgentName.optional(),
+      progress: z.boolean().default(true),
     }),
   )
   if (body.as) agentOnly(request)
-  return json(features.postUpdate(id(params), body.body, body.attachmentIds, actor, { as: body.as }), 201)
+  return json(
+    features.postUpdate(id(params), body.body, body.attachmentIds, actor, {
+      as: body.as,
+      progress: body.progress,
+    }),
+    201,
+  )
+})
+// Its author edits or deletes a post or reply; the human (passkey) any.
+api.patch('/api/updates/:id', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ body: z.string().min(1).max(50_000).optional(), progress: z.boolean().optional() }),
+  )
+  return json(features.editPost(id(params), body, actor, { human: !isAgent(request) }))
+})
+api.delete('/api/updates/:id', ({ request, params, actor }) => {
+  features.deletePost(id(params), actor, { human: !isAgent(request) })
+  return json({ ok: true })
 })
 
 // --- comments ---
@@ -360,6 +380,14 @@ api.post('/api/comments', async ({ request, actor }) => {
   )
   if (body.as) agentOnly(request)
   return json(features.addComment(body, actor), 201)
+})
+api.patch('/api/comments/:id', async ({ request, params, actor }) => {
+  const body = await readJson(request, z.object({ body: z.string().min(1).max(20_000) }))
+  return json(features.editComment(id(params), body.body, actor, { human: !isAgent(request) }))
+})
+api.delete('/api/comments/:id', ({ request, params, actor }) => {
+  features.deleteComment(id(params), actor, { human: !isAgent(request) })
+  return json({ ok: true })
 })
 
 // --- uploads ---

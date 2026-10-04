@@ -240,7 +240,7 @@ describe('the agent loop', () => {
     expect(texts).toContain('removed \\"b\\"')
   })
 
-  it('shows thread counts on the ticket and its updates, and the threads waiting on an agent', () => {
+  it('shows thread counts on the ticket and its posts, and the threads waiting on an agent', () => {
     const t = features.createTicket(pid, { title: 'threads', assignee: 'claude' }, 'enrique')
     const u = features.postUpdate(t.id, 'first pass done', [], 'claude')
     const other = features.createTicket(pid, { title: 'not mine', assignee: 'codex' }, 'enrique')
@@ -251,7 +251,8 @@ describe('the agent loop', () => {
     features.addComment({ parentType: 'update', parentId: u.id, body: 'looks off on mobile' }, 'enrique')
     features.addComment({ parentType: 'update', parentId: u.id, body: 'see the header' }, 'enrique')
     const full = features.getTicketFull(t.id)
-    expect(full.thread).toEqual({ count: 0, lastAuthor: null, lastAt: null })
+    // The ticket's own thread is its posts.
+    expect(full.thread).toMatchObject({ count: 1, lastAuthor: 'claude' })
     expect(full.updates[0]!.thread).toMatchObject({ count: 2, lastAuthor: 'enrique' })
     expect(features.listOpenThreads(pid, 'claude')).toMatchObject([
       { parentType: 'update', parentId: u.id, ticketId: t.id, waiting: 2, last: { text: 'see the header' } },
@@ -266,6 +267,84 @@ describe('the agent loop', () => {
     expect(features.listOpenThreads(pid, 'codex')).toMatchObject([
       { parentType: 'ticket', parentId: other.id },
     ])
+  })
+
+  it('keeps one feed of posts: progress or discussion, with replies under each', () => {
+    const t = features.createTicket(pid, { title: 'one feed', assignee: 'claude' }, 'enrique')
+    const step = features.postUpdate(t.id, 'did X', [], 'claude')
+    expect(step.progress).toBe(true)
+    // A comment on the ticket is a post, not progress; with replyTo it is a reply under that post.
+    const question = features.addComment({ parentType: 'ticket', parentId: t.id, body: 'why X?' }, 'enrique')
+    expect(question).toMatchObject({ ticketId: t.id, progress: false, author: 'enrique' })
+    const answer = features.addComment(
+      { parentType: 'ticket', parentId: t.id, replyTo: question.id, body: 'because Y' },
+      'claude',
+    )
+    expect(answer).toMatchObject({ parentType: 'update', parentId: question.id, replyTo: null })
+    const elsewhere = features.createTicket(pid, { title: 'elsewhere' }, 'enrique')
+    expect(() =>
+      features.addComment(
+        { parentType: 'ticket', parentId: elsewhere.id, replyTo: question.id, body: 'x' },
+        'claude',
+      ),
+    ).toThrow(/is not on ticket/)
+
+    const full = features.getTicketFull(t.id)
+    expect(full.updates.map((u) => [u.body, u.progress, u.thread.count])).toEqual([
+      ['why X?', false, 1],
+      ['did X', true, 0],
+    ])
+    expect(full.thread).toMatchObject({ count: 2, lastAuthor: 'enrique' })
+    expect(features.listComments('ticket', t.id).map((c) => [c.body, 'progress' in c && c.progress])).toEqual(
+      [
+        ['did X', true],
+        ['why X?', false],
+      ],
+    )
+  })
+
+  it("counts only progress posts as a lane's last update", () => {
+    const parent = features.createTicket(pid, { title: 'parent' }, 'enrique')
+    const lane = features.createTicket(pid, { title: 'lane', parentId: parent.id }, 'claude')
+    features.postUpdate(lane.id, 'built the form', [], 'claude')
+    features.postUpdate(lane.id, 'which colour?', [], 'claude', { progress: false })
+    expect(features.getTicketFull(parent.id).lanes[0]!.lastUpdate).toMatchObject({ text: 'built the form' })
+  })
+
+  it('lets the author or the human edit and delete a post or reply, nobody else', () => {
+    const t = features.createTicket(pid, { title: 'edits' }, 'enrique')
+    const p = features.postUpdate(t.id, 'first draft', [], 'claude')
+    expect(() => features.editPost(p.id, { body: 'mine now' }, 'codex')).toThrow(/only claude or the human/)
+    const edited = features.editPost(p.id, { body: 'second draft' }, 'claude')
+    expect(edited.body).toBe('second draft')
+    expect(edited.editedAt).toBeTruthy()
+    // Flipping the mark alone is not an edit of the text.
+    expect(features.editPost(p.id, { progress: false }, 'enrique', { human: true })).toMatchObject({
+      progress: false,
+      editedAt: edited.editedAt,
+    })
+    const r = features.addComment({ parentType: 'update', parentId: p.id, body: 'nice' }, 'enrique')
+    features.addComment({ parentType: 'update', parentId: p.id, replyTo: r.id, body: 'thanks' }, 'claude')
+    expect(() => features.deleteComment(r.id, 'claude')).toThrow(/only enrique or the human/)
+    expect(features.editComment(r.id, 'very nice', 'enrique').body).toBe('very nice')
+    features.deleteComment(r.id, 'enrique')
+    expect(features.listComments('update', p.id)).toEqual([])
+    // Deleting a post takes its replies with it.
+    features.addComment({ parentType: 'update', parentId: p.id, body: 'one more' }, 'enrique')
+    features.deletePost(p.id, 'enrique', { human: true })
+    expect(features.getTicketFull(t.id).updates).toEqual([])
+    expect(features.listComments('update', p.id)).toEqual([])
+  })
+
+  it("puts a question on an agent's ticket in its threads until it answers on the ticket", () => {
+    const t = features.createTicket(pid, { title: 'ask me', assignee: 'claude' }, 'enrique')
+    features.postUpdate(t.id, 'started', [], 'claude')
+    features.addComment({ parentType: 'ticket', parentId: t.id, body: 'can you also do Y?' }, 'enrique')
+    expect(features.listOpenThreads(pid, 'claude').filter((th) => th.ticketId === t.id)).toMatchObject([
+      { parentType: 'ticket', parentId: t.id, waiting: 1, last: { author: 'enrique' } },
+    ])
+    features.addComment({ parentType: 'ticket', parentId: t.id, body: 'yes, on it' }, 'claude')
+    expect(features.listOpenThreads(pid, 'claude').filter((th) => th.ticketId === t.id)).toEqual([])
   })
 
   it('links a ticket to its PR both ways, by number or by branch', async () => {
