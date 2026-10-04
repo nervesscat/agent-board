@@ -33,6 +33,7 @@ import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { PrState } from '#/components/PrState'
+import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
@@ -94,6 +95,7 @@ import {
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
 import { columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
   component: TicketPage,
@@ -132,7 +134,7 @@ function TicketPage() {
   })
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: key })
-    qc.invalidateQueries({ queryKey: ['tickets', id] })
+    qc.invalidateQueries({ queryKey: ticketsKey(id) })
     qc.invalidateQueries({ queryKey: ['ticket-git', ticketId] })
   }
   const onError = (err: unknown) => toast.error(errorMessage(err))
@@ -183,8 +185,7 @@ function TicketPage() {
   // On a top-level ticket: the board's tickets, for previous / next in the same column. Same query
   // as the board, so it is usually cached already.
   const { data: board } = useQuery({
-    queryKey: ['tickets', id],
-    queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets?parent=root`),
+    ...ticketsQuery(id, 'root'),
     enabled: Boolean(t) && !t?.parentId,
     refetchInterval: 10_000,
   })
@@ -1602,6 +1603,12 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
               <GitBranch className="size-3.5" /> {t.branch}
             </div>
             <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
+            {git?.repo && (
+              <div className="flex min-w-0 items-center gap-1">
+                <PushBadge push={git.info.push} />
+                <RefreshPush projectId={t.projectId} className="-my-1" />
+              </div>
+            )}
             {git && <Info info={git.info} />}
           </>
         ) : (
@@ -1669,7 +1676,12 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
                   <Layers className="size-3 shrink-0" /> <span className="truncate">{w.lane.title}</span>
                 </Link>
               )}
-              {w.branch && <div className="font-mono text-xs">{w.branch}</div>}
+              {w.branch && (
+                <div className="flex min-w-0 items-center gap-1.5 font-mono text-xs">
+                  {w.info && <PushDot push={w.info.push} />}
+                  <span className="truncate">{w.branch}</span>
+                </div>
+              )}
               {w.info && <Info info={w.info} />}
               {w.worktree && (
                 <div className="truncate font-mono text-[11px] text-muted-foreground" title={w.worktree.path}>

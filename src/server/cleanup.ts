@@ -6,6 +6,7 @@ import { branchReach, listRefs, listWorktrees, type Reach, type Refs, type Workt
 import { getProject } from './projects'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
+import { unattachedUploads, type UnattachedUploads } from './unattached'
 
 /**
  * What is left behind by finished work: branches, worktrees and registered workspaces of tickets in
@@ -107,6 +108,8 @@ export interface CleanupReport {
   /** Worktrees no ticket or workspace on the board accounts for: register them or remove them. */
   untracked: { repo: string; path: string; branch: string | null; head: string | null }[]
   counts: { tickets: number; workspaces: number; worktrees: number; branches: number; remote: number }
+  /** Uploads nothing on the whole board points at (not just this project's). */
+  uploads: UnattachedUploads
 }
 
 /**
@@ -214,5 +217,6 @@ export async function cleanupReport(
       branches: branches.filter((b) => b.local).length,
       remote: branches.filter((b) => b.remote).length,
     },
+    uploads: unattachedUploads(),
   }
 }

@@ -60,6 +60,7 @@ MCP tool results and agents' REST reads pass through `ensureLocalFiles`. The S3 
 `storage.test.ts` run against a real MinIO when `S3_TEST_ENDPOINT` (with `S3_TEST_ACCESS_KEY`,
 `S3_TEST_SECRET_KEY`) is set, e.g. `docker compose -f docker-compose.minio.yml up -d` and
 `http://127.0.0.1:47120`.
+Unattached uploads older than a day are deleted hourly: a new reference to an upload goes in `src/server/unattached.ts`.
 
 ## Database
 
