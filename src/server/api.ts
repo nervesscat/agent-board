@@ -34,6 +34,8 @@ const Status = z.string().min(1).max(60)
 const forAgent = <T>(request: Request, value: T) =>
   isAgent(request) ? uploads.ensureLocalFiles(value) : Promise.resolve(value)
 const AgentName = z.string().min(1).max(40)
+// Checked for http(s) where it is stored; null or '' clears it.
+const PreviewUrl = z.string().max(500).nullable()
 // Speaking as one of the project's agents is how a connected agent delegates; the human speaks as themself.
 const agentOnly = (request: Request) => {
   if (!isAgent(request)) throw new HttpError(403, 'only a connected agent posts as one of the project agents')
@@ -355,10 +357,20 @@ api.post('/api/tickets/:id/workspaces', async ({ request, params, actor }) => {
       branch: z.string().max(200).optional(),
       path: z.string().max(500).optional(),
       agent: z.string().max(80).optional(),
+      previewUrl: PreviewUrl.optional(),
     }),
   )
   return json(features.addWorkspace(id(params), body, actor), 201)
 })
+// Set or clear (null, '') the link where the workspace's branch runs for the human to try.
+api.patch('/api/workspaces/:id', async ({ request, params, actor }) => {
+  const body = await readJson(request, z.object({ previewUrl: PreviewUrl }))
+  return json(features.setWorkspacePreview(id(params), body.previewUrl, actor))
+})
+// Whether that preview answers right now: `{running, status?, checkedAt}`; localhost URLs only.
+api.get('/api/workspaces/:id/preview', async ({ params }) =>
+  json(await features.workspacePreview(id(params))),
+)
 api.delete('/api/workspaces/:id', ({ params, actor }) => {
   features.deleteWorkspace(id(params), actor)
   return json({ ok: true })

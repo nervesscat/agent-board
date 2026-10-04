@@ -113,8 +113,12 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 - **Previews:** when the change can be tried (a page, an API), start your branch from your
   worktree on a free port, with a copy of the data rather than the real one (the project's
   `instructions` say how), and `post_update` the link (`http://localhost:<port>`) with what to
-  try. Say that what the human posts there stays in the copy. Keep it running while the ticket is
-  in `review`; stop it once it is merged or dropped. Never run it from the checkout or port the
+  try. Register it on that worktree's workspace too: `set_preview` with the `workspaceId` and
+  `previewUrl` once the server answers (or `previewUrl` on `add_workspace` when it already runs).
+  The ticket page then shows a Preview card with an Open button and whether it is running. Say
+  that what the human posts there stays in the copy. Keep it running while the ticket is in
+  `review`; stop it once it is merged or dropped, and clear it with `set_preview` and
+  `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port the
   human uses day to day.
 - Questions are posts too: `comment` on the ticket; the human answers with a post or a reply
   under yours (`comment` on the post, `parentType: update`, replies there). A choice between clear

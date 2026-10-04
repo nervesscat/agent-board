@@ -70,9 +70,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    change what you posted.
    **Previews:** when the change can be tried (a page, an API), start your branch from your
    worktree on a free port, with a copy of the data rather than the real one (the project's
-   instructions say how), and post the link (`http://localhost:<port>`) with what to try. Say that
+   instructions say how), and post the link (`http://localhost:<port>`) with what to try. Register
+   it on that worktree's workspace as well (`set_preview`, or `previewUrl` on `add_workspace`): the
+   ticket page shows it as a Preview card with an Open button and whether it is running. Say that
    what the human posts there stays in the copy. Keep it running while the ticket is in review;
-   stop it once it is merged or dropped.
+   stop it once it is merged or dropped, and clear it (`set_preview` with `previewUrl: ""`).
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
    (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
