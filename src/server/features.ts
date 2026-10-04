@@ -7,6 +7,7 @@ import { branchInfo } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
+import { previewState, previewUrl } from './preview'
 import { prForTicket } from './prs'
 import { resolveRepo, ticketRepo } from './repos'
 import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
@@ -574,10 +575,11 @@ export function deleteTask(id: number, actor: string) {
 
 export function addWorkspace(
   ticketId: number,
-  input: { name: string; branch?: string; path?: string; agent?: string },
+  input: { name: string; branch?: string; path?: string; agent?: string; previewUrl?: string | null },
   actor: string,
 ) {
   const ticket = getTicket(ticketId)
+  const preview = previewUrl(input.previewUrl)
   const row = db
     .insert(schema.workspaces)
     .values({
@@ -586,6 +588,7 @@ export function addWorkspace(
       branch: input.branch ?? '',
       path: input.path ?? '',
       agent: input.agent ?? actor,
+      previewUrl: preview,
     })
     .returning()
     .get()
@@ -594,16 +597,53 @@ export function addWorkspace(
     projectId: ticket.projectId,
     actor,
     kind: 'workspace',
-    text: `opened workspace ${row.name}${row.branch ? ` on ${row.branch}` : ''} for #${ticketId}`,
+    text: `opened workspace ${row.name}${row.branch ? ` on ${row.branch}` : ''} for #${ticketId}${preview ? `, preview at ${preview}` : ''}`,
     refType: 'ticket',
     refId: ticketId,
   })
   return row
 }
 
-export function deleteWorkspace(id: number, actor: string) {
+function getWorkspace(id: number) {
   const ws = db.select().from(schema.workspaces).where(eq(schema.workspaces.id, id)).get()
   if (!ws) throw notFound('workspace')
+  return ws
+}
+
+/** Set the link where the workspace's branch runs for the human to try, or clear it ('' or null). */
+export function setWorkspacePreview(id: number, value: string | null, actor: string) {
+  const ws = getWorkspace(id)
+  const preview = previewUrl(value)
+  const row = db
+    .update(schema.workspaces)
+    .set({ previewUrl: preview })
+    .where(eq(schema.workspaces.id, id))
+    .returning()
+    .get()
+  touch(ws.ticketId)
+  const ticket = getTicket(ws.ticketId)
+  logActivity({
+    projectId: ticket.projectId,
+    actor,
+    kind: 'workspace',
+    text: preview
+      ? `preview of workspace ${ws.name} on #${ticket.id} at ${preview}`
+      : `stopped the preview of workspace ${ws.name} on #${ticket.id}`,
+    refType: 'ticket',
+    refId: ticket.id,
+  })
+  return row
+}
+
+/** Whether the workspace's preview answers right now (checked on this machine, cached a few seconds). */
+export function workspacePreview(id: number) {
+  const ws = getWorkspace(id)
+  if (!ws.previewUrl) throw new HttpError(404, 'workspace has no preview')
+  return previewState(ws.previewUrl)
+}
+
+export function deleteWorkspace(id: number, actor: string) {
+  const ws = getWorkspace(id)
   db.delete(schema.workspaces).where(eq(schema.workspaces.id, id)).run()
   const ticket = getTicket(ws.ticketId)
   logActivity({

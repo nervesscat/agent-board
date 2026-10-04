@@ -164,6 +164,8 @@ export const workspaces = sqliteTable('workspaces', {
   branch: text().notNull().default(''),
   path: text().notNull().default(''),
   agent: text().notNull().default(''),
+  // Where the branch runs for the human to try (`http://localhost:<port>`); '' when nothing runs.
+  previewUrl: text('preview_url').notNull().default(''),
   createdAt: now(),
 })
 

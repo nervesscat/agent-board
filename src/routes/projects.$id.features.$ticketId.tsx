@@ -47,7 +47,7 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Badge } from '#/components/ui/badge'
-import { Button } from '#/components/ui/button'
+import { Button, buttonVariants } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { Switch } from '#/components/ui/switch'
 import { Input } from '#/components/ui/input'
@@ -61,9 +61,11 @@ import {
   post,
   put,
   upload,
+  type PreviewState,
   type TicketFull,
   type TicketGit,
   type UpdateRow,
+  type Workspace,
 } from '#/lib/api'
 import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
@@ -302,6 +304,7 @@ function TicketPage() {
           <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
         </div>
         <aside className="min-w-0 space-y-4">
+          <Previews t={t} git={git} />
           <Details key={t.id} t={t} onSave={(p) => update.mutate(p)} />
           <GitPanel t={t} git={git} onChange={invalidate} />
         </aside>
@@ -1342,6 +1345,94 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
         </div>
       )}
     </div>
+  )
+}
+
+/** Where the ticket's work runs for the human to try: a row per workspace with a preview link. */
+function Previews({ t, git }: { t: TicketFull; git?: TicketGit }) {
+  const rows = [
+    ...t.workspaces.filter((w) => w.previewUrl).map((w) => ({ ...w, lane: null })),
+    // The lanes' come with the git state, tagged with their lane.
+    ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
+  ]
+  if (!rows.length) return null
+  return (
+    <section className="rounded-lg border p-3" aria-label="Preview">
+      <h2 className="mb-2 text-sm font-medium">Preview</h2>
+      <ul className="space-y-3">
+        {rows.map((w) => (
+          <PreviewRow key={w.id} w={w} projectId={t.projectId} />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function PreviewRow({
+  w,
+  projectId,
+}: {
+  w: Workspace & { lane: { id: number; title: string } | null }
+  projectId: number
+}) {
+  // Polled only while the page is in view: TanStack Query pauses intervals in a hidden tab.
+  const { data, error } = useQuery({
+    queryKey: ['preview', w.id, w.previewUrl],
+    queryFn: () => get<PreviewState>(`/api/workspaces/${w.id}/preview`),
+    refetchInterval: 15_000,
+    retry: false,
+  })
+  const state = data
+    ? data.running
+      ? {
+          label: 'Running',
+          title: `Answered with HTTP ${data.status} at ${clock(data.checkedAt)}`,
+          className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+        }
+      : {
+          label: 'Not running',
+          title: `No answer at ${clock(data.checkedAt)}`,
+          className: 'bg-muted text-muted-foreground',
+        }
+    : error
+      ? { label: 'Not checked', title: errorMessage(error), className: 'bg-muted text-muted-foreground' }
+      : { label: 'Checking…', title: 'Checking whether it answers', className: 'text-muted-foreground' }
+  return (
+    <li className="space-y-1.5 text-sm">
+      <div className="flex items-center gap-2">
+        <a href={w.previewUrl} target="_blank" rel="noreferrer" className={buttonVariants({ size: 'sm' })}>
+          Open preview <ExternalLink />
+        </a>
+        <span
+          className={cn(
+            'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
+            state.className,
+          )}
+          title={state.title}
+        >
+          {data && <span className="size-1.5 rounded-full bg-current" />}
+          {state.label}
+        </span>
+      </div>
+      <div className="truncate font-mono text-xs text-muted-foreground" title={w.previewUrl}>
+        {w.previewUrl}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+        <span className="inline-flex min-w-0 items-center gap-1 font-mono" title={`workspace ${w.name}`}>
+          <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
+        </span>
+        {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
+      </div>
+      {w.lane && (
+        <Link
+          to="/projects/$id/features/$ticketId"
+          params={{ id: String(projectId), ticketId: String(w.lane.id) }}
+          className="inline-flex max-w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <Layers className="size-3 shrink-0" /> <span className="truncate">{w.lane.title}</span>
+        </Link>
+      )}
+    </li>
   )
 }
 

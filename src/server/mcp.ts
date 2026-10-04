@@ -42,7 +42,7 @@ The rhythm:
 2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. Tickets are shared: you may take over one another agent holds (the board logs it), so prefer unassigned ones and take over only what is clearly stalled or handed to you. A ticket with reserved: true belongs to one of the project's agents (see below).
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each; update_task or remove_task when the plan changes.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox): register every worktree you open, since that list is what gets cleaned up later; remove_workspace when it is gone.
-5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket has one feed of posts: post_update adds one marked as progress (lane summaries and the Daily view pick those out); questions and answers are posts too (comment on the ticket, or post_update with progress: false). Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. When the change can be tried (a page, an API), start a preview the human can open before anything is merged: your branch, from your worktree, on a free port, with a copy of the data rather than the real one (the project's instructions say how). Post its link (http://localhost:<port>) with what to try, say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped.
+5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket has one feed of posts: post_update adds one marked as progress (lane summaries and the Daily view pick those out); questions and answers are posts too (comment on the ticket, or post_update with progress: false). Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. When the change can be tried (a page, an API), start a preview the human can open before anything is merged: your branch, from your worktree, on a free port, with a copy of the data rather than the real one (the project's instructions say how). Post its link (http://localhost:<port>) with what to try and register it on that worktree's workspace (set_preview, or previewUrl on add_workspace): the ticket page then shows it with an Open button and whether it is running. Say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped, clearing it with set_preview "".
 6. Ask and answer with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When it is a choice between clear options (an approach, a trade-off, a scope call), ask_decision instead: the human answers with one click, and the ticket blocks and unblocks by itself. When you resume, and between steps, list_my_threads shows every ticket feed or reply thread where someone spoke after you; get_ticket shows each post's reply count and last author. Files on posts and replies come with a local path you can open.
 6. Ask and answer in threads with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When you resume, and between steps, list_my_threads shows every thread where someone spoke after you; get_ticket shows each thread's comment count and last author. Files in threads and updates come with a local path you can open.
 7. Hand off: open the PR assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), update_ticket with its prNumber (links the ticket and the PR queue both ways), a final post_update with the PR link, then update_ticket to review. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either.
@@ -61,6 +61,8 @@ const AS = z
   .string()
   .optional()
   .describe("one of the project's agents (get_project): post under its name, as the work you did for it")
+const PREVIEW_URL =
+  'where the branch runs for the human to try, http(s) only: http://localhost:<port> (the board checks whether localhost links are up)'
 const TAGS =
   'Short labels the human filters lanes by: a severity (Critical, High, Medium, Low, Cosmetic), an area (API, UI, Forms…) or a kind (Bug, Refactor…). One or two words each, Title Case; reuse the tags sibling lanes already use, and keep them out of the title (no "[High] …").'
 
@@ -275,19 +277,29 @@ function buildServer(actor: string) {
   )
   tool(
     'add_workspace',
-    'Register a worktree / sub-branch / subagent sandbox you opened for a ticket, so the board can show it.',
+    'Register a worktree / sub-branch / subagent sandbox you opened for a ticket, so the board can show it. previewUrl is where its branch runs for the human to try, if it does already (set_preview sets it later).',
     {
       ticketId: z.number().int(),
       name: z.string(),
       branch: z.string().default(''),
       path: z.string().default(''),
       agent: z.string().optional(),
+      previewUrl: z.string().optional().describe(PREVIEW_URL),
     },
     ({ ticketId, ...rest }) => features.addWorkspace(ticketId, rest, actor),
   )
   tool(
+    'set_preview',
+    'Set the link where a workspace\'s branch runs for the human to try (after you start its server), or clear it with "" once you stop the server. The ticket page shows it as a Preview card with an Open button and whether it is running.',
+    {
+      workspaceId: z.number().int(),
+      previewUrl: z.string().describe(`${PREVIEW_URL}; "" clears it`),
+    },
+    ({ workspaceId, previewUrl }) => features.setWorkspacePreview(workspaceId, previewUrl, actor),
+  )
+  tool(
     'remove_workspace',
-    'Remove a workspace you closed.',
+    'Remove a workspace you closed (its preview goes with it).',
     { workspaceId: z.number().int() },
     ({ workspaceId }) => {
       features.deleteWorkspace(workspaceId, actor)

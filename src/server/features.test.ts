@@ -117,6 +117,27 @@ describe('lanes', () => {
     expect((await features.ticketGit(sub.id)).workspaces.map((w) => w.lane)).toEqual([null])
   })
 
+  it('carry a preview link agents set, change and clear', () => {
+    const t = features.createTicket(projectId, { title: 'preview', repoId: otherRepo }, 'me')
+    expect(() =>
+      features.addWorkspace(t.id, { name: 'wt', previewUrl: 'javascript:alert(1)' }, 'codex'),
+    ).toThrow(/http/)
+    const ws = features.addWorkspace(t.id, { name: 'wt', previewUrl: 'http://localhost:47101' }, 'codex')
+    expect(ws.previewUrl).toBe('http://localhost:47101')
+    expect(features.getTicketFull(t.id).workspaces.map((w) => w.previewUrl)).toEqual([
+      'http://localhost:47101',
+    ])
+    expect(features.setWorkspacePreview(ws.id, 'http://example.com:3000', 'codex').previewUrl).toBe(
+      'http://example.com:3000',
+    )
+    // Only links on this machine are checked.
+    expect(() => features.workspacePreview(ws.id)).toThrow(/localhost/)
+    expect(() => features.setWorkspacePreview(ws.id, 'ftp://localhost', 'codex')).toThrow(/http/)
+    expect(features.setWorkspacePreview(ws.id, null, 'codex').previewUrl).toBe('')
+    expect(() => features.workspacePreview(ws.id)).toThrow(/no preview/)
+    expect(() => features.setWorkspacePreview(999_999, '', 'codex')).toThrow(/not found/)
+  })
+
   it("carry the human's verdict; disapproving cancels, taking it back reopens", () => {
     const parent = features.createTicket(projectId, { title: 'verdicts', repoId: otherRepo }, 'me')
     const a = features.createTicket(projectId, { title: 'a', parentId: parent.id, tasks: ['x'] }, 'claude')
