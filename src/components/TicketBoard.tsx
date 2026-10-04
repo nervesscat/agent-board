@@ -12,6 +12,7 @@ import {
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
+import { NeedsBadge } from '#/components/Needs'
 import { Tag, compareTags } from '#/components/Tag'
 import {
   AlertDialog,
@@ -151,9 +152,10 @@ export function TicketBoard({
                     <div className="line-clamp-2 font-medium leading-snug">
                       <span className="text-muted-foreground">#{t.id}</span> {t.title}
                     </div>
-                    {(t.decisions > 0 || hasResumeBadge(t.resume)) && (
+                    {(t.decisions > 0 || t.needs.some((n) => !n.merged) || hasResumeBadge(t.resume)) && (
                       <div className="mt-1.5 flex flex-wrap gap-1">
                         {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                        <NeedsBadge needs={t.needs} />
                         <ResumeBadges resume={t.resume} />
                       </div>
                     )}
@@ -476,6 +478,7 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                     {t.title}
                   </span>
                   {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
+                  <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
                   {hasResumeBadge(t.resume) && (
                     <span className="ml-2 inline-flex gap-1 align-[1px]">
                       <ResumeBadges resume={t.resume} />

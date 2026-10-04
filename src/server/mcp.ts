@@ -9,9 +9,11 @@ import { cleanupReport } from './cleanup'
 import { dailyReport, today } from './daily'
 import * as features from './features'
 import { HttpError } from './http'
+import * as needs from './needs'
 import * as prs from './prs'
 import * as projects from './projects'
-import { withResume, withResumeBriefs } from './resume'
+import * as reports from './reports'
+import { withResume } from './resume'
 import * as reviews from './reviews'
 import * as uploads from './uploads'
 
@@ -46,9 +48,9 @@ The rhythm:
 5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket has one feed of posts: post_update adds one marked as progress (lane summaries and the Daily view pick those out); questions and answers are posts too (comment on the ticket, or post_update with progress: false). Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. When the change can be tried (a page, an API), start a preview the human can open before anything is merged: your branch, from your worktree, on a free port, with a copy of the data rather than the real one (the project's instructions say how). Post its link (http://localhost:<port>) with what to try and register it on that worktree's workspace (set_preview, or previewUrl on add_workspace): the ticket page then shows it with an Open button and whether it is running. Say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped, clearing it with set_preview "".
 6. Ask and answer with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When it is a choice between clear options (an approach, a trade-off, a scope call), ask_decision instead: the human answers with one click, and the ticket blocks and unblocks by itself. When you resume, and between steps, list_my_threads shows every ticket feed or reply thread where someone spoke after you; get_ticket shows each post's reply count and last author. Files on posts and replies come with a local path you can open.
 6. Ask and answer in threads with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When you resume, and between steps, list_my_threads shows every thread where someone spoke after you; get_ticket shows each thread's comment count and last author. Files in threads and updates come with a local path you can open.
-7. Hand off: open the PR assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), update_ticket with its prNumber (links the ticket and the PR queue both ways), a final post_update with the PR link, then update_ticket to review. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either. Archiving is the human's too: archivedAt set means the ticket (lanes included) is finished and off the board, and list_tickets leaves it out unless you pass archived.
+7. Hand off: open the PR assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), update_ticket with its prNumber (links the ticket and the PR queue both ways), a final post_update with the PR link, then update_ticket to review. When your branch is built on another ticket's open branch, or you merged one in (to get past a conflict), declare it with update_ticket needs: [its id] instead of only writing "builds on" in the PR: the PR queue then says which PR to merge first, and the ticket cannot be done until that branch is merged into its base. get_ticket_git includes lists the tickets whose unmerged work your branch holds. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either. Archiving is the human's too: archivedAt set means the ticket (lanes included) is finished and off the board, and list_tickets leaves it out unless you pass archived.
 8. Clean up after yourself: once a lane's work is in its parent's branch (or a ticket's in its base), and before moving it to done, remove its worktree and delete its local branch, remove_workspace, and post_update the deleted branch names with their commit hashes (e.g. lane/47 @ 9ec12e8b) so any of them can be restored. get_ticket_git says whether each branch's work arrived (reach); cleanup_report lists every leftover in the project. Never delete a branch whose reach is unique without the human's go-ahead, and never delete branches on origin: list them for the human.
-9. End of session: for every ticket you leave in progress, blocked or review, set_resume_note with its template filled in (state, done so far, next steps, open questions or blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that another agent can continue without asking. Then post_daily_summary, at most three short lines.
+9. End of session: for every ticket you leave in progress, blocked or review, set_resume_note with its template filled in (state, done so far, next steps, open questions or blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that another agent can continue without asking. Then post_daily_summary, at most three short lines. If the project tracks reports (get_report_settings: cadence daily or weekly), list_reports shows which periods are done, missing or upcoming; write the missing or current one exactly as its prompt says (by the hour, sections, a short text or a PDF) and post_report it, files as absolute paths.
 
 The project's agents: get_project lists them (agents: name, instructions, delegation notes, picture). They are personas the human defined, not connected tools; you work for them. A ticket assigned to one (reserved: true; get_ticket's agent has its instructions) is that agent's alone: claim_ticket with as: <its name>, brief a subagent with its instructions (and the ticket's), and post that work with post_update and comment using as: <its name>, so it shows under the agent's name, via you. Never take a reserved ticket as yourself, reassign it, or work it without the agent's instructions; only the human reassigns it. A thread can wait on an agent too: when someone @mentions it, or replies on its ticket or post, list_my_threads returns that thread with as: <its name>; answer it with comment as: <its name>, in that agent's voice and instructions. Orchestrating: each agent's delegation notes say when to call it, what to give it, what it returns and what comes next. With them you can work a ticket as its orchestrator instead of doing the work yourself: run each step as a subagent briefed with that agent's instructions, the project's instructions and the ticket; post what it returns on the ticket as that agent (as: <its name>, progress: true); go where its notes say next. The default set (spec, builder, runner, and the review phases env, verify, hunt, refute, merge) is the cycle spec → build → review that tries to break it → build again with the confirmed findings (at most three rounds) → hand off; the /review-queue skill runs it (/feature-review is its review). Ask the human with ask_decision instead of guessing, never run two builders on one branch, and never delegate to an agent without delegation notes. The board skill has the full routine.
 
@@ -64,6 +66,8 @@ const AS = z
   .describe("one of the project's agents (get_project): post under its name, as the work you did for it")
 const PREVIEW_URL =
   'where the branch runs for the human to try, http(s) only: http://localhost:<port> (the board checks whether localhost links are up)'
+const NEEDS =
+  "ticket ids whose branches must be merged into this ticket's base before it can be done: the branch this one is built on (stacked), or one it merged in to get past a conflict. Same project, not itself, no cycles."
 const TAGS =
   'Short labels the human filters lanes by: a severity (Critical, High, Medium, Low, Cosmetic), an area (API, UI, Forms…) or a kind (Bug, Refactor…). One or two words each, Title Case; reuse the tags sibling lanes already use, and keep them out of the title (no "[High] …").'
 
@@ -106,7 +110,7 @@ function buildServer(actor: string) {
   // PR queue
   tool(
     'list_prs',
-    'Open PRs assigned to the human for review across all repos of the project, with status pending | reviewed | on_hold, the repo, and the latest review verdict. waitingOn is me (review requested from the human, or assigned to them and not reviewed by them at its head) or others. Where it stands on GitHub as of the last refresh: merge (clean | conflicts | behind | blocked | checking), ci (passing | failing | pending | none) with checks[] {name, state pass | fail | pending | skipped, url}, reviewDecision and isDraft.',
+    'Open PRs assigned to the human for review across all repos of the project, with status pending | reviewed | on_hold, the repo, and the latest review verdict. waitingOn is me (review requested from the human, or assigned to them and not reviewed by them at its head) or others. Where it stands on GitHub as of the last refresh: merge (clean | conflicts | behind | blocked | checking), ci (passing | failing | pending | none) with checks[] {name, state pass | fail | pending | skipped, url}, reviewDecision and isDraft. mergeAfter lists the open PRs of tickets its tickets need: merge those first.',
     {
       projectId: z.number().int(),
       refresh: z.boolean().default(false).describe('re-query GitHub before answering'),
@@ -157,7 +161,7 @@ function buildServer(actor: string) {
   // ongoing features
   tool(
     'list_tickets',
-    "Tickets of a project (all its repos) with status, assignee, reserved (assigned to one of the project's agents: only that agent works it), repoId, branch, parentId, tags, task progress (own and rolled up over lanes), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage), startedAt (when work on it last started), and resume: whether its resume note holds (at: when it was written, null for none; stale: the work moved on since; noHandoff: it carried over from an earlier day without one; day: which day of work this is). status is a stage key (see get_project). Cancelled lanes' tasks are left out of the rolled-up progress. Archived tickets (finished work the human took off the board, lanes with it; archivedAt/archivedBy) are left out unless archived says otherwise.",
+    "Tickets of a project (all its repos) with status, assignee, reserved (assigned to one of the project's agents: only that agent works it), repoId, branch, parentId, tags, task progress (own and rolled up over lanes), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage), startedAt (when work on it last started), and resume: whether its resume note holds (at: when it was written, null for none; stale: the work moved on since; noHandoff: it carried over from an earlier day without one; day: which day of work this is). status is a stage key (see get_project). needs lists the tickets it needs merged first, each with merged (see get_ticket). Cancelled lanes' tasks are left out of the rolled-up progress. Archived tickets (finished work the human took off the board, lanes with it; archivedAt/archivedBy) are left out unless archived says otherwise.",
     {
       projectId: z.number().int(),
       parentId: z
@@ -178,16 +182,16 @@ function buildServer(actor: string) {
         .optional()
         .describe('include: archived tickets too; only: just the archived ones. Omit to leave them out'),
     },
-    async ({ projectId, ...filter }) => withResumeBriefs(features.listTickets(projectId, filter)),
+    ({ projectId, ...filter }) => needs.ticketRows(projectId, filter),
   )
   tool(
     'get_ticket',
-    "A ticket in full: instructions and the files attached to them (attachments, each with a local path), agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces, its parent chain, its lanes with their last progress post and verdict, the feed of posts (updates: newest first, each with progress true for a step of the work or false for discussion, editedAt, attachments with a local path, and thread: its reply count, last author and time), thread on the ticket (how many posts, who posted last), and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled). archivedAt/archivedBy is set when the human archived it (or the ticket it is a lane of): finished, off the board. resume is where the last session left off: note (markdown; '' when none), at, by, sha (the branch head when it was written), commitsSince (commits on the branch since; null when unknown), stale (new commits or a newer progress post since), noHandoff (in progress, blocked or review since an earlier day with no note written since) and day (which day of work this is). Read the note before anything else when you pick the ticket up; handoff: true marks its earlier versions in the feed.",
+    "A ticket in full: instructions and the files attached to them (attachments, each with a local path), agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces, its parent chain, its lanes with their last progress post and verdict, the feed of posts (updates: newest first, each with progress true for a step of the work or false for discussion, editedAt, attachments with a local path, and thread: its reply count, last author and time), thread on the ticket (how many posts, who posted last), and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled). archivedAt/archivedBy is set when the human archived it (or the ticket it is a lane of): finished, off the board. resume is where the last session left off: note (markdown; '' when none), at, by, sha (the branch head when it was written), commitsSince (commits on the branch since; null when unknown), stale (new commits or a newer progress post since), noHandoff (in progress, blocked or review since an earlier day with no note written since) and day (which day of work this is). Read the note before anything else when you pick the ticket up; handoff: true marks its earlier versions in the feed. needs: the tickets whose branches must be merged into its base before it can be done ({id, title, branch, prNumber, status, merged, into}); neededBy: the tickets that need this one.",
     {
       ticketId: z.number().int(),
       laneUpdates: z.boolean().default(false).describe("include the lanes' posts in the feed"),
     },
-    ({ ticketId, laneUpdates }) => withResume(features.getTicketFull(ticketId, { laneUpdates })),
+    ({ ticketId, laneUpdates }) => needs.ticketView(ticketId, { laneUpdates }),
   )
   tool(
     'create_ticket',
@@ -218,12 +222,13 @@ function buildServer(actor: string) {
       tags: z.array(z.string()).default([]).describe(TAGS),
       tasks: z.array(z.string()).default([]),
       prNumber: z.number().int().optional().describe("the PR opened from this ticket's branch"),
+      needs: z.array(z.number().int()).optional().describe(NEEDS),
     },
-    ({ projectId, ...rest }) => features.createTicket(projectId, rest, actor),
+    ({ projectId, ...rest }) => needs.newTicket(projectId, rest, actor, { agent: true }),
   )
   tool(
     'update_ticket',
-    "Change status, assignee, branch, tags, prNumber, title or instructions. Use claim_ticket to pick a ticket up. Changing the assignee of a ticket reserved for one of the project's agents fails: only the human reassigns those. Status blocked means you are waiting on the human: say what for in a comment on the ticket.",
+    "Change status, assignee, branch, tags, prNumber, title or instructions. Use claim_ticket to pick a ticket up. Changing the assignee of a ticket reserved for one of the project's agents fails: only the human reassigns those. Status blocked means you are waiting on the human: say what for in a comment on the ticket. A move to done is refused while one of its needs is not merged into its base (the error says which); merge order is the human's, so leave it in review.",
     {
       ticketId: z.number().int(),
       title: z.string().optional(),
@@ -240,8 +245,9 @@ function buildServer(actor: string) {
         .nullable()
         .optional()
         .describe("the PR opened from this ticket's branch, in the ticket's repo; null unlinks it"),
+      needs: z.array(z.number().int()).optional().describe(`${NEEDS} Replaces the whole list; [] clears it.`),
     },
-    ({ ticketId, ...patch }) => features.updateTicket(ticketId, patch, actor, { agent: true }),
+    ({ ticketId, ...patch }) => needs.changeTicket(ticketId, patch, actor, { agent: true }),
   )
   tool(
     'claim_ticket',
@@ -391,9 +397,9 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'get_ticket_git',
-    "Read-only git state of the ticket branch and its workspaces, its lanes' included and tagged with the lane (ahead/behind, last commit, worktrees). Each branch's reach says whether its work is already in its base chain (a lane's parent branch, then the parent's base, then the repo's base): merged (as is), rebased (same patches), edited (patches differ but merging would change nothing), unique (still has work of its own, listed). merged, rebased and edited are safe to delete.",
+    "Read-only git state of the ticket branch and its workspaces, its lanes' included and tagged with the lane (ahead/behind, last commit, worktrees). Each branch's reach says whether its work is already in its base chain (a lane's parent branch, then the parent's base, then the repo's base): merged (as is), rebased (same patches), edited (patches differ but merging would change nothing), unique (still has work of its own, listed). merged, rebased and edited are safe to delete. includes: ids of open tickets whose unmerged work this ticket's branch holds (commits of their branch that are in this one but not in its base): declare them with update_ticket needs, so they are merged first.",
     { ticketId: z.number().int() },
-    ({ ticketId }) => features.ticketGit(ticketId),
+    ({ ticketId }) => needs.ticketGitView(ticketId),
   )
   tool(
     'cleanup_report',
@@ -463,13 +469,48 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'post_daily_summary',
-    'Post the highest-level summary of a day: at most three short lines, what got done and what is open. At the end of a session, set_resume_note first on every ticket you leave in progress, blocked or review.',
+    "Post the highest-level summary of a day: at most three short lines, what got done and what is open. At the end of a session, set_resume_note first on every ticket you leave in progress, blocked or review. For a project with daily text reports it also counts as that day's report until a report is posted with post_report.",
     {
       date: z.string().default(today()),
       projectId: z.number().int().nullable().default(null),
       body: z.string(),
     },
     ({ date, projectId, body }) => addSummary({ date, projectId, body, author: actor }),
+  )
+
+  // reports
+  tool(
+    'get_report_settings',
+    "How the project's reports are made: prompt (markdown: what each report must contain and how: by the hour, sections, audience, tone, a short text or a PDF), cadence (off, daily, or weekly due on weekday 1 Monday to 7 Sunday), dueTime (local HH:MM on the due day; null is by the end of it) and format (text, or file: the report is an attached file such as a PDF). Follow the prompt when you write a report.",
+    { projectId: z.number().int() },
+    ({ projectId }) => reports.getReportSettings(projectId),
+  )
+  tool(
+    'set_report_settings',
+    "Change how the project's reports are made: any of prompt, cadence, weekday, dueTime and format; what you leave out stays. The change shows in the project's activity. Change the prompt only when the human asked for it or agreed.",
+    { projectId: z.number().int(), ...reports.reportSettingsShape },
+    ({ projectId, ...patch }) => reports.setReportSettings(projectId, patch, actor),
+  )
+  tool(
+    'post_report',
+    "Post the project's report for a period: body (markdown, may be a single line) and/or files (absolute paths on this machine, e.g. the PDF you made; the board does not make PDFs). A file-format project needs a file. period is a day, YYYY-MM-DD (for a weekly cadence any day of the week; the week's Monday is kept), by default the current one. Posting again for a period replaces its report (the earlier version stays as history).",
+    {
+      projectId: z.number().int(),
+      period: z.string().optional().describe('YYYY-MM-DD, local; defaults to the current period'),
+      body: z.string().optional(),
+      files: z.array(z.string()).default([]).describe('absolute paths to attach'),
+    },
+    ({ projectId, ...input }) => reports.postReport(projectId, input, actor),
+  )
+  tool(
+    'list_reports',
+    "The project's report periods, newest first, from from to to (YYYY-MM-DD; by default the last two weeks of a daily cadence or eight weeks of a weekly one, up to today), each with due (when it is due), status (done: it has a report; missing: due and none posted; upcoming: not due yet), its latest report (body, author, attachments with a local path; source summary when a daily summary stands in for a daily text report) and how many versions were posted. Also the schedule and the current period. Periods before tracking began are left out unless they have a report.",
+    {
+      projectId: z.number().int(),
+      from: z.string().optional().describe('YYYY-MM-DD'),
+      to: z.string().optional().describe('YYYY-MM-DD'),
+    },
+    ({ projectId, from, to }) => reports.listReports(projectId, { from, to }),
   )
 
   return server

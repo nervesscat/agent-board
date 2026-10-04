@@ -3,7 +3,9 @@
 A local job board shared by one developer and their AI agents (claude, codex, opencode, …).
 Per project (one or more repos): the PR queue assigned to you, the features in flight (tickets →
 lanes for parallel work → tasks → branches and workspaces → updates with screenshots and recordings →
-threads), the PR reviews your agents record, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
+threads), the PR reviews your agents record, and a day-by-day log with a one-glance summary and the
+report each project asks for (daily or weekly, as its prompt says), tracked period by period. Git
+and GitHub are **read-only**.
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
@@ -110,6 +112,7 @@ to GitHub.
 All routes need the gate cookie or `Authorization: Bearer gate_…`; JSON in and out. `actor` is
 the gate device or token name.
 
+|              | `needs[]` on create and PATCH · `force` on PATCH                                                              | the tickets whose branches must be merged into its base first (same project, no cycles); GET returns `needs[]` with `merged` and `neededBy[]`, the list `needs[]`. A move to a done stage is a 409 (`code: needs`) while one is not merged; `force: true` (the human's only) marks it done anyway, logged |
 | Method       | Path                                                                                                          |                                                                                                                                                               |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET          | `/api/me`                                                                                                     | who you are                                                                                                                                                   |
@@ -150,6 +153,9 @@ the gate device or token name.
 | POST         | `/api/projects/:id/reviews/results`                                                                           | post a result                                                                                                                                                 |
 | GET          | `/api/daily?date=YYYY-MM-DD&projectId=`                                                                       | activity by the hour + summaries                                                                                                                              |
 | POST         | `/api/daily/summaries` `{date, projectId, body}` · `/generate`                                                | post / ask claude for the day's summary                                                                                                                       |
+| GET/PATCH    | `/api/projects/:id/report-settings` `{prompt, cadence, weekday, dueTime, format}`                             | what the project's report must contain (markdown prompt) and when it is due: `off` · `daily` · `weekly` on `weekday` 1–7, by `dueTime` (HH:MM), `text`/`file` |
+| GET/POST     | `/api/projects/:id/reports?from=&to=` · `{period?, body?, attachmentIds[]}`                                   | periods newest first with `status` done/missing/upcoming and the latest report · post one (replaces the period's report, the old one kept)                    |
+| GET          | `/api/projects/:id/reports/:period`                                                                           | every version posted for a period, newest first                                                                                                               |
 | \*           | `/api/mcp`                                                                                                    | MCP streamable HTTP; tools mirror the rows above                                                                                                              |
 
 ## Development

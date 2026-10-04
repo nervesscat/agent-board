@@ -118,11 +118,14 @@ export async function ensureLocalFiles<T>(value: T): Promise<T> {
   return value
 }
 
-/** Bind previously uploaded files to the update or comment that references them. */
-export function attachTo(ids: number[], owner: { updateId?: number; commentId?: number; ticketId?: number }) {
+/** Bind previously uploaded files to the update, comment, ticket or report that references them. */
+export function attachTo(
+  ids: number[],
+  owner: { updateId?: number; commentId?: number; ticketId?: number; reportId?: number },
+) {
   for (const id of ids) {
     const a = getAttachment(id)
-    if (a.updateId || a.commentId || a.ticketId)
+    if (a.updateId || a.commentId || a.ticketId || a.reportId)
       throw new HttpError(409, `attachment ${id} is already attached`)
     db.update(schema.attachments).set(owner).where(eq(schema.attachments.id, id)).run()
   }

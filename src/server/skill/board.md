@@ -1,6 +1,6 @@
 ---
 name: board
-description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, leave resume notes, post the daily summary. Use when the user says "pick up a ticket", "next ticket", "where did we leave off", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
+description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, leave resume notes, post the daily summary and the project's report. Use when the user says "pick up a ticket", "next ticket", "where did we leave off", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "daily report", "weekly report", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
 ---
 
 # Working through the agent board
@@ -148,6 +148,13 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
    the PR queue also lists PRs assigned to the human, so this is how it gets there.
 2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
+   **Merge order:** if your branch is built on another ticket's open branch (stacked), or you merged
+   one in to get past a conflict, declare it with `update_ticket` → `needs: [<its ticket id>]` (or
+   `needs` on `create_ticket`) instead of only writing "builds on …" in the PR. `get_ticket_git` →
+   `includes` lists the open tickets whose unmerged work your branch holds: each one belongs in
+   `needs`. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot go to
+   `done` until those branches are merged into its base: `update_ticket` to `done` is refused
+   with which one (`get_ticket` → `needs[].merged`). Only the human can mark it done anyway.
 3. Final `post_update` with the PR link, how to test, and the preview link if there is one.
 4. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
    say otherwise.
@@ -190,6 +197,25 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 2. `post_daily_summary` with your `projectId`: at most three short lines, highest level: what got
    done, what is open. `daily_report` with your `projectId` shows what else happened in the project
    today.
+
+Then the project's report, if it keeps one:
+
+1. `get_report_settings`: `cadence` `off` means no reports; stop here. Otherwise it is `daily` or
+   `weekly` (due on `weekday`, 1 Monday to 7 Sunday), by `dueTime` (local; null is the end of the
+   day), as `format` `text` or `file`, and `prompt` says what the report must contain and how (by
+   the hour, sections, who reads it, tone, a two-line text or a PDF).
+2. `list_reports`: each recent period with `status` `done`, `missing` (due, nothing posted) or
+   `upcoming` (not due yet), newest first, and `current`, the period you are in.
+3. For the current period, and any `missing` one the activity lets you write: write the report
+   exactly as the prompt says (`daily_report` for the days it covers) and `post_report` with
+   `period` (any day of it), `body`, and `files` as absolute paths. The board does not make PDFs:
+   when the prompt or `format: file` asks for one, make it yourself and attach it. Posting again
+   for a period replaces its report; the old one stays as history.
+4. On a daily text project the day's `post_daily_summary` already counts as its report until one
+   is posted; post a report anyway when the prompt asks for more than the summary.
+
+`set_report_settings` changes the prompt or the schedule, and the change shows in the project's
+activity: only when the human asks for it.
 
 ## 6. Clean up
 
