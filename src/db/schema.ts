@@ -149,6 +149,9 @@ export const tickets = sqliteTable(
     // The opposite call: the human rejected it, which also cancels it. At most one of the two is set.
     disapprovedAt: text('disapproved_at'),
     disapprovedBy: text('disapproved_by').notNull().default(''),
+    // Put away by the human off the board and the default lists; a lane goes with its ticket. Null while on the board.
+    archivedAt: text('archived_at'),
+    archivedBy: text('archived_by').notNull().default(''),
     createdAt: now(),
     updatedAt: now(),
   },

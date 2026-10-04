@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover
 import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
 import { useProjects } from '#/lib/project'
 
-const MODULES = ['prs', 'features', 'reviews', 'daily', 'settings'] as const
+const MODULES = ['prs', 'features', 'daily', 'settings'] as const
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
@@ -53,7 +53,13 @@ export function ProjectSwitcher() {
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
-          render={<Button variant="outline" size="sm" className="min-w-44 justify-between font-normal" />}
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-w-0 shrink justify-between font-normal sm:min-w-44"
+            />
+          }
           aria-label="Project"
         >
           <span className={current ? 'truncate' : 'truncate text-muted-foreground'}>

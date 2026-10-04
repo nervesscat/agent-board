@@ -3,9 +3,11 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { ExternalLink, MessageSquare, PauseCircle, PlayCircle, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
 import { Empty } from '#/components/Empty'
 import { PrAlert, PrState } from '#/components/PrState'
+import { ReviewResultDialog, verdictTone } from '#/components/ReviewResult'
 import { Thread } from '#/components/Thread'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
@@ -24,7 +26,11 @@ import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 
-export const Route = createFileRoute('/projects/$id/prs')({ component: PrQueue })
+// ?result=<id> opens that review result over the queue (a verdict on a card links there).
+export const Route = createFileRoute('/projects/$id/prs')({
+  component: PrQueue,
+  validateSearch: z.object({ result: z.number().int().positive().optional().catch(undefined) }),
+})
 
 const TABS = [
   { key: 'pending', label: 'Pending' },
@@ -59,6 +65,8 @@ function savedFilter(): Filter {
 
 function PrQueue() {
   const { id } = Route.useParams()
+  const { result } = Route.useSearch()
+  const navigate = Route.useNavigate()
   const qc = useQueryClient()
   const key = ['prs', id]
   const { data: project } = useProject(id)
@@ -149,6 +157,10 @@ function PrQueue() {
           ))}
         </Tabs>
       )}
+      <ReviewResultDialog
+        resultId={result ?? null}
+        onClose={() => navigate({ search: (s) => ({ ...s, result: undefined }), replace: true })}
+      />
     </div>
   )
 }
@@ -166,12 +178,6 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  const verdictTone = pr.latestReview?.verdict.startsWith('SHIP')
-    ? 'default'
-    : pr.latestReview
-      ? 'destructive'
-      : 'secondary'
-
   return (
     <div className="rounded-lg border p-3">
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
@@ -216,12 +222,15 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
         <div className="flex items-center gap-1">
           {pr.latestReview && (
             <Link
-              to="/projects/$id/reviews"
+              to="/projects/$id/prs"
               params={{ id: projectId }}
               search={{ result: pr.latestReview.id }}
               title={pr.latestReview.fresh ? 'reviewed at this SHA' : 'review is for an older SHA'}
             >
-              <Badge variant={verdictTone} className={pr.latestReview.fresh ? '' : 'opacity-60'}>
+              <Badge
+                variant={verdictTone(pr.latestReview.verdict)}
+                className={pr.latestReview.fresh ? '' : 'opacity-60'}
+              >
                 {pr.latestReview.verdict}
               </Badge>
             </Link>

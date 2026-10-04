@@ -114,12 +114,14 @@ export interface TicketFilter {
   status?: string[]
   assignee?: string
   q?: string
+  /** Archived tickets are left out unless `include` (with the rest) or `only` (just those). */
+  archived?: 'include' | 'only'
 }
 
 /**
  * A project's tickets; `parentId` narrows to the lanes of one ticket (`null` to the top level), `tag`
  * to those carrying it (any casing), `status` to those stages, `assignee` to one name (`''` for
- * unassigned), `q` to a text match in the title or instructions.
+ * unassigned), `q` to a text match in the title or instructions. Archived tickets only with `archived`.
  */
 export function listTickets(projectId: number, filter: TicketFilter = {}) {
   getProject(projectId)
@@ -132,6 +134,7 @@ export function listTickets(projectId: number, filter: TicketFilter = {}) {
       (!tag || t.tags.some((x) => x.toLowerCase() === tag)) &&
       (!stages || stages.has(t.status)) &&
       (filter.assignee === undefined || t.assignee === filter.assignee) &&
+      (filter.archived === 'include' || (filter.archived === 'only') === Boolean(t.archivedAt)) &&
       (!q || t.title.toLowerCase().includes(q) || t.body.toLowerCase().includes(q)),
   )
 }
@@ -385,7 +388,7 @@ export function updateTicket(
 /**
  * Take a ticket, for `actor` or, with `as`, for one of the project's agents that `actor` works it as. A
  * shared ticket can be taken over from whoever holds it; one reserved for a project agent only by acting
- * as that agent. Not in a done or cancelled stage. The write only lands if nobody reassigned the ticket
+ * as that agent. Not in a done or cancelled stage, nor archived. The write only lands if nobody reassigned the ticket
  * since it was read, so two agents claiming at once cannot both win. A ticket waiting in an open or
  * blocked stage moves to the project's first active stage, if it has one.
  */
@@ -395,6 +398,7 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
   const from = stageOf(stages, before.status)
   if (from.kind === 'done' || from.kind === 'cancelled')
     throw new HttpError(409, `ticket ${id} is ${from.kind} (${from.name})`)
+  if (before.archivedAt) throw new HttpError(409, `ticket ${id} is archived`)
   const as = opts.as ? actingAs(before.projectId, opts.as) : null
   const holder = reservedFor(before)
   if (holder && holder.id !== as?.id)
@@ -508,6 +512,108 @@ export function deleteTicket(id: number, actor: string, opts: { keepLanes?: bool
     db.update(schema.tickets).set({ parentId: t.parentId }).where(eq(schema.tickets.parentId, id)).run()
   db.delete(schema.tickets).where(eq(schema.tickets.id, id)).run()
   logActivity({ projectId: t.projectId, actor, kind: 'ticket', text: `deleted ticket #${id} ${t.title}` })
+}
+
+// --- archive (the human puts finished tickets away; their lanes go with them) ---
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/** Set or clear the archive mark on these tickets and every lane under them, in one write. */
+function markArchived(projectId: number, roots: number[], archivedAt: string | null, actor: string) {
+  const all = db
+    .select({ id: schema.tickets.id, parentId: schema.tickets.parentId })
+    .from(schema.tickets)
+    .where(eq(schema.tickets.projectId, projectId))
+    .all()
+  const lanes = roots.flatMap((id) => laneTree(all, id).map((t) => t.id))
+  const ids = [...roots, ...lanes]
+  if (ids.length)
+    db.update(schema.tickets)
+      .set({ archivedAt, archivedBy: archivedAt ? actor : '' })
+      .where(inArray(schema.tickets.id, ids))
+      .run()
+  return lanes.length
+}
+
+/** A top-level ticket, as archive and restore take them; a lane follows its ticket. */
+function topLevel(id: number) {
+  const t = getTicket(id)
+  if (t.parentId)
+    throw new HttpError(400, `#${id} is a lane: it is archived and restored with its ticket #${t.parentId}`)
+  return t
+}
+
+/**
+ * Take a finished ticket (in a done or cancelled stage) off the board and out of the default lists,
+ * its lanes with it. Its page still opens. Callers make sure the actor is the human.
+ */
+export function archiveTicket(id: number, actor: string) {
+  const t = topLevel(id)
+  if (t.archivedAt) return t
+  const stage = stageOf(listStages(t.projectId), t.status)
+  if (stage.kind !== 'done' && stage.kind !== 'cancelled')
+    throw new HttpError(409, `ticket ${id} is in ${stage.name}; only done or cancelled tickets are archived`)
+  const lanes = markArchived(t.projectId, [id], new Date().toISOString(), actor)
+  logActivity({
+    projectId: t.projectId,
+    actor,
+    kind: 'ticket',
+    text: `archived ticket #${id} ${t.title}${lanes ? ` (with ${plural(lanes, 'lane')})` : ''}`,
+    refType: 'ticket',
+    refId: id,
+  })
+  return getTicket(id)
+}
+
+/**
+ * Archive every top-level ticket in one done or cancelled stage (a key, name or kind), lanes included.
+ * Callers make sure the actor is the human.
+ */
+export function archiveStage(projectId: number, status: string, actor: string) {
+  getProject(projectId)
+  const stage = resolveStage(listStages(projectId), status)
+  if (stage.kind !== 'done' && stage.kind !== 'cancelled')
+    throw new HttpError(409, `${stage.name} is not a done or cancelled stage`)
+  const ids = db
+    .select({ id: schema.tickets.id })
+    .from(schema.tickets)
+    .where(
+      and(
+        eq(schema.tickets.projectId, projectId),
+        eq(schema.tickets.status, stage.key),
+        isNull(schema.tickets.parentId),
+        isNull(schema.tickets.archivedAt),
+      ),
+    )
+    .all()
+    .map((t) => t.id)
+  if (!ids.length) return { stage: stage.key, ids }
+  const lanes = markArchived(projectId, ids, new Date().toISOString(), actor)
+  logActivity({
+    projectId,
+    actor,
+    kind: 'ticket',
+    text: `archived ${plural(ids.length, 'ticket')} from ${stage.name} (${ids.map((id) => `#${id}`).join(', ')})${lanes ? `, with ${plural(lanes, 'lane')}` : ''}`,
+    refType: 'project',
+    refId: projectId,
+  })
+  return { stage: stage.key, ids }
+}
+
+/** Put an archived ticket back on the board, its lanes with it. Callers make sure the actor is the human. */
+export function restoreTicket(id: number, actor: string) {
+  const t = topLevel(id)
+  if (!t.archivedAt) return t
+  const lanes = markArchived(t.projectId, [id], null, actor)
+  logActivity({
+    projectId: t.projectId,
+    actor,
+    kind: 'ticket',
+    text: `restored ticket #${id} ${t.title} from the archive${lanes ? ` (with ${plural(lanes, 'lane')})` : ''}`,
+    refType: 'ticket',
+    refId: id,
+  })
+  return getTicket(id)
 }
 
 // --- tasks ---

@@ -106,6 +106,10 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   means no call yet, and `lanes.approved` / `lanes.disapproved` count them. Read it, never set it:
   an approved lane is settled and a disapproved one is dropped, so ask in its thread before
   touching either.
+- The archive: the human takes finished tickets (done or cancelled) off the board, their lanes with
+  them; `archivedAt` / `archivedBy` show it. `list_tickets` leaves them out unless `archived` is
+  `"include"` (with the rest) or `"only"`; `get_ticket` still opens them. Only the human archives
+  and restores.
 - `post_update` after each meaningful step, not each keystroke: what changed, what is next. It
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are
@@ -182,8 +186,8 @@ worked:
 When the human asks to clean up (`/board cleanup`, "clean up branches", "clean up worktrees"):
 
 1. `git fetch --prune` in each repo of the project, so origin's branches are current.
-2. `cleanup_report` with your `projectId`: every ticket in a done or cancelled stage that still
-   has workspaces, local or origin branches, or worktrees, each branch with its sha, worktrees,
+2. `cleanup_report` with your `projectId`: every ticket in a done or cancelled stage (or archived)
+   that still has workspaces, local or origin branches, or worktrees, each branch with its sha, worktrees,
    `reach` and `restore` command, plus `untracked` worktrees no ticket accounts for.
 3. For each `unique` branch, check it yourself before calling it: `git cherry -v <base> <branch>`
    and `git range-diff` or `git diff <base>...<branch>` show whether the listed commits' changes
@@ -252,7 +256,8 @@ a PR from your ticket are yours to fix. Before reviewing a PR, `list_review_resu
 `prNumber` and head `sha`: if that SHA was already
 reviewed, `get_review_result` has the findings. If you review a PR, record it with
 `post_review_result` (verdict, markdown summary with findings, how to test, checks, `repoId` when
-the project has several repos). Never post the review to GitHub.
+the project has several repos): the human reads it from its verdict on the PR queue and on the
+ticket's Branch card. Never post the review to GitHub.
 
 `list_actors` gives every name that signs in to the board (the project's agents are in
 `get_project`); use those exact names for `assignee`.

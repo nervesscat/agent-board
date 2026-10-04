@@ -7,7 +7,6 @@ import {
   GitPullRequest,
   KanbanSquare,
   Settings,
-  ShieldCheck,
 } from 'lucide-react'
 
 import { useProject } from '#/lib/project'
@@ -17,7 +16,6 @@ export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout
 const MODULES = [
   { to: '/projects/$id/prs', label: 'PR queue', icon: GitPullRequest },
   { to: '/projects/$id/features', label: 'Ongoing features', icon: KanbanSquare },
-  { to: '/projects/$id/reviews', label: 'Reviews', icon: ShieldCheck },
   { to: '/projects/$id/agents', label: 'Agents', icon: Bot },
   { to: '/projects/$id/daily', label: 'Daily', icon: CalendarDays },
   { to: '/projects/$id/cleanup', label: 'Cleanup', icon: BrushCleaning },

@@ -7,6 +7,7 @@ import { Actor } from '#/components/Actor'
 import { DatePicker } from '#/components/DatePicker'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
+import { ReviewResultButton } from '#/components/ReviewResult'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, get, post, type DailyPayload } from '#/lib/api'
@@ -179,7 +180,17 @@ export function DailyView({ projectId }: { projectId?: number }) {
                     {!projectId && a.project && (
                       <span className="text-xs text-muted-foreground">[{a.project}]</span>
                     )}
-                    <span>{a.text}</span>
+                    {a.refType === 'review' && a.refId ? (
+                      <ReviewResultButton
+                        resultId={a.refId}
+                        className="text-left hover:underline"
+                        title="Open the review result"
+                      >
+                        {a.text}
+                      </ReviewResultButton>
+                    ) : (
+                      <span>{a.text}</span>
+                    )}
                   </li>
                 ))}
               </ul>

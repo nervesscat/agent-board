@@ -121,10 +121,6 @@ export interface TicketGit {
   })[]
 }
 
-export interface ReviewsPayload {
-  results: ReviewResult[]
-}
-
 export interface DailyPayload {
   date: string
   projects: { id: number; name: string }[]
