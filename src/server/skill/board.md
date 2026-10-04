@@ -252,7 +252,8 @@ a PR from your ticket are yours to fix. Before reviewing a PR, `list_review_resu
 `prNumber` and head `sha`: if that SHA was already
 reviewed, `get_review_result` has the findings. If you review a PR, record it with
 `post_review_result` (verdict, markdown summary with findings, how to test, checks, `repoId` when
-the project has several repos). Never post the review to GitHub.
+the project has several repos): the human reads it from its verdict on the PR queue and on the
+ticket's Branch card. Never post the review to GitHub.
 
 `list_actors` gives every name that signs in to the board (the project's agents are in
 `get_project`); use those exact names for `assignee`.

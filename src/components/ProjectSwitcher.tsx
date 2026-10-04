@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover
 import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
 import { useProjects } from '#/lib/project'
 
-const MODULES = ['prs', 'features', 'reviews', 'daily', 'settings'] as const
+const MODULES = ['prs', 'features', 'daily', 'settings'] as const
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
