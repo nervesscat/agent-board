@@ -65,6 +65,11 @@ http_headers = { Authorization = "Bearer gate_…" }
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
    the board copies them). One update per meaningful step, not per keystroke.
+   **Previews:** when the change can be tried (a page, an API), start your branch from your
+   worktree on a free port, with a copy of the data rather than the real one (the project's
+   instructions say how), and post the link (`http://localhost:<port>`) with what to try. Say that
+   what the human posts there stays in the copy. Keep it running while the ticket is in review;
+   stop it once it is merged or dropped.
 6. **Ask and answer in threads**: `comment` on the ticket, on an update, on a PR or on a review
    result. When you cannot continue without an answer, also move the ticket to `blocked` (back to
    `in_progress` once answered). `list_my_threads` lists every thread where someone spoke after
