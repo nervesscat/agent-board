@@ -1,0 +1,2 @@
+# Skills and agents installed from the board, kept exactly as written (LF) on every checkout.
+src/server/skill/review/** text eol=lf
