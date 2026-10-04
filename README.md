@@ -112,6 +112,7 @@ to GitHub.
 All routes need the gate cookie or `Authorization: Bearer gate_…`; JSON in and out. `actor` is
 the gate device or token name.
 
+|              | `needs[]` on create and PATCH · `force` on PATCH                                                              | the tickets whose branches must be merged into its base first (same project, no cycles); GET returns `needs[]` with `merged` and `neededBy[]`, the list `needs[]`. A move to a done stage is a 409 (`code: needs`) while one is not merged; `force: true` (the human's only) marks it done anyway, logged |
 | Method       | Path                                                                                                          |                                                                                                                                                               |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET          | `/api/me`                                                                                                     | who you are                                                                                                                                                   |

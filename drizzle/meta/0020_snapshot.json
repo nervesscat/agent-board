@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "592165ce-1017-44d0-965e-80fa9a4c187e",
-  "prevId": "0ad9ca0d-9059-45bc-ab74-fca843300dc0",
+  "id": "955ba9d7-0b6a-4aa2-8f61-7f6f3ac5f366",
+  "prevId": "9f94f19b-8f2e-4997-b3bd-737e3ed30de9",
   "tables": {
     "activity": {
       "name": "activity",
@@ -1340,6 +1340,73 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ticket_needs": {
+      "name": "ticket_needs",
+      "columns": {
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "needs_id": {
+          "name": "needs_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ticket_needs_needs": {
+          "name": "ticket_needs_needs",
+          "columns": [
+            "needs_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ticket_needs_ticket_id_tickets_id_fk": {
+          "name": "ticket_needs_ticket_id_tickets_id_fk",
+          "tableFrom": "ticket_needs",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_needs_needs_id_tickets_id_fk": {
+          "name": "ticket_needs_needs_id_tickets_id_fk",
+          "tableFrom": "ticket_needs",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "needs_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "ticket_needs_ticket_id_needs_id_pk": {
+          "columns": [
+            "ticket_id",
+            "needs_id"
+          ],
+          "name": "ticket_needs_ticket_id_needs_id_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },

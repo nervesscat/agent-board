@@ -97,7 +97,7 @@ export const reservedFor = (t: Pick<schema.Ticket, 'projectId' | 'assignee'>) =>
 export type TicketRow = ReturnType<typeof projectTickets>[number]
 
 /** The lanes under a ticket, all the way down, nearest first. */
-function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
+export function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
   const out: T[] = []
   for (let queue = all.filter((t) => t.parentId === id); queue.length; ) {
     const next = queue.shift()!
@@ -242,6 +242,21 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
 
 export type TicketFull = ReturnType<typeof getTicketFull>
 
+/** Where a new ticket goes: its parent (in the same project), its repo, and the branch it starts from. */
+export function placement(
+  projectId: number,
+  input: { repoId?: number | null; parentId?: number | null; baseBranch?: string },
+) {
+  getProject(projectId)
+  const parent = input.parentId ? getTicket(input.parentId) : null
+  if (parent && parent.projectId !== projectId)
+    throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
+  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
+  // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
+  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
+  return { parent, repo, baseBranch: input.baseBranch || parentBase || repo.baseBranch }
+}
+
 export function createTicket(
   projectId: number,
   input: {
@@ -260,13 +275,7 @@ export function createTicket(
   },
   actor: string,
 ) {
-  getProject(projectId)
-  const parent = input.parentId ? getTicket(input.parentId) : null
-  if (parent && parent.projectId !== projectId)
-    throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
-  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
-  // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
-  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
+  const { parent, repo, baseBranch } = placement(projectId, input)
   const stages = listStages(projectId)
   const row = db
     .insert(schema.tickets)
@@ -279,7 +288,7 @@ export function createTicket(
       status: (input.status ? resolveStage(stages, input.status) : startStage(stages)).key,
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
-      baseBranch: input.baseBranch || parentBase || repo.baseBranch,
+      baseBranch,
       tags: cleanTags(input.tags ?? []),
       prNumber: input.prNumber ?? null,
       createdBy: actor,

@@ -29,6 +29,7 @@ import { StatusSelect } from '#/components/StatusSelect'
 import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
+import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
@@ -139,7 +140,8 @@ function TicketPage() {
   const update = useMutation({
     mutationFn: (p: Record<string, unknown>) => patch(`/api/tickets/${ticketId}`, p),
     onSuccess: invalidate,
-    onError,
+    // A move to done refused for a need not merged yet comes with the human's way past it.
+    onError: (err, p) => toastRefusal(err, () => update.mutate({ ...p, force: true })),
   })
   const remove = useMutation({
     mutationFn: (keepLanes: boolean) => del(`/api/tickets/${ticketId}${keepLanes ? '?keepLanes=1' : ''}`),
@@ -162,15 +164,20 @@ function TicketPage() {
     onError,
   })
   const judge = useMutation({
-    mutationFn: (v: { ticketId: number; verdict: Verdict; reopenTo?: string }) =>
-      put(`/api/tickets/${v.ticketId}/approval`, { verdict: v.verdict, reopenTo: v.reopenTo }),
+    mutationFn: (v: { ticketId: number; verdict: Verdict; reopenTo?: string; force?: boolean }) =>
+      put(`/api/tickets/${v.ticketId}/approval`, {
+        verdict: v.verdict,
+        reopenTo: v.reopenTo,
+        force: v.force,
+      }),
     onSuccess: (_d, v) => {
       invalidate()
       qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
       // The parent's lanes list shows the same call.
       if (t?.parentId) qc.invalidateQueries({ queryKey: ['ticket', String(t.parentId)] })
     },
-    onError,
+    // Approving a PR review moves it to done, held to its needs like any move there.
+    onError: (err, v) => toastRefusal(err, () => judge.mutate({ ...v, force: true })),
   })
   // On a lane: the parent's lanes, for previous / next under the same filter. Same query as the
   // parent's own page, so it is usually cached already.
@@ -298,6 +305,7 @@ function TicketPage() {
               <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
             </span>
           )}
+          <NeedsStatus t={t} />
           {t.updates.some((u) => u.decision && !u.decidedAt) && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
               <Scale className="size-3.5" /> decision needed
@@ -358,7 +366,7 @@ function TicketPage() {
         </div>
         <aside className="min-w-0 space-y-4">
           <Previews t={t} git={git} />
-          <Details key={t.id} t={t} onSave={(p) => update.mutate(p)} />
+          <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />
           <GitPanel t={t} git={git} onChange={invalidate} />
         </aside>
       </div>
@@ -596,8 +604,16 @@ function Instructions({
   )
 }
 
-/** Who and where: each field saves as soon as it changes. */
-function Details({ t, onSave }: { t: TicketFull; onSave: (p: Record<string, unknown>) => void }) {
+/** Who, where, and what it needs merged first: each field saves as soon as it changes. */
+function Details({
+  t,
+  includes,
+  onSave,
+}: {
+  t: TicketFull
+  includes?: number[]
+  onSave: (p: Record<string, unknown>) => void
+}) {
   const { data: project } = useProject(t.projectId)
   const repos = project?.repos ?? []
   const repoId = String(t.repoId ?? repos[0]?.id ?? '')
@@ -679,6 +695,34 @@ function Details({ t, onSave }: { t: TicketFull; onSave: (p: Record<string, unkn
             if (v && v !== t.baseBranch) later('baseBranch', v)
           }}
         />
+      </div>
+      <div className="space-y-1">
+        <Label
+          htmlFor="needs"
+          className="text-xs text-muted-foreground"
+          title="Tickets whose branches must be merged into this one's base before it can be done"
+        >
+          Needs
+          {t.neededBy.length > 0 && (
+            <span className="ml-auto font-normal">
+              needed by{' '}
+              {t.neededBy.map((n, i) => (
+                <span key={n.id}>
+                  {i > 0 && ', '}
+                  <Link
+                    to="/projects/$id/features/$ticketId"
+                    params={{ id: String(t.projectId), ticketId: String(n.id) }}
+                    className="hover:text-foreground hover:underline"
+                    title={n.title}
+                  >
+                    #{n.id}
+                  </Link>
+                </span>
+              ))}
+            </span>
+          )}
+        </Label>
+        <NeedsField t={t} includes={includes} onSave={(needs) => onSave({ needs })} />
       </div>
     </section>
   )

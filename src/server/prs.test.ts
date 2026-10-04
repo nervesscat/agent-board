@@ -189,4 +189,39 @@ describe('the queue', () => {
       ci: 'none',
     })
   })
+  it('says which PR to merge first when the ticket of a PR needs another ticket with an open PR', async () => {
+    const { db, schema } = await import('#/db')
+    const features = await import('./features')
+    const needs = await import('./needs')
+    const projectId = db.insert(schema.projects).values({ name: 'stacked' }).returning().get().id
+    db.insert(schema.repos)
+      .values({ projectId, name: 'app', repoPath: '/r/app', baseBranch: 'main', githubRepo: 'acme/app' })
+      .run()
+    found = [ghPr(10, { assigned: true }), ghPr(11, { assigned: true }), ghPr(12, { assigned: true })]
+    const base = features.createTicket(projectId, { title: 'base', branch: 'feat/10' }, 'claude')
+    const top = features.createTicket(projectId, { title: 'top', branch: 'feat/11', prNumber: 11 }, 'claude')
+    // A need whose PR is outside the queue still counts while its ticket is open; once done, not.
+    const outside = features.createTicket(projectId, { title: 'outside', prNumber: 99 }, 'claude')
+    const other = features.createTicket(projectId, { title: 'other', branch: 'feat/12' }, 'claude')
+    await needs.changeTicket(top.id, { needs: [base.id, outside.id] }, 'claude', { agent: true })
+    await needs.changeTicket(other.id, { needs: [outside.id] }, 'claude', { agent: true })
+    features.updateTicket(outside.id, { status: 'done' }, 'me')
+    const queue = await prs.listPrs(projectId, { refresh: true })
+    const byNumber = (n: number) => queue.find((p) => p.number === n)!
+    expect(byNumber(11).mergeAfter).toEqual([
+      {
+        ticketId: base.id,
+        title: 'base',
+        repoId: byNumber(10).repoId,
+        number: 10,
+        url: 'https://github.com/acme/app/pull/10',
+      },
+    ])
+    expect(byNumber(10).mergeAfter).toEqual([])
+    expect(byNumber(12).mergeAfter).toEqual([])
+    features.updateTicket(outside.id, { status: 'review' }, 'me')
+    expect((await prs.listPrs(projectId)).find((p) => p.number === 12)!.mergeAfter).toMatchObject([
+      { ticketId: outside.id, number: 99, url: 'https://github.com/acme/app/pull/99' },
+    ])
+  })
 })
