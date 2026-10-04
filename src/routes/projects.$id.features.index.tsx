@@ -9,6 +9,7 @@ import { ArchivedList, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, patch, post, type CleanupReport, type TicketRow } from '#/lib/api'
+import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/features/')({ component: Features })
 
@@ -35,17 +36,12 @@ function Features() {
       localStorage.setItem(VIEW_KEY, v)
     } catch {}
   }
-  const key = ['tickets', id]
-  const { data, isLoading } = useQuery({
-    queryKey: key,
-    queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets?parent=root`),
-    refetchInterval: 10_000,
-  })
-  // Under the same key, so whatever refreshes the board refreshes the archive and its count too.
-  const archivedKey = [...key, 'archived']
+  // The board's list. Both lists sit under `ticketsKey(id)`, so whatever refreshes the board
+  // refreshes the archive and its count too.
+  const key = ticketsKey(id, 'root')
+  const { data, isLoading } = useQuery({ ...ticketsQuery(id, 'root'), refetchInterval: 10_000 })
   const { data: archived, isLoading: archiveLoading } = useQuery({
-    queryKey: archivedKey,
-    queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets?parent=root&archived=only`),
+    ...ticketsQuery(id, 'archived'),
     refetchInterval: 30_000,
   })
   const archiveAll = useMutation({
@@ -53,7 +49,7 @@ function Features() {
       post<{ ids: number[] }>(`/api/projects/${id}/tickets/archive`, { status }),
     onSuccess: (res) => toast.success(`Archived ${res.ids.length} ticket${res.ids.length === 1 ? '' : 's'}`),
     onError: (err) => toast.error(errorMessage(err)),
-    onSettled: () => qc.invalidateQueries({ queryKey: key }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ticketsKey(id) }),
   })
   const restore = useMutation({
     mutationFn: (ticketId: number) => post(`/api/tickets/${ticketId}/restore`),
@@ -62,7 +58,7 @@ function Features() {
       qc.invalidateQueries({ queryKey: ['ticket', String(ticketId)] })
     },
     onError: (err) => toast.error(errorMessage(err)),
-    onSettled: () => qc.invalidateQueries({ queryKey: key }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ticketsKey(id) }),
   })
   // The card moves at once; a failed save puts it back.
   const move = useMutation({
@@ -81,7 +77,7 @@ function Features() {
       toast.error(errorMessage(err))
     },
     onSettled: (_d, _e, v) => {
-      qc.invalidateQueries({ queryKey: key })
+      qc.invalidateQueries({ queryKey: ticketsKey(id) })
       qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
     },
   })

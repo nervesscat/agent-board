@@ -94,6 +94,7 @@ import {
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
 import { columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
   component: TicketPage,
@@ -132,7 +133,7 @@ function TicketPage() {
   })
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: key })
-    qc.invalidateQueries({ queryKey: ['tickets', id] })
+    qc.invalidateQueries({ queryKey: ticketsKey(id) })
     qc.invalidateQueries({ queryKey: ['ticket-git', ticketId] })
   }
   const onError = (err: unknown) => toast.error(errorMessage(err))
@@ -183,8 +184,7 @@ function TicketPage() {
   // On a top-level ticket: the board's tickets, for previous / next in the same column. Same query
   // as the board, so it is usually cached already.
   const { data: board } = useQuery({
-    queryKey: ['tickets', id],
-    queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets?parent=root`),
+    ...ticketsQuery(id, 'root'),
     enabled: Boolean(t) && !t?.parentId,
     refetchInterval: 10_000,
   })
