@@ -94,7 +94,9 @@ http_headers = { Authorization = "Bearer gate_…" }
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
    `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a ticket tagged `PR`,
    a PR review, also moves it to `done`): read it, never set it, and ask
-   in the thread before touching an approved or disapproved lane.
+   in the thread before touching an approved or disapproved lane. Archiving is the human's too:
+   `archivedAt` set means the ticket (and its lanes) is finished and off the board; `list_tickets`
+   leaves those out unless `archived: "include"` or `"only"`.
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
    `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
