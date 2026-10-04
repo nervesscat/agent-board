@@ -155,9 +155,9 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     .select()
     .from(schema.updates)
     .where(inArray(schema.updates.ticketId, [id, ...descendants]))
-    .orderBy(desc(schema.updates.createdAt))
+    .orderBy(desc(schema.updates.createdAt), desc(schema.updates.id))
     .all()
-  // Each lane's newest update from anywhere under it, its own lanes included.
+  // Each lane's newest progress post from anywhere under it, its own lanes included.
   const laneOf = (ticketId: number) => {
     let t = byId.get(ticketId)
     while (t && t.parentId !== id) t = t.parentId ? byId.get(t.parentId) : undefined
@@ -166,14 +166,18 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
   const lastUpdate = new Map<number, (typeof updates)[number]>()
   for (const u of updates) {
     const lane = u.ticketId === id ? undefined : laneOf(u.ticketId)
-    if (lane && !lastUpdate.has(lane)) lastUpdate.set(lane, u)
+    if (lane && u.progress && !lastUpdate.has(lane)) lastUpdate.set(lane, u)
   }
   const feed = opts.laneUpdates ? updates : updates.filter((u) => u.ticketId === id)
   const updateIds = feed.map((u) => u.id)
   const files = updateIds.length
     ? db.select().from(schema.attachments).where(inArray(schema.attachments.updateId, updateIds)).all()
     : []
-  const ticketThread = threadStats('ticket', [id]).get(id) ?? NO_THREAD
+  // The ticket's conversation is its own posts: how many, and who posted last.
+  const own = updates.filter((u) => u.ticketId === id)
+  const ticketThread: ThreadStats = own.length
+    ? { count: own.length, lastAuthor: own[0]!.author, lastAt: own[0]!.createdAt }
+    : NO_THREAD
   const updateThreads = threadStats('update', updateIds)
   const agent = reservedFor(ticket)
   return {
@@ -183,7 +187,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     agent: agent
       ? { id: agent.id, name: agent.name, instructions: agent.instructions, avatarUrl: agent.avatarUrl }
       : null,
-    // The ticket's own thread; each update carries its own below.
+    // The ticket's own posts (count, who posted last); each post carries the thread of its replies below.
     thread: ticketThread,
     pr: prForTicket(ticket),
     tasks,
@@ -200,7 +204,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     }),
     updates: feed.map((u) => ({
       ...u,
-      // Set on a lane's update shown in its parent's feed.
+      // Set on a lane's post shown in its parent's feed.
       lane: u.ticketId === id ? null : { id: u.ticketId, title: byId.get(u.ticketId)?.title ?? '' },
       attachments: files.filter((f) => f.updateId === u.id).map((f) => attachmentView(f)),
       thread: updateThreads.get(u.id) ?? NO_THREAD,
@@ -656,7 +660,7 @@ export async function ticketGit(id: number) {
 const samePath = (a: string, b: string) =>
   a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase()
 
-// --- updates (the "advances" feed) ---
+// --- posts (the ticket's feed; stored in `updates`) and their replies ---
 
 /** Who a post is signed with: `actor`, or with `as` one of the project's agents, posted via `actor`. */
 function signer(projectId: number, actor: string, as?: string) {
@@ -664,23 +668,28 @@ function signer(projectId: number, actor: string, as?: string) {
   return { author: actingAs(projectId, as).name, via: actor }
 }
 
+/**
+ * A post on a ticket. `progress` (the default, what `post_update` means) marks a step of the work: lane
+ * summaries and the Daily view pick those out. Without it, it is discussion: a question, an answer.
+ */
 export function postUpdate(
   ticketId: number,
   body: string,
   attachmentIds: number[],
   actor: string,
-  opts: { as?: string } = {},
+  opts: { as?: string; progress?: boolean } = {},
 ) {
   const ticket = getTicket(ticketId)
   const { author, via } = signer(ticket.projectId, actor, opts.as)
-  const row = db.insert(schema.updates).values({ ticketId, author, via, body }).returning().get()
+  const progress = opts.progress ?? true
+  const row = db.insert(schema.updates).values({ ticketId, author, via, body, progress }).returning().get()
   attachTo(attachmentIds, { updateId: row.id })
   touch(ticketId)
   logActivity({
     projectId: ticket.projectId,
     actor: author,
-    kind: 'update',
-    text: `posted an update on #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${firstLine(body)}`,
+    kind: progress ? 'update' : 'comment',
+    text: `${progress ? 'posted an update on' : 'posted on'} #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${firstLine(body)}`,
     refType: 'ticket',
     refId: ticketId,
   })
@@ -709,7 +718,30 @@ export const firstLine = (s: string, max = 120) => {
 
 // --- comments (threads on tickets, updates, PRs, review results) ---
 
+/**
+ * A thread. On a ticket that is its posts, oldest first, shaped like comments (with `progress`); on a
+ * post, its replies; on a PR or a review result, its comments.
+ */
 export function listComments(parentType: schema.CommentParent, parentId: number) {
+  if (parentType === 'ticket') {
+    const posts = db
+      .select()
+      .from(schema.updates)
+      .where(eq(schema.updates.ticketId, parentId))
+      .orderBy(asc(schema.updates.createdAt), asc(schema.updates.id))
+      .all()
+    const ids = posts.map((p) => p.id)
+    const files = ids.length
+      ? db.select().from(schema.attachments).where(inArray(schema.attachments.updateId, ids)).all()
+      : []
+    return posts.map(({ ticketId, ...p }) => ({
+      ...p,
+      parentType: 'ticket' as const,
+      parentId: ticketId,
+      replyTo: null,
+      attachments: files.filter((f) => f.updateId === p.id).map((f) => attachmentView(f)),
+    }))
+  }
   const rows = db
     .select()
     .from(schema.comments)
@@ -767,6 +799,7 @@ export function listOpenThreads(projectId: number, actor: string) {
           ticketId: schema.updates.ticketId,
           author: schema.updates.author,
           body: schema.updates.body,
+          createdAt: schema.updates.createdAt,
         })
         .from(schema.updates)
         .where(
@@ -801,7 +834,7 @@ export function listOpenThreads(projectId: number, actor: string) {
   for (const u of updates)
     subjects.set(`update:${u.id}`, {
       ticketId: u.ticketId,
-      title: `update on #${u.ticketId} ${ticketById.get(u.ticketId)?.title ?? ''}: ${gist(u.body, 60)}`,
+      title: `post on #${u.ticketId} ${ticketById.get(u.ticketId)?.title ?? ''}: ${gist(u.body, 60)}`,
       owners: [u.author],
     })
   for (const p of prs)
@@ -819,7 +852,7 @@ export function listOpenThreads(projectId: number, actor: string) {
 
   const ids = (type: string) =>
     [...subjects.keys()].filter((k) => k.startsWith(`${type}:`)).map((k) => Number(k.split(':')[1]))
-  const comments = (['ticket', 'update', 'pr', 'review'] as const).flatMap((type) => {
+  const comments = (['update', 'pr', 'review'] as const).flatMap((type) => {
     const parentIds = ids(type)
     return parentIds.length
       ? db
@@ -830,7 +863,21 @@ export function listOpenThreads(projectId: number, actor: string) {
           .all()
       : []
   })
-  const threads = new Map<string, schema.Comment[]>()
+  type Said = Pick<schema.Comment, 'id' | 'parentType' | 'parentId' | 'author' | 'body' | 'createdAt'>
+  const threads = new Map<string, Said[]>()
+  // A ticket's conversation is its posts, in order; a post's, PR's or review's is its comments.
+  for (const u of [...updates].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)) {
+    const key = `ticket:${u.ticketId}`
+    const said: Said = {
+      id: u.id,
+      parentType: 'ticket',
+      parentId: u.ticketId,
+      author: u.author,
+      body: u.body,
+      createdAt: u.createdAt,
+    }
+    threads.set(key, [...(threads.get(key) ?? []), said])
+  }
   for (const c of comments) {
     const key = `${c.parentType}:${c.parentId}`
     threads.set(key, [...(threads.get(key) ?? []), c])
@@ -884,7 +931,19 @@ export function addComment(
     as?: string
   },
   actor: string,
-) {
+): schema.Comment | schema.Update {
+  // On a ticket, a comment is a post (not progress); with replyTo, a reply under that post.
+  if (input.parentType === 'ticket') {
+    if (!input.replyTo)
+      return postUpdate(input.parentId, input.body, input.attachmentIds ?? [], actor, {
+        as: input.as,
+        progress: false,
+      })
+    const post = getPost(input.replyTo)
+    if (post.ticketId !== input.parentId)
+      throw new HttpError(400, `post ${input.replyTo} is not on ticket ${input.parentId}`)
+    return addComment({ ...input, parentType: 'update', parentId: post.id, replyTo: null }, actor)
+  }
   const projectId = commentProject(input.parentType, input.parentId)
   const { author, via } = signer(projectId, actor, input.as)
   const row = db
@@ -909,6 +968,115 @@ export function addComment(
     refId: input.parentId,
   })
   return row
+}
+
+export function getPost(id: number) {
+  const p = db.select().from(schema.updates).where(eq(schema.updates.id, id)).get()
+  if (!p) throw notFound('post')
+  return p
+}
+
+function getComment(id: number) {
+  const c = db.select().from(schema.comments).where(eq(schema.comments.id, id)).get()
+  if (!c) throw notFound('comment')
+  return c
+}
+
+/**
+ * Its author changes a post or reply (a connected agent also what it posted as one of the project's
+ * agents, via it); the human changes anything.
+ */
+function mayChange(row: { author: string; via: string }, actor: string, human: boolean) {
+  if (human || row.author === actor || row.via === actor) return
+  throw new HttpError(403, `only ${row.author} or the human can change this`)
+}
+
+export function editPost(
+  id: number,
+  patch: { body?: string; progress?: boolean },
+  actor: string,
+  opts: { human?: boolean } = {},
+) {
+  const before = getPost(id)
+  mayChange(before, actor, opts.human ?? false)
+  const edited = patch.body !== undefined && patch.body !== before.body
+  const row = db
+    .update(schema.updates)
+    .set({ ...patch, ...(edited ? { editedAt: new Date().toISOString() } : {}) })
+    .where(eq(schema.updates.id, id))
+    .returning()
+    .get()!
+  const ticket = getTicket(row.ticketId)
+  const mark =
+    patch.progress === undefined || patch.progress === before.progress
+      ? ''
+      : patch.progress
+        ? ' (marked as progress)'
+        : ' (no longer progress)'
+  logActivity({
+    projectId: ticket.projectId,
+    actor,
+    kind: 'update',
+    text: `edited a post on #${ticket.id} ${ticket.title}${mark}`,
+    refType: 'ticket',
+    refId: ticket.id,
+  })
+  return row
+}
+
+/** Its replies and files go with it. */
+export function deletePost(id: number, actor: string, opts: { human?: boolean } = {}) {
+  const post = getPost(id)
+  mayChange(post, actor, opts.human ?? false)
+  db.delete(schema.comments)
+    .where(and(eq(schema.comments.parentType, 'update'), eq(schema.comments.parentId, id)))
+    .run()
+  db.delete(schema.updates).where(eq(schema.updates.id, id)).run()
+  const ticket = getTicket(post.ticketId)
+  logActivity({
+    projectId: ticket.projectId,
+    actor,
+    kind: 'update',
+    text: `deleted a post by ${post.author} on #${ticket.id} ${ticket.title}: ${firstLine(post.body, 60)}`,
+    refType: 'ticket',
+    refId: ticket.id,
+  })
+}
+
+export function editComment(id: number, body: string, actor: string, opts: { human?: boolean } = {}) {
+  const before = getComment(id)
+  mayChange(before, actor, opts.human ?? false)
+  const row = db
+    .update(schema.comments)
+    .set({ body, ...(body !== before.body ? { editedAt: new Date().toISOString() } : {}) })
+    .where(eq(schema.comments.id, id))
+    .returning()
+    .get()!
+  logActivity({
+    projectId: commentProject(row.parentType, row.parentId),
+    actor,
+    kind: 'comment',
+    text: `edited a reply on ${row.parentType} #${row.parentId}`,
+    refType: row.parentType,
+    refId: row.parentId,
+  })
+  return row
+}
+
+/** Replies nested under it go with it, and their files. */
+export function deleteComment(id: number, actor: string, opts: { human?: boolean } = {}) {
+  const c = getComment(id)
+  mayChange(c, actor, opts.human ?? false)
+  db.delete(schema.comments).where(eq(schema.comments.replyTo, id)).run()
+  db.delete(schema.comments).where(eq(schema.comments.id, id)).run()
+  logActivity({
+    projectId: commentProject(c.parentType, c.parentId),
+    actor,
+    kind: 'comment',
+    text: `deleted a reply by ${c.author} on ${c.parentType} #${c.parentId}: ${firstLine(c.body, 60)}`,
+    refType: c.parentType,
+    refId: c.parentId,
+  })
 }
 
 function commentProject(parentType: schema.CommentParent, parentId: number): number {

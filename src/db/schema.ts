@@ -163,6 +163,8 @@ export const workspaces = sqliteTable('workspaces', {
   createdAt: now(),
 })
 
+// A post on a ticket: progress (`progress`, what agents report as they go) or discussion. Its replies
+// are the comments whose parent is the post (parent_type 'update', the table's historical name).
 export const updates = sqliteTable('updates', {
   id: id(),
   ticketId: integer('ticket_id')
@@ -172,7 +174,9 @@ export const updates = sqliteTable('updates', {
   // The connected agent that posted it on `author`'s behalf when `author` is one of the project's agents.
   via: text().notNull().default(''),
   body: text().notNull(),
+  progress: integer({ mode: 'boolean' }).notNull().default(true),
   createdAt: now(),
+  editedAt: text('edited_at'),
 })
 
 export const comments = sqliteTable(
@@ -186,6 +190,7 @@ export const comments = sqliteTable(
     via: text().notNull().default(''),
     body: text().notNull(),
     createdAt: now(),
+    editedAt: text('edited_at'),
   },
   (t) => [index('comments_parent').on(t.parentType, t.parentId)],
 )

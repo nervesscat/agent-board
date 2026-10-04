@@ -64,8 +64,9 @@ Then:
   candidates; `q` finds text in titles and instructions. If the human named a ticket, use that one.
   The list includes lanes (`parentId` set); `parentId: null` narrows it to top-level tickets,
   `parentId: <id>` to one ticket's lanes.
-- `get_ticket` and read it in full. `thread` on the ticket and on each update says how many
-  comments it has and who spoke last: `list_comments` on any with comments. On a lane,
+- `get_ticket` and read it in full. Its `updates` are the ticket's feed of posts (`progress`
+  marks steps of the work; the rest is discussion), each with `thread`: how many replies and who
+  spoke last. `list_comments` (`parentType: update`, the post's id) reads a post's replies. On a lane,
   `ancestors` names the tickets above it: `get_ticket` the parent too for the bigger picture, but
   the lane's own instructions are your brief.
 - `claim_ticket` with the `branch` you will use: it assigns you and moves it to `in_progress`.
@@ -105,13 +106,15 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   means no call yet, and `lanes.approved` / `lanes.disapproved` count them. Read it, never set it:
   an approved lane is settled and a disapproved one is dropped, so ask in its thread before
   touching either.
-- `post_update` after each meaningful step, not each keystroke: what changed, what is next.
+- `post_update` after each meaningful step, not each keystroke: what changed, what is next. It
+  is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are
   fine, the board reads them through `/mnt/c/…`.
-- Questions go in the ticket thread with `comment`; the human answers there. If you cannot go on
+- Questions are posts too: `comment` on the ticket; the human answers with a post or a reply
+  under yours (`comment` on the post, `parentType: update`, replies there). If you cannot go on
   without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
   is answered. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
-- Files the human attaches (screenshots in a thread or update) come with `path` (and
+- Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.
 

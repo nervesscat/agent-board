@@ -42,8 +42,8 @@ The rhythm:
 2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. Tickets are shared: you may take over one another agent holds (the board logs it), so prefer unassigned ones and take over only what is clearly stalled or handed to you. A ticket with reserved: true belongs to one of the project's agents (see below).
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each; update_task or remove_task when the plan changes.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox): register every worktree you open, since that list is what gets cleaned up later; remove_workspace when it is gone.
-5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files.
-6. Ask and answer in threads with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When you resume, and between steps, list_my_threads shows every thread where someone spoke after you; get_ticket shows each thread's comment count and last author. Files in threads and updates come with a local path you can open.
+5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket has one feed of posts: post_update adds one marked as progress (lane summaries and the Daily view pick those out); questions and answers are posts too (comment on the ticket, or post_update with progress: false). Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted.
+6. Ask and answer with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When you resume, and between steps, list_my_threads shows every ticket feed or reply thread where someone spoke after you; get_ticket shows each post's reply count and last author. Files on posts and replies come with a local path you can open.
 7. Hand off: open the PR assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), update_ticket with its prNumber (links the ticket and the PR queue both ways), a final post_update with the PR link, then update_ticket to review. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either.
 8. Clean up after yourself: once a lane's work is in its parent's branch (or a ticket's in its base), and before moving it to done, remove its worktree and delete its local branch, remove_workspace, and post_update the deleted branch names with their commit hashes (e.g. lane/47 @ 9ec12e8b) so any of them can be restored. get_ticket_git says whether each branch's work arrived (reach); cleanup_report lists every leftover in the project. Never delete a branch whose reach is unique without the human's go-ahead, and never delete branches on origin: list them for the human.
 9. End of session: post_daily_summary, at most three short lines.
@@ -173,10 +173,10 @@ function buildServer(actor: string) {
   )
   tool(
     'get_ticket',
-    "A ticket in full: instructions, agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces, its parent chain, its lanes with their last update and verdict,, the update feed with attachments (each with a local path), thread (comment count, last author and time) on the ticket and on each update, and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled).",
+    "A ticket in full: instructions, agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces, its parent chain, its lanes with their last progress post and verdict, the feed of posts (updates: newest first, each with progress true for a step of the work or false for discussion, editedAt, attachments with a local path, and thread: its reply count, last author and time), thread on the ticket (how many posts, who posted last), and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled).",
     {
       ticketId: z.number().int(),
-      laneUpdates: z.boolean().default(false).describe("include the lanes' updates in the feed"),
+      laneUpdates: z.boolean().default(false).describe("include the lanes' posts in the feed"),
     },
     ({ ticketId, laneUpdates }) => features.getTicketFull(ticketId, { laneUpdates }),
   )
@@ -294,16 +294,45 @@ function buildServer(actor: string) {
   )
   tool(
     'post_update',
-    'Post progress on a ticket: markdown plus optional files (screenshots, recordings) given as absolute paths on this machine.',
+    'Post on a ticket: markdown plus optional files (screenshots, recordings) given as absolute paths on this machine. progress (default true) marks it as a step of the work; false makes it discussion, like comment on the ticket.',
     {
       ticketId: z.number().int(),
       body: z.string(),
       files: z.array(z.string()).default([]).describe('absolute paths to attach'),
       as: AS,
+      progress: z.boolean().default(true),
     },
-    ({ ticketId, body, files, as }) => {
+    ({ ticketId, body, files, as, progress }) => {
       const ids = files.map((f) => uploads.saveFromPath(f, actor).id)
-      return features.postUpdate(ticketId, body, ids, actor, { as })
+      return features.postUpdate(ticketId, body, ids, actor, { as, progress })
+    },
+  )
+  tool(
+    'edit_post',
+    'Change a post you made on a ticket (its body, or whether it is progress), or a reply (kind reply: its body). Edits show as edited.',
+    {
+      kind: z.enum(['post', 'reply']).default('post'),
+      id: z
+        .number()
+        .int()
+        .describe('the post id (from get_ticket updates) or the reply id (from list_comments)'),
+      body: z.string().min(1).optional(),
+      progress: z.boolean().optional().describe('posts only'),
+    },
+    ({ kind, id, body, progress }) => {
+      if (kind === 'post') return features.editPost(id, { body, progress }, actor)
+      if (body === undefined) throw new HttpError(400, 'give the new body')
+      return features.editComment(id, body, actor)
+    },
+  )
+  tool(
+    'delete_post',
+    'Delete a post you made on a ticket (its replies and files go with it), or a reply (kind reply).',
+    { kind: z.enum(['post', 'reply']).default('post'), id: z.number().int() },
+    ({ kind, id }) => {
+      if (kind === 'post') features.deletePost(id, actor)
+      else features.deleteComment(id, actor)
+      return { ok: true }
     },
   )
   tool(
@@ -328,13 +357,13 @@ function buildServer(actor: string) {
   )
   tool(
     'list_comments',
-    'The thread under a ticket, an update, a PR (board id, not number) or a review result. Attachments come with a local path you can open.',
+    "A conversation, oldest first: on a ticket, its posts (with progress); under a post (parentType update, the post's id), its replies; under a PR (board id, not number) or a review result, its comments. Attachments come with a local path you can open.",
     { parentType: z.enum(COMMENT_PARENTS), parentId: z.number().int() },
     ({ parentType, parentId }) => features.listComments(parentType, parentId),
   )
   tool(
     'comment',
-    "Leave a comment in a thread; replyTo nests it under another comment. @name mentions one of the project's agents, which puts the thread in list_my_threads for whoever answers as it.",
+    "Say something. On a ticket it becomes a post in its feed (not progress); with replyTo it is a reply under that post instead. Under a post (parentType update, the post's id), a PR or a review result it is a reply; replyTo nests it under another reply. @name mentions one of the project's agents, which puts the thread in list_my_threads for whoever answers as it.",
     {
       parentType: z.enum(COMMENT_PARENTS),
       parentId: z.number().int(),
@@ -352,7 +381,7 @@ function buildServer(actor: string) {
 
   tool(
     'get_attachment',
-    'A file someone attached to an update or comment: name, type, size and the absolute path to open it on this machine (windowsPath too when the board runs in WSL).',
+    'A file someone attached to a post or reply: name, type, size and the absolute path to open it on this machine (windowsPath too when the board runs in WSL).',
     { attachmentId: z.number().int() },
     ({ attachmentId }) => uploads.attachmentView(uploads.getAttachment(attachmentId)),
   )

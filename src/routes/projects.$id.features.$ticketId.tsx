@@ -29,7 +29,8 @@ import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
-import { CommentItem, Thread, useComments } from '#/components/Thread'
+import { EditBox, Edited, PostActions } from '#/components/PostTools'
+import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
 import {
   AlertDialog,
@@ -51,7 +52,6 @@ import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Textarea } from '#/components/ui/textarea'
 import {
-  type CommentRow,
   del,
   errorMessage,
   get,
@@ -795,11 +795,9 @@ function Lanes({
   )
 }
 
-type Entry = { kind: 'update'; at: string; u: UpdateRow } | { kind: 'comment'; at: string; c: CommentRow }
-
 /**
- * The ticket's updates and comments in one timeline, newest first, with one box to post either.
- * Replying to a comment goes through the same box.
+ * The ticket's feed: one kind of post, newest first, with one box to write one. A post marked
+ * progress is a step of the work (what agents post as they go); any post can have replies.
  */
 function Activity({
   t,
@@ -812,41 +810,26 @@ function Activity({
   laneFeed: boolean
   onLaneFeed: (v: boolean) => void
 }) {
-  const qc = useQueryClient()
-  const { key: commentsKey, comments } = useComments('ticket', t.id)
-  const [kind, setKind] = useState<'update' | 'comment'>('update')
-  const [replyTo, setReplyTo] = useState<number | null>(null)
   const [body, setBody] = useState('')
+  const [progress, setProgress] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
-  const textarea = useRef<HTMLTextAreaElement>(null)
   const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
-  const asComment = kind === 'comment' || replyTo !== null
 
   const send = useMutation({
     mutationFn: async () => {
       const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
-      return asComment
-        ? post('/api/comments', { parentType: 'ticket', parentId: t.id, replyTo, body, attachmentIds })
-        : post(`/api/tickets/${t.id}/updates`, { body, attachmentIds })
+      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress })
     },
     onSuccess: () => {
       setBody('')
       setFiles([])
-      setReplyTo(null)
-      if (asComment) {
-        qc.invalidateQueries({ queryKey: commentsKey })
-        qc.invalidateQueries({ queryKey: ['daily'] })
-      } else onChange()
+      setProgress(false)
+      onChange()
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
   const submit = () => body.trim() && !send.isPending && send.mutate()
-
-  const entries: Entry[] = [
-    ...t.updates.map((u) => ({ kind: 'update' as const, at: u.createdAt, u })),
-    ...comments.filter((c) => !c.replyTo).map((c) => ({ kind: 'comment' as const, at: c.createdAt, c })),
-  ].sort((x, y) => y.at.localeCompare(x.at))
 
   return (
     <section>
@@ -854,7 +837,7 @@ function Activity({
         <h2 className="text-sm font-medium">Activity</h2>
         {t.lanes.length > 0 && (
           <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lane updates
+            <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lane posts
           </label>
         )}
       </div>
@@ -866,27 +849,14 @@ function Activity({
           submit()
         }}
       >
-        {replyTo !== null && (
-          <div className="text-xs text-muted-foreground">
-            replying to {comments.find((c) => c.id === replyTo)?.author} ·{' '}
-            <button type="button" className="underline" onClick={() => setReplyTo(null)}>
-              cancel
-            </button>
-          </div>
-        )}
         <Textarea
-          ref={textarea}
           value={body}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit()
           }}
           rows={3}
-          placeholder={
-            asComment
-              ? 'Comment or ask something (markdown). Agents answer in the thread.'
-              : 'Post progress (markdown). Agents post here too, with screenshots and recordings.'
-          }
+          placeholder="Write a post (markdown): a question, an answer, progress. Screenshots and recordings welcome."
         />
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -894,7 +864,6 @@ function Activity({
             type="file"
             multiple
             hidden
-            accept={asComment ? undefined : 'image/*,video/*,.md,.txt,.log,.pdf'}
             onChange={(e) => {
               setFiles([...files, ...Array.from(e.target.files ?? [])])
               // Clear it, so picking a file that was just removed registers again.
@@ -905,70 +874,28 @@ function Activity({
             <Paperclip data-icon="inline-start" /> attach
           </Button>
           <PendingFiles files={files} onChange={setFiles} />
-          <div className="ml-auto flex items-center gap-2">
-            {replyTo === null && (
-              <div
-                className="inline-flex rounded-md border p-0.5 text-xs"
-                role="radiogroup"
-                aria-label="Post as"
-              >
-                {(['update', 'comment'] as const).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    role="radio"
-                    aria-checked={kind === k}
-                    onClick={() => setKind(k)}
-                    className={cn(
-                      'rounded px-2 py-0.5 capitalize',
-                      kind === k
-                        ? 'bg-muted font-medium text-foreground'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {k}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className="ml-auto flex items-center gap-3">
+            <label
+              className="inline-flex items-center gap-2 text-xs text-muted-foreground"
+              title="A step of the work: lane summaries and the Daily view pick these out"
+            >
+              <Switch size="sm" checked={progress} onCheckedChange={setProgress} /> progress
+            </label>
             <Button type="submit" size="sm" disabled={!body.trim() || send.isPending}>
-              {send.isPending
-                ? 'Posting…'
-                : replyTo !== null
-                  ? 'Reply'
-                  : asComment
-                    ? 'Comment'
-                    : 'Post update'}
+              {send.isPending ? 'Posting…' : 'Post'}
             </Button>
           </div>
         </div>
       </form>
-      {entries.length === 0 ? (
-        <Empty>No activity yet.</Empty>
+      {t.updates.length === 0 ? (
+        <Empty>No posts yet.</Empty>
       ) : (
         <Timeline>
-          {entries.map((e) =>
-            e.kind === 'update' ? (
-              <TimelineRow key={`u${e.u.id}`} at={e.at}>
-                <UpdateCard u={e.u} projectId={String(t.projectId)} />
-              </TimelineRow>
-            ) : (
-              <TimelineRow key={`c${e.c.id}`} at={e.at} dot="bg-sky-500/70">
-                <article className="rounded-lg border bg-muted/30 p-3">
-                  <CommentItem
-                    c={e.c}
-                    comments={comments}
-                    hideTime
-                    label="comment"
-                    onReply={() => {
-                      setReplyTo(e.c.id)
-                      textarea.current?.focus()
-                    }}
-                  />
-                </article>
-              </TimelineRow>
-            ),
-          )}
+          {t.updates.map((u) => (
+            <TimelineRow key={u.id} at={u.createdAt} dot={u.progress ? undefined : 'bg-sky-500/70'}>
+              <PostCard u={u} projectId={String(t.projectId)} onChange={onChange} />
+            </TimelineRow>
+          ))}
         </Timeline>
       )}
     </section>
@@ -1030,13 +957,28 @@ function TimelineRow({
   )
 }
 
-function UpdateCard({ u, projectId }: { u: UpdateRow; projectId: string }) {
+/** One post: who, progress or not, the text and files, and its replies behind a toggle. */
+function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string; onChange: () => void }) {
   const [thread, setThread] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const onError = (err: unknown) => toast.error(errorMessage(err))
+  const edit = useMutation({
+    mutationFn: (p: { body?: string; progress?: boolean }) => patch(`/api/updates/${u.id}`, p),
+    onSuccess: () => {
+      setEditing(false)
+      onChange()
+    },
+    onError,
+  })
+  const remove = useMutation({ mutationFn: () => del(`/api/updates/${u.id}`), onSuccess: onChange, onError })
+  const replies = u.thread.count
   return (
-    <article className="rounded-lg border p-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+    <article className={cn('rounded-lg border p-3', !u.progress && 'bg-muted/30')}>
+      <div className="group/post flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Actor name={u.author} via={u.via} className="text-foreground" />
-        <span>update</span>
+        {u.progress && (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
+        )}
         {u.lane && (
           <Link
             to="/projects/$id/features/$ticketId"
@@ -1046,11 +988,38 @@ function UpdateCard({ u, projectId }: { u: UpdateRow; projectId: string }) {
             <Layers className="size-3 shrink-0" /> <span className="max-w-48 truncate">{u.lane.title}</span>
           </Link>
         )}
-        <button type="button" className="ml-auto hover:text-foreground" onClick={() => setThread((v) => !v)}>
-          {thread ? 'hide thread' : 'thread'}
-        </button>
+        <Edited at={u.editedAt} />
+        <span className="ml-auto inline-flex items-center gap-2">
+          {!u.lane && (
+            <PostActions what="this post" onEdit={() => setEditing(true)} onDelete={() => remove.mutate()}>
+              <button
+                type="button"
+                className="hover:text-foreground"
+                onClick={() => edit.mutate({ progress: !u.progress })}
+              >
+                {u.progress ? 'not progress' : 'mark progress'}
+              </button>
+            </PostActions>
+          )}
+          <button type="button" className="hover:text-foreground" onClick={() => setThread((v) => !v)}>
+            {thread
+              ? 'hide replies'
+              : replies
+                ? `${replies} ${replies === 1 ? 'reply' : 'replies'}`
+                : 'reply'}
+          </button>
+        </span>
       </div>
-      <Markdown className="mt-2">{u.body}</Markdown>
+      {editing ? (
+        <EditBox
+          value={u.body}
+          pending={edit.isPending}
+          onSave={(body) => edit.mutate({ body })}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <Markdown className="mt-2">{u.body}</Markdown>
+      )}
       <Attachments items={u.attachments} />
       {thread && (
         <div className="mt-3 border-t pt-3">

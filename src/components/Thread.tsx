@@ -8,9 +8,10 @@ import { Attachments } from '#/components/Attachments'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Markdown } from '#/components/Markdown'
+import { EditBox, Edited, PostActions } from '#/components/PostTools'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
-import { errorMessage, get, post, upload, type CommentRow } from '#/lib/api'
+import { del, errorMessage, get, patch, post, upload, type CommentRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { useProjectAgents } from '#/lib/project'
 
@@ -30,11 +31,12 @@ export function useComments(parentType: Parent, parentId: number) {
 /**
  * A comment with its replies (from `comments`, the whole thread). `onReply` puts a reply button on
  * it; `hideTime` leaves its own time out, for when a timeline shows it already; `label` names its
- * kind next to the author.
+ * kind next to the author. Edit and delete refresh the thread under `threadKey`.
  */
 export function CommentItem({
   c,
   comments,
+  threadKey,
   onReply,
   hideTime = false,
   label,
@@ -42,34 +44,66 @@ export function CommentItem({
 }: {
   c: CommentRow
   comments: CommentRow[]
+  threadKey: unknown[]
   onReply?: () => void
   hideTime?: boolean
   label?: string
   depth?: number
 }) {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: threadKey })
+    // Reply counts on the ticket page.
+    qc.invalidateQueries({ queryKey: ['ticket'] })
+    qc.invalidateQueries({ queryKey: ['daily'] })
+  }
+  const onError = (err: unknown) => toast.error(errorMessage(err))
+  const edit = useMutation({
+    mutationFn: (body: string) => patch(`/api/comments/${c.id}`, { body }),
+    onSuccess: () => {
+      setEditing(false)
+      refresh()
+    },
+    onError,
+  })
+  const remove = useMutation({ mutationFn: () => del(`/api/comments/${c.id}`), onSuccess: refresh, onError })
   return (
     <div className={depth ? 'ml-6 border-l pl-3' : ''}>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="group/post flex items-center gap-2 text-xs text-muted-foreground">
         <Actor name={c.author} via={c.via} className="text-foreground" />
         {label && <span>{label}</span>}
         {!hideTime && <span>{ago(c.createdAt)}</span>}
-        {depth === 0 && onReply && (
-          <button
-            type="button"
-            className="ml-auto inline-flex items-center gap-1 hover:text-foreground"
-            onClick={onReply}
-          >
-            <Reply className="size-3" /> reply
-          </button>
-        )}
+        <Edited at={c.editedAt} />
+        <span className="ml-auto inline-flex items-center gap-2">
+          <PostActions what="this reply" onEdit={() => setEditing(true)} onDelete={() => remove.mutate()} />
+          {depth === 0 && onReply && (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 hover:text-foreground"
+              onClick={onReply}
+            >
+              <Reply className="size-3" /> reply
+            </button>
+          )}
+        </span>
       </div>
-      <Markdown className="mt-1">{c.body}</Markdown>
+      {editing ? (
+        <EditBox
+          value={c.body}
+          pending={edit.isPending}
+          onSave={(body) => edit.mutate(body)}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <Markdown className="mt-1">{c.body}</Markdown>
+      )}
       <Attachments items={c.attachments} />
       {comments
         .filter((r) => r.replyTo === c.id)
         .map((r) => (
           <div key={r.id} className="mt-3">
-            <CommentItem c={r} comments={comments} depth={depth + 1} />
+            <CommentItem c={r} comments={comments} threadKey={threadKey} depth={depth + 1} />
           </div>
         ))}
     </div>
@@ -116,7 +150,7 @@ export function Thread({
     <div className="space-y-4">
       {roots.length === 0 && !compact && <p className="text-sm text-muted-foreground">No comments yet.</p>}
       {roots.map((c) => (
-        <CommentItem key={c.id} c={c} comments={comments} onReply={() => setReplyTo(c.id)} />
+        <CommentItem key={c.id} c={c} comments={comments} threadKey={key} onReply={() => setReplyTo(c.id)} />
       ))}
       <form
         {...drop.props}

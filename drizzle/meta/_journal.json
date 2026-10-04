@@ -85,6 +85,13 @@
       "when": 1791097625110,
       "tag": "0011_project_agents",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1791104227984,
+      "tag": "0012_one_kind_of_post",
+      "breakpoints": true
     }
   ]
 }
