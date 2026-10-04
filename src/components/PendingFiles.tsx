@@ -1,14 +1,25 @@
-import { FileText, X } from 'lucide-react'
+import { FileText, Loader2, X } from 'lucide-react'
 import { type ClipboardEvent, type DragEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 import { galleryItem } from '#/components/Gallery'
+import { errorMessage, upload } from '#/lib/api'
 import { cn } from '#/lib/utils'
 
 /**
  * Files picked for an update or comment but not posted yet: a chip each, which opens the file in
- * the gallery (stepping through this form's files only), with a way to drop it.
+ * the gallery (stepping through this form's files only), with a way to drop it. `uploading` marks
+ * the ones still on their way to the server.
  */
-export function PendingFiles({ files, onChange }: { files: File[]; onChange: (files: File[]) => void }) {
+export function PendingFiles({
+  files,
+  onChange,
+  uploading,
+}: {
+  files: File[]
+  onChange: (files: File[]) => void
+  uploading?: (file: File) => boolean
+}) {
   // Object URLs for the thumbnails and the gallery, released when the list changes or the form goes away.
   const urls = useMemo(() => files.map((f) => URL.createObjectURL(f)), [files])
   useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls])
@@ -37,7 +48,14 @@ export function PendingFiles({ files, onChange }: { files: File[]; onChange: (fi
               <FileText className="size-3.5 shrink-0 text-muted-foreground" />
             )}
             <span className="truncate">{f.name}</span>
-            <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
+            {uploading?.(f) ? (
+              <Loader2
+                className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                aria-label="uploading"
+              />
+            ) : (
+              <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
+            )}
           </button>
           <button
             type="button"
@@ -93,15 +111,55 @@ export function useFileDrop(add: (files: File[]) => void) {
         setDragging(false)
       }
     },
+    // Cleared on the way down: a drop the rich text editor takes for itself never bubbles back up.
+    onDropCapture: () => {
+      depth.current = 0
+      setDragging(false)
+    },
     onDrop: (e: DragEvent) => {
       if (!hasFiles(e)) return
       e.preventDefault()
-      depth.current = 0
-      setDragging(false)
       add(Array.from(e.dataTransfer.files))
     },
   }
   return { props, className: cn(dragging && 'ring-2 ring-primary/50 ring-offset-2 ring-offset-background') }
+}
+
+/**
+ * Files uploaded as soon as they are added, for a form whose owner does not exist yet (a new
+ * ticket): `ids` are the uploads to send along with it, `uploading` is true until every one has
+ * arrived. A file that fails to upload is dropped with a toast. Uploads that are removed or never
+ * sent stay on the server unattached.
+ */
+export function useUploads() {
+  // Kept apart, so the list (and its thumbnails) changes only when files are added or removed.
+  const [files, setFiles] = useState<File[]>([])
+  const [ids, setIds] = useState<ReadonlyMap<File, number>>(new Map())
+  const add = (added: File[]) => {
+    const picked = added.map(named)
+    setFiles((prev) => [...prev, ...picked])
+    for (const file of picked)
+      upload(file).then(
+        (a) => setIds((prev) => new Map(prev).set(file, a.id)),
+        (err) => {
+          toast.error(`${file.name}: ${errorMessage(err)}`)
+          setFiles((prev) => prev.filter((f) => f !== file))
+        },
+      )
+  }
+  return {
+    add,
+    files,
+    /** For PendingFiles: the files left in the list. */
+    setFiles,
+    isUploading: (file: File) => !ids.has(file),
+    uploading: files.some((f) => !ids.has(f)),
+    ids: files.flatMap((f) => ids.get(f) ?? []),
+    clear: () => {
+      setFiles([])
+      setIds(new Map())
+    },
+  }
 }
 
 /** Pasted screenshots all arrive as "image.png": give them a name that tells them apart. */

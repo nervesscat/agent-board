@@ -11,7 +11,7 @@ import { previewState, previewUrl } from './preview'
 import { prForTicket } from './prs'
 import { resolveRepo, ticketRepo } from './repos'
 import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
-import { attachTo, attachmentView } from './uploads'
+import { assertUnattached, attachTo, attachmentView } from './uploads'
 
 // --- tickets ---
 
@@ -254,6 +254,8 @@ export function createTicket(
     tags?: string[]
     tasks?: string[]
     prNumber?: number | null
+    /** Uploads (POST /api/uploads) that go with the instructions. */
+    attachmentIds?: number[]
   },
   actor: string,
 ) {
@@ -261,6 +263,9 @@ export function createTicket(
   const parent = input.parentId ? getTicket(input.parentId) : null
   if (parent && parent.projectId !== projectId)
     throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
+  // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
+  const attachmentIds = input.attachmentIds ?? []
+  assertUnattached(attachmentIds)
   const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
   // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
   const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
@@ -284,6 +289,7 @@ export function createTicket(
     .returning()
     .get()
   if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
+  if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
   if (parent) touch(parent.id)
   logActivity({
     projectId,

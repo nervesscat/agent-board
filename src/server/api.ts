@@ -269,6 +269,7 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
       title: z.string().min(1).max(200),
       tasks: z.array(z.string().min(1).max(500)).optional(),
       parentId: z.number().int().optional(),
+      attachmentIds: z.array(z.number().int()).optional(),
     }),
   )
   return json(features.createTicket(id(params), body, actor), 201)
