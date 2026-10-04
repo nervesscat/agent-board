@@ -176,7 +176,80 @@ describe('in progress and carrying over', () => {
       since: iso(at(1, 9)),
       days: 6,
     })
-    expect(s.carryingOver.every((t) => t.resume === undefined)).toBe(true)
+    // Read from the log (no start time on these tickets): no resume note, nothing known about a handoff.
+    expect(s.carryingOver.find((t) => t.id === gamma.id)?.resume).toEqual({
+      note: '',
+      at: null,
+      by: '',
+      noHandoff: false,
+      stale: false,
+      day: null,
+    })
+  })
+
+  it('dates a ticket from when its work started and shows where its last session left off', () => {
+    const pid = project('started')
+    // Started two days ago (the log only knows a later claim); a note written yesterday, after the
+    // last thing done on it: the note holds.
+    const fresh = ticket(pid, 'Fresh note', {
+      status: 'in_progress',
+      startedAt: iso(at(5, 10)),
+      resumeNote: '**State:** the form saves.\n\n**Next steps:**\n\n1. Validate the [email](http://x) field',
+      resumeAt: iso(at(6, 18)),
+      resumeBy: 'claude',
+    })
+    log(pid, fresh.id, `claimed ticket #${fresh.id} Fresh note (status To do → In progress)`, at(7, 9))
+    log(pid, fresh.id, 'set a task done', at(6, 17))
+    // Started three days ago, worked yesterday, nobody wrote a note: no handoff.
+    const bare = ticket(pid, 'No note', { status: 'in_progress', startedAt: iso(at(4, 10)) })
+    log(pid, bare.id, 'set a task done', at(6, 15))
+    post(bare.id, 'tests pass', at(6, 15))
+    // A progress post came after the note: it no longer says where the work stands.
+    const moved = ticket(pid, 'Moved on', {
+      status: 'blocked',
+      startedAt: iso(at(6, 9)),
+      resumeNote: 'State: waiting on the key',
+      resumeAt: iso(at(6, 18)),
+      resumeBy: 'claude',
+    })
+    post(moved.id, 'got the key, resuming', at(7, 10))
+    // Started this morning, though the log has it claimed days ago: not carried over.
+    const today = ticket(pid, 'Started today', { status: 'in_progress', startedAt: iso(at(7, 8)) })
+    log(pid, today.id, `claimed ticket #${today.id} Started today (status To do → In progress)`, at(3, 10))
+
+    const s = take(pid)
+    expect(s.inProgress.find((t) => t.id === fresh.id)).toMatchObject({ since: iso(at(5, 10)), days: 2 })
+    expect(s.inProgress.find((t) => t.id === today.id)).toMatchObject({ since: iso(at(7, 8)), days: 0 })
+    expect(s.carryingOver.map((t) => t.id).sort()).toEqual([fresh.id, bare.id, moved.id].sort())
+    const carried = new Map(s.carryingOver.map((t) => [t.id, t]))
+    expect(carried.get(fresh.id)?.resume).toEqual({
+      note: 'State: the form saves. Next steps: Validate the email field',
+      at: iso(at(6, 18)),
+      by: 'claude',
+      noHandoff: false,
+      stale: false,
+      day: 3,
+    })
+    expect(carried.get(bare.id)).toMatchObject({
+      since: iso(at(4, 10)),
+      days: 3,
+      lastPost: { text: 'tests pass' },
+      resume: { note: '', at: null, noHandoff: true, stale: false, day: 4 },
+    })
+    expect(carried.get(moved.id)?.resume).toMatchObject({ noHandoff: false, stale: true, day: 2 })
+  })
+})
+
+describe('excerpt', () => {
+  it('reads a note as one line of plain text, cut to length', () => {
+    expect(summary.excerpt('## Heading\n\n- **bold** item\n> quote with `code`\n')).toBe(
+      'Heading bold item quote with code',
+    )
+    expect(summary.excerpt('see [the PR](https://x/1) and ![shot](a.png)')).toBe('see the PR and shot')
+    expect(summary.excerpt('')).toBe('')
+    const long = summary.excerpt('word '.repeat(100))
+    expect(long).toHaveLength(200)
+    expect(long.endsWith('…')).toBe(true)
   })
 })
 
@@ -386,6 +459,7 @@ describe('with the log the board writes', () => {
     const s = summary.getSummary(pid, { humans: [HUMAN] }).projects[0]!
     expect(s.inProgress).toMatchObject([{ id: t.id, assignee: 'claude', days: 0, stale: false }])
     expect(Date.now() - new Date(s.inProgress[0]!.since).getTime()).toBeLessThan(60_000)
+    expect(s.inProgress[0]!.since).toBe(features.getTicket(t.id).startedAt)
     expect(s.doneToday.tickets.map((x) => x.id)).toEqual([d.id])
   })
 })

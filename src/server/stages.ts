@@ -42,6 +42,27 @@ export const kindOf = (stages: Stage[], key: string): StageKind => stageOf(stage
 export const startStage = (stages: Stage[]) =>
   [...stages].reverse().find((s) => s.kind === 'open') ?? stages[0]!
 
+/** The kinds of stage a ticket is being worked in: in these a ticket carries over from day to day. */
+export const WORKING_KINDS: readonly StageKind[] = ['active', 'blocked', 'review']
+
+export const isWorking = (stages: Stage[], key: string) => WORKING_KINDS.includes(kindOf(stages, key))
+
+/**
+ * The `startedAt` to write when a ticket moves from `from` (null: it is new) to `to`: now when it enters
+ * work from any other kind of stage, or is in work without a start yet; nothing otherwise.
+ */
+export function startedPatch(
+  stages: Stage[],
+  from: string | null,
+  to: string,
+  startedAt: string | null = null,
+): { startedAt?: string } {
+  if (!isWorking(stages, to)) return {}
+  return from === null || !isWorking(stages, from) || !startedAt
+    ? { startedAt: new Date().toISOString() }
+    : {}
+}
+
 /**
  * The stage an agent or the UI named: its key, else its name (any casing), else the first stage of
  * that kind (`review`, `done`, … and the old `todo` / `in_progress`; for open, the start stage).
@@ -195,7 +216,12 @@ export function deleteStage(projectId: number, id: number, opts: { moveTo?: stri
   db.transaction((tx) => {
     if (target)
       tx.update(schema.tickets)
-        .set({ status: target.key, updatedAt: new Date().toISOString() })
+        .set({
+          status: target.key,
+          updatedAt: new Date().toISOString(),
+          // Work starts for them when they go from a stage that is not one of work into one that is.
+          ...(isWorking(stages, stage.key) ? {} : startedPatch(stages, stage.key, target.key)),
+        })
         .where(and(eq(schema.tickets.projectId, projectId), eq(schema.tickets.status, stage.key)))
         .run()
     tx.delete(schema.stages).where(eq(schema.stages.id, id)).run()

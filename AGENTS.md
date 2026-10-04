@@ -53,6 +53,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    `in_progress`. Tickets are shared: claiming one another agent holds takes it over (the board
    logs it), so prefer unassigned ones. A ticket with `reserved: true` belongs to one of the
    project's agents (below): claim it only with `as`.
+   **Start of a session:** before anything else on a ticket you pick up or come back to, read its
+   resume note (`resume` on `get_ticket`, also returned by `claim_ticket`): where the last session
+   left off, the next steps and how to resume. `resume.commitsSince` and `resume.stale` say whether
+   the work moved on since it was written; `resume.noHandoff` means it carried over from an earlier
+   day without one.
 3. **Break it down**: `add_tasks` with the concrete steps if the ticket does not have them;
    `set_task_done` as you finish each one, `update_task` / `remove_task` when the plan changes.
    The progress bar the human sees is those tasks.
@@ -90,7 +95,13 @@ http_headers = { Authorization = "Bearer gate_…" }
    `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
    requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
    the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
-   final `post_update`. `done` is
+   final `post_update`. **Merge order:** when your branch is built on another ticket's open branch
+   (stacked), or you merged one in to get past a conflict, declare it: `update_ticket` with
+   `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing "builds on …"
+   in the PR. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot move to
+   `done` until that branch is merged into its base (the refusal says which; only the human can
+   mark it done anyway). `get_ticket_git` → `includes` lists the open tickets whose unmerged work
+   your branch already holds; `get_ticket` → `needs` says whether each is `merged`. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
    its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
@@ -106,8 +117,22 @@ http_headers = { Authorization = "Bearer gate_…" }
    as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
    origin branches: list them for the human. `cleanup_report` lists every leftover of the project's
    closed tickets; the board skill's `/board cleanup` walks it with the human.
-9. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
-   what got done, what is open. `daily_report` shows what everyone else did that day.
+9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
+   `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
+   blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that
+   another agent can continue without asking. It is the ticket's one current "Where we left off"
+   note, shown at the top of its page; each version is also posted to its feed as a handoff. Then
+   `post_daily_summary` — at most three short lines at the highest level: what got done, what is
+   open. `daily_report` shows what everyone else did that day.
+10. **Reports**: a project can ask for a report every day or once a week (`get_report_settings`:
+    `cadence`, the `weekday` and `dueTime` it is due by, `format` text or file, and the `prompt`
+    saying what it must contain and how: by the hour, sections, audience, a short text or a PDF).
+    At the end of a session, `list_reports` shows each recent period as `done`, `missing` (due,
+    nothing posted) or `upcoming`; write the current or missing one exactly as the prompt says and
+    `post_report` it (`body`, and `files` as absolute paths: the board does not make PDFs; a `file`
+    project needs one). Posting again for a period replaces its report and keeps the old one as
+    history. For a daily text project the day's summary counts as its report until one is posted.
+    `set_report_settings` changes the prompt or schedule; do that only when the human asks.
 
 ## The project's agents
 

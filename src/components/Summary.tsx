@@ -3,6 +3,8 @@ import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
   ArrowRight,
+  Bookmark,
+  BookmarkX,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -113,25 +115,29 @@ function Section({
   icon: Icon,
   title,
   count,
+  extra,
   className = '',
   children,
 }: {
   icon: typeof Inbox
   title: string
   count?: number
+  /** After the count: what among them needs attention. */
+  extra?: ReactNode
   className?: string
   children: ReactNode
 }) {
   return (
     <Card size="sm" className={className}>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex flex-wrap items-center gap-2">
           <Icon className="size-4 text-muted-foreground" /> {title}
           {count !== undefined && count > 0 && (
             <span className="rounded-full bg-muted px-1.5 text-xs font-normal tabular-nums text-muted-foreground">
               {count}
             </span>
           )}
+          {extra}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">{children}</CardContent>
@@ -528,8 +534,24 @@ function Next({ p }: { p: ProjectSummary }) {
 
 function CarryingOver({ p }: { p: ProjectSummary }) {
   const items = p.carryingOver
+  const missing = items.filter((t) => t.resume.noHandoff).length
   return (
-    <Section icon={Clock} title="Carrying over" count={items.length} className="lg:col-span-2">
+    <Section
+      icon={Clock}
+      title="Carrying over"
+      count={items.length}
+      extra={
+        missing > 0 && (
+          <span
+            className="inline-flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400"
+            title="Worked on an earlier day, and nobody left a resume note on where it was left"
+          >
+            <BookmarkX className="size-3" /> {missing} without a handoff
+          </span>
+        )
+      }
+      className="lg:col-span-2"
+    >
       {!items.length ? (
         <Quiet>Nothing carried over from before today.</Quiet>
       ) : (
@@ -548,11 +570,12 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
                 <div className="w-full min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <Who p={p} name={t.assignee} />
-                    <span title={new Date(t.since).toLocaleString()}>
+                    <span title={`Work on it started ${new Date(t.since).toLocaleString()}`}>
                       {t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}
                     </span>
+                    {t.resume.noHandoff && <NoHandoff p={p} id={t.id} />}
                   </div>
-                  <Resume t={t} />
+                  <Resume p={p} t={t} />
                 </div>
               }
             />
@@ -563,29 +586,78 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
   )
 }
 
-/** Its handoff note when the ticket has one (and a warning when nobody left one), else its last progress post. */
-function Resume({ t }: { t: CarryOver }) {
+/** The ticket page, scrolled to its "Resume here" card. */
+function ResumeLink({
+  p,
+  id,
+  className,
+  title,
+  children,
+}: {
+  p: ProjectSummary
+  id: number
+  className: string
+  title?: string
+  children: ReactNode
+}) {
+  return (
+    <Link
+      to="/projects/$id/features/$ticketId"
+      params={{ id: String(p.project.id), ticketId: String(id) }}
+      hash="resume"
+      className={className}
+      title={title}
+    >
+      {children}
+    </Link>
+  )
+}
+
+function NoHandoff({ p, id }: { p: ProjectSummary; id: number }) {
+  return (
+    <ResumeLink
+      p={p}
+      id={id}
+      className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 hover:underline dark:text-amber-400"
+      title="Worked on an earlier day, and nobody left a resume note on where it was left: open it to write one"
+    >
+      <BookmarkX className="size-3" /> no handoff
+    </ResumeLink>
+  )
+}
+
+/**
+ * Where the last session left off: the ticket's resume note, with its last progress post under it
+ * when that came later; the last progress post alone when there is no note.
+ */
+function Resume({ p, t }: { p: ProjectSummary; t: CarryOver }) {
   const r = t.resume
+  if (!r.note) return <LastPost post={t.lastPost} />
   return (
     <>
-      {r?.noHandoff && (
-        <p className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="size-3" /> no handoff: the last session left no resume note
-        </p>
-      )}
-      {r?.note ? (
-        <p className="mt-1 line-clamp-2 border-l-2 border-primary/40 pl-2 text-xs text-muted-foreground">
-          {r.note}
-          {r.by && (
-            <span className="whitespace-nowrap">
-              {' '}
-              — {r.by}
-              {r.at ? `, ${ago(r.at)}` : ''}
-            </span>
-          )}
-        </p>
-      ) : (
-        <LastPost post={t.lastPost} />
+      <ResumeLink
+        p={p}
+        id={t.id}
+        className="mt-1 line-clamp-2 border-l-2 border-primary/40 pl-2 text-xs text-muted-foreground hover:text-foreground"
+        title="Its resume note: open it on the ticket"
+      >
+        <Bookmark className="mr-1 inline size-3 align-[-1px]" />
+        {r.note}
+        {r.at && (
+          <span className="whitespace-nowrap">
+            {' '}
+            — {r.by ? `${r.by}, ` : ''}
+            {ago(r.at)}
+          </span>
+        )}
+      </ResumeLink>
+      {r.stale && (
+        <>
+          <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+            Progress posted since this note:
+          </p>
+          <LastPost post={t.lastPost} />
+        </>
       )}
     </>
   )

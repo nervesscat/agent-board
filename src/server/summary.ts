@@ -6,11 +6,12 @@ import { stageColumn } from '#/lib/stages'
 import { dayBounds } from './activity'
 import { listActors } from './actors'
 import { today } from './daily'
-import { gist, listHumanThreads, listTickets, type TicketRow } from './features'
+import { gist, listHumanThreads, listTickets } from './features'
 import { getProject } from './projects'
 import { refreshPrsInBackground } from './prs'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
+import { handoffStates } from './resume'
 import { listStages, type Stage } from './stages'
 
 /**
@@ -31,11 +32,24 @@ const inProgress = (kind: StageKind | undefined) => !!kind && IN_PROGRESS.includ
 const BACKLOG = /backlog|icebox|someday|later|parking/i
 export const isBacklog = (s: Pick<Stage, 'key' | 'name'>) => BACKLOG.test(s.key) || BACKLOG.test(s.name)
 
+/** A ticket as `listTickets` reads it, its resume columns included. */
+type Row = ReturnType<typeof listTickets>[number]
+
 /**
- * What a ticket's handoff note says when its work resumes in a later session. Nothing sets it yet;
- * the Carrying over section shows it when it is there and the last progress post otherwise.
+ * Where the last session on a carried-over ticket left off: its resume note as one line of plain text
+ * (`''` when nobody wrote one) and who wrote it when. `stale` here is only a progress post after the
+ * note; the ticket page also counts the commits on its branch since.
  */
-export type ResumeNote = { note: string; at?: string; by?: string; stale?: boolean; noHandoff?: boolean }
+export interface ResumeNote {
+  note: string
+  at: string | null
+  by: string
+  /** Worked on an earlier day, and no note written since the last day it was worked. */
+  noHandoff: boolean
+  stale: boolean
+  /** Which day of work this is (1 on the day it started); null when its start is not on the ticket. */
+  day: number | null
+}
 
 /** A ticket that was already in progress before today. */
 export interface CarryOver {
@@ -49,8 +63,7 @@ export interface CarryOver {
   days: number
   lastPost: Post | null
   stale: boolean
-  /** Left out until tickets carry handoff notes. */
-  resume?: ResumeNote | null
+  resume: ResumeNote
 }
 
 export interface SummaryOptions {
@@ -94,11 +107,11 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
   const byId = new Map(tickets.map((t) => [t.id, t]))
   const ids = tickets.map((t) => t.id)
   const top = tickets.filter((t) => t.parentId === null)
-  const children = new Map<number, TicketRow[]>()
+  const children = new Map<number, Row[]>()
   for (const t of tickets) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
   const below = (id: number): number[] =>
     (children.get(id) ?? []).flatMap((lane) => [lane.id, ...below(lane.id)])
-  const parentOf = (t: TicketRow) => {
+  const parentOf = (t: Row) => {
     const p = t.parentId ? byId.get(t.parentId) : undefined
     return p ? { id: p.id, title: p.title } : null
   }
@@ -177,10 +190,11 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       updatedAt: t.updatedAt,
     }))
 
-  // --- in progress: since when (from the log) and the last progress post, for every ticket in progress ---
+  // --- in progress: since when and the last progress post, for every ticket in progress ---
   const working = top.filter((t) => inProgress(kind(t.status)))
-  const workingIds = working.map((t) => t.id)
-  const events = workingIds.length
+  // When the work started is on the ticket; only tickets that predate that are read from the log.
+  const unstarted = working.filter((t) => !t.startedAt).map((t) => t.id)
+  const events = unstarted.length
     ? db
         .select()
         .from(schema.activity)
@@ -188,7 +202,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
           and(
             eq(schema.activity.refType, 'ticket'),
             eq(schema.activity.kind, 'ticket'),
-            inArray(schema.activity.refId, workingIds),
+            inArray(schema.activity.refId, unstarted),
           ),
         )
         .orderBy(asc(schema.activity.createdAt), asc(schema.activity.id))
@@ -211,11 +225,13 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
   const startOfToday = new Date(`${date}T00:00:00`).getTime()
   const progress = working
     .map((t) => {
-      const since = progressSince(
-        t,
-        events.filter((e) => e.refId === t.id),
-        parse,
-      )
+      const since =
+        t.startedAt ??
+        progressSince(
+          t,
+          events.filter((e) => e.refId === t.id),
+          parse,
+        )
       const post = lastPost(t.id)
       return {
         id: t.id,
@@ -342,22 +358,60 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       blocked: top.filter((t) => kind(t.status) === 'blocked').length,
       backlog: top.filter((t) => kind(t.status) === 'open' && t.status !== nextStage?.key).length,
     },
-    carryingOver: progress
-      .filter((t) => new Date(t.since).getTime() < startOfToday)
-      .map(
-        ({ id, title, status, kind, assignee, since, days, lastPost, stale }): CarryOver => ({
-          id,
-          title,
-          status,
-          kind,
-          assignee,
-          since,
-          days,
-          lastPost,
-          stale,
-        }),
-      ),
+    carryingOver: carryOver(
+      progress.filter((t) => new Date(t.since).getTime() < startOfToday),
+      byId,
+      now,
+    ),
   }
+}
+
+/**
+ * The tickets in progress since before today, each with where its last session left off: the resume
+ * note and whether one is missing, from the ticket and its log only (no git), in one batch.
+ */
+function carryOver(items: Omit<CarryOver, 'resume'>[], byId: Map<number, Row>, now: Date): CarryOver[] {
+  const rows = items.map((t) => byId.get(t.id)!)
+  const handoffs = handoffStates(rows, now)
+  return items.map(({ id, title, status, kind, assignee, since, days, lastPost, stale }, i) => {
+    const t = rows[i]!
+    const h = handoffs.get(id)!
+    return {
+      id,
+      title,
+      status,
+      kind,
+      assignee,
+      since,
+      days,
+      lastPost,
+      stale,
+      resume: {
+        note: excerpt(t.resumeNote),
+        at: t.resumeAt,
+        by: t.resumeBy,
+        noHandoff: h.noHandoff,
+        stale: h.newerProgress,
+        day: h.day,
+      },
+    }
+  })
+}
+
+/** Markdown as one line of plain text: line markers, emphasis and link targets dropped, cut to `max`. */
+export function excerpt(body: string, max = 200) {
+  const text = body
+    .split('\n')
+    .map((l) =>
+      l
+        .replace(/^\s*(?:#+|[-*+>]|\d+\.)\s+/, '')
+        .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\*\*|__|`/g, '')
+        .trim(),
+    )
+    .filter(Boolean)
+    .join(' ')
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
 }
 
 type Move = { from: Stage | null; to: Stage }
@@ -388,7 +442,8 @@ export function moveParser(stages: Stage[]): (text: string) => Move | null {
 /**
  * When the ticket's current stretch in progress began, from its log (oldest first): the move into an
  * in-progress stage, or a claim while it was not known to be out of progress. Its creation when the
- * log does not say (it was created in progress, or moved before the log knew the stage's name).
+ * log does not say (it was created in progress, or moved before the log knew the stage's name). Only
+ * for a ticket without `startedAt`, which says it directly.
  */
 export function progressSince(
   t: Pick<schema.Ticket, 'createdAt'>,

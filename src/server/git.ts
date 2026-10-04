@@ -159,6 +159,21 @@ export async function branchInfo(repoPath: string, branch: string, base: string)
   return { exists: true, sha, subject, authoredAt, ahead, behind }
 }
 
+/** The local branch's head commit, or null when there is no such branch here. */
+export async function branchHead(repoPath: string, branch: string): Promise<string | null> {
+  if (!branch) return null
+  return git(repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`]).catch(
+    () => null,
+  )
+}
+
+/** How many commits the local branch has that `sha` does not; null when either is unknown here. */
+export async function commitsSince(repoPath: string, branch: string, sha: string): Promise<number | null> {
+  if (!branch || !sha) return null
+  const out = await git(repoPath, ['rev-list', '--count', `${sha}..refs/heads/${branch}`]).catch(() => null)
+  return out === null ? null : Number(out)
+}
+
 export interface Worktree {
   path: string
   branch: string | null
@@ -263,4 +278,47 @@ async function reachInto(repoPath: string, ref: string, base: string): Promise<R
   ])
   const tree = merged.split('\n')[0]
   return { state: tree === baseTree ? 'edited' : 'unique', into: base, unique }
+}
+
+/**
+ * Whether `ref` holds work of `other` that none of `bases` has: a commit of `other`'s own (not in a
+ * base, nor in one of `others`, the other branches `other` itself is built on) that is in `ref`. A
+ * branch built on `ref` does not count, and without a base nothing can be told.
+ */
+export async function holdsWorkOf(
+  repoPath: string,
+  ref: string,
+  other: string,
+  bases: string[],
+  others: string[],
+) {
+  if (!bases.length) return false
+  const isAncestor = (a: string, b: string) =>
+    git(repoPath, ['merge-base', '--is-ancestor', a, b]).then(
+      () => true,
+      () => false,
+    )
+  if (await isAncestor(ref, other)) return false
+  // Quick way out: nothing the two share lies outside the bases.
+  const shared = await git(repoPath, ['merge-base', '--all', ref, other]).catch(() => '')
+  let outside = false
+  for (const sha of shared ? shared.split('\n') : []) {
+    const landed = await Promise.all(bases.map((b) => isAncestor(sha, b)))
+    if (!landed.some(Boolean)) outside = true
+  }
+  if (!outside) return false
+  // What `other` stands on is not its own work: the shared commits may be a third branch's.
+  const under = await git(repoPath, [
+    'for-each-ref',
+    '--merged',
+    other,
+    '--format=%(refname:short)',
+    'refs/heads',
+    'refs/remotes/origin',
+  ])
+  const below = new Set(under ? under.split('\n') : [])
+  const stands = others.filter((x) => x !== other && below.has(x))
+  const own = ['rev-list', '--count', other, ...[...bases, ...stands].map((b) => `^${b}`)]
+  const mine = Number(await git(repoPath, own))
+  return mine > 0 && Number(await git(repoPath, [...own, `^${ref}`])) < mine
 }

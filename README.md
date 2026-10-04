@@ -3,7 +3,9 @@
 A local job board shared by one developer and their AI agents (claude, codex, opencode, …).
 Per project (one or more repos): the PR queue assigned to you, the features in flight (tickets →
 lanes for parallel work → tasks → branches and workspaces → updates with screenshots and recordings →
-threads), the PR reviews your agents record, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
+threads), the PR reviews your agents record, and a day-by-day log with a one-glance summary and the
+report each project asks for (daily or weekly, as its prompt says), tracked period by period. Git
+and GitHub are **read-only**.
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
@@ -110,6 +112,7 @@ to GitHub.
 All routes need the gate cookie or `Authorization: Bearer gate_…`; JSON in and out. `actor` is
 the gate device or token name.
 
+|              | `needs[]` on create and PATCH · `force` on PATCH                                                              | the tickets whose branches must be merged into its base first (same project, no cycles); GET returns `needs[]` with `merged` and `neededBy[]`, the list `needs[]`. A move to a done stage is a 409 (`code: needs`) while one is not merged; `force: true` (the human's only) marks it done anyway, logged |
 | Method       | Path                                                                                                          |                                                                                                                                                               |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET          | `/api/me`                                                                                                     | who you are                                                                                                                                                   |
@@ -125,11 +128,13 @@ the gate device or token name.
 | GET          | `/api/projects/:id/prs?refresh=1`                                                                             | PR queue (`status`, `waitingOn` me/others, `merge`, `ci` + `checks[]`, `latestReview`, `tickets[]` it came from)                                              |
 | PATCH        | `/api/prs/:id` `{hold, holdNote}`                                                                             | park / release                                                                                                                                                |
 | GET/POST     | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`                                             | tickets (`tasks[]` on create; `repoId` when the project has several repos)                                                                                    |
+|              | `resume` on GET `/api/tickets/:id` · on list rows                                                             | the resume note with `at`, `by`, `sha`, `commitsSince`, `stale`, `noHandoff`, `day` · rows: `at`, `stale`, `noHandoff`, `day`                                 |
 |              | `?parent=root\|<id>` on the list · `parentId` on create                                                       | lanes: a ticket's parallel sub-tickets, nested to any depth                                                                                                   |
 |              | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                                                  | lanes' updates in the feed · move lanes up a level instead of deleting them                                                                                   |
 | GET          | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=&archived=`                           | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level; `archived=include` or `only`)              |
 | POST         | `/api/tickets/:id/archive` · `/restore` · `/api/projects/:id/tickets/archive` `{status}`                      | archive a done or cancelled top-level ticket, its lanes with it · put it back · archive a whole done or cancelled stage (the human's)                         |
-| POST         | `/api/tickets/:id/claim` `{branch?, as?}`                                                                     | assign to the caller (or the project agent it works as) and start it; 409 if reserved for another agent                                                       |
+| POST         | `/api/tickets/:id/claim` `{branch?, as?}`                                                                     | assign to the caller (or the project agent it works as) and start it, returning it with `resume`; 409 if reserved for another agent                           |
+| PUT          | `/api/tickets/:id/resume` `{note, as?}`                                                                       | the resume note, "Where we left off" (human or agents; `as` agents only); each version is also a handoff post                                                 |
 | GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain)                                                        |
 | GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches or worktrees; `reach=0` skips the merge checks                                                              |
 | POST         | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`                                          | todo list                                                                                                                                                     |
@@ -149,6 +154,9 @@ the gate device or token name.
 | GET          | `/api/summary?projectId=`                                                                                     | the Home and Overview summary: what waits on the human, in progress, done today, next, carrying over (every project without `projectId`)                      |
 | GET          | `/api/daily?date=YYYY-MM-DD&projectId=`                                                                       | activity by the hour + summaries                                                                                                                              |
 | POST         | `/api/daily/summaries` `{date, projectId, body}` · `/generate`                                                | post / ask claude for the day's summary                                                                                                                       |
+| GET/PATCH    | `/api/projects/:id/report-settings` `{prompt, cadence, weekday, dueTime, format}`                             | what the project's report must contain (markdown prompt) and when it is due: `off` · `daily` · `weekly` on `weekday` 1–7, by `dueTime` (HH:MM), `text`/`file` |
+| GET/POST     | `/api/projects/:id/reports?from=&to=` · `{period?, body?, attachmentIds[]}`                                   | periods newest first with `status` done/missing/upcoming and the latest report · post one (replaces the period's report, the old one kept)                    |
+| GET          | `/api/projects/:id/reports/:period`                                                                           | every version posted for a period, newest first                                                                                                               |
 | \*           | `/api/mcp`                                                                                                    | MCP streamable HTTP; tools mirror the rows above                                                                                                              |
 
 ## Development

@@ -1,16 +1,27 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { RESUME_TEMPLATE } from '#/lib/constants'
 import { logActivity } from './activity'
 import { baseChain, gitCache, reachOf } from './cleanup'
-import { branchInfo } from './git'
+import { branchHead, branchInfo } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { previewState, previewUrl } from './preview'
 import { prForTicket } from './prs'
 import { resolveRepo, ticketRepo } from './repos'
-import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
+import { type WithResume, type WithResumeBrief, resumeState, withoutResume } from './resume'
+import {
+  firstOfKind,
+  kindOf,
+  listStages,
+  matchStages,
+  resolveStage,
+  startStage,
+  startedPatch,
+  stageOf,
+} from './stages'
 import { attachTo, attachmentView } from './uploads'
 
 // --- tickets ---
@@ -94,10 +105,11 @@ function projectTickets(projectId: number) {
 export const reservedFor = (t: Pick<schema.Ticket, 'projectId' | 'assignee'>) =>
   findAgent(t.projectId, t.assignee)
 
-export type TicketRow = ReturnType<typeof projectTickets>[number]
+/** A row of a ticket list as reads hand it out (`withResumeBriefs`). */
+export type TicketRow = WithResumeBrief<ReturnType<typeof projectTickets>[number]>
 
 /** The lanes under a ticket, all the way down, nearest first. */
-function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
+export function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
   const out: T[] = []
   for (let queue = all.filter((t) => t.parentId === id); queue.length; ) {
     const next = queue.shift()!
@@ -226,7 +238,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     lanes: lanes.map((l) => {
       const u = lastUpdate.get(l.id)
       return {
-        ...l,
+        ...withoutResume(l),
         lastUpdate: u ? { author: u.author, text: gist(u.body), createdAt: u.createdAt } : null,
       }
     }),
@@ -240,7 +252,23 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
   }
 }
 
-export type TicketFull = ReturnType<typeof getTicketFull>
+/** A ticket in full as reads hand it out (`withResume`): its resume note and state under `resume`. */
+export type TicketFull = WithResume<ReturnType<typeof getTicketFull>>
+
+/** Where a new ticket goes: its parent (in the same project), its repo, and the branch it starts from. */
+export function placement(
+  projectId: number,
+  input: { repoId?: number | null; parentId?: number | null; baseBranch?: string },
+) {
+  getProject(projectId)
+  const parent = input.parentId ? getTicket(input.parentId) : null
+  if (parent && parent.projectId !== projectId)
+    throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
+  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
+  // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
+  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
+  return { parent, repo, baseBranch: input.baseBranch || parentBase || repo.baseBranch }
+}
 
 export function createTicket(
   projectId: number,
@@ -260,14 +288,9 @@ export function createTicket(
   },
   actor: string,
 ) {
-  getProject(projectId)
-  const parent = input.parentId ? getTicket(input.parentId) : null
-  if (parent && parent.projectId !== projectId)
-    throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
-  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
-  // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
-  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
+  const { parent, repo, baseBranch } = placement(projectId, input)
   const stages = listStages(projectId)
+  const status = (input.status ? resolveStage(stages, input.status) : startStage(stages)).key
   const row = db
     .insert(schema.tickets)
     .values({
@@ -276,10 +299,11 @@ export function createTicket(
       parentId: parent?.id ?? null,
       title: input.title,
       body: input.body ?? '',
-      status: (input.status ? resolveStage(stages, input.status) : startStage(stages)).key,
+      status,
+      ...startedPatch(stages, null, status),
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
-      baseBranch: input.baseBranch || parentBase || repo.baseBranch,
+      baseBranch,
       tags: cleanTags(input.tags ?? []),
       prNumber: input.prNumber ?? null,
       createdBy: actor,
@@ -351,7 +375,11 @@ export function updateTicket(
   if (patch.status) patch = { ...patch, status: resolveStage(stages, patch.status).key }
   const row = db
     .update(schema.tickets)
-    .set({ ...patch, updatedAt: new Date().toISOString() })
+    .set({
+      ...patch,
+      ...(patch.status ? startedPatch(stages, before.status, patch.status, before.startedAt) : {}),
+      updatedAt: new Date().toISOString(),
+    })
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
@@ -410,6 +438,7 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
     .set({
       assignee,
       ...(start ? { status: start.key } : {}),
+      ...startedPatch(stages, before.status, start?.key ?? before.status, before.startedAt),
       ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
       updatedAt: new Date().toISOString(),
     })
@@ -462,6 +491,8 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     : before === 'approved'
       ? (firstOfKind(stages, 'review') ?? startStage(stages))
       : startStage(stages)
+  const status =
+    verdict === 'disapproved' && cancel ? cancel.key : finish ? finish.key : reopen ? reopenTo.key : t.status
   const row = db
     .update(schema.tickets)
     .set({
@@ -469,13 +500,8 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
       approvedBy: verdict === 'approved' ? actor : '',
       disapprovedAt: verdict === 'disapproved' ? now : null,
       disapprovedBy: verdict === 'disapproved' ? actor : '',
-      ...(verdict === 'disapproved' && cancel
-        ? { status: cancel.key }
-        : finish
-          ? { status: finish.key }
-          : reopen
-            ? { status: reopenTo.key }
-            : {}),
+      status,
+      ...startedPatch(stages, t.status, status, t.startedAt),
       updatedAt: now,
     })
     .where(eq(schema.tickets.id, id))
@@ -847,19 +873,24 @@ export function postUpdate(
   body: string,
   attachmentIds: number[],
   actor: string,
-  opts: { as?: string; progress?: boolean } = {},
+  opts: { as?: string; progress?: boolean; handoff?: boolean } = {},
 ) {
   const ticket = getTicket(ticketId)
   const { author, via } = signer(ticket.projectId, actor, opts.as)
   const progress = opts.progress ?? true
-  const row = db.insert(schema.updates).values({ ticketId, author, via, body, progress }).returning().get()
+  const handoff = opts.handoff ?? false
+  const row = db
+    .insert(schema.updates)
+    .values({ ticketId, author, via, body, progress, handoff })
+    .returning()
+    .get()
   attachTo(attachmentIds, { updateId: row.id })
   touch(ticketId)
   logActivity({
     projectId: ticket.projectId,
     actor: author,
-    kind: progress ? 'update' : 'comment',
-    text: `${progress ? 'posted an update on' : 'posted on'} #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${firstLine(body)}`,
+    kind: handoff ? 'handoff' : progress ? 'update' : 'comment',
+    text: `${handoff ? 'left a resume note on' : progress ? 'posted an update on' : 'posted on'} #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${handoff ? gist(body) : firstLine(body)}`,
     refType: 'ticket',
     refId: ticketId,
   })
@@ -884,6 +915,40 @@ export function gist(body: string, max = 120) {
 export const firstLine = (s: string, max = 120) => {
   const line = s.trim().split('\n')[0] ?? ''
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
+}
+
+// --- the resume note ("Where we left off") ---
+
+/**
+ * Write the ticket's resume note, for whoever picks it up next: `actor`, or with `as` one of the project's
+ * agents (via `actor`). It records the ticket branch's head (when the branch is here locally) so later
+ * commits show up as commits since the note. Each new version is also a handoff post in the feed, so
+ * the earlier ones stay readable; saving the same note again only marks it as still current.
+ */
+export async function setResumeNote(
+  ticketId: number,
+  note: string,
+  actor: string,
+  opts: { as?: string } = {},
+) {
+  const ticket = getTicket(ticketId)
+  const text = note.trim()
+  if (!text) throw new HttpError(400, 'the resume note is empty')
+  if (text === RESUME_TEMPLATE) throw new HttpError(400, 'fill in the template before saving it')
+  const { author } = signer(ticket.projectId, actor, opts.as)
+  const repo = ticketRepo(ticket)
+  const sha = repo ? await branchHead(repo.repoPath, ticket.branch) : null
+  const row = db
+    .update(schema.tickets)
+    .set({ resumeNote: text, resumeAt: new Date().toISOString(), resumeBy: author, resumeSha: sha })
+    .where(eq(schema.tickets.id, ticketId))
+    .returning()
+    .get()!
+  const post =
+    text === ticket.resumeNote
+      ? null
+      : postUpdate(ticketId, text, [], actor, { as: opts.as, progress: true, handoff: true })
+  return { resume: await resumeState(row), postId: post?.id ?? null }
 }
 
 // --- comments (threads on tickets, updates, PRs, review results) ---
@@ -1219,7 +1284,10 @@ export function askDecision(
   const stages = listStages(ticket.projectId)
   const blocked = firstOfKind(stages, 'blocked')
   if ((input.block ?? true) && blocked && ticket.status !== blocked.key) {
-    db.update(schema.tickets).set({ status: blocked.key }).where(eq(schema.tickets.id, ticketId)).run()
+    db.update(schema.tickets)
+      .set({ status: blocked.key, ...startedPatch(stages, ticket.status, blocked.key, ticket.startedAt) })
+      .where(eq(schema.tickets.id, ticketId))
+      .run()
   }
   logActivity({
     projectId: ticket.projectId,
@@ -1267,7 +1335,10 @@ export function decide(postId: number, option: number, note: string, actor: stri
     .get()
   const active = firstOfKind(stages, 'active')
   if (!stillOpen && active && kindOf(stages, ticket.status) === 'blocked')
-    db.update(schema.tickets).set({ status: active.key }).where(eq(schema.tickets.id, ticket.id)).run()
+    db.update(schema.tickets)
+      .set({ status: active.key, ...startedPatch(stages, ticket.status, active.key, ticket.startedAt) })
+      .where(eq(schema.tickets.id, ticket.id))
+      .run()
   touch(ticket.id)
   logActivity({
     projectId: ticket.projectId,
