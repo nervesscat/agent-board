@@ -14,6 +14,15 @@ import * as features from './features'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { HttpError, intParam, readJson } from './http'
+import {
+  isActive,
+  managedPreview,
+  previewLog,
+  restartPreview,
+  startPreview,
+  stopPreview,
+  stopProjectPreviews,
+} from './managedPreview'
 import { handleMcp } from './mcp'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
@@ -108,6 +117,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   return json(projects.updateProject(id(params), body, actor))
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
+  stopProjectPreviews(id(params), actor)
   projects.deleteProject(id(params), actor)
   return json({ ok: true })
 })
@@ -393,10 +403,30 @@ api.patch('/api/workspaces/:id', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ previewUrl: PreviewUrl }))
   return json(features.setWorkspacePreview(id(params), body.previewUrl, actor))
 })
-// Whether that preview answers right now: `{running, status?, checkedAt}`; localhost URLs only.
+// Whether that preview answers right now: `{running, status?, checkedAt, url}`, localhost URLs only;
+// `managed`, the preview the board runs from the workspace; `cannotStart`, why it would not start one.
 api.get('/api/workspaces/:id/preview', async ({ params }) =>
   json(await features.workspacePreview(id(params))),
 )
+// The board builds and runs the workspace's worktree as a preview (in the background; poll the GET).
+api.post('/api/workspaces/:id/preview/start', ({ params, actor }) =>
+  json(startPreview(id(params), actor), 202),
+)
+api.post('/api/workspaces/:id/preview/stop', async ({ params, actor }) => {
+  if (!isActive(managedPreview(id(params))))
+    throw new HttpError(409, 'the board runs no preview of this workspace')
+  return json(await stopPreview(id(params), `stopped by ${actor}`, actor))
+})
+api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
+  json(await restartPreview(id(params), actor), 202),
+)
+// ?name=build (install and build) or server.
+api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
+  const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))
+  return new Response(previewLog(id(params), name), {
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
 api.delete('/api/workspaces/:id', ({ params, actor }) => {
   features.deleteWorkspace(id(params), actor)
   return json({ ok: true })

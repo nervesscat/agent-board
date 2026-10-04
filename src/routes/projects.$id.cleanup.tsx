@@ -74,10 +74,10 @@ function Cleanup() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Cleanup</h1>
           <p className="text-sm text-muted-foreground">
-            Done and cancelled tickets that still have worktrees, branches or registered workspaces, each
-            branch checked against where its work should have landed: a lane's parent branch, then the
-            parent's base. Read-only; agents delete with <span className="font-mono">/board cleanup</span>{' '}
-            after you approve.
+            Done and cancelled tickets that still have worktrees, branches, registered workspaces or a running
+            preview, each branch checked against where its work should have landed: a lane's parent branch,
+            then the parent's base. Read-only; agents delete with{' '}
+            <span className="font-mono">/board cleanup</span> after you approve.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -129,6 +129,12 @@ function Cleanup() {
                               {t.workspaces.length > 0 &&
                                 ` · ${t.workspaces.length} workspace${t.workspaces.length > 1 ? 's' : ''} registered`}
                             </div>
+                            {t.previews.map((p) => (
+                              <div key={p.workspaceId} className="text-xs text-amber-700 dark:text-amber-400">
+                                preview {p.status === 'running' ? `running on :${p.port}` : p.status}: stop it
+                                on the ticket
+                              </div>
+                            ))}
                           </TableCell>
                           <TableCell>
                             {b ? (

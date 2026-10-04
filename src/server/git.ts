@@ -120,6 +120,16 @@ export async function listMyPrs(repoPath: string): Promise<MyGhPr[]> {
   return [...byNumber.values()]
 }
 
+/** Whether a PR was merged: one that left the queue may also have been closed or unassigned. */
+export async function prMerged(repoPath: string, number: number): Promise<boolean> {
+  try {
+    const r = await gh<{ state: string }>(repoPath, ['pr', 'view', String(number), '--json', 'state'])
+    return r.state === 'MERGED'
+  } catch {
+    return false
+  }
+}
+
 export interface BranchInfo {
   exists: boolean
   sha: string | null

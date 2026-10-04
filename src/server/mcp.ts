@@ -9,6 +9,7 @@ import { cleanupReport } from './cleanup'
 import { dailyReport, today } from './daily'
 import * as features from './features'
 import { HttpError } from './http'
+import { isActive, managedPreview, restartPreview, startPreview, stopPreview } from './managedPreview'
 import * as prs from './prs'
 import * as projects from './projects'
 import * as reviews from './reviews'
@@ -42,7 +43,7 @@ The rhythm:
 2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. Tickets are shared: you may take over one another agent holds (the board logs it), so prefer unassigned ones and take over only what is clearly stalled or handed to you. A ticket with reserved: true belongs to one of the project's agents (see below).
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each; update_task or remove_task when the plan changes.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox): register every worktree you open, since that list is what gets cleaned up later; remove_workspace when it is gone.
-5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket has one feed of posts: post_update adds one marked as progress (lane summaries and the Daily view pick those out); questions and answers are posts too (comment on the ticket, or post_update with progress: false). Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. When the change can be tried (a page, an API), start a preview the human can open before anything is merged: your branch, from your worktree, on a free port, with a copy of the data rather than the real one (the project's instructions say how). Post its link (http://localhost:<port>) with what to try and register it on that worktree's workspace (set_preview, or previewUrl on add_workspace): the ticket page then shows it with an Open button and whether it is running. Say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped, clearing it with set_preview "".
+5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket has one feed of posts: post_update adds one marked as progress (lane summaries and the Daily view pick those out); questions and answers are posts too (comment on the ticket, or post_update with progress: false). Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. When the change can be tried (a page, an API), have a preview the human can open before anything is merged. For a branch of the board itself, the board runs it: register your worktree (add_workspace with its path and branch; it must sit next to the repo's main checkout), then start_preview with the workspace's id. The board installs if the lockfile changed, builds, copies the live data and starts the build on a free port without the passkey gate; get_ticket shows its state on the workspace (managedPreview: building, starting, running, failed with the last log lines, or stopped), and once it runs the workspace's previewUrl is set. Do not run pnpm dev in your session for it: that dies with your session. start_preview with restart: true rebuilds it after you push more work; stop_preview stops it, and the board stops it by itself when the PR is merged, the ticket is done, cancelled or archived, or the workspace is removed. For anything else, start your branch from your worktree on a free port with a copy of the data rather than the real one (the project's instructions say how) and register its link on the workspace (set_preview, or previewUrl on add_workspace). Either way post the link with what to try, say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped (clear a link you set with set_preview "").
 6. Ask and answer with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When it is a choice between clear options (an approach, a trade-off, a scope call), ask_decision instead: the human answers with one click, and the ticket blocks and unblocks by itself. When you resume, and between steps, list_my_threads shows every ticket feed or reply thread where someone spoke after you; get_ticket shows each post's reply count and last author. Files on posts and replies come with a local path you can open.
 6. Ask and answer in threads with comment. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. When you resume, and between steps, list_my_threads shows every thread where someone spoke after you; get_ticket shows each thread's comment count and last author. Files in threads and updates come with a local path you can open.
 7. Hand off: open the PR assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), update_ticket with its prNumber (links the ticket and the PR queue both ways), a final post_update with the PR link, then update_ticket to review. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either. Archiving is the human's too: archivedAt set means the ticket (lanes included) is finished and off the board, and list_tickets leaves it out unless you pass archived.
@@ -181,7 +182,7 @@ function buildServer(actor: string) {
   )
   tool(
     'get_ticket',
-    "A ticket in full: instructions and the files attached to them (attachments, each with a local path), agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces, its parent chain, its lanes with their last progress post and verdict, the feed of posts (updates: newest first, each with progress true for a step of the work or false for discussion, editedAt, attachments with a local path, and thread: its reply count, last author and time), thread on the ticket (how many posts, who posted last), and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled). archivedAt/archivedBy is set when the human archived it (or the ticket it is a lane of): finished, off the board.",
+    "A ticket in full: instructions and the files attached to them (attachments, each with a local path), agent (the project agent it is reserved for, with its instructions; null when shared), tasks, workspaces (each with managedPreview: the preview the board builds and runs from it, null when it never ran one; status building | starting | running | failed | stopped, step, port, url, reason, tail: the last log lines when it failed, logs: their paths), its parent chain, its lanes with their last progress post and verdict, the feed of posts (updates: newest first, each with progress true for a step of the work or false for discussion, editedAt, attachments with a local path, and thread: its reply count, last author and time), thread on the ticket (how many posts, who posted last), and pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled). archivedAt/archivedBy is set when the human archived it (or the ticket it is a lane of): finished, off the board.",
     {
       ticketId: z.number().int(),
       laneUpdates: z.boolean().default(false).describe("include the lanes' posts in the feed"),
@@ -302,8 +303,28 @@ function buildServer(actor: string) {
     ({ workspaceId, previewUrl }) => features.setWorkspacePreview(workspaceId, previewUrl, actor),
   )
   tool(
+    'start_preview',
+    "Have the board build and run a branch of the board itself as a preview, from the workspace's worktree (its registered path: a git worktree next to the repo's main checkout, never the main checkout). In the background: pnpm install when the lockfile changed, pnpm build, a fresh copy of the live data, then the built server on a free port from 47101 without the passkey gate; once it answers the workspace's previewUrl is set. Returns at once with status building; get_ticket (the workspace's managedPreview) follows it to running, or failed with the last log lines. One per workspace, at most 8 at once. restart: true stops a running one first and builds again.",
+    {
+      workspaceId: z.number().int(),
+      restart: z.boolean().default(false).describe('stop the running preview first and build again'),
+    },
+    ({ workspaceId, restart }) =>
+      restart ? restartPreview(workspaceId, actor) : startPreview(workspaceId, actor),
+  )
+  tool(
+    'stop_preview',
+    "Stop the preview the board runs from a workspace (start_preview): its processes are killed, its port freed and the workspace's previewUrl cleared.",
+    { workspaceId: z.number().int() },
+    async ({ workspaceId }) => {
+      if (!isActive(managedPreview(workspaceId)))
+        throw new HttpError(409, 'the board runs no preview of this workspace')
+      return stopPreview(workspaceId, `stopped by ${actor}`, actor)
+    },
+  )
+  tool(
     'remove_workspace',
-    'Remove a workspace you closed (its preview goes with it).',
+    'Remove a workspace you closed (its preview goes with it; a preview the board runs from it is stopped).',
     { workspaceId: z.number().int() },
     ({ workspaceId }) => {
       features.deleteWorkspace(workspaceId, actor)
@@ -382,7 +403,7 @@ function buildServer(actor: string) {
   )
   tool(
     'cleanup_report',
-    "What finished work left behind: every ticket in a done or cancelled stage (or archived) that still has a registered workspace, a local or origin branch, or a worktree. Each branch comes with its local and origin sha, the worktrees holding it, reach against the ticket's base chain (merged, rebased, edited: safe to delete; unique: still has work, commits listed) and the command that restores it. untracked lists worktrees no ticket or workspace accounts for. Origin branches are as of the last fetch; the board never deletes anything.",
+    "What finished work left behind: every ticket in a done or cancelled stage (or archived) that still has a registered workspace, a local or origin branch, or a worktree. previews lists the previews the board still runs from its workspaces (stop_preview). Each branch comes with its local and origin sha, the worktrees holding it, reach against the ticket's base chain (merged, rebased, edited: safe to delete; unique: still has work, commits listed) and the command that restores it. untracked lists worktrees no ticket or workspace accounts for. Origin branches are as of the last fetch; the board never deletes anything.",
     { projectId: z.number().int() },
     ({ projectId }) => cleanupReport(projectId),
   )
