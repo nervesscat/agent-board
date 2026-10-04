@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { ChevronLeft, ChevronRight, GitBranch, Layers } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
 import { Tag, compareTags } from '#/components/Tag'
@@ -34,8 +34,11 @@ export function TicketBoard({
     setDragging(null)
     setOver(null)
   }
+  const frame = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const edges = useScrollEdges(scroller)
+  useFillHeight(frame)
+  useRememberedScroll(`features.board.${projectId}`, scroller, stages.length > 0)
   // One column (w-72) plus the gap (gap-3), landing on a column's left edge.
   const step = (dir: -1 | 1) => {
     const el = scroller.current
@@ -44,7 +47,7 @@ export function TicketBoard({
     el.scrollTo({ left: (Math.round(el.scrollLeft / col) + dir) * col, behavior: 'smooth' })
   }
   return (
-    <div>
+    <div ref={frame} className="flex min-h-80 flex-col">
       {(edges.left || edges.right) && (
         <div className="mb-2 flex justify-end gap-1">
           <Button
@@ -67,8 +70,8 @@ export function TicketBoard({
           </Button>
         </div>
       )}
-      {/* Fixed-width columns side by side, scrolling sideways; each column is as tall as its own cards. */}
-      <div ref={scroller} className="flex items-start gap-3 overflow-x-auto pb-2">
+      {/* Fixed-width columns side by side, scrolling sideways; each one as tall as the board, scrolling its own cards. */}
+      <div ref={scroller} className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
         {stages.map(({ key: status, name }) => {
           const column = items.filter((t) => t.status === status)
           return (
@@ -88,14 +91,14 @@ export function TicketBoard({
                 e.preventDefault()
                 drop(status)
               }}
-              className={`w-72 shrink-0 rounded-lg bg-muted/40 p-2 transition-colors ${
+              className={`flex w-72 shrink-0 flex-col rounded-lg bg-muted/40 p-2 transition-colors ${
                 over === status && draggedStatus !== status ? 'bg-primary/10 ring-2 ring-primary/40' : ''
               }`}
             >
               <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <span className="truncate">{name}</span> <span className="tabular-nums">{column.length}</span>
               </div>
-              <div className="min-h-12 space-y-2">
+              <div data-column={status} className="min-h-12 flex-1 space-y-2 overflow-y-auto">
                 {column.map((t) => (
                   <Link
                     key={t.id}
@@ -172,6 +175,109 @@ const INFO_ROW =
 
 const Updated = ({ at }: { at: string }) => <span className="ml-auto shrink-0">{ago(at)}</span>
 
+/**
+ * Stretches the element down to the bottom of the window, whatever sits above it on the page. It
+ * measures again when the window or the page around it changes size, e.g. a notice above it that
+ * loads a moment later.
+ */
+function useFillHeight(ref: RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const fit = () => {
+      const top = el.getBoundingClientRect().top + window.scrollY
+      // 24px: the page's bottom padding (main's py-6), so the board ends where the page does.
+      const height = `${Math.max(320, window.innerHeight - top - 24)}px`
+      if (el.style.height !== height) el.style.height = height
+    }
+    fit()
+    const around = new ResizeObserver(fit)
+    if (el.parentElement) around.observe(el.parentElement)
+    window.addEventListener('resize', fit)
+    return () => {
+      around.disconnect()
+      window.removeEventListener('resize', fit)
+    }
+  }, [ref])
+}
+
+type SavedScroll = { left?: number; top?: number; columns?: Record<string, number> }
+
+function readScroll(key: string): SavedScroll | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(key) ?? 'null') as SavedScroll | null
+  } catch {
+    return null
+  }
+}
+
+function writeScroll(key: string, value: SavedScroll) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // storage unavailable (private mode, blocked): the board just starts at the top
+  }
+}
+
+/**
+ * Where the board was scrolled, sideways and in each column, for this tab: restored when the page
+ * comes back, however it is reached (a link, the menu, Back). `ready` once the columns are drawn.
+ */
+function useRememberedScroll(key: string, scroller: RefObject<HTMLDivElement | null>, ready: boolean) {
+  const restored = useRef(false)
+  useLayoutEffect(() => {
+    const el = scroller.current
+    if (!el || !ready) return
+    const columns = () => [...el.querySelectorAll<HTMLElement>('[data-column]')]
+    if (!restored.current) {
+      restored.current = true
+      const saved = readScroll(key)
+      if (saved) {
+        el.scrollLeft = saved.left ?? 0
+        for (const c of columns()) c.scrollTop = saved.columns?.[c.dataset.column!] ?? 0
+      }
+    }
+    let pending = 0
+    const save = () => {
+      cancelAnimationFrame(pending)
+      pending = requestAnimationFrame(() =>
+        writeScroll(key, {
+          left: el.scrollLeft,
+          columns: Object.fromEntries(columns().map((c) => [c.dataset.column!, c.scrollTop])),
+        }),
+      )
+    }
+    // Scroll events do not bubble; listening while they travel down catches the columns' too.
+    el.addEventListener('scroll', save, { capture: true, passive: true })
+    return () => {
+      cancelAnimationFrame(pending)
+      el.removeEventListener('scroll', save, { capture: true })
+    }
+  }, [key, scroller, ready])
+}
+
+/** The page's own scroll position, for the list view: restored when the page comes back. */
+function useRememberedPageScroll(key: string) {
+  useEffect(() => {
+    // After the router's own scroll handling for the navigation, which would put it back at the top.
+    const restore = requestAnimationFrame(() => {
+      const top = readScroll(key)?.top
+      if (top) window.scrollTo(0, top)
+    })
+    let pending = 0
+    const save = () => {
+      cancelAnimationFrame(pending)
+      pending = requestAnimationFrame(() => writeScroll(key, { top: window.scrollY }))
+    }
+    window.addEventListener('scroll', save, { passive: true })
+    return () => {
+      cancelAnimationFrame(restore)
+      cancelAnimationFrame(pending)
+      window.removeEventListener('scroll', save)
+    }
+  }, [key])
+}
+
 /** Whether a sideways scroller has more to show on its left and on its right. */
 function useScrollEdges(ref: React.RefObject<HTMLDivElement | null>) {
   const [edges, setEdges] = useState({ left: false, right: false })
@@ -223,6 +329,7 @@ function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup']; cla
 
 /** The same tickets as rows, in column order (newest first within a status), like the lanes list. */
 export function TicketList({ projectId, items }: { projectId: string; items: TicketRow[] }) {
+  useRememberedPageScroll(`features.list.${projectId}`)
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
   const rank = (key: string) => {
