@@ -43,6 +43,56 @@ test('no sideways scroll at 390px on Home, Repositories, the PR queue, the board
   expect(await scrollsSideways(page)).toBe(false)
 })
 
+test('no sideways scroll at 390px on the Overview, Daily (with a report), Cleanup and Agents pages', async ({
+  page,
+  api,
+  human,
+  agent,
+  project,
+}) => {
+  const t = await api.ticket({
+    title: 'A ticket with a long title that has to wrap on a phone instead of widening the page',
+    status: 'in_progress',
+  })
+  // The day's activity quotes it: a long URL must wrap there too.
+  await ok(
+    agent.post(`/api/tickets/${t.id}/decisions`, {
+      data: {
+        body: 'Which one? https://example.com/a/very/long/path/that/goes/on/and/on/without/a/break',
+        options: [{ label: 'A' }, { label: 'B' }],
+      },
+    }),
+  )
+  await ok(
+    human.patch(`/api/projects/${project.id}/report-settings`, {
+      data: { cadence: 'daily', prompt: 'What shipped today.' },
+    }),
+  )
+
+  await page.goto(`/projects/${project.id}`)
+  await expect(page.getByRole('link', { name: /^Decide: Which one\?/ })).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+
+  for (const daily of [`/projects/${project.id}/daily`, '/daily']) {
+    await page.goto(daily)
+    await expect(page.getByText(/asked for a decision on/).first()).toBeVisible()
+    expect(await scrollsSideways(page), daily).toBe(false)
+  }
+  await page.goto(`/projects/${project.id}/daily`)
+  await expect(page.getByRole('list', { name: 'Report periods' })).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+
+  await page.goto(`/projects/${project.id}/cleanup`)
+  await expect(page.getByRole('heading', { name: 'Cleanup' })).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+
+  for (const agents of ['/agents', `/projects/${project.id}/agents`]) {
+    await page.goto(agents)
+    await expect(page.getByText(/^\$t = Join-Path|^mkdir -p/).first()).toBeVisible()
+    expect(await scrollsSideways(page), agents).toBe(false)
+  }
+})
+
 test('the top bar folds its pages into a menu that opens', async ({ page }) => {
   await page.goto(`/projects/${seededProject().id}/prs`)
   await expect(page.getByRole('heading', { name: 'PR queue' })).toBeVisible()

@@ -264,13 +264,16 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   their own SQLite in a temp folder; the S3 ones run only with `S3_TEST_ENDPOINT` set (CLAUDE.md).
 - **End to end** (`pnpm test:e2e`): Playwright, `e2e/`. It builds the board into `.output-e2e`
   (never `.output`, so the live board's build is left alone) and starts it in test mode (above) on
-  a free loopback port above 47140, with its data and a scratch git repo in a temp folder. Global
-  setup seeds a project through the REST API; each test makes a project of its own. The browser is
-  the human (no `X-Test-Actor`); tests call the API as `human:enrique` or `agent:claude` to set
-  things up and to check what agents may do. Failures keep a screenshot and a trace under
-  `test-results/`, and `playwright-report/` has the HTML report (`pnpm exec playwright show-report`).
-  First run: `pnpm exec playwright install chromium`. `E2E_SKIP_BUILD=1` reuses the last build;
-  `E2E_PORT` picks the port.
+  a free loopback port above 47140, with its data and a scratch git repo (a bare repo beside it is
+  its origin) in a temp folder. Global setup seeds a project through the REST API; each test makes a
+  project of its own. The browser is the human (no `X-Test-Actor`); tests call the API as
+  `human:enrique` or `agent:claude` to set things up and to check what agents may do, and make the
+  branches they need in the scratch repo. What no API can do, putting a moment in the past (work
+  started yesterday, an upload a day old), they write to the run's throwaway database
+  (`e2e/db.ts`). A full page load waits for hydration before the test goes on. Failures keep a
+  screenshot and a trace under `test-results/`, and `playwright-report/` has the HTML report
+  (`pnpm exec playwright show-report`). First run: `pnpm exec playwright install chromium`.
+  `E2E_SKIP_BUILD=1` reuses the last build; `E2E_PORT` picks the port.
 - **Migrations** (`pnpm check:migrations`): every `drizzle/NNNN_*.sql` has a number of its own and
   a journal entry, every entry its file, `idx` matches, and `when` grows down the journal. Drizzle
   applies only migrations dated after the last one applied, so one merged with an older `when`

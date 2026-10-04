@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -18,6 +18,8 @@ export function e2eEnv() {
     root,
     dataDir: path.join(root, 'data'),
     repoPath: path.join(root, 'repo'),
+    /** The repo's origin: a bare repo, so branches can be pushed or not. */
+    originPath: path.join(root, 'origin.git'),
     seedFile: path.join(root, 'seed.json'),
   }
 }
@@ -41,4 +43,27 @@ function freePort(): string {
   const port = out.stdout.trim()
   if (out.status !== 0 || !port) throw new Error('no free port between 47141 and 47199 for the e2e board')
   return port
+}
+
+/** Runs git in the run's repo (as a fixed author), and answers what it printed. */
+export function git(...args: string[]): string {
+  return gitWith('', args)
+}
+
+function gitWith(input: string, args: string[]): string {
+  return execFileSync('git', ['-c', 'user.name=e2e', '-c', 'user.email=e2e@example.com', ...args], {
+    cwd: e2eEnv().repoPath,
+    encoding: 'utf8',
+    input,
+  })
+}
+
+/**
+ * A commit on top of `parent` whose tree is one file, made without touching the repo's working tree
+ * (tests run side by side in it); answers its sha.
+ */
+export function commitFile(parent: string, file: string, content: string, message: string): string {
+  const blob = gitWith(content, ['hash-object', '-w', '--stdin']).trim()
+  const tree = gitWith(`100644 blob ${blob}\t${file}\n`, ['mktree']).trim()
+  return git('commit-tree', tree, '-p', parent, '-m', message).trim()
 }
