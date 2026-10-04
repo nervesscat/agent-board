@@ -24,8 +24,7 @@ docker compose -f docker-compose.gate.yml logs gate
 
 # 2. the board
 cp .env.example .env
-pnpm install
-pnpm dev               # http://localhost:47100 — redirects to the gate login until you sign in
+pnpm redeploy          # builds and starts the board on http://localhost:47100, the gate login first
 ```
 
 Add a repository (path of a local checkout) and the project it belongs to, pick the project in the
@@ -116,7 +115,7 @@ the gate device or token name.
 ## Development
 
 ```
-pnpm dev             # vite dev server on 47100 with hot reload
+pnpm dev             # hot-reload copy on 47101 with its own data (data/dev, copied from data/ the first time; --fresh copies again)
 pnpm typecheck       # tsc
 pnpm lint            # oxlint
 pnpm format          # prettier

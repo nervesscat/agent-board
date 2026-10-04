@@ -14,17 +14,12 @@ reload: code reaches it only through a build.
 - **Never `pnpm build` while the board runs on Windows.** The running server holds the SQLite driver
   in `.output` open, so the build fails halfway and leaves `.output` wiped under the live board. Use
   `pnpm redeploy`, or build in a separate worktree to check that it builds.
-- **Hot reload while working on the board itself:** run a second copy on another port with its own
-  data, so the live board and its database stay untouched. `PORT` must be set: `.env`'s `PORT`
-  overrides `--port`.
-
-  ```powershell
-  $env:PORT='47101'; $env:BOARD_URL='http://localhost:47101'; $env:DATA_DIR='./data/dev'; pnpm exec vite dev --port 47101 --strictPort
-  ```
-
-  Copy `data/board.db` (with `better-sqlite3`'s `backup()`, not a file copy, since it is in WAL mode)
-  and `data/uploads` into `data/dev` first for real data. In dev, images under `/api/uploads/*` do
-  not load (Vite answers requests with `Sec-Fetch-Dest: image` itself); check those on a built server.
+- **Hot reload while working on the board itself:** `pnpm dev` runs a second copy on
+  http://localhost:47101 with its own data in `data/dev`, so the live board and its database stay
+  untouched. The first run copies the live database and uploads there; `pnpm dev --fresh` copies
+  them again; `DEV_PORT` picks another port. Do not run `vite dev` on 47100 by hand: the built board
+  holds `127.0.0.1:47100` and Vite would quietly take `[::1]:47100`, so `localhost` would reach one
+  or the other depending on the client.
 
 ## Checks
 
