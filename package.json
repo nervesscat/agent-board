@@ -10,6 +10,7 @@
     "dev": "vite dev --port 47100",
     "build": "vite build",
     "start": "node --env-file-if-exists=.env .output/server/index.mjs",
+    "redeploy": "node scripts/redeploy.mjs",
     "generate-routes": "tsr generate",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src",

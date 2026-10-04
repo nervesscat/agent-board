@@ -55,9 +55,15 @@ gate cookie work unchanged. After a change here: `git -C ~/agent-board pull && p
 ## Running the built board
 
 ```
-pnpm build && pnpm start      # Windows or Linux; logs to the terminal
+pnpm redeploy                 # install, stop the board, build, start it in the background, wait until it answers
+pnpm build && pnpm start      # Windows or Linux, in the foreground; logs to the terminal
 scripts/start.sh              # Linux/WSL: build if stale, (re)start in the background, logs in data/logs
 ```
+
+The built board does not reload on its own: after `git pull`, `pnpm redeploy` puts the new code live
+(migrations apply as it starts). On Windows the board is down while it builds, since the build
+cannot replace `.output` under a running server; if the build fails, the previous one is started
+again. Logs: `data/logs/build.log`, `board.out.log`, `board.err.log`.
 
 The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
 starting after a reboot.
@@ -115,7 +121,7 @@ pnpm typecheck       # tsc
 pnpm lint            # oxlint
 pnpm format          # prettier
 pnpm test            # vitest (path mapping, actors, PR status, …)
-pnpm build && pnpm start
+pnpm redeploy        # put this checkout live on the built board
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
