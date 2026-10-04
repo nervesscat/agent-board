@@ -179,6 +179,12 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     ? { count: own.length, lastAuthor: own[0]!.author, lastAt: own[0]!.createdAt }
     : NO_THREAD
   const updateThreads = threadStats('update', updateIds)
+  const instructionFiles = db
+    .select()
+    .from(schema.attachments)
+    .where(eq(schema.attachments.ticketId, id))
+    .orderBy(asc(schema.attachments.createdAt), asc(schema.attachments.id))
+    .all()
   const agent = reservedFor(ticket)
   return {
     ...ticket,
@@ -187,6 +193,8 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     agent: agent
       ? { id: agent.id, name: agent.name, instructions: agent.instructions, avatarUrl: agent.avatarUrl }
       : null,
+    // Files that go with the instructions, each with a local path.
+    attachments: instructionFiles.map((f) => attachmentView(f)),
     // The ticket's own posts (count, who posted last); each post carries the thread of its replies below.
     thread: ticketThread,
     pr: prForTicket(ticket),
@@ -968,6 +976,37 @@ export function addComment(
     refId: input.parentId,
   })
   return row
+}
+
+/** Files go with the ticket's instructions, alongside what is written there. */
+export function attachToTicket(ticketId: number, attachmentIds: number[], actor: string) {
+  const ticket = getTicket(ticketId)
+  attachTo(attachmentIds, { ticketId })
+  touch(ticketId)
+  logActivity({
+    projectId: ticket.projectId,
+    actor,
+    kind: 'ticket',
+    text: `attached ${attachmentIds.length} file${attachmentIds.length === 1 ? '' : 's'} to #${ticketId} ${ticket.title}`,
+    refType: 'ticket',
+    refId: ticketId,
+  })
+  return getTicketFull(ticketId).attachments
+}
+
+export function removeTicketFile(ticketId: number, attachmentId: number, actor: string) {
+  const ticket = getTicket(ticketId)
+  const a = db.select().from(schema.attachments).where(eq(schema.attachments.id, attachmentId)).get()
+  if (!a || a.ticketId !== ticketId) throw notFound('file on this ticket')
+  db.delete(schema.attachments).where(eq(schema.attachments.id, attachmentId)).run()
+  logActivity({
+    projectId: ticket.projectId,
+    actor,
+    kind: 'ticket',
+    text: `removed ${a.name} from #${ticketId} ${ticket.title}`,
+    refType: 'ticket',
+    refId: ticketId,
+  })
 }
 
 export function getPost(id: number) {

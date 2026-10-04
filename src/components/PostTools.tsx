@@ -12,7 +12,7 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
-import { Textarea } from '#/components/ui/textarea'
+import { RichEditor } from '#/components/RichEditor'
 import { stamp } from '#/lib/format'
 
 /** The text of a post or reply, being edited in place: Ctrl/⌘+Enter saves, Esc cancels. */
@@ -31,16 +31,13 @@ export function EditBox({
   const save = () => body.trim() && !pending && onSave(body)
   return (
     <div className="mt-2 space-y-2">
-      <Textarea
+      <RichEditor
         value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={Math.min(14, Math.max(3, body.split('\n').length + 1))}
+        onChange={setBody}
+        onSubmit={save}
+        onCancel={onCancel}
         autoFocus
-        aria-label="Edit text"
-        onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save()
-          if (e.key === 'Escape') onCancel()
-        }}
+        label="Edit text"
       />
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>

@@ -347,6 +347,28 @@ describe('the agent loop', () => {
     expect(features.listOpenThreads(pid, 'claude').filter((th) => th.ticketId === t.id)).toEqual([])
   })
 
+  it("keeps files with a ticket's instructions, with local paths, until removed or the ticket goes", async () => {
+    const uploads = await import('./uploads')
+    const { db, schema } = await import('#/db')
+    const t = features.createTicket(pid, { title: 'with files' }, 'enrique')
+    const a = uploads.saveBase64('spec.md', Buffer.from('# spec').toString('base64'), 'enrique')
+    const b = uploads.saveBase64('mock.png', Buffer.from([0x89, 0x50]).toString('base64'), 'enrique')
+    const files = features.attachToTicket(t.id, [a.id, b.id], 'enrique')
+    expect(files.map((x) => [x.name, Boolean(x.path)])).toEqual([
+      ['spec.md', true],
+      ['mock.png', true],
+    ])
+    // A file already on something else is refused.
+    expect(() => features.attachToTicket(t.id, [a.id], 'enrique')).toThrow(/already attached/)
+    features.removeTicketFile(t.id, a.id, 'enrique')
+    expect(features.getTicketFull(t.id).attachments.map((x) => x.name)).toEqual(['mock.png'])
+    const other = features.createTicket(pid, { title: 'other' }, 'enrique')
+    expect(() => features.removeTicketFile(other.id, b.id, 'enrique')).toThrow(/not found/)
+    // Deleting the ticket takes its files' rows with it.
+    features.deleteTicket(t.id, 'enrique')
+    expect(db.select().from(schema.attachments).where(eq(schema.attachments.id, b.id)).get()).toBeUndefined()
+  })
+
   it('links a ticket to its PR both ways, by number or by branch', async () => {
     const { db, schema } = await import('#/db')
     const prs = await import('./prs')
