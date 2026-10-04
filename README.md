@@ -3,7 +3,7 @@
 A local job board shared by one developer and their AI agents (claude, codex, opencode, …).
 Per project (one or more repos): the PR queue assigned to you, the features in flight (tickets →
 lanes for parallel work → tasks → branches and workspaces → updates with screenshots and recordings →
-threads), unattended PR reviews on a schedule, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
+threads), the PR reviews your agents record, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
@@ -41,7 +41,7 @@ Keep this checkout as the source of truth and run a clone inside the distro:
 ```bash
 # inside WSL, once
 git clone /mnt/f/Programming/WebDev/agent-board ~/agent-board && cd ~/agent-board
-cp .env.example .env   # set CLAUDE_BIN=$HOME/.local/bin/claude and FEATURE_REVIEW_DIR=$HOME/.claude/feature-review
+cp .env.example .env   # set CLAUDE_BIN=$HOME/.local/bin/claude
 corepack enable pnpm   # or: npm i -g pnpm
 pnpm install && pnpm build
 curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh auth login` likewise
@@ -49,40 +49,25 @@ curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh au
 
 Repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
 the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and the
-gate cookie work unchanged. After a change here: `git -C ~/agent-board pull && pnpm install && pnpm build`, or
-re-run the task installer below, which does that.
+gate cookie work unchanged. After a change here: `git -C ~/agent-board pull && pnpm install`, then
+`scripts/start.sh --build` inside WSL rebuilds and restarts it.
 
-## Run whether you are logged on or not
+## Running the built board
 
-The review schedules fire from inside the board process, so the board has to be up at 9am. On
-Windows:
-
-```powershell
-scripts\install-task.ps1        # re-launches as Administrator, asks your Windows password once, builds + registers "AgentBoard"
-scripts\install-task.ps1 -Wsl kali-linux -WslPath /home/you/agent-board   # same, but the board runs inside WSL
-Get-ScheduledTask AgentBoard    # LogonType Password = runs with nobody logged on
-scripts\uninstall-task.ps1
+```
+pnpm build && pnpm start      # Windows or Linux; logs to the terminal
+scripts/start.sh              # Linux/WSL: build if stale, (re)start in the background, logs in data/logs
 ```
 
-The task starts at boot, restarts on failure, and logs to `data\logs\board.*.log`. After a
-`git pull` or dependency change, re-run `install-task.ps1` (it rebuilds). Use `-Interactive` if
-your account has no password (then it only runs while you are logged on). A stored-password task
-logs on as a batch job, a right Windows gives only to administrators; the installer grants it to
-your account. If the task still shows `LastTaskResult 267011` ("has not yet run"), enable the
-Task Scheduler history and start it once to see the logon error.
-
-The gate only answers logins and agent tokens; scheduled reviews do not need it. It comes up with
-Docker Desktop at sign-in (`restart: unless-stopped`), so before anyone signs in the board runs
-its schedules but answers requests with 401.
+The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
+starting after a reboot.
 
 ## Reviews
 
-The Reviews module runs `claude -p "/review-queue <repo> <args>"` in each repo of the project,
-one after the other (`--permission-mode bypassPermissions`, since nobody is there to answer
-prompts), streams the log, and after each repo imports every PR the queue reviewed from
-`~/.claude/feature-review/ledger.jsonl` plus that review's `summary.md` (screenshots copied into
-uploads). Findings appear on the PR row and in the Reviews module, each with its own thread. `mine` (the default argument) limits the
-queue to PRs where your review is requested.
+An agent that reviews a PR records it with `post_review_result` (REST:
+`POST /api/projects/:id/reviews/results`): verdict, markdown summary with findings, checks.
+Findings appear on the PR row and in the Reviews module, each with its own thread. Nothing is
+posted to GitHub.
 
 ## REST API
 
@@ -114,10 +99,9 @@ the gate device or token name.
 | GET       | `/api/uploads/:id` · `/api/uploads/:id/info`                                      | the file · its metadata with the local `path` (and `windowsPath` under WSL)                                        |
 | GET/POST  | `/api/comments?parentType=ticket\|update\|pr\|review&parentId=`                   | threads (`replyTo` nests)                                                                                          |
 | GET       | `/api/projects/:id/threads`                                                       | threads where someone spoke after the caller                                                                       |
-| GET       | `/api/projects/:id/reviews`                                                       | runs, results, schedules                                                                                           |
+| GET       | `/api/projects/:id/reviews`                                                       | results                                                                                                            |
 | GET       | `/api/projects/:id/reviews/results?pr=&sha=&repoId=` · `/api/reviews/results/:id` | results without summaries · one in full                                                                            |
-| POST      | `/api/projects/:id/reviews/run` `{args}` · `/cancel` · `/results`                 | run now / cancel / post a result                                                                                   |
-| POST      | `/api/projects/:id/schedules` · PATCH/DELETE `/api/schedules/:id`                 | `{time:"09:00", days:<bitmask, bit0=Sun>, args, enabled}`                                                          |
+| POST      | `/api/projects/:id/reviews/results`                                               | post a result                                                                                                      |
 | GET       | `/api/daily?date=YYYY-MM-DD&projectId=`                                           | activity by the hour + summaries                                                                                   |
 | POST      | `/api/daily/summaries` `{date, projectId, body}` · `/generate`                    | post / ask claude for the day's summary                                                                            |
 | \*        | `/api/mcp`                                                                        | MCP streamable HTTP; tools mirror the rows above                                                                   |
@@ -129,7 +113,7 @@ pnpm dev             # vite dev server on 47100 with hot reload
 pnpm typecheck       # tsc
 pnpm lint            # oxlint
 pnpm format          # prettier
-pnpm test            # vitest (ingest parser, schedule due-ness, PR status)
+pnpm test            # vitest (path mapping, actors, PR status, …)
 pnpm build && pnpm start
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```

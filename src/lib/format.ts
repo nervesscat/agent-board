@@ -51,5 +51,3 @@ export const STATUS_LABEL: Record<string, string> = {
   reviewed: 'Reviewed',
   on_hold: 'On hold',
 }
-
-export const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']

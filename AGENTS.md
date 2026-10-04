@@ -94,9 +94,9 @@ on_hold`, the latest review verdict and the tickets it came from. `set_pr_hold` 
   note (board-only). `list_review_results` (by `prNumber`, `sha`) tells whether a head SHA was
   already reviewed; `get_review_result` has the findings.
 - `list_actors` gives the names to use for `assignee`.
-- Scheduled reviews run `/review-queue` unattended and their findings land in the Reviews module
-  by themselves. If you review a PR yourself, record it with `post_review_result` (verdict,
-  markdown summary with findings, how to test, checks). Never post the review to GitHub.
+- If you review a PR, record it with `post_review_result` (verdict, markdown summary with
+  findings, how to test, checks): that is how findings reach the Reviews module. Never post the
+  review to GitHub.
 
 ## Writing style on the board
 

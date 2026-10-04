@@ -20,7 +20,6 @@ const KIND_LABEL: Record<string, string> = {
   pr: 'PRs',
   review: 'reviews',
   workspace: 'workspaces',
-  schedule: 'schedules',
   project: 'projects',
   summary: 'summaries',
 }
