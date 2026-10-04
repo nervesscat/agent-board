@@ -68,7 +68,9 @@ http_headers = { Authorization = "Bearer gate_…" }
    `in_progress` once answered). `list_my_threads` lists every thread where someone spoke after
    you; `get_ticket` shows each thread's comment count and last author. Attachments come with a
    local `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
-7. **Hand off**: `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
+7. **Hand off**: open the PR assigned to the human (`gh pr create --assignee <their login>`, or
+   `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
+   requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
    the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
    final `post_update`. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once

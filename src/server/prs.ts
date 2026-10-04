@@ -74,7 +74,7 @@ async function refreshRepoPrs(repo: schema.Repo) {
         .values({ ...values, projectId, repoId: repo.id, number: pr.number })
         .run()
   }
-  // A PR that left both searches was merged, closed, or unassigned: keep the row, mark it closed.
+  // A PR that left every search was merged, closed, or unassigned: keep the row, mark it closed.
   const open = db
     .select()
     .from(schema.prs)
