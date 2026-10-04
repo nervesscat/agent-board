@@ -27,6 +27,7 @@ import { Markdown } from '#/components/Markdown'
 import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
+import { PrState } from '#/components/PrState'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
 import { CommentItem, Thread, useComments } from '#/components/Thread'
@@ -1148,6 +1149,7 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
             )}
           </div>
         )}
+        {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
         <div className="mt-2 flex items-center gap-2 text-xs">
           {t.assignee ? (
             <>

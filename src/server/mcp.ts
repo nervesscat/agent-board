@@ -101,7 +101,7 @@ function buildServer(actor: string) {
   // PR queue
   tool(
     'list_prs',
-    'Open PRs assigned to the human for review across all repos of the project, with status pending | reviewed | on_hold, the repo, and the latest review verdict.',
+    'Open PRs assigned to the human for review across all repos of the project, with status pending | reviewed | on_hold, the repo, and the latest review verdict. waitingOn is me (review requested from the human, or assigned to them and not reviewed by them at its head) or others. Where it stands on GitHub as of the last refresh: merge (clean | conflicts | behind | blocked | checking), ci (passing | failing | pending | none) with checks[] {name, state pass | fail | pending | skipped, url}, reviewDecision and isDraft.',
     {
       projectId: z.number().int(),
       refresh: z.boolean().default(false).describe('re-query GitHub before answering'),

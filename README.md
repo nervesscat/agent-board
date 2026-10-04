@@ -89,7 +89,7 @@ the gate device or token name.
 | GET/POST  | `/api/projects/:id/stages` · PATCH/DELETE `/api/projects/:id/stages/:stageId`     | board columns `{name, kind, color}`; DELETE takes `?moveTo=<key>` when it has tickets                                |
 | PUT       | `/api/projects/:id/stages/order` `{ids[]}`                                        | reorder the stages (every id, once); stage writes are the human's only                                               |
 | GET/POST  | `/api/repos` · PATCH/DELETE `/api/repos/:id` · GET `/api/repos/:id/branches`      | checkouts; POST takes `projectId` or `projectName`, PATCH `projectId` moves it                                       |
-| GET       | `/api/projects/:id/prs?refresh=1`                                                 | PR queue (`status`, `latestReview`, `tickets[]` it came from)                                                        |
+| GET       | `/api/projects/:id/prs?refresh=1`                                                 | PR queue (`status`, `waitingOn` me/others, `merge`, `ci` + `checks[]`, `latestReview`, `tickets[]` it came from)     |
 | PATCH     | `/api/prs/:id` `{hold, holdNote}`                                                 | park / release                                                                                                       |
 | GET/POST  | `/api/projects/:id/tickets` · GET/PATCH/DELETE `/api/tickets/:id`                 | tickets (`tasks[]` on create; `repoId` when the project has several repos)                                           |
 |           | `?parent=root\|<id>` on the list · `parentId` on create                           | lanes: a ticket's parallel sub-tickets, nested to any depth                                                          |

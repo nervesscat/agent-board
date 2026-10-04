@@ -112,9 +112,11 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 ## PR queue and reviews
 
 - `list_prs` shows the PRs waiting for the human's review with status `pending | reviewed |
-on_hold`, the latest review verdict and the tickets it came from. `set_pr_hold` parks one with a
-  note (board-only). `list_review_results` (by `prNumber`, `sha`) tells whether a head SHA was
-  already reviewed; `get_review_result` has the findings.
+on_hold`, `waitingOn` (`me` while the human still has to review it, else `others`), where it
+  stands on GitHub (`merge`, `ci` with its `checks`, `reviewDecision`), the latest review verdict
+  and the tickets it came from. `set_pr_hold` parks one with a note (board-only).
+  `list_review_results` (by `prNumber`, `sha`) tells whether a head SHA was already reviewed;
+  `get_review_result` has the findings.
 - `list_actors` gives the names to use for `assignee`.
 - If you review a PR, record it with `post_review_result` (verdict, markdown summary with
   findings, how to test, checks): that is how findings reach the Reviews module. Never post the

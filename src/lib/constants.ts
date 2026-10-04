@@ -42,3 +42,6 @@ export type AgentClient = (typeof AGENT_CLIENTS)[number]
 
 export const COMMENT_PARENTS = ['ticket', 'update', 'pr', 'review'] as const
 export type CommentParent = (typeof COMMENT_PARENTS)[number]
+
+/** One CI check on a PR's head commit, sorted into the buckets `gh pr checks` uses. */
+export type PrCheck = { name: string; state: 'pass' | 'fail' | 'pending' | 'skipped'; url: string | null }

@@ -5,6 +5,7 @@ import {
   COMMENT_PARENTS,
   STAGE_KINDS,
   type CommentParent,
+  type PrCheck,
   type StageColor,
   type StageKind,
 } from '#/lib/constants'
@@ -94,6 +95,15 @@ export const prs = sqliteTable(
     isDraft: integer('is_draft', { mode: 'boolean' }).notNull().default(false),
     reviewDecision: text('review_decision'),
     myReview: text('my_review').notNull().default('none'),
+    // `me` while the human's review is asked for: requested, or assigned and not reviewed at the head.
+    waitingOn: text('waiting_on').$type<'me' | 'others'>().notNull().default('me'),
+    // GitHub's own words: MERGEABLE / CONFLICTING / UNKNOWN, and CLEAN / BEHIND / BLOCKED / DIRTY / …
+    mergeable: text().notNull().default('UNKNOWN'),
+    mergeStateStatus: text('merge_state_status').notNull().default('UNKNOWN'),
+    checks: text({ mode: 'json' })
+      .$type<PrCheck[]>()
+      .notNull()
+      .default(sql`'[]'`),
     updatedAt: text('updated_at').notNull(),
     fetchedAt: text('fetched_at').notNull(),
     open: integer({ mode: 'boolean' }).notNull().default(true),
