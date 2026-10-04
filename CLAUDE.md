@@ -31,6 +31,13 @@ reload: code reaches it only through a build.
   It prints `Preview: http://localhost:<port>`; post that link on the ticket. Remove the worktree
   (`git worktree remove`) once the branch is merged or dropped.
 
+- **Without the passkey gate (outside production only):** `AUTH=off pnpm dev` runs the preview with
+  every request as the human; `BOARD_ENV=test` runs a board with no gate where `X-Test-Actor:
+human:<name>` or `agent:<name>` says who calls (CI, Playwright). The server refuses to start without
+  the gate in production, off loopback or on 47100, and shows an AUTH OFF banner and a top-bar badge
+  while it is off; `pnpm start` and `pnpm redeploy` always run production. README: "Test mode". This
+  is authentication: change `src/server/config.ts`, `auth.ts`, `startup.ts` and their tests together.
+
 ## Checks
 
 ```

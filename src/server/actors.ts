@@ -1,4 +1,4 @@
-import { asc } from 'drizzle-orm'
+import { asc, desc, eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 
@@ -33,4 +33,17 @@ export function listActors(): { name: string; kind: ActorKind }[] {
       .filter(([n]) => !names.has(n))
       .map(([name, kind]) => ({ name, kind })),
   ]
+}
+
+/** The human the board saw sign in most recently: who a request is in development with the gate off. */
+export function lastHuman(): string | null {
+  return (
+    db
+      .select({ name: schema.actors.name })
+      .from(schema.actors)
+      .where(eq(schema.actors.kind, 'human'))
+      .orderBy(desc(schema.actors.lastSeenAt))
+      .limit(1)
+      .get()?.name ?? null
+  )
 }

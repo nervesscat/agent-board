@@ -8,6 +8,7 @@ import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
+import { authMode } from './config'
 import { dailyReport, generateSummary, today } from './daily'
 import * as features from './features'
 import { listDirs } from './fs'
@@ -55,7 +56,10 @@ const TicketPatch = z.object({
 export const api = new ApiRouter()
 
 api.get('/api/health', () => json({ ok: true }))
-api.get('/api/me', ({ actor }) => json({ actor }))
+// `authOff` (test, or development with AUTH=off) puts a badge in the top bar: this is not the live board.
+api.get('/api/me', ({ request, actor }) =>
+  json({ actor, agent: isAgent(request), boardEnv: authMode().boardEnv, authOff: authMode().off }),
+)
 // Every name the board has seen sign in, with whether it is an agent or a human.
 api.get('/api/actors', () => json(listActors()))
 

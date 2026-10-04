@@ -67,6 +67,39 @@ again. Logs: `data/logs/build.log`, `board.out.log`, `board.err.log`.
 The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
 starting after a reboot.
 
+## Test mode
+
+`BOARD_ENV` says what a running board is, and so whether it asks the gate:
+
+| `BOARD_ENV`                | Who calls                                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `production` (unset too)   | The gate, always, as above. The live board (`pnpm start`, `pnpm redeploy`) always runs this way, whatever the shell says.                                                                   |
+| `development` (`pnpm dev`) | The gate, unless `AUTH=off`: then every request is the human, named `DEV_HUMAN` (by default the human the board last saw sign in, else `human`), with no login redirect.                    |
+| `test` (CI, Playwright)    | Nobody asks the gate. A request says who it is with `X-Test-Actor: human:<name>` or `agent:<name>` (REST and `/api/mcp` alike); without it, it is the human `TEST_HUMAN` (default `human`). |
+
+`agent:` callers are agents for every human-only check (403 on the project's agents, stages,
+settings, archive, decisions…), so both sides can be tested. To try a branch without the gate:
+
+```
+AUTH=off pnpm dev                       # a preview on the first free port from 47101, with a copy of the live data
+$env:AUTH='off'; pnpm dev               # the same from PowerShell
+BOARD_ENV=test HOST=127.0.0.1 PORT=47131 DATA_DIR=<a throwaway dir> node .output/server/index.mjs   # a build, for e2e
+```
+
+Guardrails, checked as the server starts (before it accepts a request, under `vite dev` too); any of
+them stops it with a clear error and a non-zero exit:
+
+- an unknown `BOARD_ENV`, or `AUTH` other than `on` / `off`, is refused; `AUTH=off` with
+  `BOARD_ENV=production` (or unset) is refused;
+- with the gate off, the board only listens on loopback (`HOST` 127.0.0.1, ::1 or localhost; the built
+  server's default, every interface, is refused) and never on 47100, the live board's port;
+- `X-Test-Actor` is only read in test; in production and development it changes nothing;
+- `pnpm start` and `pnpm redeploy` run the board as production even from a shell with another
+  `BOARD_ENV`;
+- with the gate off, the server prints `AUTH OFF: <mode>, signed in as <name>, do not expose this` on
+  stderr as it starts, and the top bar shows a red **test mode** / **auth off** badge (`/api/me` says
+  `authOff`), so a screenshot is never taken for the live board.
+
 ## Storing files in MinIO
 
 Attachments (screenshots, recordings, files on posts and instructions, agent pictures) live in
@@ -112,7 +145,7 @@ the gate device or token name.
 
 | Method       | Path                                                                                                          |                                                                                                                                                               |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET          | `/api/me`                                                                                                     | who you are                                                                                                                                                   |
+| GET          | `/api/me`                                                                                                     | who you are `{actor, agent, boardEnv, authOff}`; `authOff` outside production only (see Test mode)                                                            |
 | GET          | `/api/agent-setup` · `/api/agent-setup/skill?client=claude\|codex\|opencode`                                  | board and gate URLs for the Connect agents page · the board skill as a SKILL.md with today's projects and repos                                               |
 | GET          | `/api/agent-setup/review-skills` · `?list`                                                                    | the feature-review and review-queue skills with their agents, as a tar to extract into `~/.claude` · the paths it holds                                       |
 | GET/PATCH    | `/api/settings` `{defaultAgent}`                                                                              | board-wide preferences (PATCH is the human's only)                                                                                                            |
@@ -154,6 +187,7 @@ the gate device or token name.
 
 ```
 pnpm dev             # hot-reload copy on the first free port from 47101, with its own data (data/dev, a copy of the live data; --fresh copies again)
+AUTH=off pnpm dev    # the same without the passkey gate: you are the human (Test mode, above)
 pnpm typecheck       # tsc
 pnpm lint            # oxlint
 pnpm format          # prettier

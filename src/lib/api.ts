@@ -105,6 +105,14 @@ export function errorMessage(err: unknown, fallback = 'something went wrong'): s
 
 // --- payload shapes the server composes ---
 
+/** `/api/me`: who you are, and whether this board runs without the passkey gate (never the live one). */
+export interface Me {
+  actor: string
+  agent: boolean
+  boardEnv: 'production' | 'development' | 'test'
+  authOff: boolean
+}
+
 export type CommentRow = Comment & { attachments: (Attachment & { url: string })[] }
 export type UpdateRow = TicketFull['updates'][number]
 export type LaneRow = TicketFull['lanes'][number]
