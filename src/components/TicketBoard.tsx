@@ -111,7 +111,8 @@ export function TicketBoard({
                       setDragging(null)
                       setOver(null)
                     }}
-                    className={`flex h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
+                    // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
+                    className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
                       dragging === t.id ? 'opacity-40' : ''
                     }`}
                     title={t.title}
@@ -119,24 +120,38 @@ export function TicketBoard({
                     <div className="line-clamp-2 font-medium leading-snug">
                       <span className="text-muted-foreground">#{t.id}</span> {t.title}
                     </div>
-                    <div className="mt-1.5 flex min-w-0 items-center gap-x-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground">
-                      {repoLabel(project, t.repoId) && (
-                        <span className="shrink-0 rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>
-                      )}
-                      {t.assignee && <Actor name={t.assignee} className="shrink-0" />}
-                      {t.branch && (
-                        <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-                          <GitBranch className="size-3 shrink-0" />{' '}
-                          <span className="truncate">{t.branch}</span>
-                        </span>
-                      )}
-                      <span className="ml-auto shrink-0">{ago(t.updatedAt)}</span>
-                    </div>
+                    {/* The time sits at the end of the last of these rows, so it always shares a line. */}
+                    {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
+                      <div className={INFO_ROW}>
+                        {repoLabel(project, t.repoId) && (
+                          <span className="shrink-0 rounded bg-muted px-1">
+                            {repoLabel(project, t.repoId)}
+                          </span>
+                        )}
+                        {t.assignee && <Actor name={t.assignee} className="shrink-0" />}
+                        {t.branch && (
+                          <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                            <GitBranch className="size-3 shrink-0" />{' '}
+                            <span className="truncate">{t.branch}</span>
+                          </span>
+                        )}
+                        {!t.tags.length && <Updated at={t.updatedAt} />}
+                      </div>
+                    )}
                     {t.tags.length > 0 && (
-                      <div className="mt-1.5 flex min-w-0 gap-1 overflow-hidden">
-                        {[...t.tags].sort(compareTags).map((tag) => (
-                          <Tag key={tag} tag={tag} className="shrink-0" />
-                        ))}
+                      <div className={INFO_ROW}>
+                        {/* Tags clip on their own, so a long list never pushes the time out of view. */}
+                        <div className="flex min-w-0 gap-1 overflow-hidden">
+                          {[...t.tags].sort(compareTags).map((tag) => (
+                            <Tag key={tag} tag={tag} className="shrink-0" />
+                          ))}
+                        </div>
+                        <Updated at={t.updatedAt} />
+                      </div>
+                    )}
+                    {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
+                      <div className={INFO_ROW}>
+                        <Updated at={t.updatedAt} />
                       </div>
                     )}
                     {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
@@ -151,6 +166,11 @@ export function TicketBoard({
     </div>
   )
 }
+
+const INFO_ROW =
+  'mt-1.5 flex min-w-0 items-center gap-x-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground'
+
+const Updated = ({ at }: { at: string }) => <span className="ml-auto shrink-0">{ago(at)}</span>
 
 /** Whether a sideways scroller has more to show on its left and on its right. */
 function useScrollEdges(ref: React.RefObject<HTMLDivElement | null>) {
