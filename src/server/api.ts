@@ -16,6 +16,7 @@ import { HttpError, intParam, readJson } from './http'
 import { handleMcp } from './mcp'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
+import { projectPush, refreshProjectPush } from './push'
 import * as projects from './projects'
 import * as repos from './repos'
 import * as reviews from './reviews'
@@ -281,7 +282,7 @@ api.get('/api/tickets/:id', async ({ request, params, url }) =>
   json(
     await forAgent(
       request,
-      features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' }),
+      await features.getTicketWithPush(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' }),
     ),
   ),
 )
@@ -350,6 +351,9 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   return json(features.claimTicket(id(params), actor, body))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
+// Whether the branch of every ticket in work is on origin, one batch of git per repo; refresh fetches now.
+api.get('/api/projects/:id/push', async ({ params }) => json(await projectPush(id(params))))
+api.post('/api/projects/:id/push/refresh', async ({ params }) => json(await refreshProjectPush(id(params))))
 // Closed tickets that still have workspaces, branches or worktrees; `reach=0` skips the merge checks.
 api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
   json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),

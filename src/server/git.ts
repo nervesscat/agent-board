@@ -5,8 +5,9 @@ import { promisify } from 'node:util'
 import { HttpError } from './http'
 
 /**
- * The board never writes to git or GitHub. Every command here is a read: the allowlist below is
- * the whole vocabulary, and nothing else in the codebase spawns `git` or `gh`.
+ * The board never writes to git or GitHub. Every command here is a read, but for `fetchOrigin`, which
+ * only refreshes the checkout's copy of origin's branches: the allowlist below is the whole
+ * vocabulary, and nothing else in the codebase spawns `git` or `gh`.
  */
 
 const run = promisify(execFile)
@@ -187,7 +188,7 @@ export async function listBranches(repoPath: string): Promise<string[]> {
 export interface Refs {
   /** Local branch → sha. */
   local: Map<string, string>
-  /** Branch on origin → sha, as of the last fetch (the board never fetches). */
+  /** Branch on origin → sha, as of the last fetch. */
   remote: Map<string, string>
 }
 
@@ -205,6 +206,32 @@ export async function listRefs(repoPath: string): Promise<Refs> {
     else if (name !== 'refs/remotes/origin/HEAD') refs.remote.set(name!.slice(20), sha!)
   }
   return refs
+}
+
+/**
+ * Brings the remote-tracking refs (`origin/*`) up to date, dropping the ones gone from origin. It
+ * never touches a local branch, a worktree or origin itself, never prompts for credentials, and gives
+ * up after `timeoutMs`.
+ */
+export async function fetchOrigin(repoPath: string, timeoutMs: number): Promise<void> {
+  await run('git', ['fetch', '--prune', '--quiet', 'origin'], {
+    cwd: repoPath,
+    windowsHide: true,
+    timeout: timeoutMs,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+  })
+}
+
+/** How many commits `a` has that `b` lacks, and the other way round. */
+export async function aheadBehind(repoPath: string, a: string, b: string): Promise<[number, number]> {
+  const out = await git(repoPath, ['rev-list', '--left-right', '--count', `${a}...${b}`])
+  const [ahead = 0, behind = 0] = out.split(/\s+/).map(Number)
+  return [ahead, behind]
+}
+
+/** How many commits reachable from `ref` are on no branch of origin. */
+export async function notOnOrigin(repoPath: string, ref: string): Promise<number> {
+  return Number(await git(repoPath, ['rev-list', '--count', ref, '--not', '--remotes=origin']))
 }
 
 /**

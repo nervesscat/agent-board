@@ -9,6 +9,7 @@ import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { previewState, previewUrl } from './preview'
 import { prForTicket } from './prs'
+import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
 import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
 import { attachTo, attachmentView } from './uploads'
@@ -241,6 +242,21 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
 }
 
 export type TicketFull = ReturnType<typeof getTicketFull>
+
+/**
+ * `getTicketFull` with whether each branch is on origin: `push` on the ticket (its branch) and on each
+ * of its workspaces, from one batch of git in the ticket's checkout.
+ */
+export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
+  const t = getTicketFull(id, opts)
+  const repo = ticketRepo(t)
+  const push = repo ? await pushStates(repo.repoPath, [t.branch, ...t.workspaces.map((w) => w.branch)]) : null
+  return {
+    ...t,
+    push: push?.get(t.branch) ?? NO_PUSH,
+    workspaces: t.workspaces.map((w) => ({ ...w, push: push?.get(w.branch) ?? NO_PUSH })),
+  }
+}
 
 export function createTicket(
   projectId: number,
@@ -766,7 +782,8 @@ export function deleteWorkspace(id: number, actor: string) {
  * Live, read-only git state for the ticket's branch and each workspace: its own, then its lanes'
  * (all the way down, each tagged with its lane). A workspace is compared against the branch of the
  * ticket it belongs to, in that ticket's repo. Each branch carries `reach`: whether its work is in
- * the base chain (a lane's parent branch, then dev), so it can be deleted.
+ * the base chain (a lane's parent branch, then dev), so it can be deleted, and `push`: whether it is
+ * on origin.
  */
 export async function ticketGit(id: number) {
   const ticket = getTicket(id)
@@ -791,26 +808,39 @@ export async function ticketGit(id: number) {
   const repoGit = gitCache()
   const [branch, ...wsState] = await Promise.all([
     (async () => {
-      if (!repo) return { ...none, reach: null }
-      const [info, { refs }] = await Promise.all([
+      if (!repo) return { ...none, reach: null, push: NO_PUSH }
+      const [info, { refs }, push] = await Promise.all([
         branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
         repoGit(repo.repoPath),
+        pushStates(repo.repoPath, [ticket.branch]),
       ])
       const chain = baseChain(ticket, byId, repo)
-      return { ...info, reach: await reachOf(repo.repoPath, ticket.branch, chain, refs) }
+      return {
+        ...info,
+        reach: await reachOf(repo.repoPath, ticket.branch, chain, refs),
+        push: push.get(ticket.branch) ?? NO_PUSH,
+      }
     })(),
     ...workspaces.map(async ({ w, owner, repo: r }) => {
-      if (!r) return { info: { ...none, reach: null }, worktree: null }
-      const [info, { refs, worktrees }] = await Promise.all([
+      if (!r) return { info: { ...none, reach: null, push: NO_PUSH }, worktree: null }
+      const [info, { refs, worktrees }, push] = await Promise.all([
         branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
         repoGit(r.repoPath),
+        pushStates(r.repoPath, [w.branch]),
       ])
       const chain = baseChain(owner, byId, r)
       const into = w.branch === owner.branch || !owner.branch ? chain : [owner.branch, ...chain]
       const worktree =
         worktrees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ??
         null
-      return { info: { ...info, reach: await reachOf(r.repoPath, w.branch, into, refs) }, worktree }
+      return {
+        info: {
+          ...info,
+          reach: await reachOf(r.repoPath, w.branch, into, refs),
+          push: push.get(w.branch) ?? NO_PUSH,
+        },
+        worktree,
+      }
     }),
   ])
   return {

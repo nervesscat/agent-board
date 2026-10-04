@@ -130,7 +130,8 @@ the gate device or token name.
 | GET          | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=&archived=`                           | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level; `archived=include` or `only`)              |
 | POST         | `/api/tickets/:id/archive` · `/restore` · `/api/projects/:id/tickets/archive` `{status}`                      | archive a done or cancelled top-level ticket, its lanes with it · put it back · archive a whole done or cancelled stage (the human's)                         |
 | POST         | `/api/tickets/:id/claim` `{branch?, as?}`                                                                     | assign to the caller (or the project agent it works as) and start it; 409 if reserved for another agent                                                       |
-| GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain)                                                        |
+| GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain) and `push`                                             |
+| GET/POST     | `/api/projects/:id/push` · `/api/projects/:id/push/refresh`                                                   | whether each ticket in work has its branch on origin (`push`: below), one batch of git per repo · fetch origin now, then the same                             |
 | GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches or worktrees; `reach=0` skips the merge checks                                                              |
 | POST         | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`                                          | todo list                                                                                                                                                     |
 | POST         | `/api/tickets/:id/workspaces` `{name, branch?, path?, agent?, previewUrl?}` · DELETE `/api/workspaces/:id`    | worktrees / sub-branches / subagents                                                                                                                          |
@@ -162,4 +163,16 @@ pnpm redeploy        # put this checkout live on the built board
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
-`src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read.
+`src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read, but
+for `git fetch --prune origin`, which only refreshes the checkout's copy of origin's branches.
+
+## Pushed or not
+
+A branch's `push` (on `GET /api/tickets/:id` for the ticket and its workspaces, on
+`/api/tickets/:id/git` for every branch, and per ticket on `/api/projects/:id/push`) is
+`{state, ahead, behind, checkedAt}`: `pushed` (green; origin has every commit, `behind` counts what it
+has on top), `ahead` (red; `ahead` commits only here), `local-only` (red; no such branch on origin),
+`remote-only` (only on origin, e.g. after cleanup) or `none` (no branch, or it exists nowhere). It is
+read from the checkout's `origin/*` refs, so the board fetches each repo in the background at most
+every 5 minutes (never prompting, never holding up a request); `checkedAt` is the last fetch, and
+the refresh action fetches at once. The board never pushes.
