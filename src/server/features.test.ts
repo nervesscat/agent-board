@@ -117,7 +117,7 @@ describe('lanes', () => {
     expect((await features.ticketGit(sub.id)).workspaces.map((w) => w.lane)).toEqual([null])
   })
 
-  it('carry a preview link agents set, change and clear', () => {
+  it('carry a preview link agents set, change and clear', async () => {
     const t = features.createTicket(projectId, { title: 'preview', repoId: otherRepo }, 'me')
     expect(() =>
       features.addWorkspace(t.id, { name: 'wt', previewUrl: 'javascript:alert(1)' }, 'codex'),
@@ -131,10 +131,16 @@ describe('lanes', () => {
       'http://example.com:3000',
     )
     // Only links on this machine are checked.
-    expect(() => features.workspacePreview(ws.id)).toThrow(/localhost/)
+    await expect(features.workspacePreview(ws.id)).rejects.toThrow(/localhost/)
     expect(() => features.setWorkspacePreview(ws.id, 'ftp://localhost', 'codex')).toThrow(/http/)
     expect(features.setWorkspacePreview(ws.id, null, 'codex').previewUrl).toBe('')
-    expect(() => features.workspacePreview(ws.id)).toThrow(/no preview/)
+    // Without a link nothing is checked; the board says whether it could run one (no path: no).
+    expect(await features.workspacePreview(ws.id)).toMatchObject({
+      running: false,
+      url: '',
+      managed: null,
+      cannotStart: 'the workspace has no local path',
+    })
     expect(() => features.setWorkspacePreview(999_999, '', 'codex')).toThrow(/not found/)
   })
 
@@ -388,6 +394,21 @@ describe('the agent loop', () => {
     // Deleting the ticket takes its files' rows with it.
     features.deleteTicket(t.id, 'enrique')
     expect(db.select().from(schema.attachments).where(eq(schema.attachments.id, b.id)).get()).toBeUndefined()
+  })
+
+  it('creates a ticket with files, and creates nothing when one of them cannot be attached', async () => {
+    const uploads = await import('./uploads')
+    const a = await uploads.saveBase64('shot.png', Buffer.from([0x89, 0x50]).toString('base64'), 'enrique')
+    const t = features.createTicket(pid, { title: 'born with files', attachmentIds: [a.id] }, 'enrique')
+    expect(features.getTicketFull(t.id).attachments.map((x) => x.name)).toEqual(['shot.png'])
+    const before = features.listTickets(pid).length
+    expect(() =>
+      features.createTicket(pid, { title: 'reuses a file', attachmentIds: [a.id] }, 'enrique'),
+    ).toThrow(/already attached/)
+    expect(() =>
+      features.createTicket(pid, { title: 'no such file', attachmentIds: [999_999] }, 'enrique'),
+    ).toThrow(/not found/)
+    expect(features.listTickets(pid)).toHaveLength(before)
   })
 
   it('asks the human for a decision: blocks the ticket, and unblocks it once nothing is left open', () => {

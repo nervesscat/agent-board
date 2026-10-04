@@ -75,13 +75,31 @@ http_headers = { Authorization = "Bearer gate_…" }
    feed of **posts**: `post_update` adds one marked as progress (lane summaries and the Daily view
    pick those out); questions and answers are posts too, not marked. `edit_post` / `delete_post`
    change what you posted.
-   **Previews:** when the change can be tried (a page, an API), start your branch from your
-   worktree on a free port, with a copy of the data rather than the real one (the project's
-   instructions say how), and post the link (`http://localhost:<port>`) with what to try. Register
-   it on that worktree's workspace as well (`set_preview`, or `previewUrl` on `add_workspace`): the
-   ticket page shows it as a Preview card with an Open button and whether it is running. Say that
-   what the human posts there stays in the copy. Keep it running while the ticket is in review;
-   stop it once it is merged or dropped, and clear it (`set_preview` with `previewUrl: ""`).
+   **Previews:** when the change can be tried (a page, an API), have a preview the human can open
+   before anything is merged, and post its link with what to try. Say that what the human posts
+   there stays in a copy of the data. Keep it running while the ticket is in review.
+   - **A branch of the board itself: the board runs it.** Register your worktree
+     (`add_workspace` with its `path` and `branch`; it must sit next to the main checkout, like
+     `../agent-board-<branch>`), then `start_preview` with the workspace's id. The board installs
+     (only when the lockfile changed), builds, copies the live data and starts the build on a free
+     port from 47101 without the passkey gate, then sets the workspace's `previewUrl`. It returns
+     at once; `get_ticket` shows the workspace's `managedPreview` going `building` → `starting` →
+     `running`, or `failed` with the last log lines (`logs` has the paths). `start_preview` with
+     `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board stops it
+     by itself when the PR is merged, the ticket moves to done or cancelled or is archived, or the
+     workspace is removed, and when the board itself stops (it does not start them again). Do not
+     run `pnpm dev` in your session for the human: it dies with your session and the dev server
+     behaves differently from the build.
+   - **Anything else:** start your branch from your worktree on a free port, with a copy of the
+     data rather than the real one (the project's instructions say how), and register its link on
+     the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it as
+     a Preview card with an Open button and whether it is running. Stop it once the ticket is
+     merged or dropped, and clear it (`set_preview` with `previewUrl: ""`).
+
+   To exercise the board yourself without the passkey gate, run your own copy: `AUTH=off pnpm dev`,
+   or `BOARD_ENV=test` with an `X-Test-Actor` header (README: "Test mode"); never on port 47100,
+   never off loopback, never the live board.
+
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
    (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
@@ -91,11 +109,24 @@ http_headers = { Authorization = "Bearer gate_…" }
    arrives as a reply under the card. `list_my_threads` lists every feed or reply thread where someone spoke after you;
    `get_ticket` shows each post's reply count and last author. Attachments come with a local
    `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
+   **Watch for feedback** so the human never has to say "check comments": while you have tickets
+   in `in_progress` or `review`, call `check_inbox` every few minutes with `since` = the `cursor`
+   of your last call (in Claude Code, under `/loop 5m …`). It returns `count`, a new `cursor` and
+   where each new thread is, without bodies. For each one: read it, fix what it asks in the
+   ticket's worktree (checks, commit, push, preview), reply in the thread with what changed, and
+   keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
+   cursor is yours to hold, the board stores nothing per agent.
 7. **Hand off**: open the PR assigned to the human (`gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
    requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
    the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
-   final `post_update`. **Merge order:** when your branch is built on another ticket's open branch
+   final `post_update`. A ticket goes to `review` only with its branch pushed: `get_ticket` →
+   `push.state` is `pushed` (green on the board), not `ahead` or `local-only` (red; `ahead` counts
+   the commits only you have). `get_ticket_git` gives the same `push` for every workspace's branch.
+   Before that post, run the repo's checks and its end-to-end suite when it has one (the project's
+   instructions say how; here `pnpm test:e2e`), and attach the result to the post (the run's
+   summary, or its report when something failed), with screenshots of what changed for a UI
+   change. **Merge order:** when your branch is built on another ticket's open branch
    (stacked), or you merged one in to get past a conflict, declare it: `update_ticket` with
    `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing "builds on …"
    in the PR. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot move to
@@ -116,7 +147,7 @@ http_headers = { Authorization = "Bearer gate_…" }
    remove its worktree and local branch, `remove_workspace`, and `post_update` the deleted branches
    as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
    origin branches: list them for the human. `cleanup_report` lists every leftover of the project's
-   closed tickets; the board skill's `/board cleanup` walks it with the human.
+   closed tickets (previews the board still runs for them too); the board skill's `/board cleanup` walks it with the human.
 9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
    `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
    blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that

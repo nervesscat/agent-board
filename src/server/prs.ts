@@ -4,8 +4,9 @@ import { db, schema } from '#/db'
 import type { PrCheck } from '#/lib/constants'
 import { isClosed } from '#/lib/stages'
 import { logActivity } from './activity'
-import { currentGithubLogin, listMyPrs, type GhCheck, type MyGhPr } from './git'
+import { currentGithubLogin, listMyPrs, prMerged, type GhCheck, type MyGhPr } from './git'
 import { notFound } from './http'
+import { hasPreviews, stopPreviewsFor } from './managedPreview'
 import { getProject } from './projects'
 import { listRepos, ticketRepo } from './repos'
 import { kindOf, listStages } from './stages'
@@ -172,9 +173,35 @@ async function refreshRepoPrs(repo: schema.Repo) {
     .from(schema.prs)
     .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.open, true)))
     .all()
-  for (const row of open) {
-    if (!seen.has(row.number))
-      db.update(schema.prs).set({ open: false, fetchedAt }).where(eq(schema.prs.id, row.id)).run()
+  const closed = open.filter((row) => !seen.has(row.number))
+  for (const row of closed)
+    db.update(schema.prs).set({ open: false, fetchedAt }).where(eq(schema.prs.id, row.id)).run()
+  if (closed.length) await stopMergedPreviews(repo, closed)
+}
+
+/** The tickets a PR came from: named by their PR number, or on its head branch when they name none. */
+const prTickets = <T extends Pick<schema.Ticket, 'repoId' | 'prNumber' | 'branch'>>(
+  tickets: T[],
+  repos: schema.Repo[],
+  pr: Pick<schema.Pr, 'repoId' | 'number' | 'headRef'>,
+) =>
+  tickets.filter(
+    (t) =>
+      (t.repoId ?? repos[0]?.id) === pr.repoId &&
+      (t.prNumber === pr.number || (t.prNumber === null && !!t.branch && t.branch === pr.headRef)),
+  )
+
+/**
+ * The board's previews of a merged PR's tickets (and their lanes) have nothing left to show: stop
+ * them. Only a PR with a preview running is asked about, since leaving the queue may also mean closed.
+ */
+async function stopMergedPreviews(repo: schema.Repo, closed: schema.Pr[]) {
+  const repos = listRepos(repo.projectId)
+  const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, repo.projectId)).all()
+  for (const pr of closed) {
+    const ids = prTickets(tickets, repos, pr).map((t) => t.id)
+    if (ids.length && hasPreviews(ids) && (await prMerged(repo.repoPath, pr.number)))
+      stopPreviewsFor(ids, `PR #${pr.number} was merged`)
   }
 }
 
@@ -199,11 +226,7 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
   const mergeAfter = mergeOrder(projectId, tickets, repos)
   return rows.map((pr) => {
     const r = latestResult(results, pr.number, pr.repoId)
-    const from = tickets.filter(
-      (t) =>
-        (t.repoId ?? repos[0]?.id) === pr.repoId &&
-        (t.prNumber === pr.number || (t.prNumber === null && !!t.branch && t.branch === pr.headRef)),
-    )
+    const from = prTickets(tickets, repos, pr)
     return {
       ...pr,
       ...prState(pr),

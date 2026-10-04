@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { del, errorMessage, get, patch, post, put } from '#/lib/api'
 import { STAGE_COLORS, STAGE_KINDS, type StageColor, type StageKind } from '#/lib/constants'
 import { STAGE_DOT, STAGE_KIND_LABEL } from '#/lib/stages'
+import { ticketsKey } from '#/lib/tickets'
 import type { Stage } from '#/db/schema'
 
 type StageRow = Stage & { tickets: number }
@@ -50,7 +51,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: key })
     qc.invalidateQueries({ queryKey: ['project', projectId] })
-    qc.invalidateQueries({ queryKey: ['tickets', projectId] })
+    qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
   }
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const add = useMutation({

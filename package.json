@@ -9,15 +9,17 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "vite build",
-    "start": "node --env-file-if-exists=.env .output/server/index.mjs",
+    "start": "node --env-file-if-exists=.env --import ./scripts/live-env.mjs .output/server/index.mjs",
     "redeploy": "node scripts/redeploy.mjs",
     "move-uploads": "node scripts/move-uploads-to-s3.mjs",
     "generate-routes": "tsr generate",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint src",
-    "format": "prettier --write src scripts *.md",
-    "format:check": "prettier --check src scripts *.md",
+    "format": "prettier --write src scripts e2e playwright.config.ts *.md",
+    "format:check": "prettier --check src scripts e2e playwright.config.ts *.md",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check:migrations": "node scripts/check-migrations.mjs",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },
@@ -62,6 +64,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/router-cli": "^1.132.0",
     "@types/better-sqlite3": "^7.6.0",

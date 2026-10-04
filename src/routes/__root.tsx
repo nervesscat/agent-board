@@ -1,13 +1,15 @@
-import type { QueryClient } from '@tanstack/react-query'
+import { type QueryClient, useQuery } from '@tanstack/react-query'
 import { HeadContent, Link, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
 import { Menu } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { Gallery } from '#/components/Gallery'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
+import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Toaster } from '#/components/ui/sonner'
+import { get, type Me } from '#/lib/api'
 import { followSystemTheme } from '#/lib/theme'
 import appCss from '#/styles.css?url'
 
@@ -59,6 +61,7 @@ function App() {
           <Link to="/" className="shrink-0 font-semibold tracking-tight" title="Home">
             Agent Board
           </Link>
+          <AuthOffBadge />
           <ProjectSwitcher />
           <div className="ml-auto hidden items-center gap-5 sm:flex">
             {PAGES.map((p) => (
@@ -80,6 +83,21 @@ function App() {
       <Gallery />
       <Toaster />
     </>
+  )
+}
+
+/** Outside production the gate can be off: say so, so no screenshot is ever taken for the live board. */
+function AuthOffBadge() {
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
+  if (!me?.authOff) return null
+  return (
+    <Badge
+      variant="destructive"
+      className="shrink-0 uppercase"
+      title={`BOARD_ENV=${me.boardEnv}, no passkey gate: signed in as ${me.actor}. Not the live board.`}
+    >
+      {me.boardEnv === 'test' ? 'test mode' : 'auth off'}
+    </Badge>
   )
 }
 
