@@ -53,7 +53,13 @@ export function ProjectSwitcher() {
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
-          render={<Button variant="outline" size="sm" className="min-w-44 justify-between font-normal" />}
+          render={
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-w-0 shrink justify-between font-normal sm:min-w-44"
+            />
+          }
           aria-label="Project"
         >
           <span className={current ? 'truncate' : 'truncate text-muted-foreground'}>
