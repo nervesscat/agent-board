@@ -88,7 +88,13 @@ http_headers = { Authorization = "Bearer gate_…" }
    `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
    requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
    the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
-   final `post_update`. `done` is
+   final `post_update`. **Merge order:** when your branch is built on another ticket's open branch
+   (stacked), or you merged one in to get past a conflict, declare it: `update_ticket` with
+   `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing "builds on …"
+   in the PR. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot move to
+   `done` until that branch is merged into its base (the refusal says which; only the human can
+   mark it done anyway). `get_ticket_git` → `includes` lists the open tickets whose unmerged work
+   your branch already holds; `get_ticket` → `needs` says whether each is `merged`. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
    its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or

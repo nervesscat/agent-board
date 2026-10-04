@@ -142,6 +142,13 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
    the PR queue also lists PRs assigned to the human, so this is how it gets there.
 2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
+   **Merge order:** if your branch is built on another ticket's open branch (stacked), or you merged
+   one in to get past a conflict, declare it with `update_ticket` → `needs: [<its ticket id>]` (or
+   `needs` on `create_ticket`) instead of only writing "builds on …" in the PR. `get_ticket_git` →
+   `includes` lists the open tickets whose unmerged work your branch holds: each one belongs in
+   `needs`. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot go to
+   `done` until those branches are merged into its base: `update_ticket` to `done` is refused
+   with which one (`get_ticket` → `needs[].merged`). Only the human can mark it done anyway.
 3. Final `post_update` with the PR link, how to test, and the preview link if there is one.
 4. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
    say otherwise.

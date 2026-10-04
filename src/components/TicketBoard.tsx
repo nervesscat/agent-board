@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, ChevronLeft, ChevronRight, GitBranch, Layers, 
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
+import { NeedsBadge } from '#/components/Needs'
 import { Tag, compareTags } from '#/components/Tag'
 import {
   AlertDialog,
@@ -143,6 +144,7 @@ export function TicketBoard({
                       <span className="text-muted-foreground">#{t.id}</span> {t.title}
                     </div>
                     {t.decisions > 0 && <DecisionBadge n={t.decisions} className="mt-1.5" />}
+                    <NeedsBadge needs={t.needs} className="mt-1.5" />
                     {/* The time sits at the end of the last of these rows, so it always shares a line. */}
                     {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
                       <div className={INFO_ROW}>
@@ -430,6 +432,7 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                     {t.title}
                   </span>
                   {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
+                  <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
                   {t.tags.length > 0 && (
                     <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
                       {[...t.tags].sort(compareTags).map((tag) => (

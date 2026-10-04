@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm'
-import { type AnySQLiteColumn, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import {
+  type AnySQLiteColumn,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core'
 
 import {
   COMMENT_PARENTS,
@@ -156,6 +164,21 @@ export const tickets = sqliteTable(
     updatedAt: now(),
   },
   (t) => [index('tickets_parent').on(t.parentId)],
+)
+
+// A ticket that cannot be done before another ticket's branch is merged into its base: a stacked
+// branch, or one that took in another branch's work. Both ends are tickets of the same project.
+export const ticketNeeds = sqliteTable(
+  'ticket_needs',
+  {
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    needsId: integer('needs_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+  },
+  (t) => [primaryKey({ columns: [t.ticketId, t.needsId] }), index('ticket_needs_needs').on(t.needsId)],
 )
 
 export const tasks = sqliteTable('tasks', {
