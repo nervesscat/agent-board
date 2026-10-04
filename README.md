@@ -24,8 +24,8 @@ docker compose -f docker-compose.gate.yml logs gate
 
 # 2. the board
 cp .env.example .env
-npm install
-npm run dev            # http://localhost:47100 — redirects to the gate login until you sign in
+pnpm install
+pnpm dev               # http://localhost:47100 — redirects to the gate login until you sign in
 ```
 
 Add a repository (path of a local checkout) and the project it belongs to, pick the project in the
@@ -42,13 +42,14 @@ Keep this checkout as the source of truth and run a clone inside the distro:
 # inside WSL, once
 git clone /mnt/f/Programming/WebDev/agent-board ~/agent-board && cd ~/agent-board
 cp .env.example .env   # set CLAUDE_BIN=$HOME/.local/bin/claude and FEATURE_REVIEW_DIR=$HOME/.claude/feature-review
-npm install && npm run build
+corepack enable pnpm   # or: npm i -g pnpm
+pnpm install && pnpm build
 curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh auth login` likewise
 ```
 
 Repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
 the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and the
-gate cookie work unchanged. After a change here: `git -C ~/agent-board pull && npm run build`, or
+gate cookie work unchanged. After a change here: `git -C ~/agent-board pull && pnpm install && pnpm build`, or
 re-run the task installer below, which does that.
 
 ## Run whether you are logged on or not
@@ -124,13 +125,13 @@ the gate device or token name.
 ## Development
 
 ```
-npm run dev          # vite dev server on 47100 with hot reload
-npm run typecheck    # tsc
-npm run lint         # oxlint
-npm run format       # prettier
-npm test             # vitest (ingest parser, schedule due-ness, PR status)
-npm run build && npm start
-npm run db:generate  # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
+pnpm dev             # vite dev server on 47100 with hot reload
+pnpm typecheck       # tsc
+pnpm lint            # oxlint
+pnpm format          # prettier
+pnpm test            # vitest (ingest parser, schedule due-ness, PR status)
+pnpm build && pnpm start
+pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
 `src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read.

@@ -15,7 +15,7 @@ sqlite.pragma('foreign_keys = ON')
 
 export const db = drizzle(sqlite, { schema })
 
-// Migrations are committed in ./drizzle (drizzle-kit generate); applying them at boot keeps `npm run dev` zero-setup.
+// Migrations are committed in ./drizzle (drizzle-kit generate); applying them at boot keeps `pnpm dev` zero-setup.
 migrate(db, { migrationsFolder: path.resolve(process.cwd(), 'drizzle') })
 
 export { schema }

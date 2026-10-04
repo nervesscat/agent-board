@@ -32,7 +32,7 @@ param(
   # elevated re-launch, which otherwise runs as whichever administrator approved the UAC prompt.
   [string]$RunAs = "$env:USERDOMAIN\$env:USERNAME",
   # Run the board inside a WSL distro instead of Windows: the projects, git, gh and claude live there.
-  # The task then starts `wsl.exe -d <distro> --cd <WslPath> -- bash -lc "npm start"`, which also keeps
+  # The task then starts `wsl.exe -d <distro> --cd <WslPath> -- bash -lc "pnpm start"`, which also keeps
   # the WSL VM alive from boot. WslPath is the board checkout inside the distro.
   [string]$Wsl = '',
   [string]$WslPath = '',
@@ -55,7 +55,7 @@ if ($Wsl -and -not $SkipBuild) {
   # The WSL checkout tracks this one as its origin: pull, install for Linux, build, all inside the distro.
   # bash -l so ~/.local/bin (gh, claude) is on PATH, exactly as it will be for the task.
   Write-Host "Building inside WSL ($Wsl : $WslPath)..."
-  wsl.exe -d $Wsl --cd $WslPath -- bash -lc "git pull -q && npm install --silent && npm run build > data/logs/build.log 2>&1"
+  wsl.exe -d $Wsl --cd $WslPath -- bash -lc "git pull -q && pnpm install --silent && pnpm build > data/logs/build.log 2>&1"
   if ($LASTEXITCODE -ne 0) { throw "build inside WSL failed, see $WslPath/data/logs/build.log" }
 }
 
@@ -75,7 +75,7 @@ $logOut = Join-Path $logDir 'board.out.log'
 $logErr = Join-Path $logDir 'board.err.log'
 
 if ($Wsl) {
-  $cmdLine = "/c `"`"wsl.exe`" -d $Wsl --cd $WslPath -- bash -lc `"npm start`" >> `"$logOut`" 2>> `"$logErr`"`""
+  $cmdLine = "/c `"`"wsl.exe`" -d $Wsl --cd $WslPath -- bash -lc `"pnpm start`" >> `"$logOut`" 2>> `"$logErr`"`""
 } else {
   $node = (Get-Command node).Source
   Push-Location $root
@@ -84,8 +84,8 @@ if ($Wsl) {
     Write-Host 'Building the production bundle...'
     # cmd.exe swallows the bundler's stderr chatter; in PowerShell 5.1 a native stderr line under
     # $ErrorActionPreference = 'Stop' would abort the script even though the build succeeded.
-    cmd.exe /c "npm run build > `"$buildLog`" 2>&1"
-    if ($LASTEXITCODE -ne 0) { throw "npm run build failed, see $buildLog" }
+    cmd.exe /c "pnpm build > `"$buildLog`" 2>&1"
+    if ($LASTEXITCODE -ne 0) { throw "pnpm build failed, see $buildLog" }
   } finally { Pop-Location }
   $cmdLine = "/c `"`"$node`" --env-file-if-exists=.env .output\server\index.mjs >> `"$logOut`" 2>> `"$logErr`"`""
 }

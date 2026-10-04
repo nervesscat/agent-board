@@ -52,23 +52,23 @@ if [ "$stop_only" = 1 ]; then
   exit 0
 fi
 
-[ -d node_modules ] || npm install
+[ -d node_modules ] || pnpm install
 
 build=.output/server/index.mjs
 if [ "$force_build" = 1 ] || [ ! -f "$build" ] ||
-  [ -n "$(find src package.json package-lock.json vite.config.ts -newer "$build" -print -quit)" ]; then
+  [ -n "$(find src package.json pnpm-lock.yaml vite.config.ts -newer "$build" -print -quit)" ]; then
   echo "Building..."
-  npm run build > "$logs/build.log" 2>&1 || { echo "Build failed, see $logs/build.log" >&2; exit 1; }
+  pnpm build > "$logs/build.log" 2>&1 || { echo "Build failed, see $logs/build.log" >&2; exit 1; }
 fi
 
 stop_board
 
 if [ "$foreground" = 1 ]; then
-  exec npm start
+  exec pnpm start
 fi
 
 echo "Starting the board on http://localhost:$port"
-nohup npm start >> "$logs/board.out.log" 2>> "$logs/board.err.log" &
+nohup pnpm start >> "$logs/board.out.log" 2>> "$logs/board.err.log" &
 
 for _ in $(seq 1 100); do
   if curl -s -o /dev/null "http://$host:$port/"; then
