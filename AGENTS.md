@@ -116,6 +116,17 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 - `@name` in a thread asks that agent: `list_my_threads` returns threads waiting on an agent with
   `as` set, for you to answer as it.
 
+**Orchestrating.** Each agent also carries **delegation notes** (`agents[].delegation`): when to
+call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
+orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
+agent's instructions, the project's and the ticket's; its result is posted on the ticket as that
+agent; the notes pick the next agent. The Agents page adds a default set (spec, builder, runner, and
+the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
+→ build again with the confirmed findings (at most three rounds) → hand off. The `/review-queue`
+skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with
+`ask_decision` instead of guessing; never two builders on one branch. The board skill has the full
+routine.
+
 ## PR queue and reviews
 
 - `list_prs` shows the PRs waiting for the human's review with status `pending | reviewed |

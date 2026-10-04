@@ -82,3 +82,46 @@ export function renderSkill(client: AgentClient): string {
 export function agentSetup() {
   return { boardUrl: config.boardUrl, gateUrl: config.gateUrl, settings: getSettings() }
 }
+
+// --- the review skills: feature-review, review-queue and their agents, installed as one tar ---
+
+const reviewFiles = import.meta.glob<string>('./skill/review/{skills,agents}/**/*', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+})
+
+/** Paths under ~/.claude, as the tar lays them out. */
+export const reviewBundlePaths = () =>
+  Object.keys(reviewFiles)
+    .map((k) => k.replace('./skill/review/', ''))
+    .sort()
+
+/** A ustar archive of the review bundle, to extract into ~/.claude (tar ships with Windows too). */
+export function reviewBundle(): Buffer {
+  const blocks: Buffer[] = []
+  const now = Math.floor(Date.now() / 1000)
+  for (const [key, text] of Object.entries(reviewFiles).sort(([a], [b]) => a.localeCompare(b))) {
+    const name = key.replace('./skill/review/', '')
+    const body = Buffer.from(text, 'utf8')
+    const header = Buffer.alloc(512)
+    const put = (value: string, at: number, len: number) => header.write(value, at, len, 'ascii')
+    const octal = (n: number, len: number) => n.toString(8).padStart(len - 1, '0') + '\0'
+    put(name, 0, 100)
+    put(octal(name.endsWith('.py') ? 0o755 : 0o644, 8), 100, 8)
+    put(octal(0, 8), 108, 8)
+    put(octal(0, 8), 116, 8)
+    put(octal(body.length, 12), 124, 12)
+    put(octal(now, 12), 136, 12)
+    put('        ', 148, 8)
+    put('0', 156, 1)
+    put('ustar\0', 257, 6)
+    put('00', 263, 2)
+    let sum = 0
+    for (const b of header) sum += b
+    put(sum.toString(8).padStart(6, '0') + '\0 ', 148, 8)
+    blocks.push(header, body, Buffer.alloc((512 - (body.length % 512)) % 512))
+  }
+  blocks.push(Buffer.alloc(1024))
+  return Buffer.concat(blocks)
+}

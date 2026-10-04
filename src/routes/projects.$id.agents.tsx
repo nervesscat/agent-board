@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ImagePlus, Lock, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ImagePlus, Lock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -21,8 +21,10 @@ import {
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
-import { Textarea } from '#/components/ui/textarea'
+import { ReviewSkills } from '#/components/ReviewSkills'
+import { RichEditor } from '#/components/RichEditor'
 import { del, errorMessage, get, patch, post, type ProjectAgent, type TicketRow, upload } from '#/lib/api'
+import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id/agents')({ component: Agents })
@@ -56,6 +58,7 @@ function Agents() {
           </Button>
         )}
       </div>
+      <DefaultAgents projectId={id} agents={project.agents} />
       {adding && <AgentForm projectId={id} onDone={() => setAdding(false)} />}
       {project.agents.length === 0 && !adding ? (
         <Empty>No agents yet. Every ticket is shared by the connected agents.</Empty>
@@ -67,6 +70,59 @@ function Agents() {
         </ul>
       )}
     </div>
+  )
+}
+
+/** The build and review cycle as agents, one click away, and the skills that run it. */
+function DefaultAgents({ projectId, agents }: { projectId: string; agents: ProjectAgent[] }) {
+  const qc = useQueryClient()
+  const { data: setup } = useQuery({
+    queryKey: ['agent-setup'],
+    queryFn: () => get<{ boardUrl: string }>('/api/agent-setup'),
+  })
+  const have = new Set(agents.map((a) => a.name.toLowerCase()))
+  const missing = DEFAULT_AGENT_NAMES.filter((n) => !have.has(n))
+  const add = useMutation({
+    mutationFn: () =>
+      post<{ added: string[]; kept: string[] }>(`/api/projects/${projectId}/agents/defaults`, {}),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['project', projectId] })
+      toast.success(`Added ${r.added.join(', ')}`)
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    <section className="space-y-3 rounded-lg border p-4" aria-label="Default agents">
+      <div className="flex items-start gap-4">
+        <div className="flex-1 space-y-1">
+          <h2 className="text-sm font-medium">Default agents</h2>
+          <p className="text-xs text-muted-foreground">
+            The build and review cycle: <strong>spec</strong> writes the acceptance criteria,{' '}
+            <strong>builder</strong> writes the code, <strong>runner</strong> reviews it, and the
+            review&apos;s phases (<strong>env</strong>, <strong>verify</strong>, <strong>hunt</strong>,{' '}
+            <strong>refute</strong>, <strong>merge</strong>) try to break it; findings go back to the builder.
+            Each comes with its instructions and the notes the orchestrator delegates by. Edit any of them
+            after.
+          </p>
+        </div>
+        {missing.length > 0 ? (
+          <Button
+            className="shrink-0"
+            variant="outline"
+            disabled={add.isPending}
+            onClick={() => add.mutate()}
+          >
+            <Sparkles data-icon="inline-start" />
+            {missing.length === DEFAULT_AGENT_NAMES.length
+              ? 'Add the default agents'
+              : `Add ${missing.join(', ')}`}
+          </Button>
+        ) : (
+          <span className="shrink-0 text-xs text-muted-foreground">All added</span>
+        )}
+      </div>
+      {setup && <ReviewSkills boardUrl={setup.boardUrl} />}
+    </section>
   )
 }
 
@@ -143,16 +199,53 @@ function AgentCard({
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      {agent.instructions ? (
-        <Markdown className="mt-3 border-t pt-3">{agent.instructions}</Markdown>
-      ) : (
-        <p className="mt-3 border-t pt-3 text-sm text-muted-foreground">No instructions yet.</p>
-      )}
+      <AgentText title="Instructions" hint="what the agent works by" text={agent.instructions} />
+      <AgentText
+        title="When to delegate"
+        hint="what the orchestrator decides by"
+        text={agent.delegation}
+        empty="No delegation notes yet: the orchestrator will not know when to call it."
+      />
     </li>
   )
 }
 
-/** New agent, or editing one: picture, name, instructions. */
+/** One of the agent's texts; a long one starts folded, so a page of agents stays readable. */
+function AgentText({
+  title,
+  hint,
+  text,
+  empty = 'Nothing yet.',
+}: {
+  title: string
+  hint: string
+  text: string
+  empty?: string
+}) {
+  const heading = (
+    <>
+      {title} <span className="font-normal">· {hint}</span>
+    </>
+  )
+  if (!text)
+    return (
+      <div className="mt-3 border-t pt-3">
+        <h3 className="mb-1 text-xs font-medium text-muted-foreground">{heading}</h3>
+        <p className="text-sm text-muted-foreground">{empty}</p>
+      </div>
+    )
+  return (
+    <details className="group mt-3 border-t pt-3" open={text.length <= 1200}>
+      <summary className="mb-1 cursor-pointer text-xs font-medium text-muted-foreground select-none">
+        {heading}
+        <span className="font-normal group-open:hidden"> · {text.split('\n').length} lines</span>
+      </summary>
+      <Markdown>{text}</Markdown>
+    </details>
+  )
+}
+
+/** New agent, or editing one: picture, name, its instructions and when to delegate to it. */
 function AgentForm({
   projectId,
   agent,
@@ -165,6 +258,7 @@ function AgentForm({
   const qc = useQueryClient()
   const [name, setName] = useState(agent?.name ?? '')
   const [instructions, setInstructions] = useState(agent?.instructions ?? '')
+  const [delegation, setDelegation] = useState(agent?.delegation ?? '')
   const [avatar, setAvatar] = useState<{ id: number; url: string } | null>(
     agent?.avatarId ? { id: agent.avatarId, url: agent.avatarUrl! } : null,
   )
@@ -176,7 +270,7 @@ function AgentForm({
   })
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, instructions, avatarId: avatar?.id ?? null }
+      const body = { name, instructions, delegation, avatarId: avatar?.id ?? null }
       return agent ? patch(`/api/agents/${agent.id}`, body) : post(`/api/projects/${projectId}/agents`, body)
     },
     onSuccess: () => {
@@ -251,14 +345,31 @@ function AgentForm({
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="agent-ins">Instructions (markdown)</Label>
-        <Textarea
-          id="agent-ins"
+        <Label>Instructions</Label>
+        <p className="text-xs text-muted-foreground">
+          What the agent works by: who it is, how it works, what it never does. The orchestrator briefs a
+          subagent with this.
+        </p>
+        <RichEditor
           value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          rows={10}
-          className="font-mono text-xs"
-          placeholder="Who it is, what it is good at, how it works, what it never does. A connected agent briefs a subagent with this."
+          onChange={setInstructions}
+          minHeight="min-h-40"
+          label="Instructions"
+          placeholder="You are the Tester. You check every acceptance criterion against the running preview…"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>When to delegate</Label>
+        <p className="text-xs text-muted-foreground">
+          What the orchestrator decides by: when to hand work to this agent, what to give it, what it returns,
+          and what comes next.
+        </p>
+        <RichEditor
+          value={delegation}
+          onChange={setDelegation}
+          minHeight="min-h-28"
+          label="When to delegate"
+          placeholder="After the Builder finishes a step, with the preview link and the acceptance criteria. Returns PASS / FAIL per criterion. All pass: the Breaker next; a failure: back to the Builder."
         />
       </div>
       <div className="flex justify-end gap-2">

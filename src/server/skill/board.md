@@ -210,6 +210,36 @@ Nothing here touches a ticket in any other stage, even when its branch looks mer
 - `list_my_threads` also returns threads waiting on an agent (someone @mentioned it, or replied
   on its ticket or post), with `as` set: answer with `comment` `as: <its name>`, in its voice.
 
+## Orchestrating the project's agents
+
+Each agent also has **delegation notes** (`agents[].delegation`): when to call it, what to give
+it, what it returns and what comes next. They are written for an orchestrator: a connected agent
+that does not do the work itself but routes each step to the agent whose notes fit, as a
+subagent, and keeps the ticket's feed as the record. An agent without delegation notes is never
+delegated to.
+
+The project's Agents page adds a default set, the build and review cycle of the
+`/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
+criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
+**env**, **verify**, **hunt**, **refute** and **merge** try to break it) → back to **builder** with
+the confirmed findings, at most three rounds → hand off. `/review-queue` is that orchestrator: it
+reviews the board's PR queue, and with `build` it also works the To do tickets through the cycle.
+Without those skills, or for one ticket, orchestrate by hand:
+
+1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its
+   brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
+2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
+   prompt is its `instructions`, the project's `instructions`, the ticket (`get_ticket`), the
+   worktree and branch, and what the previous step returned (subagents share nothing else); post
+   what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`, its
+   evidence in `files`); tick the tasks it finished; go where its notes say next.
+3. A call that is the human's (two valid behaviours, a finding that keeps coming back, ship as is
+   or not) → `ask_decision`, and work on something else until it is decided.
+4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests.
+
+Never two builders on one branch; when no agent's notes fit a step, ask in a post rather than
+doing it yourself.
+
 ## Reviews and the PR queue
 
 `list_prs` is the human's review queue; each PR lists the `tickets` it came from. Before

@@ -27,6 +27,21 @@ export const AGENTS: Record<
 
 export type Shell = 'bash' | 'powershell'
 
+// The shell picked last is remembered in this browser; storage can be unavailable, so bash is the fallback.
+const SHELL_KEY = 'agents.shell'
+export function savedShell(): Shell {
+  try {
+    return localStorage.getItem(SHELL_KEY) === 'powershell' ? 'powershell' : 'bash'
+  } catch {
+    return 'bash'
+  }
+}
+export function saveShell(shell: Shell) {
+  try {
+    localStorage.setItem(SHELL_KEY, shell)
+  } catch {}
+}
+
 /** Stands in for the token until one is pasted on the page. */
 export const TOKEN_PLACEHOLDER = 'gate_…'
 
@@ -58,6 +73,20 @@ export function mcpSetup(client: AgentClient, boardUrl: string, token: string) {
         ),
       }
   }
+}
+
+/**
+ * One line that installs feature-review, review-queue and their agents into ~/.claude (Claude Code's
+ * skills and agents; OpenCode reads ~/.claude/skills too), replacing the files of the same name.
+ */
+export function reviewSkillsInstall(shell: Shell, boardUrl: string, token: string) {
+  const src = `${boardUrl}/api/agent-setup/review-skills`
+  const auth = `Bearer ${token || TOKEN_PLACEHOLDER}`
+  return shell === 'bash'
+    ? `mkdir -p ~/.claude && curl -fsS -H "Authorization: ${auth}" "${src}" | tar -x -C ~/.claude`
+    : `$t = Join-Path $env:TEMP 'review-skills.tar'; New-Item -ItemType Directory -Force "$HOME\\.claude" | Out-Null; ` +
+        `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = '${auth}' } '${src}' -OutFile $t; ` +
+        `tar -xf $t -C "$HOME\\.claude"; Remove-Item $t`
 }
 
 /** One line that downloads the board's current skill into the CLI's skills folder. */
