@@ -226,7 +226,7 @@ function ArchiveAll({ stage, n, onConfirm }: { stage: string; n: number; onConfi
 }
 
 /** Decisions an agent asked the human to make that are still open. */
-function DecisionBadge({ n, className = '' }: { n: number; className?: string }) {
+export function DecisionBadge({ n, className = '' }: { n: number; className?: string }) {
   return (
     <span
       className={`inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 ${className}`}
@@ -380,7 +380,7 @@ function LaneCount({ lanes, stages }: { lanes: TicketRow['lanes']; stages: Stage
   )
 }
 
-function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup']; className?: string }) {
+export function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup']; className?: string }) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">

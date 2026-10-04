@@ -959,7 +959,21 @@ function threadStats(parentType: schema.CommentParent, ids: number[]) {
  * agent. Newest first; `waiting` counts the comments since the actor (or agent) last spoke.
  */
 export function listOpenThreads(projectId: number, actor: string) {
+  return openThreads(projectId, [actor], { agents: true, discussion: false })
+}
+
+/**
+ * The threads in a project waiting on the human, who may sign in under several names (one per
+ * device). A ticket's feed counts only its discussion here: progress posts are reports, not
+ * questions, and a feed ending on an open decision is left to the decision itself.
+ */
+export function listHumanThreads(projectId: number, names: string[]) {
+  return openThreads(projectId, names, { agents: false, discussion: true })
+}
+
+function openThreads(projectId: number, me: string[], opts: { agents: boolean; discussion: boolean }) {
   getProject(projectId)
+  const isMe = (name: string) => me.includes(name)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
   const ticketById = new Map(tickets.map((t) => [t.id, t]))
   const updates = tickets.length
@@ -969,6 +983,9 @@ export function listOpenThreads(projectId: number, actor: string) {
           ticketId: schema.updates.ticketId,
           author: schema.updates.author,
           body: schema.updates.body,
+          progress: schema.updates.progress,
+          decision: schema.updates.decision,
+          decidedAt: schema.updates.decidedAt,
           createdAt: schema.updates.createdAt,
         })
         .from(schema.updates)
@@ -1036,7 +1053,9 @@ export function listOpenThreads(projectId: number, actor: string) {
   type Said = Pick<schema.Comment, 'id' | 'parentType' | 'parentId' | 'author' | 'body' | 'createdAt'>
   const threads = new Map<string, Said[]>()
   // A ticket's conversation is its posts, in order; a post's, PR's or review's is its comments.
-  for (const u of [...updates].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)) {
+  const posts = opts.discussion ? updates.filter((u) => !u.progress) : updates
+  const openDecisions = new Set(updates.filter((u) => u.decision && !u.decidedAt).map((u) => u.id))
+  for (const u of [...posts].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)) {
     const key = `ticket:${u.ticketId}`
     const said: Said = {
       id: u.id,
@@ -1058,21 +1077,23 @@ export function listOpenThreads(projectId: number, actor: string) {
   for (const [key, list] of threads) {
     const subject = subjects.get(key)!
     const last = list[list.length - 1]!
-    const entry = (who: string, as: string | null) => ({
+    const entry = (who: (name: string) => boolean, as: string | null) => ({
       parentType: last.parentType,
       parentId: last.parentId,
       ticketId: subject.ticketId,
       title: subject.title,
       // Set when the thread waits on one of the project's agents: answer with comment as: <that name>.
       as,
-      waiting: list.length - 1 - list.map((c) => c.author).lastIndexOf(who),
+      waiting: list.length - 1 - list.map((c) => who(c.author)).lastIndexOf(true),
       last: { id: last.id, author: last.author, text: gist(last.body), createdAt: last.createdAt },
     })
-    const spoke = list.some((c) => c.author === actor)
-    if (last.author !== actor && (spoke || subject.owners.includes(actor))) {
-      out.push(entry(actor, null))
+    if (opts.discussion && last.parentType === 'ticket' && openDecisions.has(last.id)) continue
+    const spoke = list.some((c) => isMe(c.author))
+    if (!isMe(last.author) && (spoke || subject.owners.some(isMe))) {
+      out.push(entry(isMe, null))
       continue
     }
+    if (!opts.agents) continue
     // Else it may wait on one of the project's agents: mentioned last, or it spoke there, or it is its subject.
     const named = mentions(last.body)
     const lower = (s: string) => s.toLowerCase()
@@ -1085,7 +1106,7 @@ export function listOpenThreads(projectId: number, actor: string) {
         subject.owners.some((o) => lower(o) === n)
       )
     })
-    if (agent) out.push(entry(agent.name, agent.name))
+    if (agent) out.push(entry((name) => name === agent.name, agent.name))
   }
   return out.sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt))
 }

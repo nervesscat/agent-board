@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as DailyRouteImport } from './routes/daily'
+import { Route as RepositoriesRouteImport } from './routes/repositories'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiSplatRouteImport } from './routes/api/$'
 import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
@@ -38,6 +39,11 @@ const AgentsRoute = AgentsRouteImport.update({
 const DailyRoute = DailyRouteImport.update({
   id: '/daily',
   path: '/daily',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RepositoriesRoute = RepositoriesRouteImport.update({
+  id: '/repositories',
+  path: '/repositories',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -106,6 +112,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
   '/daily': typeof DailyRoute
+  '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
@@ -123,6 +130,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
   '/daily': typeof DailyRoute
+  '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
   '/projects/$id/agents': typeof ProjectsIdAgentsRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/agents': typeof AgentsRoute
   '/daily': typeof DailyRoute
+  '/repositories': typeof RepositoriesRoute
   '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agents'
     | '/daily'
+    | '/repositories'
     | '/settings'
     | '/api/$'
     | '/projects/$id'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agents'
     | '/daily'
+    | '/repositories'
     | '/settings'
     | '/api/$'
     | '/projects/$id/agents'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agents'
     | '/daily'
+    | '/repositories'
     | '/settings'
     | '/api/$'
     | '/projects/$id'
@@ -210,6 +222,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgentsRoute: typeof AgentsRoute
   DailyRoute: typeof DailyRoute
+  RepositoriesRoute: typeof RepositoriesRoute
   SettingsRoute: typeof SettingsRoute
   ApiSplatRoute: typeof ApiSplatRoute
   ProjectsIdRoute: typeof ProjectsIdRouteWithChildren
@@ -236,6 +249,13 @@ declare module '@tanstack/react-router' {
       path: '/daily'
       fullPath: '/daily'
       preLoaderRoute: typeof DailyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/repositories': {
+      id: '/repositories'
+      path: '/repositories'
+      fullPath: '/repositories'
+      preLoaderRoute: typeof RepositoriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -357,6 +377,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentsRoute: AgentsRoute,
   DailyRoute: DailyRoute,
+  RepositoriesRoute: RepositoriesRoute,
   SettingsRoute: SettingsRoute,
   ApiSplatRoute: ApiSplatRoute,
   ProjectsIdRoute: ProjectsIdRouteWithChildren,

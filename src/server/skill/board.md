@@ -55,6 +55,8 @@ Then:
    the project's stage of that kind: below, `todo`, `in_progress`, `blocked`, `review`, `done` and
    `cancelled` mean exactly that. Its `agents` are the project's own agents (see
    [The project's agents](#the-projects-agents)).
+3. `get_summary` with your `projectId`: where the project stands in one read (what waits on the
+   human, in progress and since when, done today, next, and what carries over from before today).
 
 ## 2. Pick up work
 

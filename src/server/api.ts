@@ -22,6 +22,7 @@ import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import { getSummary } from './summary'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -574,6 +575,13 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
   return json(reviews.postResult(id(params), body, actor), 201)
 })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
+
+// --- summary: what waits on the human, in progress, done today, next, carrying over ---
+// ?projectId= for one project; every project otherwise, one block each.
+api.get('/api/summary', ({ url }) => {
+  const project = url.searchParams.get('projectId')
+  return json(getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }))
+})
 
 // --- daily ---
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')

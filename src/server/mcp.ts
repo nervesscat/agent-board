@@ -12,6 +12,7 @@ import { HttpError } from './http'
 import * as prs from './prs'
 import * as projects from './projects'
 import * as reviews from './reviews'
+import { getSummary } from './summary'
 import * as uploads from './uploads'
 
 /**
@@ -39,7 +40,7 @@ Work only in the project of the repo you are in, and never read or write another
 
 The rhythm:
 1. get_project before touching it; its instructions override your defaults. Its stages are the board's columns, in order, each with a key, a name and a kind (open, active, blocked, review, done, cancelled). A ticket's status is a stage key; wherever status is asked for you can also give a stage's name or a kind (the first stage of that kind; todo and in_progress mean open and active). Below, todo, in_progress, blocked, review, done and cancelled mean the stage of that kind.
-2. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. Tickets are shared: you may take over one another agent holds (the board logs it), so prefer unassigned ones and take over only what is clearly stalled or handed to you. A ticket with reserved: true belongs to one of the project's agents (see below).
+2. Starting a session, get_summary with your projectId is the picture in one read: what waits on the human, what is in progress and since when, what got done today, what is next, and what carries over from before today. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. Tickets are shared: you may take over one another agent holds (the board logs it), so prefer unassigned ones and take over only what is clearly stalled or handed to you. A ticket with reserved: true belongs to one of the project's agents (see below).
 3. add_tasks with the concrete steps if the ticket has none; set_task_done as you finish each; update_task or remove_task when the plan changes.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. add_workspace registers where code runs (a worktree, a sub-branch, a sandbox): register every worktree you open, since that list is what gets cleaned up later; remove_workspace when it is gone.
 5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket has one feed of posts: post_update adds one marked as progress (lane summaries and the Daily view pick those out); questions and answers are posts too (comment on the ticket, or post_update with progress: false). Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. When the change can be tried (a page, an API), start a preview the human can open before anything is merged: your branch, from your worktree, on a free port, with a copy of the data rather than the real one (the project's instructions say how). Post its link (http://localhost:<port>) with what to try and register it on that worktree's workspace (set_preview, or previewUrl on add_workspace): the ticket page then shows it with an Open button and whether it is running. Say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped, clearing it with set_preview "".
@@ -100,6 +101,13 @@ function buildServer(actor: string) {
     "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, and a picture; tickets can be reserved for them) and the instructions agents must follow when working on it. Read this before touching a project.",
     { projectId: z.number().int() },
     ({ projectId }) => projects.getProjectFull(projectId),
+  )
+
+  tool(
+    'get_summary',
+    "Where a project stands, in one read (every project, one block each, without projectId): needsYou (open decisions, PRs waiting on the human's review, threads waiting on the human, tickets in a review stage), inProgress (tickets in active or blocked stages: assignee, task progress, lanes, last progress post, preview, since when, stale when no progress post in 24 hours), doneToday (tickets that reached a done stage today, PRs that left the queue today, today's activity count), next (the head of the first open stage that is not a backlog, with how many are blocked and in the backlog) and carryingOver (tickets in progress since before today). Today is the board's local day. Read it when starting a session.",
+    { projectId: z.number().int().optional() },
+    ({ projectId }) => getSummary(projectId, { refreshPrs: true }),
   )
 
   // PR queue

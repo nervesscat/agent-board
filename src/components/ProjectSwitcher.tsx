@@ -29,7 +29,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover
 import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
 import { useProjects } from '#/lib/project'
 
-const MODULES = ['prs', 'features', 'daily', 'settings'] as const
+// The project's Overview is its own address (no module segment); the rest keep their segment.
+const MODULES = ['overview', 'prs', 'features', 'daily', 'settings'] as const
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
@@ -43,9 +44,12 @@ export function ProjectSwitcher() {
   const [creating, setCreating] = useState(false)
   const [managing, setManaging] = useState(false)
   const current = projects?.find((p) => String(p.id) === id)
-  const module = MODULES.find((m) => pathname.split('/')[3] === m) ?? 'prs'
+  const module = MODULES.find((m) => (pathname.split('/')[3] || 'overview') === m) ?? 'overview'
   const go = (projectId: number | string) =>
-    navigate({ to: `/projects/$id/${module}`, params: { id: String(projectId) } })
+    navigate({
+      to: module === 'overview' ? '/projects/$id' : `/projects/$id/${module}`,
+      params: { id: String(projectId) },
+    })
   const item =
     'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground'
 

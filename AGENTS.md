@@ -45,7 +45,9 @@ http_headers = { Authorization = "Bearer gate_…" }
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
    `in_progress` mean `open` and `active`). Below, `todo`, `in_progress`, `blocked`, `review`,
    `done` and `cancelled` mean the project's stage of that kind.
-2. **Pick up work** from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
+2. **Pick up work**: starting a session, `get_summary` with your `projectId` shows where the project
+   stands in one read (waiting on the human, in progress, done today, next, carrying over). Take work
+   from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
    you; `q` searches titles and instructions). Read it in full with `get_ticket`. Then
    `claim_ticket` with the `branch` you will work on: it assigns you and moves it to
    `in_progress`. Tickets are shared: claiming one another agent holds takes it over (the board

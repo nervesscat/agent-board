@@ -5,6 +5,7 @@ import {
   CalendarDays,
   FolderGit2,
   GitPullRequest,
+  Home,
   KanbanSquare,
   Settings,
 } from 'lucide-react'
@@ -14,6 +15,7 @@ import { useProject } from '#/lib/project'
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
 
 const MODULES = [
+  { to: '/projects/$id', label: 'Overview', icon: Home, exact: true },
   { to: '/projects/$id/prs', label: 'PR queue', icon: GitPullRequest },
   { to: '/projects/$id/features', label: 'Ongoing features', icon: KanbanSquare },
   { to: '/projects/$id/agents', label: 'Agents', icon: Bot },
@@ -43,7 +45,7 @@ function ProjectLayout() {
             {project && !project.repos.length && (
               <li className="text-xs text-muted-foreground">
                 No repos yet.{' '}
-                <Link to="/" className="underline">
+                <Link to="/repositories" className="underline">
                   Add one
                 </Link>
               </li>
@@ -56,6 +58,7 @@ function ProjectLayout() {
               key={m.to}
               to={m.to}
               params={{ id }}
+              activeOptions={{ exact: 'exact' in m }}
               className="flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground [&.active]:bg-muted [&.active]:text-foreground"
             >
               <m.icon className="size-4" /> {m.label}

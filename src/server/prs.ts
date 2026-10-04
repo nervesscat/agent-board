@@ -104,6 +104,21 @@ export async function refreshPrs(projectId: number) {
   lastRefresh.set(projectId, Date.now())
 }
 
+const lastTry = new Map<number, number>()
+
+/**
+ * Refresh the project's queue in the background when it is as stale as `listPrs` would refresh it,
+ * for readers that answer from the stored rows at once (the summary). At most one attempt per
+ * project every refresh interval, so a GitHub that keeps failing is not asked on every read.
+ */
+export function refreshPrsInBackground(projectId: number) {
+  const now = Date.now()
+  const since = Math.max(lastRefresh.get(projectId) ?? 0, lastTry.get(projectId) ?? 0)
+  if (now - since <= REFRESH_MS) return
+  lastTry.set(projectId, now)
+  refreshPrs(projectId).catch((err) => console.error(`PR refresh failed for project ${projectId}:`, err))
+}
+
 /** Pull the PRs assigned to me from GitHub and upsert the snapshot; board-side fields (hold) are kept. */
 async function refreshRepoPrs(repo: schema.Repo) {
   const { projectId } = repo

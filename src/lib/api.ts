@@ -20,13 +20,14 @@ import type { PreviewState } from '#/server/preview'
 import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
 import type { ProjectAgent } from '#/server/projectAgents'
+import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
 /** A row of `/api/projects`: the project, its repos, and how many tickets and open PRs it holds. */
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
-export type { DirListing, PreviewState, ProjectAgent }
+export type { CarryOver, DirListing, PreviewState, ProjectAgent, ProjectSummary, Summary }
 
 export type {
   Attachment,
