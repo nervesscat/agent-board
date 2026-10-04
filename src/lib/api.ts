@@ -6,8 +6,6 @@ import type {
   DailySummary,
   Repo,
   ReviewResult,
-  ReviewRun,
-  ReviewSchedule,
   Task,
   Ticket,
   Update,
@@ -34,8 +32,6 @@ export type {
   DailySummary,
   Repo,
   ReviewResult,
-  ReviewRun,
-  ReviewSchedule,
   Task,
   Ticket,
   Update,
@@ -123,13 +119,8 @@ export interface TicketGit {
   })[]
 }
 
-export type RunRow = Omit<ReviewRun, 'log'>
-
 export interface ReviewsPayload {
-  running: boolean
-  runs: RunRow[]
   results: ReviewResult[]
-  schedules: ReviewSchedule[]
 }
 
 export interface DailyPayload {

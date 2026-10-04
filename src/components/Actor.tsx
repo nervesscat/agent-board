@@ -5,7 +5,7 @@ import { get } from '#/lib/api'
 
 type Kind = 'agent' | 'human'
 
-const AGENTS = ['claude', 'codex', 'opencode', 'gemini', 'cursor', 'scheduler', 'agent', 'bot']
+const AGENTS = ['claude', 'codex', 'opencode', 'gemini', 'cursor', 'agent', 'bot']
 
 /** Only for names the board has never seen sign in (e.g. history from before it started keeping track). */
 const guess = (name: string): Kind => (AGENTS.some((a) => name.toLowerCase().includes(a)) ? 'agent' : 'human')

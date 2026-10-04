@@ -38,12 +38,6 @@ const TicketPatch = z.object({
   tags: z.array(z.string().max(40)).max(20).optional(),
   prNumber: z.number().int().positive().nullable().optional(),
 })
-const ScheduleBody = z.object({
-  time: z.string().regex(/^\d{2}:\d{2}$/, 'HH:MM'),
-  days: z.number().int().min(0).max(127).default(0b0111110),
-  args: z.string().max(500).default('mine'),
-  enabled: z.boolean().default(true),
-})
 
 export const api = new ApiRouter()
 
@@ -370,23 +364,7 @@ api.get('/api/projects/:id/reviews/results', ({ params, url }) => {
   })
   return json(rows.map(({ summaryMd: _summary, ...r }) => r))
 })
-api.get('/api/projects/:id/reviews', ({ params }) => {
-  const pid = id(params)
-  return json({
-    running: reviews.isRunning(pid),
-    runs: reviews.listRuns(pid),
-    results: reviews.listResults(pid),
-    schedules: reviews.listSchedules(pid),
-  })
-})
-api.post('/api/projects/:id/reviews/run', async ({ request, params, actor }) => {
-  const body = await readJson(request, z.object({ args: z.string().max(500).default('mine') }))
-  return json(reviews.startRun(id(params), body.args, actor), 202)
-})
-api.post('/api/projects/:id/reviews/cancel', ({ params, actor }) => {
-  reviews.cancelRun(id(params), actor)
-  return json({ ok: true })
-})
+api.get('/api/projects/:id/reviews', ({ params }) => json({ results: reviews.listResults(id(params)) }))
 api.post('/api/projects/:id/reviews/results', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
@@ -402,18 +380,7 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
   )
   return json(reviews.postResult(id(params), body, actor), 201)
 })
-api.get('/api/reviews/runs/:id', ({ params }) => json(reviews.getRun(id(params))))
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
-api.post('/api/projects/:id/schedules', async ({ request, params, actor }) =>
-  json(reviews.createSchedule(id(params), await readJson(request, ScheduleBody), actor), 201),
-)
-api.patch('/api/schedules/:id', async ({ request, params, actor }) =>
-  json(reviews.updateSchedule(id(params), await readJson(request, ScheduleBody.partial()), actor)),
-)
-api.delete('/api/schedules/:id', ({ params, actor }) => {
-  reviews.deleteSchedule(id(params), actor)
-  return json({ ok: true })
-})
 
 // --- daily ---
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')

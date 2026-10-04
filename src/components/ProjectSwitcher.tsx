@@ -264,8 +264,8 @@ function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => vo
             <AlertDialogHeader>
               <AlertDialogTitle>Delete {p.name}?</AlertDialogTitle>
               <AlertDialogDescription>
-                Goes with it: {goes}, and its reviews, schedules and daily log. The checkouts on disk are
-                untouched. To keep a repo, move it to another project first.
+                Goes with it: {goes}, and its reviews and daily log. The checkouts on disk are untouched. To
+                keep a repo, move it to another project first.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

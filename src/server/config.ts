@@ -15,7 +15,6 @@ export const config = {
   gateUrl: env('GATE_URL', 'http://localhost:47110').replace(/\/$/, ''),
   dataDir: expandPath(env('DATA_DIR', './data')),
   claudeBin: env('CLAUDE_BIN', 'claude'),
-  featureReviewDir: expandPath(env('FEATURE_REVIEW_DIR', '~/.claude/feature-review')),
 }
 
 export const uploadsDir = path.join(config.dataDir, 'uploads')

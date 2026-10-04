@@ -179,35 +179,6 @@ export const attachments = sqliteTable('attachments', {
   createdAt: now(),
 })
 
-export const reviewSchedules = sqliteTable('review_schedules', {
-  id: id(),
-  projectId: integer('project_id')
-    .notNull()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  time: text().notNull(),
-  // Bit i set = runs on weekday i (0 = Sunday). Default: Monday to Friday.
-  days: integer().notNull().default(0b0111110),
-  args: text().notNull().default('mine'),
-  enabled: integer({ mode: 'boolean' }).notNull().default(true),
-  lastRunAt: text('last_run_at'),
-})
-
-export const reviewRuns = sqliteTable('review_runs', {
-  id: id(),
-  projectId: integer('project_id')
-    .notNull()
-    .references(() => projects.id, { onDelete: 'cascade' }),
-  scheduleId: integer('schedule_id'),
-  args: text().notNull(),
-  startedBy: text('started_by').notNull(),
-  startedAt: now(),
-  finishedAt: text('finished_at'),
-  status: text().$type<'running' | 'done' | 'error' | 'cancelled'>().notNull().default('running'),
-  exitCode: integer('exit_code'),
-  queueDir: text('queue_dir'),
-  log: text().notNull().default(''),
-})
-
 export const reviewResults = sqliteTable(
   'review_results',
   {
@@ -215,7 +186,6 @@ export const reviewResults = sqliteTable(
     projectId: integer('project_id')
       .notNull()
       .references(() => projects.id, { onDelete: 'cascade' }),
-    runId: integer('run_id').references(() => reviewRuns.id, { onDelete: 'set null' }),
     repoId: integer('repo_id').references(() => repos.id, { onDelete: 'set null' }),
     prNumber: integer('pr_number').notNull(),
     sha: text().notNull(),
@@ -223,7 +193,6 @@ export const reviewResults = sqliteTable(
     checks: text({ mode: 'json' }).$type<Record<string, string>>().notNull().default({}),
     counts: text({ mode: 'json' }).$type<Record<string, number>>().notNull().default({}),
     summaryMd: text('summary_md').notNull().default(''),
-    reviewPath: text('review_path').notNull().default(''),
     author: text().notNull(),
     createdAt: now(),
   },
@@ -286,6 +255,4 @@ export type Workspace = typeof workspaces.$inferSelect
 export type Update = typeof updates.$inferSelect
 export type Attachment = typeof attachments.$inferSelect
 export type Comment = typeof comments.$inferSelect
-export type ReviewSchedule = typeof reviewSchedules.$inferSelect
-export type ReviewRun = typeof reviewRuns.$inferSelect
 export type ReviewResult = typeof reviewResults.$inferSelect
