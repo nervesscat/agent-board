@@ -382,7 +382,7 @@ function buildServer(actor: string) {
   )
   tool(
     'cleanup_report',
-    "What finished work left behind: every ticket in a done or cancelled stage (or archived) that still has a registered workspace, a local or origin branch, or a worktree. Each branch comes with its local and origin sha, the worktrees holding it, reach against the ticket's base chain (merged, rebased, edited: safe to delete; unique: still has work, commits listed) and the command that restores it. untracked lists worktrees no ticket or workspace accounts for. Origin branches are as of the last fetch; the board never deletes anything.",
+    "What finished work left behind: every ticket in a done or cancelled stage (or archived) that still has a registered workspace, a local or origin branch, or a worktree. Each branch comes with its local and origin sha, the worktrees holding it, reach against the ticket's base chain (merged, rebased, edited: safe to delete; unique: still has work, commits listed) and the command that restores it. untracked lists worktrees no ticket or workspace accounts for. Origin branches are as of the last fetch; the board never deletes any of these. uploads counts the board's unattached uploads older than a day (no post, reply, ticket, agent picture or text points at them): the board deletes those by itself every hour, and the human can from the Cleanup page.",
     { projectId: z.number().int() },
     ({ projectId }) => cleanupReport(projectId),
   )

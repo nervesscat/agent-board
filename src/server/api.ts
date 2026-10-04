@@ -22,6 +22,7 @@ import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import { deleteUnattachedUploads } from './unattached'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -517,6 +518,11 @@ api.post('/api/uploads', async ({ request, actor }) => {
       ? await uploads.saveFromPath(body.path, actor)
       : await uploads.saveBase64(body.name, body.base64, actor, body.mime)
   return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
+})
+// Uploads nothing points at, older than a day (the board also does this hourly); the human's call.
+api.delete('/api/uploads/unattached', async ({ request }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human deletes unattached uploads')
+  return json(await deleteUnattachedUploads())
 })
 // For agents: the file's local path is there to open (fetched into the cache first with STORAGE=s3).
 api.get('/api/uploads/:id/info', async ({ params }) =>
