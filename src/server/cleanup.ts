@@ -7,6 +7,7 @@ import { activePreviews, type ManagedPreview } from './managedPreview'
 import { getProject } from './projects'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
+import { unattachedUploads, type UnattachedUploads } from './unattached'
 
 /**
  * What is left behind by finished work: branches, worktrees and registered workspaces of tickets in
@@ -117,6 +118,8 @@ export interface CleanupReport {
     branches: number
     remote: number
   }
+  /** Uploads nothing on the whole board points at (not just this project's). */
+  uploads: UnattachedUploads
 }
 
 /**
@@ -227,5 +230,6 @@ export async function cleanupReport(
       branches: branches.filter((b) => b.local).length,
       remote: branches.filter((b) => b.remote).length,
     },
+    uploads: unattachedUploads(),
   }
 }

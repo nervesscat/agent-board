@@ -20,6 +20,7 @@ import type { ManagedPreview } from '#/server/managedPreview'
 import type { PreviewState } from '#/server/preview'
 import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
+import type { ProjectPush, Push } from '#/server/push'
 import type { ProjectAgent } from '#/server/projectAgents'
 
 /** A project as the API returns it: always with its repos. */
@@ -47,6 +48,8 @@ export type {
   Worktree,
   Reach,
   CleanupReport,
+  Push,
+  ProjectPush,
 }
 
 export class ApiError extends Error {
@@ -122,9 +125,9 @@ export interface TicketGit {
   repo: { id: number; name: string } | null
   branch: string
   baseBranch: string
-  info: BranchInfo & { reach: Reach | null }
+  info: BranchInfo & { reach: Reach | null; push: Push }
   workspaces: (Workspace & {
-    info: BranchInfo & { reach: Reach | null }
+    info: BranchInfo & { reach: Reach | null; push: Push }
     worktree: Worktree | null
     lane: { id: number; title: string } | null
   })[]

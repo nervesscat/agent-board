@@ -396,6 +396,21 @@ describe('the agent loop', () => {
     expect(db.select().from(schema.attachments).where(eq(schema.attachments.id, b.id)).get()).toBeUndefined()
   })
 
+  it('creates a ticket with files, and creates nothing when one of them cannot be attached', async () => {
+    const uploads = await import('./uploads')
+    const a = await uploads.saveBase64('shot.png', Buffer.from([0x89, 0x50]).toString('base64'), 'enrique')
+    const t = features.createTicket(pid, { title: 'born with files', attachmentIds: [a.id] }, 'enrique')
+    expect(features.getTicketFull(t.id).attachments.map((x) => x.name)).toEqual(['shot.png'])
+    const before = features.listTickets(pid).length
+    expect(() =>
+      features.createTicket(pid, { title: 'reuses a file', attachmentIds: [a.id] }, 'enrique'),
+    ).toThrow(/already attached/)
+    expect(() =>
+      features.createTicket(pid, { title: 'no such file', attachmentIds: [999_999] }, 'enrique'),
+    ).toThrow(/not found/)
+    expect(features.listTickets(pid)).toHaveLength(before)
+  })
+
   it('asks the human for a decision: blocks the ticket, and unblocks it once nothing is left open', () => {
     const t = features.createTicket(pid, { title: 'decide me', assignee: 'claude' }, 'enrique')
     features.claimTicket(t.id, 'claude')

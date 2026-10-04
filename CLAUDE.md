@@ -47,11 +47,15 @@ human:<name>` or `agent:<name>` says who calls (CI, Playwright). The server refu
 
 ```
 pnpm typecheck && pnpm lint && pnpm test
+pnpm check:migrations
+pnpm test:e2e
 pnpm exec prettier --check --end-of-line auto <changed files>
 ```
 
-On a Windows checkout two tests fail regardless of the change: `agents.test.ts` (CRLF line endings)
-and `cleanup.test.ts` (path separators). Prettier without `--end-of-line auto` flags every CRLF file.
+`pnpm test:e2e` (Playwright, `e2e/`) builds into `.output-e2e` and starts that build in test mode on a
+free loopback port above 47140 with throwaway data, so it is safe beside the live board, in the main
+checkout too. CI (`.github/workflows/ci.yml`) runs all of these on every pull request. Prettier
+without `--end-of-line auto` flags every CRLF file.
 
 ## Files
 
@@ -61,6 +65,7 @@ MCP tool results and agents' REST reads pass through `ensureLocalFiles`. The S3 
 `storage.test.ts` run against a real MinIO when `S3_TEST_ENDPOINT` (with `S3_TEST_ACCESS_KEY`,
 `S3_TEST_SECRET_KEY`) is set, e.g. `docker compose -f docker-compose.minio.yml up -d` and
 `http://127.0.0.1:47120`.
+Unattached uploads older than a day are deleted hourly: a new reference to an upload goes in `src/server/unattached.ts`.
 
 ## Database
 

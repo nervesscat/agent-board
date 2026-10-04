@@ -59,7 +59,8 @@ Then:
 ## 2. Pick up work
 
 - First, `list_my_threads` with your `projectId`: threads where the human (or another agent)
-  spoke after you. Answer those before starting anything new.
+  spoke after you. Answer those before starting anything new, and keep its `cursor` for
+  [Watch for feedback](#watch-for-feedback).
 - `list_tickets` with `status: ["todo"]` and `assignee: ""` (unassigned), or `assignee: <you>`, for
   candidates; `q` finds text in titles and instructions. If the human named a ticket, use that one.
   The list includes lanes (`parentId` set); `parentId: null` narrows it to top-level tickets,
@@ -143,6 +144,23 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.
 
+### Watch for feedback
+
+The human should not have to tell you to check comments. While this session has tickets of yours
+(or of an agent you answer as) in `in_progress` or `review`, check the inbox every few minutes:
+
+- `check_inbox` with your `projectId` and `since` = the `cursor` from your last call (none the
+  first time). It is cheap: `count`, a new `cursor` and, per thread, where it is (`ticketId`,
+  `title`, `parentType`, `parentId`), `as`, `lastAuthor` and `lastAt`, no bodies. Nothing new is
+  `count: 0`. Keep the new `cursor`, even when you skip a thread; the board stores none for you.
+- In Claude Code, run it under `/loop`, e.g.
+  `/loop 5m check the board inbox and handle new comments`. Elsewhere, check between steps.
+- For each new thread: read it (`list_comments` with its `parentType` and `parentId`), fix what it
+  asks in that ticket's worktree the usual way (the checks, commit, push, refresh the preview),
+  then reply in the same thread (`comment`, `as` when it is set) with what changed and the commit.
+  A question gets an answer; a request you cannot do goes back to the human as a question.
+- Stop watching once none of your tickets is in `in_progress` or `review`.
+
 ## 4. Hand off
 
 1. Open the PR assigned to the human: `gh pr create --assignee <their login>`, or `--assignee @me`
@@ -150,9 +168,14 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
    the PR queue also lists PRs assigned to the human, so this is how it gets there.
 2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
-3. Final `post_update` with the PR link, how to test, and the preview link if there is one.
-4. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
-   say otherwise.
+3. Final `post_update` with the PR link, how to test, and the preview link if there is one. Run the
+   repo's checks first, its end-to-end suite too when it has one (the project instructions say how,
+   e.g. `pnpm test:e2e`), and attach the result to that post with `files`: the run's summary (or
+   its report when something failed) and, for a UI change, screenshots of what changed.
+4. `update_ticket` → `status: review`, only with the branch pushed: `get_ticket` → `push.state` is
+   `pushed` (a green dot on the board). `ahead` (commits only here) or `local-only` (not on origin)
+   is red: push, then check again. `done` is the human's call unless the project instructions say
+   otherwise.
 5. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
    board flags a ticket that is further along than its lanes. Say in the final update which lanes
    it covers.

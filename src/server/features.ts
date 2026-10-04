@@ -10,9 +10,10 @@ import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
 import { previewState, previewUrl, type PreviewState } from './preview'
 import { prForTicket } from './prs'
+import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
 import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
-import { attachTo, attachmentView } from './uploads'
+import { assertUnattached, attachTo, attachmentView } from './uploads'
 
 // --- tickets ---
 
@@ -244,6 +245,21 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
 
 export type TicketFull = ReturnType<typeof getTicketFull>
 
+/**
+ * `getTicketFull` with whether each branch is on origin: `push` on the ticket (its branch) and on each
+ * of its workspaces, from one batch of git in the ticket's checkout.
+ */
+export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
+  const t = getTicketFull(id, opts)
+  const repo = ticketRepo(t)
+  const push = repo ? await pushStates(repo.repoPath, [t.branch, ...t.workspaces.map((w) => w.branch)]) : null
+  return {
+    ...t,
+    push: push?.get(t.branch) ?? NO_PUSH,
+    workspaces: t.workspaces.map((w) => ({ ...w, push: push?.get(w.branch) ?? NO_PUSH })),
+  }
+}
+
 export function createTicket(
   projectId: number,
   input: {
@@ -259,6 +275,8 @@ export function createTicket(
     tags?: string[]
     tasks?: string[]
     prNumber?: number | null
+    /** Uploads (POST /api/uploads) that go with the instructions. */
+    attachmentIds?: number[]
   },
   actor: string,
 ) {
@@ -266,6 +284,9 @@ export function createTicket(
   const parent = input.parentId ? getTicket(input.parentId) : null
   if (parent && parent.projectId !== projectId)
     throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
+  // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
+  const attachmentIds = input.attachmentIds ?? []
+  assertUnattached(attachmentIds)
   const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
   // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
   const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
@@ -289,6 +310,7 @@ export function createTicket(
     .returning()
     .get()
   if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
+  if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
   if (parent) touch(parent.id)
   logActivity({
     projectId,
@@ -794,7 +816,8 @@ export function deleteWorkspace(id: number, actor: string) {
  * Live, read-only git state for the ticket's branch and each workspace: its own, then its lanes'
  * (all the way down, each tagged with its lane). A workspace is compared against the branch of the
  * ticket it belongs to, in that ticket's repo. Each branch carries `reach`: whether its work is in
- * the base chain (a lane's parent branch, then dev), so it can be deleted.
+ * the base chain (a lane's parent branch, then dev), so it can be deleted, and `push`: whether it is
+ * on origin.
  */
 export async function ticketGit(id: number) {
   const ticket = getTicket(id)
@@ -819,26 +842,39 @@ export async function ticketGit(id: number) {
   const repoGit = gitCache()
   const [branch, ...wsState] = await Promise.all([
     (async () => {
-      if (!repo) return { ...none, reach: null }
-      const [info, { refs }] = await Promise.all([
+      if (!repo) return { ...none, reach: null, push: NO_PUSH }
+      const [info, { refs }, push] = await Promise.all([
         branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
         repoGit(repo.repoPath),
+        pushStates(repo.repoPath, [ticket.branch]),
       ])
       const chain = baseChain(ticket, byId, repo)
-      return { ...info, reach: await reachOf(repo.repoPath, ticket.branch, chain, refs) }
+      return {
+        ...info,
+        reach: await reachOf(repo.repoPath, ticket.branch, chain, refs),
+        push: push.get(ticket.branch) ?? NO_PUSH,
+      }
     })(),
     ...workspaces.map(async ({ w, owner, repo: r }) => {
-      if (!r) return { info: { ...none, reach: null }, worktree: null }
-      const [info, { refs, worktrees }] = await Promise.all([
+      if (!r) return { info: { ...none, reach: null, push: NO_PUSH }, worktree: null }
+      const [info, { refs, worktrees }, push] = await Promise.all([
         branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
         repoGit(r.repoPath),
+        pushStates(r.repoPath, [w.branch]),
       ])
       const chain = baseChain(owner, byId, r)
       const into = w.branch === owner.branch || !owner.branch ? chain : [owner.branch, ...chain]
       const worktree =
         worktrees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ??
         null
-      return { info: { ...info, reach: await reachOf(r.repoPath, w.branch, into, refs) }, worktree }
+      return {
+        info: {
+          ...info,
+          reach: await reachOf(r.repoPath, w.branch, into, refs),
+          push: push.get(w.branch) ?? NO_PUSH,
+        },
+        worktree,
+      }
     }),
   ])
   return {
@@ -1116,6 +1152,45 @@ export function listOpenThreads(projectId: number, actor: string) {
     if (agent) out.push(entry(agent.name, agent.name))
   }
   return out.sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt))
+}
+
+/**
+ * The threads waiting on `actor`, from a cursor the caller keeps: with `since` (an ISO time), only the
+ * ones whose last word, by someone else, came after it. `cursor` is the newest last word seen, or
+ * `since` when nothing new came (null until there is one): pass it as `since` next time. Read-only;
+ * nothing is stored per caller.
+ */
+export function myThreads(projectId: number, actor: string, since?: string | null) {
+  const from = since ? sinceTime(since) : null
+  const all = listOpenThreads(projectId, actor)
+  const threads = from === null ? all : all.filter((t) => Date.parse(t.last.createdAt) > from)
+  // Newest first, and each one after `since`, so the cursor only moves forward.
+  const cursor = threads[0]?.last.createdAt ?? (from === null ? null : new Date(from).toISOString())
+  return { cursor, threads }
+}
+
+function sinceTime(since: string) {
+  const t = Date.parse(since)
+  if (Number.isNaN(t)) throw new HttpError(400, `since must be an ISO time, not "${since}"`)
+  return t
+}
+
+/** The cheap poll for new comments: what myThreads finds, without bodies. */
+export function checkInbox(projectId: number, actor: string, since?: string | null) {
+  const { cursor, threads } = myThreads(projectId, actor, since)
+  return {
+    count: threads.length,
+    cursor,
+    threads: threads.map((t) => ({
+      ticketId: t.ticketId,
+      title: t.title,
+      parentType: t.parentType,
+      parentId: t.parentId,
+      as: t.as,
+      lastAuthor: t.last.author,
+      lastAt: t.last.createdAt,
+    })),
+  }
 }
 
 export function addComment(
