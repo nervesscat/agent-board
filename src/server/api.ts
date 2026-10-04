@@ -23,6 +23,7 @@ import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import { deleteUnattachedUploads } from './unattached'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -273,6 +274,7 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
       title: z.string().min(1).max(200),
       tasks: z.array(z.string().min(1).max(500)).optional(),
       parentId: z.number().int().optional(),
+      attachmentIds: z.array(z.number().int()).optional(),
     }),
   )
   return json(features.createTicket(id(params), body, actor), 201)
@@ -473,8 +475,14 @@ api.get('/api/comments', async ({ request, url }) => {
   const parentId = intParam(url.searchParams.get('parentId') ?? '', 'parentId')
   return json(await forAgent(request, features.listComments(parentType, parentId)))
 })
-// Threads in a project where someone spoke after the caller, on things the caller owns or spoke in.
-api.get('/api/projects/:id/threads', ({ params, actor }) => json(features.listOpenThreads(id(params), actor)))
+// Threads in a project where someone spoke after the caller, on things the caller owns or spoke in;
+// ?since=<cursor> keeps only the ones with something new. /inbox is the same without bodies.
+api.get('/api/projects/:id/threads', ({ params, url, actor }) =>
+  json(features.myThreads(id(params), actor, url.searchParams.get('since'))),
+)
+api.get('/api/projects/:id/inbox', ({ params, url, actor }) =>
+  json(features.checkInbox(id(params), actor, url.searchParams.get('since'))),
+)
 api.post('/api/comments', async ({ request, actor }) => {
   const body = await readJson(
     request,
@@ -521,6 +529,11 @@ api.post('/api/uploads', async ({ request, actor }) => {
       ? await uploads.saveFromPath(body.path, actor)
       : await uploads.saveBase64(body.name, body.base64, actor, body.mime)
   return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
+})
+// Uploads nothing points at, older than a day (the board also does this hourly); the human's call.
+api.delete('/api/uploads/unattached', async ({ request }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human deletes unattached uploads')
+  return json(await deleteUnattachedUploads())
 })
 // For agents: the file's local path is there to open (fetched into the cache first with STORAGE=s3).
 api.get('/api/uploads/:id/info', async ({ params }) =>

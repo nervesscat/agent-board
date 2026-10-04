@@ -59,7 +59,8 @@ Then:
 ## 2. Pick up work
 
 - First, `list_my_threads` with your `projectId`: threads where the human (or another agent)
-  spoke after you. Answer those before starting anything new.
+  spoke after you. Answer those before starting anything new, and keep its `cursor` for
+  [Watch for feedback](#watch-for-feedback).
 - `list_tickets` with `status: ["todo"]` and `assignee: ""` (unassigned), or `assignee: <you>`, for
   candidates; `q` finds text in titles and instructions. If the human named a ticket, use that one.
   The list includes lanes (`parentId` set); `parentId: null` narrows it to top-level tickets,
@@ -134,6 +135,23 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.
+
+### Watch for feedback
+
+The human should not have to tell you to check comments. While this session has tickets of yours
+(or of an agent you answer as) in `in_progress` or `review`, check the inbox every few minutes:
+
+- `check_inbox` with your `projectId` and `since` = the `cursor` from your last call (none the
+  first time). It is cheap: `count`, a new `cursor` and, per thread, where it is (`ticketId`,
+  `title`, `parentType`, `parentId`), `as`, `lastAuthor` and `lastAt`, no bodies. Nothing new is
+  `count: 0`. Keep the new `cursor`, even when you skip a thread; the board stores none for you.
+- In Claude Code, run it under `/loop`, e.g.
+  `/loop 5m check the board inbox and handle new comments`. Elsewhere, check between steps.
+- For each new thread: read it (`list_comments` with its `parentType` and `parentId`), fix what it
+  asks in that ticket's worktree the usual way (the checks, commit, push, refresh the preview),
+  then reply in the same thread (`comment`, `as` when it is set) with what changed and the commit.
+  A question gets an answer; a request you cannot do goes back to the human as a question.
+- Stop watching once none of your tickets is in `in_progress` or `review`.
 
 ## 4. Hand off
 

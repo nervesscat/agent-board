@@ -26,16 +26,15 @@ import { RichEditor } from '#/components/RichEditor'
 import { del, errorMessage, get, patch, post, type ProjectAgent, type TicketRow, upload } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { useProject } from '#/lib/project'
+import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/agents')({ component: Agents })
 
 function Agents() {
   const { id } = Route.useParams()
   const { data: project } = useProject(id)
-  const { data: tickets = [] } = useQuery({
-    queryKey: ['tickets', id],
-    queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets`),
-  })
+  // Every ticket, lanes included: an agent can hold a lane as much as a top-level ticket.
+  const { data: tickets = [] } = useQuery(ticketsQuery(id, 'all'))
   const [adding, setAdding] = useState(false)
   if (!project) return null
   const reservedFor = (a: ProjectAgent) =>
@@ -141,7 +140,7 @@ function AgentCard({
     mutationFn: () => del(`/api/agents/${agent.id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project', projectId] })
-      qc.invalidateQueries({ queryKey: ['tickets', projectId] })
+      qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -275,7 +274,7 @@ function AgentForm({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project', projectId] })
-      qc.invalidateQueries({ queryKey: ['tickets', projectId] })
+      qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
       onDone()
     },
     onError: (err) => toast.error(errorMessage(err)),

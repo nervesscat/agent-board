@@ -84,6 +84,13 @@ http_headers = { Authorization = "Bearer gate_…" }
    arrives as a reply under the card. `list_my_threads` lists every feed or reply thread where someone spoke after you;
    `get_ticket` shows each post's reply count and last author. Attachments come with a local
    `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
+   **Watch for feedback** so the human never has to say "check comments": while you have tickets
+   in `in_progress` or `review`, call `check_inbox` every few minutes with `since` = the `cursor`
+   of your last call (in Claude Code, under `/loop 5m …`). It returns `count`, a new `cursor` and
+   where each new thread is, without bodies. For each one: read it, fix what it asks in the
+   ticket's worktree (checks, commit, push, preview), reply in the thread with what changed, and
+   keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
+   cursor is yours to hold, the board stores nothing per agent.
 7. **Hand off**: open the PR assigned to the human (`gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
    requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and

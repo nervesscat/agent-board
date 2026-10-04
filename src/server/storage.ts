@@ -4,6 +4,7 @@ import { Readable } from 'node:stream'
 
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
   PutObjectCommand,
@@ -27,6 +28,8 @@ export interface FileStore {
   localPath(key: string): string
   /** The file on this machine, fetched first if it is not there. */
   ensureLocal(key: string): Promise<string>
+  /** Removes the file, and with s3 its copy on this machine. A file already gone is not an error. */
+  delete(key: string): Promise<void>
 }
 
 export type ByteRange = { start: number; end: number }
@@ -62,6 +65,7 @@ export function localStore(dir = uploadsDir): FileStore {
     },
     localPath: file,
     ensureLocal: async (key) => file(key),
+    delete: async (key) => fs.rmSync(file(key), { force: true }),
   }
 }
 
@@ -163,6 +167,16 @@ export function s3Store(s3: typeof config.s3 = config.s3, cache = cacheDir): Fil
       )
       fs.renameSync(part, p)
       return p
+    },
+    delete: async (key) => {
+      await ensureBucket()
+      try {
+        // Deleting a key the bucket does not have succeeds.
+        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
+      } catch (err) {
+        throw unreachable(err)
+      }
+      fs.rmSync(cached(key), { force: true })
     },
   }
 }
