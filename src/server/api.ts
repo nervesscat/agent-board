@@ -355,6 +355,38 @@ api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
     201,
   )
 })
+// A decision for the human: the question (body) and 2 to 5 options; blocks the ticket unless block: false.
+api.post('/api/tickets/:id/decisions', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      body: z.string().min(1).max(50_000),
+      options: z
+        .array(
+          z.object({
+            label: z.string().min(1).max(200),
+            detail: z.string().max(2_000).optional(),
+            recommended: z.boolean().optional(),
+          }),
+        )
+        .min(2)
+        .max(5),
+      as: AgentName.optional(),
+      block: z.boolean().default(true),
+    }),
+  )
+  if (body.as) agentOnly(request)
+  return json(features.askDecision(id(params), body, actor), 201)
+})
+// Only the human decides; agents read the answer.
+api.put('/api/updates/:id/decision', async ({ request, params, actor }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human decides')
+  const body = await readJson(
+    request,
+    z.object({ option: z.number().int().min(0), note: z.string().max(5_000).default('') }),
+  )
+  return json(features.decide(id(params), body.option, body.note, actor))
+})
 // Its author edits or deletes a post or reply; the human (passkey) any.
 api.patch('/api/updates/:id', async ({ request, params, actor }) => {
   const body = await readJson(

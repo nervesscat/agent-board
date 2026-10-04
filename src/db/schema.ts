@@ -175,9 +175,18 @@ export const updates = sqliteTable('updates', {
   via: text().notNull().default(''),
   body: text().notNull(),
   progress: integer({ mode: 'boolean' }).notNull().default(true),
+  // A decision the human is asked to make: the post's body is the question, these are the answers
+  // to pick from. Null on any other post.
+  decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),
+  // The human's pick (an index into `decision`), who and when; null until decided.
+  decidedOption: integer('decided_option'),
+  decidedBy: text('decided_by').notNull().default(''),
+  decidedAt: text('decided_at'),
   createdAt: now(),
   editedAt: text('edited_at'),
 })
+
+export type DecisionOption = { label: string; detail?: string; recommended?: boolean }
 
 export const comments = sqliteTable(
   'comments',

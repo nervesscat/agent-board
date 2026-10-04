@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
@@ -46,6 +46,21 @@ function projectTickets(projectId: number) {
     if (task.done) p.done++
   }
   const agentNames = new Set(listAgents(projectId).map((a) => a.name.toLowerCase()))
+  // Decisions still waiting on the human, per ticket.
+  const openDecisions = new Map<number, number>()
+  if (ids.length)
+    for (const u of db
+      .select({ ticketId: schema.updates.ticketId })
+      .from(schema.updates)
+      .where(
+        and(
+          inArray(schema.updates.ticketId, ids),
+          isNotNull(schema.updates.decision),
+          isNull(schema.updates.decidedAt),
+        ),
+      )
+      .all())
+      openDecisions.set(u.ticketId, (openDecisions.get(u.ticketId) ?? 0) + 1)
   const children = new Map<number, schema.Ticket[]>()
   for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
   // A cancelled lane's tasks are no longer part of the work.
@@ -69,7 +84,8 @@ function projectTickets(projectId: number) {
     }
     // Assigned to one of the project's agents: only that agent works it.
     const reserved = agentNames.has(t.assignee.toLowerCase())
-    return { ...t, reserved, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
+    const decisions = openDecisions.get(t.id) ?? 0
+    return { ...t, reserved, decisions, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
   })
 }
 
@@ -1007,6 +1023,94 @@ export function removeTicketFile(ticketId: number, attachmentId: number, actor: 
     refType: 'ticket',
     refId: ticketId,
   })
+}
+
+/**
+ * A decision only the human should make, as a post on the ticket: `body` is the question, `options` the
+ * answers to pick from (one may be recommended). With `block` (the default) the ticket moves to the
+ * project's blocked stage until it is decided.
+ */
+export function askDecision(
+  ticketId: number,
+  input: { body: string; options: schema.DecisionOption[]; as?: string; block?: boolean },
+  actor: string,
+) {
+  const options = input.options
+    .map((o) => ({ ...o, label: o.label.trim(), detail: o.detail?.trim() || undefined }))
+    .filter((o) => o.label)
+  if (options.length < 2 || options.length > 5) throw new HttpError(400, 'give 2 to 5 options')
+  if (options.filter((o) => o.recommended).length > 1)
+    throw new HttpError(400, 'recommend at most one option')
+  const post = postUpdate(ticketId, input.body, [], actor, { as: input.as, progress: false })
+  const row = db
+    .update(schema.updates)
+    .set({ decision: options })
+    .where(eq(schema.updates.id, post.id))
+    .returning()
+    .get()!
+  const ticket = getTicket(ticketId)
+  const stages = listStages(ticket.projectId)
+  const blocked = firstOfKind(stages, 'blocked')
+  if ((input.block ?? true) && blocked && ticket.status !== blocked.key) {
+    db.update(schema.tickets).set({ status: blocked.key }).where(eq(schema.tickets.id, ticketId)).run()
+  }
+  logActivity({
+    projectId: ticket.projectId,
+    actor: post.author,
+    kind: 'ticket',
+    text: `asked for a decision on #${ticketId} ${ticket.title}: ${firstLine(input.body, 80)}`,
+    refType: 'ticket',
+    refId: ticketId,
+  })
+  return row
+}
+
+/**
+ * The human's answer to a decision: the option picked, and an optional note. It is posted as a reply
+ * under the decision too, so the agent that asked finds it in its threads. A blocked ticket goes back
+ * to the project's first active stage once no decision on it is left open. Deciding again changes
+ * the answer.
+ */
+export function decide(postId: number, option: number, note: string, actor: string) {
+  const post = getPost(postId)
+  if (!post.decision) throw new HttpError(400, `post ${postId} is not a decision`)
+  const picked = post.decision[option]
+  if (!picked) throw new HttpError(400, `no option ${option}; there are ${post.decision.length}`)
+  const changed = post.decidedAt !== null
+  const row = db
+    .update(schema.updates)
+    .set({ decidedOption: option, decidedBy: actor, decidedAt: new Date().toISOString() })
+    .where(eq(schema.updates.id, postId))
+    .returning()
+    .get()!
+  const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}`
+  addComment({ parentType: 'update', parentId: postId, body: words }, actor)
+  const ticket = getTicket(post.ticketId)
+  const stages = listStages(ticket.projectId)
+  const stillOpen = db
+    .select({ id: schema.updates.id })
+    .from(schema.updates)
+    .where(
+      and(
+        eq(schema.updates.ticketId, ticket.id),
+        isNotNull(schema.updates.decision),
+        isNull(schema.updates.decidedAt),
+      ),
+    )
+    .get()
+  const active = firstOfKind(stages, 'active')
+  if (!stillOpen && active && kindOf(stages, ticket.status) === 'blocked')
+    db.update(schema.tickets).set({ status: active.key }).where(eq(schema.tickets.id, ticket.id)).run()
+  touch(ticket.id)
+  logActivity({
+    projectId: ticket.projectId,
+    actor,
+    kind: 'ticket',
+    text: `decided "${picked.label}" on #${ticket.id} ${ticket.title}`,
+    refType: 'ticket',
+    refId: ticket.id,
+  })
+  return row
 }
 
 export function getPost(id: number) {

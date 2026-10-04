@@ -117,7 +117,10 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   in `review`; stop it once it is merged or dropped. Never run it from the checkout or port the
   human uses day to day.
 - Questions are posts too: `comment` on the ticket; the human answers with a post or a reply
-  under yours (`comment` on the post, `parentType: update`, replies there). If you cannot go on
+  under yours (`comment` on the post, `parentType: update`, replies there). A choice between clear
+  options (an approach, a trade-off, a scope call) is an `ask_decision` instead: the question with
+  the context, 2 to 5 options (a label, what it means, at most one `recommended`). The ticket
+  blocks until the human picks one; the answer comes as a reply under the card. If you cannot go on
   without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
   is answered. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
