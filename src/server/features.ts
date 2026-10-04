@@ -1,17 +1,30 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { RESUME_TEMPLATE } from '#/lib/constants'
 import { logActivity } from './activity'
 import { baseChain, gitCache, reachOf } from './cleanup'
-import { branchInfo } from './git'
+import { branchHead, branchInfo } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
-import { previewState, previewUrl } from './preview'
+import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
+import { previewState, previewUrl, type PreviewState } from './preview'
 import { prForTicket } from './prs'
+import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
-import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
-import { attachTo, attachmentView } from './uploads'
+import { type WithResume, type WithResumeBrief, resumeState, withoutResume } from './resume'
+import {
+  firstOfKind,
+  kindOf,
+  listStages,
+  matchStages,
+  resolveStage,
+  startStage,
+  startedPatch,
+  stageOf,
+} from './stages'
+import { assertUnattached, attachTo, attachmentView } from './uploads'
 
 // --- tickets ---
 
@@ -94,10 +107,11 @@ function projectTickets(projectId: number) {
 export const reservedFor = (t: Pick<schema.Ticket, 'projectId' | 'assignee'>) =>
   findAgent(t.projectId, t.assignee)
 
-export type TicketRow = ReturnType<typeof projectTickets>[number]
+/** A row of a ticket list as reads hand it out (`withResumeBriefs`). */
+export type TicketRow = WithResumeBrief<ReturnType<typeof projectTickets>[number]>
 
 /** The lanes under a ticket, all the way down, nearest first. */
-function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
+export function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
   const out: T[] = []
   for (let queue = all.filter((t) => t.parentId === id); queue.length; ) {
     const next = queue.shift()!
@@ -219,14 +233,15 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     thread: ticketThread,
     pr: prForTicket(ticket),
     tasks,
-    workspaces,
+    // managedPreview: the preview the board builds and runs from the workspace, if it ever ran one.
+    workspaces: workspaces.map((w) => ({ ...w, managedPreview: managedPreview(w.id) })),
     progress: self.progress,
     rollup: self.rollup,
     ancestors,
     lanes: lanes.map((l) => {
       const u = lastUpdate.get(l.id)
       return {
-        ...l,
+        ...withoutResume(l),
         lastUpdate: u ? { author: u.author, text: gist(u.body), createdAt: u.createdAt } : null,
       }
     }),
@@ -240,7 +255,38 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
   }
 }
 
-export type TicketFull = ReturnType<typeof getTicketFull>
+/** A ticket in full as reads hand it out (`withResume`): its resume note and state under `resume`. */
+export type TicketFull = WithResume<ReturnType<typeof getTicketFull>>
+
+/** Where a new ticket goes: its parent (in the same project), its repo, and the branch it starts from. */
+export function placement(
+  projectId: number,
+  input: { repoId?: number | null; parentId?: number | null; baseBranch?: string },
+) {
+  getProject(projectId)
+  const parent = input.parentId ? getTicket(input.parentId) : null
+  if (parent && parent.projectId !== projectId)
+    throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
+  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
+  // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
+  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
+  return { parent, repo, baseBranch: input.baseBranch || parentBase || repo.baseBranch }
+}
+
+/**
+ * `getTicketFull` with whether each branch is on origin: `push` on the ticket (its branch) and on each
+ * of its workspaces, from one batch of git in the ticket's checkout.
+ */
+export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
+  const t = getTicketFull(id, opts)
+  const repo = ticketRepo(t)
+  const push = repo ? await pushStates(repo.repoPath, [t.branch, ...t.workspaces.map((w) => w.branch)]) : null
+  return {
+    ...t,
+    push: push?.get(t.branch) ?? NO_PUSH,
+    workspaces: t.workspaces.map((w) => ({ ...w, push: push?.get(w.branch) ?? NO_PUSH })),
+  }
+}
 
 export function createTicket(
   projectId: number,
@@ -257,17 +303,17 @@ export function createTicket(
     tags?: string[]
     tasks?: string[]
     prNumber?: number | null
+    /** Uploads (POST /api/uploads) that go with the instructions. */
+    attachmentIds?: number[]
   },
   actor: string,
 ) {
-  getProject(projectId)
-  const parent = input.parentId ? getTicket(input.parentId) : null
-  if (parent && parent.projectId !== projectId)
-    throw new HttpError(400, `ticket ${parent.id} is not in project ${projectId}`)
-  const repo = resolveRepo(projectId, input.repoId ?? parent?.repoId ?? (parent && ticketRepo(parent)?.id))
-  // A lane branches off its parent's branch when they share a repo, so its PR goes back into it.
-  const parentBase = parent && ticketRepo(parent)?.id === repo.id ? parent.branch || parent.baseBranch : ''
+  const { parent, repo, baseBranch } = placement(projectId, input)
+  // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
+  const attachmentIds = input.attachmentIds ?? []
+  assertUnattached(attachmentIds)
   const stages = listStages(projectId)
+  const status = (input.status ? resolveStage(stages, input.status) : startStage(stages)).key
   const row = db
     .insert(schema.tickets)
     .values({
@@ -276,10 +322,11 @@ export function createTicket(
       parentId: parent?.id ?? null,
       title: input.title,
       body: input.body ?? '',
-      status: (input.status ? resolveStage(stages, input.status) : startStage(stages)).key,
+      status,
+      ...startedPatch(stages, null, status),
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
-      baseBranch: input.baseBranch || parentBase || repo.baseBranch,
+      baseBranch,
       tags: cleanTags(input.tags ?? []),
       prNumber: input.prNumber ?? null,
       createdBy: actor,
@@ -287,6 +334,7 @@ export function createTicket(
     .returning()
     .get()
   if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
+  if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
   if (parent) touch(parent.id)
   logActivity({
     projectId,
@@ -351,13 +399,19 @@ export function updateTicket(
   if (patch.status) patch = { ...patch, status: resolveStage(stages, patch.status).key }
   const row = db
     .update(schema.tickets)
-    .set({ ...patch, updatedAt: new Date().toISOString() })
+    .set({
+      ...patch,
+      ...(patch.status ? startedPatch(stages, before.status, patch.status, before.startedAt) : {}),
+      updatedAt: new Date().toISOString(),
+    })
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
   const changes: string[] = []
-  if (patch.status && patch.status !== before.status)
+  if (patch.status && patch.status !== before.status) {
     changes.push(`status ${stageOf(stages, before.status).name} → ${stageOf(stages, patch.status).name}`)
+    stopIfClosed(row, stages, actor)
+  }
   if (patch.assignee !== undefined && patch.assignee !== before.assignee)
     changes.push(`assignee → ${patch.assignee || 'nobody'}`)
   if (patch.branch !== undefined && patch.branch !== before.branch)
@@ -377,6 +431,13 @@ export function updateTicket(
     refId: id,
   })
   return row
+}
+
+/** A ticket that reached a done or cancelled stage has nothing left to preview. */
+function stopIfClosed(t: schema.Ticket, stages: ReturnType<typeof listStages>, actor: string) {
+  const stage = stageOf(stages, t.status)
+  if (stage.kind === 'done' || stage.kind === 'cancelled')
+    stopPreviewsFor([t.id], `the ticket moved to ${stage.name}`, actor)
 }
 
 /**
@@ -410,6 +471,7 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
     .set({
       assignee,
       ...(start ? { status: start.key } : {}),
+      ...startedPatch(stages, before.status, start?.key ?? before.status, before.startedAt),
       ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
       updatedAt: new Date().toISOString(),
     })
@@ -462,6 +524,8 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     : before === 'approved'
       ? (firstOfKind(stages, 'review') ?? startStage(stages))
       : startStage(stages)
+  const status =
+    verdict === 'disapproved' && cancel ? cancel.key : finish ? finish.key : reopen ? reopenTo.key : t.status
   const row = db
     .update(schema.tickets)
     .set({
@@ -469,19 +533,15 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
       approvedBy: verdict === 'approved' ? actor : '',
       disapprovedAt: verdict === 'disapproved' ? now : null,
       disapprovedBy: verdict === 'disapproved' ? actor : '',
-      ...(verdict === 'disapproved' && cancel
-        ? { status: cancel.key }
-        : finish
-          ? { status: finish.key }
-          : reopen
-            ? { status: reopenTo.key }
-            : {}),
+      status,
+      ...startedPatch(stages, t.status, status, t.startedAt),
       updatedAt: now,
     })
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
   if (t.parentId) touch(t.parentId)
+  if (row.status !== t.status) stopIfClosed(row, stages, actor)
   const what = `${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`
   logActivity({
     projectId: t.projectId,
@@ -502,6 +562,11 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
 /** Lanes go with the ticket unless `keepLanes`, which moves them up to the ticket's own parent. */
 export function deleteTicket(id: number, actor: string, opts: { keepLanes?: boolean } = {}) {
   const t = getTicket(id)
+  // Its workspaces go with it (and its lanes', unless they are kept).
+  const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, t.projectId)).all()
+  const gone = [id, ...(opts.keepLanes ? [] : laneTree(all, id).map((l) => l.id))]
+  for (const w of db.select().from(schema.workspaces).where(inArray(schema.workspaces.ticketId, gone)).all())
+    forgetPreview(w.id, actor)
   if (opts.keepLanes)
     db.update(schema.tickets).set({ parentId: t.parentId }).where(eq(schema.tickets.parentId, id)).run()
   db.delete(schema.tickets).where(eq(schema.tickets.id, id)).run()
@@ -548,6 +613,7 @@ export function archiveTicket(id: number, actor: string) {
   if (stage.kind !== 'done' && stage.kind !== 'cancelled')
     throw new HttpError(409, `ticket ${id} is in ${stage.name}; only done or cancelled tickets are archived`)
   const lanes = markArchived(t.projectId, [id], new Date().toISOString(), actor)
+  stopPreviewsFor([id], 'the ticket was archived', actor)
   logActivity({
     projectId: t.projectId,
     actor,
@@ -583,6 +649,7 @@ export function archiveStage(projectId: number, status: string, actor: string) {
     .map((t) => t.id)
   if (!ids.length) return { stage: stage.key, ids }
   const lanes = markArchived(projectId, ids, new Date().toISOString(), actor)
+  stopPreviewsFor(ids, 'the ticket was archived', actor)
   logActivity({
     projectId,
     actor,
@@ -741,15 +808,24 @@ export function setWorkspacePreview(id: number, value: string | null, actor: str
   return row
 }
 
-/** Whether the workspace's preview answers right now (checked on this machine, cached a few seconds). */
-export function workspacePreview(id: number) {
+/**
+ * Whether the workspace's preview answers right now (checked on this machine, cached a few seconds;
+ * `running: false` without a link), the preview the board runs from it (`managed`, null when it never
+ * ran one), and `cannotStart`: why the board would refuse to start one, null when it would.
+ */
+export async function workspacePreview(id: number) {
   const ws = getWorkspace(id)
-  if (!ws.previewUrl) throw new HttpError(404, 'workspace has no preview')
-  return previewState(ws.previewUrl)
+  const state: PreviewState = ws.previewUrl
+    ? await previewState(ws.previewUrl)
+    : { running: false, checkedAt: new Date().toISOString() }
+  return { ...state, url: ws.previewUrl, managed: managedPreview(id), cannotStart: cannotStart(id) }
 }
+
+export type WorkspacePreview = Awaited<ReturnType<typeof workspacePreview>>
 
 export function deleteWorkspace(id: number, actor: string) {
   const ws = getWorkspace(id)
+  forgetPreview(id, actor)
   db.delete(schema.workspaces).where(eq(schema.workspaces.id, id)).run()
   const ticket = getTicket(ws.ticketId)
   logActivity({
@@ -766,7 +842,8 @@ export function deleteWorkspace(id: number, actor: string) {
  * Live, read-only git state for the ticket's branch and each workspace: its own, then its lanes'
  * (all the way down, each tagged with its lane). A workspace is compared against the branch of the
  * ticket it belongs to, in that ticket's repo. Each branch carries `reach`: whether its work is in
- * the base chain (a lane's parent branch, then dev), so it can be deleted.
+ * the base chain (a lane's parent branch, then dev), so it can be deleted, and `push`: whether it is
+ * on origin.
  */
 export async function ticketGit(id: number) {
   const ticket = getTicket(id)
@@ -791,26 +868,39 @@ export async function ticketGit(id: number) {
   const repoGit = gitCache()
   const [branch, ...wsState] = await Promise.all([
     (async () => {
-      if (!repo) return { ...none, reach: null }
-      const [info, { refs }] = await Promise.all([
+      if (!repo) return { ...none, reach: null, push: NO_PUSH }
+      const [info, { refs }, push] = await Promise.all([
         branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
         repoGit(repo.repoPath),
+        pushStates(repo.repoPath, [ticket.branch]),
       ])
       const chain = baseChain(ticket, byId, repo)
-      return { ...info, reach: await reachOf(repo.repoPath, ticket.branch, chain, refs) }
+      return {
+        ...info,
+        reach: await reachOf(repo.repoPath, ticket.branch, chain, refs),
+        push: push.get(ticket.branch) ?? NO_PUSH,
+      }
     })(),
     ...workspaces.map(async ({ w, owner, repo: r }) => {
-      if (!r) return { info: { ...none, reach: null }, worktree: null }
-      const [info, { refs, worktrees }] = await Promise.all([
+      if (!r) return { info: { ...none, reach: null, push: NO_PUSH }, worktree: null }
+      const [info, { refs, worktrees }, push] = await Promise.all([
         branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
         repoGit(r.repoPath),
+        pushStates(r.repoPath, [w.branch]),
       ])
       const chain = baseChain(owner, byId, r)
       const into = w.branch === owner.branch || !owner.branch ? chain : [owner.branch, ...chain]
       const worktree =
         worktrees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ??
         null
-      return { info: { ...info, reach: await reachOf(r.repoPath, w.branch, into, refs) }, worktree }
+      return {
+        info: {
+          ...info,
+          reach: await reachOf(r.repoPath, w.branch, into, refs),
+          push: push.get(w.branch) ?? NO_PUSH,
+        },
+        worktree,
+      }
     }),
   ])
   return {
@@ -847,19 +937,24 @@ export function postUpdate(
   body: string,
   attachmentIds: number[],
   actor: string,
-  opts: { as?: string; progress?: boolean } = {},
+  opts: { as?: string; progress?: boolean; handoff?: boolean } = {},
 ) {
   const ticket = getTicket(ticketId)
   const { author, via } = signer(ticket.projectId, actor, opts.as)
   const progress = opts.progress ?? true
-  const row = db.insert(schema.updates).values({ ticketId, author, via, body, progress }).returning().get()
+  const handoff = opts.handoff ?? false
+  const row = db
+    .insert(schema.updates)
+    .values({ ticketId, author, via, body, progress, handoff })
+    .returning()
+    .get()
   attachTo(attachmentIds, { updateId: row.id })
   touch(ticketId)
   logActivity({
     projectId: ticket.projectId,
     actor: author,
-    kind: progress ? 'update' : 'comment',
-    text: `${progress ? 'posted an update on' : 'posted on'} #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${firstLine(body)}`,
+    kind: handoff ? 'handoff' : progress ? 'update' : 'comment',
+    text: `${handoff ? 'left a resume note on' : progress ? 'posted an update on' : 'posted on'} #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${handoff ? gist(body) : firstLine(body)}`,
     refType: 'ticket',
     refId: ticketId,
   })
@@ -884,6 +979,40 @@ export function gist(body: string, max = 120) {
 export const firstLine = (s: string, max = 120) => {
   const line = s.trim().split('\n')[0] ?? ''
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
+}
+
+// --- the resume note ("Where we left off") ---
+
+/**
+ * Write the ticket's resume note, for whoever picks it up next: `actor`, or with `as` one of the project's
+ * agents (via `actor`). It records the ticket branch's head (when the branch is here locally) so later
+ * commits show up as commits since the note. Each new version is also a handoff post in the feed, so
+ * the earlier ones stay readable; saving the same note again only marks it as still current.
+ */
+export async function setResumeNote(
+  ticketId: number,
+  note: string,
+  actor: string,
+  opts: { as?: string } = {},
+) {
+  const ticket = getTicket(ticketId)
+  const text = note.trim()
+  if (!text) throw new HttpError(400, 'the resume note is empty')
+  if (text === RESUME_TEMPLATE) throw new HttpError(400, 'fill in the template before saving it')
+  const { author } = signer(ticket.projectId, actor, opts.as)
+  const repo = ticketRepo(ticket)
+  const sha = repo ? await branchHead(repo.repoPath, ticket.branch) : null
+  const row = db
+    .update(schema.tickets)
+    .set({ resumeNote: text, resumeAt: new Date().toISOString(), resumeBy: author, resumeSha: sha })
+    .where(eq(schema.tickets.id, ticketId))
+    .returning()
+    .get()!
+  const post =
+    text === ticket.resumeNote
+      ? null
+      : postUpdate(ticketId, text, [], actor, { as: opts.as, progress: true, handoff: true })
+  return { resume: await resumeState(row), postId: post?.id ?? null }
 }
 
 // --- comments (threads on tickets, updates, PRs, review results) ---
@@ -959,7 +1088,21 @@ function threadStats(parentType: schema.CommentParent, ids: number[]) {
  * agent. Newest first; `waiting` counts the comments since the actor (or agent) last spoke.
  */
 export function listOpenThreads(projectId: number, actor: string) {
+  return openThreads(projectId, [actor], { agents: true, discussion: false })
+}
+
+/**
+ * The threads in a project waiting on the human, who may sign in under several names (one per
+ * device). A ticket's feed counts only its discussion here: progress posts are reports, not
+ * questions, and a feed ending on an open decision is left to the decision itself.
+ */
+export function listHumanThreads(projectId: number, names: string[]) {
+  return openThreads(projectId, names, { agents: false, discussion: true })
+}
+
+function openThreads(projectId: number, me: string[], opts: { agents: boolean; discussion: boolean }) {
   getProject(projectId)
+  const isMe = (name: string) => me.includes(name)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
   const ticketById = new Map(tickets.map((t) => [t.id, t]))
   const updates = tickets.length
@@ -969,6 +1112,9 @@ export function listOpenThreads(projectId: number, actor: string) {
           ticketId: schema.updates.ticketId,
           author: schema.updates.author,
           body: schema.updates.body,
+          progress: schema.updates.progress,
+          decision: schema.updates.decision,
+          decidedAt: schema.updates.decidedAt,
           createdAt: schema.updates.createdAt,
         })
         .from(schema.updates)
@@ -1036,7 +1182,9 @@ export function listOpenThreads(projectId: number, actor: string) {
   type Said = Pick<schema.Comment, 'id' | 'parentType' | 'parentId' | 'author' | 'body' | 'createdAt'>
   const threads = new Map<string, Said[]>()
   // A ticket's conversation is its posts, in order; a post's, PR's or review's is its comments.
-  for (const u of [...updates].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)) {
+  const posts = opts.discussion ? updates.filter((u) => !u.progress) : updates
+  const openDecisions = new Set(updates.filter((u) => u.decision && !u.decidedAt).map((u) => u.id))
+  for (const u of [...posts].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)) {
     const key = `ticket:${u.ticketId}`
     const said: Said = {
       id: u.id,
@@ -1058,21 +1206,23 @@ export function listOpenThreads(projectId: number, actor: string) {
   for (const [key, list] of threads) {
     const subject = subjects.get(key)!
     const last = list[list.length - 1]!
-    const entry = (who: string, as: string | null) => ({
+    const entry = (who: (name: string) => boolean, as: string | null) => ({
       parentType: last.parentType,
       parentId: last.parentId,
       ticketId: subject.ticketId,
       title: subject.title,
       // Set when the thread waits on one of the project's agents: answer with comment as: <that name>.
       as,
-      waiting: list.length - 1 - list.map((c) => c.author).lastIndexOf(who),
+      waiting: list.length - 1 - list.map((c) => who(c.author)).lastIndexOf(true),
       last: { id: last.id, author: last.author, text: gist(last.body), createdAt: last.createdAt },
     })
-    const spoke = list.some((c) => c.author === actor)
-    if (last.author !== actor && (spoke || subject.owners.includes(actor))) {
-      out.push(entry(actor, null))
+    if (opts.discussion && last.parentType === 'ticket' && openDecisions.has(last.id)) continue
+    const spoke = list.some((c) => isMe(c.author))
+    if (!isMe(last.author) && (spoke || subject.owners.some(isMe))) {
+      out.push(entry(isMe, null))
       continue
     }
+    if (!opts.agents) continue
     // Else it may wait on one of the project's agents: mentioned last, or it spoke there, or it is its subject.
     const named = mentions(last.body)
     const lower = (s: string) => s.toLowerCase()
@@ -1085,9 +1235,48 @@ export function listOpenThreads(projectId: number, actor: string) {
         subject.owners.some((o) => lower(o) === n)
       )
     })
-    if (agent) out.push(entry(agent.name, agent.name))
+    if (agent) out.push(entry((name) => name === agent.name, agent.name))
   }
   return out.sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt))
+}
+
+/**
+ * The threads waiting on `actor`, from a cursor the caller keeps: with `since` (an ISO time), only the
+ * ones whose last word, by someone else, came after it. `cursor` is the newest last word seen, or
+ * `since` when nothing new came (null until there is one): pass it as `since` next time. Read-only;
+ * nothing is stored per caller.
+ */
+export function myThreads(projectId: number, actor: string, since?: string | null) {
+  const from = since ? sinceTime(since) : null
+  const all = listOpenThreads(projectId, actor)
+  const threads = from === null ? all : all.filter((t) => Date.parse(t.last.createdAt) > from)
+  // Newest first, and each one after `since`, so the cursor only moves forward.
+  const cursor = threads[0]?.last.createdAt ?? (from === null ? null : new Date(from).toISOString())
+  return { cursor, threads }
+}
+
+function sinceTime(since: string) {
+  const t = Date.parse(since)
+  if (Number.isNaN(t)) throw new HttpError(400, `since must be an ISO time, not "${since}"`)
+  return t
+}
+
+/** The cheap poll for new comments: what myThreads finds, without bodies. */
+export function checkInbox(projectId: number, actor: string, since?: string | null) {
+  const { cursor, threads } = myThreads(projectId, actor, since)
+  return {
+    count: threads.length,
+    cursor,
+    threads: threads.map((t) => ({
+      ticketId: t.ticketId,
+      title: t.title,
+      parentType: t.parentType,
+      parentId: t.parentId,
+      as: t.as,
+      lastAuthor: t.last.author,
+      lastAt: t.last.createdAt,
+    })),
+  }
 }
 
 export function addComment(
@@ -1198,7 +1387,10 @@ export function askDecision(
   const stages = listStages(ticket.projectId)
   const blocked = firstOfKind(stages, 'blocked')
   if ((input.block ?? true) && blocked && ticket.status !== blocked.key) {
-    db.update(schema.tickets).set({ status: blocked.key }).where(eq(schema.tickets.id, ticketId)).run()
+    db.update(schema.tickets)
+      .set({ status: blocked.key, ...startedPatch(stages, ticket.status, blocked.key, ticket.startedAt) })
+      .where(eq(schema.tickets.id, ticketId))
+      .run()
   }
   logActivity({
     projectId: ticket.projectId,
@@ -1246,7 +1438,10 @@ export function decide(postId: number, option: number, note: string, actor: stri
     .get()
   const active = firstOfKind(stages, 'active')
   if (!stillOpen && active && kindOf(stages, ticket.status) === 'blocked')
-    db.update(schema.tickets).set({ status: active.key }).where(eq(schema.tickets.id, ticket.id)).run()
+    db.update(schema.tickets)
+      .set({ status: active.key, ...startedPatch(stages, ticket.status, active.key, ticket.startedAt) })
+      .where(eq(schema.tickets.id, ticket.id))
+      .run()
   touch(ticket.id)
   logActivity({
     projectId: ticket.projectId,

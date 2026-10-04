@@ -5,8 +5,9 @@ import { promisify } from 'node:util'
 import { HttpError } from './http'
 
 /**
- * The board never writes to git or GitHub. Every command here is a read: the allowlist below is
- * the whole vocabulary, and nothing else in the codebase spawns `git` or `gh`.
+ * The board never writes to git or GitHub. Every command here is a read, but for `fetchOrigin`, which
+ * only refreshes the checkout's copy of origin's branches: the allowlist below is the whole
+ * vocabulary, and nothing else in the codebase spawns `git` or `gh`.
  */
 
 const run = promisify(execFile)
@@ -120,6 +121,16 @@ export async function listMyPrs(repoPath: string): Promise<MyGhPr[]> {
   return [...byNumber.values()]
 }
 
+/** Whether a PR was merged: one that left the queue may also have been closed or unassigned. */
+export async function prMerged(repoPath: string, number: number): Promise<boolean> {
+  try {
+    const r = await gh<{ state: string }>(repoPath, ['pr', 'view', String(number), '--json', 'state'])
+    return r.state === 'MERGED'
+  } catch {
+    return false
+  }
+}
+
 export interface BranchInfo {
   exists: boolean
   sha: string | null
@@ -159,6 +170,21 @@ export async function branchInfo(repoPath: string, branch: string, base: string)
   return { exists: true, sha, subject, authoredAt, ahead, behind }
 }
 
+/** The local branch's head commit, or null when there is no such branch here. */
+export async function branchHead(repoPath: string, branch: string): Promise<string | null> {
+  if (!branch) return null
+  return git(repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`]).catch(
+    () => null,
+  )
+}
+
+/** How many commits the local branch has that `sha` does not; null when either is unknown here. */
+export async function commitsSince(repoPath: string, branch: string, sha: string): Promise<number | null> {
+  if (!branch || !sha) return null
+  const out = await git(repoPath, ['rev-list', '--count', `${sha}..refs/heads/${branch}`]).catch(() => null)
+  return out === null ? null : Number(out)
+}
+
 export interface Worktree {
   path: string
   branch: string | null
@@ -187,7 +213,7 @@ export async function listBranches(repoPath: string): Promise<string[]> {
 export interface Refs {
   /** Local branch → sha. */
   local: Map<string, string>
-  /** Branch on origin → sha, as of the last fetch (the board never fetches). */
+  /** Branch on origin → sha, as of the last fetch. */
   remote: Map<string, string>
 }
 
@@ -205,6 +231,32 @@ export async function listRefs(repoPath: string): Promise<Refs> {
     else if (name !== 'refs/remotes/origin/HEAD') refs.remote.set(name!.slice(20), sha!)
   }
   return refs
+}
+
+/**
+ * Brings the remote-tracking refs (`origin/*`) up to date, dropping the ones gone from origin. It
+ * never touches a local branch, a worktree or origin itself, never prompts for credentials, and gives
+ * up after `timeoutMs`.
+ */
+export async function fetchOrigin(repoPath: string, timeoutMs: number): Promise<void> {
+  await run('git', ['fetch', '--prune', '--quiet', 'origin'], {
+    cwd: repoPath,
+    windowsHide: true,
+    timeout: timeoutMs,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+  })
+}
+
+/** How many commits `a` has that `b` lacks, and the other way round. */
+export async function aheadBehind(repoPath: string, a: string, b: string): Promise<[number, number]> {
+  const out = await git(repoPath, ['rev-list', '--left-right', '--count', `${a}...${b}`])
+  const [ahead = 0, behind = 0] = out.split(/\s+/).map(Number)
+  return [ahead, behind]
+}
+
+/** How many commits reachable from `ref` are on no branch of origin. */
+export async function notOnOrigin(repoPath: string, ref: string): Promise<number> {
+  return Number(await git(repoPath, ['rev-list', '--count', ref, '--not', '--remotes=origin']))
 }
 
 /**
@@ -263,4 +315,47 @@ async function reachInto(repoPath: string, ref: string, base: string): Promise<R
   ])
   const tree = merged.split('\n')[0]
   return { state: tree === baseTree ? 'edited' : 'unique', into: base, unique }
+}
+
+/**
+ * Whether `ref` holds work of `other` that none of `bases` has: a commit of `other`'s own (not in a
+ * base, nor in one of `others`, the other branches `other` itself is built on) that is in `ref`. A
+ * branch built on `ref` does not count, and without a base nothing can be told.
+ */
+export async function holdsWorkOf(
+  repoPath: string,
+  ref: string,
+  other: string,
+  bases: string[],
+  others: string[],
+) {
+  if (!bases.length) return false
+  const isAncestor = (a: string, b: string) =>
+    git(repoPath, ['merge-base', '--is-ancestor', a, b]).then(
+      () => true,
+      () => false,
+    )
+  if (await isAncestor(ref, other)) return false
+  // Quick way out: nothing the two share lies outside the bases.
+  const shared = await git(repoPath, ['merge-base', '--all', ref, other]).catch(() => '')
+  let outside = false
+  for (const sha of shared ? shared.split('\n') : []) {
+    const landed = await Promise.all(bases.map((b) => isAncestor(sha, b)))
+    if (!landed.some(Boolean)) outside = true
+  }
+  if (!outside) return false
+  // What `other` stands on is not its own work: the shared commits may be a third branch's.
+  const under = await git(repoPath, [
+    'for-each-ref',
+    '--merged',
+    other,
+    '--format=%(refname:short)',
+    'refs/heads',
+    'refs/remotes/origin',
+  ])
+  const below = new Set(under ? under.split('\n') : [])
+  const stands = others.filter((x) => x !== other && below.has(x))
+  const own = ['rev-list', '--count', other, ...[...bases, ...stands].map((b) => `^${b}`)]
+  const mine = Number(await git(repoPath, own))
+  return mine > 0 && Number(await git(repoPath, [...own, `^${ref}`])) < mine
 }

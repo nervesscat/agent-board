@@ -8,7 +8,7 @@ test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true
 const scrollsSideways = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
 
-test('no sideways scroll at 390px on Home, the PR queue, the board and a ticket', async ({
+test('no sideways scroll at 390px on Home, Repositories, the PR queue, the board and a ticket', async ({
   page,
   api,
   human,
@@ -23,6 +23,10 @@ test('no sideways scroll at 390px on Home, the PR queue, the board and a ticket'
   await ok(human.post(`/api/tickets/${t.id}/updates`, { data: { body: 'A post with some progress.' } }))
 
   await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+
+  await page.goto('/repositories')
   await expect(page.getByRole('heading', { name: 'Repositories' })).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
 

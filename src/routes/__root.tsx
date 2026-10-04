@@ -46,7 +46,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 /** The board-wide pages, on the right of the top bar. Under `sm` they fold into a menu. */
 const PAGES = [
-  { to: '/', label: 'Repositories', exact: true },
+  { to: '/repositories', label: 'Repositories' },
   { to: '/daily', label: 'Daily' },
   { to: '/agents', label: 'Agents' },
   { to: '/settings', label: 'Settings' },
@@ -58,7 +58,7 @@ function App() {
     <>
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
         <nav className="mx-auto flex h-12 max-w-7xl items-center gap-3 px-4 text-sm sm:gap-5">
-          <Link to="/" className="shrink-0 font-semibold tracking-tight">
+          <Link to="/" className="shrink-0 font-semibold tracking-tight" title="Home">
             Agent Board
           </Link>
           <AuthOffBadge />
@@ -68,7 +68,6 @@ function App() {
               <Link
                 key={p.to}
                 to={p.to}
-                activeOptions={{ exact: 'exact' in p }}
                 className="text-muted-foreground hover:text-foreground [&.active]:text-foreground"
               >
                 {p.label}
@@ -118,7 +117,6 @@ function PagesMenu() {
           <Link
             key={p.to}
             to={p.to}
-            activeOptions={{ exact: 'exact' in p }}
             onClick={() => setOpen(false)}
             className="flex w-full items-center rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground [&.active]:bg-muted [&.active]:text-foreground"
           >

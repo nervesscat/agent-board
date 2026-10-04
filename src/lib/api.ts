@@ -5,6 +5,7 @@ import type {
   Comment,
   DailySummary,
   Repo,
+  ReportSettings,
   ReviewResult,
   Task,
   Ticket,
@@ -12,21 +13,36 @@ import type {
   Workspace,
   Activity,
 } from '#/db/schema'
-import type { TicketFull, TicketRow } from '#/server/features'
+import type { ReportList, ReportPeriod, ReportView } from '#/server/reports'
+import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
+import type { WorkspacePreview } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
+import type { ManagedPreview } from '#/server/managedPreview'
 import type { PreviewState } from '#/server/preview'
 import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
+import type { ProjectPush, Push } from '#/server/push'
 import type { ProjectAgent } from '#/server/projectAgents'
+import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
 /** A row of `/api/projects`: the project, its repos, and how many tickets and open PRs it holds. */
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
-export type { DirListing, PreviewState, ProjectAgent }
+export type {
+  CarryOver,
+  DirListing,
+  ManagedPreview,
+  PreviewState,
+  ProjectAgent,
+  ProjectSummary,
+  Summary,
+  WorkspacePreview,
+}
+export type { ReportList, ReportPeriod, ReportSettings, ReportView }
 
 export type {
   Attachment,
@@ -41,19 +57,26 @@ export type {
   Activity,
   TicketFull,
   TicketRow,
+  Need,
+  NeededBy,
   PrRow,
   BranchInfo,
   Worktree,
   Reach,
   CleanupReport,
+  Push,
+  ProjectPush,
 }
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** Which refusal it is, when the server names it (`needs`: a need is not merged yet). */
+  code?: string
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -72,7 +95,11 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
       data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
         ? data.error
         : `${res.status} ${res.statusText}`
-    throw new ApiError(message, res.status)
+    const code =
+      data && typeof data === 'object' && 'code' in data && typeof data.code === 'string'
+        ? data.code
+        : undefined
+    throw new ApiError(message, res.status, code)
   }
   return data as T
 }
@@ -121,12 +148,14 @@ export interface TicketGit {
   repo: { id: number; name: string } | null
   branch: string
   baseBranch: string
-  info: BranchInfo & { reach: Reach | null }
+  info: BranchInfo & { reach: Reach | null; push: Push }
   workspaces: (Workspace & {
-    info: BranchInfo & { reach: Reach | null }
+    info: BranchInfo & { reach: Reach | null; push: Push }
     worktree: Worktree | null
     lane: { id: number; title: string } | null
   })[]
+  /** Open tickets whose unmerged work the ticket's branch holds. */
+  includes: number[]
 }
 
 export interface DailyPayload {

@@ -1,24 +1,33 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   Archive,
   ArchiveRestore,
+  Bookmark,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   GitBranch,
+  GitCommitHorizontal,
   Layers,
+  ListTodo,
+  Loader2,
   Lock,
+  MessageSquare,
   Paperclip,
   Pencil,
+  Play,
   Plus,
+  RotateCw,
   Scale,
+  Square,
   Trash2,
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -29,10 +38,13 @@ import { StatusSelect } from '#/components/StatusSelect'
 import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
+import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { PrState } from '#/components/PrState'
+import { RESUME_TEMPLATE } from '#/lib/constants'
+import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
@@ -65,12 +77,13 @@ import {
   post,
   put,
   upload,
-  type PreviewState,
+  type ManagedPreview,
   type TicketFull,
   type TicketGit,
   type TicketRow,
   type UpdateRow,
   type Workspace,
+  type WorkspacePreview,
 } from '#/lib/api'
 import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
@@ -94,6 +107,7 @@ import {
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
 import { columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
   component: TicketPage,
@@ -132,14 +146,15 @@ function TicketPage() {
   })
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: key })
-    qc.invalidateQueries({ queryKey: ['tickets', id] })
+    qc.invalidateQueries({ queryKey: ticketsKey(id) })
     qc.invalidateQueries({ queryKey: ['ticket-git', ticketId] })
   }
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const update = useMutation({
     mutationFn: (p: Record<string, unknown>) => patch(`/api/tickets/${ticketId}`, p),
     onSuccess: invalidate,
-    onError,
+    // A move to done refused for a need not merged yet comes with the human's way past it.
+    onError: (err, p) => toastRefusal(err, () => update.mutate({ ...p, force: true })),
   })
   const remove = useMutation({
     mutationFn: (keepLanes: boolean) => del(`/api/tickets/${ticketId}${keepLanes ? '?keepLanes=1' : ''}`),
@@ -162,15 +177,20 @@ function TicketPage() {
     onError,
   })
   const judge = useMutation({
-    mutationFn: (v: { ticketId: number; verdict: Verdict; reopenTo?: string }) =>
-      put(`/api/tickets/${v.ticketId}/approval`, { verdict: v.verdict, reopenTo: v.reopenTo }),
+    mutationFn: (v: { ticketId: number; verdict: Verdict; reopenTo?: string; force?: boolean }) =>
+      put(`/api/tickets/${v.ticketId}/approval`, {
+        verdict: v.verdict,
+        reopenTo: v.reopenTo,
+        force: v.force,
+      }),
     onSuccess: (_d, v) => {
       invalidate()
       qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
       // The parent's lanes list shows the same call.
       if (t?.parentId) qc.invalidateQueries({ queryKey: ['ticket', String(t.parentId)] })
     },
-    onError,
+    // Approving a PR review moves it to done, held to its needs like any move there.
+    onError: (err, v) => toastRefusal(err, () => judge.mutate({ ...v, force: true })),
   })
   // On a lane: the parent's lanes, for previous / next under the same filter. Same query as the
   // parent's own page, so it is usually cached already.
@@ -183,8 +203,7 @@ function TicketPage() {
   // On a top-level ticket: the board's tickets, for previous / next in the same column. Same query
   // as the board, so it is usually cached already.
   const { data: board } = useQuery({
-    queryKey: ['tickets', id],
-    queryFn: () => get<TicketRow[]>(`/api/projects/${id}/tickets?parent=root`),
+    ...ticketsQuery(id, 'root'),
     enabled: Boolean(t) && !t?.parentId,
     refetchInterval: 10_000,
   })
@@ -298,6 +317,7 @@ function TicketPage() {
               <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
             </span>
           )}
+          <NeedsStatus t={t} />
           {t.updates.some((u) => u.decision && !u.decidedAt) && (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
               <Scale className="size-3.5" /> decision needed
@@ -351,14 +371,15 @@ function TicketPage() {
         {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
               widen the page */}
         <div className="min-w-0 space-y-6">
+          <ResumeNote key={t.id} t={t} onChange={invalidate} />
           <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
           <Tasks t={t} onChange={invalidate} />
           <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
           <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
         </div>
         <aside className="min-w-0 space-y-4">
-          <Previews t={t} git={git} />
-          <Details key={t.id} t={t} onSave={(p) => update.mutate(p)} />
+          <Previews t={t} git={git} onChange={invalidate} />
+          <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />
           <GitPanel t={t} git={git} onChange={invalidate} />
         </aside>
       </div>
@@ -596,8 +617,188 @@ function Instructions({
   )
 }
 
-/** Who and where: each field saves as soon as it changes. */
-function Details({ t, onSave }: { t: TicketFull; onSave: (p: Record<string, unknown>) => void }) {
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
+/**
+ * "Resume here": the ticket's one current resume note, pinned above the instructions while the ticket
+ * is open and has a note, or carried over from an earlier day without one. Alongside it, what is
+ * true now: commits since the note, tasks left, open decisions and threads, which day of work this
+ * is. Edited like the instructions; an empty note starts from the template. On any other open ticket
+ * a one-line button writes the first one.
+ */
+function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
+  const stages = useStages(t.projectId)
+  const [editing, setEditing] = useState(false)
+  const [note, setNote] = useState('')
+  const r = t.resume
+  const save = useMutation({
+    mutationFn: () => put(`/api/tickets/${t.id}/resume`, { note }),
+    onSuccess: () => {
+      setEditing(false)
+      onChange()
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  // Linked to as #resume (from the summary's Carrying over): brought into view once it is there.
+  const reveal = useCallback((el: HTMLElement | null) => {
+    if (el && window.location.hash === '#resume') el.scrollIntoView({ block: 'start' })
+  }, [])
+  if (t.archivedAt || isClosed(stageOf(stages, t.status).kind)) return null
+  const open = () => {
+    setNote(r.note || RESUME_TEMPLATE)
+    setEditing(true)
+  }
+  const submit = () => {
+    if (note.trim() && !save.isPending) save.mutate()
+  }
+  if (!r.note && !r.noHandoff && !editing)
+    return (
+      <button
+        type="button"
+        onClick={open}
+        className="-mb-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <Bookmark className="size-3.5" /> Leave a resume note: where the work stands, for whoever picks it up
+        next
+      </button>
+    )
+
+  const own = t.updates.filter((u) => !u.lane)
+  const tasksLeft = t.tasks.filter((x) => !x.done).length
+  const decisions = own.filter((u) => u.decision && !u.decidedAt).length
+  // Discussion where someone other than the assignee spoke last: waiting on whoever works the ticket.
+  const waiting = t.assignee
+    ? own.filter((u) => !u.progress && !u.decision && (u.thread.lastAuthor ?? u.author) !== t.assignee).length
+    : 0
+  const commits = r.commitsSince ?? 0
+  const chip = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5'
+  const warn = `${chip} bg-amber-500/10 text-amber-700 dark:text-amber-400`
+  return (
+    <section
+      id="resume"
+      ref={reveal}
+      className={cn(
+        'scroll-mt-20 rounded-lg border p-4',
+        r.noHandoff ? 'border-amber-500/60 bg-amber-500/5' : 'border-primary/30 bg-primary/5',
+      )}
+      aria-label="Resume here"
+    >
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h2 className="inline-flex items-center gap-1.5 text-sm font-medium">
+          <Bookmark className="size-4" /> Resume here
+        </h2>
+        {r.at && (
+          <span className="text-xs text-muted-foreground" title={stamp(r.at)}>
+            by <Actor name={r.by} /> {ago(r.at)}
+            {r.sha && <span className="font-mono"> at {shortSha(r.sha)}</span>}
+          </span>
+        )}
+        {!editing && (
+          <Button type="button" variant="ghost" size="xs" className="ml-auto" onClick={open}>
+            <Pencil data-icon="inline-start" /> {r.note ? 'edit' : 'write'}
+          </Button>
+        )}
+      </div>
+      <div className="mb-3 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+        {commits > 0 && (
+          <span className={warn} title="Commits on the ticket's branch after the note was written">
+            <GitCommitHorizontal className="size-3.5" /> {plural(commits, 'commit')} since this note
+          </span>
+        )}
+        {r.stale && commits === 0 && (
+          <span className={warn} title="A progress post came after the note">
+            <TriangleAlert className="size-3.5" /> progress posted since this note
+          </span>
+        )}
+        {r.noHandoff && r.note && (
+          <span className={warn} title="It was worked on a later day than this note was written">
+            <TriangleAlert className="size-3.5" /> no handoff since the last session
+          </span>
+        )}
+        {t.tasks.length > 0 && (
+          <span className={cn(chip, 'bg-muted')}>
+            <ListTodo className="size-3.5" />{' '}
+            {tasksLeft ? `${plural(tasksLeft, 'task')} left` : 'all tasks done'}
+          </span>
+        )}
+        {decisions > 0 && (
+          <span className={warn}>
+            <Scale className="size-3.5" /> {plural(decisions, 'open decision')}
+          </span>
+        )}
+        {waiting > 0 && (
+          <span
+            className={cn(chip, 'bg-muted')}
+            title={`Posts where someone spoke after ${t.assignee}, the assignee`}
+          >
+            <MessageSquare className="size-3.5" /> {plural(waiting, 'unanswered thread')}
+          </span>
+        )}
+        {r.day !== null && (
+          <span
+            className={cn(chip, 'bg-muted')}
+            title={t.startedAt ? `Work on it started ${stamp(t.startedAt)}` : undefined}
+          >
+            <CalendarDays className="size-3.5" /> day {r.day} in progress
+          </span>
+        )}
+      </div>
+      {editing ? (
+        <div className="space-y-2">
+          <RichEditor
+            value={note}
+            onChange={setNote}
+            onSubmit={submit}
+            onCancel={() => setEditing(false)}
+            autoFocus
+            minHeight="min-h-40"
+            label="Resume note"
+            placeholder="Where the work stands, what is next, how to pick it up."
+          />
+          <div className="flex items-center justify-end gap-2">
+            <span className="mr-auto text-xs text-muted-foreground">
+              Saving also posts it to the feed, so earlier notes stay readable.
+            </span>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button type="button" size="sm" disabled={!note.trim() || save.isPending} onClick={submit}>
+              {save.isPending ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        </div>
+      ) : r.note ? (
+        <Markdown>{r.note}</Markdown>
+      ) : (
+        <div className="text-sm">
+          <p className="font-medium">No handoff yet</p>
+          <p className="text-muted-foreground">
+            This ticket was already being worked on an earlier day, and nobody wrote down where it was left.{' '}
+            <button
+              type="button"
+              onClick={open}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Write the resume note
+            </button>{' '}
+            so the next session can pick it up without asking.
+          </p>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Who, where, and what it needs merged first: each field saves as soon as it changes. */
+function Details({
+  t,
+  includes,
+  onSave,
+}: {
+  t: TicketFull
+  includes?: number[]
+  onSave: (p: Record<string, unknown>) => void
+}) {
   const { data: project } = useProject(t.projectId)
   const repos = project?.repos ?? []
   const repoId = String(t.repoId ?? repos[0]?.id ?? '')
@@ -679,6 +880,34 @@ function Details({ t, onSave }: { t: TicketFull; onSave: (p: Record<string, unkn
             if (v && v !== t.baseBranch) later('baseBranch', v)
           }}
         />
+      </div>
+      <div className="space-y-1">
+        <Label
+          htmlFor="needs"
+          className="text-xs text-muted-foreground"
+          title="Tickets whose branches must be merged into this one's base before it can be done"
+        >
+          Needs
+          {t.neededBy.length > 0 && (
+            <span className="ml-auto font-normal">
+              needed by{' '}
+              {t.neededBy.map((n, i) => (
+                <span key={n.id}>
+                  {i > 0 && ', '}
+                  <Link
+                    to="/projects/$id/features/$ticketId"
+                    params={{ id: String(t.projectId), ticketId: String(n.id) }}
+                    className="hover:text-foreground hover:underline"
+                    title={n.title}
+                  >
+                    #{n.id}
+                  </Link>
+                </span>
+              ))}
+            </span>
+          )}
+        </Label>
+        <NeedsField t={t} includes={includes} onSave={(needs) => onSave({ needs })} />
       </div>
     </section>
   )
@@ -1316,8 +1545,17 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
     >
       <div className="group/post flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Actor name={u.author} via={u.via} className="text-foreground" />
-        {u.progress && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
+        {u.handoff ? (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium"
+            title="A resume note as it was saved: where the work was left off then"
+          >
+            <Bookmark className="size-3" /> resume note
+          </span>
+        ) : (
+          u.progress && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
+          )
         )}
         {u.lane && (
           <Link
@@ -1473,20 +1711,59 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   )
 }
 
-/** Where the ticket's work runs for the human to try: a row per workspace with a preview link. */
-function Previews({ t, git }: { t: TicketFull; git?: TicketGit }) {
-  const rows = [
-    ...t.workspaces.filter((w) => w.previewUrl).map((w) => ({ ...w, lane: null })),
+/** A preview the board is building or running (and so can stop). */
+const previewActive = (m: ManagedPreview | null | undefined) =>
+  !!m && (m.status === 'building' || m.status === 'starting' || m.status === 'running')
+
+const STEP_LABEL: Record<NonNullable<ManagedPreview['step']>, string> = {
+  install: 'installing dependencies',
+  build: 'building',
+  copy: 'copying the live data',
+  server: 'starting the server',
+}
+
+/**
+ * Where the ticket's work runs for the human to try: a row per workspace with a preview link, or one
+ * the board can build and run a preview of (its own worktree on this machine).
+ */
+function Previews({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+  const candidates = [
+    ...t.workspaces.filter((w) => w.previewUrl || w.path).map((w) => ({ ...w, lane: null })),
     // The lanes' come with the git state, tagged with their lane.
     ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
   ]
+  // Polled only while the page is in view: TanStack Query pauses intervals in a hidden tab. Faster
+  // while the board builds or starts one.
+  const previews = useQueries({
+    queries: candidates.map((w) => ({
+      queryKey: ['preview', w.id, w.previewUrl],
+      queryFn: () => get<WorkspacePreview>(`/api/workspaces/${w.id}/preview`),
+      refetchInterval: (q: { state: { data?: WorkspacePreview } }) =>
+        previewActive(q.state.data?.managed) && q.state.data?.managed?.status !== 'running' ? 2_000 : 15_000,
+      retry: false,
+    })),
+  })
+  const rows = candidates
+    .map((w, i) => ({ w, query: previews[i]! }))
+    // A worktree shows only once the board says it could run it, or ran it before.
+    .filter(({ w, query: { data } }) => w.previewUrl || data?.managed || data?.cannotStart === null)
   if (!rows.length) return null
   return (
     <section className="rounded-lg border p-3" aria-label="Preview">
       <h2 className="mb-2 text-sm font-medium">Preview</h2>
       <ul className="space-y-3">
-        {rows.map((w) => (
-          <PreviewRow key={w.id} w={w} projectId={t.projectId} />
+        {rows.map(({ w, query }) => (
+          <PreviewRow
+            key={w.id}
+            w={w}
+            data={query.data}
+            error={query.error}
+            projectId={t.projectId}
+            onChange={() => {
+              void query.refetch()
+              onChange()
+            }}
+          />
         ))}
       </ul>
     </section>
@@ -1495,55 +1772,108 @@ function Previews({ t, git }: { t: TicketFull; git?: TicketGit }) {
 
 function PreviewRow({
   w,
+  data,
+  error,
   projectId,
+  onChange,
 }: {
   w: Workspace & { lane: { id: number; title: string } | null }
+  data: WorkspacePreview | undefined
+  error: Error | null
   projectId: number
+  onChange: () => void
 }) {
-  // Polled only while the page is in view: TanStack Query pauses intervals in a hidden tab.
-  const { data, error } = useQuery({
-    queryKey: ['preview', w.id, w.previewUrl],
-    queryFn: () => get<PreviewState>(`/api/workspaces/${w.id}/preview`),
-    refetchInterval: 15_000,
-    retry: false,
+  const action = useMutation({
+    mutationFn: (what: 'start' | 'stop' | 'restart') => post(`/api/workspaces/${w.id}/preview/${what}`),
+    onSuccess: onChange,
+    onError: (err) => toast.error(errorMessage(err)),
   })
-  const state = data
-    ? data.running
-      ? {
-          label: 'Running',
-          title: `Answered with HTTP ${data.status} at ${clock(data.checkedAt)}`,
-          className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-        }
-      : {
-          label: 'Not running',
-          title: `No answer at ${clock(data.checkedAt)}`,
-          className: 'bg-muted text-muted-foreground',
-        }
-    : error
-      ? { label: 'Not checked', title: errorMessage(error), className: 'bg-muted text-muted-foreground' }
-      : { label: 'Checking…', title: 'Checking whether it answers', className: 'text-muted-foreground' }
+  const url = data?.url ?? w.previewUrl
+  const m = data?.managed ?? null
+  const active = previewActive(m)
+  const state = !url
+    ? null
+    : data
+      ? data.running
+        ? {
+            label: 'Running',
+            title: `Answered with HTTP ${data.status} at ${clock(data.checkedAt)}`,
+            className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+          }
+        : {
+            label: 'Not running',
+            title: `No answer at ${clock(data.checkedAt)}`,
+            className: 'bg-muted text-muted-foreground',
+          }
+      : error
+        ? { label: 'Not checked', title: errorMessage(error), className: 'bg-muted text-muted-foreground' }
+        : { label: 'Checking…', title: 'Checking whether it answers', className: 'text-muted-foreground' }
+  const logUrl = (name: 'build' | 'server') => `/api/workspaces/${w.id}/preview/log?name=${name}`
   return (
     <li className="space-y-1.5 text-sm">
-      <div className="flex items-center gap-2">
-        <a href={w.previewUrl} target="_blank" rel="noreferrer" className={buttonVariants({ size: 'sm' })}>
-          Open preview <ExternalLink />
-        </a>
-        <span
-          className={cn(
-            'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
-            state.className,
-          )}
-          title={state.title}
-        >
-          {data && <span className="size-1.5 rounded-full bg-current" />}
-          {state.label}
-        </span>
+      <div className="flex flex-wrap items-center gap-2">
+        {url && (
+          <a href={url} target="_blank" rel="noreferrer" className={buttonVariants({ size: 'sm' })}>
+            Open preview <ExternalLink />
+          </a>
+        )}
+        {!active && data?.cannotStart === null && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={action.isPending}
+            onClick={() => action.mutate('start')}
+            title="Build this worktree and run it on a free port, with a fresh copy of the live data"
+          >
+            <Play /> Start
+          </Button>
+        )}
+        {active && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={action.isPending}
+              onClick={() => action.mutate('stop')}
+              title="Stop the preview and free its port"
+            >
+              <Square /> Stop
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={action.isPending}
+              onClick={() => action.mutate('restart')}
+              title="Stop it, build again and start it with a fresh copy of the data"
+            >
+              <RotateCw /> Restart
+            </Button>
+          </>
+        )}
+        {state && (
+          <span
+            className={cn(
+              'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
+              state.className,
+            )}
+            title={state.title}
+          >
+            {data && <span className="size-1.5 rounded-full bg-current" />}
+            {state.label}
+          </span>
+        )}
       </div>
-      <div className="truncate font-mono text-xs text-muted-foreground" title={w.previewUrl}>
-        {w.previewUrl}
-      </div>
+      {url && (
+        <div className="truncate font-mono text-xs text-muted-foreground" title={url}>
+          {url}
+        </div>
+      )}
+      {m && <ManagedLine m={m} logUrl={logUrl} />}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <span className="inline-flex min-w-0 items-center gap-1 font-mono" title={`workspace ${w.name}`}>
+        <span
+          className="inline-flex min-w-0 items-center gap-1 font-mono"
+          title={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}
+        >
           <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
         </span>
         {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
@@ -1558,6 +1888,52 @@ function PreviewRow({
         </Link>
       )}
     </li>
+  )
+}
+
+/** What the board's own preview of the workspace is doing, and why it failed or stopped. */
+function ManagedLine({ m, logUrl }: { m: ManagedPreview; logUrl: (name: 'build' | 'server') => string }) {
+  const log = (name: 'build' | 'server', label = 'full log') => (
+    <a href={logUrl(name)} target="_blank" rel="noreferrer" className="underline hover:text-foreground">
+      {label}
+    </a>
+  )
+  if (m.status === 'building' || m.status === 'starting')
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" />
+        {m.status === 'starting' && m.port ? `Starting on :${m.port}…` : 'Building…'}
+        {m.step && ` ${STEP_LABEL[m.step]}`} · {log(m.step === 'server' ? 'server' : 'build', 'log')}
+      </div>
+    )
+  if (m.status === 'running')
+    return (
+      <div className="text-xs text-muted-foreground">
+        Run by the board on :{m.port}
+        {m.runningAt && `, since ${clock(m.runningAt)}`} · {log('server', 'server log')}
+      </div>
+    )
+  if (m.status === 'failed')
+    return (
+      <div className="space-y-1 text-xs">
+        <div className="text-destructive">
+          Failed: {m.reason}
+          {m.tailLog && <> · {log(m.tailLog)}</>}
+        </div>
+        {m.tail.length > 0 && (
+          <pre className="max-h-40 overflow-auto rounded bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap">
+            {m.tail.join('\n')}
+          </pre>
+        )}
+      </div>
+    )
+  return (
+    <div className="text-xs text-muted-foreground">
+      {m.reason?.startsWith('stopped')
+        ? m.reason.charAt(0).toUpperCase() + m.reason.slice(1)
+        : `Stopped${m.reason ? `: ${m.reason}` : ''}`}
+      {m.stoppedAt && ` (${clock(m.stoppedAt)})`}
+    </div>
   )
 }
 
@@ -1602,6 +1978,12 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
               <GitBranch className="size-3.5" /> {t.branch}
             </div>
             <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
+            {git?.repo && (
+              <div className="flex min-w-0 items-center gap-1">
+                <PushBadge push={git.info.push} />
+                <RefreshPush projectId={t.projectId} className="-my-1" />
+              </div>
+            )}
             {git && <Info info={git.info} />}
           </>
         ) : (
@@ -1669,7 +2051,12 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
                   <Layers className="size-3 shrink-0" /> <span className="truncate">{w.lane.title}</span>
                 </Link>
               )}
-              {w.branch && <div className="font-mono text-xs">{w.branch}</div>}
+              {w.branch && (
+                <div className="flex min-w-0 items-center gap-1.5 font-mono text-xs">
+                  {w.info && <PushDot push={w.info.push} />}
+                  <span className="truncate">{w.branch}</span>
+                </div>
+              )}
               {w.info && <Info info={w.info} />}
               {w.worktree && (
                 <div className="truncate font-mono text-[11px] text-muted-foreground" title={w.worktree.path}>

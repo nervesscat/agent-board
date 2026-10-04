@@ -3,9 +3,11 @@ import { eq, inArray } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
 import { branchReach, listRefs, listWorktrees, type Reach, type Refs, type Worktree } from './git'
+import { activePreviews, type ManagedPreview } from './managedPreview'
 import { getProject } from './projects'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
+import { unattachedUploads, type UnattachedUploads } from './unattached'
 
 /**
  * What is left behind by finished work: branches, worktrees and registered workspaces of tickets in
@@ -60,15 +62,36 @@ export function baseRefs(chain: string[], refs: Refs): string[] {
 export const branchRef = (branch: string, refs: Refs) =>
   refs.local.has(branch) ? branch : refs.remote.has(branch) ? `origin/${branch}` : null
 
+/** The commit a ref from `branchRef` or `baseRefs` points at. */
+export const refSha = (ref: string, refs: Refs) =>
+  refs.local.get(ref) ?? (ref.startsWith('origin/') ? refs.remote.get(ref.slice(7)) : undefined)
+
+/**
+ * Answers already worked out, by the commits they were worked out for: a verdict on the same commits
+ * never changes, so the board's polling asks git again only once a branch or a base moves. Bounded:
+ * the oldest answers go first.
+ */
+const REACH_MEMO_MAX = 2000
+const reachMemo = new Map<string, Promise<Reach | null>>()
+
+export function memo<T>(cache: Map<string, Promise<T>>, max: number, key: string, work: () => Promise<T>) {
+  const hit = cache.get(key)
+  if (hit) return hit
+  const p = work()
+  cache.set(key, p)
+  // A failure (a ref gone mid-read) is not remembered.
+  p.catch(() => cache.delete(key))
+  while (cache.size > max) cache.delete(cache.keys().next().value!)
+  return p
+}
+
 export async function reachOf(repoPath: string, branch: string, chain: string[], refs: Refs) {
   const ref = branch ? branchRef(branch, refs) : null
   if (!ref) return null
   // A branch is not its own destination (a workspace on the ticket's own branch).
-  return branchReach(
-    repoPath,
-    ref,
-    baseRefs(chain, refs).filter((b) => b !== ref && b !== branch),
-  )
+  const bases = baseRefs(chain, refs).filter((b) => b !== ref && b !== branch)
+  const key = [repoPath, `${ref}@${refSha(ref, refs)}`, ...bases.map((b) => `${b}@${refSha(b, refs)}`)]
+  return memo(reachMemo, REACH_MEMO_MAX, key.join('\0'), () => branchReach(repoPath, ref, bases))
 }
 
 const samePath = (a: string, b: string) =>
@@ -97,6 +120,8 @@ export interface LeftoverTicket {
   /** Where the work should have landed, nearest first. */
   chain: string[]
   workspaces: schema.Workspace[]
+  /** Previews the board still builds or runs from its workspaces. */
+  previews: ManagedPreview[]
   branches: LeftoverBranch[]
   /** True when nothing on it holds work its bases lack (every branch merged, rebased or edited in). */
   safe: boolean
@@ -106,7 +131,16 @@ export interface CleanupReport {
   tickets: LeftoverTicket[]
   /** Worktrees no ticket or workspace on the board accounts for: register them or remove them. */
   untracked: { repo: string; path: string; branch: string | null; head: string | null }[]
-  counts: { tickets: number; workspaces: number; worktrees: number; branches: number; remote: number }
+  counts: {
+    tickets: number
+    workspaces: number
+    previews: number
+    worktrees: number
+    branches: number
+    remote: number
+  }
+  /** Uploads nothing on the whole board points at (not just this project's). */
+  uploads: UnattachedUploads
 }
 
 /**
@@ -139,6 +173,7 @@ export async function cleanupReport(
         .all()
     : []
   const git = gitCache()
+  const previews = activePreviews()
 
   // An archived ticket is finished work too, whatever stage it was left in.
   const closed = all.filter((t) => t.archivedAt || isClosed(kindOf(stages, t.status)))
@@ -178,12 +213,13 @@ export async function cleanupReport(
         repo: repo ? { id: repo.id, name: repo.name, path: repo.repoPath } : null,
         chain,
         workspaces: own,
+        previews: previews.filter((p) => p.ticketId === t.id),
         branches: branches.filter((b) => b.local || b.remote || b.worktrees.length),
         safe: branches.every((b) => !b.reach || b.reach.state !== 'unique'),
       }
     }),
   )
-  const leftovers = tickets.filter((t) => t.workspaces.length || t.branches.length)
+  const leftovers = tickets.filter((t) => t.workspaces.length || t.previews.length || t.branches.length)
 
   const known = new Set(
     all.flatMap((t) => [t.branch, ...workspaces.filter((w) => w.ticketId === t.id).map((w) => w.branch)]),
@@ -210,9 +246,11 @@ export async function cleanupReport(
     counts: {
       tickets: leftovers.length,
       workspaces: leftovers.reduce((n, t) => n + t.workspaces.length, 0),
+      previews: leftovers.reduce((n, t) => n + t.previews.length, 0),
       worktrees: branches.reduce((n, b) => n + b.worktrees.filter((w) => !w.main).length, 0),
       branches: branches.filter((b) => b.local).length,
       remote: branches.filter((b) => b.remote).length,
     },
+    uploads: unattachedUploads(),
   }
 }

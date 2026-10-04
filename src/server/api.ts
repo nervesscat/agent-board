@@ -14,15 +14,30 @@ import * as features from './features'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { HttpError, intParam, readJson } from './http'
+import {
+  isActive,
+  managedPreview,
+  previewLog,
+  restartPreview,
+  startPreview,
+  stopPreview,
+  stopProjectPreviews,
+} from './managedPreview'
 import { handleMcp } from './mcp'
+import * as needs from './needs'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
+import { projectPush, refreshProjectPush } from './push'
 import * as projects from './projects'
+import * as reports from './reports'
 import * as repos from './repos'
+import { withResume } from './resume'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import { getSummary } from './summary'
+import { deleteUnattachedUploads } from './unattached'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -51,6 +66,8 @@ const TicketPatch = z.object({
   repoId: z.number().int().optional(),
   tags: z.array(z.string().max(40)).max(20).optional(),
   prNumber: z.number().int().positive().nullable().optional(),
+  // The tickets whose branches must be merged into this one's base before it can be done; replaces the list.
+  needs: z.array(z.number().int()).max(50).optional(),
 })
 
 export const api = new ApiRouter()
@@ -108,6 +125,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   return json(projects.updateProject(id(params), body, actor))
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
+  stopProjectPreviews(id(params), actor)
   projects.deleteProject(id(params), actor)
   return json({ ok: true })
 })
@@ -143,13 +161,14 @@ api.patch('/api/projects/:id/stages/:stageId', async ({ request, params, actor }
   const body = await readJson(request, StageBody.partial())
   return json(stages.updateStage(id(params), id(params, 'stageId'), body, actor))
 })
-// ?moveTo=<key> is where its tickets go; required when it has any.
-api.delete('/api/projects/:id/stages/:stageId', ({ request, params, url, actor }) => {
+// ?moveTo=<key> is where its tickets go; required when it has any. Into a done stage, ?force=1 moves
+// tickets whose needs are not merged yet.
+api.delete('/api/projects/:id/stages/:stageId', async ({ request, params, url, actor }) => {
   humanOnly(request)
-  stages.deleteStage(
+  await needs.removeStage(
     id(params),
     id(params, 'stageId'),
-    { moveTo: url.searchParams.get('moveTo') ?? undefined },
+    { moveTo: url.searchParams.get('moveTo') ?? undefined, force: url.searchParams.get('force') === '1' },
     actor,
   )
   return json({ ok: true })
@@ -252,14 +271,14 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 // ?tag= keeps the ones carrying that tag, ?status=todo,blocked those stages, ?assignee= one name (empty for
 // unassigned), ?q= a text match in the title or instructions. Archived tickets are left out; ?archived=include
 // adds them, ?archived=only lists just those.
-api.get('/api/projects/:id/tickets', ({ params, url }) => {
+api.get('/api/projects/:id/tickets', async ({ params, url }) => {
   const q = url.searchParams
   const parent = q.get('parent')
   const parentId = parent === null ? undefined : parent === 'root' ? null : intParam(parent, 'parent')
   const status = q.get('status')
   const archived = q.get('archived')
   return json(
-    features.listTickets(id(params), {
+    await needs.ticketRows(id(params), {
       parentId,
       tag: q.get('tag') ?? undefined,
       status: status ? z.array(Status).parse(status.split(',')) : undefined,
@@ -276,25 +295,30 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
       title: z.string().min(1).max(200),
       tasks: z.array(z.string().min(1).max(500)).optional(),
       parentId: z.number().int().optional(),
+      attachmentIds: z.array(z.number().int()).optional(),
     }),
   )
-  return json(features.createTicket(id(params), body, actor), 201)
+  return json(await needs.newTicket(id(params), body, actor, { agent: isAgent(request) }), 201)
 })
-// ?lanes=1 folds the lanes' updates into the feed.
+// ?lanes=1 folds the lanes' updates into the feed. `resume` is the resume note with what happened since.
 api.get('/api/tickets/:id', async ({ request, params, url }) =>
   json(
     await forAgent(
       request,
-      features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' }),
+      await needs.ticketView(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' }),
     ),
   ),
 )
-// An agent cannot reassign a ticket reserved for one of the project's agents; the human can.
+// An agent cannot reassign a ticket reserved for one of the project's agents; the human can. A move to a
+// done stage is a 409 (code: needs) while what it needs is not merged; force: true is the human's way past.
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
   json(
-    features.updateTicket(id(params), await readJson(request, TicketPatch), actor, {
-      agent: isAgent(request),
-    }),
+    await needs.changeTicket(
+      id(params),
+      await readJson(request, TicketPatch.extend({ force: z.boolean().optional() })),
+      actor,
+      { agent: isAgent(request) },
+    ),
   ),
 )
 // Files for the instructions: uploads (POST /api/uploads) bound to the ticket.
@@ -321,9 +345,13 @@ api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
     z.object({
       verdict: z.enum(['approved', 'disapproved']).nullable(),
       reopenTo: Status.optional(),
+      // Approving a PR review moves it to done: past needs not merged yet, as with PATCH.
+      force: z.boolean().optional(),
     }),
   )
-  return json(features.setVerdict(id(params), body.verdict, actor, { reopenTo: body.reopenTo }))
+  return json(
+    await needs.judgeTicket(id(params), body.verdict, actor, { reopenTo: body.reopenTo, force: body.force }),
+  )
 })
 // Assigns the ticket to the caller (or, with `as`, to the project agent the caller works it as) and starts
 // it; 409 when it is reserved for another of the project's agents.
@@ -351,9 +379,21 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
     request,
     z.object({ branch: z.string().max(200).optional(), as: AgentName.optional() }),
   )
-  return json(features.claimTicket(id(params), actor, body))
+  return json(await withResume(features.claimTicket(id(params), actor, body)))
 })
-api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
+// The resume note ("Where we left off"): the human and agents both write it; `as` is agents only.
+api.put('/api/tickets/:id/resume', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ note: z.string().min(1).max(50_000), as: AgentName.optional() }),
+  )
+  if (body.as) agentOnly(request)
+  return json(await features.setResumeNote(id(params), body.note, actor, { as: body.as }))
+})
+api.get('/api/tickets/:id/git', async ({ params }) => json(await needs.ticketGitView(id(params))))
+// Whether the branch of every ticket in work is on origin, one batch of git per repo; refresh fetches now.
+api.get('/api/projects/:id/push', async ({ params }) => json(await projectPush(id(params))))
+api.post('/api/projects/:id/push/refresh', async ({ params }) => json(await refreshProjectPush(id(params))))
 // Closed tickets that still have workspaces, branches or worktrees; `reach=0` skips the merge checks.
 api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
   json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),
@@ -393,10 +433,30 @@ api.patch('/api/workspaces/:id', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ previewUrl: PreviewUrl }))
   return json(features.setWorkspacePreview(id(params), body.previewUrl, actor))
 })
-// Whether that preview answers right now: `{running, status?, checkedAt}`; localhost URLs only.
+// Whether that preview answers right now: `{running, status?, checkedAt, url}`, localhost URLs only;
+// `managed`, the preview the board runs from the workspace; `cannotStart`, why it would not start one.
 api.get('/api/workspaces/:id/preview', async ({ params }) =>
   json(await features.workspacePreview(id(params))),
 )
+// The board builds and runs the workspace's worktree as a preview (in the background; poll the GET).
+api.post('/api/workspaces/:id/preview/start', ({ params, actor }) =>
+  json(startPreview(id(params), actor), 202),
+)
+api.post('/api/workspaces/:id/preview/stop', async ({ params, actor }) => {
+  if (!isActive(managedPreview(id(params))))
+    throw new HttpError(409, 'the board runs no preview of this workspace')
+  return json(await stopPreview(id(params), `stopped by ${actor}`, actor))
+})
+api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
+  json(await restartPreview(id(params), actor), 202),
+)
+// ?name=build (install and build) or server.
+api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
+  const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))
+  return new Response(previewLog(id(params), name), {
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
 api.delete('/api/workspaces/:id', ({ params, actor }) => {
   features.deleteWorkspace(id(params), actor)
   return json({ ok: true })
@@ -473,8 +533,14 @@ api.get('/api/comments', async ({ request, url }) => {
   const parentId = intParam(url.searchParams.get('parentId') ?? '', 'parentId')
   return json(await forAgent(request, features.listComments(parentType, parentId)))
 })
-// Threads in a project where someone spoke after the caller, on things the caller owns or spoke in.
-api.get('/api/projects/:id/threads', ({ params, actor }) => json(features.listOpenThreads(id(params), actor)))
+// Threads in a project where someone spoke after the caller, on things the caller owns or spoke in;
+// ?since=<cursor> keeps only the ones with something new. /inbox is the same without bodies.
+api.get('/api/projects/:id/threads', ({ params, url, actor }) =>
+  json(features.myThreads(id(params), actor, url.searchParams.get('since'))),
+)
+api.get('/api/projects/:id/inbox', ({ params, url, actor }) =>
+  json(features.checkInbox(id(params), actor, url.searchParams.get('since'))),
+)
 api.post('/api/comments', async ({ request, actor }) => {
   const body = await readJson(
     request,
@@ -521,6 +587,11 @@ api.post('/api/uploads', async ({ request, actor }) => {
       ? await uploads.saveFromPath(body.path, actor)
       : await uploads.saveBase64(body.name, body.base64, actor, body.mime)
   return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
+})
+// Uploads nothing points at, older than a day (the board also does this hourly); the human's call.
+api.delete('/api/uploads/unattached', async ({ request }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human deletes unattached uploads')
+  return json(await deleteUnattachedUploads())
 })
 // For agents: the file's local path is there to open (fetched into the cache first with STORAGE=s3).
 api.get('/api/uploads/:id/info', async ({ params }) =>
@@ -579,6 +650,13 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
 })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
 
+// --- summary: what waits on the human, in progress, done today, next, carrying over ---
+// ?projectId= for one project; every project otherwise, one block each.
+api.get('/api/summary', ({ url }) => {
+  const project = url.searchParams.get('projectId')
+  return json(getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }))
+})
+
 // --- daily ---
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
 api.get('/api/daily', ({ url }) => {
@@ -604,6 +682,41 @@ api.post('/api/daily/summaries/generate', async ({ request }) => {
   )
   return json(await generateSummary(body.date, body.projectId), 201)
 })
+
+// --- reports: the prompt and schedule of a project's reports, and the reports per period ---
+api.get('/api/projects/:id/report-settings', ({ params }) => json(reports.getReportSettings(id(params))))
+// Agents may change them too (the prompt included); every change shows in the activity feed.
+api.patch('/api/projects/:id/report-settings', async ({ request, params, actor }) =>
+  json(reports.setReportSettings(id(params), await readJson(request, reports.ReportSettingsPatch), actor)),
+)
+// ?from=&to= (YYYY-MM-DD): the periods in between, newest first, each with its status and latest report.
+api.get('/api/projects/:id/reports', async ({ request, params, url }) =>
+  json(
+    await forAgent(
+      request,
+      reports.listReports(id(params), {
+        from: url.searchParams.get('from') || undefined,
+        to: url.searchParams.get('to') || undefined,
+      }),
+    ),
+  ),
+)
+// period defaults to the current one; attachmentIds are uploads (POST /api/uploads) to attach.
+api.post('/api/projects/:id/reports', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      period: Day.optional(),
+      body: z.string().max(100_000).optional(),
+      attachmentIds: z.array(z.number().int()).default([]),
+    }),
+  )
+  return json(await reports.postReport(id(params), body, actor), 201)
+})
+// Every version posted for a period, newest first.
+api.get('/api/projects/:id/reports/:period', async ({ request, params }) =>
+  json(await forAgent(request, reports.reportVersions(id(params), params.period!))),
+)
 
 // --- MCP ---
 api.on('POST', '/api/mcp', ({ request, actor }) => handleMcp(request, actor))

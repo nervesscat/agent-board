@@ -28,8 +28,13 @@ reload: code reaches it only through a build.
   cd ../agent-board-<branch> && pnpm install && pnpm dev
   ```
 
-  It prints `Preview: http://localhost:<port>`; post that link on the ticket. Remove the worktree
-  (`git worktree remove`) once the branch is merged or dropped.
+  It prints `Preview: http://localhost:<port>`. For the human, let the board run the preview
+  instead: register the worktree as the ticket's workspace and press Start on the ticket's Preview
+  card (or `start_preview`). The board builds the worktree and runs the build there
+  (`BOARD_ENV=development AUTH=off`, loopback, a free port from 47101, a fresh copy of the live
+  data in `data/preview`, logs in `data/preview/logs`), and stops it when the PR is merged, the
+  ticket is closed or archived, or the board stops (`src/server/managedPreview.ts`). Remove the
+  worktree (`git worktree remove`) once the branch is merged or dropped.
 
 - **Without the passkey gate (outside production only):** `AUTH=off pnpm dev` runs the preview with
   every request as the human; `BOARD_ENV=test` runs a board with no gate where `X-Test-Actor:
@@ -60,6 +65,7 @@ MCP tool results and agents' REST reads pass through `ensureLocalFiles`. The S3 
 `storage.test.ts` run against a real MinIO when `S3_TEST_ENDPOINT` (with `S3_TEST_ACCESS_KEY`,
 `S3_TEST_SECRET_KEY`) is set, e.g. `docker compose -f docker-compose.minio.yml up -d` and
 `http://127.0.0.1:47120`.
+Unattached uploads older than a day are deleted hourly: a new reference to an upload goes in `src/server/unattached.ts`.
 
 ## Database
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ExternalLink, MessageSquare, PauseCircle, PlayCircle, RefreshCw } from 'lucide-react'
+import { ExternalLink, GitMerge, MessageSquare, PauseCircle, PlayCircle, RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -165,6 +165,34 @@ function PrQueue() {
   )
 }
 
+/**
+ * "merge after #12": the open PRs of tickets this PR's ticket needs, which have to land first. Each
+ * links to its PR on GitHub.
+ */
+function MergeAfter({ pr }: { pr: PrRow }) {
+  if (!pr.mergeAfter.length) return null
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
+      title={`Its ticket needs these merged first:\n${pr.mergeAfter.map((m) => `PR #${m.number} (from #${m.ticketId} ${m.title})`).join('\n')}`}
+    >
+      <GitMerge className="size-3" /> merge after{' '}
+      {pr.mergeAfter.map((m, i) => (
+        <span key={`${m.repoId}:${m.number}`}>
+          {i > 0 && ', '}
+          {m.url ? (
+            <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">
+              #{m.number}
+            </a>
+          ) : (
+            `#${m.number}`
+          )}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: string | null }) {
   const qc = useQueryClient()
   const [thread, setThread] = useState(false)
@@ -189,6 +217,7 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
             </a>
             <ExternalLink className="size-3 text-muted-foreground" />
             {repo && <Badge variant="secondary">{repo}</Badge>}
+            <MergeAfter pr={pr} />
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
             <span>{pr.author}</span>

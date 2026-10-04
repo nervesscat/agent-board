@@ -1,6 +1,6 @@
 ---
 name: board
-description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, post the daily summary. Use when the user says "pick up a ticket", "next ticket", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
+description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, leave resume notes, post the daily summary and the project's report. Use when the user says "pick up a ticket", "next ticket", "where did we leave off", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "daily report", "weekly report", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
 ---
 
 # Working through the agent board
@@ -55,11 +55,14 @@ Then:
    the project's stage of that kind: below, `todo`, `in_progress`, `blocked`, `review`, `done` and
    `cancelled` mean exactly that. Its `agents` are the project's own agents (see
    [The project's agents](#the-projects-agents)).
+3. `get_summary` with your `projectId`: where the project stands in one read (what waits on the
+   human, in progress and since when, done today, next, and what carries over from before today).
 
 ## 2. Pick up work
 
 - First, `list_my_threads` with your `projectId`: threads where the human (or another agent)
-  spoke after you. Answer those before starting anything new.
+  spoke after you. Answer those before starting anything new, and keep its `cursor` for
+  [Watch for feedback](#watch-for-feedback).
 - `list_tickets` with `status: ["todo"]` and `assignee: ""` (unassigned), or `assignee: <you>`, for
   candidates; `q` finds text in titles and instructions. If the human named a ticket, use that one.
   The list includes lanes (`parentId` set); `parentId: null` narrows it to top-level tickets,
@@ -73,6 +76,12 @@ Then:
   Tickets are shared: claiming one another agent holds takes it over (the board logs it), so prefer
   unassigned ones and take over only what is stalled or handed to you. A ticket with
   `reserved: true` belongs to one of the project's agents: claim it only with `as`, below.
+- **Start of a session: read the resume note first.** For every ticket you pick up or come back
+  to, before anything else, read its `resume` (on `get_ticket`, and returned by `claim_ticket`):
+  `note` is where the last session left off (state, what is done, next steps, open questions, how
+  to resume), with `by` and `at`. `commitsSince` counts commits on the branch since it was written
+  and `stale` says the work moved on (new commits or a newer progress post): check the branch and
+  the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
 - No tasks yet → `add_tasks` with the concrete steps. The human's progress bar is these tasks.
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
@@ -114,16 +123,24 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are
   fine, the board reads them through `/mnt/c/…`.
-- **Previews:** when the change can be tried (a page, an API), start your branch from your
-  worktree on a free port, with a copy of the data rather than the real one (the project's
-  `instructions` say how), and `post_update` the link (`http://localhost:<port>`) with what to
-  try. Register it on that worktree's workspace too: `set_preview` with the `workspaceId` and
-  `previewUrl` once the server answers (or `previewUrl` on `add_workspace` when it already runs).
-  The ticket page then shows a Preview card with an Open button and whether it is running. Say
-  that what the human posts there stays in the copy. Keep it running while the ticket is in
-  `review`; stop it once it is merged or dropped, and clear it with `set_preview` and
-  `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port the
-  human uses day to day.
+- **Previews:** when the change can be tried (a page, an API), give the human a preview and
+  `post_update` its link with what to try; say that what they post there stays in the copy. Keep
+  it running while the ticket is in `review`.
+  - A branch of the board itself: the board runs it. `add_workspace` with your worktree's `path`
+    and `branch` (a worktree next to the main checkout, `../agent-board-<branch>`), then
+    `start_preview` with the `workspaceId`. It returns at once; `get_ticket` shows the workspace's
+    `managedPreview` (`building`, `starting`, `running` with its `url`, or `failed` with the last
+    log lines and the log paths). Do not run `pnpm dev` in your session for it: that dies with
+    your session. `start_preview` with `restart: true` rebuilds after more commits;
+    `stop_preview` stops it, and the board stops it by itself once the PR is merged or the
+    ticket is done, cancelled, archived or its workspace removed.
+  - Anything else: start your branch from your worktree on a free port, with a copy of the data
+    rather than the real one (the project's `instructions` say how), then `set_preview` with the
+    `workspaceId` and `previewUrl` once it answers (or `previewUrl` on `add_workspace` when it
+    already runs). The ticket page then shows a Preview card with an Open button and whether it
+    is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
+    `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port
+    the human uses day to day.
 - Questions are posts too: `comment` on the ticket; the human answers with a post or a reply
   under yours (`comment` on the post, `parentType: update`, replies there). A choice between clear
   options (an approach, a trade-off, a scope call) is an `ask_decision` instead: the question with
@@ -135,6 +152,23 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.
 
+### Watch for feedback
+
+The human should not have to tell you to check comments. While this session has tickets of yours
+(or of an agent you answer as) in `in_progress` or `review`, check the inbox every few minutes:
+
+- `check_inbox` with your `projectId` and `since` = the `cursor` from your last call (none the
+  first time). It is cheap: `count`, a new `cursor` and, per thread, where it is (`ticketId`,
+  `title`, `parentType`, `parentId`), `as`, `lastAuthor` and `lastAt`, no bodies. Nothing new is
+  `count: 0`. Keep the new `cursor`, even when you skip a thread; the board stores none for you.
+- In Claude Code, run it under `/loop`, e.g.
+  `/loop 5m check the board inbox and handle new comments`. Elsewhere, check between steps.
+- For each new thread: read it (`list_comments` with its `parentType` and `parentId`), fix what it
+  asks in that ticket's worktree the usual way (the checks, commit, push, refresh the preview),
+  then reply in the same thread (`comment`, `as` when it is set) with what changed and the commit.
+  A question gets an answer; a request you cannot do goes back to the human as a question.
+- Stop watching once none of your tickets is in `in_progress` or `review`.
+
 ## 4. Hand off
 
 1. Open the PR assigned to the human: `gh pr create --assignee <their login>`, or `--assignee @me`
@@ -142,12 +176,21 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
    the PR queue also lists PRs assigned to the human, so this is how it gets there.
 2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
+   **Merge order:** if your branch is built on another ticket's open branch (stacked), or you merged
+   one in to get past a conflict, declare it with `update_ticket` → `needs: [<its ticket id>]` (or
+   `needs` on `create_ticket`) instead of only writing "builds on …" in the PR. `get_ticket_git` →
+   `includes` lists the open tickets whose unmerged work your branch holds: each one belongs in
+   `needs`. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot go to
+   `done` until those branches are merged into its base: `update_ticket` to `done` is refused
+   with which one (`get_ticket` → `needs[].merged`). Only the human can mark it done anyway.
 3. Final `post_update` with the PR link, how to test, and the preview link if there is one. Run the
    repo's checks first, its end-to-end suite too when it has one (the project instructions say how,
    e.g. `pnpm test:e2e`), and attach the result to that post with `files`: the run's summary (or
    its report when something failed) and, for a UI change, screenshots of what changed.
-4. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
-   say otherwise.
+4. `update_ticket` → `status: review`, only with the branch pushed: `get_ticket` → `push.state` is
+   `pushed` (a green dot on the board). `ahead` (commits only here) or `local-only` (not on origin)
+   is red: push, then check again. `done` is the human's call unless the project instructions say
+   otherwise.
 5. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
    board flags a ticket that is further along than its lanes. Say in the final update which lanes
    it covers.
@@ -158,9 +201,54 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 
 ## 5. End of session
 
-`post_daily_summary` with your `projectId`: at most three short lines, highest level: what got
-done, what is open. `daily_report` with your `projectId` shows what else happened in the project
-today.
+1. **Resume notes.** For every ticket and lane you leave in `in_progress`, `blocked` or `review`,
+   `set_resume_note` with this template filled in (`as` when you work it as one of the project's
+   agents), concretely enough that another agent can continue without asking:
+
+   ```markdown
+   **State:** (one line)
+
+   **Done so far:**
+
+   - …
+
+   **Next steps:**
+
+   1. …
+
+   **Open questions / blockers:**
+
+   - …
+
+   **How to resume:** branch, worktree, commands, preview, gotchas
+   ```
+
+   It replaces the ticket's previous note and is posted to its feed as a handoff, so the older ones
+   stay readable. The ticket page shows it at the top as "Resume here"; a ticket that carries over
+   to the next day without one shows "no handoff".
+
+2. `post_daily_summary` with your `projectId`: at most three short lines, highest level: what got
+   done, what is open. `daily_report` with your `projectId` shows what else happened in the project
+   today.
+
+Then the project's report, if it keeps one:
+
+1. `get_report_settings`: `cadence` `off` means no reports; stop here. Otherwise it is `daily` or
+   `weekly` (due on `weekday`, 1 Monday to 7 Sunday), by `dueTime` (local; null is the end of the
+   day), as `format` `text` or `file`, and `prompt` says what the report must contain and how (by
+   the hour, sections, who reads it, tone, a two-line text or a PDF).
+2. `list_reports`: each recent period with `status` `done`, `missing` (due, nothing posted) or
+   `upcoming` (not due yet), newest first, and `current`, the period you are in.
+3. For the current period, and any `missing` one the activity lets you write: write the report
+   exactly as the prompt says (`daily_report` for the days it covers) and `post_report` with
+   `period` (any day of it), `body`, and `files` as absolute paths. The board does not make PDFs:
+   when the prompt or `format: file` asks for one, make it yourself and attach it. Posting again
+   for a period replaces its report; the old one stays as history.
+4. On a daily text project the day's `post_daily_summary` already counts as its report until one
+   is posted; post a report anyway when the prompt asks for more than the summary.
+
+`set_report_settings` changes the prompt or the schedule, and the change shows in the project's
+activity: only when the human asks for it.
 
 ## 6. Clean up
 
@@ -191,7 +279,8 @@ When the human asks to clean up (`/board cleanup`, "clean up branches", "clean u
 1. `git fetch --prune` in each repo of the project, so origin's branches are current.
 2. `cleanup_report` with your `projectId`: every ticket in a done or cancelled stage (or archived)
    that still has workspaces, local or origin branches, or worktrees, each branch with its sha, worktrees,
-   `reach` and `restore` command, plus `untracked` worktrees no ticket accounts for.
+   `reach` and `restore` command, plus `untracked` worktrees no ticket accounts for, and
+   `previews` the board still runs for it (`stop_preview` each one).
 3. For each `unique` branch, check it yourself before calling it: `git cherry -v <base> <branch>`
    and `git range-diff` or `git diff <base>...<branch>` show whether the listed commits' changes
    landed in another shape (split, squashed with others, moved to another branch). If they did,

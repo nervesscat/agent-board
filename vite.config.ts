@@ -48,7 +48,7 @@ export default defineConfig({
     refuseUnsafeAuth(),
     apiIsNeverAnAsset(),
     nitro({
-      plugins: ['./src/server/startup.ts'],
+      plugins: ['./src/server/startup.ts', './src/server/plugins/uploadSweep.ts'],
       // The e2e suite builds into its own folder, so the live board's .output is never touched.
       ...(process.env.BOARD_BUILD_DIR && { output: { dir: process.env.BOARD_BUILD_DIR } }),
     }),

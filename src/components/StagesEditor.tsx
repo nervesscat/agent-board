@@ -14,12 +14,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
+import { toastRefusal } from '#/components/Needs'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { del, errorMessage, get, patch, post, put } from '#/lib/api'
 import { STAGE_COLORS, STAGE_KINDS, type StageColor, type StageKind } from '#/lib/constants'
 import { STAGE_DOT, STAGE_KIND_LABEL } from '#/lib/stages'
+import { ticketsKey } from '#/lib/tickets'
 import type { Stage } from '#/db/schema'
 
 type StageRow = Stage & { tickets: number }
@@ -49,7 +51,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
   const refresh = () => {
     qc.invalidateQueries({ queryKey: key })
     qc.invalidateQueries({ queryKey: ['project', projectId] })
-    qc.invalidateQueries({ queryKey: ['tickets', projectId] })
+    qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
   }
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const add = useMutation({
@@ -71,12 +73,13 @@ export function StagesEditor({ projectId }: { projectId: string }) {
     onError,
   })
   const remove = useMutation({
-    mutationFn: (v: { id: number; moveTo?: string }) =>
+    mutationFn: (v: { id: number; moveTo?: string; force?: boolean }) =>
       del(
-        `/api/projects/${projectId}/stages/${v.id}${v.moveTo ? `?moveTo=${encodeURIComponent(v.moveTo)}` : ''}`,
+        `/api/projects/${projectId}/stages/${v.id}${v.moveTo ? `?moveTo=${encodeURIComponent(v.moveTo)}` : ''}${v.force ? '&force=1' : ''}`,
       ),
     onSuccess: refresh,
-    onError,
+    // Into a done stage, tickets whose needs are not merged yet hold it up; the human can move them anyway.
+    onError: (err, v) => toastRefusal(err, () => remove.mutate({ ...v, force: true }), 'Move them anyway'),
   })
 
   const [name, setName] = useState('')
