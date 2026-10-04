@@ -34,6 +34,19 @@ export function tidy(markdown: string): string {
     .trimEnd()
 }
 
+/** What the editor understands; each one reads and writes its own markdown. */
+export function richExtensions(placeholder = '') {
+  return [
+    StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
+    Markdown,
+    Image,
+    TableKit,
+    TaskList,
+    TaskItem.configure({ nested: true }),
+    Placeholder.configure({ placeholder }),
+  ]
+}
+
 /**
  * Rich text in, markdown out: what agents write and read stays markdown, people get formatting
  * buttons instead of syntax. Tables, task lists, code and images round-trip. Files pasted or dropped
@@ -70,15 +83,7 @@ export function RichEditor({
   const lastEmitted = useRef(value)
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
-      Markdown,
-      Image,
-      TableKit,
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder: placeholder ?? '' }),
-    ],
+    extensions: richExtensions(placeholder),
     content: value,
     contentType: 'markdown',
     // The server render has no editor; it appears once the page is live.
