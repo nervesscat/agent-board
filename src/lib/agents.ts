@@ -25,22 +25,11 @@ export const AGENTS: Record<
   },
 }
 
-export type Shell = 'bash' | 'powershell'
-
-// The shell picked last is remembered in this browser; storage can be unavailable, so bash is the fallback.
-const SHELL_KEY = 'agents.shell'
-export function savedShell(): Shell {
-  try {
-    return localStorage.getItem(SHELL_KEY) === 'powershell' ? 'powershell' : 'bash'
-  } catch {
-    return 'bash'
-  }
-}
-export function saveShell(shell: Shell) {
-  try {
-    localStorage.setItem(SHELL_KEY, shell)
-  } catch {}
-}
+/** The shells the install lines are written for; bash unless one is picked. */
+export const SHELLS = ['bash', 'powershell'] as const
+export type Shell = (typeof SHELLS)[number]
+/** The shell picked last, remembered in this browser (`useShell` in ReviewSkills). */
+export const SHELL_KEY = 'agents.shell'
 
 /** Stands in for the token until one is pasted on the page. */
 export const TOKEN_PLACEHOLDER = 'gate_…'

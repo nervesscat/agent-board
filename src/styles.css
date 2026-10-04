@@ -174,8 +174,6 @@
   }
 }
 
-/* The rich text editor (TipTap): the placeholder of an empty editor, and checklists drawn as
-   checkboxes beside their text rather than as bullets. */
 /* Inline code in rendered markdown and the editor: the typography plugin wraps it in literal
    backticks, which read as part of the text (a path shows as `F:…`). A tinted chip instead; code
    blocks keep their own look. */
@@ -190,6 +188,8 @@
   font-weight: 500;
 }
 
+/* The rich text editor (TipTap): the placeholder of an empty editor, and checklists drawn as
+   checkboxes beside their text rather than as bullets. */
 .tiptap p.is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;

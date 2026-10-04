@@ -192,16 +192,17 @@ export function DailyView({ projectId }: { projectId?: number }) {
                     {!projectId && a.project && (
                       <span className="text-xs text-muted-foreground">[{a.project}]</span>
                     )}
+                    {/* A long word (a URL, a path) breaks anywhere rather than widen the page on a phone. */}
                     {a.refType === 'review' && a.refId ? (
                       <ReviewResultButton
                         resultId={a.refId}
-                        className="text-left hover:underline"
+                        className="min-w-0 text-left wrap-anywhere hover:underline"
                         title="Open the review result"
                       >
                         {a.text}
                       </ReviewResultButton>
                     ) : (
-                      <span>{a.text}</span>
+                      <span className="min-w-0 wrap-anywhere">{a.text}</span>
                     )}
                   </li>
                 ))}
