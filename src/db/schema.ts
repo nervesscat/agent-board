@@ -152,6 +152,16 @@ export const tickets = sqliteTable(
     // Put away by the human off the board and the default lists; a lane goes with its ticket. Null while on the board.
     archivedAt: text('archived_at'),
     archivedBy: text('archived_by').notNull().default(''),
+    // When work on it last started: it entered an active, blocked or review stage from any other kind.
+    // A multi-day ticket counts its days from here.
+    startedAt: text('started_at'),
+    // Where we left off: the one current resume note (markdown), who wrote it and when, and the ticket
+    // branch's head at that moment (null when the branch was not there locally). Each save is also a
+    // handoff post in the feed, so the older notes stay readable.
+    resumeNote: text('resume_note').notNull().default(''),
+    resumeAt: text('resume_at'),
+    resumeBy: text('resume_by').notNull().default(''),
+    resumeSha: text('resume_sha'),
     createdAt: now(),
     updatedAt: now(),
   },
@@ -194,6 +204,8 @@ export const updates = sqliteTable('updates', {
   via: text().notNull().default(''),
   body: text().notNull(),
   progress: integer({ mode: 'boolean' }).notNull().default(true),
+  // A resume note as it was saved (see tickets.resumeNote): the ticket's handoffs, oldest to newest.
+  handoff: integer({ mode: 'boolean' }).notNull().default(false),
   // A decision the human is asked to make: the post's body is the question, these are the answers
   // to pick from. Null on any other post.
   decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),

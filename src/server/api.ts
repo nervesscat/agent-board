@@ -18,6 +18,7 @@ import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import * as projects from './projects'
 import * as repos from './repos'
+import { withResume, withResumeBriefs } from './resume'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
@@ -248,21 +249,23 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 // ?tag= keeps the ones carrying that tag, ?status=todo,blocked those stages, ?assignee= one name (empty for
 // unassigned), ?q= a text match in the title or instructions. Archived tickets are left out; ?archived=include
 // adds them, ?archived=only lists just those.
-api.get('/api/projects/:id/tickets', ({ params, url }) => {
+api.get('/api/projects/:id/tickets', async ({ params, url }) => {
   const q = url.searchParams
   const parent = q.get('parent')
   const parentId = parent === null ? undefined : parent === 'root' ? null : intParam(parent, 'parent')
   const status = q.get('status')
   const archived = q.get('archived')
   return json(
-    features.listTickets(id(params), {
-      parentId,
-      tag: q.get('tag') ?? undefined,
-      status: status ? z.array(Status).parse(status.split(',')) : undefined,
-      assignee: q.get('assignee') ?? undefined,
-      q: q.get('q') ?? undefined,
-      archived: archived ? z.enum(['include', 'only']).parse(archived) : undefined,
-    }),
+    await withResumeBriefs(
+      features.listTickets(id(params), {
+        parentId,
+        tag: q.get('tag') ?? undefined,
+        status: status ? z.array(Status).parse(status.split(',')) : undefined,
+        assignee: q.get('assignee') ?? undefined,
+        q: q.get('q') ?? undefined,
+        archived: archived ? z.enum(['include', 'only']).parse(archived) : undefined,
+      }),
+    ),
   )
 })
 api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
@@ -276,12 +279,14 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   )
   return json(features.createTicket(id(params), body, actor), 201)
 })
-// ?lanes=1 folds the lanes' updates into the feed.
+// ?lanes=1 folds the lanes' updates into the feed. `resume` is the resume note with what happened since.
 api.get('/api/tickets/:id', async ({ request, params, url }) =>
   json(
     await forAgent(
       request,
-      features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' }),
+      await withResume(
+        features.getTicketFull(id(params), { laneUpdates: url.searchParams.get('lanes') === '1' }),
+      ),
     ),
   ),
 )
@@ -347,7 +352,16 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
     request,
     z.object({ branch: z.string().max(200).optional(), as: AgentName.optional() }),
   )
-  return json(features.claimTicket(id(params), actor, body))
+  return json(await withResume(features.claimTicket(id(params), actor, body)))
+})
+// The resume note ("Where we left off"): the human and agents both write it; `as` is agents only.
+api.put('/api/tickets/:id/resume', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ note: z.string().min(1).max(50_000), as: AgentName.optional() }),
+  )
+  if (body.as) agentOnly(request)
+  return json(await features.setResumeNote(id(params), body.note, actor, { as: body.as }))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await features.ticketGit(id(params))))
 // Closed tickets that still have workspaces, branches or worktrees; `reach=0` skips the merge checks.

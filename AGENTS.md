@@ -51,6 +51,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    `in_progress`. Tickets are shared: claiming one another agent holds takes it over (the board
    logs it), so prefer unassigned ones. A ticket with `reserved: true` belongs to one of the
    project's agents (below): claim it only with `as`.
+   **Start of a session:** before anything else on a ticket you pick up or come back to, read its
+   resume note (`resume` on `get_ticket`, also returned by `claim_ticket`): where the last session
+   left off, the next steps and how to resume. `resume.commitsSince` and `resume.stale` say whether
+   the work moved on since it was written; `resume.noHandoff` means it carried over from an earlier
+   day without one.
 3. **Break it down**: `add_tasks` with the concrete steps if the ticket does not have them;
    `set_task_done` as you finish each one, `update_task` / `remove_task` when the plan changes.
    The progress bar the human sees is those tasks.
@@ -104,8 +109,13 @@ http_headers = { Authorization = "Bearer gate_…" }
    as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
    origin branches: list them for the human. `cleanup_report` lists every leftover of the project's
    closed tickets; the board skill's `/board cleanup` walks it with the human.
-9. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
-   what got done, what is open. `daily_report` shows what everyone else did that day.
+9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
+   `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
+   blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that
+   another agent can continue without asking. It is the ticket's one current "Where we left off"
+   note, shown at the top of its page; each version is also posted to its feed as a handoff. Then
+   `post_daily_summary` — at most three short lines at the highest level: what got done, what is
+   open. `daily_report` shows what everyone else did that day.
 
 ## The project's agents
 

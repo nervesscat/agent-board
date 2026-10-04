@@ -159,6 +159,21 @@ export async function branchInfo(repoPath: string, branch: string, base: string)
   return { exists: true, sha, subject, authoredAt, ahead, behind }
 }
 
+/** The local branch's head commit, or null when there is no such branch here. */
+export async function branchHead(repoPath: string, branch: string): Promise<string | null> {
+  if (!branch) return null
+  return git(repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`]).catch(
+    () => null,
+  )
+}
+
+/** How many commits the local branch has that `sha` does not; null when either is unknown here. */
+export async function commitsSince(repoPath: string, branch: string, sha: string): Promise<number | null> {
+  if (!branch || !sha) return null
+  const out = await git(repoPath, ['rev-list', '--count', `${sha}..refs/heads/${branch}`]).catch(() => null)
+  return out === null ? null : Number(out)
+}
+
 export interface Worktree {
   path: string
   branch: string | null

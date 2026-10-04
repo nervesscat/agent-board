@@ -1,6 +1,6 @@
 ---
 name: board
-description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, post the daily summary. Use when the user says "pick up a ticket", "next ticket", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
+description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, leave resume notes, post the daily summary. Use when the user says "pick up a ticket", "next ticket", "where did we leave off", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
 ---
 
 # Working through the agent board
@@ -73,6 +73,12 @@ Then:
   Tickets are shared: claiming one another agent holds takes it over (the board logs it), so prefer
   unassigned ones and take over only what is stalled or handed to you. A ticket with
   `reserved: true` belongs to one of the project's agents: claim it only with `as`, below.
+- **Start of a session: read the resume note first.** For every ticket you pick up or come back
+  to, before anything else, read its `resume` (on `get_ticket`, and returned by `claim_ticket`):
+  `note` is where the last session left off (state, what is done, next steps, open questions, how
+  to resume), with `by` and `at`. `commitsSince` counts commits on the branch since it was written
+  and `stale` says the work moved on (new commits or a newer progress post): check the branch and
+  the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
 - No tasks yet → `add_tasks` with the concrete steps. The human's progress bar is these tasks.
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
@@ -155,9 +161,35 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 
 ## 5. End of session
 
-`post_daily_summary` with your `projectId`: at most three short lines, highest level: what got
-done, what is open. `daily_report` with your `projectId` shows what else happened in the project
-today.
+1. **Resume notes.** For every ticket and lane you leave in `in_progress`, `blocked` or `review`,
+   `set_resume_note` with this template filled in (`as` when you work it as one of the project's
+   agents), concretely enough that another agent can continue without asking:
+
+   ```markdown
+   **State:** (one line)
+
+   **Done so far:**
+
+   - …
+
+   **Next steps:**
+
+   1. …
+
+   **Open questions / blockers:**
+
+   - …
+
+   **How to resume:** branch, worktree, commands, preview, gotchas
+   ```
+
+   It replaces the ticket's previous note and is posted to its feed as a handoff, so the older ones
+   stay readable. The ticket page shows it at the top as "Resume here"; a ticket that carries over
+   to the next day without one shows "no handoff".
+
+2. `post_daily_summary` with your `projectId`: at most three short lines, highest level: what got
+   done, what is open. `daily_report` with your `projectId` shows what else happened in the project
+   today.
 
 ## 6. Clean up
 
