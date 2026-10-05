@@ -74,7 +74,10 @@ http_headers = { Authorization = "Bearer gate_…" }
    it on that worktree's workspace as well (`set_preview`, or `previewUrl` on `add_workspace`): the
    ticket page shows it as a Preview card with an Open button and whether it is running. Say that
    what the human posts there stays in the copy. Keep it running while the ticket is in review;
-   stop it once it is merged or dropped, and clear it (`set_preview` with `previewUrl: ""`).
+   stop it once it is merged or dropped, and clear it (`set_preview` with `previewUrl: ""`). A
+   preview of the board itself can run without the passkey gate, so you can exercise it too:
+   `AUTH=off pnpm dev`, or `BOARD_ENV=test` with an `X-Test-Actor` header (README: "Test mode");
+   never on port 47100, never off loopback, never the live board.
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
    (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
