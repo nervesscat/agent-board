@@ -1,4 +1,6 @@
 import fs from 'node:fs'
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import type { Readable } from 'node:stream'
@@ -44,6 +46,60 @@ describe('local storage', () => {
     expect(await store.ensureLocal('a.txt')).toBe(path.join(dir, 'a.txt'))
     await expect(store.read('missing.txt')).rejects.toThrow(/gone/)
   })
+
+  it('deletes a file, and a file already gone is not an error', async () => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'uploads-'))
+    const store = storage.localStore(dir)
+    await store.put('b.txt', Buffer.from('bye'), 'text/plain')
+    await store.delete('b.txt')
+    expect(fs.existsSync(path.join(dir, 'b.txt'))).toBe(false)
+    await store.delete('b.txt')
+  })
+})
+
+describe('s3 delete', () => {
+  it('deletes the object and the cached copy (a stand-in S3 that answers every call)', async () => {
+    const calls: string[] = []
+    const server = http.createServer((req, res) => {
+      calls.push(`${req.method} ${req.url}`)
+      req.resume()
+      res.writeHead(req.method === 'DELETE' ? 204 : 200).end()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    try {
+      const { port } = server.address() as AddressInfo
+      const cache = fs.mkdtempSync(path.join(tmp, 'cache-'))
+      const store = storage.s3Store(
+        {
+          endpoint: `http://127.0.0.1:${port}`,
+          region: 'us-east-1',
+          bucket: 'b',
+          accessKey: 'k',
+          secretKey: 's',
+        },
+        cache,
+      )
+      fs.writeFileSync(store.localPath('old.png'), 'png')
+      await store.delete('old.png')
+      expect(calls.some((c) => c.startsWith('DELETE /b/old.png'))).toBe(true)
+      expect(fs.existsSync(store.localPath('old.png'))).toBe(false)
+      // Not cached: only the bucket's copy goes.
+      await store.delete('other.png')
+    } finally {
+      server.close()
+    }
+  })
+
+  it('keeps the cached copy when the store cannot delete', async () => {
+    const cache = fs.mkdtempSync(path.join(tmp, 'cache-'))
+    const down = storage.s3Store(
+      { endpoint: 'http://127.0.0.1:9', region: 'us-east-1', bucket: 'b', accessKey: 'k', secretKey: 's' },
+      cache,
+    )
+    fs.writeFileSync(down.localPath('x.png'), 'png')
+    await expect(down.delete('x.png')).rejects.toThrow(/unreachable/)
+    expect(fs.existsSync(down.localPath('x.png'))).toBe(true)
+  })
 })
 
 // Against a real MinIO (or any S3): S3_TEST_ENDPOINT=http://127.0.0.1:47120 with S3_TEST_ACCESS_KEY,
@@ -72,6 +128,16 @@ describe.skipIf(!endpoint)('s3 storage', () => {
     const p = await store.ensureLocal('clip.txt')
     expect(fs.readFileSync(p, 'utf8')).toBe('0123456789')
     await expect(store.read('nope.txt')).rejects.toThrow(/gone/)
+  })
+
+  it('deletes an object and its cached copy; deleting one already gone succeeds', async () => {
+    const cache = fs.mkdtempSync(path.join(tmp, 'cache-'))
+    const store = storage.s3Store(s3, cache)
+    await store.put('old.txt', Buffer.from('old'), 'text/plain')
+    await store.delete('old.txt')
+    expect(fs.existsSync(store.localPath('old.txt'))).toBe(false)
+    await expect(store.read('old.txt')).rejects.toThrow(/gone/)
+    await store.delete('old.txt')
   })
 
   it('says the store is unreachable instead of writing to disk', async () => {

@@ -96,6 +96,20 @@ are written through to `data/cache`, and any file an agent is handed (MCP, or RE
 fetched there first if it has gone; copies nobody opened for 30 days leave the cache. While MinIO is
 down, uploads fail with a clear error and cached files still open.
 
+## Cleanup
+
+A project's Cleanup page (MCP `cleanup_report`) lists what its finished tickets left behind:
+registered workspaces, local and origin branches and worktrees, each branch checked against where its
+work should have landed. The board never deletes those; agents do with the human's go-ahead.
+
+It also counts the board's **unattached uploads**: files no post, reply, ticket or agent picture
+holds and no text links to (`/api/uploads/<id>`), such as images added to a New ticket window that was
+closed without creating, or a file removed from a post before sending. The board deletes those once
+they are a day old, every hour in the background (the file from disk or the bucket, its cached copy,
+then the row; a file the store cannot delete keeps its row for the next run). Younger files are never
+touched: they may be an upload about to be attached. **Delete now** on the Cleanup page runs it at
+once. A `pnpm dev` copy on `STORAGE=s3` shares the bucket with the live board, so it deletes nothing.
+
 ## Reviews
 
 An agent that reviews a PR records it with `post_review_result` (REST:
@@ -131,7 +145,8 @@ the gate device or token name.
 | POST         | `/api/tickets/:id/archive` · `/restore` · `/api/projects/:id/tickets/archive` `{status}`                      | archive a done or cancelled top-level ticket, its lanes with it · put it back · archive a whole done or cancelled stage (the human's)                         |
 | POST         | `/api/tickets/:id/claim` `{branch?, as?}`                                                                     | assign to the caller (or the project agent it works as) and start it; 409 if reserved for another agent                                                       |
 | GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain)                                                        |
-| GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches or worktrees; `reach=0` skips the merge checks                                                              |
+| GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches or worktrees; `reach=0` skips the merge checks; `uploads` counts the unattached ones                        |
+| DELETE       | `/api/uploads/unattached`                                                                                     | delete the unattached uploads older than a day now `{deleted, bytes, failed}` (the human's)                                                                   |
 | POST         | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`                                          | todo list                                                                                                                                                     |
 | POST         | `/api/tickets/:id/workspaces` `{name, branch?, path?, agent?, previewUrl?}` · DELETE `/api/workspaces/:id`    | worktrees / sub-branches / subagents                                                                                                                          |
 | PATCH/GET    | `/api/workspaces/:id` `{previewUrl}` · `/api/workspaces/:id/preview`                                          | set or clear (`null`, `""`) where the branch runs for the human to try (http/https) · whether it answers: `{running, status?, checkedAt}`, localhost only     |

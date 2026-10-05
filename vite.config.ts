@@ -22,6 +22,12 @@ const apiIsNeverAnAsset = (): Plugin => ({
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
-  plugins: [apiIsNeverAnAsset(), nitro(), tailwindcss(), tanstackStart(), viteReact()],
+  plugins: [
+    apiIsNeverAnAsset(),
+    nitro({ plugins: ['./src/server/plugins/uploadSweep.ts'] }),
+    tailwindcss(),
+    tanstackStart(),
+    viteReact(),
+  ],
   ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
 })
