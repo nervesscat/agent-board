@@ -2,19 +2,24 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Copy, ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { z } from 'zod'
 
 import { AgentPicker, CopyBlock, copyText } from '#/components/AgentPicker'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
-import { ReviewSkills } from '#/components/ReviewSkills'
-import { AGENTS, type Shell, mcpSetup, savedShell, saveShell, skillInstall } from '#/lib/agents'
+import { ReviewSkills, useShell } from '#/components/ReviewSkills'
+import { AGENTS, SHELLS, type Shell, mcpSetup, skillInstall } from '#/lib/agents'
 import { errorMessage, get } from '#/lib/api'
 import type { AgentClient } from '#/lib/constants'
 import type { Settings } from '#/server/agents'
 
-export const Route = createFileRoute('/agents')({ component: ConnectAgents })
+// ?shell= is the shell the install lines are for (none: the one this browser remembers, else bash).
+export const Route = createFileRoute('/agents')({
+  component: ConnectAgents,
+  validateSearch: z.object({ shell: z.enum(SHELLS).optional().catch(undefined) }),
+})
 
 type Setup = { boardUrl: string; gateUrl: string; settings: Settings }
 
@@ -24,7 +29,7 @@ function ConnectAgents() {
     queryFn: () => get<Setup>('/api/agent-setup'),
   })
   const [client, setClient] = useState<AgentClient | null>(null)
-  const [shell, setShell] = useState<Shell>(savedShell)
+  const [shell, pickShell] = useShell()
   // The token only fills in the commands on this page; it is never saved or sent anywhere.
   const [token, setToken] = useState('')
   useEffect(() => {
@@ -42,10 +47,6 @@ function ConnectAgents() {
   if (!setup || !client) return null
   const agent = AGENTS[client]
   const mcp = mcpSetup(client, setup.boardUrl, token.trim())
-  const pickShell = (s: Shell) => {
-    setShell(s)
-    saveShell(s)
-  }
   return (
     <div className="max-w-3xl space-y-6">
       <div>
@@ -150,7 +151,7 @@ function ConnectAgents() {
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium">3. Install the review skills (Claude Code)</h2>
-        <ReviewSkills boardUrl={setup.boardUrl} token={token} />
+        <ReviewSkills boardUrl={setup.boardUrl} token={token} shell={shell} onShellChange={pickShell} />
       </section>
     </div>
   )

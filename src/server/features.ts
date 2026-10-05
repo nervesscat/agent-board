@@ -1,9 +1,10 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { RESUME_TEMPLATE } from '#/lib/constants'
 import { logActivity } from './activity'
 import { baseChain, gitCache, reachOf } from './cleanup'
-import { branchInfo } from './git'
+import { branchHead, branchInfo } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
@@ -12,7 +13,17 @@ import { previewState, previewUrl, type PreviewState } from './preview'
 import { prForTicket } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
-import { firstOfKind, kindOf, listStages, matchStages, resolveStage, startStage, stageOf } from './stages'
+import { type WithResume, type WithResumeBrief, resumeState, withoutResume } from './resume'
+import {
+  firstOfKind,
+  kindOf,
+  listStages,
+  matchStages,
+  resolveStage,
+  startStage,
+  startedPatch,
+  stageOf,
+} from './stages'
 import { assertUnattached, attachTo, attachmentView } from './uploads'
 
 // --- tickets ---
@@ -96,7 +107,8 @@ function projectTickets(projectId: number) {
 export const reservedFor = (t: Pick<schema.Ticket, 'projectId' | 'assignee'>) =>
   findAgent(t.projectId, t.assignee)
 
-export type TicketRow = ReturnType<typeof projectTickets>[number]
+/** A row of a ticket list as reads hand it out (`withResumeBriefs`). */
+export type TicketRow = WithResumeBrief<ReturnType<typeof projectTickets>[number]>
 
 /** The lanes under a ticket, all the way down, nearest first. */
 export function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
@@ -229,7 +241,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     lanes: lanes.map((l) => {
       const u = lastUpdate.get(l.id)
       return {
-        ...l,
+        ...withoutResume(l),
         lastUpdate: u ? { author: u.author, text: gist(u.body), createdAt: u.createdAt } : null,
       }
     }),
@@ -243,7 +255,8 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
   }
 }
 
-export type TicketFull = ReturnType<typeof getTicketFull>
+/** A ticket in full as reads hand it out (`withResume`): its resume note and state under `resume`. */
+export type TicketFull = WithResume<ReturnType<typeof getTicketFull>>
 
 /** Where a new ticket goes: its parent (in the same project), its repo, and the branch it starts from. */
 export function placement(
@@ -262,12 +275,16 @@ export function placement(
 
 /**
  * `getTicketFull` with whether each branch is on origin: `push` on the ticket (its branch) and on each
- * of its workspaces, from one batch of git in the ticket's checkout.
+ * of its workspaces, from one batch of git in the ticket's checkout. A branch gone from origin counts
+ * as merged once it is in the ticket's base.
  */
 export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
   const t = getTicketFull(id, opts)
   const repo = ticketRepo(t)
-  const push = repo ? await pushStates(repo.repoPath, [t.branch, ...t.workspaces.map((w) => w.branch)]) : null
+  const branches = [t.branch, ...t.workspaces.map((w) => w.branch)]
+  const push = repo
+    ? await pushStates(repo.repoPath, branches, new Map(branches.map((b) => [b, t.baseBranch])))
+    : null
   return {
     ...t,
     push: push?.get(t.branch) ?? NO_PUSH,
@@ -300,6 +317,7 @@ export function createTicket(
   const attachmentIds = input.attachmentIds ?? []
   assertUnattached(attachmentIds)
   const stages = listStages(projectId)
+  const status = (input.status ? resolveStage(stages, input.status) : startStage(stages)).key
   const row = db
     .insert(schema.tickets)
     .values({
@@ -308,7 +326,8 @@ export function createTicket(
       parentId: parent?.id ?? null,
       title: input.title,
       body: input.body ?? '',
-      status: (input.status ? resolveStage(stages, input.status) : startStage(stages)).key,
+      status,
+      ...startedPatch(stages, null, status),
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
       baseBranch,
@@ -384,7 +403,11 @@ export function updateTicket(
   if (patch.status) patch = { ...patch, status: resolveStage(stages, patch.status).key }
   const row = db
     .update(schema.tickets)
-    .set({ ...patch, updatedAt: new Date().toISOString() })
+    .set({
+      ...patch,
+      ...(patch.status ? startedPatch(stages, before.status, patch.status, before.startedAt) : {}),
+      updatedAt: new Date().toISOString(),
+    })
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
@@ -452,6 +475,7 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
     .set({
       assignee,
       ...(start ? { status: start.key } : {}),
+      ...startedPatch(stages, before.status, start?.key ?? before.status, before.startedAt),
       ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
       updatedAt: new Date().toISOString(),
     })
@@ -504,6 +528,8 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     : before === 'approved'
       ? (firstOfKind(stages, 'review') ?? startStage(stages))
       : startStage(stages)
+  const status =
+    verdict === 'disapproved' && cancel ? cancel.key : finish ? finish.key : reopen ? reopenTo.key : t.status
   const row = db
     .update(schema.tickets)
     .set({
@@ -511,13 +537,8 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
       approvedBy: verdict === 'approved' ? actor : '',
       disapprovedAt: verdict === 'disapproved' ? now : null,
       disapprovedBy: verdict === 'disapproved' ? actor : '',
-      ...(verdict === 'disapproved' && cancel
-        ? { status: cancel.key }
-        : finish
-          ? { status: finish.key }
-          : reopen
-            ? { status: reopenTo.key }
-            : {}),
+      status,
+      ...startedPatch(stages, t.status, status, t.startedAt),
       updatedAt: now,
     })
     .where(eq(schema.tickets.id, id))
@@ -855,7 +876,7 @@ export async function ticketGit(id: number) {
       const [info, { refs }, push] = await Promise.all([
         branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
         repoGit(repo.repoPath),
-        pushStates(repo.repoPath, [ticket.branch]),
+        pushStates(repo.repoPath, [ticket.branch], new Map([[ticket.branch, ticket.baseBranch]])),
       ])
       const chain = baseChain(ticket, byId, repo)
       return {
@@ -869,7 +890,7 @@ export async function ticketGit(id: number) {
       const [info, { refs, worktrees }, push] = await Promise.all([
         branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
         repoGit(r.repoPath),
-        pushStates(r.repoPath, [w.branch]),
+        pushStates(r.repoPath, [w.branch], new Map([[w.branch, owner.baseBranch]])),
       ])
       const chain = baseChain(owner, byId, r)
       const into = w.branch === owner.branch || !owner.branch ? chain : [owner.branch, ...chain]
@@ -920,19 +941,24 @@ export function postUpdate(
   body: string,
   attachmentIds: number[],
   actor: string,
-  opts: { as?: string; progress?: boolean } = {},
+  opts: { as?: string; progress?: boolean; handoff?: boolean } = {},
 ) {
   const ticket = getTicket(ticketId)
   const { author, via } = signer(ticket.projectId, actor, opts.as)
   const progress = opts.progress ?? true
-  const row = db.insert(schema.updates).values({ ticketId, author, via, body, progress }).returning().get()
+  const handoff = opts.handoff ?? false
+  const row = db
+    .insert(schema.updates)
+    .values({ ticketId, author, via, body, progress, handoff })
+    .returning()
+    .get()
   attachTo(attachmentIds, { updateId: row.id })
   touch(ticketId)
   logActivity({
     projectId: ticket.projectId,
     actor: author,
-    kind: progress ? 'update' : 'comment',
-    text: `${progress ? 'posted an update on' : 'posted on'} #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${firstLine(body)}`,
+    kind: handoff ? 'handoff' : progress ? 'update' : 'comment',
+    text: `${handoff ? 'left a resume note on' : progress ? 'posted an update on' : 'posted on'} #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${handoff ? gist(body) : firstLine(body)}`,
     refType: 'ticket',
     refId: ticketId,
   })
@@ -957,6 +983,40 @@ export function gist(body: string, max = 120) {
 export const firstLine = (s: string, max = 120) => {
   const line = s.trim().split('\n')[0] ?? ''
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
+}
+
+// --- the resume note ("Where we left off") ---
+
+/**
+ * Write the ticket's resume note, for whoever picks it up next: `actor`, or with `as` one of the project's
+ * agents (via `actor`). It records the ticket branch's head (when the branch is here locally) so later
+ * commits show up as commits since the note. Each new version is also a handoff post in the feed, so
+ * the earlier ones stay readable; saving the same note again only marks it as still current.
+ */
+export async function setResumeNote(
+  ticketId: number,
+  note: string,
+  actor: string,
+  opts: { as?: string } = {},
+) {
+  const ticket = getTicket(ticketId)
+  const text = note.trim()
+  if (!text) throw new HttpError(400, 'the resume note is empty')
+  if (text === RESUME_TEMPLATE) throw new HttpError(400, 'fill in the template before saving it')
+  const { author } = signer(ticket.projectId, actor, opts.as)
+  const repo = ticketRepo(ticket)
+  const sha = repo ? await branchHead(repo.repoPath, ticket.branch) : null
+  const row = db
+    .update(schema.tickets)
+    .set({ resumeNote: text, resumeAt: new Date().toISOString(), resumeBy: author, resumeSha: sha })
+    .where(eq(schema.tickets.id, ticketId))
+    .returning()
+    .get()!
+  const post =
+    text === ticket.resumeNote
+      ? null
+      : postUpdate(ticketId, text, [], actor, { as: opts.as, progress: true, handoff: true })
+  return { resume: await resumeState(row), postId: post?.id ?? null }
 }
 
 // --- comments (threads on tickets, updates, PRs, review results) ---
@@ -1032,7 +1092,21 @@ function threadStats(parentType: schema.CommentParent, ids: number[]) {
  * agent. Newest first; `waiting` counts the comments since the actor (or agent) last spoke.
  */
 export function listOpenThreads(projectId: number, actor: string) {
+  return openThreads(projectId, [actor], { agents: true, discussion: false })
+}
+
+/**
+ * The threads in a project waiting on the human, who may sign in under several names (one per
+ * device). A ticket's feed counts only its discussion here: progress posts are reports, not
+ * questions, and a feed ending on an open decision is left to the decision itself.
+ */
+export function listHumanThreads(projectId: number, names: string[]) {
+  return openThreads(projectId, names, { agents: false, discussion: true })
+}
+
+function openThreads(projectId: number, me: string[], opts: { agents: boolean; discussion: boolean }) {
   getProject(projectId)
+  const isMe = (name: string) => me.includes(name)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
   const ticketById = new Map(tickets.map((t) => [t.id, t]))
   const updates = tickets.length
@@ -1042,6 +1116,9 @@ export function listOpenThreads(projectId: number, actor: string) {
           ticketId: schema.updates.ticketId,
           author: schema.updates.author,
           body: schema.updates.body,
+          progress: schema.updates.progress,
+          decision: schema.updates.decision,
+          decidedAt: schema.updates.decidedAt,
           createdAt: schema.updates.createdAt,
         })
         .from(schema.updates)
@@ -1109,7 +1186,9 @@ export function listOpenThreads(projectId: number, actor: string) {
   type Said = Pick<schema.Comment, 'id' | 'parentType' | 'parentId' | 'author' | 'body' | 'createdAt'>
   const threads = new Map<string, Said[]>()
   // A ticket's conversation is its posts, in order; a post's, PR's or review's is its comments.
-  for (const u of [...updates].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)) {
+  const posts = opts.discussion ? updates.filter((u) => !u.progress) : updates
+  const openDecisions = new Set(updates.filter((u) => u.decision && !u.decidedAt).map((u) => u.id))
+  for (const u of [...posts].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id)) {
     const key = `ticket:${u.ticketId}`
     const said: Said = {
       id: u.id,
@@ -1131,21 +1210,23 @@ export function listOpenThreads(projectId: number, actor: string) {
   for (const [key, list] of threads) {
     const subject = subjects.get(key)!
     const last = list[list.length - 1]!
-    const entry = (who: string, as: string | null) => ({
+    const entry = (who: (name: string) => boolean, as: string | null) => ({
       parentType: last.parentType,
       parentId: last.parentId,
       ticketId: subject.ticketId,
       title: subject.title,
       // Set when the thread waits on one of the project's agents: answer with comment as: <that name>.
       as,
-      waiting: list.length - 1 - list.map((c) => c.author).lastIndexOf(who),
+      waiting: list.length - 1 - list.map((c) => who(c.author)).lastIndexOf(true),
       last: { id: last.id, author: last.author, text: gist(last.body), createdAt: last.createdAt },
     })
-    const spoke = list.some((c) => c.author === actor)
-    if (last.author !== actor && (spoke || subject.owners.includes(actor))) {
-      out.push(entry(actor, null))
+    if (opts.discussion && last.parentType === 'ticket' && openDecisions.has(last.id)) continue
+    const spoke = list.some((c) => isMe(c.author))
+    if (!isMe(last.author) && (spoke || subject.owners.some(isMe))) {
+      out.push(entry(isMe, null))
       continue
     }
+    if (!opts.agents) continue
     // Else it may wait on one of the project's agents: mentioned last, or it spoke there, or it is its subject.
     const named = mentions(last.body)
     const lower = (s: string) => s.toLowerCase()
@@ -1158,7 +1239,7 @@ export function listOpenThreads(projectId: number, actor: string) {
         subject.owners.some((o) => lower(o) === n)
       )
     })
-    if (agent) out.push(entry(agent.name, agent.name))
+    if (agent) out.push(entry((name) => name === agent.name, agent.name))
   }
   return out.sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt))
 }
@@ -1310,7 +1391,10 @@ export function askDecision(
   const stages = listStages(ticket.projectId)
   const blocked = firstOfKind(stages, 'blocked')
   if ((input.block ?? true) && blocked && ticket.status !== blocked.key) {
-    db.update(schema.tickets).set({ status: blocked.key }).where(eq(schema.tickets.id, ticketId)).run()
+    db.update(schema.tickets)
+      .set({ status: blocked.key, ...startedPatch(stages, ticket.status, blocked.key, ticket.startedAt) })
+      .where(eq(schema.tickets.id, ticketId))
+      .run()
   }
   logActivity({
     projectId: ticket.projectId,
@@ -1358,7 +1442,10 @@ export function decide(postId: number, option: number, note: string, actor: stri
     .get()
   const active = firstOfKind(stages, 'active')
   if (!stillOpen && active && kindOf(stages, ticket.status) === 'blocked')
-    db.update(schema.tickets).set({ status: active.key }).where(eq(schema.tickets.id, ticket.id)).run()
+    db.update(schema.tickets)
+      .set({ status: active.key, ...startedPatch(stages, ticket.status, active.key, ticket.startedAt) })
+      .where(eq(schema.tickets.id, ticket.id))
+      .run()
   touch(ticket.id)
   logActivity({
     projectId: ticket.projectId,

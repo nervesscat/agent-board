@@ -115,3 +115,45 @@ test('steps to the previous and next ticket in a stage, by button and by [ and ]
   await expect(page).toHaveURL(url(second!.id))
   await expect(page.getByRole('textbox', { name: 'New post' })).toHaveText(']')
 })
+
+test('the features view (board or list) survives a reload, kept in the URL and remembered', async ({
+  page,
+  api,
+  project,
+}) => {
+  await api.ticket({ title: 'Seen either way' })
+  const tab = (name: string) => page.getByRole('tab', { name })
+  const card = page.locator('[data-column="todo"]').getByRole('link', { name: /Seen either way/ })
+  const row = page.getByRole('listitem').filter({ hasText: 'Seen either way' })
+
+  await page.goto(`/projects/${project.id}/features`)
+  await expect(tab('Board')).toHaveAttribute('aria-selected', 'true')
+  await expect(card).toBeVisible()
+  await tab('List').click()
+  await expect(page).toHaveURL(/[?&]view=list(&|$)/)
+  await expect(row).toBeVisible()
+
+  await page.reload()
+  await expect(tab('List')).toHaveAttribute('aria-selected', 'true')
+  await expect(tab('Board')).toHaveAttribute('aria-selected', 'false')
+  await expect(row).toBeVisible()
+  await expect(page.locator('[data-column]')).toHaveCount(0)
+
+  // Without one in the URL, the view this browser remembers comes back, and the URL says so.
+  await page.goto(`/projects/${project.id}/features`)
+  await expect(page).toHaveURL(/[?&]view=list(&|$)/)
+  await expect(tab('List')).toHaveAttribute('aria-selected', 'true')
+  await expect(row).toBeVisible()
+
+  // Archived is a visit: it is in the URL, but the next visit without one is back on the list.
+  await tab('Archived').click()
+  await expect(page).toHaveURL(/[?&]view=archived(&|$)/)
+  await page.goto(`/projects/${project.id}/features`)
+  await expect(page).toHaveURL(/[?&]view=list(&|$)/)
+  await expect(row).toBeVisible()
+
+  // A link that names one wins over what is remembered.
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await expect(tab('Board')).toHaveAttribute('aria-selected', 'true')
+  await expect(card).toBeVisible()
+})

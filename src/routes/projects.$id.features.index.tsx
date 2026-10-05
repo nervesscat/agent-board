@@ -3,7 +3,9 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { Archive, BrushCleaning, Columns3, List } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
+import { toastHandoff } from '#/components/Handoff'
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/components/PushDot'
@@ -11,32 +13,35 @@ import { ArchivedList, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, patch, post, type CleanupReport, type Push, type TicketRow } from '#/lib/api'
+import { remember, useRestoreRemembered } from '#/lib/remembered'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
-export const Route = createFileRoute('/projects/$id/features/')({ component: Features })
+const VIEWS = ['board', 'list', 'archived'] as const
+type View = (typeof VIEWS)[number]
 
-type View = 'board' | 'list' | 'archived'
-// The last of board and list picked is remembered in this browser (the archive is a visit, not a view to
-// come back to); storage can be unavailable, so board is the fallback.
+// ?view= is the view picked (none: the one this browser remembers, else board).
+export const Route = createFileRoute('/projects/$id/features/')({
+  component: Features,
+  validateSearch: z.object({ view: z.enum(VIEWS).optional().catch(undefined) }),
+})
+
+// The last of board and list picked is remembered in this browser, for a visit whose URL names none
+// (the archive is a visit, not a view to come back to).
 const VIEW_KEY = 'features.view'
-function savedView(): View {
-  try {
-    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'board'
-  } catch {
-    return 'board'
-  }
-}
+const REMEMBERED_VIEWS = ['board', 'list'] as const
 
 function Features() {
   const { id } = Route.useParams()
+  const { view: picked } = Route.useSearch()
+  const navigate = Route.useNavigate()
   const qc = useQueryClient()
-  const [view, setView] = useState<View>(savedView)
+  // The tabs and the page both follow the URL, so the server's render and the browser's agree.
+  const view = picked ?? 'board'
+  const showView = (v: View) => navigate({ search: (s) => ({ ...s, view: v }), replace: true })
+  useRestoreRemembered(VIEW_KEY, picked, REMEMBERED_VIEWS, showView)
   const pickView = (v: View) => {
-    setView(v)
-    if (v === 'archived') return
-    try {
-      localStorage.setItem(VIEW_KEY, v)
-    } catch {}
+    showView(v)
+    if (v !== 'archived') remember(VIEW_KEY, v)
   }
   // The board's list. Both lists sit under `ticketsKey(id)`, so whatever refreshes the board
   // refreshes the archive and its count too.
@@ -75,6 +80,8 @@ function Features() {
       )
       return { before }
     },
+    // A move to review goes through; the board says what the hand-off still lacks.
+    onSuccess: toastHandoff,
     onError: (err, v, ctx) => {
       qc.setQueryData(key, ctx?.before)
       toastRefusal(err, () => move.mutate({ ...v, force: true }))

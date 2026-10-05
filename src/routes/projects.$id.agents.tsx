@@ -3,6 +3,7 @@ import { Link, createFileRoute } from '@tanstack/react-router'
 import { ImagePlus, Lock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
@@ -21,14 +22,19 @@ import {
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
-import { ReviewSkills } from '#/components/ReviewSkills'
+import { ReviewSkills, useShell } from '#/components/ReviewSkills'
 import { RichEditor } from '#/components/RichEditor'
+import { SHELLS } from '#/lib/agents'
 import { del, errorMessage, get, patch, post, type ProjectAgent, type TicketRow, upload } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { useProject } from '#/lib/project'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
-export const Route = createFileRoute('/projects/$id/agents')({ component: Agents })
+// ?shell= is the shell the review skills' install line is for (see useShell).
+export const Route = createFileRoute('/projects/$id/agents')({
+  component: Agents,
+  validateSearch: z.object({ shell: z.enum(SHELLS).optional().catch(undefined) }),
+})
 
 function Agents() {
   const { id } = Route.useParams()
@@ -79,6 +85,7 @@ function DefaultAgents({ projectId, agents }: { projectId: string; agents: Proje
     queryKey: ['agent-setup'],
     queryFn: () => get<{ boardUrl: string }>('/api/agent-setup'),
   })
+  const [shell, pickShell] = useShell()
   const have = new Set(agents.map((a) => a.name.toLowerCase()))
   const missing = DEFAULT_AGENT_NAMES.filter((n) => !have.has(n))
   const add = useMutation({
@@ -120,7 +127,7 @@ function DefaultAgents({ projectId, agents }: { projectId: string; agents: Proje
           <span className="shrink-0 text-xs text-muted-foreground">All added</span>
         )}
       </div>
-      {setup && <ReviewSkills boardUrl={setup.boardUrl} />}
+      {setup && <ReviewSkills boardUrl={setup.boardUrl} shell={shell} onShellChange={pickShell} />}
     </section>
   )
 }

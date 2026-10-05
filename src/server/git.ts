@@ -170,6 +170,21 @@ export async function branchInfo(repoPath: string, branch: string, base: string)
   return { exists: true, sha, subject, authoredAt, ahead, behind }
 }
 
+/** The local branch's head commit, or null when there is no such branch here. */
+export async function branchHead(repoPath: string, branch: string): Promise<string | null> {
+  if (!branch) return null
+  return git(repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}^{commit}`]).catch(
+    () => null,
+  )
+}
+
+/** How many commits the local branch has that `sha` does not; null when either is unknown here. */
+export async function commitsSince(repoPath: string, branch: string, sha: string): Promise<number | null> {
+  if (!branch || !sha) return null
+  const out = await git(repoPath, ['rev-list', '--count', `${sha}..refs/heads/${branch}`]).catch(() => null)
+  return out === null ? null : Number(out)
+}
+
 export interface Worktree {
   path: string
   branch: string | null
@@ -242,6 +257,35 @@ export async function aheadBehind(repoPath: string, a: string, b: string): Promi
 /** How many commits reachable from `ref` are on no branch of origin. */
 export async function notOnOrigin(repoPath: string, ref: string): Promise<number> {
   return Number(await git(repoPath, ['rev-list', '--count', ref, '--not', '--remotes=origin']))
+}
+
+/**
+ * Whether commit `sha` was merged into `base`: it is in the base's history but not on its
+ * first-parent line. A branch cut from the base and never committed to sits on that line: it is in
+ * the base without having been merged into it.
+ */
+export async function mergedInto(repoPath: string, sha: string, base: string): Promise<boolean> {
+  const inBase = await git(repoPath, ['merge-base', '--is-ancestor', sha, base]).then(
+    () => true,
+    () => false,
+  )
+  if (!inBase) return false
+  // The base's first parents down to the first commit `sha` holds: its first parent is `sha` itself
+  // when `sha` is on that line.
+  const walk = await git(repoPath, ['rev-list', '--first-parent', '--parents', base, '--not', sha])
+  if (!walk) return false
+  const [, firstParent] = walk.split('\n').at(-1)!.split(' ')
+  return firstParent !== sha
+}
+
+/** When the branch's last commit was made (committer date): the local branch, else origin's. */
+export async function lastCommitAt(repoPath: string, branch: string): Promise<string | null> {
+  if (!branch) return null
+  for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
+    const at = await git(repoPath, ['log', '-1', '--format=%cI', ref, '--']).catch(() => '')
+    if (at) return new Date(at).toISOString()
+  }
+  return null
 }
 
 /**

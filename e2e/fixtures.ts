@@ -1,6 +1,13 @@
 import fs from 'node:fs'
 
-import { type APIRequestContext, type APIResponse, test as base, expect } from '@playwright/test'
+import {
+  type APIRequestContext,
+  type APIResponse,
+  type Locator,
+  type Page,
+  test as base,
+  expect,
+} from '@playwright/test'
 
 import type { Project, Repo, TicketFull } from '#/lib/api'
 import { AGENT, HUMAN, e2eEnv } from './env'
@@ -34,6 +41,15 @@ export function seededProject(): Project {
   return JSON.parse(fs.readFileSync(e2eEnv().seedFile, 'utf8')).project as Project
 }
 
+/** A card of the Home or Overview summary (Needs you, In progress…), by the start of its title. */
+export const section = (scope: Page | Locator, title: string) => {
+  // The inner locator of `has` is matched inside each card, so it starts from the page.
+  const page = 'page' in scope ? scope.page() : scope
+  return scope.locator('[data-slot="card"]').filter({
+    has: page.locator('[data-slot="card-title"]').filter({ hasText: new RegExp(`^\\s*${title}`) }),
+  })
+}
+
 export interface Api {
   ticket(input: { title: string; status?: string; body?: string; tags?: string[] }): Promise<TicketFull>
   getTicket(id: number): Promise<TicketFull>
@@ -65,6 +81,25 @@ export const test = base.extend<{
     })
     await use(ctx)
     await ctx.dispose()
+  },
+  // The board renders on the server, and its buttons do nothing until React takes the page over: a
+  // full load (goto, reload) waits for that, so a click right after it is never lost.
+  page: async ({ page }, use) => {
+    const hydrated = () =>
+      page.waitForFunction(() => Object.keys(document.body).some((k) => k.startsWith('__reactFiber')))
+    const goto = page.goto.bind(page)
+    const reload = page.reload.bind(page)
+    page.goto = async (...args) => {
+      const res = await goto(...args)
+      await hydrated()
+      return res
+    }
+    page.reload = async (...args) => {
+      const res = await reload(...args)
+      await hydrated()
+      return res
+    }
+    await use(page)
   },
   project: async ({ human }, use, info) => {
     await use(await seedProject(human, `${info.title.slice(0, 60)} (${info.workerIndex}.${++projects})`))

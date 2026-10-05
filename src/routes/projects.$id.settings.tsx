@@ -55,7 +55,7 @@ function Settings() {
           </ul>
           <p className="text-xs text-muted-foreground">
             Repos:{' '}
-            <Link to="/" className="underline hover:text-foreground">
+            <Link to="/repositories" className="underline hover:text-foreground">
               Repositories page
             </Link>
             . Rename or delete the project: project menu → Manage projects.

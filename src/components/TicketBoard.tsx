@@ -1,5 +1,14 @@
 import { Link } from '@tanstack/react-router'
-import { Archive, ArchiveRestore, ChevronLeft, ChevronRight, GitBranch, Layers, Scale } from 'lucide-react'
+import {
+  Archive,
+  ArchiveRestore,
+  BookmarkX,
+  ChevronLeft,
+  ChevronRight,
+  GitBranch,
+  Layers,
+  Scale,
+} from 'lucide-react'
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
@@ -147,8 +156,13 @@ export function TicketBoard({
                     <div className="line-clamp-2 font-medium leading-snug">
                       <span className="text-muted-foreground">#{t.id}</span> {t.title}
                     </div>
-                    {t.decisions > 0 && <DecisionBadge n={t.decisions} className="mt-1.5" />}
-                    <NeedsBadge needs={t.needs} className="mt-1.5" />
+                    {(t.decisions > 0 || t.needs.some((n) => !n.merged) || hasResumeBadge(t.resume)) && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                        <NeedsBadge needs={t.needs} />
+                        <ResumeBadges resume={t.resume} />
+                      </div>
+                    )}
                     {/* The time sits at the end of the last of these rows, so it always shares a line. */}
                     {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
                       <div className={INFO_ROW}>
@@ -233,13 +247,45 @@ function ArchiveAll({ stage, n, onConfirm }: { stage: string; n: number; onConfi
 }
 
 /** Decisions an agent asked the human to make that are still open. */
-function DecisionBadge({ n, className = '' }: { n: number; className?: string }) {
+export function DecisionBadge({ n, className = '' }: { n: number; className?: string }) {
   return (
     <span
       className={`inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 ${className}`}
     >
       <Scale className="size-3" /> {n === 1 ? 'decision needed' : `${n} decisions needed`}
     </span>
+  )
+}
+
+/** Shown from the second day of work on: a ticket that carries over. */
+const multiDay = (resume: TicketRow['resume']) => resume.day !== null && resume.day > 1
+
+const hasResumeBadge = (resume: TicketRow['resume']) => resume.noHandoff || multiDay(resume)
+
+/**
+ * A ticket that carried over to another day: which day of work this is, and "no handoff" when nobody
+ * left a resume note for it since the last day it was worked.
+ */
+function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
+  return (
+    <>
+      {resume.noHandoff && (
+        <span
+          className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
+          title="Worked on an earlier day, and nobody left a resume note on where it was left"
+        >
+          <BookmarkX className="size-3" /> no handoff
+        </span>
+      )}
+      {multiDay(resume) && (
+        <span
+          className="inline-flex w-fit items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
+          title="Which day of work this is, counted from when it was started"
+        >
+          day {resume.day}
+        </span>
+      )}
+    </>
   )
 }
 
@@ -387,7 +433,7 @@ function LaneCount({ lanes, stages }: { lanes: TicketRow['lanes']; stages: Stage
   )
 }
 
-function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup']; className?: string }) {
+export function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup']; className?: string }) {
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted">
@@ -446,6 +492,11 @@ export function TicketList({
                   </span>
                   {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
+                  {hasResumeBadge(t.resume) && (
+                    <span className="ml-2 inline-flex gap-1 align-[1px]">
+                      <ResumeBadges resume={t.resume} />
+                    </span>
+                  )}
                   {t.tags.length > 0 && (
                     <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
                       {[...t.tags].sort(compareTags).map((tag) => (

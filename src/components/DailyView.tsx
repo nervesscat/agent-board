@@ -7,6 +7,7 @@ import { Actor } from '#/components/Actor'
 import { DatePicker } from '#/components/DatePicker'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
+import { ReportPanel } from '#/components/ReportPanel'
 import { ReviewResultButton } from '#/components/ReviewResult'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
@@ -24,9 +25,13 @@ const KIND_LABEL: Record<string, string> = {
   agent: 'agents',
   project: 'projects',
   summary: 'summaries',
+  report: 'reports',
 }
 
-/** One day, hour by hour: what every person and agent did, and the shortest possible summary on top. */
+/**
+ * One day, hour by hour: what every person and agent did, and the shortest possible summary on top. A
+ * project's page also has its report: the prompt, and which periods are reported.
+ */
 export function DailyView({ projectId }: { projectId?: number }) {
   const qc = useQueryClient()
   const [date, setDate] = useState(localDate())
@@ -38,12 +43,17 @@ export function DailyView({ projectId }: { projectId?: number }) {
     refetchInterval: (q) => (q.state.data?.generating ? 2_000 : 15_000),
   })
   const onError = (err: unknown) => toast.error(errorMessage(err))
+  // A summary also stands in for a daily text report, so the report strip goes with it.
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['daily'] })
+    qc.invalidateQueries({ queryKey: ['reports'] })
+  }
   const [body, setBody] = useState('')
   const postSummary = useMutation({
     mutationFn: () => post('/api/daily/summaries', { date, projectId: projectId ?? null, body }),
     onSuccess: () => {
       setBody('')
-      qc.invalidateQueries({ queryKey: ['daily'] })
+      refresh()
     },
     onError,
   })
@@ -51,7 +61,7 @@ export function DailyView({ projectId }: { projectId?: number }) {
     mutationFn: () => post('/api/daily/summaries/generate', { date, projectId: projectId ?? null }),
     onMutate: () =>
       qc.setQueryData(key, (old: DailyPayload | undefined) => old && { ...old, generating: true }),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['daily'] }),
+    onSettled: refresh,
     onError,
   })
   // Server-side flag, so the state survives navigating away and back while claude is still writing.
@@ -72,7 +82,7 @@ export function DailyView({ projectId }: { projectId?: number }) {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Daily</h1>
           <p className="text-sm text-muted-foreground">
-            What got done, hour by hour, and the one-glance summary.
+            What got done, hour by hour, the one-glance summary{projectId ? ' and the report' : ''}.
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
@@ -150,6 +160,8 @@ export function DailyView({ projectId }: { projectId?: number }) {
         </form>
       </section>
 
+      {projectId !== undefined && <ReportPanel projectId={projectId} date={date} />}
+
       {data && data.activity.length > 0 && (
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
           <span>{data.activity.length} actions</span>
@@ -180,16 +192,17 @@ export function DailyView({ projectId }: { projectId?: number }) {
                     {!projectId && a.project && (
                       <span className="text-xs text-muted-foreground">[{a.project}]</span>
                     )}
+                    {/* A long word (a URL, a path) breaks anywhere rather than widen the page on a phone. */}
                     {a.refType === 'review' && a.refId ? (
                       <ReviewResultButton
                         resultId={a.refId}
-                        className="text-left hover:underline"
+                        className="min-w-0 text-left wrap-anywhere hover:underline"
                         title="Open the review result"
                       >
                         {a.text}
                       </ReviewResultButton>
                     ) : (
-                      <span>{a.text}</span>
+                      <span className="min-w-0 wrap-anywhere">{a.text}</span>
                     )}
                   </li>
                 ))}

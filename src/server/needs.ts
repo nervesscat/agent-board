@@ -6,8 +6,10 @@ import { logActivity } from './activity'
 import { baseChain, baseRefs, branchRef, gitCache, memo, reachOf, refSha } from './cleanup'
 import * as features from './features'
 import { holdsWorkOf, type Reach } from './git'
+import { type Handoff, ticketHandoff } from './handoff'
 import { HttpError } from './http'
 import { listRepos } from './repos'
+import { withResume, withResumeBriefs } from './resume'
 import { deleteStage, firstOfKind, kindOf, listStages, resolveStage, stageOf } from './stages'
 
 /**
@@ -206,7 +208,10 @@ async function needsFor(rows: Ticket[], ctx: Context) {
   return out
 }
 
-/** The ticket page's read: `getTicketWithPush` with what it needs (each with `merged`) and what needs it. */
+/**
+ * The ticket page's read: `getTicketWithPush` with what it needs (each with `merged`), what needs it, its
+ * resume note under `resume`, and in a review stage `handoff`: what the hand-off still lacks.
+ */
 export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {}) {
   const full = await features.getTicketWithPush(id, opts)
   const ctx = context(full.projectId)
@@ -221,14 +226,16 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
       const t = ctx.byId.get(id)
       return t ? [{ id: t.id, title: t.title, branch: t.branch, prNumber: t.prNumber, status: t.status }] : []
     })
-  return { ...full, needs, neededBy }
+  const handoff: Handoff | null =
+    kindOf(ctx.stages, full.status) === 'review' ? await ticketHandoff(full) : null
+  return withResume({ ...full, needs, neededBy, handoff })
 }
 
-/** `listTickets` with each ticket's needs, met or not. */
+/** `listTickets` with each ticket's needs, met or not, and whether its resume note holds (`resume`). */
 export async function ticketRows(projectId: number, filter: features.TicketFilter = {}) {
   const rows = features.listTickets(projectId, filter)
   const needs = await needsFor(rows, context(projectId))
-  return rows.map((t) => ({ ...t, needs: needs.get(t.id) ?? [] }))
+  return withResumeBriefs(rows.map((t) => ({ ...t, needs: needs.get(t.id) ?? [] })))
 }
 
 // --- what a branch took in from other tickets' branches ---
@@ -356,7 +363,8 @@ type Patch = Parameters<typeof features.updateTicket>[1]
 
 /**
  * `updateTicket` with the needs rule: `needs` replaces what the ticket needs, and a move to a done stage
- * is refused while one is not merged, unless the human sends `force` (logged).
+ * is refused while one is not merged, unless the human sends `force` (logged). A move to a review stage
+ * answers with `handoff` too: what the hand-off still lacks, as warnings.
  */
 export async function changeTicket(
   id: number,
@@ -380,6 +388,8 @@ export async function changeTicket(
     ? features.updateTicket(id, patch, actor, opts)
     : features.getTicket(id)
   logOverride(row, unmet, actor)
+  if (patch.status && kindOf(listStages(row.projectId), row.status) === 'review')
+    return { ...row, handoff: await ticketHandoff(await features.getTicketWithPush(id)) }
   return row
 }
 

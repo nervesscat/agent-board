@@ -45,12 +45,19 @@ http_headers = { Authorization = "Bearer gate_…" }
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
    `in_progress` mean `open` and `active`). Below, `todo`, `in_progress`, `blocked`, `review`,
    `done` and `cancelled` mean the project's stage of that kind.
-2. **Pick up work** from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
+2. **Pick up work**: starting a session, `get_summary` with your `projectId` shows where the project
+   stands in one read (waiting on the human, in progress, done today, next, carrying over). Take work
+   from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
    you; `q` searches titles and instructions). Read it in full with `get_ticket`. Then
    `claim_ticket` with the `branch` you will work on: it assigns you and moves it to
    `in_progress`. Tickets are shared: claiming one another agent holds takes it over (the board
    logs it), so prefer unassigned ones. A ticket with `reserved: true` belongs to one of the
    project's agents (below): claim it only with `as`.
+   **Start of a session:** before anything else on a ticket you pick up or come back to, read its
+   resume note (`resume` on `get_ticket`, also returned by `claim_ticket`): where the last session
+   left off, the next steps and how to resume. `resume.commitsSince` and `resume.stale` say whether
+   the work moved on since it was written; `resume.noHandoff` means it carried over from an earlier
+   day without one.
 3. **Break it down**: `add_tasks` with the concrete steps if the ticket does not have them;
    `set_task_done` as you finish each one, `update_task` / `remove_task` when the plan changes.
    The progress bar the human sees is those tasks.
@@ -109,31 +116,50 @@ http_headers = { Authorization = "Bearer gate_…" }
    ticket's worktree (checks, commit, push, preview), reply in the thread with what changed, and
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
    cursor is yours to hold, the board stores nothing per agent.
-7. **Hand off**: open the PR assigned to the human (`gh pr create --assignee <their login>`, or
-   `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
-   requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
-   the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
-   final `post_update`. A ticket goes to `review` only with its branch pushed: `get_ticket` →
-   `push.state` is `pushed` (green on the board), not `ahead` or `local-only` (red; `ahead` counts
-   the commits only you have). `get_ticket_git` gives the same `push` for every workspace's branch.
-   Before that post, run the repo's checks and its end-to-end suite when it has one (the project's
-   instructions say how; here `pnpm test:e2e`), and attach the result to the post (the run's
-   summary, or its report when something failed), with screenshots of what changed for a UI
-   change. **Merge order:** when your branch is built on another ticket's open branch
-   (stacked), or you merged one in to get past a conflict, declare it: `update_ticket` with
-   `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing "builds on …"
-   in the PR. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot move to
-   `done` until that branch is merged into its base (the refusal says which; only the human can
-   mark it done anyway). `get_ticket_git` → `includes` lists the open tickets whose unmerged work
-   your branch already holds; `get_ticket` → `needs` says whether each is `merged`. `done` is
-   the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
-   its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
-   a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
-   `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a ticket tagged `PR`,
-   a PR review, also moves it to `done`): read it, never set it, and ask
-   in the thread before touching an approved or disapproved lane. Archiving is the human's too:
+7. **Hand off**: before `update_ticket` → `review`, every item, in order:
+   1. Worktree registered (`add_workspace`), tasks ticked.
+   2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
+      project's instructions say how; here `pnpm test:e2e`).
+   3. Branch pushed: `get_ticket` → `push.state` is `pushed` (green on the board), not `ahead` or
+      `local-only` (red; `ahead` counts the commits only you have). `get_ticket_git` gives the same
+      `push` for every workspace's branch. (`merged`: gone from origin because its PR was merged
+      into the base.)
+   4. `needs` declared for any unmerged branch it builds on: when your branch is built on another
+      ticket's open branch (stacked), or you merged one in to get past a conflict, `update_ticket`
+      with `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing
+      "builds on …" in the PR. The PR queue then marks your PR "merge after #<its PR>", and the
+      ticket cannot move to `done` until that branch is merged into its base (the refusal says
+      which; only the human can mark it done anyway). `get_ticket_git` → `includes` lists the open
+      tickets whose unmerged work your branch already holds; `get_ticket` → `needs` says whether
+      each is `merged`.
+   5. PR open, assigned to the human (`gh pr create --assignee <their login>`, or `--assignee @me`
+      when you push with their account; GitHub never lets a PR's author be its requested reviewer,
+      and the PR queue also lists PRs assigned to them), and `update_ticket` with its `prNumber`
+      (the PR queue then shows the ticket, and the ticket its PR and latest review).
+   6. **Preview running**: `start_preview` on the workspace and wait for `running` (for a repo the
+      board cannot build, start one the project's way and `set_preview`; see Previews above).
+      Required whenever the change can be tried; when it cannot (docs only, a script), say why in
+      the hand-off post.
+   7. Hand-off post (`post_update`): the PR link, **the preview link and what to try there**, how it
+      was tested, the e2e result (the run's summary, or its report when something failed) and
+      screenshots of what changed for a UI change.
+   8. Resume note if the ticket stays open past the session (step 9).
+
+   `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
+   each a `code` and a `text` (`no_pr`, `not_pushed`, `no_preview`, `no_handoff_post`: no progress
+   post of yours since the branch's last commit, `checks_unknown`: the PR's CI is failing or still
+   running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff`
+   while the ticket is in review, and its page shows it as a Hand-off card.
+
+   `done` is the human's call unless the instructions say otherwise. A ticket with lanes goes to
+   `review` once its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was
+   dropped: say why in a comment). The human's verdict on a lane or ticket is `approvedAt` /
+   `approvedBy` or `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a
+   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it, and ask in the
+   thread before touching an approved or disapproved lane. Archiving is the human's too:
    `archivedAt` set means the ticket (and its lanes) is finished and off the board; `list_tickets`
    leaves those out unless `archived: "include"` or `"only"`.
+
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
    `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
@@ -141,8 +167,22 @@ http_headers = { Authorization = "Bearer gate_…" }
    as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
    origin branches: list them for the human. `cleanup_report` lists every leftover of the project's
    closed tickets (previews the board still runs for them too); the board skill's `/board cleanup` walks it with the human.
-9. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
-   what got done, what is open. `daily_report` shows what everyone else did that day.
+9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
+   `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
+   blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that
+   another agent can continue without asking. It is the ticket's one current "Where we left off"
+   note, shown at the top of its page; each version is also posted to its feed as a handoff. Then
+   `post_daily_summary` — at most three short lines at the highest level: what got done, what is
+   open. `daily_report` shows what everyone else did that day.
+10. **Reports**: a project can ask for a report every day or once a week (`get_report_settings`:
+    `cadence`, the `weekday` and `dueTime` it is due by, `format` text or file, and the `prompt`
+    saying what it must contain and how: by the hour, sections, audience, a short text or a PDF).
+    At the end of a session, `list_reports` shows each recent period as `done`, `missing` (due,
+    nothing posted) or `upcoming`; write the current or missing one exactly as the prompt says and
+    `post_report` it (`body`, and `files` as absolute paths: the board does not make PDFs; a `file`
+    project needs one). Posting again for a period replaces its report and keeps the old one as
+    history. For a daily text project the day's summary counts as its report until one is posted.
+    `set_report_settings` changes the prompt or schedule; do that only when the human asks.
 
 ## The project's agents
 
@@ -160,8 +200,9 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 **Orchestrating.** Each agent also carries **delegation notes** (`agents[].delegation`): when to
 call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
 orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
-agent's instructions, the project's and the ticket's; its result is posted on the ticket as that
-agent; the notes pick the next agent. The Agents page adds a default set (spec, builder, runner, and
+agent's instructions, the project's and the ticket's, and the hand-off checklist (step 7); its result
+is posted on the ticket as that agent; the notes pick the next agent. Before moving the ticket to
+`review`, check every item of that checklist yourself. The Agents page adds a default set (spec, builder, runner, and
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
 → build again with the confirmed findings (at most three rounds) → hand off. The `/review-queue`
 skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with

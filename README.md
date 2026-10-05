@@ -3,7 +3,9 @@
 A local job board shared by one developer and their AI agents (claude, codex, opencode, …).
 Per project (one or more repos): the PR queue assigned to you, the features in flight (tickets →
 lanes for parallel work → tasks → branches and workspaces → updates with screenshots and recordings →
-threads), the PR reviews your agents record, and a day-by-day log with a one-glance summary. Git and GitHub are **read-only**.
+threads), the PR reviews your agents record, and a day-by-day log with a one-glance summary and the
+report each project asks for (daily or weekly, as its prompt says), tracked period by period. Git
+and GitHub are **read-only**.
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
@@ -206,9 +208,12 @@ the gate device or token name.
 |              | `?parent=root\|<id>` on the list · `parentId` on create                                                       | lanes: a ticket's parallel sub-tickets, nested to any depth                                                                                                                                                                                                                                               |
 |              | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                                                  | lanes' updates in the feed · move lanes up a level instead of deleting them                                                                                                                                                                                                                               |
 |              | `needs[]` on create and PATCH · `force` on PATCH                                                              | the tickets whose branches must be merged into its base first (same project, no cycles); GET returns `needs[]` with `merged` and `neededBy[]`, the list `needs[]`. A move to a done stage is a 409 (`code: needs`) while one is not merged; `force: true` (the human's only) marks it done anyway, logged |
+|              | `resume` on GET `/api/tickets/:id` · on list rows                                                             | the resume note with `at`, `by`, `sha`, `commitsSince`, `stale`, `noHandoff`, `day` · rows: `at`, `stale`, `noHandoff`, `day`                                                                                                                                                                             |
+|              | `handoff` on PATCH to a review stage · on GET in one                                                          | what the hand-off still lacks, as warnings (the move goes through): `{missing: [{code, text}], checks: [{code, label, ok, text}]}`; codes `no_pr`, `not_pushed`, `no_preview`, `no_handoff_post`, `checks_unknown` (the PR's CI failing or running)                                                       |
 | GET          | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=&archived=`                           | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level; `archived=include` or `only`)                                                                                                                                                          |
 | POST         | `/api/tickets/:id/archive` · `/restore` · `/api/projects/:id/tickets/archive` `{status}`                      | archive a done or cancelled top-level ticket, its lanes with it · put it back · archive a whole done or cancelled stage (the human's)                                                                                                                                                                     |
-| POST         | `/api/tickets/:id/claim` `{branch?, as?}`                                                                     | assign to the caller (or the project agent it works as) and start it; 409 if reserved for another agent                                                                                                                                                                                                   |
+| POST         | `/api/tickets/:id/claim` `{branch?, as?}`                                                                     | assign to the caller (or the project agent it works as) and start it, returning it with `resume`; 409 if reserved for another agent                                                                                                                                                                       |
+| PUT          | `/api/tickets/:id/resume` `{note, as?}`                                                                       | the resume note, "Where we left off" (human or agents; `as` agents only); each version is also a handoff post                                                                                                                                                                                             |
 | GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain) and `push`; `includes[]`: open tickets whose unmerged work its branch holds                                                                                                                        |
 | GET/POST     | `/api/projects/:id/push` · `/api/projects/:id/push/refresh`                                                   | whether each ticket in work has its branch on origin (`push`: below), one batch of git per repo · fetch origin now, then the same                                                                                                                                                                         |
 | GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches, worktrees or running previews; `reach=0` skips the merge checks; `uploads` counts the unattached ones                                                                                                                                                  |
@@ -228,8 +233,12 @@ the gate device or token name.
 | GET          | `/api/projects/:id/reviews`                                                                                   | results                                                                                                                                                                                                                                                                                                   |
 | GET          | `/api/projects/:id/reviews/results?pr=&sha=&repoId=` · `/api/reviews/results/:id`                             | results without summaries · one in full                                                                                                                                                                                                                                                                   |
 | POST         | `/api/projects/:id/reviews/results`                                                                           | post a result                                                                                                                                                                                                                                                                                             |
+| GET          | `/api/summary?projectId=`                                                                                     | the Home and Overview summary: what waits on the human, in progress, done today, next, carrying over (every project without `projectId`)                                                                                                                                                                  |
 | GET          | `/api/daily?date=YYYY-MM-DD&projectId=`                                                                       | activity by the hour + summaries                                                                                                                                                                                                                                                                          |
 | POST         | `/api/daily/summaries` `{date, projectId, body}` · `/generate`                                                | post / ask claude for the day's summary                                                                                                                                                                                                                                                                   |
+| GET/PATCH    | `/api/projects/:id/report-settings` `{prompt, cadence, weekday, dueTime, format}`                             | what the project's report must contain (markdown prompt) and when it is due: `off` · `daily` · `weekly` on `weekday` 1–7, by `dueTime` (HH:MM), `text`/`file`                                                                                                                                             |
+| GET/POST     | `/api/projects/:id/reports?from=&to=` · `{period?, body?, attachmentIds[]}`                                   | periods newest first with `status` done/missing/upcoming and the latest report · post one (replaces the period's report, the old one kept)                                                                                                                                                                |
+| GET          | `/api/projects/:id/reports/:period`                                                                           | every version posted for a period, newest first                                                                                                                                                                                                                                                           |
 | \*           | `/api/mcp`                                                                                                    | MCP streamable HTTP; tools mirror the rows above                                                                                                                                                                                                                                                          |
 
 ## Development
@@ -256,13 +265,16 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   their own SQLite in a temp folder; the S3 ones run only with `S3_TEST_ENDPOINT` set (CLAUDE.md).
 - **End to end** (`pnpm test:e2e`): Playwright, `e2e/`. It builds the board into `.output-e2e`
   (never `.output`, so the live board's build is left alone) and starts it in test mode (above) on
-  a free loopback port above 47140, with its data and a scratch git repo in a temp folder. Global
-  setup seeds a project through the REST API; each test makes a project of its own. The browser is
-  the human (no `X-Test-Actor`); tests call the API as `human:enrique` or `agent:claude` to set
-  things up and to check what agents may do. Failures keep a screenshot and a trace under
-  `test-results/`, and `playwright-report/` has the HTML report (`pnpm exec playwright show-report`).
-  First run: `pnpm exec playwright install chromium`. `E2E_SKIP_BUILD=1` reuses the last build;
-  `E2E_PORT` picks the port.
+  a free loopback port above 47140, with its data and a scratch git repo (a bare repo beside it is
+  its origin) in a temp folder. Global setup seeds a project through the REST API; each test makes a
+  project of its own. The browser is the human (no `X-Test-Actor`); tests call the API as
+  `human:enrique` or `agent:claude` to set things up and to check what agents may do, and make the
+  branches they need in the scratch repo. What no API can do, putting a moment in the past (work
+  started yesterday, an upload a day old), they write to the run's throwaway database
+  (`e2e/db.ts`). A full page load waits for hydration before the test goes on. Failures keep a
+  screenshot and a trace under `test-results/`, and `playwright-report/` has the HTML report
+  (`pnpm exec playwright show-report`). First run: `pnpm exec playwright install chromium`.
+  `E2E_SKIP_BUILD=1` reuses the last build; `E2E_PORT` picks the port.
 - **Migrations** (`pnpm check:migrations`): every `drizzle/NNNN_*.sql` has a number of its own and
   a journal entry, every entry its file, `idx` matches, and `when` grows down the journal. Drizzle
   applies only migrations dated after the last one applied, so one merged with an older `when`
@@ -275,8 +287,10 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
 
 A branch's `push` (on `GET /api/tickets/:id` for the ticket and its workspaces, on
 `/api/tickets/:id/git` for every branch, and per ticket on `/api/projects/:id/push`) is
-`{state, ahead, behind, checkedAt}`: `pushed` (green; origin has every commit, `behind` counts what it
+`{state, ahead, behind, checkedAt}` (`into` on `merged`): `pushed` (green; origin has every commit, `behind` counts what it
 has on top), `ahead` (red; `ahead` commits only here), `local-only` (red; no such branch on origin),
+`merged` (no such branch on origin, and merged into origin's copy of the ticket's base, `into`: its PR
+was merged and the branch deleted; a branch cut from the base and never committed to stays `local-only`),
 `remote-only` (only on origin, e.g. after cleanup) or `none` (no branch, or it exists nowhere). It is
 read from the checkout's `origin/*` refs, so the board fetches each repo in the background at most
 every 5 minutes (never prompting, never holding up a request); `checkedAt` is the last fetch, and

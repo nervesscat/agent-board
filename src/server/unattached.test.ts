@@ -172,12 +172,12 @@ describe('what holds an upload comes from the schema', () => {
     const dir = fs.mkdtempSync(path.join(tmp, 'uploads-'))
     const store = storage.localStore(dir)
     // What a later feature might add: an owner column, a table pointing at uploads, a text linking one.
-    db.run(sql`alter table attachments add column report_id integer`)
+    db.run(sql`alter table attachments add column invoice_id integer`)
     db.run(sql`create table pinned (id integer primary key, file_id integer references attachments(id))`)
     db.run(sql`create table memos (id integer primary key, text text not null)`)
 
-    const byColumn = upload(dir, 'report.pdf')
-    db.run(sql`update attachments set report_id = 1 where id = ${byColumn.id}`)
+    const byColumn = upload(dir, 'invoice.pdf')
+    db.run(sql`update attachments set invoice_id = 1 where id = ${byColumn.id}`)
     const byKey = upload(dir, 'pinned.png')
     db.run(sql`insert into pinned (file_id) values (${byKey.id})`)
     const byText = upload(dir, 'linked.png')

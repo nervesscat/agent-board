@@ -29,6 +29,8 @@ const commit = (cwd: string, file: string, msg: string) => {
  * - feat/local: never pushed (1 commit)
  * - feat/remote: pushed, then the local branch deleted
  * - feat/behind: pushed 2 commits, then reset back one here
+ * - feat/merged: pushed, merged into main (pushed), then deleted on origin as GitHub does
+ * - feat/fresh: cut from main before that merge, never committed to nor pushed
  */
 beforeAll(() => {
   fs.mkdirSync(origin)
@@ -67,10 +69,20 @@ beforeAll(() => {
   git('checkout', '-q', 'main')
   git('branch', '-q', '-D', 'feat/remote')
 
+  git('checkout', '-q', '-b', 'feat/merged', 'main')
+  commit(repo, 'merged.txt', 'merged')
+  git('push', '-q', 'origin', 'feat/merged')
+  git('branch', '-q', 'feat/fresh', 'main')
+  git('checkout', '-q', 'main')
+  git('merge', '-q', '--no-ff', '-m', 'merge feat/merged', 'feat/merged')
+  git('push', '-q', 'origin', 'main')
+  git('push', '-q', 'origin', '--delete', 'feat/merged')
+
   execFileSync('git', ['clone', '-q', origin, other], { stdio: 'ignore' })
   gitIn(other, 'config', 'user.email', 'o@o')
   gitIn(other, 'config', 'user.name', 'o')
-})
+  // A few dozen git processes: slow on Windows, more so beside the other suites.
+}, 60_000)
 
 afterEach(() => {
   vi.useRealTimers()
@@ -99,6 +111,23 @@ describe('pushStates', () => {
     expect(states.get('feat/behind')).toMatchObject({ state: 'pushed', ahead: 0, behind: 1 })
     expect(states.get('feat/nowhere')).toMatchObject({ state: 'none' })
     expect(states.get('')).toEqual({ state: 'none', ahead: 0, behind: 0, checkedAt: null })
+  })
+
+  it('tells a branch merged into its base and gone from origin from one never pushed', async () => {
+    const { fetchRepo, pushStates } = await import('./push')
+    await fetchRepo(repo, { force: true })
+    const bases = new Map([
+      ['feat/merged', 'main'],
+      ['feat/fresh', 'main'],
+      ['feat/local', 'main'],
+    ])
+    const states = await pushStates(repo, ['feat/merged', 'feat/fresh', 'feat/local'], bases)
+    expect(states.get('feat/merged')).toMatchObject({ state: 'merged', ahead: 0, behind: 0, into: 'main' })
+    // In main too, but on its own line: cut from it, not merged into it.
+    expect(states.get('feat/fresh')).toMatchObject({ state: 'local-only', ahead: 0 })
+    expect(states.get('feat/local')).toMatchObject({ state: 'local-only', ahead: 1 })
+    // Without its base it cannot be told apart.
+    expect((await pushStates(repo, ['feat/merged'])).get('feat/merged')?.state).toBe('local-only')
   })
 
   it('reads a checkout that is not there as none', async () => {
@@ -208,5 +237,17 @@ describe('the board', () => {
     const g = await features.ticketGit(ahead.id)
     expect(g.info.push).toMatchObject({ state: 'ahead', ahead: 2 })
     expect(g.workspaces[0]!.info.push.state).toBe('local-only')
+
+    // A ticket whose PR was merged: its branch is gone from origin, and that is fine.
+    const merged = ticket('merged', 'feat/merged', 'review')
+    expect((await features.getTicketWithPush(merged.id)).push).toMatchObject({
+      state: 'merged',
+      into: 'main',
+    })
+    expect((await features.ticketGit(merged.id)).info.push.state).toBe('merged')
+    const all = await (
+      await api.handle(new Request(`http://board/api/projects/${projectId}/push`), 'claude')
+    ).json()
+    expect(all.tickets.find((t: { id: number }) => t.id === merged.id).push.state).toBe('merged')
   })
 })

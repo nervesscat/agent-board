@@ -25,11 +25,19 @@ import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
+import { remember, useRestoreRemembered } from '#/lib/remembered'
 
-// ?result=<id> opens that review result over the queue (a verdict on a card links there).
+const FILTER_KEYS = ['me', 'others', 'all'] as const
+type Filter = (typeof FILTER_KEYS)[number]
+
+// ?result=<id> opens that review result over the queue (a verdict on a card links there); ?filter= is
+// the filter picked (none: the one this browser remembers, else all).
 export const Route = createFileRoute('/projects/$id/prs')({
   component: PrQueue,
-  validateSearch: z.object({ result: z.number().int().positive().optional().catch(undefined) }),
+  validateSearch: z.object({
+    result: z.number().int().positive().optional().catch(undefined),
+    filter: z.enum(FILTER_KEYS).optional().catch(undefined),
+  }),
 })
 
 const TABS = [
@@ -38,7 +46,6 @@ const TABS = [
   { key: 'on_hold', label: 'On hold' },
 ] as const
 
-type Filter = 'me' | 'others' | 'all'
 const FILTERS: { key: Filter; label: string; title: string }[] = [
   {
     key: 'me',
@@ -52,30 +59,23 @@ const FILTERS: { key: Filter; label: string; title: string }[] = [
   },
   { key: 'all', label: 'All', title: 'Every PR in the queue' },
 ]
-// The last filter picked is remembered in this browser; storage can be unavailable, so all is the fallback.
+// The last filter picked is remembered in this browser, for a visit whose URL names none.
 const FILTER_KEY = 'prs.filter'
-function savedFilter(): Filter {
-  try {
-    const v = localStorage.getItem(FILTER_KEY)
-    return v === 'me' || v === 'others' ? v : 'all'
-  } catch {
-    return 'all'
-  }
-}
 
 function PrQueue() {
   const { id } = Route.useParams()
-  const { result } = Route.useSearch()
+  const { result, filter: picked } = Route.useSearch()
   const navigate = Route.useNavigate()
   const qc = useQueryClient()
   const key = ['prs', id]
   const { data: project } = useProject(id)
-  const [filter, setFilter] = useState<Filter>(savedFilter)
+  // The tab and the list both follow the URL, so the server's render and the browser's agree.
+  const filter = picked ?? 'all'
+  const showFilter = (f: Filter) => navigate({ search: (s) => ({ ...s, filter: f }), replace: true })
+  useRestoreRemembered(FILTER_KEY, picked, FILTER_KEYS, showFilter)
   const pickFilter = (f: Filter) => {
-    setFilter(f)
-    try {
-      localStorage.setItem(FILTER_KEY, f)
-    } catch {}
+    showFilter(f)
+    remember(FILTER_KEY, f)
   }
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: key,

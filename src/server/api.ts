@@ -29,11 +29,14 @@ import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
 import * as projects from './projects'
+import * as reports from './reports'
 import * as repos from './repos'
+import { withResume } from './resume'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
 import * as uploads from './uploads'
 
@@ -297,7 +300,7 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   )
   return json(await needs.newTicket(id(params), body, actor, { agent: isAgent(request) }), 201)
 })
-// ?lanes=1 folds the lanes' updates into the feed.
+// ?lanes=1 folds the lanes' updates into the feed. `resume` is the resume note with what happened since.
 api.get('/api/tickets/:id', async ({ request, params, url }) =>
   json(
     await forAgent(
@@ -376,7 +379,16 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
     request,
     z.object({ branch: z.string().max(200).optional(), as: AgentName.optional() }),
   )
-  return json(features.claimTicket(id(params), actor, body))
+  return json(await withResume(features.claimTicket(id(params), actor, body)))
+})
+// The resume note ("Where we left off"): the human and agents both write it; `as` is agents only.
+api.put('/api/tickets/:id/resume', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ note: z.string().min(1).max(50_000), as: AgentName.optional() }),
+  )
+  if (body.as) agentOnly(request)
+  return json(await features.setResumeNote(id(params), body.note, actor, { as: body.as }))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await needs.ticketGitView(id(params))))
 // Whether the branch of every ticket in work is on origin, one batch of git per repo; refresh fetches now.
@@ -638,6 +650,13 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
 })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
 
+// --- summary: what waits on the human, in progress, done today, next, carrying over ---
+// ?projectId= for one project; every project otherwise, one block each.
+api.get('/api/summary', ({ url }) => {
+  const project = url.searchParams.get('projectId')
+  return json(getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }))
+})
+
 // --- daily ---
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
 api.get('/api/daily', ({ url }) => {
@@ -663,6 +682,41 @@ api.post('/api/daily/summaries/generate', async ({ request }) => {
   )
   return json(await generateSummary(body.date, body.projectId), 201)
 })
+
+// --- reports: the prompt and schedule of a project's reports, and the reports per period ---
+api.get('/api/projects/:id/report-settings', ({ params }) => json(reports.getReportSettings(id(params))))
+// Agents may change them too (the prompt included); every change shows in the activity feed.
+api.patch('/api/projects/:id/report-settings', async ({ request, params, actor }) =>
+  json(reports.setReportSettings(id(params), await readJson(request, reports.ReportSettingsPatch), actor)),
+)
+// ?from=&to= (YYYY-MM-DD): the periods in between, newest first, each with its status and latest report.
+api.get('/api/projects/:id/reports', async ({ request, params, url }) =>
+  json(
+    await forAgent(
+      request,
+      reports.listReports(id(params), {
+        from: url.searchParams.get('from') || undefined,
+        to: url.searchParams.get('to') || undefined,
+      }),
+    ),
+  ),
+)
+// period defaults to the current one; attachmentIds are uploads (POST /api/uploads) to attach.
+api.post('/api/projects/:id/reports', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      period: Day.optional(),
+      body: z.string().max(100_000).optional(),
+      attachmentIds: z.array(z.number().int()).default([]),
+    }),
+  )
+  return json(await reports.postReport(id(params), body, actor), 201)
+})
+// Every version posted for a period, newest first.
+api.get('/api/projects/:id/reports/:period', async ({ request, params }) =>
+  json(await forAgent(request, reports.reportVersions(id(params), params.period!))),
+)
 
 // --- MCP ---
 api.on('POST', '/api/mcp', ({ request, actor }) => handleMcp(request, actor))

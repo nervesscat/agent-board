@@ -14,6 +14,8 @@ import {
   STAGE_KINDS,
   type CommentParent,
   type PrCheck,
+  type ReportCadence,
+  type ReportFormat,
   type StageColor,
   type StageKind,
 } from '#/lib/constants'
@@ -160,6 +162,16 @@ export const tickets = sqliteTable(
     // Put away by the human off the board and the default lists; a lane goes with its ticket. Null while on the board.
     archivedAt: text('archived_at'),
     archivedBy: text('archived_by').notNull().default(''),
+    // When work on it last started: it entered an active, blocked or review stage from any other kind.
+    // A multi-day ticket counts its days from here.
+    startedAt: text('started_at'),
+    // Where we left off: the one current resume note (markdown), who wrote it and when, and the ticket
+    // branch's head at that moment (null when the branch was not there locally). Each save is also a
+    // handoff post in the feed, so the older notes stay readable.
+    resumeNote: text('resume_note').notNull().default(''),
+    resumeAt: text('resume_at'),
+    resumeBy: text('resume_by').notNull().default(''),
+    resumeSha: text('resume_sha'),
     createdAt: now(),
     updatedAt: now(),
   },
@@ -217,6 +229,8 @@ export const updates = sqliteTable('updates', {
   via: text().notNull().default(''),
   body: text().notNull(),
   progress: integer({ mode: 'boolean' }).notNull().default(true),
+  // A resume note as it was saved (see tickets.resumeNote): the ticket's handoffs, oldest to newest.
+  handoff: integer({ mode: 'boolean' }).notNull().default(false),
   // A decision the human is asked to make: the post's body is the question, these are the answers
   // to pick from. Null on any other post.
   decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),
@@ -246,13 +260,14 @@ export const comments = sqliteTable(
   (t) => [index('comments_parent').on(t.parentType, t.parentId)],
 )
 
-// An attachment belongs to a post, a reply, or a ticket's instructions; unattached rows are uploads
-// waiting to be referenced.
+// An attachment belongs to a post, a reply, a ticket's instructions or a report; unattached rows are
+// uploads waiting to be referenced.
 export const attachments = sqliteTable('attachments', {
   id: id(),
   updateId: integer('update_id').references(() => updates.id, { onDelete: 'cascade' }),
   commentId: integer('comment_id').references(() => comments.id, { onDelete: 'cascade' }),
   ticketId: integer('ticket_id').references(() => tickets.id, { onDelete: 'cascade' }),
+  reportId: integer('report_id').references((): AnySQLiteColumn => reports.id, { onDelete: 'cascade' }),
   name: text().notNull(),
   mime: text().notNull(),
   size: integer().notNull(),
@@ -311,6 +326,44 @@ export const dailySummaries = sqliteTable(
   (t) => [index('daily_summaries_date').on(t.date)],
 )
 
+// What a project's report must say and how (the prompt, markdown), and when one is due. The human edits
+// it on the Daily page; agents read it, and may change it, through the API.
+export const reportSettings = sqliteTable('report_settings', {
+  projectId: integer('project_id')
+    .primaryKey()
+    .references(() => projects.id, { onDelete: 'cascade' }),
+  prompt: text().notNull().default(''),
+  cadence: text().$type<ReportCadence>().notNull().default('off'),
+  // The day a weekly report is due, 1 (Monday) to 7 (Sunday).
+  weekday: integer().notNull().default(5),
+  // Local `HH:MM` the report is due by on its day; null means by the end of that day.
+  dueTime: text('due_time'),
+  format: text().$type<ReportFormat>().notNull().default('text'),
+  // The first period tracked (YYYY-MM-DD), set when the cadence changes: earlier periods without a
+  // report are not counted as missing.
+  since: text().notNull().default(''),
+  updatedBy: text('updated_by').notNull().default(''),
+  updatedAt: now(),
+})
+
+// A report for one period of a project: the day (YYYY-MM-DD) or, for a weekly cadence, the Monday of the
+// week. Posting again for the same period adds a newer version; the latest is the report.
+export const reports = sqliteTable(
+  'reports',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    cadence: text().$type<Exclude<ReportCadence, 'off'>>().notNull(),
+    period: text().notNull(),
+    body: text().notNull().default(''),
+    author: text().notNull(),
+    createdAt: now(),
+  },
+  (t) => [index('reports_project_period').on(t.projectId, t.period)],
+)
+
 // Board-wide preferences the human sets in Settings, one row per key (the value is JSON).
 export const settings = sqliteTable('settings', {
   key: text().primaryKey(),
@@ -339,3 +392,5 @@ export type Update = typeof updates.$inferSelect
 export type Attachment = typeof attachments.$inferSelect
 export type Comment = typeof comments.$inferSelect
 export type ReviewResult = typeof reviewResults.$inferSelect
+export type ReportSettings = typeof reportSettings.$inferSelect
+export type Report = typeof reports.$inferSelect

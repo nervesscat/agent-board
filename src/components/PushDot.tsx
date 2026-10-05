@@ -13,11 +13,12 @@ const DOT: Record<Push['state'], string> = {
   pushed: 'bg-emerald-500',
   ahead: 'bg-red-500',
   'local-only': 'bg-red-500',
+  merged: 'bg-emerald-500/50',
   'remote-only': 'bg-sky-500',
   none: 'bg-muted-foreground/40',
 }
 
-/** Not pushed: red on the board. */
+/** Not pushed: red on the board. A merged branch gone from origin is not one. */
 export const isUnpushed = (p: Push | undefined) => p?.state === 'ahead' || p?.state === 'local-only'
 
 /** A short label and the sentence behind it, for a branch's push state. */
@@ -39,6 +40,11 @@ export function pushText(p: Push): { label: string; title: string } {
       return {
         label: 'not on origin',
         title: `not pushed: no such branch on origin${p.ahead ? `, ${plural(p.ahead, 'commit')} only here` : ''}`,
+      }
+    case 'merged':
+      return {
+        label: `merged into ${p.into ?? 'its base'}`,
+        title: `merged into ${p.into ?? 'its base'}; the branch is gone from origin`,
       }
     case 'remote-only':
       return { label: 'only on origin', title: 'only on origin: no local branch' }

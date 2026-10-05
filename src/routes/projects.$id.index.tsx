@@ -1,7 +1,20 @@
-import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 
-export const Route = createFileRoute('/projects/$id/')({
-  beforeLoad: ({ params }) => {
-    throw redirect({ to: '/projects/$id/prs', params })
-  },
-})
+import { Summary } from '#/components/Summary'
+
+export const Route = createFileRoute('/projects/$id/')({ component: Overview })
+
+function Overview() {
+  const { id } = Route.useParams()
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
+        <p className="text-sm text-muted-foreground">
+          What waits on you, what is in progress, what got done today and what is next.
+        </p>
+      </div>
+      <Summary projectId={Number(id)} />
+    </div>
+  )
+}
