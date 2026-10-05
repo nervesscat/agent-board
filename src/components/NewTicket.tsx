@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { useProject } from '#/lib/project'
+import { ticketsKey } from '#/lib/tickets'
 import { cn } from '#/lib/utils'
 
 /**
@@ -66,7 +67,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         attachmentIds: files.ids,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tickets', projectId] })
+      qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
       if (parent) qc.invalidateQueries({ queryKey: ['ticket', String(parent.id)] })
       setOpen(false)
       setTitle('')
