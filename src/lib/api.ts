@@ -12,7 +12,8 @@ import type {
   Workspace,
   Activity,
 } from '#/db/schema'
-import type { TicketFull, TicketRow, WorkspacePreview } from '#/server/features'
+import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
+import type { WorkspacePreview } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
@@ -43,6 +44,8 @@ export type {
   Activity,
   TicketFull,
   TicketRow,
+  Need,
+  NeededBy,
   PrRow,
   BranchInfo,
   Worktree,
@@ -54,10 +57,13 @@ export type {
 
 export class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  /** Which refusal it is, when the server names it (`needs`: a need is not merged yet). */
+  code?: string
+  constructor(message: string, status: number, code?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.code = code
   }
 }
 
@@ -76,7 +82,11 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
       data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
         ? data.error
         : `${res.status} ${res.statusText}`
-    throw new ApiError(message, res.status)
+    const code =
+      data && typeof data === 'object' && 'code' in data && typeof data.code === 'string'
+        ? data.code
+        : undefined
+    throw new ApiError(message, res.status, code)
   }
   return data as T
 }
@@ -131,6 +141,8 @@ export interface TicketGit {
     worktree: Worktree | null
     lane: { id: number; title: string } | null
   })[]
+  /** Open tickets whose unmerged work the ticket's branch holds. */
+  includes: number[]
 }
 
 export interface DailyPayload {

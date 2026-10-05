@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { NewTicket } from '#/components/NewTicket'
+import { toastRefusal } from '#/components/Needs'
 import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/components/PushDot'
 import { ArchivedList, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
@@ -61,10 +62,11 @@ function Features() {
     onError: (err) => toast.error(errorMessage(err)),
     onSettled: () => qc.invalidateQueries({ queryKey: ticketsKey(id) }),
   })
-  // The card moves at once; a failed save puts it back.
+  // The card moves at once; a failed save puts it back. A move to done refused for a need not merged
+  // yet offers to make it anyway.
   const move = useMutation({
-    mutationFn: (v: { ticketId: number; status: string }) =>
-      patch(`/api/tickets/${v.ticketId}`, { status: v.status }),
+    mutationFn: (v: { ticketId: number; status: string; force?: boolean }) =>
+      patch(`/api/tickets/${v.ticketId}`, { status: v.status, force: v.force }),
     onMutate: async (v) => {
       await qc.cancelQueries({ queryKey: key })
       const before = qc.getQueryData<TicketRow[]>(key)
@@ -73,9 +75,9 @@ function Features() {
       )
       return { before }
     },
-    onError: (err, _v, ctx) => {
+    onError: (err, v, ctx) => {
       qc.setQueryData(key, ctx?.before)
-      toast.error(errorMessage(err))
+      toastRefusal(err, () => move.mutate({ ...v, force: true }))
     },
     onSettled: (_d, _e, v) => {
       qc.invalidateQueries({ queryKey: ticketsKey(id) })

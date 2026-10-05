@@ -62,15 +62,36 @@ export function baseRefs(chain: string[], refs: Refs): string[] {
 export const branchRef = (branch: string, refs: Refs) =>
   refs.local.has(branch) ? branch : refs.remote.has(branch) ? `origin/${branch}` : null
 
+/** The commit a ref from `branchRef` or `baseRefs` points at. */
+export const refSha = (ref: string, refs: Refs) =>
+  refs.local.get(ref) ?? (ref.startsWith('origin/') ? refs.remote.get(ref.slice(7)) : undefined)
+
+/**
+ * Answers already worked out, by the commits they were worked out for: a verdict on the same commits
+ * never changes, so the board's polling asks git again only once a branch or a base moves. Bounded:
+ * the oldest answers go first.
+ */
+const REACH_MEMO_MAX = 2000
+const reachMemo = new Map<string, Promise<Reach | null>>()
+
+export function memo<T>(cache: Map<string, Promise<T>>, max: number, key: string, work: () => Promise<T>) {
+  const hit = cache.get(key)
+  if (hit) return hit
+  const p = work()
+  cache.set(key, p)
+  // A failure (a ref gone mid-read) is not remembered.
+  p.catch(() => cache.delete(key))
+  while (cache.size > max) cache.delete(cache.keys().next().value!)
+  return p
+}
+
 export async function reachOf(repoPath: string, branch: string, chain: string[], refs: Refs) {
   const ref = branch ? branchRef(branch, refs) : null
   if (!ref) return null
   // A branch is not its own destination (a workspace on the ticket's own branch).
-  return branchReach(
-    repoPath,
-    ref,
-    baseRefs(chain, refs).filter((b) => b !== ref && b !== branch),
-  )
+  const bases = baseRefs(chain, refs).filter((b) => b !== ref && b !== branch)
+  const key = [repoPath, `${ref}@${refSha(ref, refs)}`, ...bases.map((b) => `${b}@${refSha(b, refs)}`)]
+  return memo(reachMemo, REACH_MEMO_MAX, key.join('\0'), () => branchReach(repoPath, ref, bases))
 }
 
 const samePath = (a: string, b: string) =>

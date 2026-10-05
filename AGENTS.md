@@ -119,7 +119,13 @@ http_headers = { Authorization = "Bearer gate_…" }
    Before that post, run the repo's checks and its end-to-end suite when it has one (the project's
    instructions say how; here `pnpm test:e2e`), and attach the result to the post (the run's
    summary, or its report when something failed), with screenshots of what changed for a UI
-   change. `done` is
+   change. **Merge order:** when your branch is built on another ticket's open branch
+   (stacked), or you merged one in to get past a conflict, declare it: `update_ticket` with
+   `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing "builds on …"
+   in the PR. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot move to
+   `done` until that branch is merged into its base (the refusal says which; only the human can
+   mark it done anyway). `get_ticket_git` → `includes` lists the open tickets whose unmerged work
+   your branch already holds; `get_ticket` → `needs` says whether each is `merged`. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
    its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or

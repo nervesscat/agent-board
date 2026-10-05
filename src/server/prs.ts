@@ -1,13 +1,15 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import type { PrCheck } from '#/lib/constants'
+import { isClosed } from '#/lib/stages'
 import { logActivity } from './activity'
 import { currentGithubLogin, listMyPrs, prMerged, type GhCheck, type MyGhPr } from './git'
 import { notFound } from './http'
 import { hasPreviews, stopPreviewsFor } from './managedPreview'
 import { getProject } from './projects'
 import { listRepos, ticketRepo } from './repos'
+import { kindOf, listStages } from './stages'
 
 export type PrStatus = 'pending' | 'reviewed' | 'on_hold'
 
@@ -206,8 +208,10 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
     .all()
   const repos = listRepos(projectId)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
+  const mergeAfter = mergeOrder(projectId, tickets, repos)
   return rows.map((pr) => {
     const r = latestResult(results, pr.number, pr.repoId)
+    const from = prTickets(tickets, repos, pr)
     return {
       ...pr,
       ...prState(pr),
@@ -217,15 +221,69 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
         ? { id: r.id, verdict: r.verdict, sha: r.sha, fresh: r.sha === pr.headSha, createdAt: r.createdAt }
         : null,
       // The tickets this PR came from: named by their PR number, or on its head branch when they name none.
-      tickets: prTickets(tickets, repos, pr).map((t) => ({
+      tickets: from.map((t) => ({
         id: t.id,
         title: t.title,
         status: t.status,
         assignee: t.assignee,
         parentId: t.parentId,
       })),
+      // Open PRs of the tickets these tickets need: merge those first.
+      mergeAfter: [
+        ...new Map(
+          from
+            .flatMap((t) => mergeAfter(t.id))
+            .filter((p) => !(p.number === pr.number && p.repoId === pr.repoId))
+            .map((p) => [`${p.repoId}:${p.number}`, p]),
+        ).values(),
+      ],
     }
   })
+}
+
+export interface MergeAfter {
+  /** The needed ticket. */
+  ticketId: number
+  title: string
+  repoId: number | null
+  number: number
+  url: string | null
+}
+
+/**
+ * For each ticket, the open PRs of the tickets it needs merged first. A PR the queue holds counts while
+ * it is open there; one outside the queue (named by `prNumber`) while its ticket is not finished.
+ */
+function mergeOrder(projectId: number, tickets: schema.Ticket[], repos: schema.Repo[]) {
+  const ids = tickets.map((t) => t.id)
+  const edges = ids.length
+    ? db.select().from(schema.ticketNeeds).where(inArray(schema.ticketNeeds.ticketId, ids)).all()
+    : []
+  const byId = new Map(tickets.map((t) => [t.id, t]))
+  const stages = listStages(projectId)
+  const rows = edges.length
+    ? db.select().from(schema.prs).where(eq(schema.prs.projectId, projectId)).all()
+    : []
+  const openPr = (n: schema.Ticket): MergeAfter | null => {
+    const repo = repos.find((r) => r.id === n.repoId) ?? repos[0]
+    if (!repo) return null
+    const row = n.prNumber
+      ? rows.find((p) => p.repoId === repo.id && p.number === n.prNumber)
+      : rows.find((p) => p.repoId === repo.id && p.open && !!n.branch && p.headRef === n.branch)
+    const number = n.prNumber ?? row?.number
+    const finished = Boolean(n.archivedAt) || isClosed(kindOf(stages, n.status))
+    if (!number || (row ? !row.open : finished)) return null
+    const url = row?.url ?? (repo.githubRepo ? `https://github.com/${repo.githubRepo}/pull/${number}` : null)
+    return { ticketId: n.id, title: n.title, repoId: repo.id, number, url }
+  }
+  return (ticketId: number) =>
+    edges
+      .filter((e) => e.ticketId === ticketId)
+      .flatMap((e) => {
+        const n = byId.get(e.needsId)
+        const p = n ? openPr(n) : null
+        return p ? [p] : []
+      })
 }
 
 // PR numbers repeat across repos; an agent-posted result without a repo counts for any of them.
