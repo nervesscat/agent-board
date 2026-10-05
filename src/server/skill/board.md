@@ -171,32 +171,53 @@ The human should not have to tell you to check comments. While this session has 
 
 ## 4. Hand off
 
-1. Open the PR assigned to the human: `gh pr create --assignee <their login>`, or `--assignee @me`
-   when you push with their account. GitHub never lets a PR's author be its requested reviewer;
-   the PR queue also lists PRs assigned to the human, so this is how it gets there.
-2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
-   shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
-   **Merge order:** if your branch is built on another ticket's open branch (stacked), or you merged
-   one in to get past a conflict, declare it with `update_ticket` → `needs: [<its ticket id>]` (or
-   `needs` on `create_ticket`) instead of only writing "builds on …" in the PR. `get_ticket_git` →
-   `includes` lists the open tickets whose unmerged work your branch holds: each one belongs in
-   `needs`. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot go to
-   `done` until those branches are merged into its base: `update_ticket` to `done` is refused
-   with which one (`get_ticket` → `needs[].merged`). Only the human can mark it done anyway.
-3. Final `post_update` with the PR link, how to test, and the preview link if there is one. Run the
-   repo's checks first, its end-to-end suite too when it has one (the project instructions say how,
-   e.g. `pnpm test:e2e`), and attach the result to that post with `files`: the run's summary (or
-   its report when something failed) and, for a UI change, screenshots of what changed.
-4. `update_ticket` → `status: review`, only with the branch pushed: `get_ticket` → `push.state` is
-   `pushed` (a green dot on the board). `ahead` (commits only here) or `local-only` (not on origin)
-   is red: push, then check again. `done` is the human's call unless the project instructions say
-   otherwise.
-5. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
-   board flags a ticket that is further along than its lanes. Say in the final update which lanes
+Before `update_ticket` → `status: review`, every item, in order:
+
+1. Worktree registered (`add_workspace`), tasks ticked.
+2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
+   project instructions say how, e.g. `pnpm test:e2e`).
+3. Branch pushed: `get_ticket` → `push.state` is `pushed` (a green dot on the board). `ahead`
+   (commits only here) or `local-only` (not on origin) is red: push, then check again. (`merged`:
+   gone from origin because its PR was merged into the base.)
+4. `needs` declared for any unmerged branch it builds on. If your branch is built on another
+   ticket's open branch (stacked), or you merged one in to get past a conflict, declare it with
+   `update_ticket` → `needs: [<its ticket id>]` (or `needs` on `create_ticket`) instead of only
+   writing "builds on …" in the PR. `get_ticket_git` → `includes` lists the open tickets whose
+   unmerged work your branch holds: each one belongs in `needs`. The PR queue then marks your PR
+   "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
+   its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
+   Only the human can mark it done anyway.
+5. PR open, assigned to the human, `prNumber` set: `gh pr create --assignee <their login>`, or
+   `--assignee @me` when you push with their account (GitHub never lets a PR's author be its
+   requested reviewer; the PR queue also lists PRs assigned to the human). Then `update_ticket` with
+   the PR's `prNumber`: the PR queue shows the ticket, and `get_ticket` the PR with its latest
+   review. (A PR on the ticket's branch links by itself.)
+6. **Preview running**: `start_preview` on the workspace, then `get_ticket` until its
+   `managedPreview` is `running` (`failed`: read the log lines and fix). For a repo the board cannot
+   build, start one the project's way and `set_preview` (see Previews in
+   [While working](#3-while-working)). Required whenever the change can be tried; when it cannot
+   (docs only, a script), say why in the hand-off post.
+7. Hand-off post (`post_update`): the PR link, **the preview link and what to try there**, how it
+   was tested, the e2e result (its summary, or its report when something failed) and, for a UI
+   change, screenshots of what changed, in `files`.
+8. Resume note if the ticket stays open past the session (`set_resume_note`, see
+   [End of session](#5-end-of-session)).
+
+`update_ticket` → `review` then answers with `handoff.missing`: what the board still sees missing,
+each a `code` with a `text`: `no_pr`, `not_pushed`, `no_preview`, `no_handoff_post` (no progress
+post of yours since the branch's last commit), `checks_unknown` (the PR's CI is failing or still
+running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
+the ticket is in review, and its page shows it as a Hand-off card.
+
+After that:
+
+1. `done` is the human's call unless the project instructions say otherwise.
+2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
+   board flags a ticket that is further along than its lanes. Say in the hand-off post which lanes
    it covers.
-6. Dropping work: `status: cancelled`, with a comment saying why. Cancelled lanes' tasks leave the
+3. Dropping work: `status: cancelled`, with a comment saying why. Cancelled lanes' tasks leave the
    parent's progress.
-7. Clean up your lane before it goes to `done` (or when the human moves it there): see
+4. Clean up your lane before it goes to `done` (or when the human moves it there): see
    [Clean up](#6-clean-up) for the rule. A ticket in `review` keeps its branch and worktree.
 
 ## 5. End of session
@@ -330,12 +351,16 @@ Without those skills, or for one ticket, orchestrate by hand:
    brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
 2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
    prompt is its `instructions`, the project's `instructions`, the ticket (`get_ticket`), the
-   worktree and branch, and what the previous step returned (subagents share nothing else); post
+   worktree and branch, what the previous step returned (subagents share nothing else) and the
+   checklist from [Hand off](#4-hand-off), as it stands; post
    what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`, its
    evidence in `files`); tick the tasks it finished; go where its notes say next.
 3. A call that is the human's (two valid behaviours, a finding that keeps coming back, ship as is
    or not) → `ask_decision`, and work on something else until it is decided.
-4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests.
+4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests. Check
+   every item of the checklist yourself before moving the ticket to `review` (`get_ticket`: `push`,
+   `pr`, the workspace's `managedPreview` `running`, the hand-off post): a subagent saying it is
+   done is not enough.
 
 Never two builders on one branch; when no agent's notes fit a step, ask in a post rather than
 doing it yourself.

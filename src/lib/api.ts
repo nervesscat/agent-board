@@ -19,6 +19,7 @@ import type { WorkspacePreview } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
+import type { Handoff } from '#/server/handoff'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { PreviewState } from '#/server/preview'
 import type { ProjectFull, listProjects } from '#/server/projects'
@@ -35,6 +36,7 @@ export type ProjectRow = ReturnType<typeof listProjects>[number]
 export type {
   CarryOver,
   DirListing,
+  Handoff,
   ManagedPreview,
   PreviewState,
   ProjectAgent,

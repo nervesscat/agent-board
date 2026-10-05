@@ -116,31 +116,50 @@ http_headers = { Authorization = "Bearer gate_…" }
    ticket's worktree (checks, commit, push, preview), reply in the thread with what changed, and
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
    cursor is yours to hold, the board stores nothing per agent.
-7. **Hand off**: open the PR assigned to the human (`gh pr create --assignee <their login>`, or
-   `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
-   requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
-   the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
-   final `post_update`. A ticket goes to `review` only with its branch pushed: `get_ticket` →
-   `push.state` is `pushed` (green on the board), not `ahead` or `local-only` (red; `ahead` counts
-   the commits only you have). `get_ticket_git` gives the same `push` for every workspace's branch.
-   Before that post, run the repo's checks and its end-to-end suite when it has one (the project's
-   instructions say how; here `pnpm test:e2e`), and attach the result to the post (the run's
-   summary, or its report when something failed), with screenshots of what changed for a UI
-   change. **Merge order:** when your branch is built on another ticket's open branch
-   (stacked), or you merged one in to get past a conflict, declare it: `update_ticket` with
-   `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing "builds on …"
-   in the PR. The PR queue then marks your PR "merge after #<its PR>", and the ticket cannot move to
-   `done` until that branch is merged into its base (the refusal says which; only the human can
-   mark it done anyway). `get_ticket_git` → `includes` lists the open tickets whose unmerged work
-   your branch already holds; `get_ticket` → `needs` says whether each is `merged`. `done` is
-   the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
-   its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
-   a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
-   `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a ticket tagged `PR`,
-   a PR review, also moves it to `done`): read it, never set it, and ask
-   in the thread before touching an approved or disapproved lane. Archiving is the human's too:
+7. **Hand off**: before `update_ticket` → `review`, every item, in order:
+   1. Worktree registered (`add_workspace`), tasks ticked.
+   2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
+      project's instructions say how; here `pnpm test:e2e`).
+   3. Branch pushed: `get_ticket` → `push.state` is `pushed` (green on the board), not `ahead` or
+      `local-only` (red; `ahead` counts the commits only you have). `get_ticket_git` gives the same
+      `push` for every workspace's branch. (`merged`: gone from origin because its PR was merged
+      into the base.)
+   4. `needs` declared for any unmerged branch it builds on: when your branch is built on another
+      ticket's open branch (stacked), or you merged one in to get past a conflict, `update_ticket`
+      with `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing
+      "builds on …" in the PR. The PR queue then marks your PR "merge after #<its PR>", and the
+      ticket cannot move to `done` until that branch is merged into its base (the refusal says
+      which; only the human can mark it done anyway). `get_ticket_git` → `includes` lists the open
+      tickets whose unmerged work your branch already holds; `get_ticket` → `needs` says whether
+      each is `merged`.
+   5. PR open, assigned to the human (`gh pr create --assignee <their login>`, or `--assignee @me`
+      when you push with their account; GitHub never lets a PR's author be its requested reviewer,
+      and the PR queue also lists PRs assigned to them), and `update_ticket` with its `prNumber`
+      (the PR queue then shows the ticket, and the ticket its PR and latest review).
+   6. **Preview running**: `start_preview` on the workspace and wait for `running` (for a repo the
+      board cannot build, start one the project's way and `set_preview`; see Previews above).
+      Required whenever the change can be tried; when it cannot (docs only, a script), say why in
+      the hand-off post.
+   7. Hand-off post (`post_update`): the PR link, **the preview link and what to try there**, how it
+      was tested, the e2e result (the run's summary, or its report when something failed) and
+      screenshots of what changed for a UI change.
+   8. Resume note if the ticket stays open past the session (step 9).
+
+   `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
+   each a `code` and a `text` (`no_pr`, `not_pushed`, `no_preview`, `no_handoff_post`: no progress
+   post of yours since the branch's last commit, `checks_unknown`: the PR's CI is failing or still
+   running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff`
+   while the ticket is in review, and its page shows it as a Hand-off card.
+
+   `done` is the human's call unless the instructions say otherwise. A ticket with lanes goes to
+   `review` once its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was
+   dropped: say why in a comment). The human's verdict on a lane or ticket is `approvedAt` /
+   `approvedBy` or `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a
+   ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it, and ask in the
+   thread before touching an approved or disapproved lane. Archiving is the human's too:
    `archivedAt` set means the ticket (and its lanes) is finished and off the board; `list_tickets`
    leaves those out unless `archived: "include"` or `"only"`.
+
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
    `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
@@ -181,8 +200,9 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 **Orchestrating.** Each agent also carries **delegation notes** (`agents[].delegation`): when to
 call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
 orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
-agent's instructions, the project's and the ticket's; its result is posted on the ticket as that
-agent; the notes pick the next agent. The Agents page adds a default set (spec, builder, runner, and
+agent's instructions, the project's and the ticket's, and the hand-off checklist (step 7); its result
+is posted on the ticket as that agent; the notes pick the next agent. Before moving the ticket to
+`review`, check every item of that checklist yourself. The Agents page adds a default set (spec, builder, runner, and
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
 → build again with the confirmed findings (at most three rounds) → hand off. The `/review-queue`
 skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with

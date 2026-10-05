@@ -275,12 +275,16 @@ export function placement(
 
 /**
  * `getTicketFull` with whether each branch is on origin: `push` on the ticket (its branch) and on each
- * of its workspaces, from one batch of git in the ticket's checkout.
+ * of its workspaces, from one batch of git in the ticket's checkout. A branch gone from origin counts
+ * as merged once it is in the ticket's base.
  */
 export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
   const t = getTicketFull(id, opts)
   const repo = ticketRepo(t)
-  const push = repo ? await pushStates(repo.repoPath, [t.branch, ...t.workspaces.map((w) => w.branch)]) : null
+  const branches = [t.branch, ...t.workspaces.map((w) => w.branch)]
+  const push = repo
+    ? await pushStates(repo.repoPath, branches, new Map(branches.map((b) => [b, t.baseBranch])))
+    : null
   return {
     ...t,
     push: push?.get(t.branch) ?? NO_PUSH,
@@ -872,7 +876,7 @@ export async function ticketGit(id: number) {
       const [info, { refs }, push] = await Promise.all([
         branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
         repoGit(repo.repoPath),
-        pushStates(repo.repoPath, [ticket.branch]),
+        pushStates(repo.repoPath, [ticket.branch], new Map([[ticket.branch, ticket.baseBranch]])),
       ])
       const chain = baseChain(ticket, byId, repo)
       return {
@@ -886,7 +890,7 @@ export async function ticketGit(id: number) {
       const [info, { refs, worktrees }, push] = await Promise.all([
         branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
         repoGit(r.repoPath),
-        pushStates(r.repoPath, [w.branch]),
+        pushStates(r.repoPath, [w.branch], new Map([[w.branch, owner.baseBranch]])),
       ])
       const chain = baseChain(owner, byId, r)
       const into = w.branch === owner.branch || !owner.branch ? chain : [owner.branch, ...chain]

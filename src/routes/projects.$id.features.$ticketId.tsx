@@ -37,6 +37,7 @@ import { BranchSelect } from '#/components/BranchSelect'
 import { StatusSelect } from '#/components/StatusSelect'
 import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
+import { HandoffCard, toastHandoff } from '#/components/Handoff'
 import { Markdown } from '#/components/Markdown'
 import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
@@ -152,7 +153,10 @@ function TicketPage() {
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const update = useMutation({
     mutationFn: (p: Record<string, unknown>) => patch(`/api/tickets/${ticketId}`, p),
-    onSuccess: invalidate,
+    onSuccess: (res) => {
+      invalidate()
+      toastHandoff(res)
+    },
     // A move to done refused for a need not merged yet comes with the human's way past it.
     onError: (err, p) => toastRefusal(err, () => update.mutate({ ...p, force: true })),
   })
@@ -378,6 +382,7 @@ function TicketPage() {
           <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
         </div>
         <aside className="min-w-0 space-y-4">
+          {t.handoff && <HandoffCard handoff={t.handoff} />}
           <Previews t={t} git={git} onChange={invalidate} />
           <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />
           <GitPanel t={t} git={git} onChange={invalidate} />

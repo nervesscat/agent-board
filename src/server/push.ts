@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
-import { aheadBehind, fetchOrigin, listRefs, notOnOrigin, type Refs } from './git'
+import { aheadBehind, fetchOrigin, listRefs, mergedInto, notOnOrigin, type Refs } from './git'
 import { getProject } from './projects'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
@@ -18,15 +18,19 @@ import { kindOf, listStages } from './stages'
  * - `pushed`: origin has the branch and every commit of it (origin may be ahead: `behind`);
  * - `ahead`: the local branch has `ahead` commits origin's lacks;
  * - `local-only`: origin has no such branch; `ahead` commits of it are on no origin branch at all;
+ * - `merged`: origin has no such branch (GitHub deletes it once its PR is merged) and it was merged
+ *   into origin's copy of its base, `into`;
  * - `remote-only`: only origin has it (no local branch, e.g. after cleanup);
  * - `none`: no branch given, or it exists nowhere.
  */
-export type PushState = 'pushed' | 'ahead' | 'local-only' | 'remote-only' | 'none'
+export type PushState = 'pushed' | 'ahead' | 'local-only' | 'merged' | 'remote-only' | 'none'
 
 export interface Push {
   state: PushState
   ahead: number
   behind: number
+  /** The base it was merged into: only on `merged`. */
+  into?: string
   /** When origin's branches were last fetched into the checkout; null when that is not known. */
   checkedAt: string | null
 }
@@ -52,6 +56,8 @@ interface RepoState {
 const repos = new Map<string, RepoState>()
 /** Ahead/behind per pair of shas (and commits on no origin branch per sha): they never change. */
 const counts = new Map<string, Promise<[number, number]>>()
+/** Whether a sha was merged into a base's sha: never changes either. */
+const merges = new Map<string, Promise<boolean>>()
 
 function repoState(repoPath: string): RepoState {
   let s = repos.get(repoPath)
@@ -132,51 +138,76 @@ function readRefs(repoPath: string): Promise<Refs | null> {
   return s.refs.value
 }
 
-function memo(key: string, count: () => Promise<[number, number]>) {
-  if (!counts.has(key)) {
+function memo<T>(cache: Map<string, Promise<T>>, key: string, work: () => Promise<T>) {
+  if (!cache.has(key)) {
     // Shas are forever, but branches move: keep the memo from growing without end.
-    if (counts.size > 5000) counts.clear()
-    counts.set(
+    if (cache.size > 5000) cache.clear()
+    cache.set(
       key,
-      count().catch((err: unknown) => {
-        counts.delete(key)
+      work().catch((err: unknown) => {
+        cache.delete(key)
         throw err
       }),
     )
   }
-  return counts.get(key)!
+  return cache.get(key)!
 }
 
 /**
  * The push state of each branch in one checkout: one `for-each-ref` for all of them (cached a few
  * seconds), then a `rev-list` only for a branch whose local and origin shas differ (cached per pair).
- * Starts a background fetch when origin's copy is stale; never waits for it.
+ * `bases` gives a branch's base (its ticket's): a branch gone from origin that was merged into
+ * origin's copy of it is `merged`. Starts a background fetch when origin's copy is stale; never waits
+ * for it.
  */
-export async function pushStates(repoPath: string, branches: string[]): Promise<Map<string, Push>> {
+export async function pushStates(
+  repoPath: string,
+  branches: string[],
+  bases: ReadonlyMap<string, string> = new Map(),
+): Promise<Map<string, Push>> {
   fetchRepo(repoPath)
   const refs = await readRefs(repoPath)
   const { checkedAt } = fetchStatus(repoPath)
   const out = new Map<string, Push>()
   await Promise.all(
     [...new Set(branches)].map(async (branch) => {
-      out.set(branch, refs && branch ? await pushOf(repoPath, branch, refs, checkedAt) : NO_PUSH)
+      out.set(
+        branch,
+        refs && branch ? await pushOf(repoPath, branch, bases.get(branch), refs, checkedAt) : NO_PUSH,
+      )
     }),
   )
   return out
 }
 
-async function pushOf(repoPath: string, branch: string, refs: Refs, checkedAt: string | null): Promise<Push> {
+async function pushOf(
+  repoPath: string,
+  branch: string,
+  base: string | undefined,
+  refs: Refs,
+  checkedAt: string | null,
+): Promise<Push> {
   const local = refs.local.get(branch)
   const remote = refs.remote.get(branch)
   const at = { checkedAt }
   try {
     if (local && remote) {
       if (local === remote) return { state: 'pushed', ahead: 0, behind: 0, ...at }
-      const [ahead, behind] = await memo(`${local}...${remote}`, () => aheadBehind(repoPath, local, remote))
+      const [ahead, behind] = await memo(counts, `${local}...${remote}`, () =>
+        aheadBehind(repoPath, local, remote),
+      )
       return { state: ahead ? 'ahead' : 'pushed', ahead, behind, ...at }
     }
     if (local) {
-      const [ahead] = await memo(local, async () => [await notOnOrigin(repoPath, local), 0])
+      const [ahead] = await memo(counts, local, async () => [await notOnOrigin(repoPath, local), 0])
+      // Every commit is on origin somewhere: perhaps in its base, its PR merged and the branch deleted.
+      const onBase = base && base !== branch ? refs.remote.get(base) : undefined
+      if (!ahead && onBase) {
+        const merged = await memo(merges, `${local}>${onBase}`, () =>
+          mergedInto(repoPath, local, `origin/${base}`),
+        )
+        if (merged) return { state: 'merged', ahead: 0, behind: 0, into: base, ...at }
+      }
       return { state: 'local-only', ahead, behind: 0, ...at }
     }
   } catch {
@@ -186,7 +217,7 @@ async function pushOf(repoPath: string, branch: string, refs: Refs, checkedAt: s
   return { ...NO_PUSH, ...at }
 }
 
-/** Not pushed: the human should hear about these. */
+/** Not pushed: the human should hear about these (a merged branch is not one of them). */
 export const unpushed = (p: Pick<Push, 'state'>) => p.state === 'ahead' || p.state === 'local-only'
 
 export interface ProjectPush {
@@ -221,6 +252,9 @@ export async function projectPush(projectId: number): Promise<ProjectPush> {
             await pushStates(
               r.repoPath,
               tickets.filter(({ repo }) => repo?.id === r.id).map(({ t }) => t.branch),
+              new Map(
+                tickets.filter(({ repo }) => repo?.id === r.id).map(({ t }) => [t.branch, t.baseBranch]),
+              ),
             ),
           ] as const,
       ),

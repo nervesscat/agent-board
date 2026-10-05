@@ -260,6 +260,35 @@ export async function notOnOrigin(repoPath: string, ref: string): Promise<number
 }
 
 /**
+ * Whether commit `sha` was merged into `base`: it is in the base's history but not on its
+ * first-parent line. A branch cut from the base and never committed to sits on that line: it is in
+ * the base without having been merged into it.
+ */
+export async function mergedInto(repoPath: string, sha: string, base: string): Promise<boolean> {
+  const inBase = await git(repoPath, ['merge-base', '--is-ancestor', sha, base]).then(
+    () => true,
+    () => false,
+  )
+  if (!inBase) return false
+  // The base's first parents down to the first commit `sha` holds: its first parent is `sha` itself
+  // when `sha` is on that line.
+  const walk = await git(repoPath, ['rev-list', '--first-parent', '--parents', base, '--not', sha])
+  if (!walk) return false
+  const [, firstParent] = walk.split('\n').at(-1)!.split(' ')
+  return firstParent !== sha
+}
+
+/** When the branch's last commit was made (committer date): the local branch, else origin's. */
+export async function lastCommitAt(repoPath: string, branch: string): Promise<string | null> {
+  if (!branch) return null
+  for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
+    const at = await git(repoPath, ['log', '-1', '--format=%cI', ref, '--']).catch(() => '')
+    if (at) return new Date(at).toISOString()
+  }
+  return null
+}
+
+/**
  * How far a branch's work got into a base, best first:
  * - `merged`: every commit is in the base as is;
  * - `rebased`: the commits differ but each one's patch is in the base (rebased, cherry-picked);
