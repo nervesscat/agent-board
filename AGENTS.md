@@ -68,16 +68,31 @@ http_headers = { Authorization = "Bearer gate_…" }
    feed of **posts**: `post_update` adds one marked as progress (lane summaries and the Daily view
    pick those out); questions and answers are posts too, not marked. `edit_post` / `delete_post`
    change what you posted.
-   **Previews:** when the change can be tried (a page, an API), start your branch from your
-   worktree on a free port, with a copy of the data rather than the real one (the project's
-   instructions say how), and post the link (`http://localhost:<port>`) with what to try. Register
-   it on that worktree's workspace as well (`set_preview`, or `previewUrl` on `add_workspace`): the
-   ticket page shows it as a Preview card with an Open button and whether it is running. Say that
-   what the human posts there stays in the copy. Keep it running while the ticket is in review;
-   stop it once it is merged or dropped, and clear it (`set_preview` with `previewUrl: ""`). A
-   preview of the board itself can run without the passkey gate, so you can exercise it too:
-   `AUTH=off pnpm dev`, or `BOARD_ENV=test` with an `X-Test-Actor` header (README: "Test mode");
-   never on port 47100, never off loopback, never the live board.
+   **Previews:** when the change can be tried (a page, an API), have a preview the human can open
+   before anything is merged, and post its link with what to try. Say that what the human posts
+   there stays in a copy of the data. Keep it running while the ticket is in review.
+   - **A branch of the board itself: the board runs it.** Register your worktree
+     (`add_workspace` with its `path` and `branch`; it must sit next to the main checkout, like
+     `../agent-board-<branch>`), then `start_preview` with the workspace's id. The board installs
+     (only when the lockfile changed), builds, copies the live data and starts the build on a free
+     port from 47101 without the passkey gate, then sets the workspace's `previewUrl`. It returns
+     at once; `get_ticket` shows the workspace's `managedPreview` going `building` → `starting` →
+     `running`, or `failed` with the last log lines (`logs` has the paths). `start_preview` with
+     `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board stops it
+     by itself when the PR is merged, the ticket moves to done or cancelled or is archived, or the
+     workspace is removed, and when the board itself stops (it does not start them again). Do not
+     run `pnpm dev` in your session for the human: it dies with your session and the dev server
+     behaves differently from the build.
+   - **Anything else:** start your branch from your worktree on a free port, with a copy of the
+     data rather than the real one (the project's instructions say how), and register its link on
+     the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it as
+     a Preview card with an Open button and whether it is running. Stop it once the ticket is
+     merged or dropped, and clear it (`set_preview` with `previewUrl: ""`).
+
+   To exercise the board yourself without the passkey gate, run your own copy: `AUTH=off pnpm dev`,
+   or `BOARD_ENV=test` with an `X-Test-Actor` header (README: "Test mode"); never on port 47100,
+   never off loopback, never the live board.
+
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
    (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
@@ -119,7 +134,7 @@ http_headers = { Authorization = "Bearer gate_…" }
    remove its worktree and local branch, `remove_workspace`, and `post_update` the deleted branches
    as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
    origin branches: list them for the human. `cleanup_report` lists every leftover of the project's
-   closed tickets; the board skill's `/board cleanup` walks it with the human.
+   closed tickets (previews the board still runs for them too); the board skill's `/board cleanup` walks it with the human.
 9. **End of a session**: `post_daily_summary` — at most three short lines at the highest level:
    what got done, what is open. `daily_report` shows what everyone else did that day.
 

@@ -117,7 +117,7 @@ describe('lanes', () => {
     expect((await features.ticketGit(sub.id)).workspaces.map((w) => w.lane)).toEqual([null])
   })
 
-  it('carry a preview link agents set, change and clear', () => {
+  it('carry a preview link agents set, change and clear', async () => {
     const t = features.createTicket(projectId, { title: 'preview', repoId: otherRepo }, 'me')
     expect(() =>
       features.addWorkspace(t.id, { name: 'wt', previewUrl: 'javascript:alert(1)' }, 'codex'),
@@ -131,10 +131,16 @@ describe('lanes', () => {
       'http://example.com:3000',
     )
     // Only links on this machine are checked.
-    expect(() => features.workspacePreview(ws.id)).toThrow(/localhost/)
+    await expect(features.workspacePreview(ws.id)).rejects.toThrow(/localhost/)
     expect(() => features.setWorkspacePreview(ws.id, 'ftp://localhost', 'codex')).toThrow(/http/)
     expect(features.setWorkspacePreview(ws.id, null, 'codex').previewUrl).toBe('')
-    expect(() => features.workspacePreview(ws.id)).toThrow(/no preview/)
+    // Without a link nothing is checked; the board says whether it could run one (no path: no).
+    expect(await features.workspacePreview(ws.id)).toMatchObject({
+      running: false,
+      url: '',
+      managed: null,
+      cannotStart: 'the workspace has no local path',
+    })
     expect(() => features.setWorkspacePreview(999_999, '', 'codex')).toThrow(/not found/)
   })
 

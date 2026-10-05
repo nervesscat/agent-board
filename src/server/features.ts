@@ -7,7 +7,8 @@ import { branchInfo } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
-import { previewState, previewUrl } from './preview'
+import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
+import { previewState, previewUrl, type PreviewState } from './preview'
 import { prForTicket } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
@@ -220,7 +221,8 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     thread: ticketThread,
     pr: prForTicket(ticket),
     tasks,
-    workspaces,
+    // managedPreview: the preview the board builds and runs from the workspace, if it ever ran one.
+    workspaces: workspaces.map((w) => ({ ...w, managedPreview: managedPreview(w.id) })),
     progress: self.progress,
     rollup: self.rollup,
     ancestors,
@@ -378,8 +380,10 @@ export function updateTicket(
     .returning()
     .get()!
   const changes: string[] = []
-  if (patch.status && patch.status !== before.status)
+  if (patch.status && patch.status !== before.status) {
     changes.push(`status ${stageOf(stages, before.status).name} → ${stageOf(stages, patch.status).name}`)
+    stopIfClosed(row, stages, actor)
+  }
   if (patch.assignee !== undefined && patch.assignee !== before.assignee)
     changes.push(`assignee → ${patch.assignee || 'nobody'}`)
   if (patch.branch !== undefined && patch.branch !== before.branch)
@@ -399,6 +403,13 @@ export function updateTicket(
     refId: id,
   })
   return row
+}
+
+/** A ticket that reached a done or cancelled stage has nothing left to preview. */
+function stopIfClosed(t: schema.Ticket, stages: ReturnType<typeof listStages>, actor: string) {
+  const stage = stageOf(stages, t.status)
+  if (stage.kind === 'done' || stage.kind === 'cancelled')
+    stopPreviewsFor([t.id], `the ticket moved to ${stage.name}`, actor)
 }
 
 /**
@@ -504,6 +515,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     .returning()
     .get()!
   if (t.parentId) touch(t.parentId)
+  if (row.status !== t.status) stopIfClosed(row, stages, actor)
   const what = `${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`
   logActivity({
     projectId: t.projectId,
@@ -524,6 +536,11 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
 /** Lanes go with the ticket unless `keepLanes`, which moves them up to the ticket's own parent. */
 export function deleteTicket(id: number, actor: string, opts: { keepLanes?: boolean } = {}) {
   const t = getTicket(id)
+  // Its workspaces go with it (and its lanes', unless they are kept).
+  const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, t.projectId)).all()
+  const gone = [id, ...(opts.keepLanes ? [] : laneTree(all, id).map((l) => l.id))]
+  for (const w of db.select().from(schema.workspaces).where(inArray(schema.workspaces.ticketId, gone)).all())
+    forgetPreview(w.id, actor)
   if (opts.keepLanes)
     db.update(schema.tickets).set({ parentId: t.parentId }).where(eq(schema.tickets.parentId, id)).run()
   db.delete(schema.tickets).where(eq(schema.tickets.id, id)).run()
@@ -570,6 +587,7 @@ export function archiveTicket(id: number, actor: string) {
   if (stage.kind !== 'done' && stage.kind !== 'cancelled')
     throw new HttpError(409, `ticket ${id} is in ${stage.name}; only done or cancelled tickets are archived`)
   const lanes = markArchived(t.projectId, [id], new Date().toISOString(), actor)
+  stopPreviewsFor([id], 'the ticket was archived', actor)
   logActivity({
     projectId: t.projectId,
     actor,
@@ -605,6 +623,7 @@ export function archiveStage(projectId: number, status: string, actor: string) {
     .map((t) => t.id)
   if (!ids.length) return { stage: stage.key, ids }
   const lanes = markArchived(projectId, ids, new Date().toISOString(), actor)
+  stopPreviewsFor(ids, 'the ticket was archived', actor)
   logActivity({
     projectId,
     actor,
@@ -763,15 +782,24 @@ export function setWorkspacePreview(id: number, value: string | null, actor: str
   return row
 }
 
-/** Whether the workspace's preview answers right now (checked on this machine, cached a few seconds). */
-export function workspacePreview(id: number) {
+/**
+ * Whether the workspace's preview answers right now (checked on this machine, cached a few seconds;
+ * `running: false` without a link), the preview the board runs from it (`managed`, null when it never
+ * ran one), and `cannotStart`: why the board would refuse to start one, null when it would.
+ */
+export async function workspacePreview(id: number) {
   const ws = getWorkspace(id)
-  if (!ws.previewUrl) throw new HttpError(404, 'workspace has no preview')
-  return previewState(ws.previewUrl)
+  const state: PreviewState = ws.previewUrl
+    ? await previewState(ws.previewUrl)
+    : { running: false, checkedAt: new Date().toISOString() }
+  return { ...state, url: ws.previewUrl, managed: managedPreview(id), cannotStart: cannotStart(id) }
 }
+
+export type WorkspacePreview = Awaited<ReturnType<typeof workspacePreview>>
 
 export function deleteWorkspace(id: number, actor: string) {
   const ws = getWorkspace(id)
+  forgetPreview(id, actor)
   db.delete(schema.workspaces).where(eq(schema.workspaces.id, id)).run()
   const ticket = getTicket(ws.ticketId)
   logActivity({
