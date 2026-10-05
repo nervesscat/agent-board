@@ -1096,6 +1096,45 @@ export function listOpenThreads(projectId: number, actor: string) {
   return out.sort((a, b) => b.last.createdAt.localeCompare(a.last.createdAt))
 }
 
+/**
+ * The threads waiting on `actor`, from a cursor the caller keeps: with `since` (an ISO time), only the
+ * ones whose last word, by someone else, came after it. `cursor` is the newest last word seen, or
+ * `since` when nothing new came (null until there is one): pass it as `since` next time. Read-only;
+ * nothing is stored per caller.
+ */
+export function myThreads(projectId: number, actor: string, since?: string | null) {
+  const from = since ? sinceTime(since) : null
+  const all = listOpenThreads(projectId, actor)
+  const threads = from === null ? all : all.filter((t) => Date.parse(t.last.createdAt) > from)
+  // Newest first, and each one after `since`, so the cursor only moves forward.
+  const cursor = threads[0]?.last.createdAt ?? (from === null ? null : new Date(from).toISOString())
+  return { cursor, threads }
+}
+
+function sinceTime(since: string) {
+  const t = Date.parse(since)
+  if (Number.isNaN(t)) throw new HttpError(400, `since must be an ISO time, not "${since}"`)
+  return t
+}
+
+/** The cheap poll for new comments: what myThreads finds, without bodies. */
+export function checkInbox(projectId: number, actor: string, since?: string | null) {
+  const { cursor, threads } = myThreads(projectId, actor, since)
+  return {
+    count: threads.length,
+    cursor,
+    threads: threads.map((t) => ({
+      ticketId: t.ticketId,
+      title: t.title,
+      parentType: t.parentType,
+      parentId: t.parentId,
+      as: t.as,
+      lastAuthor: t.last.author,
+      lastAt: t.last.createdAt,
+    })),
+  }
+}
+
 export function addComment(
   input: {
     parentType: schema.CommentParent
