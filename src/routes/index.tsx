@@ -49,7 +49,7 @@ function Repositories() {
                 setEditing(r)
                 setEditOpen(true)
               }}
-              className="group text-left"
+              className="group min-w-0 text-left"
             >
               <Card className="h-full transition-colors group-hover:border-foreground/30">
                 <CardHeader>

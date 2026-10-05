@@ -208,12 +208,35 @@ pnpm typecheck       # tsc
 pnpm lint            # oxlint
 pnpm format          # prettier
 pnpm test            # vitest (path mapping, actors, PR status, …)
+pnpm test:e2e        # Playwright against a built board in test mode (Testing, below)
+pnpm check:migrations # the drizzle folder and its journal agree
 pnpm redeploy        # put this checkout live on the built board
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
 `src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read, but
 for `git fetch --prune origin`, which only refreshes the checkout's copy of origin's branches.
+
+## Testing
+
+- **Unit** (`pnpm test`): vitest, `src/**/*.test.ts` and `scripts/**/*.test.mjs`. Server tests open
+  their own SQLite in a temp folder; the S3 ones run only with `S3_TEST_ENDPOINT` set (CLAUDE.md).
+- **End to end** (`pnpm test:e2e`): Playwright, `e2e/`. It builds the board into `.output-e2e`
+  (never `.output`, so the live board's build is left alone) and starts it in test mode (above) on
+  a free loopback port above 47140, with its data and a scratch git repo in a temp folder. Global
+  setup seeds a project through the REST API; each test makes a project of its own. The browser is
+  the human (no `X-Test-Actor`); tests call the API as `human:enrique` or `agent:claude` to set
+  things up and to check what agents may do. Failures keep a screenshot and a trace under
+  `test-results/`, and `playwright-report/` has the HTML report (`pnpm exec playwright show-report`).
+  First run: `pnpm exec playwright install chromium`. `E2E_SKIP_BUILD=1` reuses the last build;
+  `E2E_PORT` picks the port.
+- **Migrations** (`pnpm check:migrations`): every `drizzle/NNNN_*.sql` has a number of its own and
+  a journal entry, every entry its file, `idx` matches, and `when` grows down the journal. Drizzle
+  applies only migrations dated after the last one applied, so one merged with an older `when`
+  would be skipped on every existing database without an error.
+- **CI** (`.github/workflows/ci.yml`, on pull requests and pushes to `main`): install, typecheck,
+  lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
+  Playwright report and traces are uploaded as the `playwright-report` artifact.
 
 ## Pushed or not
 

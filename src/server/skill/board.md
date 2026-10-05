@@ -160,7 +160,10 @@ The human should not have to tell you to check comments. While this session has 
    the PR queue also lists PRs assigned to the human, so this is how it gets there.
 2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
-3. Final `post_update` with the PR link, how to test, and the preview link if there is one.
+3. Final `post_update` with the PR link, how to test, and the preview link if there is one. Run the
+   repo's checks first, its end-to-end suite too when it has one (the project instructions say how,
+   e.g. `pnpm test:e2e`), and attach the result to that post with `files`: the run's summary (or
+   its report when something failed) and, for a UI change, screenshots of what changed.
 4. `update_ticket` → `status: review`, only with the branch pushed: `get_ticket` → `push.state` is
    `pushed` (a green dot on the board). `ahead` (commits only here) or `local-only` (not on origin)
    is red: push, then check again. `done` is the human's call unless the project instructions say

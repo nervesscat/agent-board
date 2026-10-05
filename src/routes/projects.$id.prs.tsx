@@ -93,7 +93,7 @@ function PrQueue() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">PR queue</h1>
           <p className="text-sm text-muted-foreground">
@@ -101,7 +101,7 @@ function PrQueue() {
             of the project. Read-only against GitHub; holds and threads live here.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Tabs value={filter} onValueChange={(v) => pickFilter(v as Filter)}>
             <TabsList>
               {FILTERS.map((f) => (

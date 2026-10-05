@@ -100,7 +100,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
    final `post_update`. A ticket goes to `review` only with its branch pushed: `get_ticket` →
    `push.state` is `pushed` (green on the board), not `ahead` or `local-only` (red; `ahead` counts
-   the commits only you have). `get_ticket_git` gives the same `push` for every workspace's branch. `done` is
+   the commits only you have). `get_ticket_git` gives the same `push` for every workspace's branch.
+   Before that post, run the repo's checks and its end-to-end suite when it has one (the project's
+   instructions say how; here `pnpm test:e2e`), and attach the result to the post (the run's
+   summary, or its report when something failed), with screenshots of what changed for a UI
+   change. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
    its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
