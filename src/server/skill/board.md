@@ -161,8 +161,10 @@ The human should not have to tell you to check comments. While this session has 
 2. `update_ticket` with the PR's `prNumber`: the PR queue then shows the ticket, and `get_ticket`
    shows the PR with its latest review. (A PR on the ticket's branch links by itself.)
 3. Final `post_update` with the PR link, how to test, and the preview link if there is one.
-4. `update_ticket` → `status: review`. `done` is the human's call unless the project instructions
-   say otherwise.
+4. `update_ticket` → `status: review`, only with the branch pushed: `get_ticket` → `push.state` is
+   `pushed` (a green dot on the board). `ahead` (commits only here) or `local-only` (not on origin)
+   is red: push, then check again. `done` is the human's call unless the project instructions say
+   otherwise.
 5. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
    board flags a ticket that is further along than its lanes. Say in the final update which lanes
    it covers.

@@ -95,7 +95,9 @@ http_headers = { Authorization = "Bearer gate_…" }
    `--assignee @me` when you push with their account; GitHub never lets a PR's author be its
    requested reviewer, and the PR queue also lists PRs assigned to them). Then `update_ticket` with the PR's `prNumber` (the PR queue then shows the ticket, and
    the ticket its PR and latest review), then `update_ticket` to `review` with the PR link in a
-   final `post_update`. `done` is
+   final `post_update`. A ticket goes to `review` only with its branch pushed: `get_ticket` →
+   `push.state` is `pushed` (green on the board), not `ahead` or `local-only` (red; `ahead` counts
+   the commits only you have). `get_ticket_git` gives the same `push` for every workspace's branch. `done` is
    the human's call unless the instructions say otherwise. A ticket with lanes goes to `review` once
    its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was dropped: say why in
    a comment). The human's verdict on a lane or ticket is `approvedAt` / `approvedBy` or
