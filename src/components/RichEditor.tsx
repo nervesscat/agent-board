@@ -140,15 +140,17 @@ export function RichEditor({
     editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false })
   }, [editor, value])
 
+  // The text comes before the toolbar in the page, so Tab reaches the text first and the buttons after
+  // it (Shift+Tab the reverse); `flex-col-reverse` still draws the toolbar above the text.
   return (
     <div
       className={cn(
-        'rounded-md border border-input bg-transparent focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30',
+        'flex flex-col-reverse rounded-md border border-input bg-transparent focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30',
         className,
       )}
     >
-      {editor && <Toolbar editor={editor} />}
       <EditorContent editor={editor} />
+      {editor && <Toolbar editor={editor} />}
     </div>
   )
 }
