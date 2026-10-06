@@ -122,7 +122,9 @@ Only the holder of `LOCK` starts one in this repo.
 4. Worktree next to the main checkout: `<path>` = `<REPO>/../<repo folder>-<branch>`. Never work in
    a worktree that is not registered in this ticket's `workspaces`: it is someone else's.
    - Own branch: reuse the worktree registered in this ticket's `workspaces` when it is still on
-     disk. Else `git -C REPO fetch origin BASE`, then `git -C REPO worktree add <path> <branch>`
+     disk and on that branch (`git -C <its path> rev-parse --abbrev-ref HEAD` prints `<branch>`;
+     a workspace left on an earlier branch of the ticket does not count). Else
+     `git -C REPO fetch origin BASE`, then `git -C REPO worktree add <path> <branch>`
      when the branch exists, or `git -C REPO worktree add -b <branch> <path> origin/BASE` when it
      does not. Git refusing because the branch is checked out in another worktree, or because the
      path exists, means someone else works on it: return `STATUS: error` with that worktree's path
