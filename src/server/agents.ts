@@ -86,7 +86,7 @@ export function agentSetup() {
   return { boardUrl: config.boardUrl, gateUrl: config.gateUrl, settings: getSettings() }
 }
 
-// --- the review skills: feature-review, review-queue and their agents, installed as one tar ---
+// --- the review skills: feature-review, review-queue, todo-review and their agents, installed as one tar ---
 
 const reviewFiles = import.meta.glob<string>('./skill/review/{skills,agents}/**/*', {
   query: '?raw',

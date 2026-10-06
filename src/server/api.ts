@@ -89,7 +89,7 @@ api.get('/api/agent-setup/skill', ({ url }) => {
     headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
   })
 })
-// feature-review, review-queue and their agents, as a tar to extract into ~/.claude.
+// feature-review, review-queue, todo-review and their agents, as a tar to extract into ~/.claude.
 api.get('/api/agent-setup/review-skills', ({ url }) => {
   if (url.searchParams.get('list') !== null) return json(agents.reviewBundlePaths())
   return new Response(new Uint8Array(agents.reviewBundle()), {

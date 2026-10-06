@@ -1,7 +1,7 @@
 import { createAgent, listAgents } from './projectAgents'
 
 /**
- * The default agents: the build and review cycle the feature-review and review-queue skills run,
+ * The default agents: the build and review cycle the feature-review, review-queue and todo-review skills run,
  * as project agents. Each one's instructions are its agent file from the review bundle (without
  * the frontmatter), so the board and the installed skills start from the same text; the human
  * edits them on the board from there. The delegation notes are what the orchestrator routes by.

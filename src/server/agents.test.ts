@@ -85,6 +85,8 @@ describe('the review skills bundle', () => {
     const paths = agents.reviewBundlePaths()
     expect(paths).toContain('skills/feature-review/SKILL.md')
     expect(paths).toContain('skills/review-queue/build_pdf.py')
+    expect(paths).toContain('skills/todo-review/SKILL.md')
+    expect(paths).toContain('agents/todo-review-ticket.md')
     expect(paths.filter((p) => p.startsWith('agents/feature-review-'))).toHaveLength(7)
     const src = path.join(import.meta.dirname, 'skill', 'review')
     for (const p of paths)
