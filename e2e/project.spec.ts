@@ -6,7 +6,7 @@ test('the PR queue renders with its filter (no GitHub: empty)', async ({ page, p
   await page.goto(`/projects/${project.id}/prs`)
   await expect(page.getByRole('heading', { name: 'PR queue' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Refresh' })).toBeVisible()
-  for (const status of ['Pending', 'Reviewed', 'On hold'])
+  for (const status of ['Pending', 'Reviewed', 'On hold', 'Done'])
     await expect(page.getByRole('tab', { name: new RegExp(`^${status}`) })).toBeVisible()
 
   const filter = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
@@ -21,6 +21,10 @@ test('the PR queue renders with its filter (no GitHub: empty)', async ({ page, p
   await expect(page.getByText('Nothing pending waiting on others.')).toBeVisible()
   await page.getByRole('tab', { name: /^On hold/ }).click()
   await expect(page.getByText('Nothing on hold waiting on others.')).toBeVisible()
+  await page.getByRole('tab', { name: /^Done/ }).click()
+  await expect(page.getByText('Nothing done waiting on others.')).toBeVisible()
+  await filter('To review').click()
+  await expect(page.getByText('Nothing done to review.')).toBeVisible()
 })
 
 test('the PR queue filter survives a reload, kept in the URL and remembered', async ({ page, project }) => {
