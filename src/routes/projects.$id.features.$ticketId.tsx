@@ -1483,8 +1483,9 @@ function Timeline({ children }: { children: ReactNode }) {
 /**
  * One row of a Timeline: how long ago on the left (the exact time on hover), a dot on the rail. The
  * two lines run top to bottom down the rail from beside the dot, so the post keeps the width; a long
- * one makes its row taller rather than spill into the next. Its padding is pt/pb: py pads the block
- * axis, which runs sideways in vertical text.
+ * one makes its row taller rather than spill into the next. Their column is as wide as the two lines,
+ * 2.25rem at least: wider when a browser's minimum font size makes them bigger than the rem sizes. Its
+ * padding is pt/pb: py pads the block axis, which runs sideways in vertical text.
  */
 function TimelineRow({
   at,
@@ -1497,7 +1498,7 @@ function TimelineRow({
 }) {
   const today = new Date(at).toDateString() === new Date().toDateString()
   return (
-    <li className="group grid grid-cols-[2.25rem_1.25rem_minmax(0,1fr)] sm:grid-cols-[2.25rem_1.5rem_minmax(0,1fr)]">
+    <li className="group grid grid-cols-[minmax(2.25rem,max-content)_1.25rem_minmax(0,1fr)] sm:grid-cols-[minmax(2.25rem,max-content)_1.5rem_minmax(0,1fr)]">
       <time
         dateTime={at}
         title={stamp(at)}
