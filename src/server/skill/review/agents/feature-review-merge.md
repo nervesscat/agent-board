@@ -20,6 +20,10 @@ for comparison), and your output file `05-merge.md`.
 ## Procedure
 
 1. `git -C MAIN fetch origin BASE`. `BASE_SHA = git -C MAIN rev-parse origin/BASE`.
+   Other sessions may run git on `MAIN` at the same time: a fetch that fails on another one's
+   lock (`Unable to create '<path>.lock': File exists`, `cannot lock ref`) waits about 15 seconds
+   and runs again, up to 5 times, and never deletes the `.lock` file. Still locked: result
+   `UNVERIFIED (git lock on MAIN)`.
 2. If `git -C MAIN merge-base --is-ancestor origin/BASE HEAD_SHA` succeeds, the change
    already contains the latest base. Result `NO ISSUE (up to date)`. Skip to step 7.
 3. Record how far behind: `git -C MAIN rev-list --count HEAD_SHA..origin/BASE`. Record
