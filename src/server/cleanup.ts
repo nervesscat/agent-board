@@ -1,8 +1,18 @@
+import crypto from 'node:crypto'
+
 import { eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
-import { branchReach, listRefs, listWorktrees, type Reach, type Refs, type Worktree } from './git'
+import {
+  branchReach,
+  listRefs,
+  listWorktrees,
+  refsContaining,
+  type Reach,
+  type Refs,
+  type Worktree,
+} from './git'
 import { activePreviews, type ManagedPreview } from './managedPreview'
 import { getProject } from './projects'
 import { listRepos } from './repos'
@@ -94,6 +104,60 @@ export async function reachOf(repoPath: string, branch: string, chain: string[],
   return memo(reachMemo, REACH_MEMO_MAX, key.join('\0'), () => branchReach(repoPath, ref, bases))
 }
 
+/** Which branches hold a commit, by the commit and the sha of every branch: asked again once one moves. */
+const CONTAINS_MEMO_MAX = 500
+const containsMemo = new Map<string, Promise<Set<string>>>()
+
+const refsKey = (refs: Refs) => {
+  const hash = crypto.createHash('sha1')
+  for (const [name, sha] of refs.local) hash.update(`${name} ${sha}\n`)
+  for (const [name, sha] of refs.remote) hash.update(`origin/${name} ${sha}\n`)
+  return hash.digest('hex')
+}
+
+/** A ticket's branch that a detached worktree is checked out at a commit of. */
+interface Claim {
+  ticketId: number
+  branch: string
+}
+
+/**
+ * The tickets a worktree checked out detached at `head` (a review of a commit) works for: those with a
+ * branch at that commit, else those whose branch holds it while none of their bases does (the branch
+ * moved on since; a commit the bases have, such as dev's tip, is no ticket's own work). Empty when git
+ * cannot tell, so the worktree stays untracked.
+ */
+async function detachedClaims(
+  repoPath: string,
+  head: string,
+  refs: Refs,
+  tickets: { id: number; names: string[]; chain: string[] }[],
+): Promise<Claim[]> {
+  const claims = (t: (typeof tickets)[number], holds: (name: string) => boolean) =>
+    t.names.filter(holds).map((branch) => ({ ticketId: t.id, branch }))
+  const tips = tickets.flatMap((t) =>
+    claims(t, (n) => refs.local.get(n) === head || refs.remote.get(n) === head),
+  )
+  if (tips.length) return tips
+  // Only now the costlier question, and only when some ticket has a branch here to ask it of.
+  const present = tickets.filter((t) => t.names.some((n) => refs.local.has(n) || refs.remote.has(n)))
+  if (!present.length) return []
+  const key = [repoPath, head, refsKey(refs)].join('\0')
+  const holding = await memo(containsMemo, CONTAINS_MEMO_MAX, key, () =>
+    refsContaining(repoPath, head),
+  ).catch(() => null)
+  if (!holding) return []
+  return present.flatMap((t) => {
+    // The ticket's own branches are not its bases (a workspace on the ticket's own branch).
+    const bases = baseRefs(
+      t.chain.filter((b) => !t.names.includes(b)),
+      refs,
+    )
+    if (bases.some((b) => holding.has(b))) return []
+    return claims(t, (n) => holding.has(n) || holding.has(`origin/${n}`))
+  })
+}
+
 const samePath = (a: string, b: string) =>
   a.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() ===
   b.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
@@ -104,7 +168,10 @@ export interface LeftoverBranch {
   local: string | null
   /** Sha of origin's branch as of the last fetch; null when origin has none. */
   remote: string | null
-  /** Worktrees with this branch checked out. `main` is the repo's own checkout, not a worktree. */
+  /**
+   * Worktrees with this branch checked out, or checked out detached at one of its commits. `main` is
+   * the repo's own checkout, not a worktree.
+   */
   worktrees: { path: string; main: boolean }[]
   reach: Reach | null
   /** Recreates the branch after it was deleted. */
@@ -129,7 +196,10 @@ export interface LeftoverTicket {
 
 export interface CleanupReport {
   tickets: LeftoverTicket[]
-  /** Worktrees no ticket or workspace on the board accounts for: register them or remove them. */
+  /**
+   * Worktrees no ticket or workspace on the board accounts for (by branch, registered path, or the
+   * ticket's branch commit a detached one is at): register them or remove them.
+   */
   untracked: { repo: string; path: string; branch: string | null; head: string | null }[]
   counts: {
     tickets: number
@@ -174,6 +244,31 @@ export async function cleanupReport(
     : []
   const git = gitCache()
   const previews = activePreviews()
+  const namesOf = (t: schema.Ticket) => [
+    ...new Set(
+      [t.branch, ...workspaces.filter((w) => w.ticketId === t.id).map((w) => w.branch)].filter(Boolean),
+    ),
+  ]
+  const registered = (tree: Worktree) => workspaces.some((w) => w.path && samePath(w.path, tree.path))
+
+  // A detached worktree has no branch to go by: it belongs to the tickets of its repo whose branch
+  // commit it is checked out at.
+  const claimed = new Map<Worktree, Claim[]>()
+  await Promise.all(
+    repos.map(async (r) => {
+      const { refs, worktrees } = await git(r.repoPath)
+      const detached = worktrees.slice(1).filter((tree) => !tree.branch && tree.head && !registered(tree))
+      if (!detached.length) return
+      const mine = all
+        .filter((t) => repoOf(t)?.id === r.id)
+        .map((t) => ({ id: t.id, names: namesOf(t), chain: baseChain(t, byId, r) }))
+      await Promise.all(
+        detached.map(async (tree) =>
+          claimed.set(tree, await detachedClaims(r.repoPath, tree.head!, refs, mine)),
+        ),
+      )
+    }),
+  )
 
   // An archived ticket is finished work too, whatever stage it was left in.
   const closed = all.filter((t) => t.archivedAt || isClosed(kindOf(stages, t.status)))
@@ -182,7 +277,7 @@ export async function cleanupReport(
       const repo = repoOf(t)
       const own = workspaces.filter((w) => w.ticketId === t.id)
       const chain = baseChain(t, byId, repo)
-      const names = [...new Set([t.branch, ...own.map((w) => w.branch)].filter(Boolean))]
+      const names = namesOf(t)
       const state = repo ? await git(repo.repoPath) : null
       const branches = await Promise.all(
         names.map(async (name): Promise<LeftoverBranch> => {
@@ -191,7 +286,12 @@ export async function cleanupReport(
           const paths = own.filter((w) => w.branch === name && w.path).map((w) => w.path)
           const worktrees = (state?.worktrees ?? [])
             .map((tree, i) => ({ tree, main: i === 0 }))
-            .filter(({ tree }) => tree.branch === name || paths.some((p) => samePath(p, tree.path)))
+            .filter(
+              ({ tree }) =>
+                tree.branch === name ||
+                paths.some((p) => samePath(p, tree.path)) ||
+                !!claimed.get(tree)?.some((c) => c.ticketId === t.id && c.branch === name),
+            )
             .map(({ tree, main }) => ({ path: tree.path, main }))
           // A workspace on its own sub-branch should land in the ticket's branch first.
           const into = name === t.branch || !t.branch ? chain : [t.branch, ...chain]
@@ -231,8 +331,7 @@ export async function cleanupReport(
           .slice(1)
           .filter(
             (tree) =>
-              !(tree.branch && known.has(tree.branch)) &&
-              !workspaces.some((w) => w.path && samePath(w.path, tree.path)),
+              !(tree.branch && known.has(tree.branch)) && !registered(tree) && !claimed.get(tree)?.length,
           )
           .map((tree) => ({ repo: r.name, ...tree })),
       ),
