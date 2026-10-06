@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
 
 import { checkBind, readAuthMode, StartupError } from './src/server/config.ts'
+import { endConnectionGone } from './src/server/connectionGone.ts'
 
 /**
  * In dev, Nitro hands a request the browser marks as an image, video or embed (`Sec-Fetch-Dest`) to
@@ -42,6 +43,29 @@ const refuseUnsafeAuth = (): Plugin => ({
   },
 })
 
+/**
+ * A reset connection between `vite dev` and Nitro's worker reached Vite's error middleware as a bare
+ * `read ECONNRESET` and opened the error overlay over whatever the human was doing. The
+ * handler ends such a request and lets every other error through to the overlay. Connect passes an
+ * error to the next error handler after the middleware that raised it, so this one goes in after
+ * Nitro's (pre and post) and before Vite's own: `order: 'post'` runs this hook after Nitro's, and the
+ * function it returns runs after the one Nitro's returns, once Vite's internal middlewares are in.
+ */
+const connectionGoneIsNotAnError = (): Plugin => ({
+  name: 'agent-board:connection-gone-is-not-an-error',
+  apply: 'serve',
+  configureServer: {
+    order: 'post',
+    handler(server) {
+      return () => {
+        server.middlewares.use(
+          endConnectionGone((line) => server.config.logger.warn(line, { timestamp: true })),
+        )
+      }
+    },
+  },
+})
+
 export default defineConfig({
   resolve: { tsconfigPaths: true },
   plugins: [
@@ -55,6 +79,7 @@ export default defineConfig({
     tailwindcss(),
     tanstackStart(),
     viteReact(),
+    connectionGoneIsNotAnError(),
   ],
   ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
 })
