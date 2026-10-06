@@ -26,7 +26,7 @@ docker compose -f docker-compose.gate.yml logs gate
 
 # 2. the board
 cp .env.example .env
-pnpm redeploy          # builds and starts the board on http://localhost:47100, the gate login first
+pnpm start             # starts the board on http://localhost:47100 (hot reload), the gate login first
 ```
 
 Add a repository (path of a local checkout) and the project it belongs to, pick the project in the
@@ -44,27 +44,28 @@ Keep this checkout as the source of truth and run a clone inside the distro:
 git clone /mnt/f/Programming/WebDev/agent-board ~/agent-board && cd ~/agent-board
 cp .env.example .env   # set CLAUDE_BIN=$HOME/.local/bin/claude
 corepack enable pnpm   # or: npm i -g pnpm
-pnpm install && pnpm build
+pnpm install
 curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh auth login` likewise
 ```
 
 Repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
 the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and the
-gate cookie work unchanged. After a change here: `git -C ~/agent-board pull && pnpm install`, then
-`scripts/start.sh --build` inside WSL rebuilds and restarts it.
+gate cookie work unchanged. `pnpm start` inside WSL starts it; after a change here,
+`git -C ~/agent-board pull` puts it live (and `pnpm start` again when dependencies or migrations changed).
 
-## Running the built board
+## Running the board
 
 ```
-pnpm redeploy                 # install, stop the board, build, start it in the background, wait until it answers
-pnpm build && pnpm start      # Windows or Linux, in the foreground; logs to the terminal
-scripts/start.sh              # Linux/WSL: build if stale, (re)start in the background, logs in data/logs
+pnpm start          # stop the board, install, start it in the background with hot reload, wait until it answers
+pnpm start --fg     # the same in the foreground; logs to the terminal
+pnpm stop           # stop it
 ```
 
-The built board does not reload on its own: after `git pull`, `pnpm redeploy` puts the new code live
-(migrations apply as it starts). On Windows the board is down while it builds, since the build
-cannot replace `.output` under a running server; if the build fails, the previous one is started
-again. Logs: `data/logs/build.log`, `board.out.log`, `board.err.log`.
+There is one board, run from the main checkout with `vite dev` on the real data in `data/`, so code
+saved there is live at once: `git pull` on `main` is how changes go live. A pull that changes
+dependencies or adds a migration needs `pnpm start` again (migrations apply as it starts). Work on
+the board itself happens in worktrees, never in the main checkout (Development, below). Logs:
+`data/logs/board.out.log`, `board.err.log`.
 
 The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
 starting after a reboot.
@@ -75,7 +76,7 @@ starting after a reboot.
 
 | `BOARD_ENV`                | Who calls                                                                                                                                                                                   |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `production` (unset too)   | The gate, always, as above. The live board (`pnpm start`, `pnpm redeploy`) always runs this way, whatever the shell says.                                                                   |
+| `production` (unset too)   | The gate, always, as above. The board (`pnpm start`) always runs this way, whatever the shell says.                                                                                         |
 | `development` (`pnpm dev`) | The gate, unless `AUTH=off`: then every request is the human, named `DEV_HUMAN` (by default the human the board last saw sign in, else `human`), with no login redirect.                    |
 | `test` (CI, Playwright)    | Nobody asks the gate. A request says who it is with `X-Test-Actor: human:<name>` or `agent:<name>` (REST and `/api/mcp` alike); without it, it is the human `TEST_HUMAN` (default `human`). |
 
@@ -83,7 +84,7 @@ starting after a reboot.
 settings, archive, decisions…), so both sides can be tested. To try a branch without the gate:
 
 ```
-AUTH=off pnpm dev                       # a preview on the first free port from 47101, with a copy of the live data
+AUTH=off pnpm dev                       # in a worktree: a preview on the first free port from 47101, with a copy of the data
 $env:AUTH='off'; pnpm dev               # the same from PowerShell
 BOARD_ENV=test HOST=127.0.0.1 PORT=47131 DATA_DIR=<a throwaway dir> node .output/server/index.mjs   # a build, for e2e
 ```
@@ -96,8 +97,7 @@ them stops it with a clear error and a non-zero exit:
 - with the gate off, the board only listens on loopback (`HOST` 127.0.0.1, ::1 or localhost; the built
   server's default, every interface, is refused) and never on 47100, the live board's port;
 - `X-Test-Actor` is only read in test; in production and development it changes nothing;
-- `pnpm start` and `pnpm redeploy` run the board as production even from a shell with another
-  `BOARD_ENV`;
+- `pnpm start` runs the board as production even from a shell with another `BOARD_ENV`;
 - with the gate off, the server prints `AUTH OFF: <mode>, signed in as <name>, do not expose this` on
   stderr as it starts, and the top bar shows a red **test mode** / **auth off** badge (`/api/me` says
   `authOff`), so a screenshot is never taken for the live board.
@@ -153,7 +153,7 @@ S3_SECRET_KEY=<a long secret; the compose file uses it as MinIO's root password>
 
 Then `pnpm move-uploads` copies the existing files into the bucket under the same keys, checking each
 one (it skips those already there, so it can run again; `--delete-local` removes each checked local
-file, `--dry-run` only says what it would do), and `pnpm redeploy` puts the board on the bucket. The
+file, `--dry-run` only says what it would do), and `pnpm start` puts the board on the bucket. The
 board creates the bucket on first use.
 
 The bucket stays private: the browser gets files from the board, which streams them from MinIO
@@ -244,7 +244,7 @@ the gate device or token name.
 ## Development
 
 ```
-pnpm dev             # hot-reload copy on the first free port from 47101, with its own data (data/dev, a copy of the live data; --fresh copies again)
+pnpm dev             # in a worktree: a copy on the first free port from 47101 with its own data (data/dev, a copy of the board's; --fresh copies again); refused in the main checkout
 AUTH=off pnpm dev    # the same without the passkey gate: you are the human (Test mode, above)
 pnpm typecheck       # tsc
 pnpm lint            # oxlint
@@ -252,7 +252,6 @@ pnpm format          # prettier
 pnpm test            # vitest (path mapping, actors, PR status, …)
 pnpm test:e2e        # Playwright against a built board in test mode (Testing, below)
 pnpm check:migrations # the drizzle folder and its journal agree
-pnpm redeploy        # put this checkout live on the built board
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
@@ -264,7 +263,7 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
 - **Unit** (`pnpm test`): vitest, `src/**/*.test.ts` and `scripts/**/*.test.mjs`. Server tests open
   their own SQLite in a temp folder; the S3 ones run only with `S3_TEST_ENDPOINT` set (CLAUDE.md).
 - **End to end** (`pnpm test:e2e`): Playwright, `e2e/`. It builds the board into `.output-e2e`
-  (never `.output`, so the live board's build is left alone) and starts it in test mode (above) on
+  (never `.output`, so a preview running from the same worktree is left alone) and starts it in test mode (above) on
   a free loopback port above 47140, with its data and a scratch git repo (a bare repo beside it is
   its origin) in a temp folder. Global setup seeds a project through the REST API; each test makes a
   project of its own. The browser is the human (no `X-Test-Actor`); tests call the API as

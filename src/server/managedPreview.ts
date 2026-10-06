@@ -425,7 +425,7 @@ function worktreeEnv(): NodeJS.ProcessEnv {
 }
 
 // Run inside the preview's server: it exits within a few seconds of the board, whichever way the
-// board went (`pnpm redeploy` ends it without a chance to clean up).
+// board went (`pnpm stop` ends it without a chance to clean up).
 const WATCHDOG = `data:text/javascript,${encodeURIComponent(
   'const p=Number(process.env.PREVIEW_PARENT_PID);if(p)setInterval(()=>{try{process.kill(p,0)}catch(e){if(e.code==="ESRCH")process.exit(0)}},2000).unref()',
 )}`
