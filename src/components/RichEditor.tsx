@@ -14,6 +14,7 @@ import {
   List,
   ListChecks,
   ListOrdered,
+  Paperclip,
   Quote,
   SquareCode,
   Strikethrough,
@@ -50,14 +51,18 @@ export function richExtensions(placeholder = '') {
 /**
  * Rich text in, markdown out: what agents write and read stays markdown, people get formatting
  * buttons instead of syntax. Tables, task lists, code and images round-trip. Files pasted or dropped
- * go to `onFiles` (the caller attaches them) instead of into the text. Ctrl/⌘+Enter calls `onSubmit`,
- * Esc `onCancel`.
+ * go to `onFiles` (the caller attaches them) instead of into the text. With `onAttach` the toolbar ends
+ * with an attach button that calls it (the caller opens its file picker; `attaching` while it works);
+ * forms that keep their attach in a row of their own leave it out. Ctrl/⌘+Enter calls `onSubmit`, Esc
+ * `onCancel`.
  */
 export function RichEditor({
   value,
   onChange,
   placeholder,
   onFiles,
+  onAttach,
+  attaching = false,
   onSubmit,
   onCancel,
   autoFocus = false,
@@ -69,6 +74,10 @@ export function RichEditor({
   onChange: (markdown: string) => void
   placeholder?: string
   onFiles?: (files: File[]) => void
+  /** Puts an attach button at the end of the toolbar. */
+  onAttach?: () => void
+  /** The attach button says so while the files it picked are on their way. */
+  attaching?: boolean
   onSubmit?: () => void
   onCancel?: () => void
   autoFocus?: boolean
@@ -140,20 +149,30 @@ export function RichEditor({
     editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false })
   }, [editor, value])
 
+  // The text comes before the toolbar in the page, so Tab reaches the text first and the buttons after
+  // it, attach last (Shift+Tab the reverse); `flex-col-reverse` still draws the toolbar above the text.
   return (
     <div
       className={cn(
-        'rounded-md border border-input bg-transparent focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30',
+        'flex flex-col-reverse rounded-md border border-input bg-transparent focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 dark:bg-input/30',
         className,
       )}
     >
-      {editor && <Toolbar editor={editor} />}
       <EditorContent editor={editor} />
+      {editor && <Toolbar editor={editor} onAttach={onAttach} attaching={attaching} />}
     </div>
   )
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({
+  editor,
+  onAttach,
+  attaching,
+}: {
+  editor: Editor
+  onAttach?: () => void
+  attaching: boolean
+}) {
   const state = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -229,6 +248,17 @@ function Toolbar({ editor }: { editor: Editor }) {
           <b.icon className="size-3.5" />
         </button>
       ))}
+      {onAttach && (
+        <button
+          type="button"
+          title="Attach files"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onAttach}
+          className="ml-auto flex items-center gap-1 rounded px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <Paperclip className="size-3.5" /> {attaching ? 'attaching…' : 'attach'}
+        </button>
+      )}
     </div>
   )
 }
