@@ -3,6 +3,7 @@ import { HeadContent, Link, Outlet, Scripts, createRootRouteWithContext } from '
 import { Menu } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import { CrossBoardMark } from '#/components/CrossBoardMark'
 import { Gallery } from '#/components/Gallery'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { Badge } from '#/components/ui/badge'
@@ -22,9 +23,16 @@ export const Route = createRootRouteWithContext<RouterContext>()({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'Agent Board' },
+      { title: 'CrossBoard' },
     ],
-    links: [{ rel: 'stylesheet', href: appCss }],
+    // The SVG favicon switches its own colours with the system theme. The PNG is for browsers without
+    // SVG icons; its `sizes` lets the others prefer the SVG.
+    links: [
+      { rel: 'stylesheet', href: appCss },
+      { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png' },
+      { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
+      { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
+    ],
   }),
   shellComponent: RootDocument,
   component: App,
@@ -58,8 +66,11 @@ function App() {
     <>
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
         <nav className="mx-auto flex h-12 max-w-7xl items-center gap-3 px-4 text-sm sm:gap-5">
-          <Link to="/" className="shrink-0 font-semibold tracking-tight" title="Home">
-            Agent Board
+          <Link to="/" className="flex shrink-0 items-center gap-2" title="Home">
+            <CrossBoardMark className="size-[22px] shrink-0" />
+            <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap">
+              CrossBoard
+            </span>
           </Link>
           <AuthOffBadge />
           <ProjectSwitcher />
