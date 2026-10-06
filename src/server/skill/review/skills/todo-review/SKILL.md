@@ -62,7 +62,7 @@ only when they share none.
 | Lane | Held by | Why |
 |---|---|---|
 | `ticket:<id>` | the run of that ticket | never two agents on one ticket: a send-back or re-queue starts only after its previous run returned |
-| `branch:<name>` | the ticket whose `branch` is that name | never two agents on one branch: two tickets that carry the same `branch` never run together |
+| `branch:<name>` | the ticket whose `branch` is that name | never two agents on one branch: two tickets that carry the same `branch` never run together. A ticket with no `branch` yet gets a new name that its agent makes its own by creating the branch, and it works only in a worktree registered on its ticket (`todo-review-ticket` steps 1.3 and 1.4) |
 | `browser` | the one ticket allowed `browser=yes` | the browser automation tool is a single shared instance |
 
 There is no lane per repo: tickets of the same repo run at the same time, each in its own worktree

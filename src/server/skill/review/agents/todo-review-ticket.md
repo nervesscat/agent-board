@@ -109,19 +109,30 @@ Only the holder of `LOCK` starts one in this repo.
    a ticket with an empty body and a screenshot is a bug report), the posts, the answered
    decisions, and the **resume note first** when there is one. On `RETRY`, start from the resume
    note and fix what `RETRY` names before anything else.
-3. Branch: the ticket's `branch`, else three or four words saying what the change does,
-   kebab-case (`align-author-with-text`), with no ticket number in it. A new name must not be
-   taken: when `git -C REPO branch -a --list <name> "origin/<name>"` lists it (another ticket's
-   branch, maybe running right now), choose another.
-   `claim_ticket` with it (and `as: AS` when given).
-4. Worktree next to the main checkout: `<REPO>/../<repo folder>-<branch>`. Reuse it when it already
-   exists on that branch; else `git -C REPO fetch origin BASE` and
-   `git -C REPO worktree add -b <branch> <path> origin/BASE` (without `-b` when the branch is the
-   ticket's own `branch` and exists). Both write to the shared checkout's git: a lock error is
-   retried (**Shared with the other tickets of this repo**). `worktree add -b` saying the branch
-   already exists means another ticket took the name in the meantime: choose another name and
-   `claim_ticket` again with it. Install the way the project's instructions say. `add_workspace`
-   with its `path` and `branch` at once.
+3. Branch. The ticket's **own** branch is the `branch` that `get_ticket` showed in step 2, before
+   this run claimed anything (a `RETRY` or re-queued run finds the one its first run claimed).
+   Without one, choose a **new** name: three or four words saying what the change does,
+   kebab-case (`align-author-with-text`), with no ticket number in it, that
+   `git -C REPO branch -a --list <name> "origin/<name>"` does not list. Another ticket of this
+   repo may be choosing a name at the same moment, so a new name is yours only once step 4 has
+   created it. `claim_ticket` with it (and `as: AS` when given).
+4. Worktree next to the main checkout: `<path>` = `<REPO>/../<repo folder>-<branch>`. Never work in
+   a worktree that is not registered in this ticket's `workspaces`: it is someone else's.
+   - Own branch: reuse the worktree registered in this ticket's `workspaces` when it is still on
+     disk. Else `git -C REPO fetch origin BASE`, then `git -C REPO worktree add <path> <branch>`
+     when the branch exists, or `git -C REPO worktree add -b <branch> <path> origin/BASE` when it
+     does not. Git refusing because the branch is checked out in another worktree, or because the
+     path exists, means someone else works on it: return `STATUS: error` with that worktree's path
+     in `NOTES`.
+   - New name: reuse nothing, even a branch or worktree of that name that exists by now.
+     `git -C REPO fetch origin BASE`, then `git -C REPO worktree add -b <branch> <path> origin/BASE`.
+     Creating the branch is what makes the name yours: when it fails because the branch or the
+     path already exists, another ticket took the name in the meantime. Choose another new name,
+     `claim_ticket` again with it, and create again.
+
+   Both git commands write to the shared checkout's git: a lock error is retried (**Shared with
+   the other tickets of this repo**). Install the way the project's instructions say.
+   `add_workspace` with its `path` and `branch` at once.
 
 ### 2. Spec
 
