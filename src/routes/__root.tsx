@@ -52,7 +52,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** The board-wide pages, on the right of the top bar. Under `sm` they fold into a menu. */
+/**
+ * The board-wide pages, on the right of the top bar. Under `md` they fold into a menu: between `sm` and
+ * `md` the lockup, the gate-off badge, the project switcher and the four links do not fit on one row.
+ */
 const PAGES = [
   { to: '/repositories', label: 'Repositories' },
   { to: '/daily', label: 'Daily' },
@@ -74,7 +77,7 @@ function App() {
           </Link>
           <AuthOffBadge />
           <ProjectSwitcher />
-          <div className="ml-auto hidden items-center gap-5 sm:flex">
+          <div className="ml-auto hidden items-center gap-5 md:flex">
             {PAGES.map((p) => (
               <Link
                 key={p.to}
@@ -118,7 +121,7 @@ function PagesMenu() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        render={<Button variant="ghost" size="icon" className="ml-auto sm:hidden" />}
+        render={<Button variant="ghost" size="icon" className="ml-auto md:hidden" />}
         aria-label="Pages"
       >
         <Menu />

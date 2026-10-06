@@ -173,3 +173,31 @@ test('the favicon switches its own colours with the system theme', async ({ page
   }
   await svg.close()
 })
+
+test('with the test mode badge the top bar fits every width from 640 to 768px without sideways scroll', async ({
+  page,
+}) => {
+  for (const width of [640, 676, 683, 700, 720, 727, 767, 768]) {
+    await page.setViewportSize({ width, height: 800 })
+    for (const url of ['/repositories', `/projects/${seededProject().id}/prs`]) {
+      const at = `${width}px ${url}`
+      await page.goto(url)
+      await expect(page.getByRole('main').getByRole('heading').first(), at).toBeVisible()
+      const bar = page.getByRole('banner')
+      await expect(bar.getByText('test mode'), at).toBeVisible()
+      // The last page link when the links are inline, the Pages menu when they are folded.
+      const settings = bar.getByRole('link', { name: 'Settings' })
+      const last = (await settings.isVisible()) ? settings : bar.getByRole('button', { name: 'Pages' })
+      await expect(last, at).toBeVisible()
+      await expect(last, at).toBeInViewport({ ratio: 1 })
+      const b = await box(last)
+      expect(b.x + b.width, at).toBeLessThanOrEqual(width)
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+        at,
+      ).toBe(true)
+    }
+  }
+})
