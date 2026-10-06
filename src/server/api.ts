@@ -100,6 +100,12 @@ api.get('/api/agent-setup/review-skills', ({ url }) => {
     },
   })
 })
+// Whether each repo's own .claude folder has that bundle as it is now: every repo, or ?projectId's.
+api.get('/api/agent-setup/review-skills/status', async ({ url }) => {
+  const pid = url.searchParams.get('projectId')
+  const status = await agents.reviewSkillsStatus(pid === null ? undefined : intParam(pid, 'projectId'))
+  return Response.json(status, { headers: { 'cache-control': 'no-store' } })
+})
 api.get('/api/settings', () => json(agents.getSettings()))
 api.patch('/api/settings', async ({ request }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human changes the settings')

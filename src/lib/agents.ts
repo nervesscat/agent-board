@@ -64,18 +64,40 @@ export function mcpSetup(client: AgentClient, boardUrl: string, token: string) {
   }
 }
 
+/** A repo's own `.claude` folder, joined with the separator its path already uses. */
+export function repoClaudeDir(repoPath: string) {
+  const sep = repoPath.includes('\\') ? '\\' : '/'
+  return `${repoPath.replace(/[\\/]+$/, '')}${sep}.claude`
+}
+
+/** A Windows path (drive letter or UNC share), which Git Bash's tar takes only with forward slashes. */
+const windowsPath = /^[A-Za-z]:[\\/]|^\\\\/
+
+/** `dir` as one bash argument, taken literally. */
+const bashArg = (dir: string) =>
+  `'${(windowsPath.test(dir) ? dir.replace(/\\/g, '/') : dir).replace(/'/g, `'\\''`)}'`
+
+/** `dir` as one PowerShell argument, taken literally. */
+const powershellArg = (dir: string) => `'${dir.replace(/'/g, "''")}'`
+
 /**
  * One line that installs feature-review, review-queue and their agents into ~/.claude (Claude Code's
- * skills and agents; OpenCode reads ~/.claude/skills too), replacing the files of the same name.
+ * skills and agents; OpenCode reads ~/.claude/skills too), or into `dir` (a repo's own `.claude`, see
+ * `repoClaudeDir`), replacing the files of the same name.
  */
-export function reviewSkillsInstall(shell: Shell, boardUrl: string, token: string) {
+export function reviewSkillsInstall(shell: Shell, boardUrl: string, token: string, dir?: string) {
   const src = `${boardUrl}/api/agent-setup/review-skills`
   const auth = `Bearer ${token || TOKEN_PLACEHOLDER}`
-  return shell === 'bash'
-    ? `mkdir -p ~/.claude && curl -fsS -H "Authorization: ${auth}" "${src}" | tar -x -C ~/.claude`
-    : `$t = Join-Path $env:TEMP 'review-skills.tar'; New-Item -ItemType Directory -Force "$HOME\\.claude" | Out-Null; ` +
-        `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = '${auth}' } '${src}' -OutFile $t; ` +
-        `tar -xf $t -C "$HOME\\.claude"; Remove-Item $t`
+  if (shell === 'bash') {
+    const to = dir === undefined ? '~/.claude' : bashArg(dir)
+    return `mkdir -p ${to} && curl -fsS -H "Authorization: ${auth}" "${src}" | tar -x -C ${to}`
+  }
+  const to = dir === undefined ? '"$HOME\\.claude"' : powershellArg(dir)
+  return (
+    `$t = Join-Path $env:TEMP 'review-skills.tar'; New-Item -ItemType Directory -Force ${to} | Out-Null; ` +
+    `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = '${auth}' } '${src}' -OutFile $t; ` +
+    `tar -xf $t -C ${to}; Remove-Item $t`
+  )
 }
 
 /** One line that downloads the board's current skill into the CLI's skills folder. */

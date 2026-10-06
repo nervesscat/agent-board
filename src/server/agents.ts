@@ -1,7 +1,10 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
+
 import { db, schema } from '#/db'
 import { AGENT_CLIENTS, type AgentClient } from '#/lib/constants'
 import { config } from './config'
-import { listProjects } from './projects'
+import { getProject, listProjects } from './projects'
 import rawTemplate from './skill/board.md?raw'
 
 // Agents get the skill with LF line endings, also from a Windows checkout where the file has CRLF.
@@ -128,3 +131,89 @@ export function reviewBundle(): Buffer {
   blocks.push(Buffer.alloc(1024))
   return Buffer.concat(blocks)
 }
+
+// --- the review skills in each repo: the copies under <repo>/.claude, compared with the bundle ---
+
+/** A bundle file in a repo: the same as the bundle's (line endings aside), different, or not there. */
+export type SkillFileStatus = 'current' | 'outdated' | 'missing'
+/**
+ * A repo's copy of the bundle: `none` when it has no bundle file (it relies on the user-wide install),
+ * `current` when every file matches, `outdated` when some are there and any differs or is missing,
+ * `unreachable` when its checkout cannot be read.
+ */
+export type RepoSkillsStatus = 'none' | 'current' | 'outdated' | 'unreachable'
+
+export interface RepoSkills {
+  repoId: number
+  repoName: string
+  projectId: number
+  projectName: string
+  repoPath: string
+  status: RepoSkillsStatus
+  files: { path: string; status: SkillFileStatus }[]
+}
+
+const lf = (text: string) => text.replace(/\r\n/g, '\n')
+
+async function fileStatus(file: string, want: string): Promise<SkillFileStatus> {
+  try {
+    return lf(await fs.readFile(file, 'utf8')) === lf(want) ? 'current' : 'outdated'
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    // Anything else (a folder in its place, no permission) is there but not the bundle's file.
+    return code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'outdated'
+  }
+}
+
+/** One repo's copy of the bundle, read from `<repoPath>/.claude`: only the bundle's paths, never a write. */
+async function repoSkills(repoPath: string): Promise<Pick<RepoSkills, 'status' | 'files'>> {
+  try {
+    if (!(await fs.stat(repoPath)).isDirectory()) return { status: 'unreachable', files: [] }
+    await fs.access(repoPath, fs.constants.R_OK | fs.constants.X_OK)
+  } catch {
+    return { status: 'unreachable', files: [] }
+  }
+  const files = await Promise.all(
+    reviewBundlePaths().map(async (p) => ({
+      path: p,
+      status: await fileStatus(
+        path.join(repoPath, '.claude', ...p.split('/')),
+        reviewFiles[`./skill/review/${p}`]!,
+      ),
+    })),
+  )
+  const status = files.every((f) => f.status === 'missing')
+    ? 'none'
+    : files.every((f) => f.status === 'current')
+      ? 'current'
+      : 'outdated'
+  return { status, files }
+}
+
+/**
+ * Whether each repo on the board (or in one project) has the review bundle the board serves now, in
+ * its own `.claude` folder. Read from the checkouts on this machine each time it is asked.
+ */
+export async function reviewSkillsStatus(projectId?: number) {
+  if (projectId !== undefined) getProject(projectId)
+  const repos = listProjects()
+    .filter((p) => projectId === undefined || p.id === projectId)
+    .flatMap((p) => p.repos.map((r) => ({ r, p })))
+  return {
+    files: reviewBundlePaths(),
+    repos: await Promise.all(
+      repos.map(
+        async ({ r, p }): Promise<RepoSkills> => ({
+          repoId: r.id,
+          repoName: r.name,
+          projectId: p.id,
+          projectName: p.name,
+          repoPath: r.repoPath,
+          ...(await repoSkills(r.repoPath)),
+        }),
+      ),
+    ),
+  }
+}
+
+export type ReviewSkillsStatus = Awaited<ReturnType<typeof reviewSkillsStatus>>
