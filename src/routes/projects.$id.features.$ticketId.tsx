@@ -9,6 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Flag,
+  FlagOff,
   GitBranch,
   GitCommitHorizontal,
   Layers,
@@ -49,7 +51,7 @@ import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
-import { EditBox, Edited, PostActions } from '#/components/PostTools'
+import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostTools'
 import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
 import {
@@ -1558,7 +1560,10 @@ function TimelineRow({
   )
 }
 
-/** One post: who, progress or not, the text and files, and its replies behind a toggle. */
+/**
+ * One post: who, progress or not, the text and files, then its actions as icons, and its replies behind
+ * the first of them, opening right under the row.
+ */
 function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string; onChange: () => void }) {
   const [thread, setThread] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -1573,15 +1578,16 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
   })
   const remove = useMutation({ mutationFn: () => del(`/api/updates/${u.id}`), onSuccess: onChange, onError })
   const replies = u.thread.count
+  const count = `${replies} ${replies === 1 ? 'reply' : 'replies'}`
   return (
     <article
       className={cn(
-        'rounded-lg border p-3',
+        'group/post rounded-lg border p-3',
         !u.progress && 'bg-muted/30',
         u.decision && !u.decidedAt && 'border-amber-500/60 bg-amber-500/5',
       )}
     >
-      <div className="group/post flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <Actor name={u.author} via={u.via} className="text-foreground" />
         {u.handoff ? (
           <span
@@ -1605,26 +1611,6 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
           </Link>
         )}
         <Edited at={u.editedAt} />
-        <span className="ml-auto inline-flex items-center gap-2">
-          {!u.lane && (
-            <PostActions what="this post" onEdit={() => setEditing(true)} onDelete={() => remove.mutate()}>
-              <button
-                type="button"
-                className="hover:text-foreground"
-                onClick={() => edit.mutate({ progress: !u.progress })}
-              >
-                {u.progress ? 'not progress' : 'mark progress'}
-              </button>
-            </PostActions>
-          )}
-          <button type="button" className="hover:text-foreground" onClick={() => setThread((v) => !v)}>
-            {thread
-              ? 'hide replies'
-              : replies
-                ? `${replies} ${replies === 1 ? 'reply' : 'replies'}`
-                : 'reply'}
-          </button>
-        </span>
       </div>
       {editing ? (
         <EditBox
@@ -1638,6 +1624,34 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
       )}
       {u.decision && <DecisionCard u={u} onChange={onChange} />}
       <Attachments items={u.attachments} />
+      <div role="group" aria-label="Post actions" className="mt-2 flex items-center gap-0.5">
+        <ActionButton
+          label={thread ? 'hide replies' : replies ? count : 'reply'}
+          tip={thread ? 'Hide replies' : replies ? `Show ${count}` : 'Reply'}
+          size={replies && !thread ? 'xs' : 'icon-xs'}
+          aria-expanded={thread}
+          onClick={() => setThread((v) => !v)}
+        >
+          <MessageSquare />
+          {!thread && replies > 0 && replies}
+        </ActionButton>
+        {!u.lane && (
+          <PostActions
+            what="this post"
+            group="post"
+            onEdit={() => setEditing(true)}
+            onDelete={() => remove.mutate()}
+          >
+            <ActionButton
+              label={u.progress ? 'not progress' : 'mark progress'}
+              tip={u.progress ? 'Not progress: make it a plain post' : 'Mark as progress'}
+              onClick={() => edit.mutate({ progress: !u.progress })}
+            >
+              {u.progress ? <FlagOff /> : <Flag />}
+            </ActionButton>
+          </PostActions>
+        )}
+      </div>
       {thread && (
         <div className="mt-3 border-t pt-3">
           <Thread parentType="update" parentId={u.id} compact />
