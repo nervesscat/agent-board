@@ -1,14 +1,14 @@
 #!/usr/bin/env node
-// The hot-reload copy of the board, next to the built one in daily use: its own port and its own data,
-// so it never answers on the live board's address or writes into its database. The first run copies
-// the live database and uploads into data/dev; --fresh copies them again. Run from a git worktree, it
-// copies them from the main checkout, the only one with a data/ folder, so a branch's preview shows the
-// real board.
+// A hot-reload copy of the board for a branch, run in its worktree: its own port and its own data,
+// so it never answers on the board's address or writes into its database. The first run copies the
+// board's database and uploads from the main checkout into data/dev; --fresh copies them again. In
+// the main checkout it refuses: that checkout is the board itself (`pnpm start`, hot reload too), and
+// a second copy there is a second board people end up using by mistake.
 //
 //   pnpm dev            # the first free port from 47101, or DEV_PORT
 //   pnpm dev --fresh    # start over from a copy of the live data
 //   AUTH=off pnpm dev   # without the passkey gate: every request is the human (README: "Test mode")
-import { execFileSync, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
@@ -16,22 +16,12 @@ import { fileURLToPath } from 'node:url'
 
 import Database from 'better-sqlite3'
 
+import { isMainCheckout, mainCheckout } from './checkout.mjs'
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
 
-/** The main checkout: this folder, or the one a worktree was made from. */
-function mainCheckout() {
-  try {
-    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
-      encoding: 'utf8',
-    }).trim()
-    return path.dirname(common)
-  } catch {
-    return root
-  }
-}
-
-/** Free on both loopbacks: Vite binds `localhost`, which may be ::1 while the built board holds 127.0.0.1. */
+/** Free on both loopbacks: Vite binds `localhost`, which may be ::1 while the board holds 127.0.0.1. */
 async function isFree(port) {
   for (const host of ['127.0.0.1', '::1']) {
     const ok = await new Promise((resolve) => {
@@ -56,8 +46,16 @@ async function pickPort() {
   throw new Error('no free port between 47101 and 47199; set DEV_PORT')
 }
 
+if (isMainCheckout(root)) {
+  console.error(
+    'This checkout is the board itself: `pnpm start` runs it on :47100 with hot reload. `pnpm dev` is ' +
+      'for a branch, in its worktree: git worktree add ../agent-board-<branch> <branch>',
+  )
+  process.exit(1)
+}
+
 const port = await pickPort()
-const live = path.join(mainCheckout(), 'data')
+const live = path.join(mainCheckout(root), 'data')
 const dev = path.join('data', 'dev')
 
 if (process.argv.includes('--fresh')) fs.rmSync(dev, { recursive: true, force: true })
@@ -72,7 +70,7 @@ if (!fs.existsSync(path.join(dev, 'board.db')) && fs.existsSync(path.join(live, 
     fs.cpSync(path.join(live, 'uploads'), path.join(dev, 'uploads'), { recursive: true })
 }
 
-console.log(`Preview: http://localhost:${port} (a copy of the data, in ${path.join(root, dev)})`)
+console.log(`Preview: http://localhost:${port} (a copy of the board's data, in ${path.join(root, dev)})`)
 // PORT has to be set here: the PORT in .env would otherwise win over --port. BOARD_ENV is always
 // development, whatever the shell says; AUTH (off turns the gate off) comes through as it is.
 // BOARD_DATA_COPY keeps the copy from deleting files in an S3 bucket it shares with the live board.

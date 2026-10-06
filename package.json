@@ -9,8 +9,8 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "vite build",
-    "start": "node --env-file-if-exists=.env --import ./scripts/live-env.mjs .output/server/index.mjs",
-    "redeploy": "node scripts/redeploy.mjs",
+    "start": "node scripts/start.mjs",
+    "stop": "node scripts/start.mjs --stop",
     "move-uploads": "node scripts/move-uploads-to-s3.mjs",
     "generate-routes": "tsr generate",
     "typecheck": "tsc --noEmit",
