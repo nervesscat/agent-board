@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Paperclip, Plus } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -114,34 +114,24 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             <Input id="t" value={title} onChange={(e) => setTitle(e.target.value)} required autoFocus />
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <Label>Instructions</Label>
-              <input
-                ref={fileInput}
-                type="file"
-                multiple
-                hidden
-                onChange={(e) => {
-                  const picked = Array.from(e.target.files ?? [])
-                  if (picked.length) files.add(picked)
-                  // Clear it, so picking a file that was just removed registers again.
-                  e.target.value = ''
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                className="text-muted-foreground"
-                onClick={() => fileInput.current?.click()}
-              >
-                <Paperclip data-icon="inline-start" /> attach
-              </Button>
-            </div>
+            <Label>Instructions</Label>
+            <input
+              ref={fileInput}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                const picked = Array.from(e.target.files ?? [])
+                if (picked.length) files.add(picked)
+                // Clear it, so picking a file that was just removed registers again.
+                e.target.value = ''
+              }}
+            />
             <RichEditor
               value={body}
               onChange={setBody}
               onFiles={files.add}
+              onAttach={() => fileInput.current?.click()}
               minHeight="min-h-32"
               label="Instructions"
               placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."

@@ -486,8 +486,8 @@ function InlineTags({ t, onSave }: { t: TicketFull; onSave: (tags: string[]) => 
 
 /**
  * The instructions, edited where they are with the rich text editor (click the text, or "edit"), and
- * the files that go with them: attach, paste or drop to add, × to remove. Files are kept as soon as
- * they are added; the text when saved.
+ * the files that go with them: attach (in the editor's toolbar while editing), paste or drop to add, ×
+ * to remove. Files are kept as soon as they are added; the text when saved.
  */
 function Instructions({
   t,
@@ -544,13 +544,15 @@ function Instructions({
               e.target.value = ''
             }}
           />
-          <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
-            <Paperclip data-icon="inline-start" /> {attach.isPending ? 'attaching…' : 'attach'}
-          </Button>
           {!editing && (
-            <Button type="button" variant="ghost" size="xs" onClick={open}>
-              <Pencil data-icon="inline-start" /> edit
-            </Button>
+            <>
+              <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
+                <Paperclip data-icon="inline-start" /> {attach.isPending ? 'attaching…' : 'attach'}
+              </Button>
+              <Button type="button" variant="ghost" size="xs" onClick={open}>
+                <Pencil data-icon="inline-start" /> edit
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -560,6 +562,8 @@ function Instructions({
             value={body}
             onChange={setBody}
             onFiles={(files) => attach.mutate(files)}
+            onAttach={() => fileInput.current?.click()}
+            attaching={attach.isPending}
             onSubmit={save}
             onCancel={() => setEditing(false)}
             autoFocus
