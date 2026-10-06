@@ -73,7 +73,10 @@ lock error is never the ticket's failure and never a blocker. Still locked after
 `/feature-review` retries its own git steps the same way. A review that still stopped on a git
 lock ("git lock on MAIN", or a merge check `UNVERIFIED (git lock on MAIN)`) did not judge the
 change: it is not a round and nothing goes to the builder. Run it once more (step 5, holding
-`LOCK`); locked again: `STATUS: error`, as above.
+`LOCK`): a review stopped in Setup removed its own claim and worktree first, so the new one
+starts clean. Locked again: `STATUS: error`, as above. A review that judged the change but could
+not remove its worktree for a lock (it says so; `LEFTOVER.md` in its folder) counts as usual:
+the next review of the branch removes that worktree.
 
 **The machine's CPU, for heavy runs.** Two test suites of one repo at once make its tests flaky,
 and a result seen then proves nothing either way. **Heavy runs** are the project's checks

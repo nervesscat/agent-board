@@ -133,10 +133,11 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    ticket" with no question asked), is **weak**: send it back once.
 3. **`needs-browser`**: re-queue once with `browser=yes` (it waits for the browser lane).
 4. **`error`**: if `NOTES` shows contention (a port held by another process, the browser
-   unavailable, a git lock still held after the retries, a test lock waited on too long),
-   re-queue once to run alone after everything else: it starts only when no other ticket is in
-   flight, and nothing else starts while it runs. Otherwise record it, and make sure the ticket is
-   not left in progress with no word: `comment` on it with the error and leave it where it is.
+   unavailable, a git lock still held after the retries or a review's "git lock on MAIN", a
+   test lock waited on too long), re-queue once to run alone after everything else: it starts
+   only when no other ticket is in flight, and nothing else starts while it runs. Otherwise record
+   it, and make sure the ticket is not left in progress with no word: `comment` on it with the
+   error and leave it where it is.
 
 **Sending back** is one more `todo-review-ticket` run for the same ticket with `RETRY=<what the
 check found>` added. It resumes from the ticket's resume note and posts, not from scratch. It goes

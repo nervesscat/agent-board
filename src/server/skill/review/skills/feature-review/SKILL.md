@@ -77,7 +77,11 @@ Parse `$ARGUMENTS` as space-separated tokens:
    **Claim before you clean.** Another session may be reviewing the same target. A claim
    is live when `WORKDIR/CLAIM.md` exists, is less than 6 hours old, and
    `~/.claude/feature-review/ledger.jsonl` has no entry for this target written after
-   the claim (a finished review that forgot to remove its claim is not live). If the claim
+   the claim (a finished review that forgot to remove its claim is not live). When the
+   claim is not live and `WORKDIR/LEFTOVER.md` exists, an earlier review of this target
+   could not remove its worktree for a git lock (Teardown step 2): remove `WORKTREE` now as
+   Teardown step 2 does, then delete `LEFTOVER.md`; still locked, stop with the error
+   "git lock on MAIN: <path>". If the claim
    is live, or `git -C MAIN worktree list` already registers `WORKTREE`, stop with the
    error "review of <target> already in flight (see WORKDIR/CLAIM.md)" and do nothing else. Otherwise remove and recreate `WORKDIR`
    and write `WORKDIR/CLAIM.md` with the target, the start time, and the session or
@@ -93,9 +97,11 @@ Parse `$ARGUMENTS` as space-separated tokens:
    that fails on another one's lock (`Unable to create '<path>.lock': File exists`, `cannot lock
    ref`, `Another git process seems to be running`) waits about 15 seconds and runs again, up to
    5 times. Never delete the `.lock` file: a git process that is still running holds it. A lock
-   error is never a finding or a failed criterion. Still locked after 5 tries: in Setup, stop with
-   the error "git lock on MAIN: <path>"; in the merge check, its result is
-   `UNVERIFIED (git lock on MAIN)`; in Teardown, say so and leave the worktree for cleanup.
+   error is never a finding or a failed criterion. Still locked after 5 tries: in the merge
+   check, its result is `UNVERIFIED (git lock on MAIN)`; in Teardown, see Teardown step 2; in
+   Setup, first undo what this run made so that running it again is not "already in flight"
+   (if `git -C MAIN worktree list` registers `WORKTREE`, remove it as Teardown step 2 does;
+   then delete `WORKDIR/CLAIM.md`, last), then stop with the error "git lock on MAIN: <path>".
    - a PR number: `gh pr view N --json title,body,baseRefName,headRefName,headRefOid,isDraft,mergeable,url`
      run from `MAIN`. Then `git -C MAIN fetch origin pull/N/head` and confirm
      `git -C MAIN rev-parse FETCH_HEAD` equals `headRefOid`; if not, fetch again.
@@ -264,7 +270,10 @@ Unless `keep` was given:
    directory behind after deregistering it; if `WORKTREE` still exists, clear it with
    `robocopy <empty dir> WORKTREE /MIR` followed by `rmdir`, or PowerShell
    `Remove-Item -Recurse -Force`. Do **not** run `git worktree prune`: other sessions may
-   have worktrees registered on the same checkout.
+   have worktrees registered on the same checkout. Still locked after the retries: write
+   `WORKDIR/LEFTOVER.md` with `WORKTREE` and the lock file's path, say so in what you print,
+   and go on with steps 3 and 4. The next review of this target removes it (Setup step 1);
+   until then `git worktree list` shows it.
 3. Confirm `git -C MAIN status --porcelain` is unchanged from before the review.
 4. Delete `WORKDIR/CLAIM.md`.
 
