@@ -197,6 +197,8 @@ describe('cleanupReport on detached worktrees', () => {
     const git = gitIn(dir)
     fs.mkdirSync(dir)
     git('init', '-q', '-b', 'main')
+    git('config', 'user.email', 't@t')
+    git('config', 'user.name', 't')
     const shas = commitsIn(dir)([
       { ref: 'refs/heads/main', file: 'base.txt', text: 'base\n', msg: 'base' },
       ...commits,
