@@ -47,6 +47,13 @@ earned.
 Never merge, approve, force-push, or comment on GitHub. Never touch `REPO`'s working tree: all work
 happens in the ticket's worktree. Never two builders on one branch.
 
+**The repo's rules on what it may mention win.** Many repos (this board's own `AGENTS.md`: "Keep
+the board out of the repo") forbid naming the board, a ticket (`#12`, "ticket 12") or a tracker in
+branch names, commit messages, code comments, docs, PR titles and descriptions. Read the repo's
+`AGENTS.md`, `CLAUDE.md` and `CONTRIBUTING.md` before you name anything, and brief the builder with
+the rule. When in doubt, describe the change in the repo's own terms and keep ticket numbers on the
+board only.
+
 ## Procedure
 
 ### 1. Read and claim
@@ -59,7 +66,8 @@ happens in the ticket's worktree. Never two builders on one branch.
    a ticket with an empty body and a screenshot is a bug report), the posts, the answered
    decisions, and the **resume note first** when there is one. On `RETRY`, start from the resume
    note and fix what `RETRY` names before anything else.
-3. Branch: the ticket's `branch`, else `t<TICKET>-<three or four words of the title, kebab-case>`.
+3. Branch: the ticket's `branch`, else three or four words saying what the change does,
+   kebab-case (`align-author-with-text`), with no ticket number in it.
    `claim_ticket` with it (and `as: AS` when given).
 4. Worktree next to the main checkout: `<REPO>/../<repo folder>-<branch>`. Reuse it when it already
    exists on that branch; else `git -C REPO fetch origin BASE` and
@@ -131,7 +139,8 @@ Every item, in order, as the board skill's hand-off checklist says:
 1. Tasks ticked (`set_task_done`); the workspace registered.
 2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`.
 3. Any unmerged branch yours builds on: `update_ticket` with `needs`.
-4. The PR, the project's way (its instructions say how it is assigned), and `update_ticket` with
+4. The PR, the project's way (its instructions say how it is assigned), titled and described in
+   the repo's own terms (no ticket numbers or board links where the repo forbids them), and `update_ticket` with
    its `prNumber`.
 5. The preview: `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
