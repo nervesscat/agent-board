@@ -42,13 +42,21 @@ async function createdBody(dialog: Locator, human: APIRequestContext, projectId:
   return (await ok<TicketFull>(human.get(`/api/tickets/${row!.id}`))).body
 }
 
-/** The toolbar is drawn above the text, inside the editor's box. */
-async function expectToolbarAbove(scope: Locator | Page, text: Locator) {
-  const bar = await scope.getByRole('toolbar', { name: 'Formatting' }).boundingBox()
-  const box = await text.boundingBox()
-  expect(bar).not.toBeNull()
-  expect(box).not.toBeNull()
-  expect(bar!.y + bar!.height).toBeLessThanOrEqual(box!.y + 1)
+/**
+ * The editor's toolbar is drawn above its text. Measured once whatever moves the editor (a dialog
+ * zooming in) has finished, and both in the same frame.
+ */
+async function expectToolbarAbove(text: Locator) {
+  const { barBottom, textTop } = await text.evaluate(async (el) => {
+    const moving: Animation[] = []
+    for (let node: Element | null = el; node; node = node.parentElement) moving.push(...node.getAnimations())
+    await Promise.all(moving.map((a) => a.finished))
+    const bar = el
+      .parentElement!.closest(':has(> [role="toolbar"])')!
+      .querySelector(':scope > [role="toolbar"]')!
+    return { barBottom: bar.getBoundingClientRect().bottom, textTop: el.getBoundingClientRect().top }
+  })
+  expect(barBottom).toBeLessThanOrEqual(textTop)
 }
 
 test('Tab from the title reaches the instructions text, then the formatting buttons, then the next field', async ({
@@ -57,7 +65,7 @@ test('Tab from the title reaches the instructions text, then the formatting butt
   human,
 }) => {
   const d = await newTicket(page, project.id, 'Keyboard only')
-  await expectToolbarAbove(d.dialog, d.text)
+  await expectToolbarAbove(d.text)
 
   await page.keyboard.press('Tab')
   await expect(d.attach).toBeFocused()
@@ -159,7 +167,7 @@ test('every rich editor puts its text before its toolbar: ticket instructions an
   await instructions.getByRole('button', { name: 'edit' }).click()
   const editor = instructions.getByRole('textbox', { name: 'Instructions' })
   await expect(editor).toBeFocused()
-  await expectToolbarAbove(instructions, editor)
+  await expectToolbarAbove(editor)
   await page.keyboard.press('Tab')
   await expect(instructions.getByRole('button', { name: 'Bold', exact: true })).toBeFocused()
   await page.keyboard.press('Shift+Tab')
@@ -174,7 +182,7 @@ test('every rich editor puts its text before its toolbar: ticket instructions an
   const reply = post.getByRole('textbox', { name: 'Reply' })
   await reply.click()
   await expect(reply).toBeFocused()
-  await expectToolbarAbove(post, reply)
+  await expectToolbarAbove(reply)
   await page.keyboard.press('Tab')
   await expect(post.getByRole('button', { name: 'Bold', exact: true })).toBeFocused()
   await page.keyboard.press('Shift+Tab')
@@ -186,6 +194,6 @@ test.describe('at phone width', () => {
 
   test('the toolbar is still drawn above the text in the New ticket dialog', async ({ page, project }) => {
     const d = await newTicket(page, project.id, 'On a phone')
-    await expectToolbarAbove(d.dialog, d.text)
+    await expectToolbarAbove(d.text)
   })
 })
