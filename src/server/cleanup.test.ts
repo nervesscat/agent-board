@@ -5,6 +5,8 @@ import path from 'node:path'
 
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import type { CleanupReport } from './cleanup'
+
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-'))
 process.env.DATA_DIR = tmp
@@ -20,6 +22,49 @@ const commitIn = (cwd: string) => (file: string, text: string, msg: string) => {
   git('add', file)
   git('commit', '-q', '-m', msg)
   return git('rev-parse', 'HEAD')
+}
+
+/** A commit putting `file` with `text` on top of `from` (a ref or sha; none for a root) and moving `ref` to it. */
+interface Commit {
+  ref: string
+  from?: string
+  file: string
+  text: string
+  msg: string
+}
+/**
+ * Makes `commits` in order in one git process, without touching any checkout (a git process per step
+ * makes a test slow on Windows). Returns their shas, in the same order.
+ */
+const commitsIn = (cwd: string) => (commits: Commit[]) => {
+  const marks = path.join(cwd, '.git', 'test-marks')
+  const data = (text: string) => `data ${Buffer.byteLength(text)}\n${text}`
+  const when = `${Math.floor(Date.now() / 1000)} +0000`
+  const stream = commits.map((c, i) =>
+    [
+      `commit ${c.ref}`,
+      `mark :${i + 1}`,
+      `committer t <t@t> ${when}`,
+      data(c.msg),
+      ...(c.from ? [`from ${c.from}`] : []),
+      `M 100644 inline ${c.file}`,
+      data(c.text),
+      '',
+    ].join('\n'),
+  )
+  execFileSync('git', ['fast-import', '--quiet', `--export-marks=${marks}`], {
+    cwd,
+    input: stream.join(''),
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+  const shas = new Map(
+    fs
+      .readFileSync(marks, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => line.split(' ') as [string, string]),
+  )
+  return commits.map((_, i) => shas.get(`:${i + 1}`)!)
 }
 const git = gitIn(repo)
 const commit = commitIn(repo)
@@ -140,219 +185,250 @@ describe('cleanupReport', () => {
 })
 
 describe('cleanupReport on detached worktrees', () => {
-  it('accounts for a worktree checked out detached at a ticket branch commit', async () => {
-    const { db, schema } = await import('#/db')
-    const features = await import('./features')
-    const { cleanupReport } = await import('./cleanup')
-    const dir = path.join(tmp, 'detached')
-    const git = gitIn(dir)
-    const commit = commitIn(dir)
-    const at = (name: string) => path.join(tmp, name)
-    const detach = (name: string, sha: string) => git('worktree', 'add', '-q', '--detach', at(name), sha)
-    // The way a workspace may be registered: other slashes, other case, a trailing separator.
-    const odd = (p: string) => `${p.replace(/\//g, '\\').toUpperCase()}\\`
+  const at = (name: string) => path.join(tmp, name)
 
+  /**
+   * A repo with main at a base commit and `commits` on top, its own checkout detached at `head`,
+   * registered as a repo row of a new project. Returns the commits' shas, base first.
+   */
+  const detachedRepo = async (name: string, commits: Commit[], head = 'main') => {
+    const { db, schema } = await import('#/db')
+    const dir = path.join(tmp, name)
+    const git = gitIn(dir)
     fs.mkdirSync(dir)
     git('init', '-q', '-b', 'main')
-    git('config', 'user.email', 't@t')
-    git('config', 'user.name', 't')
-    const base = commit('base.txt', 'base\n', 'base')
-    const branch = (name: string, from: string, file: string) => {
-      git('checkout', '-q', '-B', name, from)
-      return commit(file, `${name}\n`, name)
-    }
-    const reviewed = branch('feat/open', 'main', 'open.txt')
-    const ui = branch('feat/open-ui', 'feat/open', 'ui.txt')
-    // Only origin has it.
-    const remoteOnly = branch('feat/remote', 'main', 'remote.txt')
-    git('update-ref', 'refs/remotes/origin/feat/remote', remoteOnly)
-    // Origin's copy is the reviewed one; the local branch was started over elsewhere.
-    const both = branch('feat/both', 'main', 'both.txt')
-    git('update-ref', 'refs/remotes/origin/feat/both', both)
-    branch('feat/both', 'main', 'both-again.txt')
-    const done = branch('feat/done', 'main', 'done.txt')
-    branch('feat/reg', 'main', 'reg.txt')
-    branch('unnamed', 'main', 'unnamed.txt')
-    const other = branch('other', 'main', 'other.txt')
-    git('checkout', '-q', '--detach', 'other')
-    git('branch', '-D', 'feat/remote')
-    // A commit on no branch at all.
-    const dangling = git('commit-tree', `${base}^{tree}`, '-p', base, '-m', 'dangling')
+    const shas = commitsIn(dir)([
+      { ref: 'refs/heads/main', file: 'base.txt', text: 'base\n', msg: 'base' },
+      ...commits,
+    ])
+    git('checkout', '-q', '--detach', head)
+    const projectId = db.insert(schema.projects).values({ name }).returning().get().id
+    const addRow = (row: string) =>
+      db.insert(schema.repos).values({ projectId, name: row, repoPath: dir, baseBranch: 'main' }).run()
+    addRow(name)
+    return { dir, git, commits: commitsIn(dir), shas, projectId, addRow }
+  }
+  /** A branch's commit adding a file named after it, made from `from`. */
+  const onto = (name: string, from: string, file: string, ref = `refs/heads/${name}`): Commit => ({
+    ref,
+    from,
+    file,
+    text: `${name}\n`,
+    msg: name,
+  })
+  const report = async (projectId: number, opts?: { reach?: boolean }) =>
+    (await import('./cleanup')).cleanupReport(projectId, opts)
 
-    detach('wt-tip', reviewed)
-    detach('wt-ui', ui)
-    detach('wt-remote', remoteOnly)
-    detach('wt-both', both)
-    detach('wt-done', done)
-    detach('wt-main', base)
-    detach('wt-other', other)
-    detach('wt-dangling', dangling)
-    detach('wt-reg-open', other)
-    git('worktree', 'add', '-q', at('wt-reg-closed'), 'unnamed')
-
-    const projectId = db.insert(schema.projects).values({ name: 'detached' }).returning().get().id
-    db.insert(schema.repos).values({ projectId, name: 'detached', repoPath: dir, baseBranch: 'main' }).run()
-    const ticket = (title: string, branch: string, status: string) =>
-      features.createTicket(projectId, { title, branch, status, baseBranch: 'main' }, 'claude')
-    const open = ticket('open', 'feat/open', 'in_progress')
-    features.addWorkspace(open.id, { name: 'ui', branch: 'feat/open-ui', path: at('ui-elsewhere') }, 'claude')
-    features.addWorkspace(
-      open.id,
-      { name: 'review', branch: 'feat/open', path: odd(at('wt-reg-open')) },
-      'claude',
-    )
-    ticket('remote', 'feat/remote', 'in_progress')
-    ticket('both', 'feat/both', 'in_progress')
-    ticket('done', 'feat/done', 'done')
-    const reg = ticket('reg', 'feat/reg', 'done')
-    features.addWorkspace(
-      reg.id,
-      { name: 'wt', branch: 'feat/reg', path: odd(at('wt-reg-closed')) },
-      'claude',
-    )
-
-    type Report = Awaited<ReturnType<typeof cleanupReport>>
+  // The repo and tickets are made once; each test below goes on from where the one before left off.
+  describe('accounts for a worktree checked out detached at a ticket branch commit', () => {
+    let fixture: Awaited<ReturnType<typeof detachedRepo>>
+    let sha: Record<
+      'base' | 'reviewed' | 'ui' | 'remoteOnly' | 'both' | 'done' | 'other' | 'dangling',
+      string
+    >
+    const detach = (name: string, commit: string) =>
+      fixture.git('worktree', 'add', '-q', '--detach', at(name), commit)
     // git lists worktree paths with forward slashes, also on Windows.
-    const untracked = (r: Report) => r.untracked.map((w) => path.resolve(w.path)).sort()
-    const rows = (r: Report) =>
+    const untracked = (r: CleanupReport) => r.untracked.map((w) => path.resolve(w.path)).sort()
+    const rows = (r: CleanupReport) =>
       Object.fromEntries(
         r.tickets.flatMap((t) =>
           t.branches.map((b) => [b.name, b.worktrees.map((w) => ({ ...w, path: path.resolve(w.path) }))]),
         ),
       )
     const stray = ['wt-dangling', 'wt-main', 'wt-other'].map(at).sort()
-
-    const report = await cleanupReport(projectId)
-    expect(untracked(report)).toEqual(stray)
-    const heads = Object.fromEntries(report.untracked.map((w) => [path.resolve(w.path), w]))
-    // At main's tip: every ticket branch holds it, but so do their bases.
-    expect(heads[at('wt-main')]).toMatchObject({ repo: 'detached', branch: null, head: base })
-    expect(heads[at('wt-other')]).toMatchObject({ branch: null, head: other })
-    expect(heads[at('wt-dangling')]).toMatchObject({ branch: null, head: dangling })
-    // The repo's own checkout is never a stray worktree, whatever it has checked out.
-    expect(untracked(report)).not.toContain(path.resolve(dir))
-    // A closed ticket lists the worktree reviewing its branch, and the one registered on it.
-    expect(report.tickets.map((t) => t.title).sort()).toEqual(['done', 'reg'])
-    expect(rows(report)).toEqual({
-      'feat/done': [{ path: at('wt-done'), main: false }],
-      'feat/reg': [{ path: at('wt-reg-closed'), main: false }],
-    })
-    expect(report.counts).toMatchObject({ tickets: 2, worktrees: 2, branches: 2, remote: 0 })
-    expect(untracked(await cleanupReport(projectId, { reach: false }))).toEqual(stray)
-
-    // The branch moved on after the review: the worktree still holds the ticket's work.
-    git('checkout', '-q', 'feat/open')
-    commit('open.txt', 'more\n', 'after review')
-    git('checkout', '-q', '--detach', 'other')
-    expect(untracked(await cleanupReport(projectId))).toEqual(stray)
-    expect(untracked(await cleanupReport(projectId, { reach: false }))).toEqual(stray)
-
-    // Once that commit is in the base it is no ticket's own work any more.
-    git('update-ref', 'refs/heads/main', 'feat/open')
     const landed = [...stray, at('wt-tip')].sort()
-    expect(untracked(await cleanupReport(projectId))).toEqual(landed)
-    expect(untracked(await cleanupReport(projectId, { reach: false }))).toEqual(landed)
 
-    // A head git cannot read leaves the worktree untracked rather than failing the report.
-    const missing = '1'.repeat(40)
-    detach('wt-missing', other)
-    fs.writeFileSync(path.join(dir, '.git', 'worktrees', 'wt-missing', 'HEAD'), `${missing}\n`)
-    const broken = await cleanupReport(projectId)
-    expect(untracked(broken)).toEqual([...landed, at('wt-missing')].sort())
-    expect(broken.untracked.find((w) => path.resolve(w.path) === at('wt-missing'))?.head).toBe(missing)
+    beforeAll(async () => {
+      const features = await import('./features')
+      // The way a workspace may be registered: other slashes, other case, a trailing separator.
+      const odd = (p: string) => `${p.replace(/\//g, '\\').toUpperCase()}\\`
+      const main = 'refs/heads/main'
+      fixture = await detachedRepo(
+        'detached',
+        [
+          onto('feat/open', main, 'open.txt'),
+          onto('feat/open-ui', 'refs/heads/feat/open', 'ui.txt'),
+          // Only origin has it.
+          onto('feat/remote', main, 'remote.txt', 'refs/remotes/origin/feat/remote'),
+          // Origin's copy is the reviewed one; the local branch was started over elsewhere.
+          onto('feat/both', main, 'both.txt', 'refs/remotes/origin/feat/both'),
+          onto('feat/both', main, 'both-again.txt'),
+          onto('feat/done', main, 'done.txt'),
+          onto('feat/reg', main, 'reg.txt'),
+          onto('unnamed', main, 'unnamed.txt'),
+          onto('other', main, 'other.txt'),
+        ],
+        'other',
+      )
+      const [base, reviewed, ui, remoteOnly, both, , done, , , other] = fixture.shas
+      // A commit on no branch at all.
+      const dangling = fixture.git('commit-tree', `${base}^{tree}`, '-p', base, '-m', 'dangling')
+      sha = { base, reviewed, ui, remoteOnly, both, done, other, dangling }
+
+      detach('wt-tip', sha.reviewed)
+      detach('wt-ui', sha.ui)
+      detach('wt-remote', sha.remoteOnly)
+      detach('wt-both', sha.both)
+      detach('wt-done', sha.done)
+      detach('wt-main', sha.base)
+      detach('wt-other', sha.other)
+      detach('wt-dangling', sha.dangling)
+      detach('wt-reg-open', sha.other)
+      fixture.git('worktree', 'add', '-q', at('wt-reg-closed'), 'unnamed')
+
+      const { projectId } = fixture
+      const ticket = (title: string, branch: string, status: string) =>
+        features.createTicket(projectId, { title, branch, status, baseBranch: 'main' }, 'claude')
+      const open = ticket('open', 'feat/open', 'in_progress')
+      features.addWorkspace(
+        open.id,
+        { name: 'ui', branch: 'feat/open-ui', path: at('ui-elsewhere') },
+        'claude',
+      )
+      features.addWorkspace(
+        open.id,
+        { name: 'review', branch: 'feat/open', path: odd(at('wt-reg-open')) },
+        'claude',
+      )
+      ticket('remote', 'feat/remote', 'in_progress')
+      ticket('both', 'feat/both', 'in_progress')
+      ticket('done', 'feat/done', 'done')
+      const reg = ticket('reg', 'feat/reg', 'done')
+      features.addWorkspace(
+        reg.id,
+        { name: 'wt', branch: 'feat/reg', path: odd(at('wt-reg-closed')) },
+        'claude',
+      )
+    })
+
+    it('leaves untracked only the worktrees at no ticket’s own commit', async () => {
+      const r = await report(fixture.projectId)
+      expect(untracked(r)).toEqual(stray)
+      const heads = Object.fromEntries(r.untracked.map((w) => [path.resolve(w.path), w]))
+      // At main's tip: every ticket branch holds it, but so do their bases.
+      expect(heads[at('wt-main')]).toMatchObject({ repo: 'detached', branch: null, head: sha.base })
+      expect(heads[at('wt-other')]).toMatchObject({ branch: null, head: sha.other })
+      expect(heads[at('wt-dangling')]).toMatchObject({ branch: null, head: sha.dangling })
+      // The repo's own checkout is never a stray worktree, whatever it has checked out.
+      expect(untracked(r)).not.toContain(path.resolve(fixture.dir))
+      // A closed ticket lists the worktree reviewing its branch, and the one registered on it.
+      expect(r.tickets.map((t) => t.title).sort()).toEqual(['done', 'reg'])
+      expect(rows(r)).toEqual({
+        'feat/done': [{ path: at('wt-done'), main: false }],
+        'feat/reg': [{ path: at('wt-reg-closed'), main: false }],
+      })
+      expect(r.counts).toMatchObject({ tickets: 2, worktrees: 2, branches: 2, remote: 0 })
+      expect(untracked(await report(fixture.projectId, { reach: false }))).toEqual(stray)
+    })
+
+    it('still accounts for it once the branch moved on after the review', async () => {
+      fixture.commits([
+        {
+          ref: 'refs/heads/feat/open',
+          from: sha.reviewed,
+          file: 'open.txt',
+          text: 'more\n',
+          msg: 'after review',
+        },
+      ])
+      expect(untracked(await report(fixture.projectId))).toEqual(stray)
+      expect(untracked(await report(fixture.projectId, { reach: false }))).toEqual(stray)
+    })
+
+    it('leaves it untracked once the commit is in the base, no ticket’s own work any more', async () => {
+      fixture.git('update-ref', 'refs/heads/main', 'feat/open')
+      expect(untracked(await report(fixture.projectId))).toEqual(landed)
+      expect(untracked(await report(fixture.projectId, { reach: false }))).toEqual(landed)
+    })
+
+    it('leaves a worktree whose head git cannot read untracked rather than failing the report', async () => {
+      const missing = '1'.repeat(40)
+      detach('wt-missing', sha.other)
+      fs.writeFileSync(path.join(fixture.dir, '.git', 'worktrees', 'wt-missing', 'HEAD'), `${missing}\n`)
+      const broken = await report(fixture.projectId)
+      expect(untracked(broken)).toEqual([...landed, at('wt-missing')].sort())
+      expect(broken.untracked.find((w) => path.resolve(w.path) === at('wt-missing'))?.head).toBe(missing)
+    })
   })
 
-  /** A repo with main at one commit, registered as a repo row of a new project. */
-  const detachedRepo = async (name: string) => {
-    const { db, schema } = await import('#/db')
-    const dir = path.join(tmp, name)
-    const git = gitIn(dir)
-    fs.mkdirSync(dir)
-    git('init', '-q', '-b', 'main')
-    git('config', 'user.email', 't@t')
-    git('config', 'user.name', 't')
-    commitIn(dir)('base.txt', 'base\n', 'base')
-    const projectId = db.insert(schema.projects).values({ name }).returning().get().id
-    const addRow = (row: string) =>
-      db.insert(schema.repos).values({ projectId, name: row, repoPath: dir, baseBranch: 'main' }).run()
-    addRow(name)
-    return { git, commit: commitIn(dir), projectId, addRow }
-  }
-
-  it('lists a detached worktree several branches of a closed ticket hold under one of them', async () => {
-    const features = await import('./features')
-    const { cleanupReport } = await import('./cleanup')
-    const { git, commit, projectId } = await detachedRepo('detached-ff')
-    const at = (name: string) => path.join(tmp, name)
-    git('checkout', '-q', '-b', 'feat/x')
-    commit('x.txt', 'x\n', 'x')
-    git('checkout', '-q', '-b', 'feat/x-ui')
-    const tip = commit('ui.txt', 'ui\n', 'ui')
-    // The workspace's sub-branch landed in the ticket's branch: both are at the same commit.
-    git('checkout', '-q', 'feat/x')
-    git('merge', '-q', '--ff-only', 'feat/x-ui')
-    git('checkout', '-q', '--detach', 'main')
-    git('worktree', 'add', '-q', '--detach', at('ff-wt'), tip)
-
-    const done = features.createTicket(
-      projectId,
-      { title: 'x', branch: 'feat/x', status: 'done', baseBranch: 'main' },
-      'claude',
-    )
-    features.addWorkspace(done.id, { name: 'ui', branch: 'feat/x-ui', path: at('ff-ui-elsewhere') }, 'claude')
-
-    type Report = Awaited<ReturnType<typeof cleanupReport>>
-    const rows = (r: Report) =>
+  // The repo and ticket are made once; each test below goes on from where the one before left off.
+  describe('lists a detached worktree several branches of a closed ticket hold under one of them', () => {
+    let fixture: Awaited<ReturnType<typeof detachedRepo>>
+    let tip: string
+    const rows = (r: CleanupReport) =>
       Object.fromEntries(
         r.tickets.flatMap((t) =>
           t.branches.map((b) => [b.name, b.worktrees.map((w) => path.resolve(w.path))]),
         ),
       )
     const expectOnce = async (branch: string) => {
-      for (const report of [
-        await cleanupReport(projectId),
-        await cleanupReport(projectId, { reach: false }),
-      ]) {
+      for (const r of [await report(fixture.projectId), await report(fixture.projectId, { reach: false })]) {
         const other = branch === 'feat/x' ? 'feat/x-ui' : 'feat/x'
-        expect(rows(report)).toEqual({ [branch]: [at('ff-wt')], [other]: [] })
-        expect(report.counts.worktrees).toBe(1)
-        expect(report.untracked).toEqual([])
+        expect(rows(r)).toEqual({ [branch]: [at('ff-wt')], [other]: [] })
+        expect(r.counts.worktrees).toBe(1)
+        expect(r.untracked).toEqual([])
       }
     }
 
-    // Both tips are at it: the ticket's own branch takes it.
-    await expectOnce('feat/x')
-    // The ticket's branch moved on: only the sub-branch is still at it.
-    git('checkout', '-q', 'feat/x')
-    commit('x.txt', 'more\n', 'after review')
-    git('checkout', '-q', '--detach', 'main')
-    await expectOnce('feat/x-ui')
-    // Both moved on and both hold it: the ticket's own branch again.
-    git('checkout', '-q', 'feat/x-ui')
-    commit('ui.txt', 'more\n', 'ui after review')
-    git('checkout', '-q', '--detach', 'main')
-    await expectOnce('feat/x')
+    beforeAll(async () => {
+      const features = await import('./features')
+      fixture = await detachedRepo('detached-ff', [
+        { ref: 'refs/heads/feat/x', from: 'refs/heads/main', file: 'x.txt', text: 'x\n', msg: 'x' },
+        { ref: 'refs/heads/feat/x-ui', from: 'refs/heads/feat/x', file: 'ui.txt', text: 'ui\n', msg: 'ui' },
+      ])
+      tip = fixture.shas[2]
+      // The workspace's sub-branch landed in the ticket's branch: both are at the same commit.
+      fixture.git('update-ref', 'refs/heads/feat/x', tip)
+      fixture.git('worktree', 'add', '-q', '--detach', at('ff-wt'), tip)
+
+      const done = features.createTicket(
+        fixture.projectId,
+        { title: 'x', branch: 'feat/x', status: 'done', baseBranch: 'main' },
+        'claude',
+      )
+      features.addWorkspace(
+        done.id,
+        { name: 'ui', branch: 'feat/x-ui', path: at('ff-ui-elsewhere') },
+        'claude',
+      )
+    })
+
+    it('under the ticket’s own branch when both tips are at it', async () => {
+      await expectOnce('feat/x')
+    })
+
+    it('under the sub-branch once the ticket’s branch moved on', async () => {
+      fixture.commits([
+        { ref: 'refs/heads/feat/x', from: tip, file: 'x.txt', text: 'more\n', msg: 'after review' },
+      ])
+      await expectOnce('feat/x-ui')
+    })
+
+    it('under the ticket’s own branch again once both moved on and both hold it', async () => {
+      fixture.commits([
+        { ref: 'refs/heads/feat/x-ui', from: tip, file: 'ui.txt', text: 'more\n', msg: 'ui after review' },
+      ])
+      await expectOnce('feat/x')
+    })
   })
 
   it('keeps an open ticket’s detached worktree tracked when two repo rows share its path', async () => {
     const features = await import('./features')
-    const { cleanupReport } = await import('./cleanup')
-    const { git, commit, projectId, addRow } = await detachedRepo('detached-dup')
-    const at = (name: string) => path.join(tmp, name)
-    git('checkout', '-q', '-b', 'feat/o')
-    const tip = commit('o.txt', 'o\n', 'o')
-    git('checkout', '-q', '--detach', 'main')
-    git('worktree', 'add', '-q', '--detach', at('dup-wt'), tip)
+    const { git, shas, projectId, addRow } = await detachedRepo('detached-dup', [
+      { ref: 'refs/heads/feat/o', from: 'refs/heads/main', file: 'o.txt', text: 'o\n', msg: 'o' },
+    ])
+    git('worktree', 'add', '-q', '--detach', at('dup-wt'), shas[1])
     // On the first row; the second, added below at the same path, has no tickets.
     features.createTicket(
       projectId,
       { title: 'o', branch: 'feat/o', status: 'in_progress', baseBranch: 'main' },
       'claude',
     )
-    expect((await cleanupReport(projectId)).untracked).toEqual([])
+    expect((await report(projectId)).untracked).toEqual([])
 
     addRow('detached-dup-again')
-    expect((await cleanupReport(projectId)).untracked).toEqual([])
-    expect((await cleanupReport(projectId, { reach: false })).untracked).toEqual([])
+    expect((await report(projectId)).untracked).toEqual([])
+    expect((await report(projectId, { reach: false })).untracked).toEqual([])
   })
 })
