@@ -37,8 +37,8 @@ describe('the review skills install line', () => {
   it("installs into a repo's .claude, the folder one argument however it is spelled", () => {
     const posix = repoClaudeDir('/home/me/my repo/')
     expect(reviewSkillsInstall('bash', board, 'gate_abc', posix)).toBe(
-      `mkdir -p '/home/me/my repo/.claude' && curl -fsS -H "Authorization: Bearer gate_abc" "${src}" | ` +
-        `tar -x -C '/home/me/my repo/.claude'`,
+      `mkdir -p '/home/me/my repo/.claude' && (cd '/home/me/my repo/.claude' && ` +
+        `curl -fsS -H "Authorization: Bearer gate_abc" "${src}" | tar -x)`,
     )
     expect(reviewSkillsInstall('powershell', board, '', posix)).toBe(
       `$t = Join-Path $env:TEMP 'review-skills.tar'; New-Item -ItemType Directory -Force '/home/me/my repo/.claude' | Out-Null; ` +
@@ -53,31 +53,42 @@ describe('the review skills install line', () => {
     expect(reviewSkillsInstall('powershell', board, 'gate_abc', windows)).toContain(
       `tar -xf $t -C 'F:\\Code\\my repo\\.claude'; Remove-Item $t`,
     )
-    // Git Bash's tar reads backslashes as escapes: there the same folder is written with slashes.
+    // In bash the same folder is written with slashes, which Git Bash takes.
     expect(reviewSkillsInstall('bash', board, 'gate_abc', windows)).toBe(
-      `mkdir -p 'F:/Code/my repo/.claude' && curl -fsS -H "Authorization: Bearer gate_abc" "${src}" | ` +
-        `tar -x -C 'F:/Code/my repo/.claude'`,
+      `mkdir -p 'F:/Code/my repo/.claude' && (cd 'F:/Code/my repo/.claude' && ` +
+        `curl -fsS -H "Authorization: Bearer gate_abc" "${src}" | tar -x)`,
     )
     expect(reviewSkillsInstall('bash', board, '', repoClaudeDir('\\\\nas\\code\\repo'))).toContain(
-      `tar -x -C '//nas/code/repo/.claude'`,
+      `(cd '//nas/code/repo/.claude' && `,
     )
   })
 
   it('keeps quotes, dollars and backslashes in a folder literal in either shell', () => {
     expect(reviewSkillsInstall('bash', board, '', "/home/me/it's $HOME/.claude")).toContain(
-      `tar -x -C '/home/me/it'\\''s $HOME/.claude'`,
+      `(cd '/home/me/it'\\''s $HOME/.claude' && `,
     )
     expect(reviewSkillsInstall('bash', board, '', '/home/me/a\\b/.claude')).toContain(
-      `tar -x -C '/home/me/a\\b/.claude'`,
+      `(cd '/home/me/a\\b/.claude' && `,
     )
     expect(reviewSkillsInstall('powershell', board, '', "F:\\it's $HOME\\.claude")).toContain(
       `tar -xf $t -C 'F:\\it''s $HOME\\.claude'`,
     )
     const backslash = repoClaudeDir('/tmp/x/a\\b')
     expect(reviewSkillsInstall('bash', board, '', backslash)).toBe(
-      `mkdir -p '/tmp/x/a\\b/.claude' && curl -fsS -H "Authorization: Bearer gate_…" "${src}" | ` +
-        `tar -x -C '/tmp/x/a\\b/.claude'`,
+      `mkdir -p '/tmp/x/a\\b/.claude' && (cd '/tmp/x/a\\b/.claude' && ` +
+        `curl -fsS -H "Authorization: Bearer gate_…" "${src}" | tar -x)`,
     )
+  })
+
+  it("hands a repo's folder to mkdir and cd only: GNU tar would read escapes in it", () => {
+    for (const repo of ['/tmp/x/a\\b', '/tmp/x/a\\101z', '/home/me/my repo', 'F:\\Code\\my repo']) {
+      const line = reviewSkillsInstall('bash', board, '', repoClaudeDir(repo))
+      const folder = line.match(/^mkdir -p ('(?:[^']|'\\'')*') && \(cd /)![1]!
+      expect(line, repo).toBe(
+        `mkdir -p ${folder} && (cd ${folder} && curl -fsS -H "Authorization: Bearer gate_…" "${src}" | tar -x)`,
+      )
+      expect(line, repo).not.toContain('-C')
+    }
   })
 
   /**

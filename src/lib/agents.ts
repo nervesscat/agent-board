@@ -64,7 +64,7 @@ export function mcpSetup(client: AgentClient, boardUrl: string, token: string) {
   }
 }
 
-/** A Windows path (drive letter or UNC share), which Git Bash's tar takes only with forward slashes. */
+/** A Windows path (drive letter or UNC share), which the bash line writes with forward slashes. */
 const windowsPath = /^[A-Za-z]:[\\/]|^\\\\/
 
 /**
@@ -96,8 +96,11 @@ export function reviewSkillsInstall(shell: Shell, boardUrl: string, token: strin
   const src = `${boardUrl}/api/agent-setup/review-skills`
   const auth = `Bearer ${token || TOKEN_PLACEHOLDER}`
   if (shell === 'bash') {
-    const to = dir === undefined ? '~/.claude' : bashArg(dir)
-    return `mkdir -p ${to} && curl -fsS -H "Authorization: ${auth}" "${src}" | tar -x -C ${to}`
+    const get = `curl -fsS -H "Authorization: ${auth}" "${src}"`
+    if (dir === undefined) return `mkdir -p ~/.claude && ${get} | tar -x -C ~/.claude`
+    // GNU tar reads escapes in -C's folder (a\b, a\101z), so tar extracts where cd has taken it.
+    const to = bashArg(dir)
+    return `mkdir -p ${to} && (cd ${to} && ${get} | tar -x)`
   }
   const to = dir === undefined ? '"$HOME\\.claude"' : powershellArg(dir)
   return (
