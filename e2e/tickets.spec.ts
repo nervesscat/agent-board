@@ -1,5 +1,51 @@
-import type { TicketRow } from '#/lib/api'
+import type { Locator } from '@playwright/test'
+
+import type { TicketFull, TicketRow } from '#/lib/api'
+import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { expect, ok, test } from './fixtures'
+
+/** Top, bottom and middle of a box on the page, in px. */
+type Box = { top: number; bottom: number; mid: number }
+
+/**
+ * One reading of a row that holds an author (`Actor`), taken at a single moment so that nothing moving on
+ * the page in between can skew it: the author's icon or avatar, the glyphs of its name, what follows the
+ * name (the admin badge, or `via`), and the glyphs of every other text in the row, in order. Glyph boxes
+ * of two texts in the same font have the same bottom exactly when they share a baseline. A text that wraps
+ * is measured on its first line.
+ */
+const measure = (row: Locator) =>
+  row.evaluate(async (el) => {
+    await document.fonts.ready
+    const box = (r: DOMRect): Box => ({ top: r.top, bottom: r.bottom, mid: (r.top + r.bottom) / 2 })
+    const glyphs = (n: Node) => {
+      const range = document.createRange()
+      range.selectNodeContents(n)
+      const first = range.getClientRects()[0]
+      return first && box(first)
+    }
+    const actor = el.querySelector('span[title]')!
+    const name = [...actor.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim())!
+    // The bot or person glyph, the avatar's picture or the avatar's initial on its colour.
+    const icon = actor.querySelector('svg, img, span[aria-hidden]')!
+    const after = actor.children[1]
+    const texts: ({ text: string } & Box)[] = []
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      const at = n.textContent!.trim() && !actor.contains(n) && glyphs(n)
+      if (at) texts.push({ text: n.textContent!.trim(), ...at })
+    }
+    return {
+      icon: box(icon.getBoundingClientRect()),
+      name: glyphs(name)!,
+      after: after && { box: box(after.getBoundingClientRect()), glyphs: glyphs(after)! },
+      texts,
+    }
+  })
+
+/** Within a pixel: what sub-pixel font rounding leaves of two things on one line. */
+const aligned = (what: string, a: number, b: number) =>
+  expect(Math.abs(a - b), `${what}: ${a} against ${b}`).toBeLessThanOrEqual(1)
 
 test('creates a ticket from the New ticket dialog', async ({ page, project, human }) => {
   await page.goto(`/projects/${project.id}/features`)
@@ -156,4 +202,117 @@ test('the features view (board or list) survives a reload, kept in the URL and r
   await page.goto(`/projects/${project.id}/features?view=board`)
   await expect(tab('Board')).toHaveAttribute('aria-selected', 'true')
   await expect(card).toBeVisible()
+})
+
+test('the author sits on the line of the text around it: "opened by", the "by" of a resume note', async ({
+  page,
+  api,
+  agent,
+  human,
+  project,
+}) => {
+  await ok(human.post(`/api/projects/${project.id}/agents/defaults`, { data: {} }))
+  const as = DEFAULT_AGENT_NAMES[0]
+  const byAgent = await ok<TicketFull>(
+    agent.post(`/api/projects/${project.id}/tickets`, { data: { title: 'Opened by an agent' } }),
+  )
+  const byHuman = await api.ticket({ title: 'Opened by the human', status: 'in_progress' })
+  await ok(agent.put(`/api/tickets/${byHuman.id}/resume`, { data: { note: 'Halfway there', as } }))
+
+  for (const { ticket, name, title } of [
+    // A bot glyph, as in the ticket's screenshot.
+    { ticket: byAgent, name: 'claude', title: /agent, gate token/ },
+    // A person glyph, and the admin badge after the name.
+    { ticket: byHuman, name: 'enrique', title: /signed in with a passkey/ },
+  ]) {
+    await page.goto(`/projects/${project.id}/features/${ticket.id}`)
+    const line = page.locator('span').filter({ hasText: /^opened by / })
+    const actor = line.locator('span[title]')
+    await expect(actor).toContainText(name)
+    await expect(actor).toHaveAttribute('title', title)
+
+    // The row: "opened by <author> <time>", "updated <time>", the tags.
+    const { texts, ...author } = await measure(line.locator('..'))
+    const [openedBy, ago] = texts
+    expect(openedBy!.text).toBe('opened by')
+    aligned(`${name}: the name on the baseline of "opened by"`, author.name.bottom, openedBy!.bottom)
+    aligned(`${name}: the name on the baseline of the time`, author.name.bottom, ago!.bottom)
+    aligned(`${name}: the icon centred on the text`, author.icon.mid, openedBy!.mid)
+    if (author.after) aligned(`${name}: the badge centred on the text`, author.after.box.mid, openedBy!.mid)
+    const updated = texts.find((t) => t.text === 'updated')
+    aligned(`${name}: "opened by" on the baseline of "updated"`, openedBy!.bottom, updated!.bottom)
+  }
+
+  // One of the project's agents wrote the resume note: its avatar, the agent's initial on a colour.
+  const line = page.getByRole('region', { name: 'Resume here' }).getByText(/^by /)
+  await expect(line.locator('span[title]')).toHaveAttribute('title', /one of the project's agents/)
+  const { texts, ...author } = await measure(line)
+  const [by, ago] = texts
+  expect(by!.text).toBe('by')
+  aligned(`${as}: the name on the baseline of "by"`, author.name.bottom, by!.bottom)
+  aligned(`${as}: the name on the baseline of the time`, author.name.bottom, ago!.bottom)
+  aligned(`${as}: the avatar centred on the text`, author.icon.mid, by!.mid)
+})
+
+test('an author in the header of a post or a reply stays centred on it, on a phone too', async ({
+  page,
+  api,
+  agent,
+  human,
+  project,
+}) => {
+  await ok(human.post(`/api/projects/${project.id}/agents/defaults`, { data: {} }))
+  const as = DEFAULT_AGENT_NAMES[0]
+  const t = await api.ticket({ title: 'Posted on' })
+  const post = await ok<{ id: number }>(
+    agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'From the agent itself.' } }),
+  )
+  await ok(
+    agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'From one of the project agents.', as } }),
+  )
+  await ok(
+    agent.post('/api/comments', {
+      data: { parentType: 'update', parentId: post.id, body: 'A reply from a project agent.', as },
+    }),
+  )
+
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto(`/projects/${project.id}/features/${t.id}`)
+    const article = (body: string) => page.getByRole('article').filter({ hasText: body })
+    await article('From the agent itself.').getByRole('button', { name: '1 reply' }).click()
+    await expect(page.getByText('A reply from a project agent.')).toBeVisible()
+
+    for (const [what, header, title] of [
+      [
+        'post by claude',
+        article('From the agent itself.').locator('.group\\/post').first(),
+        /agent, gate token/,
+      ],
+      [
+        `post by ${as}`,
+        article('From one of the project agents.').locator('.group\\/post').first(),
+        /one of the project's agents, posted via claude/,
+      ],
+      // On a phone its `via claude` and its time wrap onto a second line: the picture stays on the first.
+      [
+        `reply by ${as}`,
+        article('From the agent itself.').locator('.group\\/post').nth(1),
+        /one of the project's agents, posted via claude/,
+      ],
+    ] as const) {
+      const actor = header.locator('span[title]').first()
+      await expect(actor).toHaveAttribute('title', title)
+      const { texts, ...author } = await measure(header)
+      const label = `${width}px, ${what}`
+      aligned(`${label}: the icon centred on the name`, author.icon.mid, author.name.mid)
+      if (author.after)
+        aligned(`${label}: "via" on the baseline of the name`, author.after.glyphs.bottom, author.name.bottom)
+      // On a phone the post header wraps, and "reply" goes to a line of its own.
+      if (what.startsWith('post') && width === 1280) {
+        const reply = texts.find((t) => /^(reply|hide replies)$/.test(t.text))
+        aligned(`${label}: the name on the baseline of "reply"`, author.name.bottom, reply!.bottom)
+      }
+    }
+  }
 })
