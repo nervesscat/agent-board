@@ -252,7 +252,7 @@ export async function cleanupReport(
   const registered = (tree: Worktree) => workspaces.some((w) => w.path && samePath(w.path, tree.path))
 
   // A detached worktree has no branch to go by: it belongs to the tickets of its repo whose branch
-  // commit it is checked out at.
+  // commit it is checked out at. Repo rows sharing a path share its worktrees, so their claims add up.
   const claimed = new Map<Worktree, Claim[]>()
   await Promise.all(
     repos.map(async (r) => {
@@ -263,9 +263,10 @@ export async function cleanupReport(
         .filter((t) => repoOf(t)?.id === r.id)
         .map((t) => ({ id: t.id, names: namesOf(t), chain: baseChain(t, byId, r) }))
       await Promise.all(
-        detached.map(async (tree) =>
-          claimed.set(tree, await detachedClaims(r.repoPath, tree.head!, refs, mine)),
-        ),
+        detached.map(async (tree) => {
+          const found = await detachedClaims(r.repoPath, tree.head!, refs, mine)
+          claimed.set(tree, [...(claimed.get(tree) ?? []), ...found])
+        }),
       )
     }),
   )
@@ -279,6 +280,9 @@ export async function cleanupReport(
       const chain = baseChain(t, byId, repo)
       const names = namesOf(t)
       const state = repo ? await git(repo.repoPath) : null
+      // A detached worktree several of the ticket's branches hold is one worktree: it goes with the
+      // first of them, the ticket's own branch when that is one (claims follow `names`).
+      const claimedBy = (tree: Worktree) => claimed.get(tree)?.find((c) => c.ticketId === t.id)?.branch
       const branches = await Promise.all(
         names.map(async (name): Promise<LeftoverBranch> => {
           const local = state?.refs.local.get(name) ?? null
@@ -288,9 +292,7 @@ export async function cleanupReport(
             .map((tree, i) => ({ tree, main: i === 0 }))
             .filter(
               ({ tree }) =>
-                tree.branch === name ||
-                paths.some((p) => samePath(p, tree.path)) ||
-                !!claimed.get(tree)?.some((c) => c.ticketId === t.id && c.branch === name),
+                tree.branch === name || paths.some((p) => samePath(p, tree.path)) || claimedBy(tree) === name,
             )
             .map(({ tree, main }) => ({ path: tree.path, main }))
           // A workspace on its own sub-branch should land in the ticket's branch first.

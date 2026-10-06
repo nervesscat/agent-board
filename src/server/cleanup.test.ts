@@ -261,4 +261,98 @@ describe('cleanupReport on detached worktrees', () => {
     expect(untracked(broken)).toEqual([...landed, at('wt-missing')].sort())
     expect(broken.untracked.find((w) => path.resolve(w.path) === at('wt-missing'))?.head).toBe(missing)
   })
+
+  /** A repo with main at one commit, registered as a repo row of a new project. */
+  const detachedRepo = async (name: string) => {
+    const { db, schema } = await import('#/db')
+    const dir = path.join(tmp, name)
+    const git = gitIn(dir)
+    fs.mkdirSync(dir)
+    git('init', '-q', '-b', 'main')
+    git('config', 'user.email', 't@t')
+    git('config', 'user.name', 't')
+    commitIn(dir)('base.txt', 'base\n', 'base')
+    const projectId = db.insert(schema.projects).values({ name }).returning().get().id
+    const addRow = (row: string) =>
+      db.insert(schema.repos).values({ projectId, name: row, repoPath: dir, baseBranch: 'main' }).run()
+    addRow(name)
+    return { git, commit: commitIn(dir), projectId, addRow }
+  }
+
+  it('lists a detached worktree several branches of a closed ticket hold under one of them', async () => {
+    const features = await import('./features')
+    const { cleanupReport } = await import('./cleanup')
+    const { git, commit, projectId } = await detachedRepo('detached-ff')
+    const at = (name: string) => path.join(tmp, name)
+    git('checkout', '-q', '-b', 'feat/x')
+    commit('x.txt', 'x\n', 'x')
+    git('checkout', '-q', '-b', 'feat/x-ui')
+    const tip = commit('ui.txt', 'ui\n', 'ui')
+    // The workspace's sub-branch landed in the ticket's branch: both are at the same commit.
+    git('checkout', '-q', 'feat/x')
+    git('merge', '-q', '--ff-only', 'feat/x-ui')
+    git('checkout', '-q', '--detach', 'main')
+    git('worktree', 'add', '-q', '--detach', at('ff-wt'), tip)
+
+    const done = features.createTicket(
+      projectId,
+      { title: 'x', branch: 'feat/x', status: 'done', baseBranch: 'main' },
+      'claude',
+    )
+    features.addWorkspace(done.id, { name: 'ui', branch: 'feat/x-ui', path: at('ff-ui-elsewhere') }, 'claude')
+
+    type Report = Awaited<ReturnType<typeof cleanupReport>>
+    const rows = (r: Report) =>
+      Object.fromEntries(
+        r.tickets.flatMap((t) =>
+          t.branches.map((b) => [b.name, b.worktrees.map((w) => path.resolve(w.path))]),
+        ),
+      )
+    const expectOnce = async (branch: string) => {
+      for (const report of [
+        await cleanupReport(projectId),
+        await cleanupReport(projectId, { reach: false }),
+      ]) {
+        const other = branch === 'feat/x' ? 'feat/x-ui' : 'feat/x'
+        expect(rows(report)).toEqual({ [branch]: [at('ff-wt')], [other]: [] })
+        expect(report.counts.worktrees).toBe(1)
+        expect(report.untracked).toEqual([])
+      }
+    }
+
+    // Both tips are at it: the ticket's own branch takes it.
+    await expectOnce('feat/x')
+    // The ticket's branch moved on: only the sub-branch is still at it.
+    git('checkout', '-q', 'feat/x')
+    commit('x.txt', 'more\n', 'after review')
+    git('checkout', '-q', '--detach', 'main')
+    await expectOnce('feat/x-ui')
+    // Both moved on and both hold it: the ticket's own branch again.
+    git('checkout', '-q', 'feat/x-ui')
+    commit('ui.txt', 'more\n', 'ui after review')
+    git('checkout', '-q', '--detach', 'main')
+    await expectOnce('feat/x')
+  })
+
+  it('keeps an open ticket’s detached worktree tracked when two repo rows share its path', async () => {
+    const features = await import('./features')
+    const { cleanupReport } = await import('./cleanup')
+    const { git, commit, projectId, addRow } = await detachedRepo('detached-dup')
+    const at = (name: string) => path.join(tmp, name)
+    git('checkout', '-q', '-b', 'feat/o')
+    const tip = commit('o.txt', 'o\n', 'o')
+    git('checkout', '-q', '--detach', 'main')
+    git('worktree', 'add', '-q', '--detach', at('dup-wt'), tip)
+    // On the first row; the second, added below at the same path, has no tickets.
+    features.createTicket(
+      projectId,
+      { title: 'o', branch: 'feat/o', status: 'in_progress', baseBranch: 'main' },
+      'claude',
+    )
+    expect((await cleanupReport(projectId)).untracked).toEqual([])
+
+    addRow('detached-dup-again')
+    expect((await cleanupReport(projectId)).untracked).toEqual([])
+    expect((await cleanupReport(projectId, { reach: false })).untracked).toEqual([])
+  })
 })
