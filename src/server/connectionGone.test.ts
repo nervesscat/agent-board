@@ -6,14 +6,23 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { endConnectionGone, isConnectionGone } from './connectionGone'
 
-/** The error a client gets when the far end resets the connection: the one the overlay showed. */
+/**
+ * The error a client gets when the far end resets the connection mid-request: the one the overlay
+ * showed. The server resets only once the request has arrived, so the reset hits an established
+ * connection, as on the dev server; resetting as it accepts races the client's connect, and on Linux
+ * the client then gets `connect ECONNRESET` instead.
+ */
 async function genuineReset(): Promise<NodeJS.ErrnoException> {
-  const server = net.createServer((s) => s.resetAndDestroy())
+  const server = net.createServer((s) => s.once('data', () => s.resetAndDestroy()))
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   try {
-    return await new Promise((resolve) => {
-      const client = net.connect((server.address() as AddressInfo).port, '127.0.0.1')
+    return await new Promise((resolve, reject) => {
+      const client = net.connect((server.address() as AddressInfo).port, '127.0.0.1', () =>
+        client.write('GET / HTTP/1.1\r\n\r\n'),
+      )
       client.on('error', resolve)
+      // After an error this does nothing; without one, it fails the test rather than hang it.
+      client.on('close', () => reject(new Error('the connection closed without an error')))
     })
   } finally {
     server.close()
@@ -29,6 +38,13 @@ describe('isConnectionGone', () => {
 
   it('is true for the codes of a connection gone, with or without an Error around them', () => {
     expect(isConnectionGone({ code: 'ECONNRESET' })).toBe(true)
+    // A reset that lands while the connect is still completing, as Linux reports it.
+    const resetAtConnect = Object.assign(new Error('connect ECONNRESET 127.0.0.1:1'), {
+      code: 'ECONNRESET',
+      errno: -104,
+      syscall: 'connect',
+    })
+    expect(isConnectionGone(resetAtConnect)).toBe(true)
     expect(isConnectionGone(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))).toBe(true)
     expect(isConnectionGone(Object.assign(new Error('aborted'), { code: 'ECONNABORTED' }))).toBe(true)
   })
