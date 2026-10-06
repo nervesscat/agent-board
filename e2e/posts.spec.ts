@@ -13,8 +13,8 @@ const shown = (l: Locator) =>
     return o
   })
 
-/** The first row of a post card or of a reply: who wrote it, and when. */
-const firstRow = (card: Locator) => card.locator(':scope > div').first()
+/** The row of a post card or of a reply that says who wrote it, and when: the one that holds `Actor`. */
+const authorRow = (card: Locator) => card.locator('div:has(> span[title])').first()
 
 /** Where it is on the page. */
 const box = async (l: Locator) => (await l.boundingBox())!
@@ -51,7 +51,7 @@ test('posts on a ticket, replies, edits and deletes', async ({ page, api, human 
   await expect(page.getByRole('textbox', { name: 'New post' })).toHaveText('')
 
   // Edit it in place: Ctrl+Enter saves.
-  const header = firstRow(post)
+  const header = authorRow(post)
   const actions = post.getByRole('group', { name: 'Post actions' })
   await actions.hover()
   await actions.getByRole('button', { name: 'edit', exact: true }).click()
@@ -168,7 +168,7 @@ test("a post's actions are icons in a row under its text and files, shown on hov
   await page.mouse.move(0, 0)
 
   const post = page.getByRole('article')
-  const header = firstRow(post)
+  const header = authorRow(post)
   const actions = post.getByRole('group', { name: 'Post actions' })
   // The header keeps who posted it, and no buttons.
   await expect(header).toContainText('enrique')
@@ -261,7 +261,7 @@ test('the progress toggle flips a post both ways, with its own icon for each', a
   )
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   const post = page.getByRole('article')
-  const chip = firstRow(post).getByText('progress', { exact: true })
+  const chip = authorRow(post).getByText('progress', { exact: true })
   await expect(chip).toBeVisible()
   await expect(post).not.toHaveClass(/bg-muted\/30/)
 
@@ -308,8 +308,8 @@ test('a lane post on its parent keeps only the reply toggle, in the row under it
   await page.getByText('include lane posts').click()
 
   const post = page.getByRole('article').filter({ hasText: 'Done in the lane.' })
-  await expect(firstRow(post).getByRole('link', { name: 'One part' })).toBeVisible()
-  await expect(firstRow(post).getByRole('button')).toHaveCount(0)
+  await expect(authorRow(post).getByRole('link', { name: 'One part' })).toBeVisible()
+  await expect(authorRow(post).getByRole('button')).toHaveCount(0)
   await post.hover()
   for (const name of ['edit', 'delete', 'mark progress', 'not progress'])
     await expect(post.getByRole('button', { name, exact: true })).toHaveCount(0)
@@ -343,8 +343,13 @@ test('the reply toggle shows the count, opens the thread right under its row and
   // Nothing between the row and the thread, whose Reply box is in the same card.
   const row = await box(actions)
   expect((await box(post.getByText('The reply.'))).y).toBeGreaterThan(row.y + row.height)
-  const next = await actions.evaluate((el) => el.nextElementSibling?.textContent ?? '')
-  expect(next).toContain('The reply.')
+  // The row ends the post's own part, and the thread comes right after that part.
+  const after = await actions.evaluate((el) => ({
+    last: el.parentElement!.lastElementChild === el,
+    next: el.parentElement!.nextElementSibling?.textContent ?? '',
+  }))
+  expect(after.last).toBe(true)
+  expect(after.next).toContain('The reply.')
   await expect(post.getByRole('textbox', { name: 'Reply' })).toBeVisible()
 
   await hide.click()
@@ -384,7 +389,7 @@ test('a reply in a thread has its actions as icons under its own text, before it
     [first, AGENT],
     [nested, 'enrique'],
   ] as const) {
-    const header = firstRow(c)
+    const header = authorRow(c)
     await expect(header).toContainText(author)
     await expect(header.getByRole('button')).toHaveCount(0)
   }
@@ -453,4 +458,44 @@ test('a reply in a thread has its actions as icons under its own text, before it
   await expect(post.getByText('And docs.')).toHaveCount(0)
   const left = await ok<CommentRow[]>(human.get(thread))
   expect(left.map((c) => c.body)).toEqual(['The parser first.', 'Agreed, then the tests.'])
+})
+
+test("hovering a reply or the thread's Reply box shows the reply's actions, not the post's", async ({
+  page,
+  api,
+  agent,
+}) => {
+  const t = await api.ticket({ title: 'One set at a time' })
+  const { id } = await ok<{ id: number }>(
+    agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'The post itself.' } }),
+  )
+  for (const body of ['First reply.', 'Second reply.', 'Third reply.'])
+    await ok(agent.post('/api/comments', { data: { parentType: 'update', parentId: id, body } }))
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const post = page.getByRole('article')
+  const actions = post.getByRole('group', { name: 'Post actions' })
+  await actions.getByRole('button', { name: '3 replies', exact: true }).click()
+  await page.mouse.move(0, 0)
+
+  const own = ['not progress', 'edit', 'delete'].map((name) =>
+    actions.getByRole('button', { name, exact: true }),
+  )
+  const reply = post.locator('.group\\/comment').filter({ hasText: 'First reply.' })
+  const replyEdit = reply.getByRole('button', { name: 'edit', exact: true })
+  for (const b of [...own, replyEdit]) await expect.poll(() => shown(b)).toBe(0)
+
+  // A reply: its own edit shows, the post's actions stay hidden.
+  await reply.getByText('First reply.').hover()
+  await expect.poll(() => shown(replyEdit)).toBe(1)
+  for (const b of own) expect(await shown(b)).toBe(0)
+
+  // The thread's Reply box: nothing of the post's either.
+  await post.getByRole('textbox', { name: 'Reply' }).hover()
+  await expect.poll(() => shown(replyEdit)).toBe(0)
+  for (const b of own) expect(await shown(b)).toBe(0)
+
+  // The post's own text still shows them.
+  await post.getByText('The post itself.').hover()
+  for (const b of own) await expect.poll(() => shown(b)).toBe(1)
+  expect(await shown(replyEdit)).toBe(0)
 })

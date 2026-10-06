@@ -1582,78 +1582,81 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
   return (
     <article
       className={cn(
-        'group/post rounded-lg border p-3',
+        'rounded-lg border',
         !u.progress && 'bg-muted/30',
         u.decision && !u.decidedAt && 'border-amber-500/60 bg-amber-500/5',
       )}
     >
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <Actor name={u.author} via={u.via} className="text-foreground" />
-        {u.handoff ? (
-          <span
-            className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium"
-            title="A resume note as it was saved: where the work was left off then"
-          >
-            <Bookmark className="size-3" /> resume note
-          </span>
-        ) : (
-          u.progress && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
-          )
-        )}
-        {u.lane && (
-          <Link
-            to="/projects/$id/features/$ticketId"
-            params={{ id: projectId, ticketId: String(u.lane.id) }}
-            className="inline-flex min-w-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 hover:text-foreground"
-          >
-            <Layers className="size-3 shrink-0" /> <span className="max-w-48 truncate">{u.lane.title}</span>
-          </Link>
-        )}
-        <Edited at={u.editedAt} />
-      </div>
-      {editing ? (
-        <EditBox
-          value={u.body}
-          pending={edit.isPending}
-          onSave={(body) => edit.mutate({ body })}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
-        <Markdown className="mt-2">{u.body}</Markdown>
-      )}
-      {u.decision && <DecisionCard u={u} onChange={onChange} />}
-      <Attachments items={u.attachments} />
-      <div role="group" aria-label="Post actions" className="mt-2 flex items-center gap-0.5">
-        <ActionButton
-          label={thread ? 'hide replies' : replies ? count : 'reply'}
-          tip={thread ? 'Hide replies' : replies ? `Show ${count}` : 'Reply'}
-          size={replies && !thread ? 'xs' : 'icon-xs'}
-          aria-expanded={thread}
-          onClick={() => setThread((v) => !v)}
-        >
-          <MessageSquare />
-          {!thread && replies > 0 && replies}
-        </ActionButton>
-        {!u.lane && (
-          <PostActions
-            what="this post"
-            group="post"
-            onEdit={() => setEditing(true)}
-            onDelete={() => remove.mutate()}
-          >
-            <ActionButton
-              label={u.progress ? 'not progress' : 'mark progress'}
-              tip={u.progress ? 'Not progress: make it a plain post' : 'Mark as progress'}
-              onClick={() => edit.mutate({ progress: !u.progress })}
+      {/* The post without its thread: hovering it shows its actions, hovering one of its replies does not. */}
+      <div className="group/post p-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Actor name={u.author} via={u.via} className="text-foreground" />
+          {u.handoff ? (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium"
+              title="A resume note as it was saved: where the work was left off then"
             >
-              {u.progress ? <FlagOff /> : <Flag />}
-            </ActionButton>
-          </PostActions>
+              <Bookmark className="size-3" /> resume note
+            </span>
+          ) : (
+            u.progress && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
+            )
+          )}
+          {u.lane && (
+            <Link
+              to="/projects/$id/features/$ticketId"
+              params={{ id: projectId, ticketId: String(u.lane.id) }}
+              className="inline-flex min-w-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 hover:text-foreground"
+            >
+              <Layers className="size-3 shrink-0" /> <span className="max-w-48 truncate">{u.lane.title}</span>
+            </Link>
+          )}
+          <Edited at={u.editedAt} />
+        </div>
+        {editing ? (
+          <EditBox
+            value={u.body}
+            pending={edit.isPending}
+            onSave={(body) => edit.mutate({ body })}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <Markdown className="mt-2">{u.body}</Markdown>
         )}
+        {u.decision && <DecisionCard u={u} onChange={onChange} />}
+        <Attachments items={u.attachments} />
+        <div role="group" aria-label="Post actions" className="mt-2 flex items-center gap-0.5">
+          <ActionButton
+            label={thread ? 'hide replies' : replies ? count : 'reply'}
+            tip={thread ? 'Hide replies' : replies ? `Show ${count}` : 'Reply'}
+            size={replies && !thread ? 'xs' : 'icon-xs'}
+            aria-expanded={thread}
+            onClick={() => setThread((v) => !v)}
+          >
+            <MessageSquare />
+            {!thread && replies > 0 && replies}
+          </ActionButton>
+          {!u.lane && (
+            <PostActions
+              what="this post"
+              group="post"
+              onEdit={() => setEditing(true)}
+              onDelete={() => remove.mutate()}
+            >
+              <ActionButton
+                label={u.progress ? 'not progress' : 'mark progress'}
+                tip={u.progress ? 'Not progress: make it a plain post' : 'Mark as progress'}
+                onClick={() => edit.mutate({ progress: !u.progress })}
+              >
+                {u.progress ? <FlagOff /> : <Flag />}
+              </ActionButton>
+            </PostActions>
+          )}
+        </div>
       </div>
       {thread && (
-        <div className="mt-3 border-t pt-3">
+        <div className="mx-3 mb-3 border-t pt-3">
           <Thread parentType="update" parentId={u.id} compact />
         </div>
       )}

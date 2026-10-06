@@ -47,8 +47,8 @@ const measure = (row: Locator) =>
 const aligned = (what: string, a: number, b: number) =>
   expect(Math.abs(a - b), `${what}: ${a} against ${b}`).toBeLessThanOrEqual(1)
 
-/** The first row of a post card or of a reply: who wrote it, and when. */
-const firstRow = (card: Locator) => card.locator(':scope > div').first()
+/** The row of a post card or of a reply that says who wrote it, and when: the one that holds `Actor`. */
+const authorRow = (card: Locator) => card.locator('div:has(> span[title])').first()
 
 test('creates a ticket from the New ticket dialog', async ({ page, project, human }) => {
   await page.goto(`/projects/${project.id}/features`)
@@ -287,16 +287,16 @@ test('an author in the header of a post or a reply stays centred on it, on a pho
     await expect(page.getByText('A reply from a project agent.')).toBeVisible()
 
     for (const [what, header, title] of [
-      ['post by claude', firstRow(article('From the agent itself.')), /agent, gate token/],
+      ['post by claude', authorRow(article('From the agent itself.')), /agent, gate token/],
       [
         `post by ${as}`,
-        firstRow(article('From one of the project agents.')),
+        authorRow(article('From one of the project agents.')),
         /one of the project's agents, posted via claude/,
       ],
       // On a phone its `via claude` and its time wrap onto a second line: the picture stays on the first.
       [
         `reply by ${as}`,
-        firstRow(article('From the agent itself.').locator('.group\\/comment').first()),
+        authorRow(article('From the agent itself.').locator('.group\\/comment').first()),
         /one of the project's agents, posted via claude/,
       ],
     ] as const) {

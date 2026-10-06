@@ -87,8 +87,9 @@ export function ActionButton({
 }
 
 /**
- * Edit and delete for a post or reply, as icons; they show when its `group` (`group/post`, the post's
- * card, or `group/comment`, the reply without its own replies) is hovered, or one of them is focused.
+ * Edit and delete for a post or reply, as icons; they show when its `group` (`group/post`, the post
+ * without its thread, or `group/comment`, the reply without its own replies) is hovered, or one of them
+ * is focused.
  */
 export function PostActions({
   what,
