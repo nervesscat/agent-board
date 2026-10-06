@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import { repoClaudeDir, reviewSkillsInstall } from './agents'
@@ -17,11 +19,19 @@ describe('the review skills install line', () => {
     )
   })
 
-  it("finds a repo's .claude with the separator its path uses", () => {
+  it("finds the repo's .claude the board reads: a Windows path with its own separator, any other with /", () => {
     expect(repoClaudeDir('F:\\Code\\my repo')).toBe('F:\\Code\\my repo\\.claude')
     expect(repoClaudeDir('F:\\Code\\my repo\\')).toBe('F:\\Code\\my repo\\.claude')
+    expect(repoClaudeDir('\\\\nas\\code\\repo')).toBe('\\\\nas\\code\\repo\\.claude')
+    expect(repoClaudeDir('C:/a/b/')).toBe('C:/a/b/.claude')
     expect(repoClaudeDir('/home/me/repo/')).toBe('/home/me/repo/.claude')
     expect(repoClaudeDir('/home/me/repo')).toBe('/home/me/repo/.claude')
+    // On a POSIX board a backslash is part of a folder's name, not a separator.
+    expect(repoClaudeDir('/tmp/x/a\\b')).toBe('/tmp/x/a\\b/.claude')
+    for (const p of ['/home/me/repo/', '/tmp/x/a\\b', '/tmp/x/a\\b\\'])
+      expect(repoClaudeDir(p), p).toBe(path.posix.join(p, '.claude'))
+    for (const p of ['F:\\Code\\my repo\\', '\\\\nas\\code\\repo', 'C:/a/b/'])
+      expect(path.win32.normalize(repoClaudeDir(p)), p).toBe(path.win32.join(p, '.claude'))
   })
 
   it("installs into a repo's .claude, the folder one argument however it is spelled", () => {
@@ -63,5 +73,42 @@ describe('the review skills install line', () => {
     expect(reviewSkillsInstall('powershell', board, '', "F:\\it's $HOME\\.claude")).toContain(
       `tar -xf $t -C 'F:\\it''s $HOME\\.claude'`,
     )
+    const backslash = repoClaudeDir('/tmp/x/a\\b')
+    expect(reviewSkillsInstall('bash', board, '', backslash)).toBe(
+      `mkdir -p '/tmp/x/a\\b/.claude' && curl -fsS -H "Authorization: Bearer gate_…" "${src}" | ` +
+        `tar -x -C '/tmp/x/a\\b/.claude'`,
+    )
+  })
+
+  /**
+   * Reads one PowerShell single-quoted string at the start of `text` as PowerShell does: any of
+   * ' ‘ ’ ‚ ‛ ends it, and two of them in a row stand for the first, literally. Answers the string's
+   * value and what follows it.
+   */
+  const readPowershellString = (text: string) => {
+    const quote = /['\u2018\u2019\u201A\u201B]/
+    expect(text[0]).toMatch(quote)
+    let value = ''
+    for (let i = 1; i < text.length; i++) {
+      if (!quote.test(text[i]!)) value += text[i]
+      else if (quote.test(text[i + 1] ?? '')) value += text[i++]
+      else return { value, rest: text.slice(i + 1) }
+    }
+    throw new Error(`unterminated string in ${text}`)
+  }
+
+  it('keeps a folder with typographic quotes one literal PowerShell argument', () => {
+    for (const dir of [
+      'C:\\Users\\me\\it’s repo\\.claude',
+      'C:\\code\\x’; Write-Output INJECTED; ’\\.claude',
+      "C:\\code\\‘a’ ‚b‛ 'c'\\.claude",
+    ]) {
+      const line = reviewSkillsInstall('powershell', board, '', dir)
+      const made = readPowershellString(line.slice(line.indexOf('-Force ') + '-Force '.length))
+      expect(made.value, dir).toBe(dir)
+      expect(made.rest, dir).toMatch(/^ \| Out-Null; Invoke-WebRequest /)
+      const extracted = readPowershellString(line.slice(line.indexOf(' -C ') + ' -C '.length))
+      expect(extracted, dir).toEqual({ value: dir, rest: '; Remove-Item $t' })
+    }
   })
 })

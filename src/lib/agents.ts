@@ -64,21 +64,28 @@ export function mcpSetup(client: AgentClient, boardUrl: string, token: string) {
   }
 }
 
-/** A repo's own `.claude` folder, joined with the separator its path already uses. */
+/** A Windows path (drive letter or UNC share), which Git Bash's tar takes only with forward slashes. */
+const windowsPath = /^[A-Za-z]:[\\/]|^\\\\/
+
+/**
+ * A repo's own `.claude` folder, the one the board reads its copy from. A Windows path joins with the
+ * separator it uses; any other path with `/`, since a backslash there is part of a folder's name.
+ */
 export function repoClaudeDir(repoPath: string) {
+  if (!windowsPath.test(repoPath)) return `${repoPath.replace(/\/+$/, '')}/.claude`
   const sep = repoPath.includes('\\') ? '\\' : '/'
   return `${repoPath.replace(/[\\/]+$/, '')}${sep}.claude`
 }
-
-/** A Windows path (drive letter or UNC share), which Git Bash's tar takes only with forward slashes. */
-const windowsPath = /^[A-Za-z]:[\\/]|^\\\\/
 
 /** `dir` as one bash argument, taken literally. */
 const bashArg = (dir: string) =>
   `'${(windowsPath.test(dir) ? dir.replace(/\\/g, '/') : dir).replace(/'/g, `'\\''`)}'`
 
-/** `dir` as one PowerShell argument, taken literally. */
-const powershellArg = (dir: string) => `'${dir.replace(/'/g, "''")}'`
+/**
+ * `dir` as one PowerShell argument, taken literally. PowerShell ends a single-quoted string at the
+ * typographic quotes too (‘ ’ ‚ ‛), and escapes any of them by doubling it.
+ */
+const powershellArg = (dir: string) => `'${dir.replace(/['‘’‚‛]/g, '$&$&')}'`
 
 /**
  * One line that installs feature-review, review-queue and their agents into ~/.claude (Claude Code's
