@@ -157,3 +157,14 @@ test('with a large minimum font size, the feed legend widens its column and stay
     await browser.close()
   }
 })
+
+test('the feed legend keeps counting the minutes while the page stays open', async ({ page, api, human }) => {
+  const t = await api.ticket({ title: 'A feed left open' })
+  await ok(human.post(`/api/tickets/${t.id}/updates`, { data: { body: 'Posted just now.' } }))
+  await page.clock.install()
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const legend = page.locator('ol > li > time')
+  await expect(legend).toContainText('just now')
+  await page.clock.runFor('02:10')
+  await expect(legend).toContainText('2 minutes ago')
+})

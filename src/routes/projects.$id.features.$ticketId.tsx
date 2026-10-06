@@ -27,7 +27,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -1470,14 +1470,24 @@ function Activity({
   )
 }
 
-/** A rail down the left of its rows; re-renders every minute so "5 minutes ago" keeps counting. */
+/**
+ * The minutes a Timeline has been open. Its rows are its caller's elements, which its own re-render
+ * leaves alone: each row reads this so it re-renders, and its "5 minutes ago" counts, as it changes.
+ */
+const TimelineMinute = createContext(0)
+
+/** A rail down the left of its rows; moves them on every minute so "5 minutes ago" keeps counting. */
 function Timeline({ children }: { children: ReactNode }) {
-  const [, tick] = useState(0)
+  const [minute, tick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => tick((n) => n + 1), 60_000)
     return () => clearInterval(id)
   }, [])
-  return <ol>{children}</ol>
+  return (
+    <TimelineMinute value={minute}>
+      <ol>{children}</ol>
+    </TimelineMinute>
+  )
 }
 
 /**
@@ -1496,6 +1506,7 @@ function TimelineRow({
   dot?: string
   children: ReactNode
 }) {
+  useContext(TimelineMinute)
   const today = new Date(at).toDateString() === new Date().toDateString()
   return (
     <li className="group grid grid-cols-[minmax(2.25rem,max-content)_1.25rem_minmax(0,1fr)] sm:grid-cols-[minmax(2.25rem,max-content)_1.5rem_minmax(0,1fr)]">
