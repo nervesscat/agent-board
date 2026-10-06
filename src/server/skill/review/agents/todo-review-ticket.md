@@ -141,7 +141,10 @@ Every item, in order, as the board skill's hand-off checklist says:
 3. Any unmerged branch yours builds on: `update_ticket` with `needs`.
 4. The PR, the project's way (its instructions say how it is assigned), titled and described in
    the repo's own terms (no ticket numbers or board links where the repo forbids them), and `update_ticket` with
-   its `prNumber`.
+   its `prNumber`. Then wait for the PR's CI to finish (`gh pr checks <number> --watch`): CI runs
+   on another platform than yours, and a failure there is a failed check like any other, fixed
+   through the builder before you hand off, never waved through as flaky without a rerun that
+   passes.
 5. The preview: `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
    project's way and `set_preview`. When the change cannot be tried (docs, a script), say why in

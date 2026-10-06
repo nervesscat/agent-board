@@ -89,6 +89,7 @@ The agent returns eight lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `PR`, `P
 `BLOCKER`, `NOTES`). They are claims. `get_ticket` and check them, in order:
 
 1. **`handed-off`**: the ticket is in a `review` stage, `push.state` is `pushed`, `pr` is set,
+   the PR's CI has finished and passed (`gh pr checks <number>`; still running: wait for it),
    and `handoff.missing` is empty, or holds only `no_preview` with a hand-off post saying why the
    change cannot be tried. The hand-off post (the newest progress post of the agent's) has
    screenshots in its attachments when the change has a UI, and a "Tested" part. Anything missing:
