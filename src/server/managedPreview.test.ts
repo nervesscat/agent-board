@@ -555,8 +555,20 @@ describe('over MCP and REST', () => {
   })
 })
 
-// Last: it loads the module afresh, as a restarted board would.
-describe('board restarts', () => {
+// Last: these load the module afresh, as a hot reload or a restarted board would.
+describe('board reloads and restarts', () => {
+  it('a hot reload of the server code keeps what runs', async () => {
+    const fake = useFake()
+    const { ws } = ticketWithWorktree()
+    const p = await startRunning(ws.id)
+    vi.resetModules()
+    const reloaded = await import('./managedPreview')
+    expect(reloaded.managedPreview(ws.id)).toMatchObject({ status: 'running', url: p.url, port: p.port })
+    expect(reloaded.activePreviews().map((x) => x.workspaceId)).toContain(ws.id)
+    expect(wsRow(ws.id)!.previewUrl).toBe(p.url)
+    expect(fake.killed).toEqual([])
+  })
+
   it('when the board shuts down; after a restart it says so and starts nothing', async () => {
     const fake = useFake()
     const { ws } = ticketWithWorktree()
@@ -575,6 +587,8 @@ describe('board restarts', () => {
     fs.writeFileSync(file, JSON.stringify(saved))
     features.setWorkspacePreview(ws.id, p.url, 'board')
 
+    // A restart is a new process: nothing is kept in memory, only the file.
+    delete (globalThis as Record<symbol, unknown>)[mp.KEPT]
     vi.resetModules()
     const fresh = await import('./managedPreview')
     const fakeAfter = new FakeRunner()

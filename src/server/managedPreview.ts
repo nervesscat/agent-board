@@ -245,7 +245,24 @@ export function setPreviewRunner(r: PreviewRunner | null) {
 // --- state ---
 
 type Entry = ManagedPreview & { dataDir: string }
-let entries: Map<number, Entry> | undefined
+
+/**
+ * What runs outlives this module. The board hot-reloads its server code (`vite dev`), and a reload
+ * evaluates this module again: kept here, the previews, the port queue and the exit hook survive it,
+ * so a reload neither forgets a preview that is still running (and its port) nor hooks the exit
+ * twice. A restart of the board starts from previews.json instead.
+ */
+interface Kept {
+  entries: Map<number, Entry> | undefined
+  portQueue: Promise<unknown>
+  hooked: boolean
+}
+export const KEPT = Symbol.for('agent-board.managedPreviews')
+const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
+  entries: undefined,
+  portQueue: Promise.resolve(),
+  hooked: false,
+})
 const stateFile = () => path.join(config.dataDir, 'previews.json')
 
 function save() {
@@ -261,8 +278,8 @@ function save() {
  * one that was building or running is stopped, and its link cleared.
  */
 function all(): Map<number, Entry> {
-  if (entries) return entries
-  entries = new Map()
+  if (kept.entries) return kept.entries
+  const entries = (kept.entries = new Map<number, Entry>())
   let saved: Entry[] = []
   try {
     saved = JSON.parse(fs.readFileSync(stateFile(), 'utf8')) as Entry[]
@@ -510,11 +527,10 @@ async function run(e: Entry) {
   fail(e, `the server did not answer within ${READY_MS / 1000}s`, 'server')
 }
 
-// One allocation at a time, so two previews starting together never pick the same port.
-let portQueue: Promise<unknown> = Promise.resolve()
+// One allocation at a time (kept.portQueue), so two previews starting together never pick the same port.
 
 function takePort(e: Entry): Promise<number | null> {
-  const next = portQueue.then(async () => {
+  const next = kept.portQueue.then(async () => {
     const taken = new Set([...all().values()].filter((x) => x !== e && x.port).map((x) => x.port))
     for (let port = PORTS.from; port <= PORTS.to; port++) {
       if (taken.has(port) || !(await runner.isFree(port))) continue
@@ -523,7 +539,7 @@ function takePort(e: Entry): Promise<number | null> {
     }
     return null
   })
-  portQueue = next.catch(() => {})
+  kept.portQueue = next.catch(() => {})
   return next
 }
 
@@ -667,9 +683,9 @@ export function previewLog(workspaceId: number, name: 'build' | 'server') {
 
 /** The board is going down: every preview goes with it (synchronously, there is no later). */
 export function stopAllPreviews() {
-  if (!entries) return
+  if (!kept.entries) return
   const now = new Date().toISOString()
-  for (const e of entries.values()) {
+  for (const e of kept.entries.values()) {
     if (!isActive(e)) continue
     if (e.pid) runner.killTreeSync(e.pid)
     if (e.url) clearUrl(e.workspaceId, e.url)
@@ -679,11 +695,10 @@ export function stopAllPreviews() {
   save()
 }
 
-let hooked = false
 /** Stop the previews when the board exits or is told to stop. Once per process. */
 export function stopPreviewsOnExit() {
-  if (hooked) return
-  hooked = true
+  if (kept.hooked) return
+  kept.hooked = true
   process.once('exit', stopAllPreviews)
   // The server's own handler closes it gracefully but leaves the process to exit on its own.
   for (const sig of ['SIGINT', 'SIGTERM'] as const) process.once(sig, stopAllPreviews)
