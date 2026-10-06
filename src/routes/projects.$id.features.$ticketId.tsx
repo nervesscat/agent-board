@@ -258,7 +258,7 @@ function TicketPage() {
   const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
         <Link to="/projects/$id/features" params={{ id }} className="hover:text-foreground">
           Ongoing features
@@ -283,7 +283,13 @@ function TicketPage() {
         {!t.parentId && board && <StageNav projectId={id} tickets={board} t={t} />}
       </nav>
 
-      <div className="flex flex-wrap items-start gap-3">
+      {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
+            page scrolling under it: opaque, above the feed's positioned bits, below the top bar.
+            Its padding keeps the title off the top bar's edge; the margins take it back at rest. */}
+      <header
+        ref={measureHeader}
+        className="sticky top-[calc(3rem+1px)] z-10 -my-2 flex flex-wrap items-start gap-3 bg-background py-2"
+      >
         <div className="min-w-0 flex-1">
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
@@ -369,7 +375,7 @@ function TicketPage() {
             </AlertDialogContent>
           </AlertDialog>
         </div>
-      </div>
+      </header>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
         {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
@@ -390,6 +396,28 @@ function TicketPage() {
       </div>
     </div>
   )
+}
+
+/**
+ * How far down the stuck header reaches (the top bar and itself), as --ticket-header on the page: what
+ * the page scrolls to (#resume) stops below it rather than behind it. Not the page's scroll padding,
+ * which would count the header's own fields as hidden behind it and scroll away when they take focus.
+ */
+function measureHeader(header: HTMLElement | null) {
+  const page = header?.parentElement
+  if (!header || !page) return
+  const measure = () =>
+    page.style.setProperty(
+      '--ticket-header',
+      `${parseFloat(getComputedStyle(header).top) + header.offsetHeight}px`,
+    )
+  measure()
+  const resized = new ResizeObserver(measure)
+  resized.observe(header)
+  return () => {
+    resized.disconnect()
+    page.style.removeProperty('--ticket-header')
+  }
 }
 
 /** The title, renamed where it is: click it, Enter or leaving the field saves, Esc cancels. */
@@ -683,7 +711,8 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       id="resume"
       ref={reveal}
       className={cn(
-        'scroll-mt-20 rounded-lg border p-4',
+        // Below the stuck header, as far as it is at rest; until that is measured, below the top bar.
+        'scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-4',
         r.noHandoff ? 'border-amber-500/60 bg-amber-500/5' : 'border-primary/30 bg-primary/5',
       )}
       aria-label="Resume here"
