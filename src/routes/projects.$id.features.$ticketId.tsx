@@ -27,7 +27,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -1503,17 +1503,33 @@ function Activity({
   )
 }
 
-/** A rail down the left of its rows; re-renders every minute so "5 minutes ago" keeps counting. */
+/**
+ * The minutes a Timeline has been open. Its rows are its caller's elements, which its own re-render
+ * leaves alone: each row reads this so it re-renders, and its "5 minutes ago" counts, as it changes.
+ */
+const TimelineMinute = createContext(0)
+
+/** A rail down the left of its rows; moves them on every minute so "5 minutes ago" keeps counting. */
 function Timeline({ children }: { children: ReactNode }) {
-  const [, tick] = useState(0)
+  const [minute, tick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => tick((n) => n + 1), 60_000)
     return () => clearInterval(id)
   }, [])
-  return <ol>{children}</ol>
+  return (
+    <TimelineMinute value={minute}>
+      <ol>{children}</ol>
+    </TimelineMinute>
+  )
 }
 
-/** One row of a Timeline: how long ago on the left (the exact time on hover), a dot on the rail. */
+/**
+ * One row of a Timeline: how long ago on the left (the exact time on hover), a dot on the rail. The
+ * two lines run top to bottom down the rail from beside the dot, so the post keeps the width; a long
+ * one makes its row taller rather than spill into the next. Their column is as wide as the two lines,
+ * 2.25rem at least: wider when a browser's minimum font size makes them bigger than the rem sizes. Its
+ * padding is pt/pb: py pads the block axis, which runs sideways in vertical text.
+ */
 function TimelineRow({
   at,
   dot = 'bg-muted-foreground/60',
@@ -1523,14 +1539,15 @@ function TimelineRow({
   dot?: string
   children: ReactNode
 }) {
+  useContext(TimelineMinute)
   const today = new Date(at).toDateString() === new Date().toDateString()
   return (
-    <li className="group grid grid-cols-[5.5rem_1.25rem_minmax(0,1fr)] sm:grid-cols-[7rem_1.5rem_minmax(0,1fr)]">
+    <li className="group grid grid-cols-[minmax(2.25rem,max-content)_1.25rem_minmax(0,1fr)] sm:grid-cols-[minmax(2.25rem,max-content)_1.5rem_minmax(0,1fr)]">
       <time
         dateTime={at}
         title={stamp(at)}
         suppressHydrationWarning
-        className="pt-3 text-right text-xs text-muted-foreground"
+        className="pt-3 pb-3 text-xs whitespace-nowrap text-muted-foreground [writing-mode:vertical-rl]"
       >
         {agoLong(at)}
         <span className="block text-[11px] opacity-70" suppressHydrationWarning>
