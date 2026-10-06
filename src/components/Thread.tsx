@@ -8,7 +8,7 @@ import { Attachments } from '#/components/Attachments'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { Markdown } from '#/components/Markdown'
-import { EditBox, Edited, PostActions } from '#/components/PostTools'
+import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostTools'
 import { RichEditor } from '#/components/RichEditor'
 import { Button } from '#/components/ui/button'
 import { del, errorMessage, get, patch, post, upload, type CommentRow } from '#/lib/api'
@@ -29,9 +29,10 @@ export function useComments(parentType: Parent, parentId: number) {
 }
 
 /**
- * A comment with its replies (from `comments`, the whole thread). `onReply` puts a reply button on
- * it; `hideTime` leaves its own time out, for when a timeline shows it already; `label` names its
- * kind next to the author. Edit and delete refresh the thread under `threadKey`.
+ * A comment with its replies (from `comments`, the whole thread), its actions in a row under its own
+ * text, before its replies. `onReply` puts a reply button there; `hideTime` leaves its own time out, for
+ * when a timeline shows it already; `label` names its kind next to the author. Edit and delete refresh
+ * the thread under `threadKey`.
  */
 export function CommentItem({
   c,
@@ -70,35 +71,39 @@ export function CommentItem({
   const remove = useMutation({ mutationFn: () => del(`/api/comments/${c.id}`), onSuccess: refresh, onError })
   return (
     <div className={depth ? 'ml-6 border-l pl-3' : ''}>
-      <div className="group/post flex items-center gap-2 text-xs text-muted-foreground">
-        <Actor name={c.author} via={c.via} className="text-foreground" />
-        {label && <span>{label}</span>}
-        {!hideTime && <span>{ago(c.createdAt)}</span>}
-        <Edited at={c.editedAt} />
-        <span className="ml-auto inline-flex items-center gap-2">
-          <PostActions what="this reply" onEdit={() => setEditing(true)} onDelete={() => remove.mutate()} />
+      {/* The comment without its replies: hovering it shows its own edit and delete, not theirs. */}
+      <div className="group/comment">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Actor name={c.author} via={c.via} className="text-foreground" />
+          {label && <span>{label}</span>}
+          {!hideTime && <span>{ago(c.createdAt)}</span>}
+          <Edited at={c.editedAt} />
+        </div>
+        {editing ? (
+          <EditBox
+            value={c.body}
+            pending={edit.isPending}
+            onSave={(body) => edit.mutate(body)}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <Markdown className="mt-1">{c.body}</Markdown>
+        )}
+        <Attachments items={c.attachments} />
+        <div role="group" aria-label="Reply actions" className="mt-1 flex items-center gap-0.5">
           {depth === 0 && onReply && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 hover:text-foreground"
-              onClick={onReply}
-            >
-              <Reply className="size-3" /> reply
-            </button>
+            <ActionButton label="reply" tip="Reply" onClick={onReply}>
+              <Reply />
+            </ActionButton>
           )}
-        </span>
+          <PostActions
+            what="this reply"
+            group="comment"
+            onEdit={() => setEditing(true)}
+            onDelete={() => remove.mutate()}
+          />
+        </div>
       </div>
-      {editing ? (
-        <EditBox
-          value={c.body}
-          pending={edit.isPending}
-          onSave={(body) => edit.mutate(body)}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
-        <Markdown className="mt-1">{c.body}</Markdown>
-      )}
-      <Attachments items={c.attachments} />
       {comments
         .filter((r) => r.replyTo === c.id)
         .map((r) => (
