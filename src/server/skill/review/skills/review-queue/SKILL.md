@@ -32,7 +32,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `drafts` | include draft PRs | off |
 | `post` | pass through: each fresh review posts itself as a PR comment | off |
 | `parallel=N` | maximum concurrent reviews, 1 to 3 | 2 |
-| `build` | on the board, also work the project's To do tickets through the build cycle (see **On the board**) | off |
+| `build` | on the board, after the reviews, also work the project's To do tickets with `/todo-review` (see **On the board**) | off |
 
 ## Step 1: Inventory
 
@@ -170,30 +170,11 @@ feature-review skill's **On the board** section); after Step 5, check that a res
 is in `list_review_results`, and record it yourself with `post_review_result` from the runner's
 summary if not.
 
-**Building** (`build` only). After the reviews, work the To do tickets (`list_tickets`
-`status: ["todo"]`, unassigned or yours, oldest first), one at a time per repo:
-
-1. `claim_ticket` with its branch (with `as: <agent>` when it is reserved for one), a worktree
-   off the base branch, `add_workspace`.
-2. Route by the delegation notes. The default notes give this cycle:
-   - **spec** turns the ticket into acceptance criteria → `add_tasks` with them. A decisive open
-     question → `ask_decision`, and move on to the next ticket until it is answered.
-   - **builder** implements in the worktree and commits on the branch (no push).
-   - **runner** reviews the branch: `/feature-review <branch> ticket=<id> repo=<worktree's main
-     checkout>`, unattended. Its result is the gate.
-   - Verdict `SHIP` → hand off. Otherwise the confirmed and plausible findings, and the failed
-     criteria, go back to **builder**, then **runner** again. At most three rounds: then post what
-     is still open and `ask_decision` (ship as is, keep going, or drop) instead of a fourth.
-3. Every delegated step runs as a subagent briefed with that agent's `instructions`, the
-   project's `instructions`, the ticket (`get_ticket`) and what the previous step returned,
-   and its result is posted on the ticket `as` that agent. Subagents share nothing else.
-4. **Hand off** as the board skill says: push the branch, open the PR assigned to the human, start
-   a preview from the worktree and post its link, `update_ticket` with `prNumber`, then
-   `review`. The last runner's summary is the PR's "Tested" section.
-
-Scheduling holds for builds too: a build holds its repo's lane, and the browser lane while its
-runner drives a browser. Never two builders on one branch. Step 6's report and the board's
-`post_daily_summary` close the run.
+**Building** (`build` only). After the reviews and their report, run the `todo-review` skill through
+the Skill tool for the same project, passing `parallel` and `model` through. It works the To do
+tickets through the build cycle (spec → builder → `/feature-review` until the change survives →
+hand-off), one `todo-review-ticket` agent per ticket, with its own scheduling and report. Do not
+work tickets yourself.
 
 ## Notes
 

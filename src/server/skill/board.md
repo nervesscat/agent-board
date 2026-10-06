@@ -343,8 +343,10 @@ The project's Agents page adds a default set, the build and review cycle of the
 `/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
 criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
 **env**, **verify**, **hunt**, **refute** and **merge** try to break it) → back to **builder** with
-the confirmed findings, at most three rounds → hand off. `/review-queue` is that orchestrator: it
-reviews the board's PR queue, and with `build` it also works the To do tickets through the cycle.
+the confirmed findings, at most three rounds → hand off. `/todo-review` is that orchestrator for
+the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
+working, no weakened tests, screenshots) and blocks only for what only the human can give.
+`/review-queue` reviews the board's PR queue (with `build`, it runs `/todo-review` after).
 Without those skills, or for one ticket, orchestrate by hand:
 
 1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its

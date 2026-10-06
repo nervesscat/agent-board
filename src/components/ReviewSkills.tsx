@@ -27,7 +27,7 @@ export function useShell() {
 }
 
 /**
- * The one-line install of the feature-review and review-queue skills and their agents, which run the
+ * The one-line install of the feature-review, review-queue and todo-review skills and their agents, which run the
  * default agents' cycle, for the page's shell (`useShell`). Without a token the line carries the
  * placeholder to replace.
  */
@@ -50,9 +50,10 @@ export function ReviewSkills({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          <code className="rounded bg-muted px-1">/review-queue</code> is the orchestrator: it works the board
-          and delegates to these agents. <code className="rounded bg-muted px-1">/feature-review</code> is the
-          review it runs on each change. One line installs both, with their agents, into{' '}
+          <code className="rounded bg-muted px-1">/todo-review</code> works the To do tickets to hand-off and{' '}
+          <code className="rounded bg-muted px-1">/review-queue</code> reviews the PR queue, both delegating
+          to these agents. <code className="rounded bg-muted px-1">/feature-review</code> is the review they
+          run on each change. One line installs all three, with their agents, into{' '}
           <code className="rounded bg-muted px-1">~/.claude</code> (Claude Code; OpenCode reads its skills
           too), replacing files of the same name.
           {!token && (
