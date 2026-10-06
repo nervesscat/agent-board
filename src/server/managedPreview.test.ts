@@ -432,33 +432,37 @@ describe('stops by itself', () => {
     expect(mp.activePreviews().some((p) => p.workspaceId === b.ws.id)).toBe(false)
   })
 
+  // A PR of mine in the queue, as gh lists it.
+  const queuePr = (number: number, headRefName: string, mergedAt: string | null = null) =>
+    ({
+      number,
+      title: `pr ${number}`,
+      url: `https://github.com/acme/agent-board/pull/${number}`,
+      author: { login: 'enrique' },
+      headRefName,
+      baseRefName: 'main',
+      headRefOid: 'abc1234',
+      isDraft: false,
+      reviewDecision: '',
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      statusCheckRollup: [],
+      updatedAt: '2026-10-01T10:00:00Z',
+      mergedAt,
+      reviews: [],
+      reviewRequests: [],
+      requested: false,
+      assigned: true,
+    }) satisfies MyGhPr
+
   it("when the ticket's PR is merged (not when it is only closed)", async () => {
     useFake()
-    const pr = (number: number, headRefName: string) =>
-      ({
-        number,
-        title: `pr ${number}`,
-        url: `https://github.com/acme/agent-board/pull/${number}`,
-        author: { login: 'enrique' },
-        headRefName,
-        baseRefName: 'main',
-        headRefOid: 'abc1234',
-        isDraft: false,
-        reviewDecision: '',
-        mergeable: 'MERGEABLE',
-        mergeStateStatus: 'CLEAN',
-        statusCheckRollup: [],
-        updatedAt: '2026-10-01T10:00:00Z',
-        reviews: [],
-        requested: false,
-        assigned: true,
-      }) satisfies MyGhPr
     const mergedOne = ticketWithWorktree(undefined, { branch: 'feat/merged' })
     const closedOne = ticketWithWorktree(undefined, { branch: 'feat/closed' })
     await startRunning(mergedOne.ws.id)
     await startRunning(closedOne.ws.id)
     const prs = await import('./prs')
-    found = [pr(41, 'feat/merged'), pr(42, 'feat/closed')]
+    found = [queuePr(41, 'feat/merged'), queuePr(42, 'feat/closed')]
     await prs.refreshPrs(projectId)
     // Both leave the queue; GitHub says only 41 was merged.
     found = []
@@ -467,6 +471,21 @@ describe('stops by itself', () => {
     await vi.waitFor(() => expect(status(mergedOne.ws.id)).toBe('stopped'))
     expect(mp.managedPreview(mergedOne.ws.id)!.reason).toBe('PR #41 was merged')
     expect(status(closedOne.ws.id)).toBe('running')
+  })
+
+  it("when the merged searches find the ticket's PR merged, without asking GitHub again", async () => {
+    useFake()
+    const t = ticketWithWorktree(undefined, { branch: 'feat/landed' })
+    await startRunning(t.ws.id)
+    const prs = await import('./prs')
+    found = [queuePr(43, 'feat/landed')]
+    await prs.refreshPrs(projectId)
+    // Found merged by the searches; `gh pr view` would not say so.
+    found = [queuePr(43, 'feat/landed', new Date().toISOString())]
+    merged = new Set()
+    await prs.refreshPrs(projectId)
+    await vi.waitFor(() => expect(status(t.ws.id)).toBe('stopped'))
+    expect(mp.managedPreview(t.ws.id)!.reason).toBe('PR #43 was merged')
   })
 })
 
