@@ -3,8 +3,8 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { RESUME_TEMPLATE } from '#/lib/constants'
 import { logActivity } from './activity'
-import { baseChain, gitCache, reachOf } from './cleanup'
-import { branchHead, branchInfo } from './git'
+import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
+import { branchHead, NO_BRANCH } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
@@ -847,9 +847,10 @@ export function deleteWorkspace(id: number, actor: string) {
  * (all the way down, each tagged with its lane). A workspace is compared against the branch of the
  * ticket it belongs to, in that ticket's repo. Each branch carries `reach`: whether its work is in
  * the base chain (a lane's parent branch, then dev), so it can be deleted, and `push`: whether it is
- * on origin.
+ * on origin. Read from the repos' ref and worktree listings of the last few seconds (`repoGit`), and
+ * answers kept by the commits they were worked out for: what did not move is not asked of git again.
  */
-export async function ticketGit(id: number) {
+export async function ticketGit(id: number, repoGit: GitCache = gitCache({ recent: true })) {
   const ticket = getTicket(id)
   const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, ticket.projectId)).all()
   const owners = [ticket, ...laneTree(all, id)]
@@ -867,28 +868,24 @@ export async function ticketGit(id: number) {
     rows.filter((w) => w.ticketId === owner.id).map((w) => ({ w, owner, repo: ticketRepo(owner) })),
   )
   const repo = ticketRepo(ticket)
-  const none = { exists: false, sha: null, subject: null, authoredAt: null, ahead: null, behind: null }
   const byId = new Map(all.map((t) => [t.id, t]))
-  const repoGit = gitCache()
   const [branch, ...wsState] = await Promise.all([
     (async () => {
-      if (!repo) return { ...none, reach: null, push: NO_PUSH }
-      const [info, { refs }, push] = await Promise.all([
-        branchInfo(repo.repoPath, ticket.branch, ticket.baseBranch),
+      if (!repo) return { ...NO_BRANCH, reach: null, push: NO_PUSH }
+      const [{ refs }, push] = await Promise.all([
         repoGit(repo.repoPath),
         pushStates(repo.repoPath, [ticket.branch], new Map([[ticket.branch, ticket.baseBranch]])),
       ])
       const chain = baseChain(ticket, byId, repo)
-      return {
-        ...info,
-        reach: await reachOf(repo.repoPath, ticket.branch, chain, refs),
-        push: push.get(ticket.branch) ?? NO_PUSH,
-      }
+      const [info, reach] = await Promise.all([
+        infoOf(repo.repoPath, ticket.branch, ticket.baseBranch, refs),
+        reachOf(repo.repoPath, ticket.branch, chain, refs),
+      ])
+      return { ...info, reach, push: push.get(ticket.branch) ?? NO_PUSH }
     })(),
     ...workspaces.map(async ({ w, owner, repo: r }) => {
-      if (!r) return { info: { ...none, reach: null, push: NO_PUSH }, worktree: null }
-      const [info, { refs, worktrees }, push] = await Promise.all([
-        branchInfo(r.repoPath, w.branch, owner.branch || owner.baseBranch),
+      if (!r) return { info: { ...NO_BRANCH, reach: null, push: NO_PUSH }, worktree: null }
+      const [{ refs, worktrees }, push] = await Promise.all([
         repoGit(r.repoPath),
         pushStates(r.repoPath, [w.branch], new Map([[w.branch, owner.baseBranch]])),
       ])
@@ -897,14 +894,11 @@ export async function ticketGit(id: number) {
       const worktree =
         worktrees.find((t) => (w.path && samePath(t.path, w.path)) || (w.branch && t.branch === w.branch)) ??
         null
-      return {
-        info: {
-          ...info,
-          reach: await reachOf(r.repoPath, w.branch, into, refs),
-          push: push.get(w.branch) ?? NO_PUSH,
-        },
-        worktree,
-      }
+      const [info, reach] = await Promise.all([
+        infoOf(r.repoPath, w.branch, owner.branch || owner.baseBranch, refs),
+        reachOf(r.repoPath, w.branch, into, refs),
+      ])
+      return { info: { ...info, reach, push: push.get(w.branch) ?? NO_PUSH }, worktree }
     }),
   ])
   return {

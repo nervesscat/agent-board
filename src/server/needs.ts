@@ -3,7 +3,7 @@ import { asc, eq, inArray } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
 import { logActivity } from './activity'
-import { baseChain, baseRefs, branchRef, gitCache, memo, reachOf, refSha } from './cleanup'
+import { baseChain, baseRefs, branchRef, gitCache, type GitCache, memo, reachOf, refSha } from './cleanup'
 import * as features from './features'
 import { holdsWorkOf, type Reach } from './git'
 import { type Handoff, ticketHandoff } from './handoff'
@@ -128,7 +128,7 @@ export function setNeeds(ticketId: number, ids: number[], actor: string) {
 // --- whether a need is met, from git ---
 
 /** What the checks of one request share: the project's tickets and stages, one ref listing per repo. */
-function context(projectId: number) {
+function context(projectId: number, git: GitCache = gitCache()) {
   const stages = listStages(projectId)
   const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
   const repos = listRepos(projectId)
@@ -138,7 +138,7 @@ function context(projectId: number) {
     byId: new Map(all.map((t) => [t.id, t])),
     repoOf: (t: Pick<Ticket, 'repoId'>) =>
       (t.repoId ? repos.find((r) => r.id === t.repoId) : repos[0]) ?? null,
-    git: gitCache(),
+    git,
   }
 }
 type Context = ReturnType<typeof context>
@@ -306,11 +306,15 @@ async function includedWork(t: Ticket, ctx: Context): Promise<number[]> {
   return found.sort((a, b) => a - b)
 }
 
-/** `get_ticket_git` with `includes`: the open tickets whose unmerged work this ticket's branch holds. */
+/**
+ * `get_ticket_git` with `includes`: the open tickets whose unmerged work this ticket's branch holds.
+ * Both read the same ref listing, the one every read shares for a few seconds.
+ */
 export async function ticketGitView(id: number) {
-  const git = await features.ticketGit(id)
+  const repoGit = gitCache({ recent: true })
+  const git = await features.ticketGit(id, repoGit)
   const t = features.getTicket(id)
-  return { ...git, includes: await includedWork(t, context(t.projectId)).catch(() => []) }
+  return { ...git, includes: await includedWork(t, context(t.projectId, repoGit)).catch(() => []) }
 }
 
 // --- the rule: not done while a need is not merged ---

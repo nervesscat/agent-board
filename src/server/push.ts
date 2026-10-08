@@ -5,7 +5,16 @@ import { eq } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
-import { aheadBehind, fetchOrigin, listRefs, mergedInto, notOnOrigin, type Refs } from './git'
+import {
+  aheadBehind,
+  fetchOrigin,
+  listRefs,
+  listWorktrees,
+  mergedInto,
+  notOnOrigin,
+  type Refs,
+  type Worktree,
+} from './git'
 import { getProject } from './projects'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
@@ -40,8 +49,33 @@ export const NO_PUSH: Push = { state: 'none', ahead: 0, behind: 0, checkedAt: nu
 /** At most one background fetch per repo this often. */
 export const FETCH_EVERY = 5 * 60_000
 const FETCH_TIMEOUT = 60_000
-/** The refs are read again at most this often (a fetch reads them afresh). */
+/** The refs and worktrees are read again at most this often (a fetch reads them afresh). */
 const REFS_TTL = 3_000
+
+/**
+ * A listing of the checkout, shared by every read within `REFS_TTL` of when it started. Null when git
+ * could not list it: that is not kept, the next read asks git again.
+ */
+function windowed<T>(list: () => Promise<T>) {
+  let kept: { at: number; value: Promise<T | null> } | null = null
+  return {
+    read(): Promise<T | null> {
+      if (kept && Date.now() - kept.at <= REFS_TTL) return kept.value
+      const entry = {
+        at: Date.now(),
+        value: list().catch(() => {
+          if (kept === entry) kept = null
+          return null
+        }),
+      }
+      kept = entry
+      return entry.value
+    },
+    drop() {
+      kept = null
+    },
+  }
+}
 
 interface RepoState {
   /** When the board last started a fetch, whatever came of it. */
@@ -50,7 +84,8 @@ interface RepoState {
   fetchedAt: number | null
   fetching: Promise<void> | null
   error: string | null
-  refs: { at: number; value: Promise<Refs | null> } | null
+  refs: ReturnType<typeof windowed<Refs>>
+  worktrees: ReturnType<typeof windowed<Worktree[]>>
 }
 
 const repos = new Map<string, RepoState>()
@@ -61,7 +96,18 @@ const merges = new Map<string, Promise<boolean>>()
 
 function repoState(repoPath: string): RepoState {
   let s = repos.get(repoPath)
-  if (!s) repos.set(repoPath, (s = { triedAt: 0, fetchedAt: null, fetching: null, error: null, refs: null }))
+  if (!s)
+    repos.set(
+      repoPath,
+      (s = {
+        triedAt: 0,
+        fetchedAt: null,
+        fetching: null,
+        error: null,
+        refs: windowed(() => listRefs(repoPath)),
+        worktrees: windowed(() => listWorktrees(repoPath)),
+      }),
+    )
   return s
 }
 
@@ -107,7 +153,8 @@ export function fetchRepo(repoPath: string, opts: { force?: boolean } = {}): Pro
     )
     .finally(() => {
       s.fetching = null
-      s.refs = null
+      s.refs.drop()
+      s.worktrees.drop()
     })
   return s.fetching
 }
@@ -131,12 +178,11 @@ export function fetchStatus(repoPath: string) {
   }
 }
 
-function readRefs(repoPath: string): Promise<Refs | null> {
-  const s = repoState(repoPath)
-  if (!s.refs || Date.now() - s.refs.at > REFS_TTL)
-    s.refs = { at: Date.now(), value: listRefs(repoPath).catch(() => null) }
-  return s.refs.value
-}
+/** The checkout's branches and origin's, read again at most every few seconds and after a fetch. */
+export const readRefs = (repoPath: string) => repoState(repoPath).refs.read()
+
+/** The checkout's worktrees, kept as long as its refs are. */
+export const readWorktrees = (repoPath: string) => repoState(repoPath).worktrees.read()
 
 function memo<T>(cache: Map<string, Promise<T>>, key: string, work: () => Promise<T>) {
   if (!cache.has(key)) {

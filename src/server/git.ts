@@ -140,34 +140,21 @@ export interface BranchInfo {
   behind: number | null
 }
 
-export async function branchInfo(repoPath: string, branch: string, base: string): Promise<BranchInfo> {
-  const none: BranchInfo = {
-    exists: false,
-    sha: null,
-    subject: null,
-    authoredAt: null,
-    ahead: null,
-    behind: null,
-  }
-  if (!branch) return none
-  let ref = branch
-  try {
-    await git(repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
-  } catch {
-    try {
-      await git(repoPath, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
-      ref = `origin/${branch}`
-    } catch {
-      return none
-    }
-  }
-  const [line, counts] = await Promise.all([
-    git(repoPath, ['log', '-1', '--format=%H%x1f%s%x1f%aI', ref]),
-    git(repoPath, ['rev-list', '--left-right', '--count', `${base}...${ref}`]).catch(() => ''),
-  ])
-  const [sha, subject, authoredAt] = line.split('\x1f')
-  const [behind, ahead] = counts ? counts.split(/\s+/).map(Number) : [null, null]
-  return { exists: true, sha, subject, authoredAt, ahead, behind }
+/** A branch that is neither here nor on origin (or no branch at all). */
+export const NO_BRANCH: BranchInfo = {
+  exists: false,
+  sha: null,
+  subject: null,
+  authoredAt: null,
+  ahead: null,
+  behind: null,
+}
+
+/** A commit's subject and when it was authored. */
+export async function commitSummary(repoPath: string, sha: string) {
+  const line = await git(repoPath, ['log', '-1', '--format=%s%x1f%aI', sha, '--'])
+  const [subject = '', authoredAt = ''] = line.split('\x1f')
+  return { subject, authoredAt }
 }
 
 /** The local branch's head commit, or null when there is no such branch here. */
