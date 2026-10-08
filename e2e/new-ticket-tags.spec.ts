@@ -174,6 +174,63 @@ test('a new lane takes its tags as chips too', async ({ page, project, api, huma
   expect(lane).toMatchObject({ parentId: parent.id, tags: ['Backend', 'Medium'] })
 })
 
+test('a click in the Tags field around its chips goes to the text, and keeps the word being typed', async ({
+  page,
+  project,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, field, chips } = await openDialog(page)
+  await input.pressSequentially('High')
+  await input.press('Enter')
+  // The field's own box, beside its chips: its left padding.
+  const box = (await field.boundingBox())!
+  const at = { x: box.x + 4, y: box.y + box.height / 2 }
+  expect(await field.evaluate((f, p) => document.elementFromPoint(p.x, p.y) === f, at)).toBe(true)
+
+  // From another field, the click focuses the text.
+  await dialog.getByLabel('Title').click()
+  await page.mouse.click(at.x, at.y)
+  await expect(input).toBeFocused()
+
+  // Mid-word, it ends no tag: the caret goes to the end of the text and the word goes on.
+  await page.keyboard.type('Fron')
+  await page.keyboard.press('Home')
+  await page.mouse.click(at.x, at.y)
+  await expect(input).toBeFocused()
+  await page.keyboard.type('tend')
+  await expect(chips).toHaveText(['High'])
+  await expect(input).toHaveValue('Frontend')
+})
+
+test('the word being typed in the Tags field outlasts a switch to another window', async ({
+  page,
+  project,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, chips } = await openDialog(page)
+  await input.pressSequentially('Fron')
+  // A headless browser never loses the window's focus, so the page is told it has (as it reads it
+  // during the blur a switch to another window or tab fires), and the text loses the focus.
+  await page.evaluate(() => {
+    document.hasFocus = () => false
+    ;(document.activeElement as HTMLElement).blur()
+  })
+  await expect(input).not.toBeFocused()
+  await expect(chips).toHaveCount(0)
+  await expect(input).toHaveValue('Fron')
+
+  // Back in the window, the word goes on.
+  await page.evaluate(() => Reflect.deleteProperty(document, 'hasFocus'))
+  await input.focus()
+  await page.keyboard.type('tend')
+  await expect(chips).toHaveCount(0)
+  await expect(input).toHaveValue('Frontend')
+  // Leaving it for another field still makes the chip.
+  await dialog.getByLabel('Title').click()
+  await expect(chips).toHaveText(['Frontend'])
+  await expect(input).toHaveValue('')
+})
+
 for (const width of [375, 1280]) {
   test(`many chips wrap inside the Tags field at ${width}px`, async ({ page, project }) => {
     await page.setViewportSize({ width, height: 900 })

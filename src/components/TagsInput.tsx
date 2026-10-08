@@ -7,7 +7,7 @@ import { cn } from '#/lib/utils'
 
 /**
  * Tags as chips inside one field, with the text being typed after them. Enter, a comma or leaving
- * the field turns the text into chips; text pasted at once is split on its commas. A tag already
+ * the field for another control turns the text into chips (a switch to another window keeps it); text pasted at once is split on its commas. A tag already
  * there in any casing is not added again. × removes a chip, and Backspace in the empty text the last
  * one. Enter with no text is left to the form, so it still submits. `text` is what is typed and not
  * yet a chip: a form saves it too (`addTags(value, text)`), so nothing typed is lost.
@@ -36,10 +36,16 @@ export function TagsInput({
     if (text) onTextChange('')
   }
   return (
-    // A click on the field around the chips goes to the text, as it would in a plain input.
+    // A click on the field around the chips goes to the text, as it would in a plain input. Pressing
+    // the box would take the focus from the text first, and that blur would end the word being
+    // typed: the press keeps the focus in the text instead, with the caret at its end.
     <div
-      onClick={(e) => {
-        if (e.target === e.currentTarget) input.current?.focus()
+      onMouseDown={(e) => {
+        const el = input.current
+        if (e.target !== e.currentTarget || !el) return
+        e.preventDefault()
+        el.focus()
+        el.setSelectionRange(el.value.length, el.value.length)
       }}
       className={cn(
         'flex min-h-8 w-full min-w-0 cursor-text flex-wrap items-center gap-1 rounded-lg border border-input bg-transparent px-2.5 py-0.5 text-base transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 md:text-sm dark:bg-input/30',
@@ -90,7 +96,11 @@ export function TagsInput({
             onChange(value.slice(0, -1))
           }
         }}
-        onBlur={commit}
+        // The window losing the focus (to another window or tab) is not leaving the field: the word
+        // waits there for the return.
+        onBlur={() => {
+          if (document.hasFocus()) commit()
+        }}
         className="h-6 min-w-16 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
       />
     </div>
