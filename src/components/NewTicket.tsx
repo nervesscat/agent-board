@@ -7,6 +7,7 @@ import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
+import { StatusSelect } from '#/components/StatusSelect'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -23,13 +24,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { useProject } from '#/lib/project'
+import { newTicketStage } from '#/lib/stages'
 import { ticketsKey } from '#/lib/tickets'
 import { cn } from '#/lib/utils'
 
 /**
  * A new top-level ticket, or with `parent` a new lane of that ticket. Files for the instructions
  * (attach, paste or drop anywhere on the dialog) upload as they are added and go with the ticket
- * when it is created.
+ * when it is created. A ticket starts in the stage picked here, the first open one (Backlog) unless
+ * another is picked; a lane has none to pick and starts where the server puts it (To do).
  */
 export function NewTicket({ projectId, parent }: { projectId: string; parent?: TicketFull }) {
   const qc = useQueryClient()
@@ -44,6 +47,11 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const [picked, setPicked] = useState('')
   const repos = project?.repos ?? []
   const repoId = picked || String(parent?.repoId ?? repos[0]?.id ?? '')
+  const [stage, setStage] = useState('')
+  // Sent as the stage's key: the kind `open` would resolve to To do. None until the stages have loaded.
+  const status = parent ? undefined : stage || newTicketStage(project?.stages ?? [])?.key
+  // A ticket waits for its stage, so that leaving it alone always means Backlog.
+  const ready = Boolean(parent || status)
   const files = useUploads()
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop(files.add)
@@ -59,6 +67,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
           .map((s) => s.trim())
           .filter(Boolean),
         parentId: parent?.id,
+        status,
         repoId: repoId ? Number(repoId) : undefined,
         tasks: tasks
           .split('\n')
@@ -76,6 +85,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       setBranch('')
       setAssignee('')
       setTags('')
+      setStage('')
       files.clear()
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -93,7 +103,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault()
-            if (!files.uploading) create.mutate()
+            if (!files.uploading && ready) create.mutate()
           }}
         >
           <DialogHeader>
@@ -152,6 +162,19 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             <Textarea id="tasks" value={tasks} onChange={(e) => setTasks(e.target.value)} rows={3} />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
+            {status && (
+              <div className="space-y-2">
+                <Label htmlFor="stage">Stage</Label>
+                <StatusSelect
+                  id="stage"
+                  stages={project?.stages ?? []}
+                  value={status}
+                  onChange={setStage}
+                  size="default"
+                  className="w-full"
+                />
+              </div>
+            )}
             {repos.length > 1 && (
               <div className="space-y-2">
                 <Label htmlFor="repo">Repository</Label>
@@ -203,7 +226,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             </p>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={create.isPending || files.uploading}>
+            <Button type="submit" disabled={create.isPending || files.uploading || !ready}>
               {files.uploading ? 'Uploading…' : 'Create'}
             </Button>
           </DialogFooter>
