@@ -142,7 +142,7 @@ function TicketPage() {
     placeholderData: keepPreviousData,
     refetchInterval: 10_000,
   })
-  const { data: git } = useQuery({
+  const { data: ticketGit } = useQuery({
     queryKey: ['ticket-git', ticketId],
     queryFn: () => get<TicketGit>(`/api/tickets/${ticketId}/git`),
     refetchInterval: 30_000,
@@ -216,6 +216,9 @@ function TicketPage() {
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
+  // Stepping to another ticket, the previous one stays on screen until the new one loads: its git state
+  // may come first, and must not show under the previous ticket's branch.
+  const git = t.id === Number(ticketId) ? ticketGit : undefined
 
   /**
    * Record a verdict. Disapproving cancels the lane, which can drop it out of the filtered list, so
