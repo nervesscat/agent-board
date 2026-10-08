@@ -1,16 +1,23 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { ChevronRight, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { type ReactNode, useId, useState } from 'react'
+import { toast } from 'sonner'
 
 import { CopyBlock } from '#/components/AgentPicker'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { SHELLS, SHELL_KEY, type Shell, repoClaudeDir, reviewSkillsInstall } from '#/lib/agents'
-import { errorMessage, get } from '#/lib/api'
+import { errorMessage, get, patch } from '#/lib/api'
+import type { SkillsTracking } from '#/lib/constants'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
-import type { RepoSkills as RepoSkillsRow, ReviewSkillsStatus } from '#/server/agents'
+import type {
+  GlobalSkills as GlobalSkillsRow,
+  RepoSkills as RepoSkillsRow,
+  ReviewSkillsStatus,
+  Settings,
+} from '#/server/agents'
 
 /**
  * The shell the install lines are for, on a page whose route takes `?shell=` (Connect agents, a
@@ -34,8 +41,8 @@ export function useShell() {
 /**
  * The one-line install of the feature-review, review-queue and todo-review skills and their agents, which run the
  * default agents' cycle, for the page's shell (`useShell`). Without a token the line carries the
- * placeholder to replace. Below it, whether each repo (every repo, or `projectId`'s) has its own copy,
- * and whether that copy is current.
+ * placeholder to replace. Below it, whether the copy the board tracks (a board-wide setting) is current:
+ * the one in `~/.claude` on the board's machine, or each repo's own (every repo, or `projectId`'s).
  */
 export function ReviewSkills({
   boardUrl,
@@ -91,8 +98,74 @@ export function ReviewSkills({
           </ul>
         </details>
       )}
-      <RepoSkills boardUrl={boardUrl} token={token.trim()} shell={shell} projectId={projectId} />
+      <InstalledSkills boardUrl={boardUrl} token={token.trim()} shell={shell} projectId={projectId} />
     </div>
+  )
+}
+
+/**
+ * Which copy the page tracks, a board-wide setting: the one in the settings cache (shared with the
+ * Settings page and the other Agents page), or the one being saved. Undefined until the settings load.
+ */
+function useSkillsTracking() {
+  const qc = useQueryClient()
+  const { data } = useQuery({ queryKey: ['settings'], queryFn: () => get<Settings>('/api/settings') })
+  const save = useMutation({
+    mutationFn: (skillsTracking: SkillsTracking) => patch<Settings>('/api/settings', { skillsTracking }),
+    onSuccess: (s) => {
+      qc.setQueryData(['settings'], s)
+      qc.invalidateQueries({ queryKey: ['agent-setup'] })
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return [save.isPending ? save.variables : data?.skillsTracking, save.mutate] as const
+}
+
+/** The installed copies, as read when the page loads and on Check again: `~/.claude` and every repo's. */
+function useSkillsStatus(projectId?: string) {
+  return useQuery({
+    queryKey: ['review-skills-status', projectId ?? 'all'],
+    queryFn: () =>
+      get<ReviewSkillsStatus>(
+        `/api/agent-setup/review-skills/status${projectId ? `?projectId=${projectId}` : ''}`,
+      ),
+  })
+}
+
+/** Where the skills are installed: the switch between the user-wide copy and the repos' own, and that view. */
+function InstalledSkills({
+  boardUrl,
+  token,
+  shell,
+  projectId,
+}: {
+  boardUrl: string
+  token: string
+  shell: Shell
+  projectId?: string
+}) {
+  const [tracking, track] = useSkillsTracking()
+  const label = useId()
+  if (!tracking) return null
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span id={label} className="text-xs font-medium">
+          Track
+        </span>
+        <Tabs value={tracking} onValueChange={(v) => track(v as SkillsTracking)}>
+          <TabsList aria-labelledby={label}>
+            <TabsTrigger value="global">Global</TabsTrigger>
+            <TabsTrigger value="repo">By repo</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      {tracking === 'global' ? (
+        <GlobalSkills line={reviewSkillsInstall(shell, boardUrl, token)} projectId={projectId} />
+      ) : (
+        <RepoSkills boardUrl={boardUrl} token={token} shell={shell} projectId={projectId} />
+      )}
+    </>
   )
 }
 
@@ -103,10 +176,62 @@ const STATUS_LABEL: Record<RepoSkillsRow['status'], string> = {
   unreachable: "Can't read the checkout",
 }
 
+const GLOBAL_LABEL: Record<GlobalSkillsRow['status'], string> = {
+  current: 'Up to date',
+  outdated: 'Outdated',
+  none: 'Not installed',
+  unreachable: "Can't read the folder",
+}
+
+/** Reads the copies from disk again. */
+function CheckAgain({ status }: { status: ReturnType<typeof useSkillsStatus> }) {
+  return (
+    <Button variant="outline" size="sm" onClick={() => status.refetch()} disabled={status.isFetching}>
+      <RefreshCw data-icon="inline-start" className={status.isFetching ? 'animate-spin' : ''} /> Check again
+    </Button>
+  )
+}
+
 /**
- * The repos' own copies of the review skills, read from each checkout's `.claude` when the page loads
- * and on Check again. An outdated copy opens to the files that are not current and the line that
- * brings it up to date.
+ * The user-wide copy, in the `.claude` folder in the home of the machine the board runs on. An outdated
+ * copy opens to the files that are not current and the install line.
+ */
+function GlobalSkills({ line, projectId }: { line: string; projectId?: string }) {
+  const status = useSkillsStatus(projectId)
+  const { data, error } = status
+  return (
+    <section className="space-y-2" aria-label="On this machine">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-xs font-medium">On this machine</h3>
+        <CheckAgain status={status} />
+      </div>
+      <p className="text-xs text-muted-foreground">
+        The copy in <code className="rounded bg-muted px-1">~/.claude</code> on the machine the board runs on,
+        which Claude Code uses in every repo without a copy of its own. The line above brings it up to date.
+      </p>
+      {error && <p className="text-xs text-destructive">{errorMessage(error)}</p>}
+      {data && (
+        <ul className="divide-y rounded-md border">
+          <SkillsItem
+            label="~/.claude on this machine"
+            name={<span className="font-medium">~/.claude</span>}
+            path={data.global.path}
+            status={data.global.status}
+            statusLabel={GLOBAL_LABEL[data.global.status]}
+            none="None of these files are there yet: the line above installs them."
+            files={data.global.files}
+            total={data.files.length}
+            line={line}
+          />
+        </ul>
+      )}
+    </section>
+  )
+}
+
+/**
+ * The repos' own copies of the review skills, read from each checkout's `.claude`. An outdated copy
+ * opens to the files that are not current and the line that brings it up to date.
  */
 function RepoSkills({
   boardUrl,
@@ -119,20 +244,13 @@ function RepoSkills({
   shell: Shell
   projectId?: string
 }) {
-  const { data, error, isFetching, refetch } = useQuery({
-    queryKey: ['review-skills-status', projectId ?? 'all'],
-    queryFn: () =>
-      get<ReviewSkillsStatus>(
-        `/api/agent-setup/review-skills/status${projectId ? `?projectId=${projectId}` : ''}`,
-      ),
-  })
+  const status = useSkillsStatus(projectId)
+  const { data, error } = status
   return (
     <section className="space-y-2" aria-label="In your repos">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-xs font-medium">In your repos</h3>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} /> Check again
-        </Button>
+        <CheckAgain status={status} />
       </div>
       <p className="text-xs text-muted-foreground">
         A repo can carry its own copy in its <code className="rounded bg-muted px-1">.claude</code> folder,
@@ -150,11 +268,25 @@ function RepoSkills({
         ) : (
           <ul className="divide-y rounded-md border">
             {data.repos.map((r) => (
-              <RepoSkillsItem
+              <SkillsItem
                 key={r.repoId}
-                repo={r}
+                label={`${r.repoName} in ${r.projectName}`}
+                name={
+                  <>
+                    <span className="font-medium">{r.repoName}</span>
+                    {!projectId && <span className="text-muted-foreground"> · {r.projectName}</span>}
+                  </>
+                }
+                path={r.repoPath}
+                status={r.status}
+                statusLabel={STATUS_LABEL[r.status]}
+                none={
+                  <>
+                    Uses the <code className="rounded bg-muted px-1">~/.claude</code> install.
+                  </>
+                }
+                files={r.files}
                 total={data.files.length}
-                showProject={!projectId}
                 line={reviewSkillsInstall(shell, boardUrl, token, repoClaudeDir(r.repoPath))}
               />
             ))}
@@ -164,39 +296,44 @@ function RepoSkills({
   )
 }
 
-function RepoSkillsItem({
-  repo,
+/** One copy of the bundle: where it is, its status, and, when outdated, its stale files and line. */
+function SkillsItem({
+  label,
+  name,
+  path,
+  status,
+  statusLabel,
+  none,
+  files,
   total,
-  showProject,
   line,
 }: {
-  repo: RepoSkillsRow
+  label: string
+  name: ReactNode
+  path: string
+  status: RepoSkillsRow['status']
+  statusLabel: string
+  /** What a copy with none of the files means. */
+  none: ReactNode
+  files: RepoSkillsRow['files']
   total: number
-  showProject: boolean
   line: string
 }) {
   const [open, setOpen] = useState(false)
-  const outdated = repo.status === 'outdated'
-  const stale = repo.files.filter((f) => f.status !== 'current')
+  const outdated = status === 'outdated'
+  const stale = files.filter((f) => f.status !== 'current')
   return (
-    <li className="space-y-1.5 px-3 py-2" aria-label={`${repo.repoName} in ${repo.projectName}`}>
+    <li className="space-y-1.5 px-3 py-2" aria-label={label}>
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
         <div className="min-w-0 flex-1">
-          <p className="text-sm">
-            <span className="font-medium">{repo.repoName}</span>
-            {showProject && <span className="text-muted-foreground"> · {repo.projectName}</span>}
-          </p>
-          <p className="font-mono text-xs break-all text-muted-foreground">{repo.repoPath}</p>
+          <p className="text-sm">{name}</p>
+          <p className="font-mono text-xs break-all text-muted-foreground">{path}</p>
         </div>
-        <Badge variant={outdated ? 'destructive' : repo.status === 'current' ? 'secondary' : 'outline'}>
-          {STATUS_LABEL[repo.status]}
+        <Badge variant={outdated ? 'destructive' : status === 'current' ? 'secondary' : 'outline'}>
+          {statusLabel}
         </Badge>
       </div>
-      {repo.status === 'none' && (
-        <p className="text-xs text-muted-foreground">
-          Uses the <code className="rounded bg-muted px-1">~/.claude</code> install.
-        </p>
-      )}
+      {status === 'none' && <p className="text-xs text-muted-foreground">{none}</p>}
       {outdated && (
         <>
           <button
@@ -208,7 +345,7 @@ function RepoSkillsItem({
             <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
             {stale.length} of {total} files differ or are missing
           </button>
-          {/* Rendered only when open: the page has one install line per shell until a repo's is asked for. */}
+          {/* Rendered only when open: the page has one install line per shell until a copy's is asked for. */}
           {open && (
             <div className="space-y-2">
               <ul className="font-mono text-xs text-muted-foreground" aria-label="Files not up to date">

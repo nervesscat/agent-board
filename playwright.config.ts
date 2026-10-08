@@ -46,6 +46,7 @@ export default defineConfig({
       NITRO_PORT: String(env.port),
       BOARD_URL: env.baseURL,
       DATA_DIR: env.dataDir,
+      CLAUDE_HOME: env.claudeHome,
       STORAGE: 'local',
     },
   },
