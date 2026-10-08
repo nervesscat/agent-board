@@ -8,6 +8,7 @@ import { BranchSelect } from '#/components/BranchSelect'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
+import { TagsInput } from '#/components/TagsInput'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -25,6 +26,7 @@ import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { newTicketStage } from '#/lib/stages'
+import { addTags } from '#/lib/tags'
 import { ticketsKey } from '#/lib/tickets'
 import { cn } from '#/lib/utils'
 
@@ -42,7 +44,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const [tasks, setTasks] = useState('')
   const [branch, setBranch] = useState('')
   const [assignee, setAssignee] = useState('')
-  const [tags, setTags] = useState('')
+  const [tags, setTags] = useState<string[]>([])
+  const [tagText, setTagText] = useState('')
   const { data: project } = useProject(projectId)
   const [picked, setPicked] = useState('')
   const repos = project?.repos ?? []
@@ -62,10 +65,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         body,
         branch,
         assignee,
-        tags: tags
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        tags: addTags(tags, tagText),
         parentId: parent?.id,
         status,
         repoId: repoId ? Number(repoId) : undefined,
@@ -84,7 +84,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       setTasks('')
       setBranch('')
       setAssignee('')
-      setTags('')
+      setTags([])
+      setTagText('')
       setStage('')
       files.clear()
     },
@@ -211,10 +212,12 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             )}
             <div className="space-y-2">
               <Label htmlFor="tags">Tags (optional)</Label>
-              <Input
+              <TagsInput
                 id="tags"
                 value={tags}
-                onChange={(e) => setTags(e.target.value)}
+                onChange={setTags}
+                text={tagText}
+                onTextChange={setTagText}
                 placeholder="High, Forms"
               />
             </div>
