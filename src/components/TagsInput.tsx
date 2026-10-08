@@ -7,10 +7,11 @@ import { cn } from '#/lib/utils'
 
 /**
  * Tags as chips inside one field, with the text being typed after them. Enter, a comma or leaving
- * the field for another control turns the text into chips (a switch to another window keeps it); text pasted at once is split on its commas. A tag already
- * there in any casing is not added again. × removes a chip, and Backspace in the empty text the last
- * one. Enter with no text is left to the form, so it still submits. `text` is what is typed and not
- * yet a chip: a form saves it too (`addTags(value, text)`), so nothing typed is lost.
+ * the field for another control turns the text into chips (a switch to another window keeps it);
+ * text pasted at once is split on its commas. A tag already there in any casing is not added again.
+ * × removes a chip, and Backspace in the empty text the last one. Enter with no text is left to the
+ * form, so it still submits. `text` is what is typed and not yet a chip: a form saves it too
+ * (`addTags(value, text)`), so nothing typed is lost.
  */
 export function TagsInput({
   id,
