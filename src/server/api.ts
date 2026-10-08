@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 import { z } from 'zod'
 
-import { AGENT_CLIENTS, COMMENT_PARENTS, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
+import { AGENT_CLIENTS, COMMENT_PARENTS, SKILLS_TRACKING, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
 import { addSummary } from './activity'
 import * as agents from './agents'
 import { addDefaultAgents } from './defaultAgents'
@@ -100,7 +100,7 @@ api.get('/api/agent-setup/review-skills', ({ url }) => {
     },
   })
 })
-// Whether each repo's own .claude folder has that bundle as it is now: every repo, or ?projectId's.
+// Whether ~/.claude and each repo's own .claude have that bundle as it is now: every repo, or ?projectId's.
 api.get('/api/agent-setup/review-skills/status', async ({ url }) => {
   const pid = url.searchParams.get('projectId')
   const status = await agents.reviewSkillsStatus(pid === null ? undefined : intParam(pid, 'projectId'))
@@ -109,7 +109,13 @@ api.get('/api/agent-setup/review-skills/status', async ({ url }) => {
 api.get('/api/settings', () => json(agents.getSettings()))
 api.patch('/api/settings', async ({ request }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human changes the settings')
-  const body = await readJson(request, z.object({ defaultAgent: z.enum(AGENT_CLIENTS).optional() }))
+  const body = await readJson(
+    request,
+    z.object({
+      defaultAgent: z.enum(AGENT_CLIENTS).optional(),
+      skillsTracking: z.enum(SKILLS_TRACKING).optional(),
+    }),
+  )
   return json(agents.updateSettings(body))
 })
 

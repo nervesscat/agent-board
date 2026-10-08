@@ -9,6 +9,9 @@ import type { ReviewSkillsStatus } from './agents'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-'))
+// The user-wide .claude the review skills are checked in: a folder of the test's own, not there at first.
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-home-'))
+process.env.CLAUDE_HOME = path.join(home, '.claude')
 
 let agents: typeof import('./agents')
 beforeAll(async () => {
@@ -46,10 +49,72 @@ describe('the board skill', () => {
 })
 
 describe('settings', () => {
-  it('default to Claude Code and keep what is picked', () => {
-    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude' })
-    expect(agents.updateSettings({ defaultAgent: 'codex' })).toEqual({ defaultAgent: 'codex' })
+  it('default to Claude Code and the global copy of the review skills, and keep what is picked', () => {
+    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude', skillsTracking: 'global' })
+    expect(agents.updateSettings({ defaultAgent: 'codex' })).toEqual({
+      defaultAgent: 'codex',
+      skillsTracking: 'global',
+    })
     expect(agents.updateSettings({ defaultAgent: 'opencode' }).defaultAgent).toBe('opencode')
+    expect(agents.updateSettings({ skillsTracking: 'repo' })).toEqual({
+      defaultAgent: 'opencode',
+      skillsTracking: 'repo',
+    })
+    expect(agents.updateSettings({ skillsTracking: 'global' }).skillsTracking).toBe('global')
+  })
+
+  it('fall back to the defaults for a stored value the board does not know', async () => {
+    const { db, schema } = await import('#/db')
+    const store = (key: string, value: string) =>
+      db
+        .insert(schema.settings)
+        .values({ key, value })
+        .onConflictDoUpdate({ target: schema.settings.key, set: { value } })
+        .run()
+    store('skillsTracking', 'bogus')
+    store('defaultAgent', 'bogus')
+    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude', skillsTracking: 'global' })
+    db.delete(schema.settings).run()
+    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude', skillsTracking: 'global' })
+  })
+
+  it('are read by anyone, changed by the human only, one key at a time, and checked', async () => {
+    const { api } = await import('./api')
+    const { db, schema } = await import('#/db')
+    db.delete(schema.settings).run()
+    const route = 'http://localhost/api/settings'
+    const send = (body: unknown, headers: Record<string, string> = {}) =>
+      api.handle(
+        new Request(route, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json', ...headers },
+          body: JSON.stringify(body),
+        }),
+        'enrique',
+      )
+    const read = async (headers: Record<string, string> = {}) =>
+      (await api.handle(new Request(route, { headers }), 'enrique')).json()
+
+    expect(await read()).toEqual({ defaultAgent: 'claude', skillsTracking: 'global' })
+    const set = await send({ skillsTracking: 'repo' })
+    expect(set.status).toBe(200)
+    expect(await set.json()).toEqual({ defaultAgent: 'claude', skillsTracking: 'repo' })
+    expect(await (await send({ defaultAgent: 'codex' })).json()).toEqual({
+      defaultAgent: 'codex',
+      skillsTracking: 'repo',
+    })
+    for (const bad of [{ skillsTracking: 'bogus' }, { skillsTracking: '' }, { skillsTracking: 1 }])
+      await expect(send(bad), JSON.stringify(bad)).rejects.toMatchObject({ status: 400 })
+
+    // An agent reads the choice, and cannot change it.
+    const agent = { authorization: 'Bearer gate_agent' }
+    expect(await read(agent)).toEqual({ defaultAgent: 'codex', skillsTracking: 'repo' })
+    await expect(send({ skillsTracking: 'global' }, agent)).rejects.toMatchObject({
+      status: 403,
+      message: 'only the human changes the settings',
+    })
+    expect(agents.getSettings()).toEqual({ defaultAgent: 'codex', skillsTracking: 'repo' })
+    db.delete(schema.settings).run()
   })
 })
 
@@ -97,32 +162,59 @@ describe('the review skills bundle', () => {
   })
 })
 
-describe("the review skills in each repo's .claude", () => {
+// --- copies of the review bundle on disk, by path under the folder that holds `.claude` ---
+
+const bundle = () => {
   const src = path.join(import.meta.dirname, 'skill', 'review')
-  const bundle = () =>
-    Object.fromEntries(
-      agents.reviewBundlePaths().map((p) => [`.claude/${p}`, fs.readFileSync(path.join(src, p), 'utf8')]),
-    )
+  return Object.fromEntries(
+    agents.reviewBundlePaths().map((p) => [`.claude/${p}`, fs.readFileSync(path.join(src, p), 'utf8')]),
+  )
+}
+/** The bundle as served, one file of it with CRLF line endings. */
+const synced = () => {
+  const files = bundle()
+  const checklists = '.claude/skills/feature-review/checklists.md'
+  files[checklists] = files[checklists]!.replace(/\n/g, '\r\n')
+  return files
+}
+/** As copies drift in practice: one skill edited, one as served, what came later never added, and a skill of its own. */
+const drifted = () => {
+  const files: Record<string, string> = { ...bundle(), '.claude/skills/x/SKILL.md': 'Not the bundle.\n' }
+  files['.claude/skills/feature-review/SKILL.md'] += '\nAn older line.\n'
+  delete files['.claude/skills/todo-review/SKILL.md']
+  delete files['.claude/agents/todo-review-ticket.md']
+  return files
+}
+/** Other skills and agents, none of them the bundle's. */
+const unrelated = {
+  '.claude/skills/add-mixpanel-event/SKILL.md': '---\nname: add-mixpanel-event\n---\n',
+  '.claude/agents/mine.md': 'Mine.\n',
+}
+const writeFiles = (dir: string, files: Record<string, string>) => {
+  for (const [p, text] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true })
+    fs.writeFileSync(path.join(dir, p), text)
+  }
+}
+/** Every file and folder under `dir`, with each file's bytes: to show a read left it as it was. */
+const tree = (dir: string): Record<string, string> =>
+  Object.fromEntries(
+    fs
+      .readdirSync(dir, { recursive: true, withFileTypes: true })
+      .map((e) => path.join(e.parentPath, e.name))
+      .sort()
+      .map((f) => [f, fs.statSync(f).isFile() ? fs.readFileSync(f, 'base64') : 'folder']),
+  )
+
+describe("the review skills in each repo's .claude", () => {
   /** A checkout on disk (a `.git` folder and the files given), for a repo row to point at. */
   const checkout = (files: Record<string, string> = {}) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo skills '))
     fs.mkdirSync(path.join(dir, '.git'))
     fs.writeFileSync(path.join(dir, '.git', 'HEAD'), 'ref: refs/heads/main\n')
-    for (const [p, text] of Object.entries(files)) {
-      fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true })
-      fs.writeFileSync(path.join(dir, p), text)
-    }
+    writeFiles(dir, files)
     return dir
   }
-  /** Every file and folder under `dir`, with each file's bytes: to show a read left it as it was. */
-  const tree = (dir: string): Record<string, string> =>
-    Object.fromEntries(
-      fs
-        .readdirSync(dir, { recursive: true, withFileTypes: true })
-        .map((e) => path.join(e.parentPath, e.name))
-        .sort()
-        .map((f) => [f, fs.statSync(f).isFile() ? fs.readFileSync(f, 'base64') : 'folder']),
-    )
 
   const repos: Record<string, { id: number; dir: string }> = {}
   let pid: number
@@ -131,22 +223,11 @@ describe("the review skills in each repo's .claude", () => {
     const { db, schema } = await import('#/db')
     pid = db.insert(schema.projects).values({ name: 'Skills' }).returning().get().id
     other = db.insert(schema.projects).values({ name: 'Skills elsewhere' }).returning().get().id
-    const synced = bundle()
-    const checklists = '.claude/skills/feature-review/checklists.md'
-    synced[checklists] = synced[checklists]!.replace(/\n/g, '\r\n')
-    // As copies drift in practice: one skill edited, one as served, and what came later never added.
-    const drifted: Record<string, string> = { ...bundle(), '.claude/skills/x/SKILL.md': 'Not the bundle.\n' }
-    drifted['.claude/skills/feature-review/SKILL.md'] += '\nAn older line.\n'
-    delete drifted['.claude/skills/todo-review/SKILL.md']
-    delete drifted['.claude/agents/todo-review-ticket.md']
     const dirs = {
       bare: checkout(),
-      unrelated: checkout({
-        '.claude/skills/add-mixpanel-event/SKILL.md': '---\nname: add-mixpanel-event\n---\n',
-        '.claude/agents/mine.md': 'Mine.\n',
-      }),
-      synced: checkout(synced),
-      drifted: checkout(drifted),
+      unrelated: checkout(unrelated),
+      synced: checkout(synced()),
+      drifted: checkout(drifted()),
       gone: path.join(os.tmpdir(), 'agent-board-no-such-checkout', 'repo'),
       elsewhere: checkout(),
     }
@@ -266,16 +347,94 @@ describe("the review skills in each repo's .claude", () => {
       const body = (await res.json()) as ReviewSkillsStatus
       expect(body.files).toEqual(agents.reviewBundlePaths())
       expect(body.repos.find((r) => r.repoName === 'drifted')!.status).toBe('outdated')
+      // The user-wide copy comes with it (none yet: the test's own home has no .claude).
+      expect(body.global).toMatchObject({ path: process.env.CLAUDE_HOME, status: 'none' })
     }
     const one = (await (
       await api.handle(new Request(`${route}?projectId=${other}`), 'enrique')
     ).json()) as ReviewSkillsStatus
     expect(one.repos.map((r) => r.repoName)).toEqual(['elsewhere'])
+    expect(one.global).toEqual((await agents.reviewSkillsStatus()).global)
     await expect(api.handle(new Request(`${route}?projectId=999999`), 'enrique')).rejects.toMatchObject({
       status: 404,
     })
     await expect(api.handle(new Request(`${route}?projectId=nope`), 'enrique')).rejects.toMatchObject({
       status: 400,
     })
+  })
+})
+
+describe('the review skills in ~/.claude', () => {
+  const claude = process.env.CLAUDE_HOME!
+  /** The test's home holding exactly `files` (paths from the home, so under `.claude`); none: no `.claude`. */
+  const homeWith = (files?: Record<string, string>) => {
+    fs.rmSync(home, { recursive: true, force: true })
+    fs.mkdirSync(home)
+    if (files) writeFiles(home, files)
+  }
+  const global = async () => (await agents.reviewSkillsStatus()).global
+
+  it('answers the configured folder beside the repos, file by file, the same for one project', async () => {
+    homeWith(drifted())
+    const status = await agents.reviewSkillsStatus()
+    expect(Object.keys(status).sort()).toEqual(['files', 'global', 'repos'])
+    expect(Object.keys(status.global).sort()).toEqual(['files', 'path', 'status'])
+    expect(status.global.path).toBe(claude)
+    expect(path.isAbsolute(status.global.path)).toBe(true)
+    expect(status.global.files.map((f) => f.path)).toEqual(status.files)
+    const { listProjects } = await import('./projects')
+    for (const p of listProjects())
+      expect((await agents.reviewSkillsStatus(p.id)).global).toEqual(status.global)
+  })
+
+  it('calls no .claude at all none, and one with other skills only', async () => {
+    for (const files of [undefined, {}, unrelated]) {
+      homeWith(files)
+      const g = await global()
+      expect(g.status, JSON.stringify(files)).toBe('none')
+      expect(g.files).toHaveLength(agents.reviewBundlePaths().length)
+      expect(g.files.every((f) => f.status === 'missing')).toBe(true)
+    }
+  })
+
+  it('calls a full copy current, line endings aside', async () => {
+    homeWith(synced())
+    const g = await global()
+    expect(g.status).toBe('current')
+    expect(g.files.every((f) => f.status === 'current')).toBe(true)
+    expect(fs.readFileSync(path.join(claude, 'skills', 'feature-review', 'checklists.md'), 'utf8')).toContain(
+      '\r\n',
+    )
+  })
+
+  it('calls a drifted copy outdated, file by file, and leaves its own skills out', async () => {
+    homeWith(drifted())
+    const g = await global()
+    expect(g.status).toBe('outdated')
+    expect(g.files.filter((f) => f.status !== 'current')).toEqual([
+      { path: 'agents/todo-review-ticket.md', status: 'missing' },
+      { path: 'skills/feature-review/SKILL.md', status: 'outdated' },
+      { path: 'skills/todo-review/SKILL.md', status: 'missing' },
+    ])
+    expect(g.files.some((f) => f.path.startsWith('skills/x/'))).toBe(false)
+  })
+
+  it('calls a .claude that is not a folder unreachable, and still answers for the repos', async () => {
+    homeWith({ '.claude': 'not a folder\n' })
+    const status = await agents.reviewSkillsStatus()
+    expect(status.global).toEqual({ path: claude, status: 'unreachable', files: [] })
+    expect(status.repos.find((r) => r.repoName === 'drifted')!.status).toBe('outdated')
+  })
+
+  it('only reads: the home is left as it was, and no .claude appears', async () => {
+    for (const files of [undefined, drifted()]) {
+      homeWith(files)
+      const before = tree(home)
+      await agents.reviewSkillsStatus()
+      expect(tree(home)).toEqual(before)
+    }
+    homeWith()
+    await agents.reviewSkillsStatus()
+    expect(fs.existsSync(claude)).toBe(false)
   })
 })

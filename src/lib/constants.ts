@@ -41,6 +41,13 @@ export const AGENT_CLIENTS = ['claude', 'codex', 'opencode'] as const
 export type AgentClient = (typeof AGENT_CLIENTS)[number]
 
 /**
+ * Which copy of the review skills the Agents pages track: the user-wide `~/.claude` on the board's
+ * machine (the first, the default until one is picked), or each repo's own `.claude`.
+ */
+export const SKILLS_TRACKING = ['global', 'repo'] as const
+export type SkillsTracking = (typeof SKILLS_TRACKING)[number]
+
+/**
  * The default agents (the build and review cycle of the feature-review, review-queue and todo-review skills), in
  * the order the cycle uses them. Their texts live on the server (defaultAgents.ts).
  */
