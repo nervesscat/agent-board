@@ -1401,7 +1401,8 @@ function Lanes({
 
 /**
  * The ticket's feed: one kind of post, newest first, with one box to write one. A post marked
- * progress is a step of the work (what agents post as they go); any post can have replies.
+ * progress is a step of the work (what agents post as they go); one written here is not, until its
+ * mark progress action makes it one. Any post can have replies.
  */
 function Activity({
   t,
@@ -1415,7 +1416,6 @@ function Activity({
   onLaneFeed: (v: boolean) => void
 }) {
   const [body, setBody] = useState('')
-  const [progress, setProgress] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
@@ -1423,12 +1423,12 @@ function Activity({
   const send = useMutation({
     mutationFn: async () => {
       const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
-      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress })
+      // Said outright: the API makes a post progress unless told otherwise, as agents post.
+      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress: false })
     },
     onSuccess: () => {
       setBody('')
       setFiles([])
-      setProgress(false)
       onChange()
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -1477,17 +1477,9 @@ function Activity({
             <Paperclip data-icon="inline-start" /> attach
           </Button>
           <PendingFiles files={files} onChange={setFiles} />
-          <div className="ml-auto flex items-center gap-3">
-            <label
-              className="inline-flex items-center gap-2 text-xs text-muted-foreground"
-              title="A step of the work: lane summaries and the Daily view pick these out"
-            >
-              <Switch size="sm" checked={progress} onCheckedChange={setProgress} /> progress
-            </label>
-            <Button type="submit" size="sm" disabled={!body.trim() || send.isPending}>
-              {send.isPending ? 'Posting…' : 'Post'}
-            </Button>
-          </div>
+          <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
+            {send.isPending ? 'Posting…' : 'Post'}
+          </Button>
         </div>
       </form>
       {t.updates.length === 0 ? (

@@ -292,6 +292,29 @@ test('the progress toggle flips a post both ways, with its own icon for each', a
   await expect(post).not.toHaveClass(/bg-muted\/30/)
 })
 
+test('the New post box has no progress switch, and what it posts is not progress', async ({ page, api }) => {
+  const t = await api.ticket({ title: 'Just a question' })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const editor = page.getByRole('textbox', { name: 'New post' })
+  const form = page.locator('form').filter({ has: editor })
+  await expect(form.getByRole('button', { name: 'attach' })).toBeVisible()
+  await expect(form.getByRole('switch')).toHaveCount(0)
+  await expect(form.getByText('progress', { exact: true })).toHaveCount(0)
+
+  // The API makes a post progress when it is not told, so the box tells it.
+  await editor.fill('Is the old export still used?')
+  const sent = page.waitForRequest(
+    (r) => r.method() === 'POST' && r.url().endsWith(`/api/tickets/${t.id}/updates`),
+  )
+  await form.getByRole('button', { name: 'Post', exact: true }).click()
+  expect((await sent).postDataJSON()).toMatchObject({ progress: false })
+  const post = page.getByRole('article')
+  await expect(post).toContainText('Is the old export still used?')
+  await expect(authorRow(post).getByText('progress', { exact: true })).toHaveCount(0)
+  await expect(post).toHaveClass(/bg-muted\/30/)
+  expect((await api.getTicket(t.id)).updates).toMatchObject([{ progress: false }])
+})
+
 test('a lane post on its parent keeps only the reply toggle, in the row under it', async ({
   page,
   api,
