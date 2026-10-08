@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <style>.i{stroke:#0a0a0a}.c{stroke:#a23db8}.p{fill:#a23db8}@media (prefers-color-scheme: dark){.i{stroke:#fafafa}.c{stroke:#d27de6}.p{fill:#d27de6}}</style>
+  <g class="i" fill="none" stroke-width="3.5">
+    <circle cx="13" cy="13" r="6"/><circle cx="32" cy="13" r="6"/><circle cx="51" cy="13" r="6"/>
+    <circle cx="13" cy="51" r="6"/><circle cx="32" cy="51" r="6"/><circle cx="51" cy="51" r="6"/>
+  </g>
+  <path class="c" d="M13 13 C 13 42, 51 22, 51 51" fill="none" stroke-width="5" stroke-linecap="round"/>
+  <circle class="p" cx="13" cy="13" r="3.5"/><circle class="p" cx="51" cy="51" r="3.5"/>
+</svg>

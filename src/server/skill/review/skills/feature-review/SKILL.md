@@ -2,7 +2,7 @@
 name: feature-review
 description: "Reviews one feature or change for correctness, reliability and security using a spec -> env -> verify -> hunt -> refute protocol built to produce zero false positives. The code under review runs from its own worktree at the exact commit, on servers the review starts itself; every finding needs a concrete failure scenario and must survive an adversarial refutation pass; an empty result is valid and comes with proof of what was checked."
 user-invocable: true
-argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [keep] [ports=<from>-<to>] [browser=yes|no] [post]"
+argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [post]"
 ---
 
 # Feature Review
@@ -61,6 +61,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | a number | a GitHub PR | |
 | a branch name, `diff`, `staged`, or a path | the change to review | see Setup |
 | `deep` | run two independent hunts and report finding stability | off |
+| `light` | for a tiny change: a clean first hunt gets no second hunt (Phase 2); every other phase runs as usual. Ignored when `deep` is given | off |
 | `keep` | keep the worktree and servers after the report, for debugging | off |
 | `ports=<from>-<to>` | range to allocate from when a default port is busy | `8100-8199` |
 | `browser=yes\|no` | whether browser automation may be used | `yes` |
@@ -76,7 +77,11 @@ Parse `$ARGUMENTS` as space-separated tokens:
    **Claim before you clean.** Another session may be reviewing the same target. A claim
    is live when `WORKDIR/CLAIM.md` exists, is less than 6 hours old, and
    `~/.claude/feature-review/ledger.jsonl` has no entry for this target written after
-   the claim (a finished review that forgot to remove its claim is not live). If the claim
+   the claim (a finished review that forgot to remove its claim is not live). When the
+   claim is not live and `WORKDIR/LEFTOVER.md` exists, an earlier review of this target
+   could not remove its worktree for a git lock (Teardown step 2): remove `WORKTREE` now as
+   Teardown step 2 does, then delete `LEFTOVER.md`; still locked, stop with the error
+   "git lock on MAIN: <path>". If the claim
    is live, or `git -C MAIN worktree list` already registers `WORKTREE`, stop with the
    error "review of <target> already in flight (see WORKDIR/CLAIM.md)" and do nothing else. Otherwise remove and recreate `WORKDIR`
    and write `WORKDIR/CLAIM.md` with the target, the start time, and the session or
@@ -87,6 +92,16 @@ Parse `$ARGUMENTS` as space-separated tokens:
    a fetch fails that way, retry with a one-off token helper on the command itself:
    `git -c credential.helper= -c "credential.helper=!f(){ echo username=x; echo password=$(gh auth token); }; f" fetch ...`
    (`gh auth setup-git` only helps when gh's own protocol is https).
+   Other sessions may be running git on the same checkout (other reviews, a builder's worktree).
+   A git command on `MAIN` here and in the agents (`fetch`, `worktree add`, `worktree remove`)
+   that fails on another one's lock (`Unable to create '<path>.lock': File exists`, `cannot lock
+   ref`, `Another git process seems to be running`) waits about 15 seconds and runs again, up to
+   5 times. Never delete the `.lock` file: a git process that is still running holds it. A lock
+   error is never a finding or a failed criterion. Still locked after 5 tries: in the merge
+   check, its result is `UNVERIFIED (git lock on MAIN)`; in Teardown, see Teardown step 2; in
+   Setup, first undo what this run made so that running it again is not "already in flight"
+   (if `git -C MAIN worktree list` registers `WORKTREE`, remove it as Teardown step 2 does;
+   then delete `WORKDIR/CLAIM.md`, last), then stop with the error "git lock on MAIN: <path>".
    - a PR number: `gh pr view N --json title,body,baseRefName,headRefName,headRefOid,isDraft,mergeable,url`
      run from `MAIN`. Then `git -C MAIN fetch origin pull/N/head` and confirm
      `git -C MAIN rev-parse FETCH_HEAD` equals `headRefOid`; if not, fetch again.
@@ -169,13 +184,19 @@ Wait for all. Then build the refutation input, `03-all-candidates.md`:
 Renumber candidates C1..Cn.
 
 **A clean first hunt is not trusted on its own.** If `03-candidates.md` says `None.` and
-deep mode is off, spawn a second `feature-review-hunt` (prefix `_frh2_`, outputs
-`03-candidates-b.md` and `03-hunt-notes-b.md`) with the same inputs plus this sentence:
-"A first hunt found no candidates. Start from the guard analysis and the author's tests'
+deep mode is off (and `light` was not given), spawn a second `feature-review-hunt` (prefix
+`_frh2_`, outputs `03-candidates-b.md` and `03-hunt-notes-b.md`) with the same inputs plus this
+sentence: "A first hunt found no candidates. Start from the guard analysis and the author's tests'
 blind spots, not from the checklists." Merge as in deep mode. A missed blocker costs far
 more than twenty minutes, and the second hunt is the only adversarial pass a clean
 result gets. If both hunts are clean, skip Phase 3 and say in the report that two
 independent hunts ran.
+
+**Light mode** (`light` without `deep`) is for a change too small to need that second pass: the
+second hunt is not spawned. Nothing else is dropped: the spec, the env, verify of every
+acceptance criterion, refute of every hunt candidate and every verify `FAIL`, and the merge check
+all run. Skip Phase 3 only when `03-all-candidates.md` has no candidate at all. The report never
+says that two hunts ran: it says one hunt ran, in light mode (Phase 4).
 
 ## Phase 3: Refute (1 agent)
 
@@ -202,6 +223,7 @@ without spawning the agent.
    - The **Freshness** block: commit reviewed, PR head at start and at end, worktree
      path, environment summary from `00-env.md` (reused or fresh dependencies, services
      up, services unavailable).
+   - In light mode the Freshness block's `Hunts` line says `one (light mode: no second hunt)`.
    - Findings are the candidates with verdict `CONFIRMED` or `PLAUSIBLE` in
      `04-verdicts.md`, using the refute agent's final severity. In deep mode add
      `Stability: both hunts` or `one hunt` to each.
@@ -222,9 +244,9 @@ without spawning the agent.
    plain. *What it does* comes from the spec's Intent. *How to test it* comes from the
    runbook and the commands the verify agent actually ran. *Findings* lists only
    confirmed and plausible findings, one bullet each, with why it matters. *Evidence*
-   references the screenshots in `WORKDIR/shots/` if any. The three checks are decided
-   by these rules, each with a one-line reason, conservative when something was not
-   verified:
+   references the screenshots in `WORKDIR/shots/` if any. In light mode *Findings* ends with
+   "One hunt ran (light mode)." The three checks are decided by these rules, each with a
+   one-line reason, conservative when something was not verified:
    | Check | YES when | otherwise NO, reason says |
    |---|---|---|
    | Is this reliable? | verdict is `SHIP` | the finding IDs, or "not verified: <reason>" |
@@ -243,12 +265,15 @@ Unless `keep` was given:
 1. Run the teardown commands listed in `00-env.md` (kill the recorded PIDs, bring down
    the review's compose project, remove the frontend worktree if one was created). Never
    stop a process or container the review did not start.
-2. `git -C MAIN worktree remove --force WORKTREE`. On Windows this can report
-   "Filename too long" on a `.venv` or `node_modules` and leave the directory behind
-   after deregistering it; if `WORKTREE` still exists, clear it with
+2. `git -C MAIN worktree remove --force WORKTREE` (a lock error is retried as in Setup). On
+   Windows this can report "Filename too long" on a `.venv` or `node_modules` and leave the
+   directory behind after deregistering it; if `WORKTREE` still exists, clear it with
    `robocopy <empty dir> WORKTREE /MIR` followed by `rmdir`, or PowerShell
    `Remove-Item -Recurse -Force`. Do **not** run `git worktree prune`: other sessions may
-   have worktrees registered on the same checkout.
+   have worktrees registered on the same checkout. Still locked after the retries: write
+   `WORKDIR/LEFTOVER.md` with `WORKTREE` and the lock file's path, say so in what you print,
+   and go on with steps 3 and 4. The next review of this target removes it (Setup step 1);
+   until then `git worktree list` shows it.
 3. Confirm `git -C MAIN status --porcelain` is unchanged from before the review.
 4. Delete `WORKDIR/CLAIM.md`.
 

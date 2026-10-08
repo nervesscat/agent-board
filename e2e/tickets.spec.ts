@@ -47,6 +47,9 @@ const measure = (row: Locator) =>
 const aligned = (what: string, a: number, b: number) =>
   expect(Math.abs(a - b), `${what}: ${a} against ${b}`).toBeLessThanOrEqual(1)
 
+/** The row of a post card or of a reply that says who wrote it, and when: the one that holds `Actor`. */
+const authorRow = (card: Locator) => card.locator('div:has(> span[title])').first()
+
 test('creates a ticket from the New ticket dialog', async ({ page, project, human }) => {
   await page.goto(`/projects/${project.id}/features`)
   await page.getByRole('button', { name: 'New ticket' }).click()
@@ -284,35 +287,26 @@ test('an author in the header of a post or a reply stays centred on it, on a pho
     await expect(page.getByText('A reply from a project agent.')).toBeVisible()
 
     for (const [what, header, title] of [
-      [
-        'post by claude',
-        article('From the agent itself.').locator('.group\\/post').first(),
-        /agent, gate token/,
-      ],
+      ['post by claude', authorRow(article('From the agent itself.')), /agent, gate token/],
       [
         `post by ${as}`,
-        article('From one of the project agents.').locator('.group\\/post').first(),
+        authorRow(article('From one of the project agents.')),
         /one of the project's agents, posted via claude/,
       ],
       // On a phone its `via claude` and its time wrap onto a second line: the picture stays on the first.
       [
         `reply by ${as}`,
-        article('From the agent itself.').locator('.group\\/post').nth(1),
+        authorRow(article('From the agent itself.').locator('.group\\/comment').first()),
         /one of the project's agents, posted via claude/,
       ],
     ] as const) {
       const actor = header.locator('span[title]').first()
       await expect(actor).toHaveAttribute('title', title)
-      const { texts, ...author } = await measure(header)
+      const author = await measure(header)
       const label = `${width}px, ${what}`
       aligned(`${label}: the icon centred on the name`, author.icon.mid, author.name.mid)
       if (author.after)
         aligned(`${label}: "via" on the baseline of the name`, author.after.glyphs.bottom, author.name.bottom)
-      // On a phone the post header wraps, and "reply" goes to a line of its own.
-      if (what.startsWith('post') && width === 1280) {
-        const reply = texts.find((t) => /^(reply|hide replies)$/.test(t.text))
-        aligned(`${label}: the name on the baseline of "reply"`, author.name.bottom, reply!.bottom)
-      }
     }
   }
 })

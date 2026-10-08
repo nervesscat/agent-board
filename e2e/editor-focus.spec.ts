@@ -308,9 +308,9 @@ test('every rich editor puts its text before its toolbar: ticket instructions an
   await expect(editor).toBeHidden()
 
   const post = page.getByRole('article')
-  const header = post.locator('.group\\/post').first()
-  await header.hover()
-  await header.getByRole('button', { name: 'reply', exact: true }).click()
+  const actions = post.getByRole('group', { name: 'Post actions' })
+  await actions.hover()
+  await actions.getByRole('button', { name: 'reply', exact: true }).click()
   const reply = post.getByRole('textbox', { name: 'Reply' })
   await reply.click()
   await expect(reply).toBeFocused()
@@ -401,9 +401,9 @@ test('editors without an attach of their own have none in the toolbar; posts kee
   await expectFormatsOnly(note)
 
   // New post and Reply: one attach each, in the row below the editor, adding to that form's files.
-  const header = page.getByRole('article').locator('.group\\/post').first()
-  await header.hover()
-  await header.getByRole('button', { name: 'reply', exact: true }).click()
+  const actions = page.getByRole('article').getByRole('group', { name: 'Post actions' })
+  await actions.hover()
+  await actions.getByRole('button', { name: 'reply', exact: true }).click()
   for (const [name, file] of [
     ['New post', 'for-the-post.png'],
     ['Reply', 'for-the-reply.png'],

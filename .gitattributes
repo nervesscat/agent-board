@@ -1,2 +1,4 @@
 # Skills and agents installed from the board, kept exactly as written (LF) on every checkout.
 src/server/skill/review/** text eol=lf
+# Static files served as they are (the favicon is byte for byte the supplied logo file).
+public/** -text
