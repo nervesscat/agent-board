@@ -153,6 +153,69 @@ test('the New ticket dialog has its one attach in the editor toolbar, not beside
   await expect(boxOf(d.text).locator('xpath=preceding-sibling::*/descendant-or-self::button')).toHaveCount(0)
 })
 
+test('the toolbar attach is a paperclip with no text, named and titled like the formatting buttons', async ({
+  page,
+  project,
+}) => {
+  const d = await newTicket(page, project.id, 'Just the icon')
+  const attach = d.toolbar.getByRole('button').last()
+  await expect(attach).toHaveAccessibleName('Attach files')
+  await expect(attach).toHaveAttribute('title', 'Attach files')
+  await expect(attach).toHaveAttribute('aria-busy', 'false')
+  await expect(attach).toHaveText('')
+  expect(await attach.evaluate((b) => (b as HTMLElement).innerText.trim())).toBe('')
+  await expect(attach.locator('svg')).toHaveCount(1)
+  await expect(attach.locator('svg.lucide-paperclip')).toBeVisible()
+  // As big as the formatting buttons beside it.
+  const link = (await d.format('Link').boundingBox())!
+  const clip = (await attach.boundingBox())!
+  expect(clip.width).toBe(link.width)
+  expect(clip.height).toBe(link.height)
+})
+
+test('the toolbar attach spins while its files upload, with no text, and is a paperclip again after', async ({
+  page,
+  api,
+}) => {
+  // Uploads wait until released, to see the button while one is on its way.
+  let release = () => {}
+  const held = new Promise<void>((r) => (release = r))
+  await page.route('**/api/uploads', async (route) => {
+    await held
+    await route.continue()
+  })
+
+  const t = await api.ticket({ title: 'Busy attach', body: 'Instructions.' })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const instructions = page.getByRole('region', { name: 'Instructions' })
+  await instructions.getByRole('button', { name: 'edit' }).click()
+  const editor = instructions.getByRole('textbox', { name: 'Instructions' })
+  const attach = toolbarOf(editor).getByRole('button').last()
+  await expect(attach).toHaveAccessibleName('Attach files')
+
+  const chooser = page.waitForEvent('filechooser')
+  await attach.click()
+  await (await chooser).setFiles({ name: 'slow.png', mimeType: 'image/png', buffer: png() })
+  await expect(attach).toHaveAttribute('aria-busy', 'true')
+  await expect(attach).toHaveAccessibleName('Attaching files…')
+  await expect(attach).toHaveAttribute('title', 'Attaching files…')
+  await expect(attach).toBeEnabled()
+  await expect(attach).toHaveText('')
+  await expect(attach.locator('svg')).toHaveCount(1)
+  await expect(attach.locator('svg.lucide-loader-circle.animate-spin')).toBeVisible()
+
+  release()
+  await expect(attach).toHaveAttribute('aria-busy', 'false')
+  await expect(attach).toHaveAccessibleName('Attach files')
+  await expect(attach).toHaveAttribute('title', 'Attach files')
+  await expect(attach).toHaveText('')
+  await expect(attach.locator('svg')).toHaveCount(1)
+  await expect(attach.locator('svg.lucide-paperclip')).toBeVisible()
+  await expect
+    .poll(async () => (await api.getTicket(t.id)).attachments.map((a) => a.name))
+    .toEqual(['slow.png'])
+})
+
 test('with a file pending, Tab goes from attach to the file, and Shift+Tab back', async ({
   page,
   project,
