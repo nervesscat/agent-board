@@ -14,6 +14,7 @@ import {
   List,
   ListChecks,
   ListOrdered,
+  Loader2,
   Paperclip,
   Quote,
   SquareCode,
@@ -76,7 +77,7 @@ export function RichEditor({
   onFiles?: (files: File[]) => void
   /** Puts an attach button at the end of the toolbar. */
   onAttach?: () => void
-  /** The attach button says so while the files it picked are on their way. */
+  /** The attach button spins while the files it picked are on their way. */
   attaching?: boolean
   onSubmit?: () => void
   onCancel?: () => void
@@ -228,6 +229,7 @@ function Toolbar({
     },
     { label: 'Link', icon: Link2, on: state.link, run: link },
   ]
+  const attachLabel = attaching ? 'Attaching files…' : 'Attach files'
   return (
     <div role="toolbar" aria-label="Formatting" className="flex flex-wrap gap-0.5 border-b px-1.5 py-1">
       {buttons.map((b) => (
@@ -251,12 +253,14 @@ function Toolbar({
       {onAttach && (
         <button
           type="button"
-          title="Attach files"
+          title={attachLabel}
+          aria-label={attachLabel}
+          aria-busy={attaching}
           onMouseDown={(e) => e.preventDefault()}
           onClick={onAttach}
-          className="ml-auto flex items-center gap-1 rounded px-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <Paperclip className="size-3.5" /> {attaching ? 'attaching…' : 'attach'}
+          {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
         </button>
       )}
     </div>
