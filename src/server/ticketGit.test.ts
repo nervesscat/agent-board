@@ -429,6 +429,63 @@ describe('ticketGitView', () => {
     fs.renameSync(away, lonely)
     expect(await view(t.id)).toEqual(full)
   })
+
+  it('keeps a reach for the commits it was listed at, not for where the base moved since', async () => {
+    const f = await features()
+    const needs = await import('./needs')
+    branches('refs/heads/main', 'held/need')
+    const main = git('rev-parse', 'main')
+    const need = f.createTicket(projectId, { title: 'held', branch: 'held/need', status: 'in_progress' }, 't')
+    const subject = f.createTicket(projectId, { title: 'needs held', status: 'in_progress' }, 't')
+    needs.setNeeds(subject.id, [need.id], 't')
+
+    // Listed (the board's push poll, say), then merged into main within the window: the read answers
+    // for the main it listed, its reach as its counts do.
+    await (await import('./push')).readRefs(repo)
+    mergeInto('main', 'held/need')
+    expect((await view(need.id)).info).toMatchObject({
+      ahead: 1,
+      behind: 0,
+      reach: { state: 'unique', into: 'main' },
+    })
+
+    // The merge undone: every read sees main as git does, the move to done refused.
+    git('update-ref', 'refs/heads/main', main)
+    later()
+    expect(() => git('merge-base', '--is-ancestor', 'held/need', 'main')).toThrow()
+    expect((await view(need.id)).info.reach).toMatchObject({ state: 'unique', into: 'main' })
+    expect((await needs.ticketView(subject.id)).needs).toMatchObject([{ id: need.id, merged: false }])
+    await expect(
+      needs.guardDone({ ...f.getTicket(subject.id), from: 'in_progress' }, 'done', [need.id], {
+        agent: true,
+      }),
+    ).rejects.toMatchObject({ status: 409 })
+  })
+
+  it('keeps what a branch took in for the commits it was listed at, not for where it moved since', async () => {
+    const f = await features()
+    branches('refs/heads/main', 'took/branch', 'took/other')
+    const tip = git('rev-parse', 'took/branch')
+    const t = f.createTicket(projectId, { title: 'took', branch: 'took/branch', status: 'in_progress' }, 't')
+    const o = f.createTicket(
+      projectId,
+      { title: 'took other', branch: 'took/other', status: 'in_progress' },
+      't',
+    )
+
+    // Listed, then the other branch merged in within the window: nothing taken in at the listed tip.
+    await (await import('./push')).readRefs(repo)
+    mergeInto('took/branch', 'took/other')
+    expect((await view(t.id)).includes).toEqual([])
+
+    // Undone, then done again: each read answers for the tip git has.
+    git('update-ref', 'refs/heads/took/branch', tip)
+    later()
+    expect((await view(t.id)).includes).toEqual([])
+    mergeInto('took/branch', 'took/other')
+    later()
+    expect((await view(t.id)).includes).toEqual([o.id])
+  })
 })
 
 describe('memo', () => {

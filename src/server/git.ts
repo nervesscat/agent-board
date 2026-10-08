@@ -317,7 +317,7 @@ export interface Reach {
 const REACH_ORDER: ReachState[] = ['merged', 'rebased', 'edited', 'unique']
 
 /**
- * Checks `ref` against each of `bases` (refs, nearest first) and keeps the best verdict. `merge-tree`
+ * Checks `ref` against each of `bases` (refs or shas, nearest first) and keeps the best verdict. `merge-tree`
  * writes no ref and touches no checkout: it only leaves loose objects that `git gc` reaps.
  */
 export async function branchReach(repoPath: string, ref: string, bases: string[]): Promise<Reach | null> {
@@ -356,8 +356,9 @@ async function reachInto(repoPath: string, ref: string, base: string): Promise<R
 
 /**
  * Whether `ref` holds work of `other` that none of `bases` has: a commit of `other`'s own (not in a
- * base, nor in one of `others`, the other branches `other` itself is built on) that is in `ref`. A
- * branch built on `ref` does not count, and without a base nothing can be told.
+ * base, nor in one of `others`, the other branches, those of them `other` itself is built on) that is
+ * in `ref`. A branch built on `ref` does not count, and without a base nothing can be told. Each is a
+ * commit's full sha, so the answer is about those commits whatever the branches did since.
  */
 export async function holdsWorkOf(
   repoPath: string,
@@ -381,17 +382,13 @@ export async function holdsWorkOf(
     if (!landed.some(Boolean)) outside = true
   }
   if (!outside) return false
-  // What `other` stands on is not its own work: the shared commits may be a third branch's.
-  const under = await git(repoPath, [
-    'for-each-ref',
-    '--merged',
-    other,
-    '--format=%(refname:short)',
-    'refs/heads',
-    'refs/remotes/origin',
-  ])
-  const below = new Set(under ? under.split('\n') : [])
-  const stands = others.filter((x) => x !== other && below.has(x))
+  // What `other` stands on is not its own work: the shared commits may be a third branch's. rev-list
+  // prints each of `others` that is not in `other`; one in a base is left out too, which changes
+  // nothing: what a base holds is not counted anyway.
+  const tips = [...new Set(others)]
+  const over = tips.length ? await git(repoPath, ['rev-list', ...tips, '--not', other, ...bases]) : ''
+  const notBelow = new Set(over ? over.split('\n') : [])
+  const stands = tips.filter((x) => !notBelow.has(x))
   const own = ['rev-list', '--count', other, ...[...bases, ...stands].map((b) => `^${b}`)]
   const mine = Number(await git(repoPath, own))
   return mine > 0 && Number(await git(repoPath, [...own, `^${ref}`])) < mine

@@ -112,8 +112,16 @@ export async function reachOf(repoPath: string, branch: string, chain: string[],
   if (!ref) return null
   // A branch is not its own destination (a workspace on the ticket's own branch).
   const bases = baseRefs(chain, refs).filter((b) => b !== ref && b !== branch)
-  const key = [repoPath, `${ref}@${refSha(ref, refs)}`, ...bases.map((b) => `${b}@${refSha(b, refs)}`)]
-  return memo(reachMemo, REACH_MEMO_MAX, key.join('\0'), () => branchReach(repoPath, ref, bases))
+  const sha = refSha(ref, refs)!
+  const shas = bases.map((b) => refSha(b, refs)!)
+  const key = [repoPath, `${ref}@${sha}`, ...bases.map((b, i) => `${b}@${shas[i]}`)]
+  // Worked out on the listed commits, not on the names: git reads a name as it is now, and the answer
+  // would be kept for commits it is not about.
+  return memo(reachMemo, REACH_MEMO_MAX, key.join('\0'), async () => {
+    const reach = await branchReach(repoPath, sha, shas)
+    // Bases at the same commit answer alike and the first of them is kept: so is its name.
+    return reach && { ...reach, into: bases[shas.indexOf(reach.into)]! }
+  })
 }
 
 /** A commit's subject and date, and how far apart two commits are: by their shas, so never stale. */

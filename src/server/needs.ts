@@ -295,8 +295,16 @@ async function includedWork(t: Ticket, ctx: Context): Promise<number[]> {
           refs,
         ).filter((b) => b !== ref && b !== other)
         const key = [repo.repoPath, at(ref), at(other), ...bases.map(at), '|', ...others.map(at)].join('\0')
+        // On the listed commits the key names, not on the branches as they are now.
+        const sha = (r: string) => refSha(r, refs)!
         const holds = await memo(includesMemo, 2000, key, () =>
-          holdsWorkOf(repo.repoPath, ref, other, bases, others),
+          holdsWorkOf(
+            repo.repoPath,
+            sha(ref),
+            sha(other),
+            bases.map(sha),
+            others.filter((x) => x !== other).map(sha),
+          ),
         )
         return holds ? o.id : null
       }),
