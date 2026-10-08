@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Paperclip, Reply } from 'lucide-react'
+import { Reply } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -177,6 +177,7 @@ export function Thread({
           value={body}
           onChange={setBody}
           onFiles={(added) => setFiles((prev) => [...prev, ...added])}
+          onAttach={() => fileInput.current?.click()}
           onSubmit={() => body.trim() && !send.isPending && send.mutate()}
           minHeight={compact ? 'min-h-12' : 'min-h-20'}
           label="Reply"
@@ -194,9 +195,6 @@ export function Thread({
               e.target.value = ''
             }}
           />
-          <Button type="button" variant="ghost" size="sm" onClick={() => fileInput.current?.click()}>
-            <Paperclip data-icon="inline-start" /> attach
-          </Button>
           <PendingFiles files={files} onChange={setFiles} />
           <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
             {send.isPending ? 'Sending…' : 'Reply'}

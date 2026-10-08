@@ -1,7 +1,7 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
-import type { TicketFull, TicketRow } from '#/lib/api'
-import { png } from './files'
+import type { CommentRow, TicketFull, TicketRow } from '#/lib/api'
+import { png, sendFile } from './files'
 import { expect, ok, test } from './fixtures'
 
 const FORMATS = [
@@ -385,7 +385,7 @@ test('the ticket instructions have attach in the editor toolbar while editing, a
   expect(saved.attachments.map((a) => a.name)).toEqual(['from-header.png', 'from-toolbar.png'])
 })
 
-test('editors without an attach of their own have none in the toolbar; posts keep theirs below the editor', async ({
+test('editors without an attach of their own have none in the toolbar; posts and replies have theirs in it', async ({
   page,
   api,
   human,
@@ -400,7 +400,7 @@ test('editors without an attach of their own have none in the toolbar; posts kee
   await expect(note).toBeFocused()
   await expectFormatsOnly(note)
 
-  // New post and Reply: one attach each, in the row below the editor, adding to that form's files.
+  // New post and Reply: one attach each, the toolbar's, adding to that form's files.
   const actions = page.getByRole('article').getByRole('group', { name: 'Post actions' })
   await actions.hover()
   await actions.getByRole('button', { name: 'reply', exact: true }).click()
@@ -410,10 +410,10 @@ test('editors without an attach of their own have none in the toolbar; posts kee
   ]) {
     const text = page.getByRole('textbox', { name, exact: true })
     const form = page.locator('form').filter({ has: text })
-    await expectFormatsOnly(text)
+    await expectAttachInToolbar(text)
     const attach = form.getByRole('button', { name: /attach/i })
     await expect(attach).toHaveCount(1)
-    await expect(toolbarOf(text).getByRole('button', { name: /attach/i })).toHaveCount(0)
+    await expect(toolbarOf(text).getByRole('button', { name: /attach/i })).toHaveCount(1)
     const chooser = page.waitForEvent('filechooser')
     await attach.click()
     await (await chooser).setFiles({ name: file, mimeType: 'image/png', buffer: png() })
@@ -435,6 +435,223 @@ test('editors without an attach of their own have none in the toolbar; posts kee
     await expectFormatsOnly(page.getByRole('textbox', { name, exact: true }))
 })
 
+/** The form a composer's text is in: the New post form or a reply form. `text` is located from the page. */
+const formOf = (page: Page, text: Locator) => page.locator('form').filter({ has: text })
+
+/** Opens the reply box under the ticket's only post, and gives its text (located from the page). */
+async function openReply(page: Page) {
+  const actions = page.getByRole('article').getByRole('group', { name: 'Post actions' })
+  await actions.hover()
+  await actions.getByRole('button', { name: 'reply', exact: true }).click()
+  return page.getByRole('textbox', { name: 'Reply', exact: true })
+}
+
+/** Picks a file with the composer's toolbar attach, and waits for its form to list it. */
+async function pick(page: Page, text: Locator, name: string) {
+  const chooser = page.waitForEvent('filechooser')
+  await toolbarOf(text).getByRole('button', { name: 'Attach files', exact: true }).click()
+  await (await chooser).setFiles({ name, mimeType: 'image/png', buffer: png() })
+  await expect(formOf(page, text).getByRole('button', { name: `Remove ${name}` })).toBeVisible()
+}
+
+/** The editor's toolbar attach is the paperclip alone: no text, named and titled, as big as Link. */
+async function expectPaperclip(text: Locator) {
+  const bar = toolbarOf(text)
+  const attach = bar.getByRole('button').last()
+  await expect(attach).toHaveAccessibleName('Attach files')
+  await expect(attach).toHaveAttribute('title', 'Attach files')
+  await expect(attach).toHaveAttribute('aria-busy', 'false')
+  expect(await attach.evaluate((b) => (b as HTMLElement).innerText.trim())).toBe('')
+  await expect(attach.locator('svg')).toHaveCount(1)
+  await expect(attach.locator('svg.lucide-paperclip')).toBeVisible()
+  const link = (await bar.getByRole('button', { name: 'Link', exact: true }).boundingBox())!
+  const clip = (await attach.boundingBox())!
+  expect(clip.width).toBe(link.width)
+  expect(clip.height).toBe(link.height)
+}
+
+test('the New post, Reply and New ticket attach is a paperclip with no text, as big as the Link button', async ({
+  page,
+  api,
+  human,
+}) => {
+  const t = await api.ticket({ title: 'Just the icon' })
+  await ok(human.post(`/api/tickets/${t.id}/updates`, { data: { body: 'A post to answer.' } }))
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const reply = await openReply(page)
+  for (const text of [page.getByRole('textbox', { name: 'New post', exact: true }), reply]) {
+    await expectPaperclip(text)
+    await expect(formOf(page, text)).not.toContainText(/attach/i)
+  }
+
+  const d = await newTicket(page, t.projectId, 'Just the icon too')
+  await expectPaperclip(d.text)
+})
+
+test('a file picked with the New post toolbar attach is listed under the editor, and goes with the post', async ({
+  page,
+  api,
+}) => {
+  const t = await api.ticket({ title: 'Post a file' })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const text = page.getByRole('textbox', { name: 'New post', exact: true })
+  const form = formOf(page, text)
+  const progress = form.getByRole('switch', { name: 'progress' })
+  await text.click()
+  await page.keyboard.type('See the picture.')
+  await progress.click()
+  await expect(progress).toBeChecked()
+
+  // Picking lists the file under the editor, and posts nothing.
+  await pick(page, text, 'x.png')
+  const preview = form.getByRole('button', { name: 'Preview x.png' })
+  await expect(preview).toBeVisible()
+  const { box } = await measure(text)
+  expect((await preview.boundingBox())!.y).toBeGreaterThanOrEqual(box.bottom)
+  await expect(text).toHaveText('See the picture.')
+  expect((await api.getTicket(t.id)).updates).toEqual([])
+
+  // A file removed and picked again is listed again.
+  const remove = form.getByRole('button', { name: 'Remove x.png' })
+  await remove.click()
+  await expect(remove).toHaveCount(0)
+  await pick(page, text, 'x.png')
+  await expect(remove).toHaveCount(1)
+
+  // Post sends it with the text, and clears the form.
+  await form.getByRole('button', { name: 'Post', exact: true }).click()
+  await expect(text).toHaveText('')
+  await expect(remove).toHaveCount(0)
+  await expect(progress).not.toBeChecked()
+  const [saved] = (await api.getTicket(t.id)).updates
+  expect(saved).toMatchObject({ body: 'See the picture.', progress: true })
+  expect(saved!.attachments.map((a) => a.name)).toEqual(['x.png'])
+})
+
+test('a file picked with the Reply toolbar attach is listed in the reply form, and goes with the reply', async ({
+  page,
+  api,
+  human,
+}) => {
+  const t = await api.ticket({ title: 'Reply with a file' })
+  const { id } = await ok<{ id: number }>(
+    human.post(`/api/tickets/${t.id}/updates`, { data: { body: 'A post to answer.' } }),
+  )
+  const replies = () => ok<CommentRow[]>(human.get(`/api/comments?parentType=update&parentId=${id}`))
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const text = await openReply(page)
+  const form = formOf(page, text)
+  await text.click()
+  await page.keyboard.type('Here it is.')
+
+  // Picking lists the file in the reply form, and replies nothing.
+  await pick(page, text, 'y.png')
+  await expect(form.getByRole('button', { name: 'Preview y.png' })).toBeVisible()
+  await expect(text).toHaveText('Here it is.')
+  expect(await replies()).toEqual([])
+
+  // A file removed and picked again is listed again.
+  const remove = form.getByRole('button', { name: 'Remove y.png' })
+  await remove.click()
+  await expect(remove).toHaveCount(0)
+  await pick(page, text, 'y.png')
+  await expect(remove).toHaveCount(1)
+
+  // Reply sends it with the text, and clears the form.
+  await form.getByRole('button', { name: 'Reply', exact: true }).click()
+  await expect(page.getByRole('article').getByText('Here it is.')).toBeVisible()
+  await expect(text).toHaveText('')
+  await expect(remove).toHaveCount(0)
+  const [saved] = await replies()
+  expect(saved).toMatchObject({ body: 'Here it is.', author: 'enrique' })
+  expect(saved!.attachments.map((a) => a.name)).toEqual(['y.png'])
+})
+
+test('from the New post text, Tab reaches the formatting buttons, attach, its files, then the switch and Post; Enter and Space on attach post nothing', async ({
+  page,
+  api,
+}) => {
+  const t = await api.ticket({ title: 'Post files by keyboard' })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const text = page.getByRole('textbox', { name: 'New post', exact: true })
+  const form = formOf(page, text)
+  const attach = toolbarOf(text).getByRole('button', { name: 'Attach files', exact: true })
+  const format = (name: string) => toolbarOf(text).getByRole('button', { name, exact: true })
+  await text.click()
+  await page.keyboard.type('hello')
+
+  for (const name of FORMATS) {
+    await page.keyboard.press('Tab')
+    await expect(format(name)).toBeFocused()
+  }
+  await page.keyboard.press('Tab')
+  await expect(attach).toBeFocused()
+
+  for (const [key, name] of [
+    ['Enter', 'by-enter.png'],
+    ['Space', 'by-space.png'],
+  ] as const) {
+    const chooser = page.waitForEvent('filechooser')
+    await page.keyboard.press(key)
+    await (await chooser).setFiles({ name, mimeType: 'image/png', buffer: png() })
+    await expect(form.getByRole('button', { name: `Remove ${name}` })).toBeVisible()
+  }
+  await expect(text).toHaveText('hello')
+  expect((await api.getTicket(t.id)).updates).toEqual([])
+
+  // With files pending, Tab goes on from attach to them, then to the rest of the form.
+  await text.click()
+  for (const name of FORMATS) {
+    await page.keyboard.press('Tab')
+    await expect(format(name)).toBeFocused()
+  }
+  for (const next of [
+    attach,
+    form.getByRole('button', { name: 'Preview by-enter.png' }),
+    form.getByRole('button', { name: 'Remove by-enter.png' }),
+    form.getByRole('button', { name: 'Preview by-space.png' }),
+    form.getByRole('button', { name: 'Remove by-space.png' }),
+    form.getByRole('switch', { name: 'progress' }),
+    form.getByRole('button', { name: 'Post', exact: true }),
+  ]) {
+    await page.keyboard.press('Tab')
+    await expect(next).toBeFocused()
+  }
+  await expect(text).toHaveText('hello')
+  expect((await api.getTicket(t.id)).updates).toEqual([])
+})
+
+test('files pasted in or dropped on the New post and Reply composers are listed as files, not text', async ({
+  page,
+  api,
+  human,
+}) => {
+  const t = await api.ticket({ title: 'Paste and drop' })
+  await ok(human.post(`/api/tickets/${t.id}/updates`, { data: { body: 'A post to answer.' } }))
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  await openReply(page)
+  for (const name of ['New post', 'Reply']) {
+    const text = page.getByRole('textbox', { name, exact: true })
+    const form = formOf(page, text)
+    const css = `form:has([role="textbox"][aria-label="${name}"])`
+    await sendFile(page, `${css} [role="textbox"]`, 'paste', {
+      name: 'pasted.png',
+      mime: 'image/png',
+      data: png(),
+    })
+    await expect(form.getByRole('button', { name: 'Remove pasted.png' })).toBeVisible()
+    await expect(text).toHaveText('')
+    // Dropped on the form, outside the text.
+    await sendFile(page, `${css} [role="toolbar"]`, 'drop', {
+      name: 'dropped.png',
+      mime: 'image/png',
+      data: png(),
+    })
+    await expect(form.getByRole('button', { name: 'Remove dropped.png' })).toBeVisible()
+    await expect(text).toHaveText('')
+  }
+})
+
 test.describe('at phone width', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
@@ -445,5 +662,16 @@ test.describe('at phone width', () => {
     const d = await newTicket(page, project.id, 'On a phone')
     await expectToolbarAbove(d.text)
     await expectAttachInToolbar(d.text)
+  })
+
+  test('the New post toolbar, attach with it, is still drawn above the text on a ticket', async ({
+    page,
+    api,
+  }) => {
+    const t = await api.ticket({ title: 'Post on a phone' })
+    await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+    const text = page.getByRole('textbox', { name: 'New post', exact: true })
+    await expectToolbarAbove(text)
+    await expectAttachInToolbar(text)
   })
 })

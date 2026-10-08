@@ -1457,6 +1457,7 @@ function Activity({
           value={body}
           onChange={setBody}
           onFiles={(added) => setFiles((prev) => [...prev, ...added])}
+          onAttach={() => fileInput.current?.click()}
           onSubmit={submit}
           label="New post"
           placeholder="Write a post: a question, an answer, progress. Paste or drop screenshots and recordings."
@@ -1473,9 +1474,6 @@ function Activity({
               e.target.value = ''
             }}
           />
-          <Button type="button" variant="ghost" size="sm" onClick={() => fileInput.current?.click()}>
-            <Paperclip data-icon="inline-start" /> attach
-          </Button>
           <PendingFiles files={files} onChange={setFiles} />
           <div className="ml-auto flex items-center gap-3">
             <label
