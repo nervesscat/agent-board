@@ -376,6 +376,36 @@ test('a reply that is gone lands on its post', async ({ page, api, human, agent 
   await expect(reply(page, thread.reply)).toHaveCount(0)
 })
 
+test('without motion, in either theme, the mark is a still tint for the same moment', async ({
+  page,
+  project,
+  api,
+  human,
+  agent,
+}) => {
+  let decision = 0
+  const t = await longTicket(api, human, 'Still marks', 'in_progress', async (id) => {
+    decision = (await askDecision(agent, id, 'Hold still')).id
+  })
+  const tints: string[] = []
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ reducedMotion: 'reduce', colorScheme })
+    // Loaded afresh each time (from another page: the same URL again would only move to its anchor).
+    await overview(page, project)
+    await page.goto(`/projects/${project.id}/features/${t.id}#post-${decision}`)
+    await expectRevealed(page, post(page, decision))
+    const style = await post(page, decision).evaluate((el) => {
+      const s = getComputedStyle(el)
+      return { animation: s.animationName, shadow: s.boxShadow }
+    })
+    expect(style.animation).toBe('none')
+    expect(style.shadow).not.toBe('none')
+    tints.push(style.shadow)
+    await expectMarkGone(page)
+  }
+  expect(tints[0]).not.toBe(tints[1])
+})
+
 test('Home links its entries to the same places', async ({ page, project, api, agent }) => {
   const t = await api.ticket({ title: 'Asked from Home', status: 'in_progress' })
   const d = await askDecision(agent, t.id, `Which project is it, ${project.id}`)
