@@ -10,7 +10,12 @@ import type { Handoff } from '#/lib/api'
 export function HandoffCard({ handoff }: { handoff: Handoff }) {
   const missing = handoff.missing.length
   return (
-    <section className="rounded-lg border p-3" aria-label="Hand-off">
+    // A link lands on it as #handoff (src/lib/reveal.ts), below the ticket page's stuck header.
+    <section
+      id="handoff"
+      className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-3"
+      aria-label="Hand-off"
+    >
       <h2 className="mb-2 flex items-center justify-between gap-2 text-sm font-medium">
         Hand-off
         <span

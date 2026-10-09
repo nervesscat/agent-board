@@ -88,6 +88,8 @@
   --sidebar-ring: oklch(0.708 0 0);
   /* The cable in the CrossBoard mark, and nothing else: the rest of the UI stays neutral. */
   --brand: oklch(0.55 0.2 320);
+  /* What a link landed on, for a moment ([data-revealed] below). */
+  --revealed: oklch(0.62 0.14 240 / 22%);
 }
 
 .dark {
@@ -123,6 +125,7 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
   --brand: oklch(0.72 0.17 320);
+  --revealed: oklch(0.7 0.13 240 / 26%);
 }
 
 @layer base {
@@ -222,4 +225,26 @@
 }
 .tiptap ul[data-type='taskList'] li > div > p {
   margin: 0;
+}
+
+/*
+ * What a link's #anchor landed on (src/lib/reveal.ts sets the attribute for 3 s): tinted with a halo
+ * around it, fading back to its own look. Without motion it just stays tinted while marked.
+ */
+[data-revealed] {
+  animation: revealed 2.5s ease-in;
+}
+@keyframes revealed {
+  0%,
+  30% {
+    background-color: var(--revealed);
+    box-shadow: 0 0 0 4px var(--revealed);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-revealed] {
+    animation: none;
+    background-color: var(--revealed);
+    box-shadow: 0 0 0 4px var(--revealed);
+  }
 }

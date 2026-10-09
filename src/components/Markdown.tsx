@@ -49,6 +49,8 @@ export function Markdown({ children, className = '' }: { children: string; class
                   <AgentAvatar agent={agent} className="size-3.5" />@{agent.name}
                 </span>
               )
+            // A #link is to something on the same page (a post, a reply): it lands there, in this tab.
+            if (props.href?.startsWith('#')) return <a {...props} />
             return <a {...props} target="_blank" rel="noreferrer" />
           },
           img: ({ node: _n, ...props }) => (

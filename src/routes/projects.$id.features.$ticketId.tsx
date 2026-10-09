@@ -29,7 +29,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -109,6 +109,7 @@ import {
   validateLaneSearch,
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
+import { anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
@@ -213,6 +214,22 @@ function TicketPage() {
     enabled: Boolean(t) && !t?.parentId,
     refetchInterval: 10_000,
   })
+  // A link's #anchor (a post, a reply, the hand-off, the resume note) is brought into view once this
+  // ticket is drawn: not while the previous ticket stays on screen until it loads.
+  const anchor = useAnchor()
+  const drawn = t?.id === Number(ticketId)
+  useReveal(drawn ? anchor : null)
+  // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
+  // once per anchor, so turning it off again stays off.
+  const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
+  const foldedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!drawn || !anchor || anchoredPost === null || laneFeed || foldedFor.current === anchor.hash) return
+    if (t.lanes.length && !t.updates.some((u) => u.id === anchoredPost)) {
+      foldedFor.current = anchor.hash
+      setLaneFeed(true)
+    }
+  }, [drawn, anchor, anchoredPost, laneFeed, t])
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
@@ -681,10 +698,6 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  // Linked to as #resume (from the summary's Carrying over): brought into view once it is there.
-  const reveal = useCallback((el: HTMLElement | null) => {
-    if (el && window.location.hash === '#resume') el.scrollIntoView({ block: 'start' })
-  }, [])
   if (t.archivedAt || isClosed(stageOf(stages, t.status).kind)) return null
   const open = () => {
     setNote(r.note || RESUME_TEMPLATE)
@@ -716,9 +729,9 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const chip = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5'
   const warn = `${chip} bg-amber-500/10 text-amber-700 dark:text-amber-400`
   return (
+    // Linked to as #resume (from the summary's Carrying over), and brought into view as any anchor is.
     <section
       id="resume"
-      ref={reveal}
       className={cn(
         // Below the stuck header, as far as it is at rest; until that is measured, below the top bar.
         'scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-4',
@@ -1587,12 +1600,20 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
     onError,
   })
   const remove = useMutation({ mutationFn: () => del(`/api/updates/${u.id}`), onSuccess: onChange, onError })
+  // A link to one of its replies (#post-<id>-reply-<id>) opens the thread, once per link.
+  const anchor = useAnchor()
+  const opensFor = anchor?.holder === `post-${u.id}` ? anchor.hash : null
+  useEffect(() => {
+    if (opensFor) setThread(true)
+  }, [opensFor])
   const replies = u.thread.count
   const count = `${replies} ${replies === 1 ? 'reply' : 'replies'}`
   return (
+    // A link lands on it as #post-<id>, below the stuck header.
     <article
+      id={`post-${u.id}`}
       className={cn(
-        'rounded-lg border',
+        'scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border',
         !u.progress && 'bg-muted/30',
         u.decision && !u.decidedAt && 'border-amber-500/60 bg-amber-500/5',
       )}
