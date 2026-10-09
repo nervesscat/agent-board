@@ -85,10 +85,13 @@ export function TasksInput({
           type="button"
           size="icon"
           variant="outline"
-          disabled={!text.trim()}
+          // Off only to the eye and to assistive tech while there is no text: a disabled button drops
+          // the focus out of the dialog, both when it turns off under the focus and when it is pressed
+          // (the second click of a double-click). A press on it adds what there is, which may be
+          // nothing, and puts the focus back in the text, where the next task is typed.
+          aria-disabled={!text.trim() || undefined}
+          className="aria-disabled:opacity-50 aria-disabled:hover:bg-background dark:aria-disabled:hover:bg-input/30"
           onClick={() => {
-            // + turns off once the text is gone, and a disabled button drops the focus out of the
-            // dialog: it goes back to the text, where the next task is typed.
             add()
             input.current?.focus()
           }}

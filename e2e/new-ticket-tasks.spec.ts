@@ -320,6 +320,34 @@ test('after +, the focus is back in the tasks input, so the next task is typed t
   await expect(dialog).toBeVisible()
 })
 
+test('a double-click on + adds the task once, and the focus stays in the tasks input', async ({
+  page,
+  project,
+  human,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, add, items } = await openDialog(page)
+  const sent = creates(page)
+  await input.pressSequentially('Reproduce it')
+  const box = (await add.boundingBox())!
+  // The mouse itself, so the second press lands on + as it is then, blank text and all.
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(items).toHaveText(['Reproduce it'])
+  await expect(input).toBeFocused()
+  await page.keyboard.type('Fix it')
+  await expect(input).toHaveValue('Fix it')
+
+  // With no text, + reads as off, and a press on it only puts the focus back in the text.
+  await input.fill('')
+  await expect(add).toBeDisabled()
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(items).toHaveText(['Reproduce it'])
+  await expect(input).toBeFocused()
+  await expect(dialog).toBeVisible()
+  expect(sent).toEqual([])
+  expect(await rows(human, project.id)).toEqual([])
+})
+
 test('typing [ or ] after + in the New lane dialog stays in the field, and the lane goes under its parent', async ({
   page,
   project,
