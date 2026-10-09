@@ -98,15 +98,20 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       >
         <Plus data-icon="inline-start" /> New {noun}
       </DialogTrigger>
-      <DialogContent {...drop.props} className={cn('sm:max-w-xl', drop.className)}>
+      {/* Long instructions, tasks or files scroll the form, which never outgrows the screen; the
+          heading and the footer stick to its ends, so Create and the close button stay in reach. */}
+      <DialogContent
+        {...drop.props}
+        className={cn('p-0 *:data-[slot=dialog-close]:z-20 sm:max-w-xl', drop.className)}
+      >
         <form
-          className="space-y-4"
+          className="max-h-[calc(100dvh-2rem)] scroll-pt-28 scroll-pb-24 space-y-4 overflow-y-auto p-4"
           onSubmit={(e) => {
             e.preventDefault()
             if (!files.uploading && ready) create.mutate()
           }}
         >
-          <DialogHeader>
+          <DialogHeader className="sticky -top-4 z-10 -mx-4 -mt-4 mb-0 rounded-t-xl bg-popover p-4">
             <DialogTitle>New {noun}</DialogTitle>
             <DialogDescription>
               {parent ? (
@@ -225,7 +230,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
               in the same repo.
             </p>
           )}
-          <DialogFooter>
+          <DialogFooter className="sticky -bottom-4 z-10 bg-popover bg-linear-to-b from-muted/50 to-muted/50">
             <Button type="submit" disabled={create.isPending || files.uploading || !ready}>
               {files.uploading ? 'Uploading…' : 'Create'}
             </Button>
