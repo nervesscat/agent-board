@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test'
 
 import type { TicketFull, TicketRow } from '#/lib/api'
 import { png, sendFile } from './files'
-import { expect, ok, test } from './fixtures'
+import { type Api, expect, ok, test } from './fixtures'
 
 const LINES = 60
 const TASKS = Array.from({ length: 40 }, (_, i) => `Task number ${i + 1}`)
@@ -309,8 +309,64 @@ test('the New lane dialog with long content stays on screen, scrolls its fields 
   await expect.poll(async () => (await api.getTicket(t.id)).lanes.map((l) => l.title)).toEqual(['A long one'])
 })
 
+// As long as a title gets, in words, so it wraps over several lines of the heading.
+const LONG_TITLE = Array.from({ length: 40 }, (_, i) => `part${i + 1}`)
+  .join(' ')
+  .slice(0, 200)
+
+/**
+ * Under a heading made tall by a long parent title, goes back to the first line of long instructions
+ * and types there: that line shows between the heading and the footer, and nothing covers it.
+ */
+async function expectEditedFirstLineInSight(page: Page, api: Api) {
+  const t = await api.ticket({ title: LONG_TITLE })
+  expect(t.title).toHaveLength(200)
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  await page.getByRole('button', { name: 'New lane' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText(LONG_TITLE)).toBeVisible()
+  const text = dialog.getByRole('textbox', { name: 'Instructions' })
+  await text.click()
+  for (let i = 1; i <= 40; i++) {
+    if (i > 1) await page.keyboard.press('Enter')
+    await page.keyboard.insertText(`Line ${i} of the instructions`)
+  }
+  await expect(text.locator('p').last()).toBeInViewport({ ratio: 1 })
+
+  await page.keyboard.press('Control+Home')
+  await page.keyboard.insertText('EDITED ')
+  const first = text.locator('p').first()
+  await expect(first).toHaveText('EDITED Line 1 of the instructions')
+  await expect(first).toBeInViewport({ ratio: 1 })
+  await expectBetweenEnds(dialog, first, 'the line being edited')
+  // What is drawn at the middle of the line is the line itself, not the heading over it.
+  const b = await box(first)
+  const hit = await page.evaluate(
+    ([x, y]) => {
+      const el = document.elementFromPoint(x!, y!)
+      return el?.closest('p')?.textContent ?? el?.closest('[data-slot]')?.getAttribute('data-slot') ?? null
+    },
+    [b.x + Math.min(b.width / 2, 40), b.y + b.height / 2],
+  )
+  expect(hit).toBe('EDITED Line 1 of the instructions')
+}
+
+test('in the New lane dialog under a long parent title, the line edited at the start of long instructions stays in sight', async ({
+  page,
+  api,
+}) => {
+  await expectEditedFirstLineInSight(page, api)
+})
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  test('in the New lane dialog under a long parent title, the line edited at the start of long instructions stays in sight', async ({
+    page,
+    api,
+  }) => {
+    await expectEditedFirstLineInSight(page, api)
+  })
 
   test('the New ticket dialog with long content fits the screen, scrolls only up and down, and creates the ticket', async ({
     page,

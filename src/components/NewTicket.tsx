@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
@@ -55,6 +55,16 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const files = useUploads()
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop(files.add)
+  // The heading's height: a new lane's names its parent, whose title can wrap over many lines.
+  const [headHeight, setHeadHeight] = useState(0)
+  const measureHead = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return
+    const measure = () => setHeadHeight(el.offsetHeight)
+    measure()
+    const resized = new ResizeObserver(measure)
+    resized.observe(el)
+    return () => resized.disconnect()
+  }, [])
   const create = useMutation({
     mutationFn: () =>
       post<Ticket>(`/api/projects/${projectId}/tickets`, {
@@ -99,19 +109,24 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         <Plus data-icon="inline-start" /> New {noun}
       </DialogTrigger>
       {/* Long instructions, tasks or files scroll the form, which never outgrows the screen; the
-          heading and the footer stick to its ends, so Create and the close button stay in reach. */}
+          heading and the footer stick to its ends, so Create and the close button stay in reach. The
+          caret is kept clear of them: below the heading as tall as it is, above the one-button footer. */}
       <DialogContent
         {...drop.props}
         className={cn('p-0 *:data-[slot=dialog-close]:z-20 sm:max-w-xl', drop.className)}
       >
         <form
-          className="max-h-[calc(100dvh-2rem)] scroll-pt-28 scroll-pb-24 space-y-4 overflow-y-auto p-4"
+          className="max-h-[calc(100dvh-2rem)] scroll-pb-24 space-y-4 overflow-y-auto p-4"
+          style={{ scrollPaddingTop: `calc(${headHeight}px + 1rem)` }}
           onSubmit={(e) => {
             e.preventDefault()
             if (!files.uploading && ready) create.mutate()
           }}
         >
-          <DialogHeader className="sticky -top-4 z-10 -mx-4 -mt-4 mb-0 rounded-t-xl bg-popover p-4">
+          <DialogHeader
+            ref={measureHead}
+            className="sticky -top-4 z-10 -mx-4 -mt-4 mb-0 rounded-t-xl bg-popover p-4"
+          >
             <DialogTitle>New {noun}</DialogTitle>
             <DialogDescription>
               {parent ? (
