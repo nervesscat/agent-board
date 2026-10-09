@@ -82,6 +82,107 @@ async function typeLongInstructions(page: Page, dialog: Locator) {
   await expectBetweenEnds(dialog, last, 'the line being typed')
 }
 
+/**
+ * The paragraph holding the caret shows between the dialog's heading and its footer, and is what is
+ * drawn at its middle: nothing pinned covers it. Measured once the frame after the key has been drawn.
+ */
+async function expectCaretLineInSight(page: Page, dialog: Locator, what: string) {
+  const line = await page.evaluate(async () => {
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))
+    const node = getSelection()?.focusNode
+    const p = (node instanceof Element ? node : node?.parentElement)?.closest('p')
+    if (!p) return null
+    const r = p.getBoundingClientRect()
+    const hit = document.elementFromPoint(r.x + Math.min(r.width / 2, 40), r.y + r.height / 2)
+    return { top: r.top, bottom: r.bottom, uncovered: hit?.closest('p') === p }
+  })
+  expect(line, `${what}: the caret is in a paragraph`).not.toBeNull()
+  const [top, bottom] = await Promise.all([box(header(dialog)), box(footer(dialog))])
+  const at = `${what} at ${line!.top}..${line!.bottom}, heading to ${top.y + top.height}, footer from ${bottom.y}`
+  expect(line!.top, `${at}: below the heading`).toBeGreaterThanOrEqual(top.y + top.height - 1)
+  expect(line!.bottom, `${at}: above the footer`).toBeLessThanOrEqual(bottom.y + 1)
+  expect(line!.uncovered, `${at}: drawn uncovered`).toBe(true)
+}
+
+/**
+ * Types lines of instructions, then presses Enter at their end with nothing typed after it, a few
+ * times over: each new empty line, and the caret in it, is scrolled clear of the footer by the editor
+ * itself, which does not go by the fields' scroll padding.
+ */
+async function expectEntersAtTheEndInSight(page: Page, dialog: Locator, lines: number) {
+  const text = dialog.getByRole('textbox', { name: 'Instructions' })
+  await text.click()
+  for (let i = 1; i <= lines; i++) {
+    if (i > 1) await page.keyboard.press('Enter')
+    await page.keyboard.insertText(`Line ${i} of the instructions`)
+  }
+  for (let i = 1; i <= 3; i++) {
+    await page.keyboard.press('Enter')
+    await expectCaretLineInSight(page, dialog, `empty line ${i} after the instructions`)
+  }
+  // Typing on the empty line, then Enter again: the next one shows too.
+  await page.keyboard.insertText('More')
+  await expectCaretLineInSight(page, dialog, 'the line typed after them')
+  for (let i = 1; i <= 2; i++) {
+    await page.keyboard.press('Enter')
+    await expectCaretLineInSight(page, dialog, `empty line ${i} after the typed one`)
+  }
+  await expect(text.locator('p')).toHaveCount(lines + 5)
+}
+
+/**
+ * With long instructions, scrolls the fields so that one line hides under the heading, the next one
+ * just below it, and with the caret at the start of that next line presses Backspace: the two join on
+ * the hidden line, and the editor scrolls the caret's line out from under the heading.
+ */
+async function expectBackspaceJoinUnderHeadingInSight(page: Page, dialog: Locator) {
+  const lines = dialog.getByRole('textbox', { name: 'Instructions' }).locator('p')
+  // Line `n + 1` is the paragraph at index `n`.
+  const n = 20
+  await page.keyboard.press('Control+Home')
+  for (let i = 1; i <= n; i++) await page.keyboard.press('ArrowDown')
+  await lines.nth(n).evaluate((next) => {
+    const form = next.closest('form')!
+    const head = form.querySelector('[data-slot="dialog-header"]')!
+    form.scrollTop += next.getBoundingClientRect().top - head.getBoundingClientRect().bottom - 20
+  })
+  const [under, head] = await Promise.all([box(lines.nth(n - 1)), box(header(dialog))])
+  expect(under.y, 'the line to join onto starts under the heading').toBeLessThan(head.y + head.height)
+
+  await page.keyboard.press('Backspace')
+  await expect(lines.nth(n - 1)).toHaveText(`Line ${n} of the instructionsLine ${n + 1} of the instructions`)
+  await expectCaretLineInSight(page, dialog, 'the joined line')
+
+  // Undone with the fields scrolled to their end, the caret goes back up to its line: the editor
+  // scrolls it in from above, to below the heading.
+  expect((await scrollFields(dialog, 'end'))!.scrollTop).toBeGreaterThan(0)
+  await page.keyboard.press('ControlOrMeta+z')
+  await expect(lines.nth(n)).toHaveText(`Line ${n + 1} of the instructions`)
+  await expectCaretLineInSight(page, dialog, 'the line split again by undo')
+
+  // A narrower window wraps the heading over more lines: the room under it grows with it.
+  const was = await box(header(dialog))
+  await page.setViewportSize({ width: 320, height: page.viewportSize()!.height })
+  await expect.poll(async () => (await box(header(dialog))).height).toBeGreaterThan(was.height + 20)
+  // Once it has settled: the same height for ten frames in a row.
+  await expect
+    .poll(() =>
+      header(dialog).evaluate(async (head: HTMLElement) => {
+        const heights = []
+        for (let i = 0; i < 10; i++) {
+          heights.push(head.offsetHeight)
+          await new Promise(requestAnimationFrame)
+        }
+        return new Set(heights).size
+      }),
+    )
+    .toBe(1)
+  expect((await scrollFields(dialog, 'end'))!.scrollTop).toBeGreaterThan(0)
+  await page.keyboard.press('ControlOrMeta+Shift+z')
+  await expect(lines.nth(n - 1)).toHaveText(`Line ${n} of the instructionsLine ${n + 1} of the instructions`)
+  await expectCaretLineInSight(page, dialog, 'the line joined again by redo, under the taller heading')
+}
+
 /** Fills the dialog with more than fits on any screen: long instructions, tasks, tags and files. */
 async function fillTall(page: Page, dialog: Locator, { files = true } = {}) {
   await dialog.getByLabel('Title').fill('A long one')
@@ -358,8 +459,37 @@ test('in the New lane dialog under a long parent title, the line edited at the s
   await expectEditedFirstLineInSight(page, api)
 })
 
+/** The caret at either end of the fields, scrolled by the editor itself: on the desktop and on a phone. */
+function caretAtTheEndsTests() {
+  test('Enter at the end of long instructions in the New ticket dialog keeps each new line clear of the footer', async ({
+    page,
+    project,
+  }) => {
+    await page.goto(`/projects/${project.id}/features`)
+    await page.getByRole('button', { name: 'New ticket' }).click()
+    await expectEntersAtTheEndInSight(page, page.getByRole('dialog'), 40)
+  })
+
+  test('in the New lane dialog under a long parent title, Enter at the end of long instructions keeps each new line clear of the footer, and Backspace keeps the line it joins clear of the heading', async ({
+    page,
+    api,
+  }) => {
+    const t = await api.ticket({ title: LONG_TITLE })
+    await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+    await page.getByRole('button', { name: 'New lane' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog.getByText(LONG_TITLE)).toBeVisible()
+    await expectEntersAtTheEndInSight(page, dialog, 40)
+    await expectBackspaceJoinUnderHeadingInSight(page, dialog)
+  })
+}
+
+caretAtTheEndsTests()
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  caretAtTheEndsTests()
 
   test('in the New lane dialog under a long parent title, the line edited at the start of long instructions stays in sight', async ({
     page,

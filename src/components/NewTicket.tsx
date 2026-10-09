@@ -65,6 +65,9 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
     resized.observe(el)
     return () => resized.disconnect()
   }, [])
+  // Room kept around the caret: a gap below the heading, and above the one-button footer (65px) with
+  // a gap. The browser keeps it as the fields' scroll padding, the instructions editor as its own.
+  const caretRoom = { top: headHeight + 16, bottom: 96 }
   const create = useMutation({
     mutationFn: () =>
       post<Ticket>(`/api/projects/${projectId}/tickets`, {
@@ -116,8 +119,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         className={cn('p-0 *:data-[slot=dialog-close]:z-20 sm:max-w-xl', drop.className)}
       >
         <form
-          className="max-h-[calc(100dvh-2rem)] scroll-pb-24 space-y-4 overflow-y-auto p-4"
-          style={{ scrollPaddingTop: `calc(${headHeight}px + 1rem)` }}
+          className="max-h-[calc(100dvh-2rem)] space-y-4 overflow-y-auto p-4"
+          style={{ scrollPaddingTop: caretRoom.top, scrollPaddingBottom: caretRoom.bottom }}
           onSubmit={(e) => {
             e.preventDefault()
             if (!files.uploading && ready) create.mutate()
@@ -163,6 +166,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
               onFiles={files.add}
               onAttach={() => fileInput.current?.click()}
               minHeight="min-h-32"
+              caretRoom={caretRoom}
               label="Instructions"
               placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."
             />
