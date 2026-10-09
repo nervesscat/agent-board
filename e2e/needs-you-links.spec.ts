@@ -317,6 +317,35 @@ test('a #link on an open ticket lands on its post, and back and forward move bet
   await expectRevealed(page, post(page, older))
 })
 
+test('a #link clicked while the last target is still held in place lands on its reply', async ({
+  page,
+  api,
+  human,
+  agent,
+}) => {
+  let bottom = 0
+  let thread = { post: 0, reply: 0 }
+  const t = await longTicket(api, human, 'Two links in a row', 'in_progress', async (id) => {
+    bottom = (
+      await ok<Row>(human.post(`/api/tickets/${id}/updates`, { data: { body: 'Bottom.', progress: false } }))
+    ).id
+    // Above it in the feed, and answered.
+    thread = await answeredPost(human, agent, id, 'Higher up')
+    await ok(
+      human.patch(`/api/updates/${bottom}`, {
+        data: { body: `See [the answer](#post-${thread.post}-reply-${thread.reply}).` },
+      }),
+    )
+  })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}#post-${bottom}`)
+  await expect(post(page, bottom)).toHaveAttribute('data-revealed', '')
+  // Right away, while the post is held where it landed: opening the thread above it pushes it down.
+  await post(page, bottom).getByRole('link', { name: 'the answer' }).click()
+  await expect(page).toHaveURL(new RegExp(`#post-${thread.post}-reply-${thread.reply}$`))
+  await expect(threadToggle(post(page, thread.post))).toHaveAttribute('aria-expanded', 'true')
+  await expectRevealed(page, reply(page, thread.reply))
+})
+
 test("a lane's post linked on its parent shows with the lanes' posts folded in", async ({
   page,
   project,

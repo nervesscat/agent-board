@@ -49,7 +49,14 @@ export function useReveal(anchor: Anchor | null, page?: string | number) {
   const target = anchor?.target ?? null
   const holder = anchor?.holder ?? null
   useEffect(() => {
-    if (target) return revealWhenDrawn(target, client, holder)
+    if (!target) return
+    // A new arrival: whatever the last one still holds in place is the reader's again.
+    unpin()
+    const stop = revealWhenDrawn(target, client, holder)
+    return () => {
+      stop()
+      unpin()
+    }
   }, [client, target, holder, page])
 }
 
