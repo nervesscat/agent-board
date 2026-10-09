@@ -3,8 +3,11 @@ import path from 'node:path'
 
 import { db, schema } from '#/db'
 import { AGENT_CLIENTS, type AgentClient, SKILLS_TRACKING, type SkillsTracking } from '#/lib/constants'
+import { type DiffHunk, diffLines } from '#/lib/diff'
 import { config } from './config'
+import { HttpError, notFound } from './http'
 import { getProject, listProjects } from './projects'
+import { getRepo } from './repos'
 import rawTemplate from './skill/board.md?raw'
 
 // Agents get the skill with LF line endings, also from a Windows checkout where the file has CRLF.
@@ -170,14 +173,33 @@ export interface GlobalSkills {
 
 const lf = (text: string) => text.replace(/\r\n/g, '\n')
 
-async function fileStatus(file: string, want: string): Promise<SkillFileStatus> {
+/** The bundle's own copy of one of its paths, as the board serves it. */
+const served = (p: string) => reviewFiles[`./skill/review/${p}`]!
+
+/** A bundle file in a .claude folder: its text, not there, or there but not readable as text (and why). */
+type Installed = { text: string } | { missing: true } | { unreadable: string }
+
+async function readInstalled(file: string): Promise<Installed> {
   try {
-    return lf(await fs.readFile(file, 'utf8')) === lf(want) ? 'current' : 'outdated'
+    return { text: await fs.readFile(file, 'utf8') }
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code
-    // Anything else (a folder in its place, no permission) is there but not the bundle's file.
-    return code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'outdated'
+    if (code === 'ENOENT' || code === 'ENOTDIR') return { missing: true }
+    if (code === 'EISDIR') return { unreadable: 'a folder is in its place' }
+    if (code === 'EACCES' || code === 'EPERM') return { unreadable: 'no permission to read it' }
+    return { unreadable: code ?? (err as Error).message }
   }
+}
+
+function statusOf(installed: Installed, want: string): SkillFileStatus {
+  if ('missing' in installed) return 'missing'
+  // Anything there that cannot be read (a folder in its place, no permission) is not the bundle's file.
+  if ('unreadable' in installed) return 'outdated'
+  return lf(installed.text) === lf(want) ? 'current' : 'outdated'
+}
+
+async function fileStatus(file: string, want: string): Promise<SkillFileStatus> {
+  return statusOf(await readInstalled(file), want)
 }
 
 /** The bundle as found in one `.claude` folder: only the bundle's paths are read, never a write. */
@@ -185,7 +207,7 @@ async function claudeSkills(claudeDir: string): Promise<{ status: RepoSkillsStat
   const files = await Promise.all(
     reviewBundlePaths().map(async (p) => ({
       path: p,
-      status: await fileStatus(path.join(claudeDir, ...p.split('/')), reviewFiles[`./skill/review/${p}`]!),
+      status: await fileStatus(path.join(claudeDir, ...p.split('/')), served(p)),
     })),
   )
   const status = files.every((f) => f.status === 'missing')
@@ -220,12 +242,18 @@ async function repoSkills(repoPath: string): Promise<Pick<RepoSkills, 'status' |
  */
 async function globalSkills(): Promise<GlobalSkills> {
   const dir = config.claudeHome
+  if (!(await globalReadable())) return { path: dir, status: 'unreachable', files: [] }
+  return { path: dir, ...(await claudeSkills(dir)) }
+}
+
+/** Whether the user-wide folder can be read: there and listable, or not there at all. */
+async function globalReadable() {
+  const dir = config.claudeHome
   const absent = await fs.stat(dir).then(
     () => false,
     (err: NodeJS.ErrnoException) => err.code === 'ENOENT' || err.code === 'ENOTDIR',
   )
-  if (!absent && !(await readableDir(dir))) return { path: dir, status: 'unreachable', files: [] }
-  return { path: dir, ...(await claudeSkills(dir)) }
+  return absent || readableDir(dir)
 }
 
 /**
@@ -257,3 +285,58 @@ export async function reviewSkillsStatus(projectId?: number) {
 }
 
 export type ReviewSkillsStatus = Awaited<ReturnType<typeof reviewSkillsStatus>>
+
+/** One bundle file as installed against the copy the board serves now, as `git diff` shows it. */
+export interface SkillFileDiff {
+  /** The bundle path. */
+  path: string
+  /** The same as the status gives this file. */
+  status: SkillFileStatus
+  /** Where the installed copy is, or would be: the old side. */
+  installed: string
+  /** Why the installed copy can't be read as text (a folder in its place, no permission), else null. */
+  unreadable: string | null
+  /** The old side and the new: `--- a/<installed>` (`--- /dev/null` when missing) and `+++ b/<path>`. */
+  header: [string, string]
+  /** What installing the bundle would change in the file, line endings aside: none when current or unreadable. */
+  hunks: DiffHunk[]
+}
+
+/**
+ * One file of the review bundle (`file`: exactly one of `reviewBundlePaths()`) as installed in `~/.claude`
+ * (`config.claudeHome`) or in the repo `repoId`'s own `.claude`, against the copy the board serves: what
+ * the install line would change in it. Compared as the status compares it, read from disk each time, never
+ * a write.
+ */
+export async function reviewSkillDiff(file: string, repoId?: number): Promise<SkillFileDiff> {
+  // Only the bundle's own paths: any other string is refused before anything is read.
+  if (!reviewBundlePaths().includes(file)) throw notFound('review skills file')
+  let claudeDir: string
+  if (repoId === undefined) {
+    if (!(await globalReadable())) throw new HttpError(409, `can't read the folder ${config.claudeHome}`)
+    claudeDir = config.claudeHome
+  } else {
+    const repo = getRepo(repoId)
+    if (!(await readableDir(repo.repoPath)))
+      throw new HttpError(409, `can't read the checkout at ${repo.repoPath}`)
+    claudeDir = path.join(repo.repoPath, '.claude')
+  }
+  const installedPath = path.join(claudeDir, ...file.split('/'))
+  const installed = await readInstalled(installedPath)
+  const want = served(file)
+  const status = statusOf(installed, want)
+  return {
+    path: file,
+    status,
+    installed: installedPath,
+    unreadable: 'unreadable' in installed ? installed.unreadable : null,
+    header: [
+      'missing' in installed ? '--- /dev/null' : `--- a/${installedPath.replace(/^\/+/, '')}`,
+      `+++ b/${file} (served by the board)`,
+    ],
+    hunks:
+      status !== 'current' && !('unreadable' in installed)
+        ? diffLines('text' in installed ? lf(installed.text) : '', lf(want))
+        : [],
+  }
+}

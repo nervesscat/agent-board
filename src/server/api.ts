@@ -106,6 +106,14 @@ api.get('/api/agent-setup/review-skills/status', async ({ url }) => {
   const status = await agents.reviewSkillsStatus(pid === null ? undefined : intParam(pid, 'projectId'))
   return Response.json(status, { headers: { 'cache-control': 'no-store' } })
 })
+// One of those files as installed in ~/.claude, or in ?repoId's .claude, against as served: a git-style diff.
+api.get('/api/agent-setup/review-skills/diff', async ({ url }) => {
+  const file = url.searchParams.get('path')
+  if (!file) throw new HttpError(400, 'path is required: one of the review skills files')
+  const repo = url.searchParams.get('repoId')
+  const diff = await agents.reviewSkillDiff(file, repo === null ? undefined : intParam(repo, 'repoId'))
+  return Response.json(diff, { headers: { 'cache-control': 'no-store' } })
+})
 api.get('/api/settings', () => json(agents.getSettings()))
 api.patch('/api/settings', async ({ request }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human changes the settings')
