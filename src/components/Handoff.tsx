@@ -15,14 +15,19 @@ const REACHED: Record<Exclude<Reach['state'], 'unique'>, string> = {
 /**
  * The Merged item, with what the page's git state adds: a branch whose work reached its base counts as
  * merged too (a merge the PR queue has not seen yet, or one into a local base). Only with a PR: a
- * branch with no commits of its own sits in its base as well. And only when the local branch has all
- * that origin's has: reach is read from the local branch first, so one left behind (the PR's commits
- * pushed from elsewhere) would answer for commits that are not the PR's.
+ * branch with no commits of its own sits in its base as well. And only when the branch reach was read
+ * from holds the PR's commits: origin has a copy of the branch and the local branch has all of it
+ * (pushed, or ahead), or there is only origin's (remote-only), which reach then reads. Reach reads the
+ * local branch first, so one left behind (the PR's commits pushed from elsewhere), or one whose copy
+ * on origin is gone (the PR closed and its branch deleted), would answer for commits that are not the
+ * PR's.
  */
 function withReach(c: HandoffCheck, info: TicketGit['info'] | undefined, pr: TicketFull['pr']): HandoffCheck {
   const reach = info?.reach
   if (c.code !== 'not_merged' || c.ok || !pr || !reach || reach.state === 'unique') return c
-  if (info.push.behind) return c
+  const { state, behind } = info.push
+  const holdsOrigin = state === 'remote-only' || ((state === 'pushed' || state === 'ahead') && !behind)
+  if (!holdsOrigin) return c
   return { ...c, ok: true, text: `${REACHED[reach.state]} ${reach.into}` }
 }
 

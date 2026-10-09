@@ -276,9 +276,10 @@ test('a branch with no work of its own and no PR is not taken as merged', async 
   human,
   agent,
 }) => {
-  // At main's commit: in its base already, with nothing of its own.
+  // At main's commit, and pushed: in its base already, with nothing of its own.
   const branch = `e2e-${project.id}-empty`
   git('branch', branch, 'main')
+  git('push', '-q', 'origin', branch)
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
       data: { title: 'Nothing yet', status: 'in_progress', branch },
@@ -286,11 +287,45 @@ test('a branch with no work of its own and no PR is not taken as merged', async 
   )
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
   await expect
-    .poll(async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info.reach?.state)
-    .toBe('merged')
+    .poll(async () => {
+      const { info } = await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))
+      return [info.reach?.state, info.push.state, info.push.behind]
+    })
+    .toEqual(['merged', 'pushed', 0])
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const merged = page.getByRole('region', { name: 'Hand-off' }).locator('[data-code="not_merged"]')
+  await expect(merged).toHaveAttribute('data-ok', 'false')
+  await expect(merged).toContainText('Not merged yet')
+})
+
+test('a branch with a PR whose copy on origin is gone is not taken as merged', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // The PR was closed without merging and its branch deleted on origin; the local branch, never
+  // advanced, still sits at its base's commit.
+  const branch = `e2e-${project.id}-closed`
+  git('branch', branch, 'main')
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Closed, not merged', status: 'in_progress', branch },
+    }),
+  )
+  await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review', prNumber: 4545 } }))
+  await expect
+    .poll(async () => {
+      const { info } = await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))
+      return [info.reach?.state, info.push.state, info.push.behind]
+    })
+    .toEqual(['merged', 'local-only', 0])
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Hand-off' })
+  await expect(card.locator('[data-code="no_pr"]')).toHaveAttribute('data-ok', 'true')
+  const merged = card.locator('[data-code="not_merged"]')
   await expect(merged).toHaveAttribute('data-ok', 'false')
   await expect(merged).toContainText('Not merged yet')
 })
