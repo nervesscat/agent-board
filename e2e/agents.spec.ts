@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { APIRequestContext } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import { repoClaudeDir, reviewSkillsInstall } from '#/lib/agents'
 import type { Project } from '#/lib/api'
@@ -102,6 +102,40 @@ function emptyHome() {
   fs.rmSync(path.dirname(claudeHome), { recursive: true, force: true })
   fs.mkdirSync(path.dirname(claudeHome), { recursive: true })
   return claudeHome
+}
+
+/** The bundle as served, file by file: the tar extracted into a folder of its own. */
+async function servedBundle(human: APIRequestContext) {
+  const claude = path.join(fs.mkdtempSync(path.join(e2eEnv().root, 'served ')), '.claude')
+  await install(human, claude)
+  const paths = await ok<string[]>(human.get('/api/agent-setup/review-skills?list'))
+  return Object.fromEntries(paths.map((p) => [p, fs.readFileSync(path.join(claude, p), 'utf8')]))
+}
+
+/** How many lines a text has, line endings aside, as git counts them. */
+const lineCount = (text: string) => {
+  const lf = text.replace(/\r\n/g, '\n')
+  return lf.split('\n').length - (lf.endsWith('\n') ? 1 : 0)
+}
+
+/** The button of one file in a copy's list of files not up to date. */
+const fileButton = (scope: Locator, file: string) =>
+  scope
+    .getByRole('list', { name: 'Files not up to date' })
+    .getByRole('button', { name: new RegExp(`\\.claude/${file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) })
+
+/** The open dialog fits the viewport and scrolls inside, and the page behind it stays where it was. */
+async function scrollsInside(page: Page) {
+  const dialog = page.getByRole('dialog')
+  const box = (await dialog.boundingBox())!
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.y + box.height).toBeLessThanOrEqual(page.viewportSize()!.height)
+  expect(await dialog.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  const before = await page.evaluate(() => window.scrollY)
+  await dialog.hover()
+  await page.mouse.wheel(0, 2000)
+  await expect.poll(() => dialog.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  expect(await page.evaluate(() => window.scrollY)).toBe(before)
 }
 
 type Tracking = 'global' | 'repo'
@@ -316,6 +350,185 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await expect(own.filter({ hasText: 'Not installed in the repo' })).toHaveCount(1)
   })
 
+  test('a stale file in the global copy opens to what the line would change in it, read anew each time', async ({
+    page,
+    human,
+  }) => {
+    const errors: string[] = []
+    page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+    const claude = emptyHome()
+    await drifted(human, claude)
+    await track(human, 'global')
+    const served = await servedBundle(human)
+
+    await page.goto('/agents?shell=bash')
+    const here = page.getByRole('region', { name: 'On this machine' })
+    const entry = here.getByRole('listitem', { name: '~/.claude on this machine' })
+    await entry.getByRole('button', { name: /files differ or are missing$/ }).click()
+    const list = entry.getByRole('list', { name: 'Files not up to date' })
+    const stale = [
+      'agents/todo-review-ticket.md',
+      'skills/feature-review/SKILL.md',
+      'skills/todo-review/SKILL.md',
+    ]
+    await expect(list.getByRole('listitem')).toHaveCount(3)
+    for (const [i, p] of stale.entries())
+      await expect(list.getByRole('listitem').nth(i).getByRole('button')).toHaveAccessibleName(
+        new RegExp(`\\.claude/${p.replace(/\./g, '\\.')}$`),
+      )
+
+    // The edited skill: the extra line in the installed copy is removed, in a hunk near the end, with the
+    // installed file as the old side and the served one as the new.
+    const file = fileButton(entry, 'skills/feature-review/SKILL.md')
+    await file.click()
+    const dialog = page.getByRole('dialog')
+    await expect(
+      dialog.getByRole('heading', { name: '.claude/skills/feature-review/SKILL.md' }),
+    ).toBeVisible()
+    const installed = path.join(path.resolve(claude), 'skills', 'feature-review', 'SKILL.md')
+    await expect(dialog.locator('[data-line="header"]')).toHaveText([
+      `--- a/${installed.replace(/^\/+/, '')}`,
+      '+++ b/skills/feature-review/SKILL.md (served by the board)',
+    ])
+    await expect(dialog.locator('[data-line="hunk"]')).toHaveText([/^@@ -\d+,5 \+\d+,3 @@$/])
+    await expect(dialog.locator('[data-line="del"]').last()).toHaveText(/^\d+\s*-An older line\.$/)
+    await expect(dialog.locator('[data-line="add"]')).toHaveCount(0)
+    // Three lines of context and the two removed, not the whole file.
+    await expect(dialog.locator('[data-line="context"]')).toHaveCount(3)
+    await expect(dialog.locator('[data-line="del"]')).toHaveCount(2)
+
+    // Escape closes it, back on the file; from the keyboard it opens again, and Close closes it.
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(file).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Tab')
+    await expect(file).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(dialog.locator('[data-line="del"]')).toHaveCount(2)
+    await dialog.getByRole('button', { name: 'Close' }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(file).toBeFocused()
+    await expect(list.getByRole('listitem')).toHaveCount(3)
+    await expect(entry.getByText(/^mkdir -p/)).toBeVisible()
+
+    // A missing file: all of the served one added, from /dev/null. Long, it scrolls inside the dialog only.
+    await fileButton(entry, 'skills/todo-review/SKILL.md').click()
+    await expect(dialog.getByRole('heading', { name: '.claude/skills/todo-review/SKILL.md' })).toBeVisible()
+    await expect(dialog.locator('[data-line="header"]').first()).toHaveText('--- /dev/null')
+    const lines = lineCount(served['skills/todo-review/SKILL.md']!)
+    await expect(dialog.locator('[data-line="hunk"]')).toHaveText([`@@ -0,0 +1,${lines} @@`])
+    await expect(dialog.locator('[data-line="add"]')).toHaveCount(lines)
+    await expect(dialog.locator('[data-line="del"]')).toHaveCount(0)
+    await scrollsInside(page)
+    await page.keyboard.press('Escape')
+
+    // Installed since the list was read: pressed again, the file shows no changes, not the earlier diff.
+    await install(human, claude)
+    await file.click()
+    await expect(dialog.getByText('No changes: the installed copy is up to date')).toBeVisible()
+    await expect(dialog.locator('[data-line]')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+
+    // A folder where a file should be: outdated, and the dialog says it can't be read.
+    const checklists = path.join(claude, 'skills', 'feature-review', 'checklists.md')
+    fs.rmSync(checklists)
+    fs.mkdirSync(checklists)
+    await here.getByRole('button', { name: 'Check again' }).click()
+    await expect(list.getByRole('listitem')).toHaveText([
+      /^outdated\s*\.claude\/skills\/feature-review\/checklists\.md$/,
+    ])
+    await fileButton(entry, 'skills/feature-review/checklists.md').click()
+    await expect(
+      dialog.getByText(/The installed copy can.t be read as text \(a folder is in its place\)/),
+    ).toBeVisible()
+    await expect(dialog.getByText('Loading…')).toHaveCount(0)
+    await expect(dialog.locator('[data-line]')).toHaveCount(0)
+    expect(errors).toEqual([])
+  })
+
+  test("a stale file in a repo's own copy opens to the diff of that repo's .claude", async ({
+    page,
+    human,
+    project,
+  }) => {
+    await drifted(human, emptyHome())
+    await track(human, 'repo')
+    const { dir, claude } = await driftedCheckout(human)
+    await ok(human.post('/api/repos', { data: { projectId: project.id, repoPath: dir, name: 'drifted' } }))
+    const served = await servedBundle(human)
+
+    await page.goto(`/projects/${project.id}/agents?shell=bash`)
+    const entry = page
+      .getByRole('region', { name: 'In your repos' })
+      .getByRole('listitem', { name: `drifted in ${project.name}` })
+    await entry.getByRole('button', { name: /files differ or are missing$/ }).click()
+    await fileButton(entry, 'skills/feature-review/SKILL.md').click()
+    const dialog = page.getByRole('dialog')
+    await expect(
+      dialog.getByRole('heading', { name: '.claude/skills/feature-review/SKILL.md' }),
+    ).toBeVisible()
+    const installed = path.join(claude, 'skills', 'feature-review', 'SKILL.md')
+    const old = dialog.locator('[data-line="header"]').first()
+    await expect(old).toHaveText(`--- a/${installed.replace(/^\/+/, '')}`)
+    await expect(old).not.toContainText(e2eEnv().claudeHome.replace(/^\/+/, ''))
+    await expect(dialog.locator('[data-line="del"]').last()).toHaveText(/-An older line\.$/)
+    await expect(dialog.locator('[data-line="add"]')).toHaveCount(0)
+    await dialog.getByRole('button', { name: 'Close' }).click()
+
+    await fileButton(entry, 'agents/todo-review-ticket.md').click()
+    await expect(dialog.locator('[data-line="header"]').first()).toHaveText('--- /dev/null')
+    await expect(dialog.locator('[data-line="add"]')).toHaveCount(
+      lineCount(served['agents/todo-review-ticket.md']!),
+    )
+    await expect(dialog.locator('[data-line="del"]')).toHaveCount(0)
+  })
+
+  test('added and removed lines are told apart by sign and colour, in light and in dark', async ({
+    page,
+    human,
+  }) => {
+    const claude = emptyHome()
+    await drifted(human, claude)
+    // One line edited near the top as well: removed, added and unchanged lines in one view.
+    const skill = path.join(claude, 'skills', 'feature-review', 'SKILL.md')
+    const text = fs.readFileSync(skill, 'utf8')
+    const first = text.split('\n').find((l) => l.trim().length > 20)!
+    fs.writeFileSync(skill, text.replace(first, `${first} (edited)`))
+    await track(human, 'global')
+
+    const looks: Record<string, Record<string, { bg: string; color: string }>> = {}
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme })
+      await page.goto('/agents?shell=bash')
+      if (colorScheme === 'dark') await expect(page.locator('html')).toHaveClass(/\bdark\b/)
+      const entry = page.getByRole('listitem', { name: '~/.claude on this machine' })
+      await entry.getByRole('button', { name: /files differ or are missing$/ }).click()
+      await fileButton(entry, 'skills/feature-review/SKILL.md').click()
+      const dialog = page.getByRole('dialog')
+      await expect(dialog.locator('[data-line="add"]')).toHaveCount(1)
+      const look = async (kind: string) => {
+        const row = dialog.locator(`[data-line="${kind}"]`).first()
+        await expect(row, kind).toHaveCSS('font-family', /mono/i)
+        return row.evaluate((el) => {
+          const s = getComputedStyle(el)
+          return { bg: s.backgroundColor, color: s.color }
+        })
+      }
+      looks[colorScheme] = { add: await look('add'), del: await look('del'), context: await look('context') }
+      await expect(dialog.locator('[data-line="add"]').first()).toContainText(`+${first}`)
+      await expect(dialog.locator('[data-line="del"]').first()).toContainText(`-${first} (edited)`)
+      const { add, del, context } = looks[colorScheme]!
+      expect(add.bg, colorScheme).not.toBe(context.bg)
+      expect(add.bg, colorScheme).not.toBe(del.bg)
+      expect(del.bg, colorScheme).not.toBe(context.bg)
+      expect(add.color, colorScheme).not.toBe(del.color)
+    }
+    // The added lines' text follows the theme, as the board's other green does.
+    expect(looks.dark!.add.color).not.toBe(looks.light!.add.color)
+    expect(looks.dark!.context.color).not.toBe(looks.light!.context.color)
+  })
+
   test('a project with no repos says so on its Agents page', async ({ page, human }) => {
     await track(human, 'repo')
     const empty = await ok<Project>(human.post('/api/projects', { data: { name: 'No repos here' } }))
@@ -357,6 +570,50 @@ test.describe('the copy of the review skills the Agents pages track', () => {
           await copy.getByRole('button', { name: /files differ or are missing$/ }).click()
           await expect(copy.getByText(/^\$t = Join-Path/)).toBeVisible()
           expect(await sideways(), `${tracking} ${at}`).toBe(false)
+        }
+      }
+    })
+
+    test("a stale file's diff fits the phone: long lines scroll inside the diff, never the page", async ({
+      page,
+      human,
+      project,
+    }) => {
+      const { dir } = await driftedCheckout(human)
+      await ok(human.post('/api/repos', { data: { projectId: project.id, repoPath: dir, name: 'drifted' } }))
+      await drifted(human, emptyHome())
+      const sideways = () =>
+        page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+      const within = async (what: Locator, name: string) => {
+        const box = (await what.boundingBox())!
+        expect(box.x, name).toBeGreaterThanOrEqual(0)
+        expect(box.x + box.width, name).toBeLessThanOrEqual(390)
+      }
+      for (const tracking of ['global', 'repo'] as const) {
+        await track(human, tracking)
+        await page.goto('/agents?shell=bash')
+        const copy =
+          tracking === 'global'
+            ? page.getByRole('listitem', { name: '~/.claude on this machine' })
+            : page.getByRole('listitem', { name: `drifted in ${project.name}` })
+        await copy.getByRole('button', { name: /files differ or are missing$/ }).click()
+        for (const file of ['agents/todo-review-ticket.md', 'skills/feature-review/SKILL.md']) {
+          const name = `${tracking} ${file}`
+          await fileButton(copy, file).click()
+          const dialog = page.getByRole('dialog')
+          const changes = dialog.getByRole('region', { name: 'Changes' })
+          await expect(changes.locator('[data-line="hunk"]')).toHaveCount(1)
+          await expect(dialog).toHaveCSS('opacity', '1')
+          expect(await sideways(), name).toBe(false)
+          await within(dialog, name)
+          await within(changes, name)
+          if (file.startsWith('agents/')) {
+            // The agent's long lines are wider than the phone: its diff scrolls sideways, on its own.
+            expect(await changes.evaluate((el) => el.scrollWidth > el.clientWidth), name).toBe(true)
+            await scrollsInside(page)
+          }
+          await dialog.getByRole('button', { name: 'Close' }).click()
+          await expect(dialog).toHaveCount(0)
         }
       }
     })

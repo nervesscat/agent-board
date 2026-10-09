@@ -5,6 +5,7 @@ import { type ReactNode, useId, useState } from 'react'
 import { toast } from 'sonner'
 
 import { CopyBlock } from '#/components/AgentPicker'
+import { SkillFileDiffDialog } from '#/components/SkillFileDiff'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
@@ -270,6 +271,7 @@ function RepoSkills({
             {data.repos.map((r) => (
               <SkillsItem
                 key={r.repoId}
+                repoId={r.repoId}
                 label={`${r.repoName} in ${r.projectName}`}
                 name={
                   <>
@@ -296,10 +298,14 @@ function RepoSkills({
   )
 }
 
-/** One copy of the bundle: where it is, its status, and, when outdated, its stale files and line. */
+/**
+ * One copy of the bundle: where it is, its status, and, when outdated, its stale files and line. Each
+ * stale file opens to what the line would change in it.
+ */
 function SkillsItem({
   label,
   name,
+  repoId,
   path,
   status,
   statusLabel,
@@ -310,6 +316,8 @@ function SkillsItem({
 }: {
   label: string
   name: ReactNode
+  /** The repo whose `.claude` holds this copy; none for `~/.claude`. */
+  repoId?: number
   path: string
   status: RepoSkillsRow['status']
   statusLabel: string
@@ -320,6 +328,9 @@ function SkillsItem({
   line: string
 }) {
   const [open, setOpen] = useState(false)
+  // The stale file whose changes are shown, and how many times one was opened: each opening reads anew.
+  const [diffOf, setDiffOf] = useState<string | null>(null)
+  const [opened, setOpened] = useState(0)
   const outdated = status === 'outdated'
   const stale = files.filter((f) => f.status !== 'current')
   return (
@@ -350,15 +361,34 @@ function SkillsItem({
             <div className="space-y-2">
               <ul className="font-mono text-xs text-muted-foreground" aria-label="Files not up to date">
                 {stale.map((f) => (
-                  <li key={f.path} className="flex gap-2">
-                    <span className="w-16 shrink-0">{f.status}</span>
-                    <span className="min-w-0 break-all">.claude/{f.path}</span>
+                  <li key={f.path}>
+                    {/* Opens what the line would change in this file. */}
+                    <button
+                      type="button"
+                      aria-haspopup="dialog"
+                      onClick={() => {
+                        setOpened((n) => n + 1)
+                        setDiffOf(f.path)
+                      }}
+                      className="flex w-full gap-2 rounded-sm text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+                    >
+                      <span className="w-16 shrink-0">{f.status}</span>
+                      <span className="min-w-0 break-all underline-offset-2 hover:underline">
+                        .claude/{f.path}
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
               <CopyBlock text={line} />
             </div>
           )}
+          <SkillFileDiffDialog
+            file={diffOf}
+            repoId={repoId}
+            opened={opened}
+            onClose={() => setDiffOf(null)}
+          />
         </>
       )}
     </li>
