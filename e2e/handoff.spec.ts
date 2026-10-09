@@ -1,8 +1,26 @@
-import type { Handoff, TicketFull } from '#/lib/api'
+import type { Locator, Page } from '@playwright/test'
+
+import type { Handoff, TicketFull, TicketGit } from '#/lib/api'
 import { commitFile, e2eEnv, git } from './env'
 import { expect, ok, test } from './fixtures'
 
 const ALL = ['no_pr', 'not_pushed', 'no_preview', 'no_handoff_post']
+
+/** A CSS colour as the sRGB pixel it paints, whatever notation the browser computes it in. */
+const rgb = (page: Page, color: string) =>
+  page.evaluate((c) => {
+    const ctx = document.createElement('canvas').getContext('2d')!
+    ctx.fillStyle = c
+    ctx.fillRect(0, 0, 1, 1)
+    return Array.from(ctx.getImageData(0, 0, 1, 1).data.slice(0, 3))
+  }, color)
+
+/** The colour a section's border paints. */
+const borderOf = async (section: Locator) =>
+  rgb(section.page(), await section.evaluate((e) => getComputedStyle(e).borderTopColor))
+
+/** Clearly green: the green channel well above red and blue. */
+const green = ([r, g, b]: number[]) => g! - Math.max(r!, b!) >= 40
 
 test('a ticket moved to review lists what its hand-off lacks, and ticks each item once it is there', async ({
   page,
@@ -68,11 +86,142 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   await expect.poll(missing).toEqual([])
 
   await page.reload()
+  // Complete, though the branch is not merged yet: that is the human's step, not a missing item.
   await expect(card).toContainText('complete')
+  await expect(item('not_merged')).toHaveAttribute('data-ok', 'false')
   for (const code of ALL) await expect(item(code)).toHaveAttribute('data-ok', 'true')
   await expect(item('no_pr')).toContainText('PR #4242')
   await expect(item('not_pushed')).toContainText('Branch pushed')
   await expect(item('no_preview')).toContainText(`Running at ${e2eEnv().baseURL}`)
   await expect(item('no_handoff_post')).toContainText('Posted by claude after the last commit')
   await card.screenshot({ path: test.info().outputPath('handoff-card.png') })
+})
+
+test('Merged comes first and waits on the human; once the branch is in its base the whole card turns green', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // A base of the ticket's own (so the run's main never moves), long enough to wrap on a phone, and a
+  // pushed branch one commit past it.
+  const name = (what: string) => `e2e-${project.id}-${what}`
+  const base = name('a-base-branch-with-a-rather-long-name-that-has-to-wrap-on-a-phone')
+  git('branch', base, 'main')
+  const branch = name('merge-me')
+  const work = commitFile('main', 'merge-me.txt', 'work\n', 'work')
+  git('branch', branch, work)
+  git('push', '-q', 'origin', branch)
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Merge it', status: 'in_progress', branch, baseBranch: base },
+    }),
+  )
+  const read = () => ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
+  const reach = async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info.reach?.state
+  // Everything the hand-off asks for: a PR, a preview that answers, the hand-off post.
+  await ok(agent.patch(`/api/tickets/${t.id}`, { data: { prNumber: 4343 } }))
+  await ok(
+    agent.post(`/api/tickets/${t.id}/workspaces`, {
+      data: { name: 'worktree', branch, previewUrl: e2eEnv().baseURL },
+    }),
+  )
+  await ok(
+    agent.post(`/api/tickets/${t.id}/updates`, {
+      data: { body: `PR #4343. Preview: ${e2eEnv().baseURL}.` },
+    }),
+  )
+  await expect.poll(async () => (await read()).push.state).toBe('pushed')
+  await expect.poll(reach).toBe('unique')
+
+  // The human moves it to review: nothing lacks, so no warning; Merged is first, pending.
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Merge it')
+  await page.getByRole('combobox').filter({ hasText: 'In progress' }).click()
+  await page.getByRole('option', { name: 'In review', exact: true }).click()
+  const card = page.getByRole('region', { name: 'Hand-off' })
+  const item = (code: string) => card.locator(`[data-code="${code}"]`)
+  await expect(card).toContainText('complete')
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'the hand-off lacks' })).toHaveCount(0)
+  const rows = card.locator('li')
+  await expect(rows.nth(0)).toHaveAttribute('data-code', 'not_merged')
+  await expect(rows.nth(1)).toHaveAttribute('data-code', 'no_pr')
+  const merged = item('not_merged')
+  await expect(merged).toHaveAttribute('data-ok', 'false')
+  await expect(merged).toContainText('MergedNot merged yet')
+  const marker = merged.getByRole('img')
+  await expect(marker).toHaveAccessibleName('pending')
+  await expect(marker).not.toHaveClass(/amber/)
+  await expect(marker.locator('*')).not.toHaveClass(/amber/)
+  for (const code of ALL) await expect(item(code)).toHaveAttribute('data-ok', 'true')
+  // Only Merged pending: the card's border is the plain one every card has.
+  const details = page.getByRole('region', { name: 'Details' })
+  const plain = await borderOf(details)
+  expect(green(plain), `${plain}`).toBe(false)
+  expect(await borderOf(card)).toEqual(plain)
+  await card.screenshot({ path: test.info().outputPath('handoff-pending-merge.png') })
+
+  // An agent moving it there hears the same: nothing missing.
+  const moved = await ok<TicketFull & { handoff: Handoff }>(
+    agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }),
+  )
+  expect(moved.handoff.missing).toEqual([])
+  expect(moved.handoff.checks[0]).toMatchObject({ code: 'not_merged', label: 'Merged', ok: false })
+
+  // The branch lands in its base: the card's git state says so, and every row is green.
+  git('update-ref', `refs/heads/${base}`, work)
+  await expect.poll(reach).toBe('merged')
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme })
+    await page.reload()
+    if (colorScheme === 'dark') await expect(page.locator('html')).toHaveClass(/\bdark\b/)
+    else await expect(page.locator('html')).not.toHaveClass(/\bdark\b/)
+    await expect(merged).toHaveAttribute('data-ok', 'true')
+    await expect(merged).toContainText(`Merged into ${base}`)
+    await expect(card.locator('li[data-ok="false"]')).toHaveCount(0)
+    const border = await borderOf(card)
+    expect(green(border), `${colorScheme}: ${border}`).toBe(true)
+    expect(border).not.toEqual(await borderOf(details))
+    await card.screenshot({ path: test.info().outputPath(`handoff-merged-${colorScheme}.png`) })
+  }
+
+  // On a phone the long base wraps inside the card, and the page does not scroll sideways.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.reload()
+  await expect(merged).toHaveAttribute('data-ok', 'true')
+  await card.scrollIntoViewIfNeeded()
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
+  ).toBe(true)
+  const box = (await card.boundingBox())!
+  expect(box.x).toBeGreaterThanOrEqual(0)
+  expect(box.x + box.width).toBeLessThanOrEqual(390)
+  const text = (await merged.locator('.block').boundingBox())!
+  expect(text.x + text.width).toBeLessThanOrEqual(box.x + box.width)
+  await card.screenshot({ path: test.info().outputPath('handoff-merged-phone.png') })
+})
+
+test('a branch with no work of its own and no PR is not taken as merged', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // At main's commit: in its base already, with nothing of its own.
+  const branch = `e2e-${project.id}-empty`
+  git('branch', branch, 'main')
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Nothing yet', status: 'in_progress', branch },
+    }),
+  )
+  await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
+  await expect
+    .poll(async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info.reach?.state)
+    .toBe('merged')
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const merged = page.getByRole('region', { name: 'Hand-off' }).locator('[data-code="not_merged"]')
+  await expect(merged).toHaveAttribute('data-ok', 'false')
+  await expect(merged).toContainText('Not merged yet')
 })
