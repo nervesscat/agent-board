@@ -47,42 +47,54 @@ export function followHistory(router: { history: RouterHistory }) {
 }
 
 /**
- * Where the reader left this entry of the history, when they come back to it (Back, Forward): the
- * router keeps it for the window. None for a link followed, a URL opened afresh or a reload.
+ * Whether the reader came back to this entry of the history (Back, Forward) rather than arrived (a
+ * link followed, a URL opened afresh, a reload), and where they left it, if the router kept that for
+ * the window.
  */
-function useLeftAt() {
-  const kept = useElementScrollRestoration({ getElement: () => window })
-  return moved === 'BACK' || moved === 'FORWARD' || moved === 'GO' ? kept : undefined
+function useReturn() {
+  const left = useElementScrollRestoration({ getElement: () => window })
+  return moved === 'BACK' || moved === 'FORWARD' || moved === 'GO' ? { left } : null
 }
 
 /**
  * Brings the anchor's target into view once it is drawn, once per anchor on a page: the page's
- * refetches and re-renders leave the reader where they are. Pass null until the page shows the data
- * the anchor belongs to (not the previous page's, kept while the next one loads), and `page` for what
- * it shows when one route shows several things (a ticket): the same anchor on the next one is another.
+ * refetches and re-renders leave the reader where they are. `ready` false until the page shows what
+ * the anchor belongs to (not the previous ticket, kept while the next one loads; not a list about to
+ * be filtered again), and `page` for what it shows when one route shows several things (a ticket):
+ * the same anchor on the next one is another.
  *
- * Back or Forward to where the reader had been, the page goes back to where they left it instead,
- * unmarked: once the target is drawn (the router's own restoring comes before a page that loads its
- * data has the height for it).
+ * Back or Forward, nothing is marked or scrolled to: the page goes back to where the reader left it,
+ * once the target is drawn (the router's own restoring comes before a page that loads its data has
+ * the height for it), or is left to the router when it kept no place for the window (a box of its
+ * own, such as a dialog, it restores itself).
  */
-export function useReveal(anchor: Anchor | null, page?: string | number) {
+export function useReveal(
+  anchor: Anchor | null,
+  { page, ready = true }: { page?: string | number; ready?: boolean } = {},
+) {
   const client = useQueryClient()
-  // Read below as the anchor arrives: a later change (a filter put in the URL) does not reveal again.
-  const kept = useLeftAt()
-  const left = useRef(kept)
+  // How the reader got to this anchor, as it first shows: before the page is ready, the URL may be
+  // replaced on the way (a remembered filter put in it), which is still the same arrival.
+  const arrival = `${page ?? ''}#${anchor?.hash ?? ''}`
+  const now = useReturn()
+  const came = useRef<{ arrival: string; back: typeof now } | null>(null)
   useEffect(() => {
-    left.current = kept
+    if (came.current?.arrival !== arrival) came.current = { arrival, back: now }
   })
-  const target = anchor?.target ?? null
+  const target = ready ? (anchor?.target ?? null) : null
   const holder = anchor?.holder ?? null
   useEffect(() => {
     if (!target) return
     // A new arrival: whatever the last one still holds in place is the reader's again.
     unpin()
-    const at = left.current
-    const stop = at
-      ? revealWhenDrawn(target, client, null, () => window.scrollTo(at.scrollX, at.scrollY))
-      : revealWhenDrawn(target, client, holder, (el) => el && reveal(el))
+    const back = came.current?.back
+    if (back) unmark()
+    const at = back?.left
+    const stop = !back
+      ? revealWhenDrawn(target, client, holder, (el) => el && reveal(el))
+      : at
+        ? revealWhenDrawn(target, client, null, () => window.scrollTo(at.scrollX, at.scrollY))
+        : () => {}
     return () => {
       stop()
       unpin()
@@ -191,6 +203,14 @@ function revealWhenDrawn(
 
 let marked: { el: HTMLElement; timer: ReturnType<typeof setTimeout> } | null = null
 let unpin = () => {}
+
+/** Takes the mark off whatever has it. */
+function unmark() {
+  if (!marked) return
+  clearTimeout(marked.timer)
+  marked.el.removeAttribute('data-revealed')
+  marked = null
+}
 
 /** Scrolls to the element and marks it for a moment; only one element is marked at a time. */
 function reveal(el: HTMLElement) {

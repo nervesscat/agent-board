@@ -329,6 +329,32 @@ test('a #link on an open ticket lands on its post; back and forward return to wh
   await expect(page.locator('[data-revealed]')).toHaveCount(0)
 })
 
+test('Back right after a #link takes its mark off at once', async ({ page, api, human }) => {
+  let older = 0
+  let newer = 0
+  const t = await longTicket(api, human, 'Back at once', 'in_progress', async (id) => {
+    older = (
+      await ok<Row>(human.post(`/api/tickets/${id}/updates`, { data: { body: 'Earlier.', progress: false } }))
+    ).id
+    newer = (
+      await ok<Row>(
+        human.post(`/api/tickets/${id}/updates`, {
+          data: { body: `After [the earlier one](#post-${older}).`, progress: false },
+        }),
+      )
+    ).id
+  })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}#post-${newer}`)
+  await expectRevealed(page, post(page, newer))
+  await expectMarkGone(page)
+  await post(page, newer).getByRole('link', { name: 'the earlier one' }).click()
+  await expect(post(page, older)).toHaveAttribute('data-revealed', '')
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`#post-${newer}$`))
+  // Gone with the step back, not left to fade.
+  await expect(page.locator('[data-revealed]')).toHaveCount(0, { timeout: 300 })
+})
+
 test('a #link clicked while the last target is still held in place lands on its reply', async ({
   page,
   api,
@@ -516,6 +542,104 @@ test('a PR to review lands on its card, whatever filter this browser remembers',
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
   // Shown for this visit, not remembered.
   expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('others')
+})
+
+/**
+ * The PR queue visited once (its list now loaded), a filter that hides the PR picked there, then the
+ * Overview's link to the PR: the list is drawn at once, then filtered as remembered, then widened.
+ */
+async function reviewFromCachedQueue(page: Page, project: Project) {
+  const target = seedPr(project, { title: 'Review me again', updatedAt: '2026-01-01T00:00:00.000Z' })
+  for (let i = 0; i < 12; i++) seedPr(project, { title: `Queued PR ${i}` })
+  await overview(page, project)
+  const link = needsYou(page).getByRole('link', { name: `Review PR #${target.number} Review me again` })
+  await link.click()
+  await expect(page.locator(`#pr-${target.id}`)).toHaveAttribute('data-revealed', '')
+  await page.getByRole('tab', { name: /^Waiting on others/ }).click()
+  await expect(page.locator(`#pr-${target.id}`)).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('others')
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
+  await link.click()
+  await expect(page).toHaveURL(new RegExp(`filter=all#pr-${target.id}$`))
+  const card = page.locator(`#pr-${target.id}`)
+  await expectRevealed(page, card, topBar(page))
+  await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
+  expect(await noSidewaysScroll(page)).toBe(true)
+}
+
+test('a PR to review lands on its card with the queue already loaded and a filter that hides it', async ({
+  page,
+  project,
+}) => {
+  await reviewFromCachedQueue(page, project)
+})
+
+test('Forward to a PR the reader scrolled away from returns to where they left it, under a filter remembered since', async ({
+  page,
+  project,
+}) => {
+  const target = seedPr(project, { title: 'Come back to me', updatedAt: '2026-01-01T00:00:00.000Z' })
+  for (let i = 0; i < 12; i++) seedPr(project, { title: `Queued PR ${i}` })
+  await overview(page, project)
+  await needsYou(page)
+    .getByRole('link', { name: `Review PR #${target.number} Come back to me` })
+    .click()
+  await expectRevealed(page, page.locator(`#pr-${target.id}`), topBar(page))
+  await expectMarkGone(page)
+  const left = await scrollTo(page, 600)
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
+  // Picked meanwhile (in another tab of the queue): it hides the PR, so the list is filtered, then
+  // widened, on the way back.
+  await page.evaluate(() => localStorage.setItem('prs.filter', 'others'))
+  await recordMarks(page)
+  await page.goForward()
+  await expect(page).toHaveURL(new RegExp(`#pr-${target.id}$`))
+  await expect.poll(() => scrollY(page)).toBe(left)
+  await page.waitForTimeout(1_000)
+  expect(await scrollY(page)).toBe(left)
+  expect(await marks(page)).toEqual([])
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
+})
+
+test('Back and Forward over a #link in a review result mark nothing', async ({ page, project, human }) => {
+  const summaryMd = [
+    'A claim with a note.[^1]',
+    ...Array.from({ length: 40 }, (_, i) => `Finding ${i + 1}: all good here.`),
+    '[^1]: The note behind the claim.',
+  ].join('\n\n')
+  const result = await ok<Row>(
+    human.post(`/api/projects/${project.id}/reviews/results`, {
+      data: { prNumber: 4545, sha: 'abcdef1234567', verdict: 'SHIP', summaryMd },
+    }),
+  )
+  await page.goto(`/projects/${project.id}/prs?result=${result.id}`)
+  await expect(resultDialog(page)).toContainText('Finding 40')
+  // To the note, and from the note back to the claim: two steps, the window behind never moving
+  // (clicked where they are, as the reader does, without scrolling anything to them first).
+  await resultDialog(page)
+    .locator('a[href="#user-content-fn-1"]')
+    .evaluate((a: HTMLElement) => a.click())
+  await expect(page).toHaveURL(/#user-content-fn-1$/)
+  await expect(page.locator('#user-content-fn-1')).toHaveAttribute('data-revealed', '')
+  await expectMarkGone(page)
+  await resultDialog(page)
+    .locator('a[href="#user-content-fnref-1"]')
+    .evaluate((a: HTMLElement) => a.click())
+  await expect(page).toHaveURL(/#user-content-fnref-1$/)
+  await expect(page.locator('#user-content-fnref-1')).toHaveAttribute('data-revealed', '')
+  await expectMarkGone(page)
+
+  await recordMarks(page)
+  await page.goBack()
+  await expect(page).toHaveURL(/#user-content-fn-1$/)
+  await page.waitForTimeout(1_000)
+  await page.goForward()
+  await expect(page).toHaveURL(/#user-content-fnref-1$/)
+  await page.waitForTimeout(1_000)
+  expect(await marks(page)).toEqual([])
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
 })
 
 test("a reply on a PR's thread opens it on the PR's tab", async ({ page, project, agent, human }) => {
@@ -779,6 +903,13 @@ for (const cached of [true, false])
 
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  test('a PR to review lands on its card with the queue already loaded and a filter that hides it', async ({
+    page,
+    project,
+  }) => {
+    await reviewFromCachedQueue(page, project)
+  })
 
   test('a decision, a question and a reply land below the stuck header', async ({
     page,

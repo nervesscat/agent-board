@@ -25,7 +25,7 @@ import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
-import { remember, useRestoreRemembered } from '#/lib/remembered'
+import { recall, remember, useRestoreRemembered } from '#/lib/remembered'
 import { anchorId, useAnchor, useReveal } from '#/lib/reveal'
 
 const FILTER_KEYS = ['me', 'others', 'all'] as const
@@ -99,11 +99,20 @@ function PrQueue() {
   const shown = data?.filter((p) => inFilter(p, filter)) ?? []
 
   const anchor = useAnchor()
-  useReveal(anchor)
   // The PR a link lands on: its stage's tab, once per link, and All if the filter in the URL (once it
   // is there, remembered or not) hides it.
   const linkedId = anchorId(anchor?.holder ?? anchor?.target, 'pr')
   const linked = data?.find((p) => p.id === linkedId)
+  // The filter this browser remembers, read after mount: undefined for none, null until read.
+  const [remembered, setRemembered] = useState<Filter | undefined | null>(null)
+  useEffect(() => setRemembered(recall(FILTER_KEY, FILTER_KEYS)), [])
+  // The anchor is brought into view once the list it is in has settled: the remembered filter put in
+  // the URL, then widened to All if that hides the linked PR. Each switch redraws the list, and an
+  // anchor revealed before them would be lost under them.
+  const settled =
+    (picked !== undefined ? !linked || inFilter(linked, picked) : remembered === undefined) &&
+    (linkedId === null || data !== undefined)
+  useReveal(anchor, { ready: settled })
   const [tab, setTab] = useState<string>('pending')
   const tabFor = useRef<string | null>(null)
   const widenedFor = useRef<string | null>(null)

@@ -220,7 +220,7 @@ function TicketPage() {
   const anchor = useAnchor()
   const linkedTo = useLocation({ select: (l) => l.pathname.split('/').at(-1) })
   const drawn = t !== undefined && String(t.id) === ticketId && ticketId === linkedTo
-  useReveal(drawn ? anchor : null, ticketId)
+  useReveal(anchor, { page: ticketId, ready: drawn })
   // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
