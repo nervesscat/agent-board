@@ -4,7 +4,6 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
-import { BranchSelect } from '#/components/BranchSelect'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
@@ -40,7 +39,6 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [tasks, setTasks] = useState('')
-  const [branch, setBranch] = useState('')
   const [assignee, setAssignee] = useState('')
   const [tags, setTags] = useState('')
   const { data: project } = useProject(projectId)
@@ -60,7 +58,6 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       post<Ticket>(`/api/projects/${projectId}/tickets`, {
         title,
         body,
-        branch,
         assignee,
         tags: tags
           .split(',')
@@ -82,7 +79,6 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       setTitle('')
       setBody('')
       setTasks('')
-      setBranch('')
       setAssignee('')
       setTags('')
       setStage('')
@@ -182,7 +178,6 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
                   value={repoId}
                   onValueChange={(v) => {
                     setPicked(v as string)
-                    setBranch('')
                   }}
                   items={Object.fromEntries(repos.map((r) => [String(r.id), r.name]))}
                 >
@@ -199,10 +194,6 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
                 </Select>
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="br">Branch (optional)</Label>
-              <BranchSelect id="br" value={branch} onChange={setBranch} repoId={repoId} optional />
-            </div>
             {parent && (
               <div className="space-y-2">
                 <Label htmlFor="assignee">Assignee (optional)</Label>
