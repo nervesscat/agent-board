@@ -60,7 +60,12 @@ http_headers = { Authorization = "Bearer gate_…" }
    day without one.
 3. **Break it down**: `add_tasks` with the concrete steps if the ticket does not have them;
    `set_task_done` as you finish each one, `update_task` / `remove_task` when the plan changes.
-   The progress bar the human sees is those tasks.
+   The tasks are the implementation, two levels deep and no more: top-level tasks are its steps
+   (coding, testing, benchmarks, process…), subtasks are their parts (`add_tasks` with
+   `{text, subtasks}` items, or with `parentTaskId` to add under an existing step; a subtask takes
+   no subtasks). A step with parts is done exactly when all its parts are: ticking or unticking it
+   does the same to its parts, and the parts' ticks settle it. Removing a step removes its parts.
+   The progress bar the human sees counts tasks and subtasks alike.
 4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
    agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and
    `assignee`. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its
@@ -117,7 +122,7 @@ http_headers = { Authorization = "Bearer gate_…" }
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
    cursor is yours to hold, the board stores nothing per agent.
 7. **Hand off**: before `update_ticket` → `review`, every item, in order:
-   1. Worktree registered (`add_workspace`), tasks ticked.
+   1. Worktree registered (`add_workspace`), tasks and subtasks ticked.
    2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
       project's instructions say how; here `pnpm test:e2e`).
    3. Branch pushed: `get_ticket` → `push.state` is `pushed` (green on the board), not `ahead` or
@@ -146,9 +151,10 @@ http_headers = { Authorization = "Bearer gate_…" }
    8. Resume note if the ticket stays open past the session (step 9).
 
    `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
-   each a `code` and a `text` (`no_pr`, `not_pushed`, `no_preview`, `no_handoff_post`: no progress
-   post of yours since the branch's last commit, `checks_unknown`: the PR's CI is failing or still
-   running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff`
+   each a `code` and a `text` (`tasks_open`: Implementation, the ticket has no tasks or some of
+   its tasks and subtasks, its lanes' included, are open; `no_pr`, `not_pushed`, `no_preview`,
+   `no_handoff_post`: no progress post of yours since the branch's last commit, `checks_unknown`:
+   the PR's CI is failing or still running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff`
    while the ticket is in review, and its page shows it as a Hand-off card.
 
    `done` is the human's call unless the instructions say otherwise. A ticket with lanes goes to

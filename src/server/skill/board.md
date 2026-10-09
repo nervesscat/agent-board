@@ -82,15 +82,21 @@ Then:
   to resume), with `by` and `at`. `commitsSince` counts commits on the branch since it was written
   and `stale` says the work moved on (new commits or a newer progress post): check the branch and
   the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
-- No tasks yet → `add_tasks` with the concrete steps. The human's progress bar is these tasks.
+- No tasks yet → `add_tasks` with the concrete steps. The tasks are the implementation, two levels
+  deep and no more: top-level tasks are its steps (coding, testing, benchmarks, process…), subtasks
+  are their parts (`{text, subtasks}` items, or `parentTaskId` to add under an existing step; a
+  subtask takes no subtasks). The human's progress bar is these tasks and subtasks, all counted.
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
 `repoId`. Lanes of a ticket you are working are yours to create (next section).
 
 ## 3. While working
 
-- `set_task_done` as each step finishes. When the plan changes, `update_task` rewords a step and
-  `remove_task` drops one that no longer applies, so the progress bar stays honest.
+- `set_task_done` as each step or part finishes. A step with parts is done exactly when all its
+  parts are: ticking or unticking a step does the same to its parts, ticking its last open part
+  ticks it, unticking a part unticks it. When the plan changes, `update_task` rewords a task and
+  `remove_task` drops one that no longer applies (a step goes with its parts), so the progress bar
+  stays honest.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
   brief as `body`, its own `branch`, `assignee` and `tasks`. Its repo and base branch default to
@@ -173,7 +179,7 @@ The human should not have to tell you to check comments. While this session has 
 
 Before `update_ticket` → `status: review`, every item, in order:
 
-1. Worktree registered (`add_workspace`), tasks ticked.
+1. Worktree registered (`add_workspace`), tasks and subtasks ticked.
 2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
    project instructions say how, e.g. `pnpm test:e2e`).
 3. Branch pushed: `get_ticket` → `push.state` is `pushed` (a green dot on the board). `ahead`
@@ -204,9 +210,10 @@ Before `update_ticket` → `status: review`, every item, in order:
    [End of session](#5-end-of-session)).
 
 `update_ticket` → `review` then answers with `handoff.missing`: what the board still sees missing,
-each a `code` with a `text`: `no_pr`, `not_pushed`, `no_preview`, `no_handoff_post` (no progress
-post of yours since the branch's last commit), `checks_unknown` (the PR's CI is failing or still
-running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
+each a `code` with a `text`: `tasks_open` (Implementation: the ticket has no tasks, or some of its
+tasks and subtasks, its lanes' included, are open), `no_pr`, `not_pushed`, `no_preview`,
+`no_handoff_post` (no progress post of yours since the branch's last commit), `checks_unknown` (the
+PR's CI is failing or still running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
 the ticket is in review, and its page shows it as a Hand-off card.
 
 After that:
