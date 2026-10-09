@@ -7,6 +7,13 @@ export type StageLike = { key: string; name: string; kind: StageKind; color: Sta
 export const stageOf = (stages: StageLike[], key: string): StageLike =>
   stages.find((s) => s.key === key) ?? { key, name: key, kind: 'open', color: 'gray' }
 
+/**
+ * The stage the New ticket dialog starts on: the first open stage (Backlog rather than To do), else the
+ * first stage; none until the stages have loaded.
+ */
+export const newTicketStage = (stages: StageLike[]): StageLike | undefined =>
+  stages.find((s) => s.kind === 'open') ?? stages[0]
+
 export const isClosed = (kind: StageKind) => kind === 'done' || kind === 'cancelled'
 
 export const STAGE_KIND_LABEL: Record<StageKind, string> = {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { columnNeighbours, stageColumn } from './stages'
+import { DEFAULT_STAGES } from './constants'
+import { columnNeighbours, newTicketStage, type StageLike, stageColumn } from './stages'
 
 const card = (id: number, status: string, updatedAt: string) => ({ id, status, updatedAt })
 const tickets = [
@@ -40,5 +41,31 @@ describe('stage columns', () => {
 
   it('have nothing for a ticket not in the list', () => {
     expect(columnNeighbours(tickets, 99)).toBeNull()
+  })
+})
+
+describe('the stage a new ticket starts on', () => {
+  const stage = (key: string, kind: StageLike['kind']): StageLike => ({ key, name: key, kind, color: 'gray' })
+
+  it('is Backlog in the default layout, not To do', () => {
+    expect(newTicketStage(DEFAULT_STAGES)?.key).toBe('backlog')
+  })
+
+  it('is the first open stage in board order, whatever it is called', () => {
+    const stages = [
+      stage('build', 'active'),
+      stage('ideas', 'open'),
+      stage('spec', 'open'),
+      stage('done', 'done'),
+    ]
+    expect(newTicketStage(stages)?.key).toBe('ideas')
+  })
+
+  it('is the first stage when none is open', () => {
+    expect(newTicketStage([stage('build', 'active'), stage('done', 'done')])?.key).toBe('build')
+  })
+
+  it('is none until the stages have loaded', () => {
+    expect(newTicketStage([])).toBeUndefined()
   })
 })
