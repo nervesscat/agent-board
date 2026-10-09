@@ -5,7 +5,7 @@ import { type Api, expect, ok, test } from './fixtures'
 
 /**
  * A ticket whose feed has a tall post from now, then two one-line posts from weeks back: the longest
- * legends there are, on posts shorter than them.
+ * legends there are, on the shortest posts.
  */
 async function feed(api: Api, human: APIRequestContext) {
   const t = await api.ticket({ title: 'A feed to lay out' })
@@ -132,8 +132,9 @@ test.describe('on a desktop', () => {
     await page.goto(`/projects/${t.projectId}/features/${t.id}`)
     await expect(page.getByText('Paragraph 6 of a long post.')).toBeVisible()
     const measured = await checkFeed(page)
+    // Here a one-line post with its actions row is taller than its legend: the large minimum font size
+    // below is where the legend outgrows its post.
     for (const r of measured) expect(r.post.left - r.li.left).toBeLessThanOrEqual(80)
-    outgrowsPost(measured[1]!)
   })
 })
 
