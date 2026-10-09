@@ -61,11 +61,26 @@ export const STAGE_DOT: Record<StageColor, string> = {
 export const stageBadge = (s: Pick<StageLike, 'color' | 'kind'>) =>
   `${BADGE[s.color] ?? BADGE.gray}${s.kind === 'cancelled' ? ' line-through' : ''}`
 
-type Card = { id: number; status: string; updatedAt: string }
+type Card = { id: number; status: string; updatedAt: string; rank?: number | null }
 
-/** The tickets in one stage's board column, in the column's order: last updated first. */
+const placed = (t: Card) => t.rank !== null && t.rank !== undefined
+
+/**
+ * The order of a board column: the tickets placed in it first, lowest rank first, then the rest last
+ * updated first. Ties keep the order they were given in.
+ */
+export const columnOrder = (a: Card, b: Card) =>
+  placed(a) && placed(b)
+    ? a.rank! - b.rank!
+    : placed(a) !== placed(b)
+      ? placed(a)
+        ? -1
+        : 1
+      : b.updatedAt.localeCompare(a.updatedAt)
+
+/** The tickets in one stage's board column, in the column's order (`columnOrder`). */
 export const stageColumn = <T extends Card>(items: T[], status: string): T[] =>
-  items.filter((t) => t.status === status).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  items.filter((t) => t.status === status).sort(columnOrder)
 
 /** The tickets before and after `id` in its board column, and where it sits there (null if absent). */
 export function columnNeighbours<T extends Card>(items: T[], id: number) {
@@ -74,4 +89,52 @@ export function columnNeighbours<T extends Card>(items: T[], id: number) {
   const column = stageColumn(items, self.status)
   const index = column.indexOf(self)
   return { prev: column[index - 1] ?? null, next: column[index + 1] ?? null, index, count: column.length }
+}
+
+/**
+ * The ranks that put ticket `id` at `position` (1-based; past the end is last) in its column of `items`,
+ * the tickets of one column's siblings: it and every ticket above it are placed, numbered from 1 down
+ * the column, and the placed ones below it follow. The column then reads back with it at `position`
+ * and every other ticket in the order it had; the unplaced ones below stay unplaced. Empty when `id`
+ * is not in `items`.
+ */
+export function placeInColumn<T extends Card>(items: T[], id: number, position: number) {
+  const self = items.find((t) => t.id === id)
+  if (!self) return []
+  const rest = stageColumn(items, self.status).filter((t) => t !== self)
+  const at = Math.min(Math.max(1, Math.floor(position)), rest.length + 1) - 1
+  return [...rest.slice(0, at), self, ...rest.slice(at)]
+    .filter((t, i) => i <= at || placed(t))
+    .map((t, i) => ({ id: t.id, rank: i + 1 }))
+}
+
+/** `items` with the ranks `placeInColumn` gives, for showing a placement before the server answers. */
+export function withPlacement<T extends Card>(items: T[], id: number, position: number): T[] {
+  const ranks = new Map(placeInColumn(items, id, position).map((r) => [r.id, r.rank]))
+  return items.map((t) => (ranks.has(t.id) ? { ...t, rank: ranks.get(t.id)! } : t))
+}
+
+/**
+ * The 1-based position in `column` (one stage's column in order, `id` in it) that puts `id` right above
+ * or below the ticket `anchor`, counted without `id` itself: what a drop or a Move up/down asks for when
+ * some of the column is hidden by a filter. Null when `anchor` is not in the column.
+ */
+export function positionBy(column: Card[], id: number, anchor: number, side: 'above' | 'below') {
+  const rest = column.filter((t) => t.id !== id)
+  const i = rest.findIndex((t) => t.id === anchor)
+  return i < 0 ? null : side === 'above' ? i + 1 : i + 2
+}
+
+/**
+ * In one column in order, the tickets each card sits above while it needs them merged first: the
+ * "merge after #N" a review column shows where its order and the needs disagree.
+ */
+export function mergeAfter<T extends Card & { needs: { id: number; merged: boolean }[] }>(column: T[]) {
+  const out = new Map<number, number[]>()
+  column.forEach((t, i) => {
+    const below = new Set(column.slice(i + 1).map((x) => x.id))
+    const ids = t.needs.filter((n) => !n.merged && below.has(n.id)).map((n) => n.id)
+    if (ids.length) out.set(t.id, ids)
+  })
+  return out
 }

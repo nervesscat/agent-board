@@ -311,11 +311,18 @@ api.get('/api/tickets/:id', async ({ request, params, url }) =>
 )
 // An agent cannot reassign a ticket reserved for one of the project's agents; the human can. A move to a
 // done stage is a 409 (code: needs) while what it needs is not merged; force: true is the human's way past.
+// position (1-based) places it in its stage's column, the new stage's when status comes with it.
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
   json(
     await needs.changeTicket(
       id(params),
-      await readJson(request, TicketPatch.extend({ force: z.boolean().optional() })),
+      await readJson(
+        request,
+        TicketPatch.extend({
+          force: z.boolean().optional(),
+          position: z.number().int().positive().optional(),
+        }),
+      ),
       actor,
       { agent: isAgent(request) },
     ),

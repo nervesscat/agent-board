@@ -101,7 +101,11 @@ export async function updateRepo(
     if (moved) {
       const to = { projectId: patch.projectId! }
       tx.update(schema.prs).set(to).where(eq(schema.prs.repoId, id)).run()
-      tx.update(schema.tickets).set(to).where(eq(schema.tickets.repoId, id)).run()
+      // On the other project's board they arrive unplaced in their columns.
+      tx.update(schema.tickets)
+        .set({ ...to, rank: null })
+        .where(eq(schema.tickets.repoId, id))
+        .run()
       tx.update(schema.reviewResults).set(to).where(eq(schema.reviewResults.repoId, id)).run()
     }
     return r

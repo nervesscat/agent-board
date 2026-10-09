@@ -376,16 +376,18 @@ type Patch = Parameters<typeof features.updateTicket>[1]
 /**
  * `updateTicket` with the needs rule: `needs` replaces what the ticket needs, and a move to a done stage
  * is refused while one is not merged, unless the human sends `force` (logged). A move to a review stage
- * answers with `handoff` too: what the hand-off still lacks, as warnings.
+ * answers with `handoff` too: what the hand-off still lacks, as warnings. `position` places it in its
+ * column (`placeTicket`) once the rest is written: with `status`, in the new stage's column.
  */
 export async function changeTicket(
   id: number,
-  input: Patch & { needs?: number[]; force?: boolean },
+  input: Patch & { needs?: number[]; force?: boolean; position?: number },
   actor: string,
   opts: { agent: boolean },
 ) {
-  const { needs, force, ...patch } = input
+  const { needs, force, position, ...patch } = input
   const before = features.getTicket(id)
+  if (position !== undefined) features.checkPlacement(before, position)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   const subject = {
     ...before,
@@ -396,9 +398,10 @@ export async function changeTicket(
   const to = patch.status ? resolveStage(listStages(before.projectId), patch.status).key : before.status
   const unmet = await guardDone(subject, to, ids, { force, agent: opts.agent })
   if (needs !== undefined) setNeeds(id, ids, actor)
-  const row = Object.keys(patch).length
+  const changed = Object.keys(patch).length
     ? features.updateTicket(id, patch, actor, opts)
     : features.getTicket(id)
+  const row = position !== undefined ? features.placeTicket(id, position, actor) : changed
   logOverride(row, unmet, actor)
   if (patch.status && kindOf(listStages(row.projectId), row.status) === 'review')
     return { ...row, handoff: await ticketHandoff(await features.getTicketWithPush(id)) }

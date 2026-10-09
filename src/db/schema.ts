@@ -152,6 +152,9 @@ export const tickets = sqliteTable(
     body: text().notNull().default(''),
     // The key of one of the project's stages.
     status: text().notNull().default('todo'),
+    // Where it was placed in its stage's column (its siblings in that stage): placed tickets come first,
+    // lowest rank first, then the rest last updated first. Null until placed; any change of stage clears it.
+    rank: integer(),
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
     baseBranch: text('base_branch').notNull().default('main'),
