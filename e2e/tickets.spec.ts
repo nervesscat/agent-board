@@ -314,6 +314,58 @@ test('keeps the list it steps through when a ticket in it moves to another stage
   await expect(page.getByRole('link', { name: /ticket in In progress/ })).toHaveCount(0)
 })
 
+test('a lane filter on a ticket stepped to keeps the list it steps through, on Back and on reload', async ({
+  page,
+  api,
+  human,
+  project,
+}) => {
+  const made: TicketFull[] = []
+  for (const title of ['First', 'Second', 'Third']) {
+    made.push(await api.ticket({ title, status: 'in_progress' }))
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  await ok(
+    human.post(`/api/projects/${project.id}/tickets`, { data: { title: 'A lane', parentId: made[2]!.id } }),
+  )
+  const rows = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets?parent=root`))
+  const column = rows
+    .filter((r) => r.status === 'in_progress')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  expect(column.map((r) => r.title)).toEqual(['Third', 'Second', 'First'])
+  const [third, second] = column
+  const url = (id: number) => new RegExp(`/projects/${project.id}/features/${id}(\\?|$)`)
+  const todoChip = page.getByRole('button', { name: /^To do\s*1$/ })
+
+  await page.goto(`/projects/${project.id}/features/${second!.id}`)
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+  await page.getByRole('link', { name: 'Previous ticket in In progress' }).click()
+  await expect(page).toHaveURL(url(third!.id))
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+
+  await page.getByRole('combobox').filter({ hasText: 'In progress' }).click()
+  await page.getByRole('option', { name: 'In review', exact: true }).click()
+  await expect.poll(async () => (await api.getTicket(third!.id)).status).toBe('review')
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+
+  // Filtering its lanes stays on the same page: the list it was stepped to in stays with it.
+  await todoChip.click()
+  await expect(page).toHaveURL(/\?stage=todo$/)
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+  await page.reload()
+  await expect(todoChip).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Next ticket in In progress' }).click()
+  await expect(page).toHaveURL(url(second!.id))
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(url(third!.id))
+  await expect(todoChip).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Next ticket in In progress' })).toBeVisible()
+})
+
 test('the features view (board or list) survives a reload, kept in the URL and remembered', async ({
   page,
   api,

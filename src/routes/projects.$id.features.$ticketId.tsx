@@ -130,8 +130,9 @@ function TicketPage() {
       params: { id, ticketId },
       search: laneSearch(f),
       replace: true,
-      // A filter change is the same page: stay where the reader is.
+      // A filter change is the same page: stay where the reader is, and keep the list it steps through.
       resetScroll: false,
+      state: true,
     })
   const key = ['ticket', ticketId]
   // Fold the lanes' updates into this ticket's feed.
