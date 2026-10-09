@@ -9,11 +9,12 @@ import { toastHandoff } from '#/components/Handoff'
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/components/PushDot'
-import { ArchivedList, TicketBoard, TicketList } from '#/components/TicketBoard'
+import { ArchivedList, type Placement, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, patch, post, type CleanupReport, type Push, type TicketRow } from '#/lib/api'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
+import { positionBy, stageColumn, withPlacement } from '#/lib/stages'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 const VIEWS = ['board', 'list', 'archived'] as const
@@ -67,16 +68,20 @@ function Features() {
     onError: (err) => toast.error(errorMessage(err)),
     onSettled: () => qc.invalidateQueries({ queryKey: ticketsKey(id) }),
   })
-  // The card moves at once; a failed save puts it back. A move to done refused for a need not merged
-  // yet offers to make it anyway.
+  // Moves and placements on the board are saved one at a time, in the order they were made: each
+  // placement's position is worked out on the order the ones before it left.
+  const scope = { id: `board-${id}` }
+  // The card moves at once, unplaced in its new column; a failed save puts it back. A move to done
+  // refused for a need not merged yet offers to make it anyway.
   const move = useMutation({
+    scope,
     mutationFn: (v: { ticketId: number; status: string; force?: boolean }) =>
       patch(`/api/tickets/${v.ticketId}`, { status: v.status, force: v.force }),
     onMutate: async (v) => {
       await qc.cancelQueries({ queryKey: key })
       const before = qc.getQueryData<TicketRow[]>(key)
       qc.setQueryData<TicketRow[]>(key, (rows) =>
-        rows?.map((t) => (t.id === v.ticketId ? { ...t, status: v.status } : t)),
+        rows?.map((t) => (t.id === v.ticketId ? { ...t, status: v.status, rank: null } : t)),
       )
       return { before }
     },
@@ -91,6 +96,36 @@ function Features() {
       qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
     },
   })
+  // A card's place in its column (drag within it, Move up / Move down): shown at once, then the list
+  // is read again once the last placement in a row is saved; a failed one puts the order back.
+  const placing = ['place', id]
+  const place = useMutation({
+    mutationKey: placing,
+    scope,
+    mutationFn: (v: { ticketId: number; position: number }) =>
+      patch(`/api/tickets/${v.ticketId}`, { position: v.position }),
+    onMutate: async (v) => {
+      await qc.cancelQueries({ queryKey: key })
+      const before = qc.getQueryData<TicketRow[]>(key)
+      qc.setQueryData<TicketRow[]>(key, (rows) => rows && withPlacement(rows, v.ticketId, v.position))
+      return { before }
+    },
+    onError: (err, _v, ctx) => {
+      qc.setQueryData(key, ctx?.before)
+      toast.error(errorMessage(err))
+    },
+    onSettled: (_d, _e, v) => {
+      if (qc.isMutating({ mutationKey: placing }) <= 1) qc.invalidateQueries({ queryKey: ticketsKey(id) })
+      qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
+    },
+  })
+  // Right above or below a card of its column, counted in the whole column: a filter may hide some of it.
+  const placeBy = (ticketId: number, to: Placement) => {
+    const rows = qc.getQueryData<TicketRow[]>(key) ?? []
+    const self = rows.find((t) => t.id === ticketId)
+    const position = self && positionBy(stageColumn(rows, self.status), ticketId, to.anchor, to.side)
+    if (position) place.mutate({ ticketId, position })
+  }
   const { data: pushData } = useProjectPush(id)
   const push = useMemo(() => new Map(pushData?.tickets.map((t) => [t.id, t.push])), [pushData])
   // Only the tickets whose branch is not on origin, from the line under the header.
@@ -105,8 +140,9 @@ function Features() {
           <p className="text-sm text-muted-foreground">
             Tickets agents pick up. Each one carries its todo list, branch, workspaces, updates, a thread, and
             lanes for work running in parallel. On the board, drag a card to another column to change its
-            stage; the stages themselves are set in Settings. A done or cancelled column can archive its
-            tickets, which then wait under Archived.
+            stage, or up and down its column (or Move up / Move down on the card) to set its place there: in
+            review, top merges first. The stages themselves are set in Settings. A done or cancelled column
+            can archive its tickets, which then wait under Archived.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
@@ -160,6 +196,7 @@ function Features() {
           items={shown}
           push={push}
           onMove={(ticketId, status) => move.mutate({ ticketId, status })}
+          onPlace={placeBy}
           onArchiveAll={(status) => archiveAll.mutate(status)}
         />
       )}
