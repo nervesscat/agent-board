@@ -559,11 +559,8 @@ test('a file picked with the New post toolbar attach is listed under the editor,
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   const text = page.getByRole('textbox', { name: 'New post', exact: true })
   const form = formOf(page, text)
-  const progress = form.getByRole('switch', { name: 'progress' })
   await text.click()
   await page.keyboard.type('See the picture.')
-  await progress.click()
-  await expect(progress).toBeChecked()
 
   // Picking lists the file under the editor, and posts nothing.
   await pick(page, text, 'x.png')
@@ -585,9 +582,8 @@ test('a file picked with the New post toolbar attach is listed under the editor,
   await form.getByRole('button', { name: 'Post', exact: true }).click()
   await expect(text).toHaveText('')
   await expect(remove).toHaveCount(0)
-  await expect(progress).not.toBeChecked()
   const [saved] = (await api.getTicket(t.id)).updates
-  expect(saved).toMatchObject({ body: 'See the picture.', progress: true })
+  expect(saved).toMatchObject({ body: 'See the picture.', progress: false })
   expect(saved!.attachments.map((a) => a.name)).toEqual(['x.png'])
 })
 
@@ -630,7 +626,7 @@ test('a file picked with the Reply toolbar attach is listed in the reply form, a
   expect(saved!.attachments.map((a) => a.name)).toEqual(['y.png'])
 })
 
-test('from the New post text, Tab reaches the formatting buttons, attach, its files, then the switch and Post; Enter and Space on attach post nothing', async ({
+test('from the New post text, Tab reaches the formatting buttons, attach, its files, then Post; Enter and Space on attach post nothing', async ({
   page,
   api,
 }) => {
@@ -674,7 +670,6 @@ test('from the New post text, Tab reaches the formatting buttons, attach, its fi
     form.getByRole('button', { name: 'Remove by-enter.png' }),
     form.getByRole('button', { name: 'Preview by-space.png' }),
     form.getByRole('button', { name: 'Remove by-space.png' }),
-    form.getByRole('switch', { name: 'progress' }),
     form.getByRole('button', { name: 'Post', exact: true }),
   ]) {
     await page.keyboard.press('Tab')
