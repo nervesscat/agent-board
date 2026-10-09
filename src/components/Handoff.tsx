@@ -14,18 +14,22 @@ const REACHED: Record<Exclude<Reach['state'], 'unique'>, string> = {
 
 /**
  * The Merged item, with what the page's git state adds: a branch whose work reached its base counts as
- * merged too (a merge the PR queue has not seen yet, or one into a local base). Only with a PR: a
- * branch with no commits of its own sits in its base as well. And only when the branch reach was read
- * from holds the PR's commits: origin has a copy of the branch and the local branch has all of it
- * (pushed, or ahead), or there is only origin's (remote-only), which reach then reads. Reach reads the
- * local branch first, so one left behind (the PR's commits pushed from elsewhere), or one whose copy
- * on origin is gone (the PR closed and its branch deleted), would answer for commits that are not the
- * PR's.
+ * merged too (a merge the PR queue has not seen yet, or one into a local base). Only into the ticket's
+ * own base, local or origin's: reach is the best verdict over the whole base chain (a lane's parents'
+ * bases, the repo's), and work that reached one of those (a backport whose fix is already on main) is
+ * not this PR merged. Only with a PR: a branch with no commits of its own sits in its base as well.
+ * And only when the branch reach was read from holds the PR's commits: origin has a copy of the branch
+ * and the local branch has all of it (pushed, or ahead), or there is only origin's (remote-only), which
+ * reach then reads. Reach reads the local branch first, so one left behind (the PR's commits pushed
+ * from elsewhere), or one whose copy on origin is gone (the PR closed and its branch deleted), would
+ * answer for commits that are not the PR's.
  */
-function withReach(c: HandoffCheck, info: TicketGit['info'] | undefined, pr: TicketFull['pr']): HandoffCheck {
-  const reach = info?.reach
+function withReach(c: HandoffCheck, git: TicketGit | undefined, pr: TicketFull['pr']): HandoffCheck {
+  const reach = git?.info.reach
   if (c.code !== 'not_merged' || c.ok || !pr || !reach || reach.state === 'unique') return c
-  const { state, behind } = info.push
+  const base = git.baseBranch
+  if (!base || (reach.into !== base && reach.into !== `origin/${base}`)) return c
+  const { state, behind } = git.info.push
   const holdsOrigin = state === 'remote-only' || ((state === 'pushed' || state === 'ahead') && !behind)
   if (!holdsOrigin) return c
   return { ...c, ok: true, text: `${REACHED[reach.state]} ${reach.into}` }
@@ -47,7 +51,7 @@ export function HandoffCard({
   pr: TicketFull['pr']
 }) {
   const missing = handoff.missing.length
-  const checks = handoff.checks.map((c) => withReach(c, git?.info, pr))
+  const checks = handoff.checks.map((c) => withReach(c, git, pr))
   const done = checks.every((c) => c.ok)
   return (
     <section

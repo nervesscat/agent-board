@@ -22,6 +22,13 @@ const borderOf = async (section: Locator) =>
 /** Clearly green: the green channel well above red and blue. */
 const green = ([r, g, b]: number[]) => g! - Math.max(r!, b!) >= 40
 
+/**
+ * Waits until the page has the ticket's git state, which the card's Merged item also goes by: the
+ * Branch card's reach badge, against `into`. Without it a pending Merged proves nothing.
+ */
+const reachShown = (page: Page, into: string) =>
+  expect(page.getByText(`→ ${into}`, { exact: true }).first()).toBeVisible()
+
 test('a ticket moved to review lists what its hand-off lacks, and ticks each item once it is there', async ({
   page,
   project,
@@ -88,6 +95,7 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   await page.reload()
   // Complete, though the branch is not merged yet: that is the human's step, not a missing item.
   await expect(card).toContainText('complete')
+  await reachShown(page, 'main')
   await expect(item('not_merged')).toHaveAttribute('data-ok', 'false')
   for (const code of ALL) await expect(item(code)).toHaveAttribute('data-ok', 'true')
   await expect(item('no_pr')).toContainText('PR #4242')
@@ -147,6 +155,7 @@ test('Merged comes first and waits on the human; once the branch is in its base 
   await expect(rows.nth(0)).toHaveAttribute('data-code', 'not_merged')
   await expect(rows.nth(1)).toHaveAttribute('data-code', 'no_pr')
   const merged = item('not_merged')
+  await reachShown(page, base)
   await expect(merged).toHaveAttribute('data-ok', 'false')
   await expect(merged).toContainText('MergedNot merged yet')
   const marker = merged.getByRole('img')
@@ -248,6 +257,7 @@ test('a local branch left behind its PR’s pushed commits is not taken as merge
   await expect(card).toContainText('complete')
   for (const code of ALL)
     await expect(card.locator(`[data-code="${code}"]`)).toHaveAttribute('data-ok', 'true')
+  await reachShown(page, base)
   await expect(merged).toHaveAttribute('data-ok', 'false')
   await expect(merged).toContainText('Not merged yet')
   const details = page.getByRole('region', { name: 'Details' })
@@ -295,6 +305,7 @@ test('a branch with no work of its own and no PR is not taken as merged', async 
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const merged = page.getByRole('region', { name: 'Hand-off' }).locator('[data-code="not_merged"]')
+  await reachShown(page, 'main')
   await expect(merged).toHaveAttribute('data-ok', 'false')
   await expect(merged).toContainText('Not merged yet')
 })
@@ -326,6 +337,85 @@ test('a branch with a PR whose copy on origin is gone is not taken as merged', a
   const card = page.getByRole('region', { name: 'Hand-off' })
   await expect(card.locator('[data-code="no_pr"]')).toHaveAttribute('data-ok', 'true')
   const merged = card.locator('[data-code="not_merged"]')
+  await reachShown(page, 'main')
   await expect(merged).toHaveAttribute('data-ok', 'false')
   await expect(merged).toContainText('Not merged yet')
+})
+
+test('work that reached another base of the chain, not the ticket’s own, is not taken as merged', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // A backport. The parent ticket's base stands in for main (the run's main never moves): the fix is
+  // already there. The lane's own base, its release branch, does not have it yet; the lane's branch
+  // carries the same patch as a commit of its own, pushed, its PR open against the release branch.
+  const name = (what: string) => `e2e-${project.id}-${what}`
+  const upstream = name('upstream')
+  const release = name('release')
+  const branch = name('backport')
+  git('branch', upstream, commitFile('main', 'fix.txt', 'fixed\n', 'fix'))
+  git('branch', release, 'main')
+  const work = commitFile('main', 'fix.txt', 'fixed\n', 'fix (backport)')
+  git('branch', branch, work)
+  git('push', '-q', 'origin', branch)
+  const parent = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Fix it', status: 'in_progress', baseBranch: upstream },
+    }),
+  )
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Backport it', status: 'in_progress', parentId: parent.id, branch, baseBranch: release },
+    }),
+  )
+  const gitState = async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info
+  await ok(agent.patch(`/api/tickets/${t.id}`, { data: { prNumber: 4646 } }))
+  await ok(
+    agent.post(`/api/tickets/${t.id}/workspaces`, {
+      data: { name: 'worktree', branch, previewUrl: e2eEnv().baseURL },
+    }),
+  )
+  await ok(
+    agent.post(`/api/tickets/${t.id}/updates`, {
+      data: { body: `PR #4646. Preview: ${e2eEnv().baseURL}.` },
+    }),
+  )
+  await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
+  // Its patch is in the parent's base, so the chain's best verdict is rebased into that one.
+  await expect
+    .poll(async () => {
+      const info = await gitState()
+      return [info.reach?.state, info.reach?.into, info.push.state, info.push.behind]
+    })
+    .toEqual(['rebased', upstream, 'pushed', 0])
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Hand-off' })
+  const merged = card.locator('[data-code="not_merged"]')
+  await expect(card).toContainText('complete')
+  for (const code of ALL)
+    await expect(card.locator(`[data-code="${code}"]`)).toHaveAttribute('data-ok', 'true')
+  await reachShown(page, upstream)
+  await expect(merged).toHaveAttribute('data-ok', 'false')
+  await expect(merged).toContainText('Not merged yet')
+  const details = page.getByRole('region', { name: 'Details' })
+  expect(await borderOf(card)).toEqual(await borderOf(details))
+
+  // The release branch takes the backport: merged into the lane's own base, and the card turns green.
+  git('update-ref', `refs/heads/${release}`, work)
+  await expect
+    .poll(async () => {
+      const info = await gitState()
+      return [info.reach?.state, info.reach?.into]
+    })
+    .toEqual(['merged', release])
+  await page.reload()
+  await reachShown(page, release)
+  await expect(merged).toHaveAttribute('data-ok', 'true')
+  await expect(merged).toContainText(`Merged into ${release}`)
+  await expect(card.locator('li[data-ok="false"]')).toHaveCount(0)
+  const border = await borderOf(card)
+  expect(green(border), `${border}`).toBe(true)
 })
