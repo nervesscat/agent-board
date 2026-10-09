@@ -108,9 +108,15 @@ export const prs = sqliteTable(
     headSha: text('head_sha').notNull(),
     isDraft: integer('is_draft', { mode: 'boolean' }).notNull().default(false),
     reviewDecision: text('review_decision'),
+    // The human's standing review verdict (approved / changes_requested / commented), or `none`.
     myReview: text('my_review').notNull().default('none'),
-    // `me` while the human's review is asked for: requested, or assigned and not reviewed at the head.
+    // `me`: someone else's PR, for the human to review. `others`: the human authored it.
     waitingOn: text('waiting_on').$type<'me' | 'others'>().notNull().default('me'),
+    // Where its reviews stand on GitHub as of the last refresh; a hold or a merge overrides it.
+    reviewStage: text('review_stage')
+      .$type<'pending' | 'reviewed' | 'on_hold'>()
+      .notNull()
+      .default('pending'),
     // GitHub's own words: MERGEABLE / CONFLICTING / UNKNOWN, and CLEAN / BEHIND / BLOCKED / DIRTY / …
     mergeable: text().notNull().default('UNKNOWN'),
     mergeStateStatus: text('merge_state_status').notNull().default('UNKNOWN'),
@@ -121,6 +127,10 @@ export const prs = sqliteTable(
     updatedAt: text('updated_at').notNull(),
     fetchedAt: text('fetched_at').notNull(),
     open: integer({ mode: 'boolean' }).notNull().default(true),
+    // When GitHub merged it; null while open, or when it was closed without merging.
+    mergedAt: text('merged_at'),
+    // When it left the open queue (merged, closed, or no longer the human's); kept on later refreshes.
+    closedAt: text('closed_at'),
     hold: integer({ mode: 'boolean' }).notNull().default(false),
     holdNote: text('hold_note').notNull().default(''),
   },

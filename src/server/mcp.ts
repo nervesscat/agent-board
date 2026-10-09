@@ -122,7 +122,7 @@ function buildServer(actor: string) {
   // PR queue
   tool(
     'list_prs',
-    'Open PRs assigned to the human for review across all repos of the project, with status pending | reviewed | on_hold, the repo, and the latest review verdict. waitingOn is me (review requested from the human, or assigned to them and not reviewed by them at its head) or others. Where it stands on GitHub as of the last refresh: merge (clean | conflicts | behind | blocked | checking), ci (passing | failing | pending | none) with checks[] {name, state pass | fail | pending | skipped, url}, reviewDecision and isDraft. mergeAfter lists the open PRs of tickets its tickets need: merge those first.',
+    "The human's PRs across all repos of the project: open, and merged in the last 14 days. waitingOn is me (someone else authored it: the human reviews it) or others (the human authored it on GitHub, agents' PRs pushed with their account included). status is where its reviews stand: for waitingOn me, by the human's own reviews (pending: not approved by them, or their comments were addressed by a push or a new review request; reviewed: they approved; on_hold: their comments or requested changes stand at the head); for others, by everyone else's (pending: approvals missing; reviewed: reviewDecision APPROVED, or every reviewer approved and no review is still requested; on_hold: someone's comments or requested changes stand at the head); done: merged. A board-side hold puts an open PR in on_hold. myReview is the human's standing verdict. Also the repo and the latest review verdict. Where it stands on GitHub as of the last refresh: merge (clean | conflicts | behind | blocked | checking), ci (passing | failing | pending | none) with checks[] {name, state pass | fail | pending | skipped, url}, reviewDecision and isDraft. mergeAfter lists the open PRs of tickets its tickets need: merge those first.",
     {
       projectId: z.number().int(),
       refresh: z.boolean().default(false).describe('re-query GitHub before answering'),
@@ -131,7 +131,7 @@ function buildServer(actor: string) {
   )
   tool(
     'set_pr_hold',
-    'Put a PR on hold with a note (or release it). Board-side only; GitHub is never written.',
+    'Put an open PR on hold with a note (or release it back to its stage). Board-side only; GitHub is never written. A merged PR stays done.',
     { prId: z.number().int(), hold: z.boolean(), note: z.string().default('') },
     ({ prId, hold, note }) => prs.setPrHold(prId, hold, note, actor),
   )

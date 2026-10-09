@@ -72,7 +72,11 @@ export interface GhPr {
   mergeStateStatus: string
   statusCheckRollup: GhCheck[] | null
   updatedAt: string
+  /** When it was merged; null while open (and for one closed without merging). */
+  mergedAt: string | null
   reviews: { author: { login: string }; state: string; submittedAt: string; commit?: { oid: string } }[]
+  /** Reviews asked for and not given yet: a user (`login`) or a team (`slug`). */
+  reviewRequests: { __typename?: string; login?: string; slug?: string }[]
 }
 
 /** A PR of the queue, with the searches that found it. */
@@ -84,26 +88,40 @@ export interface MyGhPr extends GhPr {
 }
 
 const PR_FIELDS =
-  'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,reviews'
+  'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,mergedAt,reviews,reviewRequests'
+
+/** How many PRs one search returns: open ones, and the recently merged ones. */
+const OPEN_LIMIT = 100
+const MERGED_LIMIT = 30
 
 /**
- * Open PRs where my review was requested, the ones I already reviewed, and the ones assigned to me.
- * Assignment is how a PR I opened myself (agents push with my account) gets in: GitHub does not let
- * its author be requested as a reviewer.
+ * The PRs I am in: the ones I authored (agents push with my account), the ones where my review was
+ * requested, the ones I already reviewed, and the ones assigned to me. Open ones, and the ones of the
+ * same searches merged on or after `mergedSince` (a date, YYYY-MM-DD), at most `MERGED_LIMIT` per
+ * search: the queue keeps them a while after they land, never the repo's whole history.
  */
-export async function listMyPrs(repoPath: string): Promise<MyGhPr[]> {
-  const searches = ['review-requested:@me', 'reviewed-by:@me', 'assignee:@me'] as const
+export async function listMyPrs(repoPath: string, opts: { mergedSince: string }): Promise<MyGhPr[]> {
+  const searches = ['author:@me', 'review-requested:@me', 'reviewed-by:@me', 'assignee:@me'] as const
+  const queries = [
+    ...searches.map((search) => ({ search, state: 'open', limit: OPEN_LIMIT, query: search })),
+    ...searches.map((search) => ({
+      search,
+      state: 'merged',
+      limit: MERGED_LIMIT,
+      query: `${search} merged:>=${opts.mergedSince}`,
+    })),
+  ]
   const found = await Promise.all(
-    searches.map((search) =>
+    queries.map((q) =>
       gh<GhPr[]>(repoPath, [
         'pr',
         'list',
         '--state',
-        'open',
+        q.state,
         '--limit',
-        '100',
+        String(q.limit),
         '--search',
-        search,
+        q.query,
         '--json',
         PR_FIELDS,
       ]),
@@ -113,8 +131,8 @@ export async function listMyPrs(repoPath: string): Promise<MyGhPr[]> {
   found.forEach((prs, i) => {
     for (const pr of prs) {
       const seen = byNumber.get(pr.number) ?? { ...pr, requested: false, assigned: false }
-      if (searches[i] === 'review-requested:@me') seen.requested = true
-      if (searches[i] === 'assignee:@me') seen.assigned = true
+      if (queries[i]!.search === 'review-requested:@me') seen.requested = true
+      if (queries[i]!.search === 'assignee:@me') seen.assigned = true
       byNumber.set(pr.number, seen)
     }
   })
@@ -140,34 +158,21 @@ export interface BranchInfo {
   behind: number | null
 }
 
-export async function branchInfo(repoPath: string, branch: string, base: string): Promise<BranchInfo> {
-  const none: BranchInfo = {
-    exists: false,
-    sha: null,
-    subject: null,
-    authoredAt: null,
-    ahead: null,
-    behind: null,
-  }
-  if (!branch) return none
-  let ref = branch
-  try {
-    await git(repoPath, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
-  } catch {
-    try {
-      await git(repoPath, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
-      ref = `origin/${branch}`
-    } catch {
-      return none
-    }
-  }
-  const [line, counts] = await Promise.all([
-    git(repoPath, ['log', '-1', '--format=%H%x1f%s%x1f%aI', ref]),
-    git(repoPath, ['rev-list', '--left-right', '--count', `${base}...${ref}`]).catch(() => ''),
-  ])
-  const [sha, subject, authoredAt] = line.split('\x1f')
-  const [behind, ahead] = counts ? counts.split(/\s+/).map(Number) : [null, null]
-  return { exists: true, sha, subject, authoredAt, ahead, behind }
+/** A branch that is neither here nor on origin (or no branch at all). */
+export const NO_BRANCH: BranchInfo = {
+  exists: false,
+  sha: null,
+  subject: null,
+  authoredAt: null,
+  ahead: null,
+  behind: null,
+}
+
+/** A commit's subject and when it was authored. */
+export async function commitSummary(repoPath: string, sha: string) {
+  const line = await git(repoPath, ['log', '-1', '--format=%s%x1f%aI', sha, '--'])
+  const [subject = '', authoredAt = ''] = line.split('\x1f')
+  return { subject, authoredAt }
 }
 
 /** The local branch's head commit, or null when there is no such branch here. */
@@ -330,7 +335,7 @@ export interface Reach {
 const REACH_ORDER: ReachState[] = ['merged', 'rebased', 'edited', 'unique']
 
 /**
- * Checks `ref` against each of `bases` (refs, nearest first) and keeps the best verdict. `merge-tree`
+ * Checks `ref` against each of `bases` (refs or shas, nearest first) and keeps the best verdict. `merge-tree`
  * writes no ref and touches no checkout: it only leaves loose objects that `git gc` reaps.
  */
 export async function branchReach(repoPath: string, ref: string, bases: string[]): Promise<Reach | null> {
@@ -369,8 +374,9 @@ async function reachInto(repoPath: string, ref: string, base: string): Promise<R
 
 /**
  * Whether `ref` holds work of `other` that none of `bases` has: a commit of `other`'s own (not in a
- * base, nor in one of `others`, the other branches `other` itself is built on) that is in `ref`. A
- * branch built on `ref` does not count, and without a base nothing can be told.
+ * base, nor in one of `others`, the other branches, those of them `other` itself is built on) that is
+ * in `ref`. A branch built on `ref` does not count, and without a base nothing can be told. Each is a
+ * commit's full sha, so the answer is about those commits whatever the branches did since.
  */
 export async function holdsWorkOf(
   repoPath: string,
@@ -394,17 +400,13 @@ export async function holdsWorkOf(
     if (!landed.some(Boolean)) outside = true
   }
   if (!outside) return false
-  // What `other` stands on is not its own work: the shared commits may be a third branch's.
-  const under = await git(repoPath, [
-    'for-each-ref',
-    '--merged',
-    other,
-    '--format=%(refname:short)',
-    'refs/heads',
-    'refs/remotes/origin',
-  ])
-  const below = new Set(under ? under.split('\n') : [])
-  const stands = others.filter((x) => x !== other && below.has(x))
+  // What `other` stands on is not its own work: the shared commits may be a third branch's. rev-list
+  // prints each of `others` that is not in `other`; one in a base is left out too, which changes
+  // nothing: what a base holds is not counted anyway.
+  const tips = [...new Set(others)]
+  const over = tips.length ? await git(repoPath, ['rev-list', ...tips, '--not', other, ...bases]) : ''
+  const notBelow = new Set(over ? over.split('\n') : [])
+  const stands = tips.filter((x) => !notBelow.has(x))
   const own = ['rev-list', '--count', other, ...[...bases, ...stands].map((b) => `^${b}`)]
   const mine = Number(await git(repoPath, own))
   return mine > 0 && Number(await git(repoPath, [...own, `^${ref}`])) < mine

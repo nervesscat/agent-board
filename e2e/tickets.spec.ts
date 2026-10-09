@@ -47,6 +47,9 @@ const measure = (row: Locator) =>
 const aligned = (what: string, a: number, b: number) =>
   expect(Math.abs(a - b), `${what}: ${a} against ${b}`).toBeLessThanOrEqual(1)
 
+/** What the Stage control of a New ticket dialog shows: the picked stage's name, without its chevron. */
+const stageValue = (dialog: Locator) => dialog.getByLabel('Stage').locator('[data-slot="select-value"]')
+
 /** The row of a post card or of a reply that says who wrote it, and when: the one that holds `Actor`. */
 const authorRow = (card: Locator) => card.locator('div:has(> span[title])').first()
 
@@ -60,17 +63,23 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
     .fill('The submit button does nothing on Safari.')
   await dialog.getByLabel('Initial tasks, one per line').fill('Reproduce it\nFix it')
   await dialog.getByLabel('Tags (optional)').fill('High, Forms')
+  // Left alone, the stage is Backlog, and it goes as Backlog's key: the kind `open` would be To do.
+  await expect(stageValue(dialog)).toHaveText('Backlog')
+  const sent = page.waitForRequest(
+    (r) => r.method() === 'POST' && r.url().endsWith(`/api/projects/${project.id}/tickets`),
+  )
   await dialog.getByRole('button', { name: 'Create' }).click()
+  expect((await sent).postDataJSON()).toMatchObject({ status: 'backlog' })
   await expect(dialog).toBeHidden()
 
-  // A new ticket starts in To do.
-  const card = page.locator('[data-column="todo"]').getByRole('link', { name: /Fix the login form/ })
+  // A new ticket from the dialog starts in Backlog.
+  const card = page.locator('[data-column="backlog"]').getByRole('link', { name: /Fix the login form/ })
   await expect(card).toBeVisible()
   await expect(card).toContainText('High')
   await expect(card).toContainText('0/2')
 
   const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
-  expect(row).toMatchObject({ title: 'Fix the login form', status: 'todo', createdBy: 'enrique' })
+  expect(row).toMatchObject({ title: 'Fix the login form', status: 'backlog', createdBy: 'enrique' })
   expect(row!.tags.sort()).toEqual(['Forms', 'High'])
   const full = await ok<{ body: string; tasks: { text: string }[] }>(human.get(`/api/tickets/${row!.id}`))
   expect(full.body).toBe('The submit button does nothing on Safari.')
@@ -79,6 +88,79 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
   await card.click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${row!.id}$`))
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Fix the login form')
+})
+
+test('the New ticket dialog picks the stage a ticket starts in, from every stage in board order', async ({
+  page,
+  project,
+  human,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Title').fill('Already started')
+  const stage = dialog.getByLabel('Stage')
+  await expect(stageValue(dialog)).toHaveText('Backlog')
+  await stage.click()
+  await expect(page.getByRole('option')).toHaveText(project.stages.map((s) => s.name))
+  await page.getByRole('option', { name: 'In progress', exact: true }).click()
+  await expect(stageValue(dialog)).toHaveText('In progress')
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  await expect(
+    page.locator('[data-column="in_progress"]').getByRole('link', { name: /Already started/ }),
+  ).toBeVisible()
+  const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  expect(row).toMatchObject({ title: 'Already started', status: 'in_progress' })
+
+  // Like every other field, the stage starts over for the next ticket.
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  await expect(dialog.getByLabel('Title')).toHaveValue('')
+  await expect(stageValue(dialog)).toHaveText('Backlog')
+})
+
+test('the New ticket dialog starts on the first open stage of the project, whatever it is called', async ({
+  page,
+  project,
+  human,
+}) => {
+  const ideas = await ok<{ id: number; key: string }>(
+    human.post(`/api/projects/${project.id}/stages`, { data: { name: 'Ideas', kind: 'open' } }),
+  )
+  const stages = await ok<{ id: number }[]>(human.get(`/api/projects/${project.id}/stages`))
+  const ids = [ideas.id, ...stages.map((s) => s.id).filter((id) => id !== ideas.id)]
+  await ok(human.put(`/api/projects/${project.id}/stages/order`, { data: { ids } }))
+
+  await page.goto(`/projects/${project.id}/features`)
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Title').fill('Maybe one day')
+  await expect(stageValue(dialog)).toHaveText('Ideas')
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  await expect(
+    page.locator(`[data-column="${ideas.key}"]`).getByRole('link', { name: /Maybe one day/ }),
+  ).toBeVisible()
+  const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  expect(row).toMatchObject({ title: 'Maybe one day', status: ideas.key })
+})
+
+test('a lane from the New lane dialog has no stage to pick and starts in To do', async ({ page, api }) => {
+  const t = await api.ticket({ title: 'Parent', status: 'in_progress' })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  await page.getByRole('button', { name: 'New lane' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Title').fill('A lane of it')
+  await expect(dialog.getByLabel('Branch (optional)')).toBeVisible()
+  await expect(dialog.getByLabel('Stage')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  await expect
+    .poll(async () => (await api.getTicket(t.id)).lanes.map((l) => ({ title: l.title, status: l.status })))
+    .toEqual([{ title: 'A lane of it', status: 'todo' }])
 })
 
 test('edits the title, tags and instructions in place', async ({ page, api }) => {

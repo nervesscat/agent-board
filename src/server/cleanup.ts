@@ -5,9 +5,13 @@ import { eq, inArray } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
 import {
+  aheadBehind,
+  type BranchInfo,
   branchReach,
+  commitSummary,
   listRefs,
   listWorktrees,
+  NO_BRANCH,
   refsContaining,
   type Reach,
   type Refs,
@@ -15,6 +19,7 @@ import {
 } from './git'
 import { activePreviews, type ManagedPreview } from './managedPreview'
 import { getProject } from './projects'
+import { readRefs, readWorktrees } from './push'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
 import { unattachedUploads, type UnattachedUploads } from './unattached'
@@ -28,21 +33,28 @@ import { unattachedUploads, type UnattachedUploads } from './unattached'
 type Chainable = Pick<schema.Ticket, 'id' | 'parentId' | 'repoId' | 'baseBranch'>
 type RepoRow = schema.Repo
 
-/** One `for-each-ref` and one `worktree list` per repo, however many tickets ask. */
-export function gitCache() {
+/**
+ * One `for-each-ref` and one `worktree list` per repo, however many tickets ask. `recent` takes them
+ * from the listings every read shares for a few seconds (`readRefs`), instead of listing afresh.
+ */
+export function gitCache(opts: { recent?: boolean } = {}) {
   const cache = new Map<string, Promise<{ refs: Refs; worktrees: Worktree[] }>>()
+  const refsOf = opts.recent ? readRefs : (p: string) => listRefs(p).catch(() => null)
+  const worktreesOf = opts.recent ? readWorktrees : (p: string) => listWorktrees(p).catch(() => null)
   return (repoPath: string) => {
     if (!cache.has(repoPath))
       cache.set(
         repoPath,
-        Promise.all([
-          listRefs(repoPath).catch((): Refs => ({ local: new Map(), remote: new Map() })),
-          listWorktrees(repoPath).catch(() => []),
-        ]).then(([refs, worktrees]) => ({ refs, worktrees })),
+        Promise.all([refsOf(repoPath), worktreesOf(repoPath)]).then(([refs, worktrees]) => ({
+          refs: refs ?? { local: new Map(), remote: new Map() },
+          worktrees: worktrees ?? [],
+        })),
       )
     return cache.get(repoPath)!
   }
 }
+
+export type GitCache = ReturnType<typeof gitCache>
 
 /**
  * Where a ticket's work should end up, nearest first: its base (for a lane, the parent's branch),
@@ -100,8 +112,53 @@ export async function reachOf(repoPath: string, branch: string, chain: string[],
   if (!ref) return null
   // A branch is not its own destination (a workspace on the ticket's own branch).
   const bases = baseRefs(chain, refs).filter((b) => b !== ref && b !== branch)
-  const key = [repoPath, `${ref}@${refSha(ref, refs)}`, ...bases.map((b) => `${b}@${refSha(b, refs)}`)]
-  return memo(reachMemo, REACH_MEMO_MAX, key.join('\0'), () => branchReach(repoPath, ref, bases))
+  const sha = refSha(ref, refs)!
+  const shas = bases.map((b) => refSha(b, refs)!)
+  const key = [repoPath, `${ref}@${sha}`, ...bases.map((b, i) => `${b}@${shas[i]}`)]
+  // Worked out on the listed commits, not on the names: git reads a name as it is now, and the answer
+  // would be kept for commits it is not about.
+  return memo(reachMemo, REACH_MEMO_MAX, key.join('\0'), async () => {
+    const reach = await branchReach(repoPath, sha, shas)
+    // Bases at the same commit answer alike and the first of them is kept: so is its name.
+    return reach && { ...reach, into: bases[shas.indexOf(reach.into)]! }
+  })
+}
+
+/** A commit's subject and date, and how far apart two commits are: by their shas, so never stale. */
+const INFO_MEMO_MAX = 2000
+const commitMemo = new Map<string, Promise<{ subject: string; authoredAt: string }>>()
+const distanceMemo = new Map<string, Promise<[number, number]>>()
+
+/**
+ * A branch's last commit and how far it is ahead of and behind `base`, from the ref listing: a branch
+ * and base that did not move cost no git at all. The local branch is read first, else origin's.
+ */
+export async function infoOf(
+  repoPath: string,
+  branch: string,
+  base: string,
+  refs: Refs,
+): Promise<BranchInfo> {
+  const ref = branch ? branchRef(branch, refs) : null
+  if (!ref) return NO_BRANCH
+  const sha = refSha(ref, refs)!
+  // A base that is no branch here nor `origin/<name>` (a tag, a sha) is left to git to read.
+  const baseSha = base ? refSha(base, refs) : undefined
+  const [commit, counts] = await Promise.all([
+    // git failing to read it (the checkout gone since it was listed) reads as no branch, as before.
+    memo(commitMemo, INFO_MEMO_MAX, `${repoPath}\0${sha}`, () => commitSummary(repoPath, sha)).catch(
+      () => null,
+    ),
+    (baseSha
+      ? memo(distanceMemo, INFO_MEMO_MAX, `${repoPath}\0${baseSha}...${sha}`, () =>
+          aheadBehind(repoPath, baseSha, sha),
+        )
+      : aheadBehind(repoPath, base, sha)
+    ).catch(() => null),
+  ])
+  if (!commit) return NO_BRANCH
+  const [behind = null, ahead = null] = counts ?? []
+  return { exists: true, sha, ...commit, ahead, behind }
 }
 
 /** Which branches hold a commit, by the commit and the sha of every branch: asked again once one moves. */

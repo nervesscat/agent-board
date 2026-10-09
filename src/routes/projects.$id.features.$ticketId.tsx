@@ -142,7 +142,7 @@ function TicketPage() {
     placeholderData: keepPreviousData,
     refetchInterval: 10_000,
   })
-  const { data: git } = useQuery({
+  const { data: ticketGit } = useQuery({
     queryKey: ['ticket-git', ticketId],
     queryFn: () => get<TicketGit>(`/api/tickets/${ticketId}/git`),
     refetchInterval: 30_000,
@@ -216,6 +216,9 @@ function TicketPage() {
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
+  // Stepping to another ticket, the previous one stays on screen until the new one loads: its git state
+  // may come first, and must not show under the previous ticket's branch.
+  const git = t.id === Number(ticketId) ? ticketGit : undefined
 
   /**
    * Record a verdict. Disapproving cancels the lane, which can drop it out of the filtered list, so
@@ -1401,7 +1404,8 @@ function Lanes({
 
 /**
  * The ticket's feed: one kind of post, newest first, with one box to write one. A post marked
- * progress is a step of the work (what agents post as they go); any post can have replies.
+ * progress is a step of the work (what agents post as they go); one written here is not, until its
+ * mark progress action makes it one. Any post can have replies.
  */
 function Activity({
   t,
@@ -1415,7 +1419,6 @@ function Activity({
   onLaneFeed: (v: boolean) => void
 }) {
   const [body, setBody] = useState('')
-  const [progress, setProgress] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
@@ -1423,12 +1426,12 @@ function Activity({
   const send = useMutation({
     mutationFn: async () => {
       const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
-      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress })
+      // Said outright: the API makes a post progress unless told otherwise, as agents post.
+      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress: false })
     },
     onSuccess: () => {
       setBody('')
       setFiles([])
-      setProgress(false)
       onChange()
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -1457,6 +1460,7 @@ function Activity({
           value={body}
           onChange={setBody}
           onFiles={(added) => setFiles((prev) => [...prev, ...added])}
+          onAttach={() => fileInput.current?.click()}
           onSubmit={submit}
           label="New post"
           placeholder="Write a post: a question, an answer, progress. Paste or drop screenshots and recordings."
@@ -1473,21 +1477,10 @@ function Activity({
               e.target.value = ''
             }}
           />
-          <Button type="button" variant="ghost" size="sm" onClick={() => fileInput.current?.click()}>
-            <Paperclip data-icon="inline-start" /> attach
-          </Button>
           <PendingFiles files={files} onChange={setFiles} />
-          <div className="ml-auto flex items-center gap-3">
-            <label
-              className="inline-flex items-center gap-2 text-xs text-muted-foreground"
-              title="A step of the work: lane summaries and the Daily view pick these out"
-            >
-              <Switch size="sm" checked={progress} onCheckedChange={setProgress} /> progress
-            </label>
-            <Button type="submit" size="sm" disabled={!body.trim() || send.isPending}>
-              {send.isPending ? 'Posting…' : 'Post'}
-            </Button>
-          </div>
+          <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
+            {send.isPending ? 'Posting…' : 'Post'}
+          </Button>
         </div>
       </form>
       {t.updates.length === 0 ? (

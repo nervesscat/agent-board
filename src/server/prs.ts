@@ -1,36 +1,89 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, gte, inArray, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import type { PrCheck } from '#/lib/constants'
 import { isClosed } from '#/lib/stages'
 import { logActivity } from './activity'
-import { currentGithubLogin, listMyPrs, prMerged, type GhCheck, type MyGhPr } from './git'
+import { currentGithubLogin, listMyPrs, prMerged, type GhCheck, type GhPr } from './git'
 import { notFound } from './http'
 import { hasPreviews, stopPreviewsFor } from './managedPreview'
 import { getProject } from './projects'
 import { listRepos, ticketRepo } from './repos'
 import { kindOf, listStages } from './stages'
 
-export type PrStatus = 'pending' | 'reviewed' | 'on_hold'
+export type PrStatus = 'pending' | 'reviewed' | 'on_hold' | 'done'
+export type ReviewStage = schema.Pr['reviewStage']
 
-export function prStatus(pr: Pick<schema.Pr, 'hold' | 'myReview'>): PrStatus {
+/** A merged PR is done, held or not; otherwise a hold wins over where its reviews stand. */
+export function prStatus(pr: Pick<schema.Pr, 'mergedAt' | 'hold' | 'reviewStage'>): PrStatus {
+  if (pr.mergedAt) return 'done'
   if (pr.hold) return 'on_hold'
-  return pr.myReview === 'none' ? 'pending' : 'reviewed'
+  return pr.reviewStage
 }
 
 export type PrWaitingOn = schema.Pr['waitingOn']
 
 /**
- * Whose move a PR waits on: mine while my review is requested, or while it is assigned to me (how
- * agents' PRs, opened with my account, reach me) and my latest review is not of its head commit.
- * Everything else in the queue (reviewed at the head, or only reviewed by me once) waits on others.
+ * Which side of the queue a PR is on, by its author on GitHub: one I opened (agents' PRs too, since
+ * they push with my account) waits on others' reviews; anyone else's waits on mine.
  */
-export function prWaitingOn(
-  pr: Pick<MyGhPr, 'requested' | 'assigned' | 'headRefOid'>,
-  myLatest: Pick<MyGhPr['reviews'][number], 'commit'> | undefined,
-): PrWaitingOn {
-  if (pr.requested) return 'me'
-  return pr.assigned && myLatest?.commit?.oid !== pr.headRefOid ? 'me' : 'others'
+export function prWaitingOn(pr: Pick<GhPr, 'author'>, me: string | null): PrWaitingOn {
+  return pr.author.login === me ? 'others' : 'me'
+}
+
+type GhReview = GhPr['reviews'][number]
+
+const VERDICTS = new Set(['APPROVED', 'CHANGES_REQUESTED', 'COMMENTED'])
+
+/**
+ * Each reviewer's standing verdict: their latest approval, request for changes or comment, except
+ * that a comment after an approval (a reply in a thread) leaves the approval standing. Unsent and
+ * dismissed reviews do not count.
+ */
+export function standingVerdicts(reviews: GhReview[]): Map<string, GhReview> {
+  const verdicts = new Map<string, GhReview>()
+  const sent = reviews
+    .filter((r) => VERDICTS.has(r.state))
+    .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))
+  for (const r of sent) {
+    if (r.state === 'COMMENTED' && verdicts.get(r.author.login)?.state === 'APPROVED') continue
+    verdicts.set(r.author.login, r)
+  }
+  return verdicts
+}
+
+type StageInputs = Pick<GhPr, 'author' | 'reviews' | 'reviewRequests' | 'headRefOid' | 'reviewDecision'>
+
+/**
+ * Comments or requested changes that still stand: not addressed since, by a push past the commit
+ * they were left on or by asking that reviewer for a review again. A review GitHub gives without its
+ * commit is addressed by the second alone.
+ */
+function unaddressed(pr: StageInputs, v: GhReview) {
+  if (v.state === 'APPROVED') return false
+  const pushedSince = !!v.commit?.oid && v.commit.oid !== pr.headRefOid
+  return !pushedSince && !pr.reviewRequests.some((r) => r.login === v.author.login)
+}
+
+/**
+ * Where an open PR's reviews stand. Someone else's PR, by my reviews alone: approved by me is
+ * reviewed, my comments not yet addressed put it on hold, anything else is pending. One of mine, by
+ * everyone else's: comments not yet addressed put it on hold; GitHub's approval, or every reviewer
+ * approving with no review still asked for, is reviewed; anything else is pending.
+ */
+export function reviewStage(pr: StageInputs, me: string | null): ReviewStage {
+  const verdicts = standingVerdicts(pr.reviews)
+  if (prWaitingOn(pr, me) === 'me') {
+    const mine = me === null ? undefined : verdicts.get(me)
+    if (!mine) return 'pending'
+    if (mine.state === 'APPROVED') return 'reviewed'
+    return unaddressed(pr, mine) ? 'on_hold' : 'pending'
+  }
+  const others = [...verdicts.values()].filter((v) => v.author.login !== pr.author.login)
+  if (others.some((v) => unaddressed(pr, v))) return 'on_hold'
+  if (pr.reviewDecision === 'APPROVED') return 'reviewed'
+  const approved = others.length > 0 && others.every((v) => v.state === 'APPROVED')
+  return approved && !pr.reviewRequests.length ? 'reviewed' : 'pending'
 }
 
 /** Whether GitHub would merge it now; `checking` while GitHub is still working it out after a push. */
@@ -122,18 +175,33 @@ export function refreshPrsInBackground(projectId: number) {
   refreshPrs(projectId).catch((err) => console.error(`PR refresh failed for project ${projectId}:`, err))
 }
 
-/** Pull the PRs assigned to me from GitHub and upsert the snapshot; board-side fields (hold) are kept. */
+/** How long a merged PR stays in the queue, under Done. */
+const MERGED_DAYS = 14
+const mergedSince = () => new Date(Date.now() - MERGED_DAYS * 86_400_000).toISOString()
+
+/**
+ * Pull my PRs from GitHub, open and recently merged, and upsert the snapshot; board-side fields (hold)
+ * are kept.
+ */
 async function refreshRepoPrs(repo: schema.Repo) {
   const { projectId } = repo
-  const [ghPrs, me] = await Promise.all([listMyPrs(repo.repoPath), currentGithubLogin(repo.repoPath)])
+  const [ghPrs, me] = await Promise.all([
+    listMyPrs(repo.repoPath, { mergedSince: mergedSince().slice(0, 10) }),
+    currentGithubLogin(repo.repoPath),
+  ])
   const fetchedAt = new Date().toISOString()
   const seen = new Set<number>()
+  // The rows that leave the open queue now.
+  const left: schema.Pr[] = []
   for (const pr of ghPrs) {
     seen.add(pr.number)
-    const mine = pr.reviews
-      .filter((r) => r.author.login === me)
-      .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
-    const myReview = mine[0] ? mine[0].state.toLowerCase() : 'none'
+    const existing = db
+      .select()
+      .from(schema.prs)
+      .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.number, pr.number)))
+      .get()
+    const open = !pr.mergedAt
+    const mine = me === null ? undefined : standingVerdicts(pr.reviews).get(me)
     const values = {
       title: pr.title,
       url: pr.url,
@@ -143,40 +211,48 @@ async function refreshRepoPrs(repo: schema.Repo) {
       headSha: pr.headRefOid,
       isDraft: pr.isDraft,
       reviewDecision: pr.reviewDecision || null,
-      myReview,
-      waitingOn: prWaitingOn(pr, mine[0]),
+      myReview: mine ? mine.state.toLowerCase() : 'none',
+      waitingOn: prWaitingOn(pr, me),
+      reviewStage: reviewStage(pr, me),
       mergeable: pr.mergeable,
       mergeStateStatus: pr.mergeStateStatus,
       checks: prChecks(pr.statusCheckRollup),
       updatedAt: pr.updatedAt,
       fetchedAt,
-      open: true,
+      open,
+      mergedAt: pr.mergedAt || null,
+      // When it left the open queue, once: now if the queue had it open, else when it was merged. A
+      // later refresh that finds it merged again keeps it.
+      closedAt: open ? null : (existing?.closedAt ?? (existing?.open ? fetchedAt : pr.mergedAt)),
     }
-    const existing = db
-      .select({ id: schema.prs.id })
-      .from(schema.prs)
-      .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.number, pr.number)))
-      .get()
-    if (existing)
-      db.update(schema.prs)
+    if (existing) {
+      const row = db
+        .update(schema.prs)
         .set({ ...values, projectId })
         .where(eq(schema.prs.id, existing.id))
-        .run()
-    else
+        .returning()
+        .get()!
+      if (existing.open && !open) left.push(row)
+    } else
       db.insert(schema.prs)
         .values({ ...values, projectId, repoId: repo.id, number: pr.number })
         .run()
   }
-  // A PR that left every search was merged, closed, or unassigned: keep the row, mark it closed.
-  const open = db
+  // A PR that left every search was closed, unassigned, or merged out of the merged searches' reach:
+  // keep the row, mark it closed.
+  const gone = db
     .select()
     .from(schema.prs)
     .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.open, true)))
     .all()
-  const closed = open.filter((row) => !seen.has(row.number))
-  for (const row of closed)
-    db.update(schema.prs).set({ open: false, fetchedAt }).where(eq(schema.prs.id, row.id)).run()
-  if (closed.length) await stopMergedPreviews(repo, closed)
+    .filter((row) => !seen.has(row.number))
+  for (const row of gone)
+    db.update(schema.prs)
+      .set({ open: false, closedAt: fetchedAt, fetchedAt })
+      .where(eq(schema.prs.id, row.id))
+      .run()
+  left.push(...gone)
+  if (left.length) await stopMergedPreviews(repo, left)
 }
 
 /** The tickets a PR came from: named by their PR number, or on its head branch when they name none. */
@@ -193,14 +269,19 @@ const prTickets = <T extends Pick<schema.Ticket, 'repoId' | 'prNumber' | 'branch
 
 /**
  * The board's previews of a merged PR's tickets (and their lanes) have nothing left to show: stop
- * them. Only a PR with a preview running is asked about, since leaving the queue may also mean closed.
+ * them. A PR that left the queue without the searches finding it merged may also have been closed:
+ * GitHub is asked about it, only when it has a preview running.
  */
-async function stopMergedPreviews(repo: schema.Repo, closed: schema.Pr[]) {
+async function stopMergedPreviews(repo: schema.Repo, left: schema.Pr[]) {
   const repos = listRepos(repo.projectId)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, repo.projectId)).all()
-  for (const pr of closed) {
+  for (const pr of left) {
     const ids = prTickets(tickets, repos, pr).map((t) => t.id)
-    if (ids.length && hasPreviews(ids) && (await prMerged(repo.repoPath, pr.number)))
+    if (
+      ids.length &&
+      hasPreviews(ids) &&
+      (pr.mergedAt !== null || (await prMerged(repo.repoPath, pr.number)))
+    )
       stopPreviewsFor(ids, `PR #${pr.number} was merged`)
   }
 }
@@ -209,10 +290,16 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
   getProject(projectId)
   const stale = Date.now() - (lastRefresh.get(projectId) ?? 0) > REFRESH_MS
   if (opts.refresh || stale) await refreshPrs(projectId)
+  // Open PRs, and the ones merged within the window; a PR closed without merging is in no stage.
   const rows = db
     .select()
     .from(schema.prs)
-    .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true)))
+    .where(
+      and(
+        eq(schema.prs.projectId, projectId),
+        or(eq(schema.prs.open, true), gte(schema.prs.mergedAt, mergedSince())),
+      ),
+    )
     .orderBy(desc(schema.prs.updatedAt))
     .all()
   const results = db
@@ -307,8 +394,8 @@ const latestResult = (results: schema.ReviewResult[], prNumber: number, repoId: 
 
 /**
  * The PR a ticket was opened as: the one it names with `prNumber`, else the open one on its branch,
- * in the ticket's repo. A PR outside the review queue (not assigned to the human) still comes back
- * with its number and GitHub link, without the queue's fields.
+ * in the ticket's repo. A PR outside the review queue (the human neither opened nor reviews it) still
+ * comes back with its number and GitHub link, without the queue's fields.
  */
 export function prForTicket(ticket: schema.Ticket) {
   const repo = ticketRepo(ticket)
@@ -346,8 +433,8 @@ export function prForTicket(ticket: schema.Ticket) {
     number,
     linkedBy: ticket.prNumber ? ('prNumber' as const) : ('branch' as const),
     url: row?.url ?? (repo.githubRepo ? `https://github.com/${repo.githubRepo}/pull/${number}` : null),
-    // Set when the PR is in the review queue: its board id (for threads and holds), title, state, and
-    // where it stands on GitHub (whose move, merge state, CI) as of the last refresh.
+    // Set when the PR is in the review queue: its board id (for threads and holds), title, stage, and
+    // where it stands on GitHub (which side of the queue, merge state, CI) as of the last refresh.
     queue: row
       ? {
           id: row.id,
