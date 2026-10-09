@@ -279,7 +279,7 @@ test('the page is the reader’s after landing: refetches neither scroll back no
   await expect(threadToggle(post(page, thread.post))).toHaveAttribute('aria-expanded', 'true')
 })
 
-test('a #link on an open ticket lands on its post, and back and forward move between the two', async ({
+test('a #link on an open ticket lands on its post; back and forward return to where the reader was', async ({
   page,
   api,
   human,
@@ -304,17 +304,29 @@ test('a #link on an open ticket lands on its post, and back and forward move bet
   await expectRevealed(page, post(page, newer))
   await expectMarkGone(page)
 
-  await post(page, newer).getByRole('link', { name: 'the first finding' }).click()
+  const link = post(page, newer).getByRole('link', { name: 'the first finding' })
+  await link.scrollIntoViewIfNeeded()
+  const leftNewer = await scrollY(page)
+  await link.click()
   await expect(page).toHaveURL(new RegExp(`#post-${older}$`))
   await expectRevealed(page, post(page, older))
   await expectMarkGone(page)
+  // The reader moves on from it.
+  const leftOlder = await scrollTo(page, 2000)
 
+  // Back and Forward go to where the reader was on each, unmarked: not to the anchor again.
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`#post-${newer}$`))
-  await expectRevealed(page, post(page, newer))
+  await expect.poll(() => scrollY(page)).toBe(leftNewer)
+  await page.waitForTimeout(1_000)
+  expect(await scrollY(page)).toBe(leftNewer)
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
   await page.goForward()
   await expect(page).toHaveURL(new RegExp(`#post-${older}$`))
-  await expectRevealed(page, post(page, older))
+  await expect.poll(() => scrollY(page)).toBe(leftOlder)
+  await page.waitForTimeout(1_000)
+  expect(await scrollY(page)).toBe(leftOlder)
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
 })
 
 test('a #link clicked while the last target is still held in place lands on its reply', async ({
@@ -712,29 +724,56 @@ test('going to another ticket with an anchor, nothing on the one still shown is 
   expect(await marks(page)).toEqual([{ id: 'handoff', shown: `#${b.id} Second in review` }])
 })
 
-test('Back to a ticket with an anchor, from another one, lands on its own target', async ({
-  page,
-  project,
-  api,
-  human,
-}) => {
-  const a = await longTicket(api, human, 'Stepped to', 'review')
-  const b = await longTicket(api, human, 'Linked first', 'review')
-  await page.goto(`/projects/${project.id}/features/${b.id}#handoff`)
-  await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
-  await expectMarkGone(page)
-  // To the other ticket in the same column, by its step link, then back.
-  await page.locator(`a[title^="#${a.id} "]`).click()
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Stepped to')
-  await feedDrawn(page)
-  expect(await scrollTo(page, 1500)).toBe(1500)
-  await recordMarks(page)
-  await page.goBack()
-  await expect(page).toHaveURL(new RegExp(`/features/${b.id}#handoff$`))
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('Linked first')
-  await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
-  expect(await marks(page)).toEqual([{ id: 'handoff', shown: `#${b.id} Linked first` }])
-})
+for (const cached of [true, false])
+  test(`Back to a ticket with an anchor${cached ? '' : ', no longer loaded,'} returns to where the reader left it`, async ({
+    page,
+    project,
+    api,
+    human,
+  }) => {
+    const a = await longTicket(api, human, 'Stepped to', 'review')
+    const b = await longTicket(api, human, 'Linked first', 'review')
+    await page.goto(`/projects/${project.id}/features/${b.id}#handoff`)
+    await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
+    await expectMarkGone(page)
+    // The reader scrolls away from it, then steps to the other ticket in the column by its key.
+    const left = await scrollTo(page, 1200)
+    const step = page.locator(`a[title^="#${a.id} "]`)
+    await page.keyboard.press((await step.getAttribute('aria-keyshortcuts'))!)
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Stepped to')
+    await feedDrawn(page)
+    expect(await scrollTo(page, 1500)).toBe(1500)
+    await recordMarks(page)
+    if (!cached) {
+      // Out of the cache, and slow to come back: the ticket is drawn well after the router restores.
+      await page.evaluate(
+        (id) =>
+          (
+            window as unknown as {
+              __TSR_ROUTER__: {
+                options: { context: { queryClient: { removeQueries(f: { queryKey: unknown[] }): void } } }
+              }
+            }
+          ).__TSR_ROUTER__.options.context.queryClient.removeQueries({ queryKey: ['ticket', String(id)] }),
+        b.id,
+      )
+      await page.route(
+        (url) => url.pathname === `/api/tickets/${b.id}`,
+        async (route) => {
+          await new Promise((r) => setTimeout(r, 1_500))
+          await route.continue()
+        },
+      )
+    }
+    await page.goBack()
+    await expect(page).toHaveURL(new RegExp(`/features/${b.id}#handoff$`))
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Linked first')
+    await expect.poll(() => scrollY(page)).toBe(left)
+    await page.waitForTimeout(1_000)
+    expect(await scrollY(page)).toBe(left)
+    expect(await marks(page)).toEqual([])
+    await expect(page.locator('[data-revealed]')).toHaveCount(0)
+  })
 
 // --- on a phone ---
 

@@ -1,6 +1,6 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query'
-import { useLocation } from '@tanstack/react-router'
-import { useEffect, useMemo } from 'react'
+import { type RouterHistory, useElementScrollRestoration, useLocation } from '@tanstack/react-router'
+import { useEffect, useMemo, useRef } from 'react'
 
 /**
  * Links that land on one thing in a page: the URL's #anchor names an element by its id, and once the
@@ -38,21 +38,51 @@ export function anchorId(id: string | null | undefined, kind: string): number | 
   return m ? Number(m[1]) : null
 }
 
+/** How the history last moved: by a link (PUSH, REPLACE) or back through it (BACK, FORWARD, GO). */
+let moved: string | undefined
+
+/** Follows the router's history, from its start, for useReveal to tell a return from an arrival. */
+export function followHistory(router: { history: RouterHistory }) {
+  if (typeof window !== 'undefined') router.history.subscribe(({ action }) => (moved = action.type))
+}
+
+/**
+ * Where the reader left this entry of the history, when they come back to it (Back, Forward): the
+ * router keeps it for the window. None for a link followed, a URL opened afresh or a reload.
+ */
+function useLeftAt() {
+  const kept = useElementScrollRestoration({ getElement: () => window })
+  return moved === 'BACK' || moved === 'FORWARD' || moved === 'GO' ? kept : undefined
+}
+
 /**
  * Brings the anchor's target into view once it is drawn, once per anchor on a page: the page's
  * refetches and re-renders leave the reader where they are. Pass null until the page shows the data
  * the anchor belongs to (not the previous page's, kept while the next one loads), and `page` for what
  * it shows when one route shows several things (a ticket): the same anchor on the next one is another.
+ *
+ * Back or Forward to where the reader had been, the page goes back to where they left it instead,
+ * unmarked: once the target is drawn (the router's own restoring comes before a page that loads its
+ * data has the height for it).
  */
 export function useReveal(anchor: Anchor | null, page?: string | number) {
   const client = useQueryClient()
+  // Read below as the anchor arrives: a later change (a filter put in the URL) does not reveal again.
+  const kept = useLeftAt()
+  const left = useRef(kept)
+  useEffect(() => {
+    left.current = kept
+  })
   const target = anchor?.target ?? null
   const holder = anchor?.holder ?? null
   useEffect(() => {
     if (!target) return
     // A new arrival: whatever the last one still holds in place is the reader's again.
     unpin()
-    const stop = revealWhenDrawn(target, client, holder)
+    const at = left.current
+    const stop = at
+      ? revealWhenDrawn(target, client, null, () => window.scrollTo(at.scrollX, at.scrollY))
+      : revealWhenDrawn(target, client, holder, (el) => el && reveal(el))
     return () => {
       stop()
       unpin()
@@ -115,26 +145,30 @@ function drawn(id: string) {
 }
 
 /**
- * Waits for the element `id` to be drawn, then reveals it. Data comes in asynchronously (a thread's
+ * Waits for the element `id` to be drawn, then lands on it. Data comes in asynchronously (a thread's
  * replies in a second request, after the thread opens), so it watches the page and the queries: once
- * nothing is loading and the page has stopped changing without it, it gives up quietly, revealing
- * `fallback` instead if that is there. Returns a function that stops waiting.
+ * nothing is loading and the page has stopped changing without it, it gives up quietly, landing on
+ * `fallback` instead if that is there (or on nothing). Returns a function that stops waiting.
  */
-function revealWhenDrawn(id: string, client: QueryClient, fallback: string | null) {
+function revealWhenDrawn(
+  id: string,
+  client: QueryClient,
+  fallback: string | null,
+  land: (el: HTMLElement | null) => void,
+) {
   let quiet: ReturnType<typeof setTimeout> | undefined
   const check = () => {
     const el = drawn(id)
     if (el) {
       stop()
-      return reveal(el)
+      return land(el)
     }
     clearTimeout(quiet)
     if (client.isFetching()) return
     quiet = setTimeout(() => {
       if (client.isFetching() || drawn(id)) return check()
       stop()
-      const instead = fallback && drawn(fallback)
-      if (instead) reveal(instead)
+      land(fallback ? drawn(fallback) : null)
     }, SETTLE_MS)
   }
   const observer = new MutationObserver(check)
