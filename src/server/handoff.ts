@@ -8,12 +8,18 @@ import { ticketRepo } from './repos'
 
 /**
  * What a ticket handed to review still lacks: the parts of the hand-off the board can see for itself
- * (a PR, the branch on origin, a preview that runs, a hand-off post after the last commit, CI that is
- * not red). Warnings only: moving to review is never refused for them.
+ * (the implementation's tasks all done, a PR, the branch on origin, a preview that runs, a hand-off post
+ * after the last commit, CI that is not red). Warnings only: moving to review is never refused for them.
  */
 
 /** Stable codes, for agents to act on; the text is for people. */
-export type HandoffCode = 'no_pr' | 'not_pushed' | 'no_preview' | 'no_handoff_post' | 'checks_unknown'
+export type HandoffCode =
+  | 'tasks_open'
+  | 'no_pr'
+  | 'not_pushed'
+  | 'no_preview'
+  | 'no_handoff_post'
+  | 'checks_unknown'
 
 export interface HandoffCheck {
   code: HandoffCode
@@ -34,6 +40,8 @@ export interface Handoff {
 /** What the checks go by, gathered from the ticket, git, the previews and the PR queue. */
 export interface HandoffFacts {
   branch: string
+  /** The implementation's tasks and subtasks, with those of its lanes that are not cancelled: its rollup. */
+  tasks: { done: number; total: number }
   /** The PR it was opened as (by prNumber or its branch), with CI from the PR queue when it is there. */
   pr: { number: number; ci: CiState | null } | null
   push: Pick<Push, 'state' | 'ahead' | 'into'>
@@ -57,6 +65,14 @@ export function handoffOf(f: HandoffFacts): Handoff {
   const checks: HandoffCheck[] = []
   const check = (code: HandoffCode, label: string, ok: boolean, text: string) =>
     checks.push({ code, label, ok, text })
+
+  const { done, total } = f.tasks
+  check(
+    'tasks_open',
+    'Implementation',
+    total > 0 && done === total,
+    total ? `${done} of ${plural(total, 'task')} done` : 'No tasks: add the steps of the work and tick them',
+  )
 
   check(
     'no_pr',
@@ -147,6 +163,7 @@ export async function ticketHandoff(t: TicketWithPush): Promise<Handoff> {
   ])
   return handoffOf({
     branch: t.branch,
+    tasks: t.rollup,
     pr: t.pr ? { number: t.pr.number, ci: t.pr.queue?.ci ?? null } : null,
     push: t.push,
     previews,

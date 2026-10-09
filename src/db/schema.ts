@@ -203,15 +203,21 @@ export const ticketNeeds = sqliteTable(
   (t) => [primaryKey({ columns: [t.ticketId, t.needsId] }), index('ticket_needs_needs').on(t.needsId)],
 )
 
-export const tasks = sqliteTable('tasks', {
-  id: id(),
-  ticketId: integer('ticket_id')
-    .notNull()
-    .references(() => tickets.id, { onDelete: 'cascade' }),
-  text: text().notNull(),
-  done: integer({ mode: 'boolean' }).notNull().default(false),
-  position: integer().notNull().default(0),
-})
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    // The task this one is a subtask of, on the same ticket and itself top-level (two levels only).
+    parentId: integer('parent_id').references((): AnySQLiteColumn => tasks.id, { onDelete: 'cascade' }),
+    text: text().notNull(),
+    done: integer({ mode: 'boolean' }).notNull().default(false),
+    position: integer().notNull().default(0),
+  },
+  (t) => [index('tasks_parent').on(t.parentId)],
+)
 
 export const workspaces = sqliteTable('workspaces', {
   id: id(),

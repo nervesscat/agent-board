@@ -22,6 +22,7 @@ const git = (...args: string[]) => gitIn(repo, ...args)
 const COMMIT_AT = '2026-01-10T12:00:00.000Z'
 const facts = (over: Partial<HandoffFacts> = {}): HandoffFacts => ({
   branch: 'feat/x',
+  tasks: { done: 3, total: 3 },
   pr: { number: 7, ci: 'passing' },
   push: { state: 'pushed', ahead: 0 },
   previews: [{ url: 'http://localhost:47101', running: true }],
@@ -38,11 +39,37 @@ describe('handoffOf', () => {
     const h = handoffOf(facts())
     expect(h.missing).toEqual([])
     expect(h.checks.map((c) => [c.code, c.ok])).toEqual([
+      ['tasks_open', true],
       ['no_pr', true],
       ['not_pushed', true],
       ['no_preview', true],
       ['no_handoff_post', true],
       ['checks_unknown', true],
+    ])
+  })
+
+  it('tasks_open: Implementation, met once there are tasks and every one is done', async () => {
+    const { handoffOf } = await import('./handoff')
+    const implementation = (tasks: HandoffFacts['tasks']) => handoffOf(facts({ tasks })).checks[0]!
+    expect(implementation({ done: 3, total: 3 })).toEqual({
+      code: 'tasks_open',
+      label: 'Implementation',
+      ok: true,
+      text: '3 of 3 tasks done',
+    })
+    const none = handoffOf(facts({ tasks: { done: 0, total: 0 } }))
+    expect(none.checks[0]).toMatchObject({ code: 'tasks_open', ok: false })
+    expect(none.missing).toEqual([{ code: 'tasks_open', text: expect.stringMatching(/^No tasks/) }])
+    expect(handoffOf(facts({ tasks: { done: 3, total: 5 } })).missing).toEqual([
+      { code: 'tasks_open', text: '3 of 5 tasks done' },
+    ])
+    expect(handoffOf(facts({ tasks: { done: 0, total: 1 } })).missing).toEqual([
+      { code: 'tasks_open', text: '0 of 1 task done' },
+    ])
+    // First in the checklist, and first in missing.
+    expect(handoffOf(facts({ tasks: { done: 0, total: 2 }, pr: null })).missing.map((m) => m.code)).toEqual([
+      'tasks_open',
+      'no_pr',
     ])
   })
 
@@ -65,7 +92,7 @@ describe('handoffOf', () => {
     ])
     expect(missing({ state: 'none', ahead: 0 }, '')).toEqual([{ code: 'not_pushed', text: 'No branch set' }])
     expect(missing({ state: 'merged', ahead: 0, into: 'main' })).toEqual([])
-    expect(handoffOf(facts({ push: { state: 'merged', ahead: 0, into: 'main' } })).checks[1]!.text).toBe(
+    expect(handoffOf(facts({ push: { state: 'merged', ahead: 0, into: 'main' } })).checks[2]!.text).toBe(
       'Merged into main',
     )
   })
@@ -174,9 +201,15 @@ describe('moving a ticket to review', () => {
     const projectId = db.insert(schema.projects).values({ name: 'p' }).returning().get().id
     db.insert(schema.repos).values({ projectId, name: 'repo', repoPath: repo, baseBranch: 'main' }).run()
     noteActor('enrique', 'human')
+    // The implementation: a step with two parts, all open.
     const t = features.createTicket(
       projectId,
-      { title: 't', branch: 'feat/handoff', status: 'in_progress' },
+      {
+        title: 't',
+        branch: 'feat/handoff',
+        status: 'in_progress',
+        tasks: [{ text: 'build it', subtasks: ['code', 'test'] }],
+      },
       'claude',
     )
     const codes = (h: { missing: { code: string }[] } | null | undefined) => h?.missing.map((m) => m.code)
@@ -188,6 +221,7 @@ describe('moving a ticket to review', () => {
 
     const first = await needs.changeTicket(t.id, { status: 'review' }, 'claude', { agent: true })
     expect('handoff' in first && codes(first.handoff)).toEqual([
+      'tasks_open',
       'no_pr',
       'not_pushed',
       'no_preview',
@@ -204,7 +238,22 @@ describe('moving a ticket to review', () => {
     await fetchRepo(repo, { force: true })
     features.addWorkspace(t.id, { name: 'wt', branch: 'feat/handoff', previewUrl }, 'claude')
     const view = await needs.ticketView(t.id)
-    expect(codes(view.handoff)).toEqual(['no_pr'])
+    expect(codes(view.handoff)).toEqual(['tasks_open', 'no_pr'])
+    expect(view.handoff!.missing[0]!.text).toBe('0 of 3 tasks done')
+
+    // A lane's tasks count too, until it is cancelled.
+    const lane = features.createTicket(
+      projectId,
+      { title: 'lane', parentId: t.id, tasks: ['lane step'] },
+      'claude',
+    )
+    // One tick on the step ticks its parts.
+    const step = features.getTicketFull(t.id).tasks.find((x) => x.text === 'build it')!
+    features.updateTask(step.id, { done: true }, 'claude')
+    const ticked = await needs.ticketView(t.id)
+    expect(ticked.handoff!.missing[0]).toEqual({ code: 'tasks_open', text: '3 of 4 tasks done' })
+    features.updateTicket(lane.id, { status: 'cancelled' }, 'claude')
+    expect(codes((await needs.ticketView(t.id)).handoff)).toEqual(['no_pr'])
     expect(view.handoff!.checks.find((c) => c.code === 'no_preview')).toMatchObject({
       ok: true,
       text: `Running at ${previewUrl}`,
