@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 
-import type { TicketFull } from '#/lib/api'
+import type { TicketFull, TicketGit } from '#/lib/api'
 import { commitFile, git } from './env'
 import { expect, ok, test } from './fixtures'
 
@@ -106,6 +106,10 @@ test('a branch that holds another ticket’s unmerged work suggests the need; on
     )
   const base = await ticket({ title: 'Foundation', branch: name('a') })
   const t = await ticket({ title: 'Built on it', branch: name('b'), baseBranch: name('base') })
+  // The board reads the checkout's refs a few seconds at a time: wait until it sees these branches.
+  await expect
+    .poll(async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).includes)
+    .toEqual([base.id])
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const details = page.getByRole('region', { name: 'Details' })
