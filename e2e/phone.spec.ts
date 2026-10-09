@@ -31,7 +31,7 @@ test('no sideways scroll at 390px on Home, Repositories, the PR queue, the board
   expect(await scrollsSideways(page)).toBe(false)
 
   await page.goto(`/projects/${project.id}/prs`)
-  await expect(page.getByText('Nothing pending.')).toBeVisible()
+  await expect(page.getByText('Nothing pending to review.')).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
 
   await page.goto(`/projects/${project.id}/features`)
@@ -137,6 +137,32 @@ test('the CrossBoard lockup stays on one row beside the test mode badge, and the
     await expect(menu).toBeInViewport({ ratio: 1 })
     const m = await menu.boundingBox()
     expect(m!.x + m!.width, `${width}px`).toBeLessThanOrEqual(width)
+    expect(await scrollsSideways(page), `${width}px`).toBe(false)
+  }
+})
+
+test('on a 375 and a 440px phone the PR queue fits without sideways scroll, and every tab answers a tap', async ({
+  page,
+  project,
+}) => {
+  const tab = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
+  for (const width of [375, 440]) {
+    await page.setViewportSize({ width, height: 844 })
+    // The filter picked at the width before is remembered: start from To review.
+    await page.goto(`/projects/${project.id}/prs?filter=me`)
+    await expect(page.getByText('Nothing pending to review.'), `${width}px`).toBeVisible()
+    expect(await scrollsSideways(page), `${width}px`).toBe(false)
+    for (const stage of ['Reviewed', 'On hold', 'Done']) {
+      await tab(stage).tap()
+      await expect(tab(stage), `${width}px`).toHaveAttribute('aria-selected', 'true')
+      await expect(page.getByText(`Nothing ${stage.toLowerCase()} to review.`), `${width}px`).toBeVisible()
+    }
+    await tab('Waiting on others').tap()
+    await expect(tab('Waiting on others'), `${width}px`).toHaveAttribute('aria-selected', 'true')
+    await expect(tab('To review'), `${width}px`).toHaveAttribute('aria-selected', 'false')
+    await expect(page.getByText('Nothing done waiting on others.'), `${width}px`).toBeVisible()
+    await tab('Pending').tap()
+    await expect(page.getByText('Nothing pending waiting on others.'), `${width}px`).toBeVisible()
     expect(await scrollsSideways(page), `${width}px`).toBe(false)
   }
 })
