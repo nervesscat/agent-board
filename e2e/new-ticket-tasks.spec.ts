@@ -220,19 +220,38 @@ test('Enter that ends an IME composition in the tasks input adds no task', async
   const { dialog, input, items } = await openDialog(page)
   const sent = creates(page)
   await input.fill('かな')
-  const enter = (isComposing: boolean) =>
-    input.evaluate((el, isComposing) => {
-      el.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', isComposing, bubbles: true, cancelable: true }),
-      )
-    }, isComposing)
+  const enter = (init: { isComposing: boolean; keyCode?: number; compositionEnd?: boolean }) =>
+    input.evaluate((el, { isComposing, keyCode, compositionEnd }) => {
+      if (compositionEnd) {
+        el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+        el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'かな' }))
+      }
+      const event = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        isComposing,
+        bubbles: true,
+        cancelable: true,
+      })
+      // The constructor leaves keyCode at 0 whatever it is given.
+      if (keyCode !== undefined) {
+        Object.defineProperty(event, 'keyCode', { get: () => keyCode })
+        Object.defineProperty(event, 'which', { get: () => keyCode })
+      }
+      el.dispatchEvent(event)
+    }, init)
 
-  await enter(true)
+  await enter({ isComposing: true })
+  await expect(input).toHaveValue('かな')
+  await expect(items).toHaveCount(0)
+
+  // Safari ends the composition before the keydown of the Enter that commits it, which then says
+  // isComposing false, and only its keyCode 229 tells it is the IME's.
+  await enter({ isComposing: false, keyCode: 229, compositionEnd: true })
   await expect(input).toHaveValue('かな')
   await expect(items).toHaveCount(0)
 
   // The same Enter once the composition is over is a task: the event does reach the field.
-  await enter(false)
+  await enter({ isComposing: false, keyCode: 13 })
   await expect(items).toHaveText(['かな'])
   await expect(input).toHaveValue('')
   await expect(dialog).toBeVisible()

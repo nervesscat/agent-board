@@ -57,7 +57,9 @@ export function TasksInput({
           value={text}
           onChange={(e) => onTextChange(e.target.value)}
           onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing || e.key !== 'Enter') return
+            // An Enter that commits an IME conversion is not a task. Safari ends the composition just
+            // before that keydown, so only its keyCode 229 tells it apart.
+            if (e.nativeEvent.isComposing || e.keyCode === 229 || e.key !== 'Enter') return
             // A task, never the form submitted.
             e.preventDefault()
             add()
