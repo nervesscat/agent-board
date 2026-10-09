@@ -526,6 +526,106 @@ test('a reply on a review result opens it, scrolled to the reply', async ({
   expect(await dialog.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
 })
 
+// --- the reader's own scrolling, and the next ticket ---
+
+/** A review result with a long summary and an agent's reply under it, waiting on the human. */
+async function answeredResult(project: Project, human: APIRequestContext, agent: APIRequestContext) {
+  const summaryMd = Array.from({ length: 40 }, (_, i) => `Finding ${i + 1}: all good here.`).join('\n\n')
+  const result = await ok<Row>(
+    human.post(`/api/projects/${project.id}/reviews/results`, {
+      data: { prNumber: 4343, sha: 'abcdef1234567', verdict: 'SHIP', summaryMd },
+    }),
+  )
+  const r = await ok<Row>(
+    agent.post('/api/comments', {
+      data: { parentType: 'review', parentId: result.id, body: 'Looked again.' },
+    }),
+  )
+  return { href: `/projects/${project.id}/prs?result=${result.id}#reply-${r.id}`, reply: r.id }
+}
+
+/** Threads' replies answer `ms` late, as on a slow connection. */
+const slowReplies = (page: Page, ms: number) =>
+  page.route(
+    (url) => url.pathname === '/api/comments',
+    async (route) => {
+      await new Promise((r) => setTimeout(r, ms))
+      await route.continue()
+    },
+  )
+
+/** The review result's dialog: a box that scrolls on its own, inside the page. */
+const resultDialog = (page: Page) => page.getByRole('dialog', { name: 'Review result' })
+const setScrollTop = (box: Locator, top: number) =>
+  box.evaluate((el, top) => {
+    el.scrollTop = top
+    return el.scrollTop
+  }, top)
+
+test('right after landing, a scroll the reader makes is kept, in the page or in a box', async ({
+  page,
+  project,
+  api,
+  human,
+  agent,
+}) => {
+  // A scrollbar dragged fires no wheel, touch or key: only the scroll itself, as a script's does.
+  let thread = { post: 0, reply: 0 }
+  const t = await longTicket(api, human, 'Scrolled away at once', 'in_progress', async (id) => {
+    thread = await answeredPost(human, agent, id, 'Right away')
+  })
+  await page.goto(`/projects/${project.id}/features/${t.id}#post-${thread.post}-reply-${thread.reply}`)
+  await expect(reply(page, thread.reply)).toHaveAttribute('data-revealed', '')
+  expect(await scrollTo(page, 300)).toBe(300)
+  await page.waitForTimeout(800)
+  expect(await scrollY(page)).toBe(300)
+
+  const result = await answeredResult(project, human, agent)
+  await page.goto(result.href)
+  await expect(reply(page, result.reply)).toHaveAttribute('data-revealed', '')
+  expect(await setScrollTop(resultDialog(page), 0)).toBe(0)
+  await page.waitForTimeout(800)
+  expect(await resultDialog(page).evaluate((el) => el.scrollTop)).toBe(0)
+})
+
+test('a reply drawn late is not scrolled to once the reader has scrolled the page', async ({
+  page,
+  project,
+  api,
+  human,
+  agent,
+}) => {
+  let thread = { post: 0, reply: 0 }
+  const t = await longTicket(api, human, 'Slow replies', 'in_progress', async (id) => {
+    thread = await answeredPost(human, agent, id, 'Late answer')
+  })
+  await slowReplies(page, 3_000)
+  await page.goto(`/projects/${project.id}/features/${t.id}#post-${thread.post}-reply-${thread.reply}`)
+  await feedDrawn(page)
+  expect(await scrollTo(page, 1200)).toBe(1200)
+  await expect(reply(page, thread.reply)).toHaveCount(1)
+  await page.waitForTimeout(1_000)
+  expect(await scrollY(page)).toBe(1200)
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
+})
+
+test('a reply drawn late is not scrolled to once the reader has scrolled the dialog it is in', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const result = await answeredResult(project, human, agent)
+  await slowReplies(page, 3_000)
+  await page.goto(result.href)
+  await expect(resultDialog(page)).toContainText('Finding 40')
+  expect(await setScrollTop(resultDialog(page), 300)).toBe(300)
+  await expect(reply(page, result.reply)).toHaveCount(1)
+  await page.waitForTimeout(1_000)
+  expect(await resultDialog(page).evaluate((el) => el.scrollTop)).toBe(300)
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
+})
+
 // --- on a phone ---
 
 test.describe('on a phone', () => {

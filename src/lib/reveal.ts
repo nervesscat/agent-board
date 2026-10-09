@@ -58,8 +58,47 @@ const SETTLE_MS = 500
 const WAIT_MS = 20_000
 /** How long the mark stays on (its fade is in styles.css). */
 export const MARK_MS = 3_000
-/** The reader scrolling or typing: from then on the page is theirs, and a late target is not scrolled to. */
+/**
+ * The reader turning the wheel, touching or typing: from then on the page is theirs, and a late target
+ * is not scrolled to. A scrollbar dragged fires nothing but scroll: see readerScrolls.
+ */
 const READER = ['wheel', 'touchmove', 'keydown'] as const
+
+/**
+ * Calls `then` when the page or a box in it scrolls while nothing here has scrolled it: the reader,
+ * by whatever means. Not the page pulled up to its new bottom as it gets shorter (the previous page
+ * gone, this one still loading), nor a box scrolling only sideways (a row of tabs following its
+ * selection). Returns a function that stops listening.
+ */
+function readerScrolls(then: () => void) {
+  let y = window.scrollY
+  const tops = new WeakMap<Element, number>()
+  const onScroll = (e: Event) => {
+    const box = e.target
+    if (box === document || box === document.scrollingElement) {
+      const now = window.scrollY
+      const bottom = document.documentElement.scrollHeight - window.innerHeight
+      if (Math.abs(now - y) <= 1 || (now < y && now >= bottom - 1)) y = now
+      else then()
+    } else if (box instanceof Element) {
+      // A box drawn while waiting starts at its top.
+      if (Math.abs(box.scrollTop - (tops.get(box) ?? 0)) > 1) then()
+      else tops.set(box, box.scrollTop)
+    }
+  }
+  document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+  return () => document.removeEventListener('scroll', onScroll, { capture: true })
+}
+
+/** What scrolls to bring the element into view: its scrolling ancestors and the page itself. */
+function scrollers(el: HTMLElement) {
+  const boxes: Element[] = []
+  for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement)
+    if (/auto|scroll|overlay/.test(getComputedStyle(p).overflowY) && p.scrollHeight > p.clientHeight)
+      boxes.push(p)
+  boxes.push(document.scrollingElement ?? document.documentElement)
+  return boxes
+}
 
 /** The element, when it is there and shown (not in a hidden tab). */
 function drawn(id: string) {
@@ -93,9 +132,11 @@ function revealWhenDrawn(id: string, client: QueryClient, fallback: string | nul
   const observer = new MutationObserver(check)
   const unsubscribe = client.getQueryCache().subscribe(check)
   const timeout = setTimeout(() => stop(), WAIT_MS)
+  const unlisten = readerScrolls(() => stop())
   function stop() {
     observer.disconnect()
     unsubscribe()
+    unlisten()
     clearTimeout(quiet)
     clearTimeout(timeout)
     for (const e of READER) window.removeEventListener(e, stop)
@@ -133,7 +174,8 @@ const PIN_MS = 2_000
 function pin(el: HTMLElement) {
   unpin()
   const until = performance.now() + PIN_MS
-  let y = window.scrollY
+  const boxes = scrollers(el)
+  let at = boxes.map((b) => b.scrollTop)
   let top = el.getBoundingClientRect().top
   let frame = 0
   const stop = () => {
@@ -141,11 +183,12 @@ function pin(el: HTMLElement) {
     for (const e of READER) window.removeEventListener(e, stop)
   }
   const step = () => {
-    // The page scrolled by someone else: it is theirs.
-    if (!el.isConnected || performance.now() > until || window.scrollY !== y) return stop()
+    // The page, or a box it is in, scrolled by someone else (a scrollbar dragged): it is theirs.
+    const moved = boxes.some((b, i) => Math.abs(b.scrollTop - at[i]!) > 1)
+    if (!el.isConnected || performance.now() > until || moved) return stop()
     if (Math.abs(el.getBoundingClientRect().top - top) > 1) {
       el.scrollIntoView({ block: 'start' })
-      y = window.scrollY
+      at = boxes.map((b) => b.scrollTop)
       top = el.getBoundingClientRect().top
     }
     frame = requestAnimationFrame(step)
