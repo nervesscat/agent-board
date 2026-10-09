@@ -139,6 +139,50 @@ test('a review card placed above a ticket it needs says to merge it after that o
   await expect(card(page, top.id).getByText(`merge after #${base.id}`)).toBeVisible()
 })
 
+test("a ticket's page agrees at once with a placement made on the board above it", async ({
+  page,
+  api,
+  human,
+  project,
+}) => {
+  const [d, c, b, a] = await column(api, 'blocked', [
+    'Fourth made',
+    'Third made',
+    'Second made',
+    'First made',
+  ])
+  await page.goto(`/projects/${project.id}/features/${a}`)
+  const where = page.getByText(/\d+ of 4 in Blocked/)
+  await expect(where).toHaveText('1 of 4 in Blocked')
+
+  // To the board by the page's own link, so the ticket's page stays cached as it was read.
+  await page.getByRole('link', { name: 'Ongoing features' }).first().click()
+  await expect.poll(() => shown(page, 'blocked')).toEqual([a, b, c, d])
+  await card(page, d!).getByRole('button', { name: 'Move up' }).click()
+  await expect.poll(() => shown(page, 'blocked')).toEqual([a, b, d, c])
+  await expect.poll(() => listed(human, project.id, 'blocked')).toEqual([a, b, d, c])
+
+  // Back on its page, the placement ranked it first: so it reads as first drawn, not after a poll.
+  await page.goBack()
+  await expect(where).toBeVisible()
+  expect(await where.textContent()).toBe('1 of 4 in Blocked')
+  expect(await page.getByRole('link', { name: 'Previous ticket in Blocked' }).count()).toBe(0)
+  expect(await page.getByRole('link', { name: 'Next ticket in Blocked' }).getAttribute('title')).toBe(
+    `#${b} Second made`,
+  )
+  // And the moved card's page has it third, between the two it went between.
+  await page.goto(`/projects/${project.id}/features/${d}`)
+  await expect(page.getByText('3 of 4 in Blocked')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Previous ticket in Blocked' })).toHaveAttribute(
+    'title',
+    `#${b} Second made`,
+  )
+  await expect(page.getByRole('link', { name: 'Next ticket in Blocked' })).toHaveAttribute(
+    'title',
+    `#${c} Third made`,
+  )
+})
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

@@ -97,7 +97,8 @@ function Features() {
     },
   })
   // A card's place in its column (drag within it, Move up / Move down): shown at once, then the list
-  // is read again once the last placement in a row is saved; a failed one puts the order back.
+  // is read again once the last placement in a row is saved; a failed one puts the order back. A
+  // placement ranks every ticket above the moved one too, so their cached pages are read again then.
   const placing = ['place', id]
   const place = useMutation({
     mutationKey: placing,
@@ -115,7 +116,10 @@ function Features() {
       toast.error(errorMessage(err))
     },
     onSettled: (_d, _e, v) => {
-      if (qc.isMutating({ mutationKey: placing }) <= 1) qc.invalidateQueries({ queryKey: ticketsKey(id) })
+      if (qc.isMutating({ mutationKey: placing }) <= 1) {
+        qc.invalidateQueries({ queryKey: ticketsKey(id) })
+        qc.invalidateQueries({ queryKey: ['ticket'] })
+      }
       qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
     },
   })
