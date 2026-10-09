@@ -57,8 +57,9 @@ async function createdBody(dialog: Locator, human: APIRequestContext, projectId:
 }
 
 /**
- * Where the editor's box, its toolbar, the toolbar's last button and its text are drawn. Measured once
- * whatever moves the editor (a dialog zooming in) has finished, and all in the same frame.
+ * Where the editor's box, its toolbar, the toolbar's first button, its Bold button and its text are
+ * drawn. Measured once whatever moves the editor (a dialog zooming in) has finished, and all in the
+ * same frame.
  */
 function measure(text: Locator) {
   return text.evaluate(async (el) => {
@@ -71,7 +72,13 @@ function measure(text: Locator) {
       const { top, right, bottom, left } = e.getBoundingClientRect()
       return { top, right, bottom, left }
     }
-    return { box: rect(box), bar: rect(bar), last: rect(bar.lastElementChild!), text: rect(el) }
+    return {
+      box: rect(box),
+      bar: rect(bar),
+      first: rect(bar.firstElementChild!),
+      bold: rect(bar.querySelector('[aria-label="Bold"]')!),
+      text: rect(el),
+    }
   })
 }
 
@@ -82,14 +89,26 @@ async function expectToolbarAbove(text: Locator) {
 }
 
 /**
- * The editor's attach is the last button of its toolbar, drawn in the toolbar's row: inside the
- * editor's box and above its text.
+ * The editor's attach is the first button of its toolbar, before the formatting buttons, drawn at the
+ * left end of the toolbar's first row: inside the editor's box, left of Bold and above its text.
  */
 async function expectAttachInToolbar(text: Locator) {
-  await expect(toolbarOf(text).getByRole('button').last()).toHaveAccessibleName(/attach/i)
-  const { box, bar, last: attach, text: drawn } = await measure(text)
+  const buttons = toolbarOf(text).getByRole('button')
+  await expect(buttons.first()).toHaveAccessibleName('Attach files')
+  await expect(buttons.last()).toHaveAccessibleName('Link')
+  expect(await buttons.evaluateAll((all) => all.map((b) => b.getAttribute('aria-label')))).toEqual([
+    'Attach files',
+    ...FORMATS,
+  ])
+  const { box, bar, first: attach, bold, text: drawn } = await measure(text)
   expect(attach.left).toBeGreaterThanOrEqual(box.left)
   expect(attach.right).toBeLessThanOrEqual(box.right)
+  // At the toolbar's left padding, not pushed to the right.
+  expect(attach.left).toBeGreaterThanOrEqual(bar.left)
+  expect(attach.left).toBeLessThanOrEqual(bar.left + 8)
+  // In Bold's row, before it.
+  expect(attach.top).toBe(bold.top)
+  expect(attach.right).toBeLessThanOrEqual(bold.left)
   expect(attach.top).toBeGreaterThanOrEqual(bar.top)
   expect(attach.bottom).toBeLessThanOrEqual(bar.bottom)
   expect(attach.bottom).toBeLessThanOrEqual(drawn.top)
@@ -102,7 +121,7 @@ async function expectFormatsOnly(text: Locator) {
   expect(await buttons.evaluateAll((all) => all.map((b) => b.getAttribute('aria-label')))).toEqual(FORMATS)
 }
 
-test('Tab from the title reaches the instructions text, then the formatting buttons and attach, then the next field', async ({
+test('Tab from the title reaches the instructions text, then attach and the formatting buttons, then the next field', async ({
   page,
   project,
   human,
@@ -116,23 +135,23 @@ test('Tab from the title reaches the instructions text, then the formatting butt
   await page.keyboard.type('hello')
 
   // From a plain paragraph Tab leaves the text for the buttons, one at a time, without typing anything.
+  await page.keyboard.press('Tab')
+  await expect(d.attach).toBeFocused()
   for (const name of FORMATS) {
     await page.keyboard.press('Tab')
     await expect(d.format(name)).toBeFocused()
   }
-  await page.keyboard.press('Tab')
-  await expect(d.attach).toBeFocused()
   await expect(d.text).toHaveText('hello')
   await page.keyboard.press('Tab')
   await expect(d.dialog.getByLabel('Initial tasks, one per line')).toBeFocused()
 
   // Shift+Tab walks the same way back.
-  await page.keyboard.press('Shift+Tab')
-  await expect(d.attach).toBeFocused()
   for (const name of [...FORMATS].reverse()) {
     await page.keyboard.press('Shift+Tab')
     await expect(d.format(name)).toBeFocused()
   }
+  await page.keyboard.press('Shift+Tab')
+  await expect(d.attach).toBeFocused()
   await page.keyboard.press('Shift+Tab')
   await expect(d.text).toBeFocused()
   await page.keyboard.press('Shift+Tab')
@@ -158,7 +177,7 @@ test('the toolbar attach is a paperclip with no text, named and titled like the 
   project,
 }) => {
   const d = await newTicket(page, project.id, 'Just the icon')
-  const attach = d.toolbar.getByRole('button').last()
+  const attach = d.toolbar.getByRole('button').first()
   await expect(attach).toHaveAccessibleName('Attach files')
   await expect(attach).toHaveAttribute('title', 'Attach files')
   await expect(attach).toHaveAttribute('aria-busy', 'false')
@@ -190,7 +209,7 @@ test('the toolbar attach spins while its files upload, with no text, and is a pa
   const instructions = page.getByRole('region', { name: 'Instructions' })
   await instructions.getByRole('button', { name: 'edit' }).click()
   const editor = instructions.getByRole('textbox', { name: 'Instructions' })
-  const attach = toolbarOf(editor).getByRole('button').last()
+  const attach = toolbarOf(editor).getByRole('button').first()
   await expect(attach).toHaveAccessibleName('Attach files')
 
   const chooser = page.waitForEvent('filechooser')
@@ -216,10 +235,7 @@ test('the toolbar attach spins while its files upload, with no text, and is a pa
     .toEqual(['slow.png'])
 })
 
-test('with a file pending, Tab goes from attach to the file, and Shift+Tab back', async ({
-  page,
-  project,
-}) => {
+test('with a file pending, Tab goes from Link to the file, and Shift+Tab back', async ({ page, project }) => {
   const d = await newTicket(page, project.id, 'With a file')
   const chooser = page.waitForEvent('filechooser')
   await d.attach.click()
@@ -230,12 +246,12 @@ test('with a file pending, Tab goes from attach to the file, and Shift+Tab back'
   await expect(d.dialog.getByLabel('uploading')).toHaveCount(0)
 
   await d.text.click()
+  await page.keyboard.press('Tab')
+  await expect(d.attach).toBeFocused()
   for (const name of FORMATS) {
     await page.keyboard.press('Tab')
     await expect(d.format(name)).toBeFocused()
   }
-  await page.keyboard.press('Tab')
-  await expect(d.attach).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(preview).toBeFocused()
   await page.keyboard.press('Tab')
@@ -247,10 +263,12 @@ test('with a file pending, Tab goes from attach to the file, and Shift+Tab back'
   await expect(remove).toBeFocused()
   await page.keyboard.press('Shift+Tab')
   await expect(preview).toBeFocused()
+  for (const name of [...FORMATS].reverse()) {
+    await page.keyboard.press('Shift+Tab')
+    await expect(d.format(name)).toBeFocused()
+  }
   await page.keyboard.press('Shift+Tab')
   await expect(d.attach).toBeFocused()
-  await page.keyboard.press('Shift+Tab')
-  await expect(d.format('Link')).toBeFocused()
 })
 
 test('the toolbar attach opens the file picker with Enter and Space without creating the ticket, and its files go with the ticket', async ({
@@ -261,10 +279,6 @@ test('the toolbar attach opens the file picker with Enter and Space without crea
   const d = await newTicket(page, project.id, 'Files by keyboard')
   await page.keyboard.press('Tab')
   await expect(d.text).toBeFocused()
-  for (const name of FORMATS) {
-    await page.keyboard.press('Tab')
-    await expect(d.format(name)).toBeFocused()
-  }
   await page.keyboard.press('Tab')
   await expect(d.attach).toBeFocused()
 
@@ -304,7 +318,9 @@ test('a formatting button reached with Tab formats at the caret and gives the te
   await expect(d.text).toBeFocused()
   await page.keyboard.type('a')
 
-  // Space turns bold on...
+  // Space turns bold on (Tab passes attach first)...
+  await page.keyboard.press('Tab')
+  await expect(d.attach).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(d.format('Bold')).toBeFocused()
   await page.keyboard.press('Space')
@@ -312,6 +328,8 @@ test('a formatting button reached with Tab formats at the caret and gives the te
   await page.keyboard.type('b')
 
   // ...and Enter turns it off.
+  await page.keyboard.press('Tab')
+  await expect(d.attach).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(d.format('Bold')).toBeFocused()
   await page.keyboard.press('Enter')
@@ -364,7 +382,7 @@ test('every rich editor puts its text before its toolbar: ticket instructions an
   await expect(editor).toBeFocused()
   await expectToolbarAbove(editor)
   await page.keyboard.press('Tab')
-  await expect(instructions.getByRole('button', { name: 'Bold', exact: true })).toBeFocused()
+  await expect(toolbarOf(editor).getByRole('button', { name: 'Attach files', exact: true })).toBeFocused()
   await page.keyboard.press('Shift+Tab')
   await expect(editor).toBeFocused()
   await page.keyboard.press('Escape')
@@ -379,7 +397,7 @@ test('every rich editor puts its text before its toolbar: ticket instructions an
   await expect(reply).toBeFocused()
   await expectToolbarAbove(reply)
   await page.keyboard.press('Tab')
-  await expect(post.getByRole('button', { name: 'Bold', exact: true })).toBeFocused()
+  await expect(toolbarOf(reply).getByRole('button', { name: 'Attach files', exact: true })).toBeFocused()
   await page.keyboard.press('Shift+Tab')
   await expect(reply).toBeFocused()
 })
@@ -405,7 +423,7 @@ test('the ticket instructions have attach in the editor toolbar while editing, a
   await expect(listed('from-header.png')).toBeVisible()
   await expect.poll(attached).toEqual(['from-header.png'])
 
-  // Editing: the one attach is the toolbar's, after Link and before Cancel.
+  // Editing: the one attach is the toolbar's, between the text and Bold.
   await instructions.getByRole('button', { name: 'edit' }).click()
   const editor = instructions.getByRole('textbox', { name: 'Instructions' })
   await expect(editor).toBeFocused()
@@ -414,21 +432,28 @@ test('the ticket instructions have attach in the editor toolbar while editing, a
   await expect(toolbarOf(editor).getByRole('button', { name: 'attach' })).toBeVisible()
   await expectToolbarAbove(editor)
   await expectAttachInToolbar(editor)
+  await page.keyboard.press('Tab')
+  await expect(attach).toBeFocused()
   for (const name of FORMATS) {
     await page.keyboard.press('Tab')
     await expect(instructions.getByRole('button', { name, exact: true })).toBeFocused()
   }
   await page.keyboard.press('Tab')
-  await expect(attach).toBeFocused()
-  await page.keyboard.press('Tab')
   await expect(instructions.getByRole('button', { name: 'Cancel' })).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(instructions.getByRole('button', { name: 'Save' })).toBeFocused()
 
-  // Attaching from it attaches to the ticket at once, and leaves the text being edited alone.
+  // Shift+Tab walks the same way back, to attach.
   await page.keyboard.press('Shift+Tab')
+  await expect(instructions.getByRole('button', { name: 'Cancel' })).toBeFocused()
+  for (const name of [...FORMATS].reverse()) {
+    await page.keyboard.press('Shift+Tab')
+    await expect(instructions.getByRole('button', { name, exact: true })).toBeFocused()
+  }
   await page.keyboard.press('Shift+Tab')
   await expect(attach).toBeFocused()
+
+  // Attaching from it attaches to the ticket at once, and leaves the text being edited alone.
   chooser = page.waitForEvent('filechooser')
   await page.keyboard.press('Enter')
   await (await chooser).setFiles({ name: 'from-toolbar.png', mimeType: 'image/png', buffer: png() })
@@ -520,7 +545,7 @@ async function pick(page: Page, text: Locator, name: string) {
 /** The editor's toolbar attach is the paperclip alone: no text, named and titled, as big as Link. */
 async function expectPaperclip(text: Locator) {
   const bar = toolbarOf(text)
-  const attach = bar.getByRole('button').last()
+  const attach = bar.getByRole('button').first()
   await expect(attach).toHaveAccessibleName('Attach files')
   await expect(attach).toHaveAttribute('title', 'Attach files')
   await expect(attach).toHaveAttribute('aria-busy', 'false')
@@ -630,7 +655,7 @@ test('a file picked with the Reply toolbar attach is listed in the reply form, a
   expect(saved!.attachments.map((a) => a.name)).toEqual(['y.png'])
 })
 
-test('from the New post text, Tab reaches the formatting buttons, attach, its files, then the switch and Post; Enter and Space on attach post nothing', async ({
+test('from the New post text, Tab reaches attach, the formatting buttons, its files, then the switch and Post; Enter and Space on attach post nothing', async ({
   page,
   api,
 }) => {
@@ -643,10 +668,6 @@ test('from the New post text, Tab reaches the formatting buttons, attach, its fi
   await text.click()
   await page.keyboard.type('hello')
 
-  for (const name of FORMATS) {
-    await page.keyboard.press('Tab')
-    await expect(format(name)).toBeFocused()
-  }
   await page.keyboard.press('Tab')
   await expect(attach).toBeFocused()
 
@@ -662,14 +683,15 @@ test('from the New post text, Tab reaches the formatting buttons, attach, its fi
   await expect(text).toHaveText('hello')
   expect((await api.getTicket(t.id)).updates).toEqual([])
 
-  // With files pending, Tab goes on from attach to them, then to the rest of the form.
+  // With files pending, Tab goes on from Link to them, then to the rest of the form.
   await text.click()
+  await page.keyboard.press('Tab')
+  await expect(attach).toBeFocused()
   for (const name of FORMATS) {
     await page.keyboard.press('Tab')
     await expect(format(name)).toBeFocused()
   }
   for (const next of [
-    attach,
     form.getByRole('button', { name: 'Preview by-enter.png' }),
     form.getByRole('button', { name: 'Remove by-enter.png' }),
     form.getByRole('button', { name: 'Preview by-space.png' }),
@@ -718,7 +740,7 @@ test('files pasted in or dropped on the New post and Reply composers are listed 
 test.describe('at phone width', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  test('the toolbar, attach with it, is still drawn above the text in the New ticket dialog', async ({
+  test('the toolbar is still drawn above the text in the New ticket dialog, attach first at its left', async ({
     page,
     project,
   }) => {
@@ -727,7 +749,7 @@ test.describe('at phone width', () => {
     await expectAttachInToolbar(d.text)
   })
 
-  test('the New post toolbar, attach with it, is still drawn above the text on a ticket', async ({
+  test('the New post toolbar is still drawn above the text on a ticket, attach first at its left', async ({
     page,
     api,
   }) => {
