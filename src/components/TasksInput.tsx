@@ -1,4 +1,5 @@
 import { Plus, X } from 'lucide-react'
+import { useRef } from 'react'
 
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
@@ -24,6 +25,7 @@ export function TasksInput({
   text: string
   onTextChange: (text: string) => void
 }) {
+  const input = useRef<HTMLInputElement>(null)
   const add = (typed = text) => {
     if (!typed.trim()) return
     onChange(addTasks(value, typed))
@@ -53,6 +55,7 @@ export function TasksInput({
       )}
       <div className="flex gap-2">
         <Input
+          ref={input}
           id={id}
           value={text}
           onChange={(e) => onTextChange(e.target.value)}
@@ -83,7 +86,12 @@ export function TasksInput({
           size="icon"
           variant="outline"
           disabled={!text.trim()}
-          onClick={() => add()}
+          onClick={() => {
+            // + turns off once the text is gone, and a disabled button drops the focus out of the
+            // dialog: it goes back to the text, where the next task is typed.
+            add()
+            input.current?.focus()
+          }}
           aria-label="Add task"
           title="Add task"
         >

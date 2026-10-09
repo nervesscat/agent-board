@@ -296,6 +296,60 @@ test('a new lane takes its initial tasks the same way', async ({ page, project, 
   expect(await tasksOf(human, lane!.id)).toEqual(['Backend part', 'Wire it'])
 })
 
+test('after +, the focus is back in the tasks input, so the next task is typed there', async ({
+  page,
+  project,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, add, items } = await openDialog(page)
+  await input.pressSequentially('Reproduce it')
+  await add.click()
+  await expect(items).toHaveText(['Reproduce it'])
+  await expect(input).toBeFocused()
+  await page.keyboard.type('Fix it')
+  await expect(input).toHaveValue('Fix it')
+
+  // From the keyboard too: Tab to + and Space on it.
+  await page.keyboard.press('Tab')
+  await expect(add).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect(items).toHaveText(['Reproduce it', 'Fix it'])
+  await expect(input).toBeFocused()
+  await page.keyboard.type('Ship it')
+  await expect(input).toHaveValue('Ship it')
+  await expect(dialog).toBeVisible()
+})
+
+test('typing [ or ] after + in the New lane dialog stays in the field, and the lane goes under its parent', async ({
+  page,
+  project,
+  api,
+  human,
+}) => {
+  // Two tickets in one stage: on the parent's page `[` and `]` step to the other one, unless typing.
+  await api.ticket({ title: 'The neighbour' })
+  const parent = await api.ticket({ title: 'The parent' })
+  const url = `/projects/${project.id}/features/${parent.id}`
+  await page.goto(url)
+  await expect(page.getByText(/ of 2 in /)).toBeVisible()
+  const { dialog, input, add, items, create } = await openDialog(page, 'New lane')
+  await dialog.getByLabel('Title').fill('A lane typed in one go')
+  await input.pressSequentially('Backend part')
+  await add.click()
+  await page.keyboard.type('[api] retry')
+  await expect(input).toHaveValue('[api] retry')
+  await page.keyboard.press('Enter')
+  await expect(items).toHaveText(['Backend part', '[api] retry'])
+  expect(new URL(page.url()).pathname).toBe(url)
+
+  await create.click()
+  await expect(dialog).toBeHidden()
+  expect(new URL(page.url()).pathname).toBe(url)
+  const lane = (await rows(human, project.id)).find((t) => t.title === 'A lane typed in one go')
+  expect(lane).toMatchObject({ parentId: parent.id })
+  expect(await tasksOf(human, lane!.id)).toEqual(['Backend part', '[api] retry'])
+})
+
 for (const width of [375, 1280]) {
   test(`long tasks wrap inside the New ticket dialog at ${width}px`, async ({ page, project }) => {
     await page.setViewportSize({ width, height: 900 })
