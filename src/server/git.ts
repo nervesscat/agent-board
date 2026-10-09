@@ -252,6 +252,27 @@ export async function listRefs(repoPath: string): Promise<Refs> {
 }
 
 /**
+ * The branches whose history holds commit `sha`, named as `baseRefs` names them: a local branch by its
+ * name, origin's as `origin/<name>`. Throws when `sha` is no commit here.
+ */
+export async function refsContaining(repoPath: string, sha: string): Promise<Set<string>> {
+  const out = await git(repoPath, [
+    'for-each-ref',
+    '--contains',
+    sha,
+    '--format=%(refname)',
+    'refs/heads',
+    'refs/remotes/origin',
+  ])
+  const names = new Set<string>()
+  for (const name of out ? out.split('\n') : []) {
+    if (name.startsWith('refs/heads/')) names.add(name.slice(11))
+    else if (name !== 'refs/remotes/origin/HEAD') names.add(`origin/${name.slice(20)}`)
+  }
+  return names
+}
+
+/**
  * Brings the remote-tracking refs (`origin/*`) up to date, dropping the ones gone from origin. It
  * never touches a local branch, a worktree or origin itself, never prompts for credentials, and gives
  * up after `timeoutMs`.

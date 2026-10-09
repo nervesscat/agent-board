@@ -9,6 +9,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Flag,
+  FlagOff,
   GitBranch,
   GitCommitHorizontal,
   Layers,
@@ -27,7 +29,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -49,7 +51,7 @@ import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
-import { EditBox, Edited, PostActions } from '#/components/PostTools'
+import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostTools'
 import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
 import {
@@ -1503,17 +1505,33 @@ function Activity({
   )
 }
 
-/** A rail down the left of its rows; re-renders every minute so "5 minutes ago" keeps counting. */
+/**
+ * The minutes a Timeline has been open. Its rows are its caller's elements, which its own re-render
+ * leaves alone: each row reads this so it re-renders, and its "5 minutes ago" counts, as it changes.
+ */
+const TimelineMinute = createContext(0)
+
+/** A rail down the left of its rows; moves them on every minute so "5 minutes ago" keeps counting. */
 function Timeline({ children }: { children: ReactNode }) {
-  const [, tick] = useState(0)
+  const [minute, tick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => tick((n) => n + 1), 60_000)
     return () => clearInterval(id)
   }, [])
-  return <ol>{children}</ol>
+  return (
+    <TimelineMinute value={minute}>
+      <ol>{children}</ol>
+    </TimelineMinute>
+  )
 }
 
-/** One row of a Timeline: how long ago on the left (the exact time on hover), a dot on the rail. */
+/**
+ * One row of a Timeline: how long ago on the left (the exact time on hover), a dot on the rail. The
+ * two lines run top to bottom down the rail from beside the dot, so the post keeps the width; a long
+ * one makes its row taller rather than spill into the next. Their column is as wide as the two lines,
+ * 2.25rem at least: wider when a browser's minimum font size makes them bigger than the rem sizes. Its
+ * padding is pt/pb: py pads the block axis, which runs sideways in vertical text.
+ */
 function TimelineRow({
   at,
   dot = 'bg-muted-foreground/60',
@@ -1523,14 +1541,15 @@ function TimelineRow({
   dot?: string
   children: ReactNode
 }) {
+  useContext(TimelineMinute)
   const today = new Date(at).toDateString() === new Date().toDateString()
   return (
-    <li className="group grid grid-cols-[5.5rem_1.25rem_minmax(0,1fr)] sm:grid-cols-[7rem_1.5rem_minmax(0,1fr)]">
+    <li className="group grid grid-cols-[minmax(2.25rem,max-content)_1.25rem_minmax(0,1fr)] sm:grid-cols-[minmax(2.25rem,max-content)_1.5rem_minmax(0,1fr)]">
       <time
         dateTime={at}
         title={stamp(at)}
         suppressHydrationWarning
-        className="pt-3 text-right text-xs text-muted-foreground"
+        className="pt-3 pb-3 text-xs whitespace-nowrap text-muted-foreground [writing-mode:vertical-rl]"
       >
         {agoLong(at)}
         <span className="block text-[11px] opacity-70" suppressHydrationWarning>
@@ -1558,7 +1577,10 @@ function TimelineRow({
   )
 }
 
-/** One post: who, progress or not, the text and files, and its replies behind a toggle. */
+/**
+ * One post: who, progress or not, the text and files, then its actions as icons, and its replies behind
+ * the first of them, opening right under the row.
+ */
 function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string; onChange: () => void }) {
   const [thread, setThread] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -1573,73 +1595,85 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
   })
   const remove = useMutation({ mutationFn: () => del(`/api/updates/${u.id}`), onSuccess: onChange, onError })
   const replies = u.thread.count
+  const count = `${replies} ${replies === 1 ? 'reply' : 'replies'}`
   return (
     <article
       className={cn(
-        'rounded-lg border p-3',
+        'rounded-lg border',
         !u.progress && 'bg-muted/30',
         u.decision && !u.decidedAt && 'border-amber-500/60 bg-amber-500/5',
       )}
     >
-      <div className="group/post flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <Actor name={u.author} via={u.via} className="text-foreground" />
-        {u.handoff ? (
-          <span
-            className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium"
-            title="A resume note as it was saved: where the work was left off then"
-          >
-            <Bookmark className="size-3" /> resume note
-          </span>
+      {/* The post without its thread: hovering it shows its actions, hovering one of its replies does not. */}
+      <div className="group/post p-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Actor name={u.author} via={u.via} className="text-foreground" />
+          {u.handoff ? (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium"
+              title="A resume note as it was saved: where the work was left off then"
+            >
+              <Bookmark className="size-3" /> resume note
+            </span>
+          ) : (
+            u.progress && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
+            )
+          )}
+          {u.lane && (
+            <Link
+              to="/projects/$id/features/$ticketId"
+              params={{ id: projectId, ticketId: String(u.lane.id) }}
+              className="inline-flex min-w-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 hover:text-foreground"
+            >
+              <Layers className="size-3 shrink-0" /> <span className="max-w-48 truncate">{u.lane.title}</span>
+            </Link>
+          )}
+          <Edited at={u.editedAt} />
+        </div>
+        {editing ? (
+          <EditBox
+            value={u.body}
+            pending={edit.isPending}
+            onSave={(body) => edit.mutate({ body })}
+            onCancel={() => setEditing(false)}
+          />
         ) : (
-          u.progress && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
-          )
+          <Markdown className="mt-2">{u.body}</Markdown>
         )}
-        {u.lane && (
-          <Link
-            to="/projects/$id/features/$ticketId"
-            params={{ id: projectId, ticketId: String(u.lane.id) }}
-            className="inline-flex min-w-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 hover:text-foreground"
+        {u.decision && <DecisionCard u={u} onChange={onChange} />}
+        <Attachments items={u.attachments} />
+        <div role="group" aria-label="Post actions" className="mt-2 flex items-center gap-0.5">
+          <ActionButton
+            label={thread ? 'hide replies' : replies ? count : 'reply'}
+            tip={thread ? 'Hide replies' : replies ? `Show ${count}` : 'Reply'}
+            size={replies && !thread ? 'xs' : 'icon-xs'}
+            aria-expanded={thread}
+            onClick={() => setThread((v) => !v)}
           >
-            <Layers className="size-3 shrink-0" /> <span className="max-w-48 truncate">{u.lane.title}</span>
-          </Link>
-        )}
-        <Edited at={u.editedAt} />
-        <span className="ml-auto inline-flex items-center gap-2">
+            <MessageSquare />
+            {!thread && replies > 0 && replies}
+          </ActionButton>
           {!u.lane && (
-            <PostActions what="this post" onEdit={() => setEditing(true)} onDelete={() => remove.mutate()}>
-              <button
-                type="button"
-                className="hover:text-foreground"
+            <PostActions
+              what="this post"
+              group="post"
+              onEdit={() => setEditing(true)}
+              onDelete={() => remove.mutate()}
+            >
+              <ActionButton
+                label={u.progress ? 'not progress' : 'mark progress'}
+                tip={u.progress ? 'Not progress: make it a plain post' : 'Mark as progress'}
                 onClick={() => edit.mutate({ progress: !u.progress })}
               >
-                {u.progress ? 'not progress' : 'mark progress'}
-              </button>
+                {u.progress ? <FlagOff /> : <Flag />}
+              </ActionButton>
             </PostActions>
           )}
-          <button type="button" className="hover:text-foreground" onClick={() => setThread((v) => !v)}>
-            {thread
-              ? 'hide replies'
-              : replies
-                ? `${replies} ${replies === 1 ? 'reply' : 'replies'}`
-                : 'reply'}
-          </button>
-        </span>
+        </div>
       </div>
-      {editing ? (
-        <EditBox
-          value={u.body}
-          pending={edit.isPending}
-          onSave={(body) => edit.mutate({ body })}
-          onCancel={() => setEditing(false)}
-        />
-      ) : (
-        <Markdown className="mt-2">{u.body}</Markdown>
-      )}
-      {u.decision && <DecisionCard u={u} onChange={onChange} />}
-      <Attachments items={u.attachments} />
       {thread && (
-        <div className="mt-3 border-t pt-3">
+        <div className="mx-3 mb-3 border-t pt-3">
           <Thread parentType="update" parentId={u.id} compact />
         </div>
       )}

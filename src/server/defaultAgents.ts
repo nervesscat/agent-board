@@ -138,7 +138,8 @@ browser criteria), and the test suite's result.
     name: 'hunt',
     instructions: brief('hunt'),
     delegation: `**When:** in a review, once **env** is up, in parallel with **verify**. A clean first
-hunt is not trusted alone: a second hunt runs, starting from the guard analysis.
+hunt is not trusted alone: a second hunt runs, starting from the guard analysis, except in a light
+review (\`light\`, which the todo-review skill gives a tiny change).
 
 **Give it:** the spec, the environment, the diff and context, the checklists, the browser flag and
 its file prefix. Never the other hunt's notes.

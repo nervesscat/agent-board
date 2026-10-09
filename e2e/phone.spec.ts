@@ -106,3 +106,37 @@ test('the top bar folds its pages into a menu that opens', async ({ page }) => {
   await expect(page).toHaveURL(/\/agents$/)
   await expect(menu).toBeHidden()
 })
+
+test('the CrossBoard lockup stays on one row beside the test mode badge, and the menu stays on screen', async ({
+  page,
+}) => {
+  for (const width of [390, 400]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto(`/projects/${seededProject().id}/prs`)
+    await expect(page.getByRole('heading', { name: 'PR queue' })).toBeVisible()
+    const bar = page.getByRole('banner')
+    const badge = bar.getByText('test mode')
+    await expect(badge).toBeVisible()
+    const home = bar.getByRole('link', { name: 'CrossBoard', exact: true })
+    const [mark, word, link, tag] = await Promise.all(
+      [home.locator('svg'), home.getByText('CrossBoard', { exact: true }), home, badge].map((l) =>
+        l.boundingBox(),
+      ),
+    )
+    // One line of 17px type, to the right of the 22px mark and level with it, with nothing cut off.
+    expect(mark!.width, `${width}px`).toBeCloseTo(22, 0)
+    expect(word!.height, `${width}px`).toBeLessThanOrEqual(17 * 1.4)
+    expect(word!.x, `${width}px`).toBeGreaterThanOrEqual(mark!.x + mark!.width)
+    expect(
+      Math.abs(word!.y + word!.height / 2 - (mark!.y + mark!.height / 2)),
+      `${width}px`,
+    ).toBeLessThanOrEqual(1.5)
+    expect(await home.evaluate((e) => e.scrollWidth <= e.clientWidth), `${width}px`).toBe(true)
+    expect(tag!.x, `${width}px`).toBeGreaterThanOrEqual(link!.x + link!.width)
+    const menu = page.getByRole('button', { name: 'Pages' })
+    await expect(menu).toBeInViewport({ ratio: 1 })
+    const m = await menu.boundingBox()
+    expect(m!.x + m!.width, `${width}px`).toBeLessThanOrEqual(width)
+    expect(await scrollsSideways(page), `${width}px`).toBe(false)
+  }
+})
