@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Link, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   Archive,
   ArchiveRestore,
@@ -109,7 +109,7 @@ import {
   validateLaneSearch,
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
-import { anchorId, useAnchor, useReveal } from '#/lib/reveal'
+import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
@@ -215,10 +215,12 @@ function TicketPage() {
     refetchInterval: 10_000,
   })
   // A link's #anchor (a post, a reply, the hand-off, the resume note) is brought into view once this
-  // ticket is drawn: not while the previous ticket stays on screen until it loads.
+  // ticket is drawn: not while the previous ticket stays on screen until it loads. Stepping to another
+  // ticket, the location (and its anchor) is the next one's before this route's params are.
   const anchor = useAnchor()
-  const drawn = t?.id === Number(ticketId)
-  useReveal(drawn ? anchor : null)
+  const linkedTo = useLocation({ select: (l) => l.pathname.split('/').at(-1) })
+  const drawn = t !== undefined && String(t.id) === ticketId && ticketId === linkedTo
+  useReveal(drawn ? anchor : null, ticketId)
   // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
@@ -407,7 +409,9 @@ function TicketPage() {
           <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
           <Tasks t={t} onChange={invalidate} />
           <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
-          <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+          <ShownAnchor value={drawn ? anchor : null}>
+            <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+          </ShownAnchor>
         </div>
         <aside className="min-w-0 space-y-4">
           {t.handoff && <HandoffCard handoff={t.handoff} />}
@@ -419,6 +423,9 @@ function TicketPage() {
     </div>
   )
 }
+
+/** The anchor of the URL to the feed's posts, once the ticket it is on is the one shown. */
+const ShownAnchor = createContext<Anchor | null>(null)
 
 /**
  * How far down the stuck header reaches (the top bar and itself), as --ticket-header on the page: what
@@ -1601,7 +1608,7 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
   })
   const remove = useMutation({ mutationFn: () => del(`/api/updates/${u.id}`), onSuccess: onChange, onError })
   // A link to one of its replies (#post-<id>-reply-<id>) opens the thread, once per link.
-  const anchor = useAnchor()
+  const anchor = useContext(ShownAnchor)
   const opensFor = anchor?.holder === `post-${u.id}` ? anchor.hash : null
   useEffect(() => {
     if (opensFor) setThread(true)

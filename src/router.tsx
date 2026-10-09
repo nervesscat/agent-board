@@ -10,6 +10,10 @@ export function getRouter() {
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
+    // A page brings its own #anchor into view once its data has drawn it (src/lib/reveal.ts). The
+    // router's own jump, as soon as the route renders, could land on the previous page's element of
+    // the same id while the next one loads.
+    defaultHashScrollIntoView: false,
     defaultPreload: 'intent',
     defaultPreloadStaleTime: 0,
   })

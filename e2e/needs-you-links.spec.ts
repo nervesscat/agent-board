@@ -626,6 +626,87 @@ test('a reply drawn late is not scrolled to once the reader has scrolled the dia
   await expect(page.locator('[data-revealed]')).toHaveCount(0)
 })
 
+/** Records each element marked from now on, with the ticket on screen at that moment. */
+const recordMarks = (page: Page) =>
+  page.evaluate(() => {
+    const marks: { id: string; shown: string }[] = []
+    ;(window as unknown as { marks: typeof marks }).marks = marks
+    new MutationObserver((changes) => {
+      for (const c of changes) {
+        const el = c.target as Element
+        if (el.hasAttribute('data-revealed'))
+          marks.push({ id: el.id, shown: document.querySelector('main h1')?.textContent ?? '' })
+      }
+    }).observe(document.body, { subtree: true, attributeFilter: ['data-revealed'] })
+  })
+const marks = (page: Page) =>
+  page.evaluate(() => (window as unknown as { marks: { id: string; shown: string }[] }).marks)
+
+test('going to another ticket with an anchor, nothing on the one still shown is marked or scrolled', async ({
+  page,
+  project,
+  api,
+  human,
+}) => {
+  const a = await longTicket(api, human, 'First in review', 'review')
+  const b = await longTicket(api, human, 'Second in review', 'review')
+  await page.goto(`/projects/${project.id}/features/${a.id}`)
+  await feedDrawn(page)
+  expect(await scrollTo(page, 1500)).toBe(1500)
+  await recordMarks(page)
+  // The next ticket answers late, so the first one stays on screen meanwhile.
+  await page.route(
+    (url) => url.pathname === `/api/tickets/${b.id}`,
+    async (route) => {
+      await new Promise((r) => setTimeout(r, 2_000))
+      await route.continue()
+    },
+  )
+  // A link inside the app, as the router follows it.
+  await page.evaluate(
+    (href) =>
+      (
+        window as unknown as { __TSR_ROUTER__: { navigate(o: { href: string }): Promise<void> } }
+      ).__TSR_ROUTER__.navigate({
+        href,
+      }),
+    `/projects/${project.id}/features/${b.id}#handoff`,
+  )
+  await expect(page).toHaveURL(new RegExp(`/features/${b.id}#handoff$`))
+  await page.waitForTimeout(1_000)
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('First in review')
+  expect(await scrollY(page)).toBe(1500)
+  expect(await marks(page)).toEqual([])
+
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Second in review')
+  await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
+  expect(await marks(page)).toEqual([{ id: 'handoff', shown: `#${b.id} Second in review` }])
+})
+
+test('Back to a ticket with an anchor, from another one, lands on its own target', async ({
+  page,
+  project,
+  api,
+  human,
+}) => {
+  const a = await longTicket(api, human, 'Stepped to', 'review')
+  const b = await longTicket(api, human, 'Linked first', 'review')
+  await page.goto(`/projects/${project.id}/features/${b.id}#handoff`)
+  await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
+  await expectMarkGone(page)
+  // To the other ticket in the same column, by its step link, then back.
+  await page.locator(`a[title^="#${a.id} "]`).click()
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Stepped to')
+  await feedDrawn(page)
+  expect(await scrollTo(page, 1500)).toBe(1500)
+  await recordMarks(page)
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/features/${b.id}#handoff$`))
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Linked first')
+  await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
+  expect(await marks(page)).toEqual([{ id: 'handoff', shown: `#${b.id} Linked first` }])
+})
+
 // --- on a phone ---
 
 test.describe('on a phone', () => {

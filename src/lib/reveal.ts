@@ -39,17 +39,18 @@ export function anchorId(id: string | null | undefined, kind: string): number | 
 }
 
 /**
- * Brings the anchor's target into view once it is drawn, once per anchor: the page's refetches and
- * re-renders leave the reader where they are. Pass null until the page shows the data the anchor
- * belongs to (not the previous page's, kept while the next one loads).
+ * Brings the anchor's target into view once it is drawn, once per anchor on a page: the page's
+ * refetches and re-renders leave the reader where they are. Pass null until the page shows the data
+ * the anchor belongs to (not the previous page's, kept while the next one loads), and `page` for what
+ * it shows when one route shows several things (a ticket): the same anchor on the next one is another.
  */
-export function useReveal(anchor: Anchor | null) {
+export function useReveal(anchor: Anchor | null, page?: string | number) {
   const client = useQueryClient()
   const target = anchor?.target ?? null
   const holder = anchor?.holder ?? null
   useEffect(() => {
     if (target) return revealWhenDrawn(target, client, holder)
-  }, [client, target, holder])
+  }, [client, target, holder, page])
 }
 
 /** How long nothing loads or changes before an anchor that is not drawn is given up on. */
