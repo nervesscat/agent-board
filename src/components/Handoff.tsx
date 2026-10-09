@@ -15,10 +15,14 @@ const REACHED: Record<Exclude<Reach['state'], 'unique'>, string> = {
 /**
  * The Merged item, with what the page's git state adds: a branch whose work reached its base counts as
  * merged too (a merge the PR queue has not seen yet, or one into a local base). Only with a PR: a
- * branch with no commits of its own sits in its base as well.
+ * branch with no commits of its own sits in its base as well. And only when the local branch has all
+ * that origin's has: reach is read from the local branch first, so one left behind (the PR's commits
+ * pushed from elsewhere) would answer for commits that are not the PR's.
  */
-function withReach(c: HandoffCheck, reach: Reach | null | undefined, pr: TicketFull['pr']): HandoffCheck {
+function withReach(c: HandoffCheck, info: TicketGit['info'] | undefined, pr: TicketFull['pr']): HandoffCheck {
+  const reach = info?.reach
   if (c.code !== 'not_merged' || c.ok || !pr || !reach || reach.state === 'unique') return c
+  if (info.push.behind) return c
   return { ...c, ok: true, text: `${REACHED[reach.state]} ${reach.into}` }
 }
 
@@ -38,7 +42,7 @@ export function HandoffCard({
   pr: TicketFull['pr']
 }) {
   const missing = handoff.missing.length
-  const checks = handoff.checks.map((c) => withReach(c, git?.info.reach, pr))
+  const checks = handoff.checks.map((c) => withReach(c, git?.info, pr))
   const done = checks.every((c) => c.ok)
   return (
     <section

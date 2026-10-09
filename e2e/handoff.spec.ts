@@ -201,6 +201,75 @@ test('Merged comes first and waits on the human; once the branch is in its base 
   await card.screenshot({ path: test.info().outputPath('handoff-merged-phone.png') })
 })
 
+test('a local branch left behind its PR’s pushed commits is not taken as merged, until it catches up and lands', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // The local branch still sits at its base's commit (a worktree made from it and never advanced);
+  // the PR's commit was pushed to origin's copy from elsewhere.
+  const name = (what: string) => `e2e-${project.id}-${what}`
+  const base = name('behind-base')
+  const branch = name('behind')
+  git('branch', base, 'main')
+  git('branch', branch, 'main')
+  const work = commitFile('main', 'behind.txt', 'work\n', 'work')
+  git('push', '-q', 'origin', `${work}:refs/heads/${branch}`)
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Pushed from elsewhere', status: 'in_progress', branch, baseBranch: base },
+    }),
+  )
+  const gitState = async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info
+  await ok(agent.patch(`/api/tickets/${t.id}`, { data: { prNumber: 4444 } }))
+  await ok(
+    agent.post(`/api/tickets/${t.id}/workspaces`, {
+      data: { name: 'worktree', branch, previewUrl: e2eEnv().baseURL },
+    }),
+  )
+  await ok(
+    agent.post(`/api/tickets/${t.id}/updates`, {
+      data: { body: `PR #4444. Preview: ${e2eEnv().baseURL}.` },
+    }),
+  )
+  await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
+  // The local branch is in its base, and behind origin's copy, which holds the PR's commit.
+  await expect
+    .poll(async () => {
+      const info = await gitState()
+      return [info.reach?.state, info.push.state, info.push.behind]
+    })
+    .toEqual(['merged', 'pushed', 1])
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Hand-off' })
+  const merged = card.locator('[data-code="not_merged"]')
+  await expect(card).toContainText('complete')
+  for (const code of ALL)
+    await expect(card.locator(`[data-code="${code}"]`)).toHaveAttribute('data-ok', 'true')
+  await expect(merged).toHaveAttribute('data-ok', 'false')
+  await expect(merged).toContainText('Not merged yet')
+  const details = page.getByRole('region', { name: 'Details' })
+  expect(await borderOf(card)).toEqual(await borderOf(details))
+
+  // The local branch catches up, and its base takes it in: merged, and the card turns green.
+  git('update-ref', `refs/heads/${branch}`, work)
+  git('update-ref', `refs/heads/${base}`, work)
+  await expect
+    .poll(async () => {
+      const info = await gitState()
+      return [info.reach?.state, info.push.state, info.push.behind]
+    })
+    .toEqual(['merged', 'pushed', 0])
+  await page.reload()
+  await expect(merged).toHaveAttribute('data-ok', 'true')
+  await expect(merged).toContainText(`Merged into ${base}`)
+  await expect(card.locator('li[data-ok="false"]')).toHaveCount(0)
+  const border = await borderOf(card)
+  expect(green(border), `${border}`).toBe(true)
+})
+
 test('a branch with no work of its own and no PR is not taken as merged', async ({
   page,
   project,
