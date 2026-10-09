@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { Tag } from '#/components/Tag'
 import { addTags } from '#/lib/tags'
@@ -32,10 +32,29 @@ export function TagsInput({
   className?: string
 }) {
   const input = useRef<HTMLInputElement>(null)
+  // The latest props, for a commit that runs after the render that scheduled it (after a reset too).
+  const latest = useRef({ value, text, onChange, onTextChange })
+  latest.current = { value, text, onChange, onTextChange }
   const commit = () => {
+    const { value, text, onChange, onTextChange } = latest.current
     if (text.trim()) onChange(addTags(value, text))
     if (text) onTextChange('')
   }
+  // Whether a mouse button is held down (on a touch screen, from the tap's mousedown to its mouseup),
+  // and the cancel of a commit waiting for that press to end.
+  const pressing = useRef(false)
+  const pending = useRef<() => void>(undefined)
+  useEffect(() => {
+    const ac = new AbortController()
+    const opts = { capture: true, signal: ac.signal }
+    window.addEventListener('mousedown', () => (pressing.current = true), opts)
+    for (const type of ['mouseup', 'dragend'])
+      window.addEventListener(type, () => (pressing.current = false), opts)
+    return () => {
+      ac.abort()
+      pending.current?.()
+    }
+  }, [])
   return (
     // A click on the field around the chips goes to the text, as it would in a plain input. Pressing
     // the box would take the focus from the text first, and that blur would end the word being
@@ -98,12 +117,39 @@ export function TagsInput({
           }
         }}
         // The window losing the focus (to another window or tab) is not leaving the field: the word
-        // waits there for the return.
+        // waits there for the return. A press that takes the focus commits only once it is released
+        // and has clicked: a chip can grow the field and move what is under the pointer, so that the
+        // release would miss it. If the focus came back (a press on the field's label), nothing left.
         onBlur={() => {
-          if (document.hasFocus()) commit()
+          if (!document.hasFocus()) return
+          if (!pressing.current) return commit()
+          pending.current?.()
+          pending.current = afterPress(() => {
+            pending.current = undefined
+            if (document.activeElement !== input.current) commit()
+          })
         }}
         className="h-6 min-w-16 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
       />
     </div>
   )
+}
+
+/**
+ * Runs `fn` once the mouse button held down now is released, after the click that release makes.
+ * Returns its cancel.
+ */
+function afterPress(fn: () => void) {
+  const ac = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const end = () => {
+    ac.abort()
+    timer = setTimeout(fn)
+  }
+  for (const type of ['mouseup', 'dragend'])
+    window.addEventListener(type, end, { capture: true, signal: ac.signal })
+  return () => {
+    ac.abort()
+    clearTimeout(timer)
+  }
 }

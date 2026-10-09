@@ -9,6 +9,9 @@ async function openDialog(page: Page, button = 'New ticket') {
   const dialog = page.getByRole('dialog')
   const input = dialog.getByLabel('Tags (optional)')
   const field = input.locator('..')
+  // The Stage field shows once the project has loaded, and moves the Tags field (and Create) to their
+  // place: what is measured is measured after that.
+  if (button === 'New ticket') await expect(dialog.getByLabel('Stage')).toBeVisible()
   return { dialog, input, field, chips: field.locator(':scope > span') }
 }
 
@@ -202,6 +205,88 @@ test('a click in the Tags field around its chips goes to the text, and keeps the
   await expect(input).toHaveValue('Frontend')
 })
 
+test('a press on the Tags label mid-word keeps the word whole', async ({ page, project, human }) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, chips } = await openDialog(page)
+  await dialog.getByLabel('Title').fill('Labelled')
+  await input.pressSequentially('Fron')
+  // The label puts the focus back in its own input: nothing left the field.
+  await dialog.locator('label[for="tags"]').click({ delay: 80 })
+  await expect(input).toBeFocused()
+  await page.keyboard.type('tend')
+  await expect(chips).toHaveCount(0)
+  await expect(input).toHaveValue('Frontend')
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+  const [row] = await rows(human, project.id)
+  expect(row!.tags).toEqual(['Frontend'])
+})
+
+test('a press near the edge of Create with a word still typed creates the ticket', async ({
+  page,
+  project,
+  human,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, chips } = await openDialog(page)
+  const sent = creates(page)
+  await dialog.getByLabel('Title').fill('Pressed at the top')
+  await input.pressSequentially('High,Forms,')
+  await expect(chips).toHaveText(['High', 'Forms'])
+  // As a chip this word leaves no room for the text on its row, so the field grows by a row.
+  await input.pressSequentially('Desktop')
+  // A press near the top of the button, as a person's may land: the button must not move under the
+  // pointer before it is released.
+  const create = (await dialog.getByRole('button', { name: 'Create' }).boundingBox())!
+  await page.mouse.move(create.x + create.width / 2, create.y + 4)
+  await page.mouse.down()
+  await page.waitForTimeout(80)
+  await page.mouse.up()
+  await expect(dialog).toBeHidden()
+  expect(sent).toHaveLength(1)
+  const [row] = await rows(human, project.id)
+  expect(row).toMatchObject({ title: 'Pressed at the top', tags: ['High', 'Forms', 'Desktop'] })
+})
+
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true })
+
+  test('a tap near the edge of Create with a word still typed creates the ticket', async ({
+    page,
+    project,
+    human,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto(`/projects/${project.id}/features`)
+    const { dialog, input, chips } = await openDialog(page)
+    const sent = creates(page)
+    await dialog.getByLabel('Title').fill('Tapped at the top')
+    await input.pressSequentially('High,Forms,Safari,')
+    await expect(chips).toHaveText(['High', 'Forms', 'Safari'])
+    await input.pressSequentially('Desktop')
+    const create = (await dialog.getByRole('button', { name: 'Create' }).boundingBox())!
+    await page.touchscreen.tap(create.x + create.width / 2, create.y + 4)
+    await expect(dialog).toBeHidden()
+    expect(sent).toHaveLength(1)
+    const [row] = await rows(human, project.id)
+    expect(row).toMatchObject({ title: 'Tapped at the top', tags: ['High', 'Forms', 'Safari', 'Desktop'] })
+  })
+})
+
+test('Tab out of the Tags field makes a chip of the text at once', async ({ page, project }) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, chips } = await openDialog(page)
+  const sent = creates(page)
+  await input.pressSequentially('Mobile')
+  await page.keyboard.press('Tab')
+  await expect(input).not.toBeFocused()
+  await expect(chips).toHaveText(['Mobile'])
+  await expect(input).toHaveValue('')
+  await expect(dialog).toBeVisible()
+  expect(sent).toEqual([])
+})
+
 test('the word being typed in the Tags field outlasts a switch to another window', async ({
   page,
   project,
@@ -241,10 +326,14 @@ for (const width of [375, 1280]) {
       'Accessibility, Performance, Internationalization, Documentation, Authentication, Notifications, Responsiveness, Observability,',
     )
     await expect(chips).toHaveCount(8)
-    const box = (await field.boundingBox())!
+    // The field and its chips, measured at once.
+    const { box, boxes } = await field.evaluate((f) => {
+      const rect = (e: Element) => e.getBoundingClientRect().toJSON() as DOMRect
+      return { box: rect(f), boxes: [...f.querySelectorAll(':scope > span')].map(rect) }
+    })
+    expect(boxes).toHaveLength(8)
     expect(box.height).toBeGreaterThan(before.height)
-    for (const chip of await chips.all()) {
-      const c = (await chip.boundingBox())!
+    for (const c of boxes) {
       expect(c.x).toBeGreaterThanOrEqual(box.x)
       expect(c.x + c.width).toBeLessThanOrEqual(box.x + box.width)
       expect(c.y).toBeGreaterThanOrEqual(box.y)
