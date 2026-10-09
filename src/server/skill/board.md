@@ -189,9 +189,9 @@ Before `update_ticket` → `status: review`, every item, in order:
    Only the human can mark it done anyway.
 5. PR open, assigned to the human, `prNumber` set: `gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account (GitHub never lets a PR's author be its
-   requested reviewer; the PR queue also lists PRs assigned to the human). Then `update_ticket` with
-   the PR's `prNumber`: the PR queue shows the ticket, and `get_ticket` the PR with its latest
-   review. (A PR on the ticket's branch links by itself.)
+   requested reviewer; the PR queue lists the human's own PRs under Waiting on others). Then
+   `update_ticket` with the PR's `prNumber`: the PR queue shows the ticket, and `get_ticket` the PR
+   with its latest review. (A PR on the ticket's branch links by itself.)
 6. **Preview running**: `start_preview` on the workspace, then `get_ticket` until its
    `managedPreview` is `running` (`failed`: read the log lines and fix). For a repo the board cannot
    build, start one the project's way and `set_preview` (see Previews in
@@ -369,14 +369,17 @@ doing it yourself.
 
 ## Reviews and the PR queue
 
-`list_prs` is the human's review queue; each PR lists the `tickets` it came from, whether it
-waits on the human (`waitingOn`), and its `merge` and `ci` state: conflicts or failed `checks` on
-a PR from your ticket are yours to fix. Before reviewing a PR, `list_review_results` with its
-`prNumber` and head `sha`: if that SHA was already
-reviewed, `get_review_result` has the findings. If you review a PR, record it with
-`post_review_result` (verdict, markdown summary with findings, how to test, checks, `repoId` when
-the project has several repos): the human reads it from its verdict on the PR queue and on the
-ticket's Branch card. Never post the review to GitHub.
+`list_prs` is the human's PR queue: PRs by others that the human reviews (`waitingOn: me`) and the
+human's own (`waitingOn: others`; agents' PRs pushed with their account are theirs on GitHub), open
+or merged in the last two weeks. `status` is where the reviews stand: `pending` (approval missing),
+`reviewed` (approved: by the human on others' PRs, by every reviewer on theirs), `on_hold` (review
+comments or requested changes not yet addressed by a push or a new review request, or a board-side
+hold) or `done` (merged). Each PR lists the `tickets` it came from and its `merge` and `ci` state:
+conflicts or failed `checks` on a PR from your ticket are yours to fix. Before reviewing a PR,
+`list_review_results` with its `prNumber` and head `sha`: if that SHA was already reviewed,
+`get_review_result` has the findings. If you review a PR, record it with `post_review_result`
+(verdict, markdown summary with findings, how to test, checks, `repoId` when the project has several
+repos): the human reads it from its verdict on the PR queue and on the ticket's Branch card. Never post the review to GitHub.
 
 `list_actors` gives every name that signs in to the board (the project's agents are in
 `get_project`); use those exact names for `assignee`.

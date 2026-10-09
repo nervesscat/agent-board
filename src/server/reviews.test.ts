@@ -39,10 +39,14 @@ describe('actors', () => {
 })
 
 describe('prStatus', () => {
-  it('hold wins, then any review of mine, else pending', () => {
-    expect(prs.prStatus({ hold: true, myReview: 'approved' })).toBe('on_hold')
-    expect(prs.prStatus({ hold: false, myReview: 'approved' })).toBe('reviewed')
-    expect(prs.prStatus({ hold: false, myReview: 'commented' })).toBe('reviewed')
-    expect(prs.prStatus({ hold: false, myReview: 'none' })).toBe('pending')
+  it('merged is done, held or not; then hold wins over the review stage', () => {
+    const st = (mergedAt: string | null, hold: boolean, reviewStage: 'pending' | 'reviewed' | 'on_hold') =>
+      prs.prStatus({ mergedAt, hold, reviewStage })
+    expect(st('2026-10-01T10:00:00Z', true, 'pending')).toBe('done')
+    expect(st('2026-10-01T10:00:00Z', false, 'reviewed')).toBe('done')
+    expect(st(null, true, 'reviewed')).toBe('on_hold')
+    expect(st(null, false, 'reviewed')).toBe('reviewed')
+    expect(st(null, false, 'on_hold')).toBe('on_hold')
+    expect(st(null, false, 'pending')).toBe('pending')
   })
 })

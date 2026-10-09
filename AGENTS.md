@@ -134,8 +134,8 @@ http_headers = { Authorization = "Bearer gate_…" }
       each is `merged`.
    5. PR open, assigned to the human (`gh pr create --assignee <their login>`, or `--assignee @me`
       when you push with their account; GitHub never lets a PR's author be its requested reviewer,
-      and the PR queue also lists PRs assigned to them), and `update_ticket` with its `prNumber`
-      (the PR queue then shows the ticket, and the ticket its PR and latest review).
+      and the PR queue lists their own PRs under Waiting on others), and `update_ticket` with its
+      `prNumber` (the PR queue then shows the ticket, and the ticket its PR and latest review).
    6. **Preview running**: `start_preview` on the workspace and wait for `running` (for a repo the
       board cannot build, start one the project's way and `set_preview`; see Previews above).
       Required whenever the change can be tried; when it cannot (docs only, a script), say why in
@@ -211,12 +211,15 @@ routine.
 
 ## PR queue and reviews
 
-- `list_prs` shows the PRs waiting for the human's review with status `pending | reviewed |
-on_hold`, `waitingOn` (`me` while the human still has to review it, else `others`), where it
-  stands on GitHub (`merge`, `ci` with its `checks`, `reviewDecision`), the latest review verdict
-  and the tickets it came from. `set_pr_hold` parks one with a note (board-only).
-  `list_review_results` (by `prNumber`, `sha`) tells whether a head SHA was already reviewed;
-  `get_review_result` has the findings.
+- `list_prs` shows the human's PRs, open and merged in the last two weeks: `waitingOn` is `me` for
+  PRs by others that the human reviews, `others` for the human's own (agents' PRs pushed with their
+  account included). `status` is where the reviews stand: `pending` (approval missing), `reviewed`
+  (approved: by the human on others' PRs, by every reviewer on theirs), `on_hold` (review comments
+  or requested changes not yet addressed by a push or a new review request, or a board-side hold)
+  or `done` (merged). Each also has where it stands on GitHub (`merge`, `ci` with its `checks`,
+  `reviewDecision`), the latest review verdict and the tickets it came from. `set_pr_hold` parks
+  an open one with a note (board-only). `list_review_results` (by `prNumber`, `sha`) tells whether
+  a head SHA was already reviewed; `get_review_result` has the findings.
 - `list_actors` gives the names to use for `assignee`.
 - If you review a PR, record it with `post_review_result` (verdict, markdown summary with
   findings, how to test, checks): that is how findings reach the human, as the verdict on the PR

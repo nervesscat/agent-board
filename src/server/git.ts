@@ -72,7 +72,11 @@ export interface GhPr {
   mergeStateStatus: string
   statusCheckRollup: GhCheck[] | null
   updatedAt: string
+  /** When it was merged; null while open (and for one closed without merging). */
+  mergedAt: string | null
   reviews: { author: { login: string }; state: string; submittedAt: string; commit?: { oid: string } }[]
+  /** Reviews asked for and not given yet: a user (`login`) or a team (`slug`). */
+  reviewRequests: { __typename?: string; login?: string; slug?: string }[]
 }
 
 /** A PR of the queue, with the searches that found it. */
@@ -84,26 +88,40 @@ export interface MyGhPr extends GhPr {
 }
 
 const PR_FIELDS =
-  'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,reviews'
+  'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,mergedAt,reviews,reviewRequests'
+
+/** How many PRs one search returns: open ones, and the recently merged ones. */
+const OPEN_LIMIT = 100
+const MERGED_LIMIT = 30
 
 /**
- * Open PRs where my review was requested, the ones I already reviewed, and the ones assigned to me.
- * Assignment is how a PR I opened myself (agents push with my account) gets in: GitHub does not let
- * its author be requested as a reviewer.
+ * The PRs I am in: the ones I authored (agents push with my account), the ones where my review was
+ * requested, the ones I already reviewed, and the ones assigned to me. Open ones, and the ones of the
+ * same searches merged on or after `mergedSince` (a date, YYYY-MM-DD), at most `MERGED_LIMIT` per
+ * search: the queue keeps them a while after they land, never the repo's whole history.
  */
-export async function listMyPrs(repoPath: string): Promise<MyGhPr[]> {
-  const searches = ['review-requested:@me', 'reviewed-by:@me', 'assignee:@me'] as const
+export async function listMyPrs(repoPath: string, opts: { mergedSince: string }): Promise<MyGhPr[]> {
+  const searches = ['author:@me', 'review-requested:@me', 'reviewed-by:@me', 'assignee:@me'] as const
+  const queries = [
+    ...searches.map((search) => ({ search, state: 'open', limit: OPEN_LIMIT, query: search })),
+    ...searches.map((search) => ({
+      search,
+      state: 'merged',
+      limit: MERGED_LIMIT,
+      query: `${search} merged:>=${opts.mergedSince}`,
+    })),
+  ]
   const found = await Promise.all(
-    searches.map((search) =>
+    queries.map((q) =>
       gh<GhPr[]>(repoPath, [
         'pr',
         'list',
         '--state',
-        'open',
+        q.state,
         '--limit',
-        '100',
+        String(q.limit),
         '--search',
-        search,
+        q.query,
         '--json',
         PR_FIELDS,
       ]),
@@ -113,8 +131,8 @@ export async function listMyPrs(repoPath: string): Promise<MyGhPr[]> {
   found.forEach((prs, i) => {
     for (const pr of prs) {
       const seen = byNumber.get(pr.number) ?? { ...pr, requested: false, assigned: false }
-      if (searches[i] === 'review-requested:@me') seen.requested = true
-      if (searches[i] === 'assignee:@me') seen.assigned = true
+      if (queries[i]!.search === 'review-requested:@me') seen.requested = true
+      if (queries[i]!.search === 'assignee:@me') seen.assigned = true
       byNumber.set(pr.number, seen)
     }
   })

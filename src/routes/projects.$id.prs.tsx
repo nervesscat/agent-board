@@ -44,18 +44,20 @@ const TABS = [
   { key: 'pending', label: 'Pending' },
   { key: 'reviewed', label: 'Reviewed' },
   { key: 'on_hold', label: 'On hold' },
+  { key: 'done', label: 'Done' },
 ] as const
 
 const FILTERS: { key: Filter; label: string; title: string }[] = [
   {
     key: 'me',
     label: 'To review',
-    title: 'Your review is requested, or it is assigned to you and you have not reviewed its latest commit',
+    title: 'PRs by others you review: pending your approval, approved by you, or on hold on your comments',
   },
   {
     key: 'others',
     label: 'Waiting on others',
-    title: 'You reviewed its latest commit, or reviewed it before and nobody asks you again',
+    title:
+      "Your PRs (agents' too): pending approvals, approved by every reviewer, or on hold on their comments",
   },
   { key: 'all', label: 'All', title: 'Every PR in the queue' },
 ]
@@ -97,8 +99,9 @@ function PrQueue() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">PR queue</h1>
           <p className="text-sm text-muted-foreground">
-            Open pull requests where your review is requested or that are assigned to you, across every repo
-            of the project. Read-only against GitHub; holds and threads live here.
+            Pull requests by others that you review, and your own, across every repo of the project, by where
+            their reviews stand; merged ones stay under Done for two weeks. Read-only against GitHub; holds
+            and threads live here.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
@@ -129,7 +132,8 @@ function PrQueue() {
         <Skeleton className="h-40" />
       ) : (
         <Tabs defaultValue="pending">
-          <TabsList>
+          {/* Four stages do not fit a phone: the list scrolls instead of the page. */}
+          <TabsList className="max-w-full justify-start overflow-x-auto">
             {TABS.map((t) => (
               <TabsTrigger key={t.key} value={t.key}>
                 {t.label}
@@ -226,12 +230,11 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
             </span>
             <span className="font-mono">{shortSha(pr.headSha)}</span>
             <span>updated {ago(pr.updatedAt)}</span>
+            {pr.mergedAt && <span>merged {ago(pr.mergedAt)}</span>}
             {pr.myReview !== 'none' && <span>· my review: {pr.myReview.replace('_', ' ')}</span>}
-            <span className={pr.waitingOn === 'me' ? 'font-medium text-foreground' : ''}>
-              · waiting on {pr.waitingOn === 'me' ? 'you' : 'others'}
-            </span>
+            <span>· {pr.waitingOn === 'me' ? 'for your review' : 'your PR'}</span>
           </div>
-          <PrState pr={pr} className="mt-1.5" />
+          {pr.open && <PrState pr={pr} className="mt-1.5" />}
           {pr.tickets.length > 0 && (
             <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
               {pr.tickets.map((t) => (
@@ -272,9 +275,12 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
               <PlayCircle data-icon="inline-start" /> release
             </Button>
           ) : (
-            <Button variant="ghost" size="sm" onClick={() => setHoldOpen(true)}>
-              <PauseCircle data-icon="inline-start" /> hold
-            </Button>
+            // A merged PR has nothing left to wait for.
+            pr.open && (
+              <Button variant="ghost" size="sm" onClick={() => setHoldOpen(true)}>
+                <PauseCircle data-icon="inline-start" /> hold
+              </Button>
+            )
           )}
         </div>
       </div>

@@ -297,6 +297,8 @@ describe('done today', () => {
           updatedAt: iso(fetched),
           fetchedAt: iso(fetched),
           open,
+          // The refresh stamps when a PR left the open queue.
+          closedAt: open ? null : iso(fetched),
         })
         .run()
     pr(12, false, at(7, 13))
@@ -383,6 +385,11 @@ describe('needs you', () => {
     pr(8, { waitingOn: 'others' })
     pr(9, { waitingOn: 'me', hold: true })
     pr(10, { waitingOn: 'me', open: false })
+    // Approved by the human, or with their comments standing: not waiting on their review.
+    pr(11, { waitingOn: 'me', reviewStage: 'reviewed' })
+    pr(12, { waitingOn: 'me', reviewStage: 'on_hold' })
+    // Merged: done.
+    pr(13, { waitingOn: 'me', open: false, mergedAt: iso(at(7, 8)) })
 
     const s = take(pid)
     expect(s.needsYou.decisions).toMatchObject([

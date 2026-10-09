@@ -150,6 +150,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
     : []
   const repos = listRepos(project.id)
   const repoName = (id: number | null) => repos.find((r) => r.id === id)?.name ?? null
+  // Someone else's open PRs the human has not approved and has no comments waiting on.
   const prsToReview = db
     .select()
     .from(schema.prs)
@@ -158,6 +159,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         eq(schema.prs.projectId, project.id),
         eq(schema.prs.open, true),
         eq(schema.prs.waitingOn, 'me'),
+        eq(schema.prs.reviewStage, 'pending'),
         eq(schema.prs.hold, false),
       ),
     )
@@ -283,7 +285,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       return { id, title: t.title, status: t.status, parent: parentOf(t), assignee: t.assignee, doneAt: at }
     })
     .sort((a, b) => b.doneAt.localeCompare(a.doneAt))
-  // A PR leaves the queue when it is merged or closed; the queue cannot tell which.
+  // A PR leaves the open queue when it is merged or closed, once: fetching it merged again on a later
+  // day does not move when it left.
   const closedPrs = db
     .select()
     .from(schema.prs)
@@ -291,11 +294,11 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       and(
         eq(schema.prs.projectId, project.id),
         eq(schema.prs.open, false),
-        gte(schema.prs.fetchedAt, from),
-        lt(schema.prs.fetchedAt, to),
+        gte(schema.prs.closedAt, from),
+        lt(schema.prs.closedAt, to),
       ),
     )
-    .orderBy(desc(schema.prs.fetchedAt))
+    .orderBy(desc(schema.prs.closedAt))
     .all()
     .map((p) => ({
       id: p.id,
@@ -303,7 +306,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       title: p.title,
       url: p.url,
       repo: repos.length > 1 ? repoName(p.repoId) : null,
-      closedAt: p.fetchedAt,
+      closedAt: p.closedAt!,
       tickets: tickets
         .filter(
           (t) =>
