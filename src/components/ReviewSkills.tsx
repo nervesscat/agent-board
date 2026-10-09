@@ -333,6 +333,11 @@ function SkillsItem({
   const [opened, setOpened] = useState(0)
   const outdated = status === 'outdated'
   const stale = files.filter((f) => f.status !== 'current')
+  // A diff is open only while its file is listed: once the file or the whole copy is read as up to date
+  // (a read on Check again, or when the page is shown again), it closes, and stays closed when the copy
+  // is outdated again later, until a file is pressed.
+  const listed = outdated && open && stale.some((f) => f.path === diffOf)
+  if (diffOf !== null && !listed) setDiffOf(null)
   return (
     <li className="space-y-1.5 px-3 py-2" aria-label={label}>
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
@@ -383,14 +388,14 @@ function SkillsItem({
               <CopyBlock text={line} />
             </div>
           )}
-          <SkillFileDiffDialog
-            file={diffOf}
-            repoId={repoId}
-            opened={opened}
-            onClose={() => setDiffOf(null)}
-          />
         </>
       )}
+      <SkillFileDiffDialog
+        file={listed ? diffOf : null}
+        repoId={repoId}
+        opened={opened}
+        onClose={() => setDiffOf(null)}
+      />
     </li>
   )
 }

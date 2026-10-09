@@ -449,9 +449,12 @@ describe('one review skills file as installed, against the copy served', () => {
 
   let repo: { id: number; dir: string }
   let gone: number
+  // The status of the user-wide copy and of this describe's own repos only: the others are not read.
+  let projectId: number
+  const status = () => agents.reviewSkillsStatus(projectId)
   beforeAll(async () => {
     const { db, schema } = await import('#/db')
-    const projectId = db.insert(schema.projects).values({ name: 'Diffs' }).returning().get().id
+    projectId = db.insert(schema.projects).values({ name: 'Diffs' }).returning().get().id
     const dir = checkout(drifted())
     const row = (name: string, repoPath: string) =>
       db.insert(schema.repos).values({ projectId, name, repoPath }).returning().get().id
@@ -522,7 +525,7 @@ describe('one review skills file as installed, against the copy served', () => {
     ]
     for (const [name, installed] of cases) {
       homeWith({ ...bundle(), [`.claude/${feature}`]: installed })
-      const listed = (await agents.reviewSkillsStatus()).global.files.find((f) => f.path === feature)!
+      const listed = (await status()).global.files.find((f) => f.path === feature)!
       const d = await agents.reviewSkillDiff(feature)
       expect(listed.status, name).toBe('outdated')
       expect(d.status, name).toBe('outdated')
@@ -531,10 +534,10 @@ describe('one review skills file as installed, against the copy served', () => {
 
     // Every bundle path, in the user-wide copy and in a repo's, gets the status the status gives it.
     homeWith(drifted())
-    const status = await agents.reviewSkillsStatus()
+    const read = await status()
     const copies: [{ path: string; status: string }[], number | undefined][] = [
-      [status.global.files, undefined],
-      [status.repos.find((r) => r.repoId === repo.id)!.files, repo.id],
+      [read.global.files, undefined],
+      [read.repos.find((r) => r.repoId === repo.id)!.files, repo.id],
     ]
     for (const [files, repoId] of copies) {
       expect(files).toHaveLength(agents.reviewBundlePaths().length)
@@ -552,7 +555,7 @@ describe('one review skills file as installed, against the copy served', () => {
     delete files[`.claude/${checklists}`]
     homeWith(files)
     fs.mkdirSync(path.join(claude, ...checklists.split('/')))
-    const listed = (await agents.reviewSkillsStatus()).global.files.find((f) => f.path === checklists)!
+    const listed = (await status()).global.files.find((f) => f.path === checklists)!
     expect(listed.status).toBe('outdated')
 
     const { api } = await import('./api')

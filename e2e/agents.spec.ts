@@ -484,6 +484,63 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await expect(dialog.locator('[data-line="del"]')).toHaveCount(0)
   })
 
+  test('a diff left open closes once its file is up to date, and never opens again by itself', async ({
+    page,
+    human,
+  }) => {
+    const claude = emptyHome()
+    await drifted(human, claude)
+    await track(human, 'global')
+    const served = await servedBundle(human)
+    const skill = path.join(claude, 'skills', 'feature-review', 'SKILL.md')
+    const diffs: string[] = []
+    page.on('request', (r) => r.url().includes('/review-skills/diff') && diffs.push(r.url()))
+    // The page reads the copies again when it is shown again (the user back from the terminal), once the
+    // last read is older than the board's 5 seconds: time is moved on rather than waited for.
+    await page.clock.install()
+    const backToThePage = async () => {
+      await page.clock.fastForward(6_000)
+      await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')))
+    }
+
+    await page.goto('/agents?shell=bash')
+    const entry = page.getByRole('listitem', { name: '~/.claude on this machine' })
+    const dialog = page.getByRole('dialog')
+    await entry.getByRole('button', { name: /files differ or are missing$/ }).click()
+    const files = entry.getByRole('list', { name: 'Files not up to date' }).getByRole('listitem')
+
+    // The file is brought up to date while its diff is open; the copy still has others to install.
+    await fileButton(entry, 'skills/feature-review/SKILL.md').click()
+    await expect(dialog.locator('[data-line="del"]')).toHaveCount(2)
+    fs.writeFileSync(skill, served['skills/feature-review/SKILL.md']!)
+    await backToThePage()
+    await expect(dialog).toHaveCount(0)
+    await expect(files).toHaveCount(2)
+
+    // The whole copy brought up to date while a diff is open.
+    await fileButton(entry, 'skills/todo-review/SKILL.md').click()
+    await expect(dialog.locator('[data-line="add"]').first()).toBeVisible()
+    await install(human, claude)
+    await backToThePage()
+    await expect(dialog).toHaveCount(0)
+    await expect(entry.getByText('Up to date', { exact: true })).toBeVisible()
+
+    // Outdated again: the list is there to press, and no diff opens or is asked for until one is pressed.
+    const asked = diffs.length
+    fs.appendFileSync(skill, '\nAn older line.\n')
+    await page.getByRole('button', { name: 'Check again' }).click()
+    await expect(entry.getByText('Outdated', { exact: true })).toBeVisible()
+    await backToThePage()
+    await expect(entry.getByRole('button', { name: /files differ or are missing$/ })).toBeVisible()
+    await expect(dialog).toHaveCount(0)
+    expect(diffs).toHaveLength(asked)
+    // Nor is the page left behind a dialog: the list is as it was, and still answers.
+    const more = entry.getByRole('button', { name: /files differ or are missing$/ })
+    await expect(files).toHaveText([/^outdated\s*\.claude\/skills\/feature-review\/SKILL\.md$/])
+    await more.click()
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+  })
+
   test('added and removed lines are told apart by sign and colour, in light and in dark', async ({
     page,
     human,
