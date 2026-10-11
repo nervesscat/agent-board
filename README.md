@@ -310,11 +310,15 @@ projects, about 2,700 tickets with lanes, 22,000 posts, 20,000 replies, 2,000 at
 activity rows at scale 1) with a git repo and a bare origin for its projects.
 
 The generated dataset gives the same answers at any hour: the board counts by the server's local day
-(today's activity, work carried over, reports due) and by whole days (stalled work), so its rows are
-laid out on the local day it is written on, each day's rows in that day's first minute, with half a
-day of work today. Within the first minute after midnight it waits for that minute to pass. When the
-day changes during a run, the dataset is written again for the new day before the next server
-starts, and a run that went past midnight is run again (the summary says so). What it cannot keep the
+(today's activity, work carried over, reports due) and by whole days of elapsed time (stalled work,
+PRs merged in the last 14 days), so its rows are laid out on the local day it is written on, each
+day's rows in that day's first minute, with half a day of work today. Within the first minute after
+midnight it waits for that minute to pass. Days of a daylight saving change are not 24 h long, so to
+keep every row on its calendar day and as many whole days old until midnight, the rows of the days up
+to the day the clocks went back go an hour after their midnight, and on the day the clocks go back and
+for the 60 days after they go forward it waits until 1:01 to write the dataset. When the day changes during a run, the dataset is
+written again for the new day before the next server starts, and a run that went past midnight is run
+again (the summary says so). What it cannot keep the
 same is a date written out in words, such as a report period's label (`Sun, Oct 4`), and how long ago
 today's rows were, so compare runs of different days with that in mind.
 
