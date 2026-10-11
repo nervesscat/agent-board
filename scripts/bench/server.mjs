@@ -225,7 +225,9 @@ export async function startServer({ mode = 'build', target, buildDir, dataDir, p
      */
     async request(urlPath, { actor, method = 'GET', body, headers = {} } = {}) {
       const id = crypto.randomUUID()
-      const counted = reply(id)
+      // Waited for from now (the report may come first), but given up on only 3 s after the answer:
+      // a slow request is no reason to lose its counts.
+      const counted = new Promise((resolve) => waiting.set(id, resolve))
       const t0 = performance.now()
       let status = 0
       let bytes = 0
@@ -243,7 +245,10 @@ export async function startServer({ mode = 'build', target, buildDir, dataDir, p
         status = `error: ${err instanceof Error ? err.message : String(err)}`
       }
       const ms = performance.now() - t0
+      const late = setTimeout(() => waiting.get(id)?.(null), 3000)
       const counts = await counted
+      clearTimeout(late)
+      waiting.delete(id)
       return {
         status,
         ms,
