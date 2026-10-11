@@ -174,8 +174,11 @@ export function fetchRepo(repoPath: string, opts: { force?: boolean } = {}): Pro
       s.worktrees.drop()
       // A fetch that succeeded is itself a look at origin: the checkout is listed at once, so a push
       // made right after it is a move from what the fetch found (an empty origin's first push too),
-      // not the baseline of whichever read lists next.
-      if (fetched) await s.refs.read()
+      // not the baseline of whichever read lists next. That listing is not kept: one made before a
+      // change in the checkout (a push from it) would hide it from a read that waited for the fetch.
+      if (!fetched) return
+      await s.refs.read()
+      s.refs.drop()
     })
     .finally(() => {
       s.fetching = null

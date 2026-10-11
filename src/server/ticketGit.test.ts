@@ -146,9 +146,6 @@ beforeAll(async () => {
   db.insert(schema.repos).values({ projectId, name: 'repo', repoPath: repo, baseBranch: 'main' }).run()
   // Fetched now, so no background fetch starts in the middle of a test.
   await (await import('./push')).fetchRepo(repo, { force: true })
-  // The fetch listed the checkout: the board's clock goes on from here, so each test starts past that
-  // listing's window.
-  now = Date.now()
 }, 60_000)
 
 /**
