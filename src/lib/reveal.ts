@@ -1,5 +1,10 @@
 import { type QueryClient, useQueryClient } from '@tanstack/react-query'
-import { type RouterHistory, useElementScrollRestoration, useLocation } from '@tanstack/react-router'
+import {
+  type AnyRouter,
+  type RouterHistory,
+  useElementScrollRestoration,
+  useLocation,
+} from '@tanstack/react-router'
 import { useEffect, useMemo, useRef } from 'react'
 
 /**
@@ -43,6 +48,9 @@ let moved: string | undefined
 
 const returned = (action: string | undefined) => action === 'BACK' || action === 'FORWARD' || action === 'GO'
 
+/** What followHistory reads of the router. */
+type Followed = Pick<AnyRouter, 'latestLocation' | 'stores'> & { history: RouterHistory }
+
 /**
  * Follows the router's history, from its start, for useReveal to tell a return from an arrival. It
  * hears of each move before the router does (the router subscribes once it is mounted), while the
@@ -52,15 +60,31 @@ const returned = (action: string | undefined) => action === 'BACK' || action ===
  * render, and the browser tells of a scroll on its next frame: a scroll right before Back, Forward or
  * a link would go unseen, and coming back to that entry the router would land on its anchor instead.
  * So the router is told now that the window scrolled, and it keeps where the window is.
+ *
+ * Only when the reader is leaving an entry they can come back to, and the one the router keeps the
+ * place for: not on a replace (the entry it leaves is gone from the history), and not while the last
+ * move is still loading (a page putting a remembered filter in its URL as it first shows). The router
+ * keeps the place for the entry it last finished loading, which is then the page the reader left: it
+ * would keep the window of the page now shown for it, and Back to it would land there.
  */
-export function followHistory(router: { history: RouterHistory }) {
+export function followHistory(router: Followed) {
   if (typeof window === 'undefined') return
   router.history.subscribe(({ action }) => {
     moved = action.type
-    document.dispatchEvent(new Event('scroll'))
+    if (action.type !== 'REPLACE' && settled(router)) document.dispatchEvent(new Event('scroll'))
     // Back where the reader was, nothing is marked: not even what the step left marked.
     if (returned(moved)) unmark()
   })
+}
+
+/**
+ * Whether the router has finished loading the entry the history is leaving. It has not heard of the
+ * move yet, so its latest location is still that entry.
+ */
+function settled(router: Followed) {
+  const leaving = router.latestLocation
+  const loaded = router.stores.resolvedLocation.get()
+  return loaded?.href === leaving.href && loaded.state.__TSR_key === leaving.state.__TSR_key
 }
 
 /**

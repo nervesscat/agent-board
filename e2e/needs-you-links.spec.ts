@@ -777,6 +777,100 @@ test('Forward to a PR the reader scrolled away from returns to where they left i
   await expect(page.locator('[data-revealed]')).toHaveCount(0)
 })
 
+/**
+ * The Overview, longer than the window and scrolled down, with what this browser remembers already
+ * set: the page the reader leaves by `link`, clicked where it is (a click that scrolls it into view
+ * would move the place being left). Returns where the reader left the Overview.
+ */
+async function leaveOverview(
+  page: Page,
+  project: Project,
+  remembered: Record<string, string>,
+  link: Locator,
+) {
+  await overview(page, project)
+  await page.evaluate((r) => Object.entries(r).forEach(([k, v]) => localStorage.setItem(k, v)), remembered)
+  await overview(page, project)
+  // Its whole length comes with one read: Needs you drawn, the page is.
+  await expect(
+    needsYou(page)
+      .getByRole('link', { name: /^Review PR #/ })
+      .first(),
+  ).toBeVisible()
+  await expect(link).toBeAttached()
+  const left = await scrollTo(page, 400)
+  expect(left).toBe(400)
+  // The scroll told before the link is followed.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
+  await link.evaluate((a: HTMLElement) => a.click())
+  return left
+}
+
+/** Back to the Overview: where the reader left it, and it stays there. */
+async function expectBackAt(page: Page, project: Project, left: number) {
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
+  await expect.poll(() => scrollY(page)).toBe(left)
+  await page.waitForTimeout(1_000)
+  expect(await scrollY(page)).toBe(left)
+}
+
+/** PRs waiting on the human, enough for the Overview's Needs you to run well past the window. */
+function manyPrs(project: Project) {
+  const target = seedPr(project, { title: 'Review me last', updatedAt: '2026-01-01T00:00:00.000Z' })
+  for (let i = 0; i < 16; i++) seedPr(project, { title: `Waiting PR ${i}` })
+  return target
+}
+
+test('Back from a PR to review, under a filter remembered that hides it, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  const target = manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { 'prs.filter': 'others' },
+    needsYou(page).getByRole('link', { name: `Review PR #${target.number} Review me last` }),
+  )
+  // The remembered filter put in the URL as the queue shows, then the one that shows the PR.
+  await expect(page).toHaveURL(new RegExp(`filter=me#pr-${target.id}$`))
+  await expectRevealed(page, page.locator(`#pr-${target.id}`), topBar(page))
+  await expectBackAt(page, project, left)
+})
+
+test('Back from the PR queue, its filter remembered, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { 'prs.filter': 'others' },
+    page.getByRole('navigation').getByRole('link', { name: 'PR queue' }),
+  )
+  await expect(page).toHaveURL(new RegExp(`/prs\\?filter=others$`))
+  await expect(page.getByRole('tab', { name: /^Waiting on others/ })).toHaveAttribute('aria-selected', 'true')
+  await expectBackAt(page, project, left)
+})
+
+test('Back from Ongoing features, its view remembered, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { 'features.view': 'list' },
+    page.getByRole('navigation').getByRole('link', { name: 'Ongoing features' }),
+  )
+  await expect(page).toHaveURL(new RegExp(`/features\\?view=list$`))
+  await expect(page.getByRole('heading', { name: 'Ongoing features' })).toBeVisible()
+  await expectBackAt(page, project, left)
+})
+
 test('Back and Forward over a #link in a review result mark nothing', async ({ page, project, human }) => {
   const summaryMd = [
     'A claim with a note.[^1]',
