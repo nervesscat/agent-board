@@ -373,11 +373,11 @@ function pages(p) {
       url: `/projects/${P}`,
       ready: { selector: 'span', text: 'in the backlog' },
     },
-    // The filter tabs count the PRs; they render on the server too, with no PRs yet.
+    // The filter tabs count the PRs; they render on the server too, with no PRs yet (every count 0).
     prs: {
       name: 'prs',
       url: `/projects/${P}/prs`,
-      ready: { selector: '[role="tablist"]', text: '', re: 'All[1-9]' },
+      ready: { selector: '[role="tablist"]', text: '', re: '[1-9]' },
     },
     agents: { name: 'agents', url: `/projects/${P}/agents`, ready: h1('Agents') },
     // The other routes, for their bundles.
