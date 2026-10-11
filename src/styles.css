@@ -195,6 +195,18 @@
   font-weight: 500;
 }
 
+/* Paragraphs in rendered markdown and the editor: Enter in the editor starts a paragraph, and the
+   typography plugin sets paragraphs a blank line apart, so lines typed one under the other read as
+   double spaced. Two paragraphs in a row sit a quarter em apart instead, the same in the editor as
+   once rendered; next to a heading, list, quote, code block or image, that block's margin still
+   sets the space. */
+.prose :where(p:has(+ p)) {
+  margin-bottom: 0.25em;
+}
+.prose :where(p + p) {
+  margin-top: 0.25em;
+}
+
 /* The rich text editor (TipTap): the placeholder of an empty editor, and checklists drawn as
    checkboxes beside their text rather than as bullets. */
 .tiptap p.is-editor-empty:first-child::before {
