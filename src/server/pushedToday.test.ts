@@ -88,6 +88,7 @@ async function fixture(name: string, history = 1) {
   return {
     projectId,
     repoId,
+    origin,
     repo,
     other,
     git,
@@ -233,6 +234,40 @@ describe('noteOriginRefs', slow, () => {
     })
   })
 
+  it('counts the first push made right after the board fetched an empty origin, before it listed again', async () => {
+    const f = await unseen('fetched-then-pushed', 3)
+    const push = await import('./push')
+    const { pushedToday } = await counting()
+    // The first read starts the board's fetch and lists the checkout at once, before the fetch is done.
+    expect(await pushedToday(f.projectId)).toMatchObject({ commits: 0, repos: [] })
+    await push.fetchRepo(f.repo)
+
+    // Pushed from the checkout as soon as the fetch is done, then read once its listing is stale.
+    f.git('push', '-q', 'origin', 'main')
+    await new Promise((resolve) => setTimeout(resolve, 3_500))
+    expect(await pushedToday(f.projectId)).toMatchObject({
+      commits: 3,
+      repos: [{ repoId: f.repoId, branches: [{ branch: 'main', commits: 3 }] }],
+    })
+    expect(f.moves()).toMatchObject([{ ref: 'main', oldSha: null, newSha: f.git('rev-parse', 'main') }])
+  })
+
+  it("takes origin's branches all gone from the checkout and back (its remote removed and added again) for no move", async () => {
+    const f = await fixture('readded', 5)
+    const { pushedToday } = await counting()
+    f.git('remote', 'remove', 'origin')
+    // Read while the checkout has no copy of origin: the board's fetch fails, its listing shows no branch.
+    await look(f.repo)
+    expect((await (await import('./push')).readRefs(f.repo))!.remote.size).toBe(0)
+    expect(await pushedToday(f.projectId)).toMatchObject({ commits: 0, repos: [] })
+
+    f.git('remote', 'add', 'origin', f.origin)
+    await look(f.repo)
+    expect(await pushedToday(f.projectId)).toMatchObject({ commits: 0, added: 0, removed: 0, repos: [] })
+    expect(f.git('rev-parse', 'origin/main')).toBe(f.refs()[0]!.sha)
+    expect(f.moves()).toEqual([])
+  })
+
   it('does not take a checkout that never fetched for a look at an empty origin', async () => {
     // Origin has history the checkout has never fetched: its listing shows no branch of origin.
     const f = await unseen('never-fetched', 2, { pushed: true })
@@ -303,6 +338,41 @@ describe('pushedToday', slow, () => {
     expect(await pushedToday(f.projectId)).toMatchObject({
       commits: 2,
       repos: [{ branches: [{ branch: 'feat/cut', commits: 2 }] }],
+    })
+  })
+
+  it('counts nothing for a branch deleted and pushed again with what it had, then its new commits', async () => {
+    const f = await fixture('again')
+    const { noteOriginRefs, pushedToday } = await counting()
+    const { listRefs } = await import('./git')
+    // A branch that reached origin yesterday.
+    f.commit('x.txt', 'x\n', 'x')
+    f.push('HEAD:refs/heads/feat/x')
+    gitIn(f.repo, ['fetch', '-q', 'origin'])
+    noteOriginRefs(f.repo, await listRefs(f.repo), new Date(Date.now() - day))
+
+    // Today it is deleted, then pushed again as it was: nothing new reached origin.
+    f.push('--delete', 'feat/x')
+    await look(f.repo)
+    f.push('HEAD:refs/heads/feat/x')
+    await look(f.repo)
+    expect(f.moves().map((m) => [m.ref, m.oldSha === null, m.newSha === null])).toEqual([
+      ['feat/x', true, false],
+      ['feat/x', false, true],
+      ['feat/x', true, false],
+    ])
+    expect(await pushedToday(f.projectId)).toMatchObject({ commits: 0, repos: [] })
+
+    // Deleted again, then pushed with a commit of its own: that one counts.
+    f.push('--delete', 'feat/x')
+    await look(f.repo)
+    f.commit('y.txt', 'y\n', 'y')
+    f.push('HEAD:refs/heads/feat/x')
+    await look(f.repo)
+    expect(await pushedToday(f.projectId)).toMatchObject({
+      commits: 1,
+      added: 1,
+      repos: [{ branches: [{ branch: 'feat/x', commits: 1 }] }],
     })
   })
 

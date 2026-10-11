@@ -148,7 +148,8 @@ function lastFetch(repoPath: string): number | null {
 /**
  * Fetches origin into the checkout unless it was fetched less than `FETCH_EVERY` ago (`force` skips
  * that check). A fetch already running is joined instead of started again. Returns null when it
- * skipped; the promise never rejects (a failure is kept as the repo's `error`).
+ * skipped; the promise settles once a fetch that succeeded has been listed, and never rejects (a
+ * failure is kept as the repo's `error`).
  */
 export function fetchRepo(repoPath: string, opts: { force?: boolean } = {}): Promise<void> | null {
   const s = repoState(repoPath)
@@ -161,15 +162,23 @@ export function fetchRepo(repoPath: string, opts: { force?: boolean } = {}): Pro
       () => {
         s.fetchedAt = Date.now()
         s.error = null
+        return true
       },
       (err: unknown) => {
         s.error = fetchError(err)
+        return false
       },
     )
-    .finally(() => {
-      s.fetching = null
+    .then(async (fetched) => {
       s.refs.drop()
       s.worktrees.drop()
+      // A fetch that succeeded is itself a look at origin: the checkout is listed at once, so a push
+      // made right after it is a move from what the fetch found (an empty origin's first push too),
+      // not the baseline of whichever read lists next.
+      if (fetched) await s.refs.read()
+    })
+    .finally(() => {
+      s.fetching = null
     })
   return s.fetching
 }

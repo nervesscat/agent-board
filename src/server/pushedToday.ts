@@ -84,6 +84,10 @@ export function noteOriginRefs(
           .all()
           .map((r) => [r.ref, r.sha]),
       )
+      // Every branch of origin gone at once is the checkout's copy of origin going away (its remote
+      // removed, or renamed and added again), not origin deleting them all: they are kept as they were,
+      // so their coming back is no move.
+      if (!refs.remote.size && known.size) return
       const moves: (typeof schema.originRefMoves.$inferInsert)[] = []
       for (const [ref, sha] of refs.remote) {
         const old = known.get(ref)
@@ -115,8 +119,8 @@ export function noteOriginRefs(
 }
 
 /**
- * The commits a move brought and their lines, by the tip it moved to and every tip origin had just
- * before: neither ever changes, so a read with no new move asks git nothing. The key is hashed, since
+ * The commits a move brought and their lines, by the tip it moved to and every tip origin had that day
+ * before it: neither ever changes, so a read with no new move asks git nothing. The key is hashed, since
  * it names every branch of origin.
  */
 const brought = new Map<string, Promise<CommitLines[]>>()
@@ -166,8 +170,9 @@ type BranchPushed = RepoPushed['branches'][number]
  * What reached origin on the local day of `now` in each of the project's repos. Each repo's branches
  * are read as `pushStates` reads them (which records any move), starting a background fetch when
  * origin's copy is stale and never waiting for it. A commit counts under the first branch whose move
- * that day brought it, and once in the repo's and the project's totals; one that some branch of
- * origin already had just before the move does not count, nor does a merge commit.
+ * that day brought it, and once in the repo's and the project's totals; one that a branch of origin
+ * had when the day began or at any point of it before the move does not count, nor does a merge
+ * commit.
  */
 export async function pushedToday(projectId: number, now = new Date()): Promise<PushedToday> {
   getProject(projectId)
@@ -221,13 +226,14 @@ export async function pushedToday(projectId: number, now = new Date()): Promise<
       branches: [],
     }
     const byBranch = new Map<string, BranchPushed>()
-    // Then the day's moves again, in order: each brings what no branch of origin had just before it.
+    // Then the day's moves again, in order: each brings what no tip origin had since the day began
+    // reaches, a branch deleted since included (a branch that goes away and comes back brings nothing).
+    const had = new Set(state.values())
     for (const m of moves) {
       if (m.seenAt >= day.end) break
-      const before = [...state.values()]
-      if (m.newSha) state.set(m.ref, m.newSha)
-      else state.delete(m.ref)
       if (!m.newSha) continue
+      const before = [...had]
+      had.add(m.newSha)
       const commits = await commitsOf(repo.repoPath, m.newSha, before).catch((err: unknown) => {
         console.error(`reading what ${m.ref} brought to origin in ${repo.repoPath} failed:`, err)
         return []
