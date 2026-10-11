@@ -8,6 +8,7 @@ import { BranchSelect } from '#/components/BranchSelect'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
+import { TasksInput } from '#/components/TasksInput'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -21,10 +22,10 @@ import {
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
-import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { newTicketStage } from '#/lib/stages'
+import { addTasks } from '#/lib/tasks'
 import { ticketsKey } from '#/lib/tickets'
 import { cn } from '#/lib/utils'
 
@@ -39,7 +40,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [tasks, setTasks] = useState('')
+  const [tasks, setTasks] = useState<string[]>([])
+  const [taskText, setTaskText] = useState('')
   const [branch, setBranch] = useState('')
   const [assignee, setAssignee] = useState('')
   const [tags, setTags] = useState('')
@@ -82,10 +84,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         parentId: parent?.id,
         status,
         repoId: repoId ? Number(repoId) : undefined,
-        tasks: tasks
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        tasks: addTasks(tasks, taskText),
         attachmentIds: files.ids,
       }),
     onSuccess: () => {
@@ -94,7 +93,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       setOpen(false)
       setTitle('')
       setBody('')
-      setTasks('')
+      setTasks([])
+      setTaskText('')
       setBranch('')
       setAssignee('')
       setTags('')
@@ -182,8 +182,14 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tasks">Initial tasks, one per line</Label>
-            <Textarea id="tasks" value={tasks} onChange={(e) => setTasks(e.target.value)} rows={3} />
+            <Label htmlFor="tasks">Initial tasks</Label>
+            <TasksInput
+              id="tasks"
+              value={tasks}
+              onChange={setTasks}
+              text={taskText}
+              onTextChange={setTaskText}
+            />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {status && (
