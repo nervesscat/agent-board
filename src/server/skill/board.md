@@ -82,20 +82,22 @@ Then:
   to resume), with `by` and `at`. `commitsSince` counts commits on the branch since it was written
   and `stale` says the work moved on (new commits or a newer progress post): check the branch and
   the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
-- No tasks yet → `add_tasks` with the concrete steps. The tasks are the implementation, two levels
-  deep and no more: top-level tasks are its steps (coding, testing, benchmarks, process…), subtasks
-  are their parts (`{text, subtasks}` items, or `parentTaskId` to add under an existing step; a
-  subtask takes no subtasks). The human's progress bar is these tasks and subtasks, all counted.
+- No tasks yet → `add_tasks` with the plan, in two levels and no more. The top level is a few
+  broad, high-level phases of the work, like the hand-off checklist (for example plan, code, tests,
+  benchmarks, docs or process); the concrete steps go under their phase as its subtasks
+  (`{text, subtasks}` items, or `parentTaskId` to add under an existing phase; a subtask takes no
+  subtasks). The human's progress bar is these tasks and subtasks, all counted, and together they
+  are the hand-off's Implementation item.
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
 `repoId`. Lanes of a ticket you are working are yours to create (next section).
 
 ## 3. While working
 
-- `set_task_done` as each step or part finishes. A step with parts is done exactly when all its
-  parts are: ticking or unticking a step does the same to its parts, ticking its last open part
-  ticks it, unticking a part unticks it. When the plan changes, `update_task` rewords a task and
-  `remove_task` drops one that no longer applies (a step goes with its parts), so the progress bar
+- `set_task_done` as each phase or step finishes. A phase with steps is done exactly when all its
+  steps are: ticking or unticking a phase does the same to its steps, ticking its last open step
+  ticks it, unticking a step unticks it. When the plan changes, `update_task` rewords a task and
+  `remove_task` drops one that no longer applies (a phase goes with its steps), so the progress bar
   stays honest.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
@@ -210,8 +212,9 @@ Before `update_ticket` → `status: review`, every item, in order:
    [End of session](#5-end-of-session)).
 
 `update_ticket` → `review` then answers with `handoff.missing`: what the board still sees missing,
-each a `code` with a `text`: `tasks_open` (Implementation: the ticket has no tasks, or some of its
-tasks and subtasks, its lanes' included, are open), `no_pr`, `not_pushed`, `no_preview`,
+each a `code` with a `text`: `tasks_open` (Implementation, the plan, the code, the tests and so on,
+which is the ticket's tasks and subtasks, its phases and their steps: missing while it has none, or
+while some of them, its lanes' included, are open), `no_pr`, `not_pushed`, `no_preview`,
 `no_handoff_post` (no progress post of yours since the branch's last commit), `checks_unknown` (the
 PR's CI is failing or still running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
 the ticket is in review, and its page shows it as a Hand-off card.

@@ -63,6 +63,10 @@ describe('handoffOf', () => {
     const none = handoffOf(facts({ tasks: { done: 0, total: 0 } }))
     expect(none.checks[1]).toMatchObject({ code: 'tasks_open', ok: false })
     expect(none.missing).toEqual([{ code: 'tasks_open', text: expect.stringMatching(/^No tasks/) }])
+    // It says how to plan: high-level phases, their steps as subtasks.
+    expect(none.checks[1]!.text).toBe(
+      'No tasks: plan the work as high-level phases (plan, code, tests…) with their steps as subtasks, and tick them',
+    )
     expect(handoffOf(facts({ tasks: { done: 3, total: 5 } })).missing).toEqual([
       { code: 'tasks_open', text: '3 of 5 tasks done' },
     ])

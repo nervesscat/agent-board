@@ -58,14 +58,15 @@ http_headers = { Authorization = "Bearer gate_…" }
    left off, the next steps and how to resume. `resume.commitsSince` and `resume.stale` say whether
    the work moved on since it was written; `resume.noHandoff` means it carried over from an earlier
    day without one.
-3. **Break it down**: `add_tasks` with the concrete steps if the ticket does not have them;
-   `set_task_done` as you finish each one, `update_task` / `remove_task` when the plan changes.
-   The tasks are the implementation, two levels deep and no more: top-level tasks are its steps
-   (coding, testing, benchmarks, process…), subtasks are their parts (`add_tasks` with
-   `{text, subtasks}` items, or with `parentTaskId` to add under an existing step; a subtask takes
-   no subtasks). A step with parts is done exactly when all its parts are: ticking or unticking it
-   does the same to its parts, and the parts' ticks settle it. Removing a step removes its parts.
-   The progress bar the human sees counts tasks and subtasks alike.
+3. **Break it down**: if the ticket has no tasks, `add_tasks` with its plan, in two levels and no
+   more. The top level is a few broad, high-level phases of the work, like the hand-off checklist
+   (for example plan, code, tests, benchmarks, docs or process); the concrete steps go under their
+   phase as its subtasks (`{text, subtasks}` items, or `parentTaskId` to add under an existing
+   phase; a subtask takes no subtasks). `set_task_done` as you finish each one, `update_task` /
+   `remove_task` when the plan changes. A phase with steps is done exactly when all its steps are:
+   ticking or unticking it does the same to its steps, and the steps' ticks settle it. Removing a
+   phase removes its steps. The progress bar the human sees counts tasks and subtasks alike, and
+   together they are the hand-off's Implementation item (step 7).
 4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
    agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and
    `assignee`. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its
@@ -151,8 +152,9 @@ http_headers = { Authorization = "Bearer gate_…" }
    8. Resume note if the ticket stays open past the session (step 9).
 
    `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
-   each a `code` and a `text` (`tasks_open`: Implementation, the ticket has no tasks or some of
-   its tasks and subtasks, its lanes' included, are open; `no_pr`, `not_pushed`, `no_preview`,
+   each a `code` and a `text` (`tasks_open`: Implementation, the plan, the code, the tests and so
+   on, which is the ticket's tasks and subtasks (its phases and their steps): missing while it has
+   none, or while some of them, its lanes' included, are open; `no_pr`, `not_pushed`, `no_preview`,
    `no_handoff_post`: no progress post of yours since the branch's last commit, `checks_unknown`:
    the PR's CI is failing or still running). The move goes through anyway: fix each one.
    `handoff.checks` lists every item with `ok`, first `not_merged` (Merged: the PR merged on

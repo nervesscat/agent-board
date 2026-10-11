@@ -89,7 +89,9 @@ export function handoffOf(f: HandoffFacts): Handoff {
     'tasks_open',
     'Implementation',
     total > 0 && done === total,
-    total ? `${done} of ${plural(total, 'task')} done` : 'No tasks: add the steps of the work and tick them',
+    total
+      ? `${done} of ${plural(total, 'task')} done`
+      : 'No tasks: plan the work as high-level phases (plan, code, tests…) with their steps as subtasks, and tick them',
   )
 
   check(

@@ -77,6 +77,7 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   await expect(rows.nth(1)).toHaveAttribute('data-code', 'tasks_open')
   await expect(item('tasks_open')).toContainText('Implementation')
   await expect(item('tasks_open')).toContainText('No tasks')
+  await expect(item('tasks_open')).toContainText('high-level phases (plan, code, tests…)')
   await card.screenshot({ path: test.info().outputPath('handoff-missing.png') })
 
   // An agent moving it there hears the same, by code.
