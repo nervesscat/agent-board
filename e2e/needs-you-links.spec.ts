@@ -3,7 +3,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import type { Project } from '#/lib/api'
 import { inDatabase } from './db'
 import { HUMAN } from './env'
-import { expect, ok, section, test } from './fixtures'
+import { type Api, expect, ok, section, test } from './fixtures'
 import { box, coveredAt, feedDrawn, longTicket, scrollTo, ticketHeader } from './scrolling'
 
 /**
@@ -327,6 +327,168 @@ test('a #link on an open ticket lands on its post; back and forward return to wh
   await page.waitForTimeout(1_000)
   expect(await scrollY(page)).toBe(leftOlder)
   await expect(page.locator('[data-revealed]')).toHaveCount(0)
+})
+
+/** Two posts on a long ticket, the newer one linking to the older one: `#link` steps on one page. */
+async function linkedPosts(api: Api, human: APIRequestContext, title: string) {
+  let older = 0
+  let newer = 0
+  const t = await longTicket(api, human, title, 'in_progress', async (id) => {
+    older = (
+      await ok<Row>(
+        human.post(`/api/tickets/${id}/updates`, { data: { body: 'The first finding.', progress: false } }),
+      )
+    ).id
+    newer = (
+      await ok<Row>(
+        human.post(`/api/tickets/${id}/updates`, {
+          data: { body: `Follows [the first finding](#post-${older}).`, progress: false },
+        }),
+      )
+    ).id
+  })
+  return { t, older, newer }
+}
+
+/**
+ * The reader's last scroll, not yet told when the history moves: the browser tells of a scroll on its
+ * next frame, and Back or Forward can be taken before that. Here the window scrolls to `y` as the
+ * history moves, before the page hears of the move, so no scroll event can come in between. The
+ * listener that does it is the page's first (see scrollingAsHistoryMoves).
+ */
+const scrollAsHistoryMoves = (page: Page, y: number) =>
+  page.evaluate((y) => {
+    ;(window as unknown as { scrollOnPop: number }).scrollOnPop = y
+  }, y)
+
+/** Put before the page's own scripts: scrolls the window on the next history move, when asked to. */
+const scrollingAsHistoryMoves = (page: Page) =>
+  page.addInitScript(() => {
+    const w = window as unknown as { scrollOnPop?: number }
+    window.addEventListener('popstate', () => {
+      if (w.scrollOnPop === undefined) return
+      window.scrollTo(0, w.scrollOnPop)
+      w.scrollOnPop = undefined
+    })
+  })
+
+test('Back and Forward return to a place scrolled to right before them', async ({ page, api, human }) => {
+  const { t, older, newer } = await linkedPosts(api, human, 'Scrolled, then back')
+  await scrollingAsHistoryMoves(page)
+  await page.goto(`/projects/${t.projectId}/features/${t.id}#post-${newer}`)
+  await expectRevealed(page, post(page, newer))
+  await expectMarkGone(page)
+  // Already where the link lands (that scroll told), and clicked where it is: landing on the post does
+  // not scroll, so nothing on the next step tells of the window before the reader scrolls it.
+  await post(page, older).evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))))
+  const leftNewer = await scrollY(page)
+  await post(page, newer)
+    .getByRole('link', { name: 'the first finding' })
+    .evaluate((a: HTMLElement) => a.click())
+  await expectRevealed(page, post(page, older))
+  expect(await scrollY(page)).toBe(leftNewer)
+  await expectMarkGone(page)
+  await recordMarks(page)
+
+  await scrollAsHistoryMoves(page, 2000)
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`#post-${newer}$`))
+  await expect.poll(() => scrollY(page)).toBe(leftNewer)
+  // And the other way: a place scrolled to right before Forward is where the next Back returns.
+  await scrollAsHistoryMoves(page, 1000)
+  await page.goForward()
+  await expect(page).toHaveURL(new RegExp(`#post-${older}$`))
+  await expect.poll(() => scrollY(page)).toBe(2000)
+  await page.waitForTimeout(1_000)
+  expect(await scrollY(page)).toBe(2000)
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`#post-${newer}$`))
+  await expect.poll(() => scrollY(page)).toBe(1000)
+  await page.waitForTimeout(1_000)
+  expect(await scrollY(page)).toBe(1000)
+  expect(await marks(page)).toEqual([])
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
+})
+
+test('going back two steps at once returns to where the reader was there, unmarked', async ({
+  page,
+  api,
+  human,
+}) => {
+  let first = 0
+  let second = 0
+  let third = 0
+  await scrollingAsHistoryMoves(page)
+  const t = await longTicket(api, human, 'Two steps back', 'in_progress', async (id) => {
+    third = (
+      await ok<Row>(human.post(`/api/tickets/${id}/updates`, { data: { body: 'The end.', progress: false } }))
+    ).id
+    second = (
+      await ok<Row>(
+        human.post(`/api/tickets/${id}/updates`, {
+          data: { body: `Goes on to [the end](#post-${third}).`, progress: false },
+        }),
+      )
+    ).id
+    first = (
+      await ok<Row>(
+        human.post(`/api/tickets/${id}/updates`, {
+          data: { body: `Starts with [the middle](#post-${second}).`, progress: false },
+        }),
+      )
+    ).id
+  })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}#post-${first}`)
+  await expectRevealed(page, post(page, first))
+  await expectMarkGone(page)
+  const toSecond = post(page, first).getByRole('link', { name: 'the middle' })
+  await toSecond.scrollIntoViewIfNeeded()
+  const leftFirst = await scrollY(page)
+  await toSecond.click()
+  await expectRevealed(page, post(page, second))
+  await expectMarkGone(page)
+  await scrollTo(page, 1000)
+  await post(page, second).getByRole('link', { name: 'the end' }).click()
+  await expectRevealed(page, post(page, third))
+  await expectMarkGone(page)
+  await recordMarks(page)
+
+  await scrollAsHistoryMoves(page, 2000)
+  await page.evaluate(() => history.go(-2))
+  await expect(page).toHaveURL(new RegExp(`#post-${first}$`))
+  await expect.poll(() => scrollY(page)).toBe(leftFirst)
+  await page.waitForTimeout(1_000)
+  expect(await scrollY(page)).toBe(leftFirst)
+  expect(await marks(page)).toEqual([])
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
+})
+
+test('Back to the page as it was before a #link takes its mark off at once', async ({ page, api, human }) => {
+  const { t, older, newer } = await linkedPosts(api, human, 'Back to no anchor')
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  await feedDrawn(page)
+  await post(page, newer).getByRole('link', { name: 'the first finding' }).click()
+  await expect(post(page, older)).toHaveAttribute('data-revealed', '')
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/features/${t.id}$`))
+  // Gone with the step back, not left to fade.
+  await expect(page.locator('[data-revealed]')).toHaveCount(0, { timeout: 300 })
+})
+
+test('a reload lands on the anchor again and marks it, wherever the reader had scrolled', async ({
+  page,
+  api,
+  human,
+}) => {
+  const { t, newer } = await linkedPosts(api, human, 'Reloaded')
+  await page.goto(`/projects/${t.projectId}/features/${t.id}#post-${newer}`)
+  await expectRevealed(page, post(page, newer))
+  await expectMarkGone(page)
+  await scrollTo(page, 0)
+  await page.reload()
+  await expectRevealed(page, post(page, newer))
+  expect(await scrollY(page)).toBeGreaterThan(0)
 })
 
 test('Back right after a #link takes its mark off at once', async ({ page, api, human }) => {

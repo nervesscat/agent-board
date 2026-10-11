@@ -41,9 +41,26 @@ export function anchorId(id: string | null | undefined, kind: string): number | 
 /** How the history last moved: by a link (PUSH, REPLACE) or back through it (BACK, FORWARD, GO). */
 let moved: string | undefined
 
-/** Follows the router's history, from its start, for useReveal to tell a return from an arrival. */
+const returned = (action: string | undefined) => action === 'BACK' || action === 'FORWARD' || action === 'GO'
+
+/**
+ * Follows the router's history, from its start, for useReveal to tell a return from an arrival. It
+ * hears of each move before the router does (the router subscribes once it is mounted), while the
+ * window is still where the reader left the entry they are leaving.
+ *
+ * The router keeps that place for the entry only if it has seen the window scroll since its last
+ * render, and the browser tells of a scroll on its next frame: a scroll right before Back, Forward or
+ * a link would go unseen, and coming back to that entry the router would land on its anchor instead.
+ * So the router is told now that the window scrolled, and it keeps where the window is.
+ */
 export function followHistory(router: { history: RouterHistory }) {
-  if (typeof window !== 'undefined') router.history.subscribe(({ action }) => (moved = action.type))
+  if (typeof window === 'undefined') return
+  router.history.subscribe(({ action }) => {
+    moved = action.type
+    document.dispatchEvent(new Event('scroll'))
+    // Back where the reader was, nothing is marked: not even what the step left marked.
+    if (returned(moved)) unmark()
+  })
 }
 
 /**
@@ -53,7 +70,7 @@ export function followHistory(router: { history: RouterHistory }) {
  */
 function useReturn() {
   const left = useElementScrollRestoration({ getElement: () => window })
-  return moved === 'BACK' || moved === 'FORWARD' || moved === 'GO' ? { left } : null
+  return returned(moved) ? { left } : null
 }
 
 /**

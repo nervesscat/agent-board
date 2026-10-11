@@ -19,6 +19,7 @@ export function getRouter() {
     defaultPreloadStaleTime: 0,
   })
   setupRouterSsrQueryIntegration({ router, queryClient })
+  // Now, before the router mounts and follows its history itself: see followHistory.
   followHistory(router)
   return router
 }
