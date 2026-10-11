@@ -19,9 +19,9 @@ import {
   assertBenchDataDir,
   copyLive,
   generate,
+  generationMoment,
   laidOutDays,
   localDay,
-  msUntilSlot,
   pickTargets,
   tableCounts,
 } from './data.mjs'
@@ -591,20 +591,19 @@ async function prepare(name) {
   }
   // Laid out on today's local day (data.mjs), which needs the first minute of the day behind it (an
   // hour more around a daylight saving change).
-  const wait = msUntilSlot()
-  if (wait > 0) {
-    log(
-      `Waiting ${Math.ceil(wait / 1000)} s: this soon after midnight, the generated rows would not all be in the past and as many whole days old as the days they stand for`,
-    )
-    await new Promise((r) => setTimeout(r, wait + 100))
-  }
+  const now = await generationMoment({
+    onWait: (wait) =>
+      log(
+        `Waiting ${Math.ceil(wait / 1000)} s: this soon after midnight, the generated rows would not all be in the past and as many whole days old as the days they stand for`,
+      ),
+  })
   log(`Generating the large dataset (scale ${settings.scale}, seed ${settings.seed})`)
   const t = Date.now()
   const gen = generate(dir, {
     scale: settings.scale,
     seed: settings.seed,
     migrationsFolder: path.join(target, 'drizzle'),
-    now: Date.now(),
+    now,
   })
   return {
     dir,

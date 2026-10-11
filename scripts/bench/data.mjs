@@ -242,6 +242,25 @@ export function startOfLocalDay(ms) {
 export const msUntilSlot = (now = Date.now()) => Math.max(0, anchoredClock(now).ready - now)
 
 /**
+ * The moment to generate a dataset for (`generate`'s `now`): the one clock read the wait was decided
+ * on, so that a later read (past the next midnight, before that day's ready moment) cannot be refused.
+ * Too soon after midnight, it calls `onWait(ms)`, waits that long and reads the clock again.
+ */
+export async function generationMoment({
+  clock = Date.now,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  onWait = () => {},
+} = {}) {
+  for (;;) {
+    const now = clock()
+    const wait = msUntilSlot(now)
+    if (wait === 0) return now
+    onWait(wait)
+    await sleep(wait + 100)
+  }
+}
+
+/**
  * The clock of a dataset generated on the local day of `now`: `real(v)` is the real moment of a
  * virtual one, where virtual day `d` (0 today, -1 yesterday) is local calendar day `d` from now's and a
  * moment's place in its virtual day is its place in that day's slot; `ready` is the first moment it

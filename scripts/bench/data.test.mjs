@@ -10,6 +10,7 @@ import {
   assertBenchDataDir,
   generate,
   generatedPlan,
+  generationMoment,
   msUntilSlot,
   pickTargets,
   prng,
@@ -135,6 +136,32 @@ describe('the generated dataset, whatever the hour', () => {
       }),
     ).toThrow(/after midnight/)
   })
+
+  it('generates for the clock read the wait was decided on, also in the last moment before midnight', async () => {
+    const lastMoment = local(10, 0, 0) - 1
+    const reads = [lastMoment, lastMoment + 2]
+    const waits = []
+    const now = await generationMoment({ clock: () => reads.shift(), sleep: (ms) => waits.push(ms) })
+    expect(now).toBe(lastMoment)
+    expect(waits).toEqual([])
+    // A second read, past midnight and before the new day's ready moment, would be refused.
+    expect(msUntilSlot(lastMoment + 2)).toBeGreaterThan(0)
+    expect(() =>
+      generate(path.join(root, 'last-moment'), { scale: 0.05, seed: 3, migrationsFolder, now }),
+    ).not.toThrow()
+
+    // Too soon after midnight: it waits, then hands on the read after the wait.
+    const after = [local(10, 0, 0, 20), local(10, 0, 1) + 100]
+    const announced = []
+    const ready = await generationMoment({
+      clock: () => after.shift(),
+      sleep: (ms) => waits.push(ms),
+      onWait: (ms) => announced.push(ms),
+    })
+    expect(announced).toEqual([SLOT_MS - 20_000])
+    expect(waits).toEqual([SLOT_MS - 20_000 + 100])
+    expect(ready).toBe(local(10, 0, 1) + 100)
+  }, 60_000)
 
   it('reads the same through the server at any hour: today, carried over, stalled, days in progress, reports due', async () => {
     const seen = []
