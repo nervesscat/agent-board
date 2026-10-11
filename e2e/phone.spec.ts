@@ -79,7 +79,18 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Cleanu
     expect(await scrollsSideways(page), daily).toBe(false)
   }
   await page.goto(`/projects/${project.id}/daily`)
-  await expect(page.getByRole('list', { name: 'Report periods' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Report', exact: true })).toContainText(
+    'daily by 17:00, text',
+  )
+  await expect(
+    page.getByRole('region', { name: 'Report calendar' }).getByRole('list', { name: 'Report periods' }),
+  ).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+  // The settings, opened: the prompt and the schedule fit too.
+  const settings = page.getByRole('region', { name: 'Report settings' })
+  await settings.getByRole('button', { name: /^Report settings/ }).click()
+  await expect(settings.getByRole('group', { name: 'Prompt' })).toContainText('What shipped today.')
+  await expect(settings.getByRole('group', { name: 'Schedule' })).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
 
   await page.goto(`/projects/${project.id}/cleanup`)
