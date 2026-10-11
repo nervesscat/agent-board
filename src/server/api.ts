@@ -2,6 +2,7 @@ import { Readable } from 'node:stream'
 import { z } from 'zod'
 
 import { AGENT_CLIENTS, COMMENT_PARENTS, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
+import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { addSummary } from './activity'
 import * as agents from './agents'
 import { addDefaultAgents } from './defaultAgents'
@@ -64,7 +65,7 @@ const TicketPatch = z.object({
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
   repoId: z.number().int().optional(),
-  tags: z.array(z.string().max(40)).max(20).optional(),
+  tags: z.array(z.string().max(MAX_TAG_LENGTH)).max(MAX_TAGS).optional(),
   prNumber: z.number().int().positive().nullable().optional(),
   // The tickets whose branches must be merged into this one's base before it can be done; replaces the list.
   needs: z.array(z.number().int()).max(50).optional(),

@@ -546,7 +546,8 @@ test('a PR to review lands on its card, whatever filter this browser remembers',
 
 /**
  * The PR queue visited once (its list now loaded), a filter that hides the PR picked there, then the
- * Overview's link to the PR: the list is drawn at once, then filtered as remembered, then widened.
+ * Overview's link to the PR: the list is drawn at once, then filtered as remembered, then switched to
+ * the filter that shows the PR.
  */
 async function reviewFromCachedQueue(page: Page, project: Project) {
   const target = seedPr(project, { title: 'Review me again', updatedAt: '2026-01-01T00:00:00.000Z' })
@@ -561,7 +562,7 @@ async function reviewFromCachedQueue(page: Page, project: Project) {
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
   await link.click()
-  await expect(page).toHaveURL(new RegExp(`filter=all#pr-${target.id}$`))
+  await expect(page).toHaveURL(new RegExp(`filter=me#pr-${target.id}$`))
   const card = page.locator(`#pr-${target.id}`)
   await expectRevealed(page, card, topBar(page))
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
@@ -591,7 +592,7 @@ test('Forward to a PR the reader scrolled away from returns to where they left i
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
   // Picked meanwhile (in another tab of the queue): it hides the PR, so the list is filtered, then
-  // widened, on the way back.
+  // switched to the one that shows it, on the way back.
   await page.evaluate(() => localStorage.setItem('prs.filter', 'others'))
   await recordMarks(page)
   await page.goForward()

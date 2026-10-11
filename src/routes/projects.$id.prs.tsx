@@ -28,13 +28,13 @@ import { repoLabel, useProject } from '#/lib/project'
 import { recall, remember, useRestoreRemembered } from '#/lib/remembered'
 import { anchorId, useAnchor, useReveal } from '#/lib/reveal'
 
-const FILTER_KEYS = ['me', 'others', 'all'] as const
+const FILTER_KEYS = ['me', 'others'] as const
 type Filter = (typeof FILTER_KEYS)[number]
 
 // ?result=<id> opens that review result over the queue (a verdict on a card links there); ?filter= is
-// the filter picked (none: the one this browser remembers, else all). A link lands on a PR's card as
-// #pr-<id>, on a reply in its thread as #pr-<id>-reply-<id>, on a reply to the review result as
-// #reply-<id> (src/lib/reveal.ts).
+// the filter picked (none, or one no longer offered such as an old `all`: the one this browser
+// remembers, else To review). A link lands on a PR's card as #pr-<id>, on a reply in its thread as
+// #pr-<id>-reply-<id>, on a reply to the review result as #reply-<id> (src/lib/reveal.ts).
 export const Route = createFileRoute('/projects/$id/prs')({
   component: PrQueue,
   validateSearch: z.object({
@@ -62,8 +62,10 @@ const FILTERS: { key: Filter; label: string; title: string }[] = [
     title:
       "Your PRs (agents' too): pending approvals, approved by every reviewer, or on hold on their comments",
   },
-  { key: 'all', label: 'All', title: 'Every PR in the queue' },
 ]
+// A tab's underline, drawn by the line style only (these are the default style), hangs 5px below it:
+// without it, nothing of a tab reaches outside its list, so the list has nothing to scroll.
+const NO_UNDERLINE = 'after:hidden'
 // The last filter picked is remembered in this browser, for a visit whose URL names none.
 const FILTER_KEY = 'prs.filter'
 
@@ -75,9 +77,9 @@ function PrQueue() {
   const key = ['prs', id]
   const { data: project } = useProject(id)
   // The tab and the list both follow the URL, so the server's render and the browser's agree.
-  const filter = picked ?? 'all'
-  // Put in the URL for the reader (the remembered one, or All to show a linked PR): the link's anchor
-  // stays. A filter the reader picks ends what the link had to show.
+  const filter = picked ?? 'me'
+  // Put in the URL for the reader (the remembered one, or the one that shows a linked PR): the link's
+  // anchor stays. A filter the reader picks ends what the link had to show.
   const showFilter = (f: Filter) =>
     navigate({ search: (s) => ({ ...s, filter: f }), hash: true, replace: true })
   useRestoreRemembered(FILTER_KEY, picked, FILTER_KEYS, showFilter)
@@ -95,39 +97,41 @@ function PrQueue() {
     onSuccess: (rows) => qc.setQueryData(key, rows),
     onError: (err) => toast.error(errorMessage(err)),
   })
-  const inFilter = (p: PrRow, f: Filter) => f === 'all' || p.waitingOn === f
+  const inFilter = (p: PrRow, f: Filter) => p.waitingOn === f
   const shown = data?.filter((p) => inFilter(p, filter)) ?? []
 
   const anchor = useAnchor()
-  // The PR a link lands on: its stage's tab, once per link, and All if the filter in the URL (once it
-  // is there, remembered or not) hides it.
+  // The PR a link lands on: its stage's tab, once per link, and the filter that shows it (the side it
+  // waits on) if the filter in the URL (once it is there, remembered or not) hides it.
   const linkedId = anchorId(anchor?.holder ?? anchor?.target, 'pr')
   const linked = data?.find((p) => p.id === linkedId)
   // The filter this browser remembers, read after mount: undefined for none, null until read.
   const [remembered, setRemembered] = useState<Filter | undefined | null>(null)
   useEffect(() => setRemembered(recall(FILTER_KEY, FILTER_KEYS)), [])
+  // The filter the list stays on: the one in the URL, else To review once nothing remembered is to be
+  // put there; null while that is not known yet.
+  const staying = picked ?? (remembered === undefined ? 'me' : null)
   // The anchor is brought into view once the list it is in has settled: the remembered filter put in
-  // the URL, then widened to All if that hides the linked PR. Each switch redraws the list, and an
-  // anchor revealed before them would be lost under them.
+  // the URL, then switched to the one that shows the linked PR if that hides it. Each switch redraws
+  // the list, and an anchor revealed before them would be lost under them.
   const settled =
-    (picked !== undefined ? !linked || inFilter(linked, picked) : remembered === undefined) &&
-    (linkedId === null || data !== undefined)
+    staying !== null && (!linked || inFilter(linked, staying)) && (linkedId === null || data !== undefined)
   useReveal(anchor, { ready: settled })
   const [tab, setTab] = useState<string>('pending')
   const tabFor = useRef<string | null>(null)
-  const widenedFor = useRef<string | null>(null)
+  const switchedFor = useRef<string | null>(null)
   useEffect(() => {
     if (!anchor || !linked) return
     if (tabFor.current !== anchor.hash) {
       tabFor.current = anchor.hash
       setTab(linked.status)
     }
-    if (picked !== undefined && widenedFor.current !== anchor.hash) {
-      widenedFor.current = anchor.hash
-      if (!inFilter(linked, picked)) showFilter('all')
+    if (staying !== null && switchedFor.current !== anchor.hash) {
+      switchedFor.current = anchor.hash
+      if (!inFilter(linked, staying)) showFilter(linked.waitingOn)
     }
-  }, [anchor, linked, picked])
-  const suffix = filter === 'all' ? '' : ` ${FILTERS.find((f) => f.key === filter)!.label.toLowerCase()}`
+  }, [anchor, linked, staying])
+  const suffix = FILTERS.find((f) => f.key === filter)!.label.toLowerCase()
 
   return (
     <div className="space-y-4">
@@ -144,7 +148,7 @@ function PrQueue() {
           <Tabs value={filter} onValueChange={(v) => pickFilter(v as Filter)}>
             <TabsList>
               {FILTERS.map((f) => (
-                <TabsTrigger key={f.key} value={f.key} title={f.title}>
+                <TabsTrigger key={f.key} value={f.key} title={f.title} className={NO_UNDERLINE}>
                   {f.label}
                   <span className="ml-1 rounded-full bg-background px-1.5 text-xs tabular-nums">
                     {data?.filter((p) => inFilter(p, f.key)).length ?? 0}
@@ -168,10 +172,11 @@ function PrQueue() {
         <Skeleton className="h-40" />
       ) : (
         <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-          {/* Four stages do not fit a phone: the list scrolls instead of the page. */}
-          <TabsList className="max-w-full justify-start overflow-x-auto">
+          {/* Four stages do not fit one row on a phone: there they take two rows of two, so every stage
+              and its count shows without the list or the page scrolling. */}
+          <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-fit sm:group-data-horizontal/tabs:h-8">
             {TABS.map((t) => (
-              <TabsTrigger key={t.key} value={t.key}>
+              <TabsTrigger key={t.key} value={t.key} className={NO_UNDERLINE}>
                 {t.label}
                 <span className="ml-1.5 rounded-full bg-background px-1.5 text-xs tabular-nums">
                   {shown.filter((p) => p.status === t.key).length}
@@ -189,8 +194,7 @@ function PrQueue() {
                   ))
               ) : (
                 <Empty>
-                  Nothing {t.label.toLowerCase()}
-                  {suffix}.
+                  Nothing {t.label.toLowerCase()} {suffix}.
                 </Empty>
               )}
             </TabsContent>

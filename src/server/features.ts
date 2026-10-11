@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { RESUME_TEMPLATE } from '#/lib/constants'
+import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
 import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
 import { branchHead, NO_BRANCH } from './git'
@@ -364,17 +365,17 @@ function touch(ticketId: number) {
   if (row?.parentId) touch(row.parentId)
 }
 
-/** Trimmed, at most 40 characters each, no repeats in any casing, at most 20. */
+/** Trimmed, cut to `MAX_TAG_LENGTH` characters each, no repeats in any casing, at most `MAX_TAGS`. */
 export function cleanTags(tags: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const raw of tags) {
-    const tag = raw.replace(/\s+/g, ' ').trim().slice(0, 40)
+    const tag = raw.replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_LENGTH)
     if (!tag || seen.has(tag.toLowerCase())) continue
     seen.add(tag.toLowerCase())
     out.push(tag)
   }
-  return out.slice(0, 20)
+  return out.slice(0, MAX_TAGS)
 }
 
 export function updateTicket(

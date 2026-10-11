@@ -108,6 +108,8 @@ test('the New ticket dialog picks the stage a ticket starts in, from every stage
   await page.getByRole('button', { name: 'New ticket' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Title').fill('Already started')
+  // No branch to pick: whoever works the ticket sets it.
+  await expect(dialog.getByLabel('Branch (optional)')).toHaveCount(0)
   const stage = dialog.getByLabel('Stage')
   await expect(stageValue(dialog)).toHaveText('Backlog')
   await stage.click()
@@ -121,7 +123,7 @@ test('the New ticket dialog picks the stage a ticket starts in, from every stage
     page.locator('[data-column="in_progress"]').getByRole('link', { name: /Already started/ }),
   ).toBeVisible()
   const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
-  expect(row).toMatchObject({ title: 'Already started', status: 'in_progress' })
+  expect(row).toMatchObject({ title: 'Already started', status: 'in_progress', branch: '' })
 
   // Like every other field, the stage starts over for the next ticket.
   await page.getByRole('button', { name: 'New ticket' }).click()
@@ -162,7 +164,7 @@ test('a lane from the New lane dialog has no stage to pick and starts in To do',
   await page.getByRole('button', { name: 'New lane' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Title').fill('A lane of it')
-  await expect(dialog.getByLabel('Branch (optional)')).toBeVisible()
+  await expect(dialog.getByLabel('Branch (optional)')).toHaveCount(0)
   await expect(dialog.getByLabel('Stage')).toHaveCount(0)
   await dialog.getByRole('button', { name: 'Create' }).click()
   await expect(dialog).toBeHidden()
@@ -254,6 +256,125 @@ test('steps to the previous and next ticket in a stage, by button and by [ and ]
   await page.keyboard.press(']')
   await expect(page).toHaveURL(url(second!.id))
   await expect(page.getByRole('textbox', { name: 'New post' })).toHaveText(']')
+})
+
+test('keeps the list it steps through when a ticket in it moves to another stage, as lanes do', async ({
+  page,
+  api,
+  human,
+  project,
+}) => {
+  for (const title of ['First', 'Second', 'Third']) {
+    await api.ticket({ title, status: 'in_progress' })
+    // Distinct update times, so the column's order (last updated first) is certain.
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  const rows = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets?parent=root`))
+  const column = rows
+    .filter((r) => r.status === 'in_progress')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  expect(column.map((r) => r.title)).toEqual(['Third', 'Second', 'First'])
+  const [third, second, first] = column
+  const url = (id: number) => new RegExp(`/projects/${project.id}/features/${id}$`)
+  const prev = page.getByRole('link', { name: 'Previous ticket in In progress' })
+  const next = page.getByRole('link', { name: 'Next ticket in In progress' })
+
+  await page.goto(`/projects/${project.id}/features/${second!.id}`)
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+
+  // Moved to review on its page: it keeps its place in the list it is in, and the list its stage.
+  await page.getByRole('combobox').filter({ hasText: 'In progress' }).click()
+  await page.getByRole('option', { name: 'In review', exact: true }).click()
+  await expect(page.getByRole('combobox').filter({ hasText: 'In review' })).toBeVisible()
+  await expect.poll(async () => (await api.getTicket(second!.id)).status).toBe('review')
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+
+  // On to the next one, and back to the moved one, though it is in review now.
+  await next.click()
+  await expect(page).toHaveURL(url(first!.id))
+  await expect(page.getByText('3 of 3 in In progress')).toBeVisible()
+  await expect(next).toHaveCount(0)
+  await prev.click()
+  await expect(page).toHaveURL(url(second!.id))
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+  await expect(page.getByRole('combobox').filter({ hasText: 'In review' })).toBeVisible()
+
+  // [ and ] step through the same list.
+  await page.keyboard.press(']')
+  await expect(page).toHaveURL(url(first!.id))
+  await expect(page.getByText('3 of 3 in In progress')).toBeVisible()
+  await page.keyboard.press('[')
+  await expect(page).toHaveURL(url(second!.id))
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+  await page.keyboard.press('[')
+  await expect(page).toHaveURL(url(third!.id))
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+  await expect(prev).toHaveCount(0)
+  await page.keyboard.press(']')
+  await expect(page).toHaveURL(url(second!.id))
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+
+  // Opened again from the board (by the breadcrumb), it starts from the column it is in now.
+  await page.getByRole('link', { name: 'Ongoing features' }).last().click()
+  await page
+    .locator('[data-column="review"]')
+    .getByRole('link', { name: /Second/ })
+    .click()
+  await expect(page).toHaveURL(url(second!.id))
+  await expect(page.getByText('1 of 1 in In review')).toBeVisible()
+  await expect(page.getByRole('link', { name: /ticket in In progress/ })).toHaveCount(0)
+})
+
+test('a lane filter on a ticket stepped to keeps the list it steps through, on Back and on reload', async ({
+  page,
+  api,
+  human,
+  project,
+}) => {
+  const made: TicketFull[] = []
+  for (const title of ['First', 'Second', 'Third']) {
+    made.push(await api.ticket({ title, status: 'in_progress' }))
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  await ok(
+    human.post(`/api/projects/${project.id}/tickets`, { data: { title: 'A lane', parentId: made[2]!.id } }),
+  )
+  const rows = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets?parent=root`))
+  const column = rows
+    .filter((r) => r.status === 'in_progress')
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  expect(column.map((r) => r.title)).toEqual(['Third', 'Second', 'First'])
+  const [third, second] = column
+  const url = (id: number) => new RegExp(`/projects/${project.id}/features/${id}(\\?|$)`)
+  const todoChip = page.getByRole('button', { name: /^To do\s*1$/ })
+
+  await page.goto(`/projects/${project.id}/features/${second!.id}`)
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+  await page.getByRole('link', { name: 'Previous ticket in In progress' }).click()
+  await expect(page).toHaveURL(url(third!.id))
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+
+  await page.getByRole('combobox').filter({ hasText: 'In progress' }).click()
+  await page.getByRole('option', { name: 'In review', exact: true }).click()
+  await expect.poll(async () => (await api.getTicket(third!.id)).status).toBe('review')
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+
+  // Filtering its lanes stays on the same page: the list it was stepped to in stays with it.
+  await todoChip.click()
+  await expect(page).toHaveURL(/\?stage=todo$/)
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+  await page.reload()
+  await expect(todoChip).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+
+  await page.getByRole('link', { name: 'Next ticket in In progress' }).click()
+  await expect(page).toHaveURL(url(second!.id))
+  await expect(page.getByText('2 of 3 in In progress')).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(url(third!.id))
+  await expect(todoChip).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByText('1 of 3 in In progress')).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Next ticket in In progress' })).toBeVisible()
 })
 
 test('the features view (board or list) survives a reload, kept in the URL and remembered', async ({
