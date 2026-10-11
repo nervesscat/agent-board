@@ -1,0 +1,153 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
+import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { afterAll, describe, expect, it } from 'vitest'
+
+/**
+ * Migrations that move data, run against a database that has rows: migrate a fresh one up to the
+ * migration before, write rows the way the board wrote them then, and apply the rest.
+ */
+
+const folder = path.resolve('drizzle')
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-migrations-'))
+afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }))
+
+/** A copy of ./drizzle that stops at `lastTag`: what a board on that migration had applied. */
+function migrationsUpTo(lastTag: string) {
+  const journal = JSON.parse(fs.readFileSync(path.join(folder, 'meta', '_journal.json'), 'utf8')) as {
+    entries: { tag: string }[]
+  }
+  const end = journal.entries.findIndex((e) => e.tag === lastTag)
+  expect(end).toBeGreaterThanOrEqual(0)
+  const dir = fs.mkdtempSync(path.join(tmp, 'drizzle-'))
+  fs.mkdirSync(path.join(dir, 'meta'))
+  const entries = journal.entries.slice(0, end + 1)
+  for (const e of entries) fs.copyFileSync(path.join(folder, `${e.tag}.sql`), path.join(dir, `${e.tag}.sql`))
+  fs.writeFileSync(path.join(dir, 'meta', '_journal.json'), JSON.stringify({ ...journal, entries }))
+  return dir
+}
+
+function databaseAt(lastTag: string) {
+  const sqlite = new Database(':memory:')
+  sqlite.pragma('foreign_keys = ON')
+  migrate(drizzle(sqlite), { migrationsFolder: migrationsUpTo(lastTag) })
+  return sqlite
+}
+
+const columns = (sqlite: Database.Database, table: string) =>
+  (sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+
+describe('0023_daily_reports_and_shifts', () => {
+  it('turns the daily summaries into report versions and the due time into the shift end', () => {
+    const sqlite = databaseAt('0022_pr_review_stages')
+    const project = (name: string) =>
+      Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
+    const a = project('a')
+    const b = project('b')
+    const c = project('c')
+    const d = project('d')
+
+    const setting = sqlite.prepare(
+      'INSERT INTO report_settings (project_id, prompt, cadence, due_time) VALUES (?, ?, ?, ?)',
+    )
+    setting.run(a, 'By the hour.', 'daily', '18:00')
+    setting.run(b, '', 'weekly', null)
+    // A due time before the default shift start: the shift starts at midnight instead.
+    setting.run(c, '', 'daily', '08:30')
+
+    const summary = sqlite.prepare(
+      'INSERT INTO daily_summaries (project_id, date, author, body, createdAt) VALUES (?, ?, ?, ?, ?)',
+    )
+    // Inserted out of time order: the versions still come out oldest first.
+    summary.run(a, '2026-10-05', 'claude', 'second on the 5th', '2026-10-05T18:00:00.000Z')
+    summary.run(a, '2026-10-05', 'enrique', 'first on the 5th', '2026-10-05T09:00:00.000Z')
+    summary.run(a, '2026-10-04', 'claude', 'the 4th', '2026-10-04T17:00:00.000Z')
+    summary.run(d, '2026-10-06', 'codex', 'project d', '2026-10-06T12:00:00.000Z')
+    // Board-wide: no project to keep it under.
+    summary.run(null, '2026-10-05', 'claude', 'everything', '2026-10-05T20:00:00.000Z')
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const reports = sqlite
+      .prepare('SELECT project_id, cadence, period, body, author, createdAt FROM reports ORDER BY id')
+      .all()
+    expect(reports).toEqual([
+      {
+        project_id: a,
+        cadence: 'daily',
+        period: '2026-10-04',
+        body: 'the 4th',
+        author: 'claude',
+        createdAt: '2026-10-04T17:00:00.000Z',
+      },
+      {
+        project_id: a,
+        cadence: 'daily',
+        period: '2026-10-05',
+        body: 'first on the 5th',
+        author: 'enrique',
+        createdAt: '2026-10-05T09:00:00.000Z',
+      },
+      {
+        project_id: a,
+        cadence: 'daily',
+        period: '2026-10-05',
+        body: 'second on the 5th',
+        author: 'claude',
+        createdAt: '2026-10-05T18:00:00.000Z',
+      },
+      {
+        project_id: d,
+        cadence: 'daily',
+        period: '2026-10-06',
+        body: 'project d',
+        author: 'codex',
+        createdAt: '2026-10-06T12:00:00.000Z',
+      },
+    ])
+    expect(() => sqlite.prepare('SELECT * FROM daily_summaries').all()).toThrow(/no such table/)
+
+    const settings = sqlite
+      .prepare(
+        'SELECT project_id, prompt, template, shift_start, shift_end, workdays, alert_minutes FROM report_settings ORDER BY project_id',
+      )
+      .all()
+    expect(settings).toEqual([
+      {
+        project_id: a,
+        prompt: 'By the hour.',
+        template: '',
+        shift_start: '09:00',
+        shift_end: '18:00',
+        workdays: '[1,2,3,4,5]',
+        alert_minutes: 30,
+      },
+      {
+        project_id: b,
+        prompt: '',
+        template: '',
+        shift_start: '09:00',
+        shift_end: '17:00',
+        workdays: '[1,2,3,4,5]',
+        alert_minutes: 30,
+      },
+      {
+        project_id: c,
+        prompt: '',
+        template: '',
+        shift_start: '00:00',
+        shift_end: '08:30',
+        workdays: '[1,2,3,4,5]',
+        alert_minutes: 30,
+      },
+    ])
+    expect(columns(sqlite, 'report_settings')).not.toContain('due_time')
+    for (const table of ['report_settings_changes', 'origin_refs', 'origin_ref_moves'])
+      expect(columns(sqlite, table).length).toBeGreaterThan(0)
+    sqlite.close()
+  })
+})

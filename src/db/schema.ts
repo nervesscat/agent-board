@@ -322,32 +322,29 @@ export const activity = sqliteTable(
   (t) => [index('activity_created').on(t.createdAt)],
 )
 
-// The highest-level line for a day: what got done, in a sentence or three.
-export const dailySummaries = sqliteTable(
-  'daily_summaries',
-  {
-    id: id(),
-    projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
-    date: text().notNull(),
-    author: text().notNull(),
-    body: text().notNull(),
-    createdAt: now(),
-  },
-  (t) => [index('daily_summaries_date').on(t.date)],
-)
-
-// What a project's report must say and how (the prompt, markdown), and when one is due. The human edits
-// it on the Daily page; agents read it, and may change it, through the API.
+// What a project's report must say and how (the prompt, markdown), the shape it takes (the template),
+// and when one is due: at the end of the project's shift. The human edits it on the Daily page; agents
+// read it, and may change it, through the API (a prompt or template change stays flagged for the human).
 export const reportSettings = sqliteTable('report_settings', {
   projectId: integer('project_id')
     .primaryKey()
     .references(() => projects.id, { onDelete: 'cascade' }),
   prompt: text().notNull().default(''),
+  // The markdown skeleton a generated report must fill (its headings, in order); '' is the default one.
+  template: text().notNull().default(''),
   cadence: text().$type<ReportCadence>().notNull().default('off'),
   // The day a weekly report is due, 1 (Monday) to 7 (Sunday).
   weekday: integer().notNull().default(5),
-  // Local `HH:MM` the report is due by on its day; null means by the end of that day.
-  dueTime: text('due_time'),
+  // The project's working hours, local `HH:MM`; the report is due at the shift's end.
+  shiftStart: text('shift_start').notNull().default('09:00'),
+  shiftEnd: text('shift_end').notNull().default('17:00'),
+  // The days a daily report is asked for, ISO weekdays 1 (Monday) to 7 (Sunday).
+  workdays: text({ mode: 'json' })
+    .$type<number[]>()
+    .notNull()
+    .default(sql`'[1,2,3,4,5]'`),
+  // How long before the shift's end the board starts reminding that the report is due.
+  alertMinutes: integer('alert_minutes').notNull().default(30),
   format: text().$type<ReportFormat>().notNull().default('text'),
   // The first period tracked (YYYY-MM-DD), set when the cadence changes: earlier periods without a
   // report are not counted as missing.
@@ -355,6 +352,28 @@ export const reportSettings = sqliteTable('report_settings', {
   updatedBy: text('updated_by').notNull().default(''),
   updatedAt: now(),
 })
+
+// Every change of a project's report prompt or template, with the value before it, so any can be
+// undone. An agent's change is pending until the human accepts or reverts it.
+export const reportSettingsChanges = sqliteTable(
+  'report_settings_changes',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    field: text().$type<'prompt' | 'template'>().notNull(),
+    oldValue: text('old_value').notNull().default(''),
+    newValue: text('new_value').notNull().default(''),
+    changedBy: text('changed_by').notNull(),
+    byAgent: integer('by_agent', { mode: 'boolean' }).notNull().default(false),
+    state: text().$type<'accepted' | 'pending' | 'reverted'>().notNull().default('accepted'),
+    resolvedBy: text('resolved_by').notNull().default(''),
+    resolvedAt: text('resolved_at'),
+    createdAt: now(),
+  },
+  (t) => [index('report_settings_changes_project').on(t.projectId, t.createdAt)],
+)
 
 // A report for one period of a project: the day (YYYY-MM-DD) or, for a weekly cadence, the Monday of the
 // week. Posting again for the same period adds a newer version; the latest is the report.
@@ -374,6 +393,39 @@ export const reports = sqliteTable(
   (t) => [index('reports_project_period').on(t.projectId, t.period)],
 )
 
+// Origin's branches of a repo as the board last saw them, and each move it saw since (a branch that
+// appeared, moved or went away): what reached origin on a given day.
+export const originRefs = sqliteTable(
+  'origin_refs',
+  {
+    repoId: integer('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    // The branch's name on origin, e.g. `main`.
+    ref: text().notNull(),
+    sha: text().notNull(),
+    seenAt: now(),
+  },
+  (t) => [primaryKey({ columns: [t.repoId, t.ref] })],
+)
+
+export const originRefMoves = sqliteTable(
+  'origin_ref_moves',
+  {
+    id: id(),
+    repoId: integer('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    ref: text().notNull(),
+    // Null: the branch appeared.
+    oldSha: text('old_sha'),
+    // Null: the branch went away.
+    newSha: text('new_sha'),
+    seenAt: now(),
+  },
+  (t) => [index('origin_ref_moves_repo_seen').on(t.repoId, t.seenAt)],
+)
+
 // Board-wide preferences the human sets in Settings, one row per key (the value is JSON).
 export const settings = sqliteTable('settings', {
   key: text().primaryKey(),
@@ -389,7 +441,6 @@ export const actors = sqliteTable('actors', {
 })
 
 export type Activity = typeof activity.$inferSelect
-export type DailySummary = typeof dailySummaries.$inferSelect
 export type Project = typeof projects.$inferSelect
 export type Agent = typeof agents.$inferSelect
 export type Stage = typeof stages.$inferSelect
@@ -404,3 +455,6 @@ export type Comment = typeof comments.$inferSelect
 export type ReviewResult = typeof reviewResults.$inferSelect
 export type ReportSettings = typeof reportSettings.$inferSelect
 export type Report = typeof reports.$inferSelect
+export type ReportSettingsChange = typeof reportSettingsChanges.$inferSelect
+export type OriginRef = typeof originRefs.$inferSelect
+export type OriginRefMove = typeof originRefMoves.$inferSelect
