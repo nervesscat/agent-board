@@ -1,12 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
+import { TasksInput } from '#/components/TasksInput'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -20,10 +21,10 @@ import {
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
-import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { newTicketStage } from '#/lib/stages'
+import { addTasks } from '#/lib/tasks'
 import { ticketsKey } from '#/lib/tickets'
 import { cn } from '#/lib/utils'
 
@@ -38,7 +39,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [tasks, setTasks] = useState('')
+  const [tasks, setTasks] = useState<string[]>([])
+  const [taskText, setTaskText] = useState('')
   const [assignee, setAssignee] = useState('')
   const [tags, setTags] = useState('')
   const { data: project } = useProject(projectId)
@@ -53,6 +55,19 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const files = useUploads()
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop(files.add)
+  // The heading's height: a new lane's names its parent, whose title can wrap over many lines.
+  const [headHeight, setHeadHeight] = useState(0)
+  const measureHead = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return
+    const measure = () => setHeadHeight(el.offsetHeight)
+    measure()
+    const resized = new ResizeObserver(measure)
+    resized.observe(el)
+    return () => resized.disconnect()
+  }, [])
+  // Room kept around the caret: a gap below the heading, and above the one-button footer (65px) with
+  // a gap. The browser keeps it as the fields' scroll padding, the instructions editor as its own.
+  const caretRoom = { top: headHeight + 16, bottom: 96 }
   const create = useMutation({
     mutationFn: () =>
       post<Ticket>(`/api/projects/${projectId}/tickets`, {
@@ -66,10 +81,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         parentId: parent?.id,
         status,
         repoId: repoId ? Number(repoId) : undefined,
-        tasks: tasks
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        tasks: addTasks(tasks, taskText),
         attachmentIds: files.ids,
       }),
     onSuccess: () => {
@@ -78,7 +90,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       setOpen(false)
       setTitle('')
       setBody('')
-      setTasks('')
+      setTasks([])
+      setTaskText('')
       setAssignee('')
       setTags('')
       setStage('')
@@ -94,15 +107,25 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       >
         <Plus data-icon="inline-start" /> New {noun}
       </DialogTrigger>
-      <DialogContent {...drop.props} className={cn('sm:max-w-xl', drop.className)}>
+      {/* Long instructions, tasks or files scroll the form, which never outgrows the screen; the
+          heading and the footer stick to its ends, so Create and the close button stay in reach. The
+          caret is kept clear of them: below the heading as tall as it is, above the one-button footer. */}
+      <DialogContent
+        {...drop.props}
+        className={cn('p-0 *:data-[slot=dialog-close]:z-20 sm:max-w-xl', drop.className)}
+      >
         <form
-          className="space-y-4"
+          className="max-h-[calc(100dvh-2rem)] space-y-4 overflow-y-auto p-4"
+          style={{ scrollPaddingTop: caretRoom.top, scrollPaddingBottom: caretRoom.bottom }}
           onSubmit={(e) => {
             e.preventDefault()
             if (!files.uploading && ready) create.mutate()
           }}
         >
-          <DialogHeader>
+          <DialogHeader
+            ref={measureHead}
+            className="sticky -top-4 z-10 -mx-4 -mt-4 mb-0 rounded-t-xl bg-popover p-4"
+          >
             <DialogTitle>New {noun}</DialogTitle>
             <DialogDescription>
               {parent ? (
@@ -139,6 +162,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
               onFiles={files.add}
               onAttach={() => fileInput.current?.click()}
               minHeight="min-h-32"
+              caretRoom={caretRoom}
               label="Instructions"
               placeholder="What to do, how to know it is done, what never to do. Paste or drop files to attach them."
             />
@@ -154,8 +178,14 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tasks">Initial tasks, one per line</Label>
-            <Textarea id="tasks" value={tasks} onChange={(e) => setTasks(e.target.value)} rows={3} />
+            <Label htmlFor="tasks">Initial tasks</Label>
+            <TasksInput
+              id="tasks"
+              value={tasks}
+              onChange={setTasks}
+              text={taskText}
+              onTextChange={setTaskText}
+            />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {status && (
@@ -216,7 +246,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
               in the same repo.
             </p>
           )}
-          <DialogFooter>
+          <DialogFooter className="sticky -bottom-4 z-10 bg-popover bg-linear-to-b from-muted/50 to-muted/50">
             <Button type="submit" disabled={create.isPending || files.uploading || !ready}>
               {files.uploading ? 'Uploading…' : 'Create'}
             </Button>

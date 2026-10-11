@@ -124,7 +124,7 @@ test('Tab from the title reaches the instructions text, then the formatting butt
   await expect(d.attach).toBeFocused()
   await expect(d.text).toHaveText('hello')
   await page.keyboard.press('Tab')
-  await expect(d.dialog.getByLabel('Initial tasks, one per line')).toBeFocused()
+  await expect(d.dialog.getByLabel('Initial tasks')).toBeFocused()
 
   // Shift+Tab walks the same way back.
   await page.keyboard.press('Shift+Tab')
@@ -241,7 +241,7 @@ test('with a file pending, Tab goes from attach to the file, and Shift+Tab back'
   await page.keyboard.press('Tab')
   await expect(remove).toBeFocused()
   await page.keyboard.press('Tab')
-  await expect(d.dialog.getByLabel('Initial tasks, one per line')).toBeFocused()
+  await expect(d.dialog.getByLabel('Initial tasks')).toBeFocused()
 
   await page.keyboard.press('Shift+Tab')
   await expect(remove).toBeFocused()

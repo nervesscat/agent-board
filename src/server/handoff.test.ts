@@ -22,7 +22,7 @@ const git = (...args: string[]) => gitIn(repo, ...args)
 const COMMIT_AT = '2026-01-10T12:00:00.000Z'
 const facts = (over: Partial<HandoffFacts> = {}): HandoffFacts => ({
   branch: 'feat/x',
-  pr: { number: 7, ci: 'passing' },
+  pr: { number: 7, ci: 'passing', merged: false },
   push: { state: 'pushed', ahead: 0 },
   previews: [{ url: 'http://localhost:47101', running: true }],
   lastCommitAt: COMMIT_AT,
@@ -37,7 +37,9 @@ describe('handoffOf', () => {
     const { handoffOf } = await import('./handoff')
     const h = handoffOf(facts())
     expect(h.missing).toEqual([])
+    // Merged first, waiting on the human: listed, never missing.
     expect(h.checks.map((c) => [c.code, c.ok])).toEqual([
+      ['not_merged', false],
       ['no_pr', true],
       ['not_pushed', true],
       ['no_preview', true],
@@ -46,11 +48,41 @@ describe('handoffOf', () => {
     ])
   })
 
+  it('not_merged: merged by push state or by the PR, and never missing', async () => {
+    const { handoffOf } = await import('./handoff')
+    const merged = (over: Partial<HandoffFacts>) => {
+      const h = handoffOf(facts(over))
+      expect(h.checks[0]).toMatchObject({ code: 'not_merged', label: 'Merged' })
+      return h
+    }
+    expect(merged({}).checks[0]).toMatchObject({ ok: false, text: 'Not merged yet' })
+    expect(merged({ push: { state: 'merged', ahead: 0, into: 'main' } }).checks[0]).toMatchObject({
+      ok: true,
+      text: 'Merged into main',
+    })
+    expect(merged({ push: { state: 'merged', ahead: 0 } }).checks[0]!.text).toBe('Merged into its base')
+    // Merged on GitHub while the branch still reads as pushed.
+    expect(merged({ pr: { number: 7, ci: 'passing', merged: true } }).checks[0]).toMatchObject({
+      ok: true,
+      text: 'PR #7 merged',
+    })
+    // Not merged, with other items missing: those are listed, in order, and Merged is not.
+    const h = merged({ pr: null, previews: [], posts: [] })
+    expect(h.checks[0]!.ok).toBe(false)
+    expect(h.missing.map((m) => m.code)).toEqual(['no_pr', 'no_preview', 'no_handoff_post'])
+    for (const push of [
+      { state: 'ahead', ahead: 2 },
+      { state: 'local-only', ahead: 1 },
+      { state: 'none', ahead: 0 },
+    ] as const)
+      expect(merged({ push }).missing.map((m) => m.code)).toEqual(['not_pushed'])
+  })
+
   it('no_pr: without a PR', async () => {
     const { handoffOf } = await import('./handoff')
     const codes = (f: HandoffFacts) => handoffOf(f).missing.map((m) => m.code)
     expect(codes(facts({ pr: null }))).toEqual(['no_pr'])
-    expect(codes(facts({ pr: { number: 3, ci: null } }))).toEqual([])
+    expect(codes(facts({ pr: { number: 3, ci: null, merged: false } }))).toEqual([])
   })
 
   it('not_pushed: ahead, local-only or no branch; a merged branch is fine', async () => {
@@ -65,7 +97,7 @@ describe('handoffOf', () => {
     ])
     expect(missing({ state: 'none', ahead: 0 }, '')).toEqual([{ code: 'not_pushed', text: 'No branch set' }])
     expect(missing({ state: 'merged', ahead: 0, into: 'main' })).toEqual([])
-    expect(handoffOf(facts({ push: { state: 'merged', ahead: 0, into: 'main' } })).checks[1]!.text).toBe(
+    expect(handoffOf(facts({ push: { state: 'merged', ahead: 0, into: 'main' } })).checks[2]!.text).toBe(
       'Merged into main',
     )
   })
@@ -119,7 +151,7 @@ describe('handoffOf', () => {
   it('checks_unknown: only when CI is failing or still running', async () => {
     const { handoffOf } = await import('./handoff')
     const ci = (state: 'passing' | 'failing' | 'pending' | 'none' | null) =>
-      handoffOf(facts({ pr: { number: 7, ci: state } }))
+      handoffOf(facts({ pr: { number: 7, ci: state, merged: false } }))
     expect(ci('failing').missing).toEqual([{ code: 'checks_unknown', text: "The PR's CI is failing" }])
     expect(ci('pending').missing).toEqual([{ code: 'checks_unknown', text: "The PR's CI is still running" }])
     expect(ci('passing').missing).toEqual([])
@@ -172,7 +204,11 @@ describe('moving a ticket to review', () => {
     const needs = await import('./needs')
     const { fetchRepo } = await import('./push')
     const projectId = db.insert(schema.projects).values({ name: 'p' }).returning().get().id
-    db.insert(schema.repos).values({ projectId, name: 'repo', repoPath: repo, baseBranch: 'main' }).run()
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId, name: 'repo', repoPath: repo, baseBranch: 'main' })
+      .returning()
+      .get().id
     noteActor('enrique', 'human')
     const t = features.createTicket(
       projectId,
@@ -214,5 +250,36 @@ describe('moving a ticket to review', () => {
       agent: true,
     })
     expect('handoff' in again && again.handoff.missing).toEqual([])
+    // Nothing missing, and the branch not merged yet: that waits on the human.
+    expect('handoff' in again && again.handoff.checks[0]).toMatchObject({
+      code: 'not_merged',
+      ok: false,
+      text: 'Not merged yet',
+    })
+
+    // GitHub merged PR #12 (the queue saw it): Merged, though the branch is still on origin.
+    const now = new Date().toISOString()
+    db.insert(schema.prs)
+      .values({
+        projectId,
+        repoId,
+        number: 12,
+        title: 'Hand it off',
+        url: 'https://github.com/o/r/pull/12',
+        author: 'claude',
+        headRef: 'feat/handoff',
+        baseRef: 'main',
+        headSha: git('rev-parse', 'feat/handoff'),
+        updatedAt: now,
+        fetchedAt: now,
+        open: false,
+        mergedAt: now,
+        closedAt: now,
+      })
+      .run()
+    const merged = await needs.ticketView(t.id)
+    expect(merged.push.state).toBe('pushed')
+    expect(merged.handoff!.missing).toEqual([])
+    expect(merged.handoff!.checks[0]).toMatchObject({ code: 'not_merged', ok: true, text: 'PR #12 merged' })
   }, 30_000)
 })
