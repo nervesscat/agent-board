@@ -17,7 +17,11 @@ fs.writeFileSync(
   path.join(buildDir, 'server', 'index.mjs'),
   `import http from 'node:http'
 if (process.env.CRASH) process.exit(3)
-const server = http.createServer((req, res) => res.end(String(process.pid)))
+let first = Number(process.env.SLOW_FIRST ?? 0)
+const server = http.createServer((req, res) => {
+  setTimeout(() => res.end(String(process.pid)), first)
+  first = 0
+})
 server.on('error', () => process.exit(0))
 server.listen(Number(process.env.PORT), process.env.HOST)
 `,
@@ -78,6 +82,18 @@ describe('startServer', () => {
     expect(s.port).not.toBe(port)
     expect(await answeredBy(s)).toBe(String(s.pid))
     expect(fs.readFileSync(log, 'utf8')).toMatch(/exited \(0\) with the port in use/)
+  }, 60_000)
+
+  it('keeps its own server when its first answer is slow (vite dev compiling it)', async () => {
+    process.env.SLOW_FIRST = '6000'
+    try {
+      const port = await freePort(47380)
+      const s = await start(port)
+      expect(s.port).toBe(port)
+      expect(await answeredBy(s)).toBe(String(s.pid))
+    } finally {
+      delete process.env.SLOW_FIRST
+    }
   }, 60_000)
 
   it('fails clearly when its server exits on a free port, without trying another', async () => {

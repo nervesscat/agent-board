@@ -237,15 +237,21 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
       killTree(proc)
       throw new Error(`the bench server did not answer within 2 minutes; see ${log}`)
     }
-    // The preload in its own process reports every request carrying this id.
+    // The preload in its own process reports every request carrying this id. Waited for from now (the
+    // report may come first), but given up on only 5 s after the answer: under vite dev the first
+    // answer can take longer than that to compile.
     const id = crypto.randomUUID()
-    const reported = reply(id, 5000)
+    const reported = new Promise((resolve) => waiting.set(id, resolve))
     let status = 0
     try {
       status = (await send(agent, `${baseURL}/api/health`, { headers: { 'x-bench-req': id } })).status
     } catch {}
     if (status === 200) {
-      if ((await reported) && exited === null) break
+      const late = setTimeout(() => waiting.get(id)?.(null), 5000)
+      const own = await reported
+      clearTimeout(late)
+      waiting.delete(id)
+      if (own && exited === null) break
       if (exited === null) return giveUp('a 200 its own process did not serve')
       continue
     }
