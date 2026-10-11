@@ -75,6 +75,7 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Cleanu
 
   for (const daily of [`/projects/${project.id}/daily`, '/daily']) {
     await page.goto(daily)
+    await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).tap()
     await expect(page.getByText(/asked for a decision on/).first()).toBeVisible()
     expect(await scrollsSideways(page), daily).toBe(false)
   }

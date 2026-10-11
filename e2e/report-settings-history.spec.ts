@@ -137,6 +137,7 @@ test('an agent’s change of the template is shown as a diff and reverted, as a 
 
   // Both are lines of the day's activity.
   const activity = page.getByRole('region', { name: 'Activity' })
+  await activity.getByRole('button', { name: 'Open all' }).click()
   await expect(activity.getByRole('button', { name: 'changed the report template' })).toBeVisible()
   await expect(
     activity.getByRole('button', { name: "reverted claude's change of the report template" }),
@@ -156,9 +157,9 @@ test('an activity line of a change opens its diff', async ({ page, project, huma
   )
   await page.goto(`/projects/${project.id}/daily`)
 
-  const lines = page
-    .getByRole('region', { name: 'Activity' })
-    .getByRole('button', { name: 'changed the report prompt' })
+  const activity = page.getByRole('region', { name: 'Activity' })
+  await activity.getByRole('button', { name: 'Open all' }).click()
+  const lines = activity.getByRole('button', { name: 'changed the report prompt' })
   await expect(lines).toHaveCount(2)
   await lines.last().click()
   const dialog = page.getByRole('dialog', { name: 'Change of the report prompt' })
@@ -209,10 +210,9 @@ test.describe('at 390px, light and dark', () => {
       await settings.screenshot({ path: test.info().outputPath(`template-settings-${colorScheme}.png`) })
     }
 
-    await page
-      .getByRole('region', { name: 'Activity' })
-      .getByRole('button', { name: 'changed the report template' })
-      .tap()
+    const activity = page.getByRole('region', { name: 'Activity' })
+    await activity.getByRole('button', { name: 'Open all' }).tap()
+    await activity.getByRole('button', { name: 'changed the report template' }).tap()
     const dialog = page.getByRole('dialog', { name: 'Change of the report template' })
     await expect(dialog.locator('ins').first()).toBeVisible()
     expect(await scrollsSideways(page)).toBe(false)
