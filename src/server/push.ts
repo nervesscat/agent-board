@@ -22,7 +22,8 @@ import { kindOf, listStages } from './stages'
 /**
  * Whether a branch is on origin, read from the checkout's copy of origin's branches. That copy is only
  * as fresh as its last fetch, so each repo is fetched in the background at most every few minutes
- * (never while a request waits on it), and on demand. The board never pushes.
+ * (never while a request waits on it), and on demand. The board pushes nothing but the origin
+ * deletions the human confirms on the Cleanup page (`cleanupActions.ts`).
  *
  * - `pushed`: origin has the branch and every commit of it (origin may be ahead: `behind`);
  * - `ahead`: the local branch has `ahead` commits origin's lacks;

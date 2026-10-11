@@ -5,7 +5,8 @@ Per project (one or more repos): the PR queue of what you review and what you op
 in flight (tickets → lanes for parallel work → tasks → branches and workspaces → updates with
 screenshots and recordings → threads), the PR reviews your agents record, and a day-by-day log with
 a one-glance summary and the report each project asks for (daily or weekly, as its prompt says),
-tracked period by period. Git and GitHub are **read-only**.
+tracked period by period. GitHub is **read-only**, and so is git, but for the finished branches and
+worktrees the human deletes from the Cleanup page.
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
@@ -166,7 +167,27 @@ down, uploads fail with a clear error and cached files still open.
 
 A project's Cleanup page (MCP `cleanup_report`) lists what its finished tickets left behind:
 registered workspaces, local and origin branches and worktrees, each branch checked against where its
-work should have landed. The board never deletes those; agents do with the human's go-ahead.
+work should have landed, and origin's copy by its own commits.
+
+From that page, and only there, the human deletes what landed: a local branch, a branch on origin, or
+a branch with its worktrees, one row or every eligible row at once, each after a dialog that lists
+exactly what will go. Just before it acts, the board checks every item again on fresh git state
+(origin fetched first):
+
+- the ticket is done, cancelled or archived;
+- the work landed: merged, rebased or edited in, or for origin's copy a merged PR whose head is that
+  very commit;
+- the branch is still at the commit the human saw, and no worktree came up that they were not shown;
+- it is not protected: the repo's base branch, the main checkout's branch, origin's default branch, or
+  anything a ticket in work or an open PR uses or stands on, in any project on that checkout.
+
+A worktree goes only when git lists no changes or untracked files in it (ignored files such as
+`node_modules` go with it): never with `--force`, never the main checkout or a locked one. A preview
+the board runs from it is stopped first, and the workspaces registered at it are unregistered. Each
+deletion is logged on its ticket as `branch @ sha`, and the page keeps the commands that restore it.
+Agents never get these actions (403, and no MCP tool deletes); they delete local branches and
+worktrees themselves with the human's go-ahead, and never origin's. A board on a copy of the live
+data (a preview, `pnpm dev`) deletes nothing: its repos are the real ones.
 
 It also counts the board's **unattached uploads**: files no post, reply, ticket or agent picture
 holds and no text links to (`/api/uploads/<id>`), such as images added to a New ticket window that was
@@ -216,7 +237,8 @@ the gate device or token name.
 | PUT          | `/api/tickets/:id/resume` `{note, as?}`                                                                       | the resume note, "Where we left off" (human or agents; `as` agents only); each version is also a handoff post                                                                                                                                                                                             |
 | GET          | `/api/tickets/:id/git`                                                                                        | branch + workspaces, live from git, each with `reach` (merged/rebased/edited/unique vs its base chain) and `push`; `includes[]`: open tickets whose unmerged work its branch holds                                                                                                                        |
 | GET/POST     | `/api/projects/:id/push` · `/api/projects/:id/push/refresh`                                                   | whether each ticket in work has its branch on origin (`push`: below), one batch of git per repo · fetch origin now, then the same                                                                                                                                                                         |
-| GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches, worktrees or running previews; `reach=0` skips the merge checks; `uploads` counts the unattached ones                                                                                                                                                  |
+| GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches, worktrees or running previews, each branch with `reach`, `remoteReach`, `protected` and `can` (what the human may delete); `reach=0` skips the merge checks; `repos` says which git could not read; `uploads` counts the unattached ones               |
+| POST         | `/api/projects/:id/cleanup/delete` `{items: [{ticketId, branch, kind, sha, worktrees?}]}`                     | the human's (403 for agents): delete closed tickets' worked branches, `kind` `local`, `remote` (on origin) or `worktrees` (its worktrees, then the local branch), `sha` the commit seen; each is checked again first; answers each item's `{ok, outcome, reason, removed, restore}`                       |
 | DELETE       | `/api/uploads/unattached`                                                                                     | delete the unattached uploads older than a day now `{deleted, bytes, failed}` (the human's)                                                                                                                                                                                                               |
 | POST         | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`                                          | todo list                                                                                                                                                                                                                                                                                                 |
 | POST         | `/api/tickets/:id/workspaces` `{name, branch?, path?, agent?, previewUrl?}` · DELETE `/api/workspaces/:id`    | worktrees / sub-branches / subagents                                                                                                                                                                                                                                                                      |
@@ -293,4 +315,5 @@ was merged and the branch deleted; a branch cut from the base and never committe
 `remote-only` (only on origin, e.g. after cleanup) or `none` (no branch, or it exists nowhere). It is
 read from the checkout's `origin/*` refs, so the board fetches each repo in the background at most
 every 5 minutes (never prompting, never holding up a request); `checkedAt` is the last fetch, and
-the refresh action fetches at once. The board never pushes.
+the refresh action fetches at once. The board pushes nothing but the origin deletions the human
+confirms on the Cleanup page.

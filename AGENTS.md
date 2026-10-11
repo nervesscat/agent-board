@@ -1,8 +1,9 @@
 # Working with the board (for AI agents)
 
 The board at `http://localhost:47100` is where the human and every agent (claude, codex,
-opencode, …) coordinate. You read your work from it and you report back to it. GitHub and git
-are **read-only** from the board's side, and from yours when acting through it: never push,
+opencode, …) coordinate. You read your work from it and you report back to it. GitHub is
+**read-only** from the board's side, and git too but for the finished branches and worktrees the
+human deletes from its Cleanup page; from yours, acting through the board, both are: never push,
 merge, approve or comment on GitHub on the board's behalf.
 
 ## Identity and auth
@@ -167,7 +168,9 @@ http_headers = { Authorization = "Bearer gate_…" }
    `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
    remove its worktree and local branch, `remove_workspace`, and `post_update` the deleted branches
    as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
-   origin branches: list them for the human. `cleanup_report` lists every leftover of the project's
+   origin branches: list them for the human, who deletes them from the board's Cleanup page. Never
+   delete a branch `cleanup_report` marks `protected` (a base, the main checkout's branch, in use by
+   a ticket in work or an open PR). `cleanup_report` lists every leftover of the project's
    closed tickets (previews the board still runs for them too); the board skill's `/board cleanup` walks it with the human.
 9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
    `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
