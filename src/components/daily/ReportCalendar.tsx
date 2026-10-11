@@ -136,6 +136,13 @@ const MARK: Record<ReportStatus, string> = {
   upcoming: 'bg-muted-foreground/40',
   off: 'border border-muted-foreground/40',
 }
+// On the day on show (the primary colour, light in the dark theme) the dot takes a shade that shows.
+const ON_SELECTED: Record<ReportStatus, string> = {
+  done: 'dark:bg-emerald-700',
+  missing: 'dark:bg-rose-700',
+  upcoming: 'bg-primary-foreground/50',
+  off: 'border-primary-foreground/60',
+}
 const TINT: Record<ReportStatus, string> = {
   done: 'bg-emerald-500/15 dark:bg-emerald-400/15',
   missing: 'bg-rose-500/15 dark:bg-rose-400/20',
@@ -159,7 +166,11 @@ function StatusDay({ className, children, ...props }: ComponentProps<typeof DayB
       )}
     >
       {children}
-      <i aria-hidden data-status={s} className={cn('size-1.5 rounded-full', s && MARK[s])} />
+      <i
+        aria-hidden
+        data-status={s}
+        className={cn('size-1.5 rounded-full', s && MARK[s], s && props.modifiers.selected && ON_SELECTED[s])}
+      />
     </CalendarDayButton>
   )
 }
