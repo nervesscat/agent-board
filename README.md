@@ -303,11 +303,15 @@ the refresh action fetches at once. The board never pushes.
 **Pushed today** (`GET /api/projects/:id/pushed-today`) counts what reached origin on the local day:
 each time the board reads a checkout's copy of origin's branches it records which of them moved
 (old sha to new sha; the first look at a repo only notes where they are, and one that finds origin
-empty after the board's own fetch is a look too, so a new repo's first push counts), and the commits those
-moves brought that no origin branch had just before count once each, under the first branch that
-brought them, whenever they were written. Merge commits do not count. Lines added and removed are
-their `git diff --shortstat`. The answer is `{date, commits, added, removed, checkedAt, repos}`, each
-repo with its `branches` (and a branch's `ticket` when it is one's); the Daily page shows it green,
+empty after the board's own fetch is a look too, so a new repo's first push counts; a listing where
+every branch the board knew is gone at once records nothing, so their coming back is no move). Each of
+the day's moves brings the commits that no tip origin had since local midnight reaches: where its
+branches stood when the day began and every tip a move set before this one, branches deleted or gone
+since included, so a branch deleted and pushed again as it was brings nothing. They count once each,
+under the first branch that brought them, whenever they were written. Merge commits do not count.
+Lines added and removed are their `git diff --shortstat`. The answer is
+`{date, commits, added, removed, checkedAt, repos}`, each repo with its `branches` (and a branch's
+`ticket` when it is one's); the Daily page shows it green,
 or grey when nothing was pushed, and the project's sidebar on a day something was. What the
 commits are is kept by their shas, so reading it again asks git nothing new; pushes made while the
 board was not reading the repo count on the day it next does.
