@@ -237,7 +237,7 @@ describe('deleting a worked local branch', () => {
 describe('deleting a worked branch on origin', () => {
   it('deletes origin’s copy alone, after fetching, and answers how to put it back', async () => {
     const { 'feat/b2': sha } = land(['feat/b2'])
-    git('push', '-q', 'origin', 'feat/b2')
+    git('push', '-q', 'origin', 'feat/b2', 'main')
     const t = done('b2', 'feat/b2')
     const [r] = await del([{ ticketId: t.id, branch: 'feat/b2', kind: 'remote', sha }])
     expect(r).toMatchObject({
@@ -269,6 +269,22 @@ describe('deleting a worked branch on origin', () => {
     const [r] = await del([{ ticketId: t.id, branch: 'feat/b2-moved', kind: 'remote', sha: seen }])
     expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/moved since/) })
     expect(gitIn(origin)('rev-parse', 'refs/heads/feat/b2-moved')).toBe(theirs)
+  })
+
+  it('refuses origin’s copy while only a base here holds it, not origin’s', async () => {
+    const { 'feat/b2-here': sha } = land(['feat/b2-here'])
+    git('push', '-q', 'origin', 'feat/b2-here')
+    const t = done('b2 here', 'feat/b2-here')
+    const b = (await branchOf(t.id, 'feat/b2-here'))!
+    expect(b.reach?.state).toBe('merged')
+    expect(b.remoteReach).toMatchObject({ state: 'unique', into: 'origin/main' })
+    const [r] = await del([{ ticketId: t.id, branch: 'feat/b2-here', kind: 'remote', sha }])
+    expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/not in origin\/main/) })
+    expect(hasRef(origin, 'refs/heads/feat/b2-here')).toBe(true)
+
+    git('push', '-q', 'origin', 'main')
+    const [again] = await del([{ ticketId: t.id, branch: 'feat/b2-here', kind: 'remote', sha }])
+    expect(again!.outcome).toBe('deleted')
   })
 
   it('judges origin’s copy by its own commits, and takes a merged PR’s very head', async () => {
@@ -339,7 +355,7 @@ describe('deleting a worked branch with its worktrees', () => {
     expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
     expect(r!.removed.map((p) => path.resolve(p))).toEqual([wt('b3')])
     expect(r!.restore[0]).toBe(`git branch feat/b3 ${sha}`)
-    expect(r!.restore[1]).toMatch(/^git worktree add ".+agent-board-b3" feat\/b3$/)
+    expect(r!.restore[1]).toMatch(/^git worktree add \S+agent-board-b3 feat\/b3$/)
     expect(fs.existsSync(wt('b3'))).toBe(false)
     expect(worktreePaths()).not.toContain(wt('b3'))
     expect(hasRef(repo, 'refs/heads/feat/b3')).toBe(false)
@@ -397,6 +413,25 @@ describe('deleting a worked branch with its worktrees', () => {
     ])
     expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/locked/) })
     expect(fs.existsSync(wt('b5l'))).toBe(true)
+  })
+
+  it('refuses a worktree whose folder is gone, rather than reading it clean', async () => {
+    const { 'feat/b3g': sha } = land(['feat/b3g'])
+    git('worktree', 'add', '-q', wt('b3g'), 'feat/b3g')
+    fs.rmSync(wt('b3g'), { recursive: true, force: true })
+    const t = done('b3 gone', 'feat/b3g')
+    const b = (await branchOf(t.id, 'feat/b3g'))!
+    const [r] = await del([
+      {
+        ticketId: t.id,
+        branch: 'feat/b3g',
+        kind: 'worktrees',
+        sha,
+        worktrees: b.worktrees.map((w) => w.path),
+      },
+    ])
+    expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/is gone/) })
+    expect(hasRef(repo, 'refs/heads/feat/b3g')).toBe(true)
   })
 
   it('never removes a worktree the human was not shown', async () => {
@@ -581,6 +616,31 @@ describe('never deletes what is protected', () => {
     expect(() => git('status', '--porcelain')).not.toThrow()
     expect(fs.existsSync(path.join(repo, '.git'))).toBe(true)
     expect(hasRef(repo, 'refs/heads/feat/b4-free')).toBe(true)
+  })
+
+  it('a worktree another project reads as its repo', async () => {
+    const { 'feat/b4wt': sha } = land(['feat/b4wt'])
+    git('worktree', 'add', '-q', wt('b4wt'), 'feat/b4wt')
+    const pid = dbm.db.insert(dbm.schema.projects).values({ name: 'reads a worktree' }).returning().get().id
+    dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId: pid, name: 'wt', repoPath: wt('b4wt'), baseBranch: 'main' })
+      .run()
+    const t = done('b4 worktree', 'feat/b4wt')
+    const b = (await branchOf(t.id, 'feat/b4wt'))!
+    expect(b.worktrees[0]!.protected).toBe("a repo's checkout on the board")
+    const [r] = await del([
+      {
+        ticketId: t.id,
+        branch: 'feat/b4wt',
+        kind: 'worktrees',
+        sha,
+        worktrees: b.worktrees.map((w) => w.path),
+      },
+    ])
+    expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/checkout on the board/) })
+    expect(fs.existsSync(wt('b4wt'))).toBe(true)
+    expect(hasRef(repo, 'refs/heads/feat/b4wt')).toBe(true)
   })
 
   it('a ticket that is not closed any more', async () => {

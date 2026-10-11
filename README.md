@@ -167,7 +167,7 @@ down, uploads fail with a clear error and cached files still open.
 
 A project's Cleanup page (MCP `cleanup_report`) lists what its finished tickets left behind:
 registered workspaces, local and origin branches and worktrees, each branch checked against where its
-work should have landed, and origin's copy by its own commits.
+work should have landed, and origin's copy by its own commits against origin's copies of the bases.
 
 From that page, and only there, the human deletes what landed: a local branch, a branch on origin, or
 a branch with its worktrees, one row or every eligible row at once, each after a dialog that lists

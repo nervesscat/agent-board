@@ -251,6 +251,13 @@ export function pathKey(p: string, platform: NodeJS.Platform = process.platform)
 export const samePath = (a: string, b: string, platform: NodeJS.Platform = process.platform) =>
   pathKey(a, platform) === pathKey(b, platform)
 
+/**
+ * A word for a command the human pastes into a shell: as it is when it is plain, else in single quotes
+ * (a branch name may hold `;`, `$` or a backtick).
+ */
+export const shellArg = (word: string) =>
+  /^[\w./@+:-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`
+
 /** Whether the human may delete it from the Cleanup page; `reason` says why not. */
 export interface Verdict {
   ok: boolean
@@ -280,7 +287,10 @@ export interface LeftoverBranch {
   worktrees: LeftoverWorktree[]
   /** How far its work got: the local branch's, else origin's when only origin has it. */
   reach: Reach | null
-  /** How far origin's copy got, judged by its own commits; null when origin has none. */
+  /**
+   * How far origin's copy got into origin's copies of the bases, judged by its own commits; null when
+   * origin has none.
+   */
   remoteReach: Reach | null
   /** A merged PR whose head is origin's very commit: that copy landed through it, whatever its reach. */
   mergedPr: { number: number; url: string } | null
@@ -359,6 +369,8 @@ interface Guard {
   branches: Map<string, string>
   inUse: Map<string, number>
   paths: { path: string; ticketId: number }[]
+  /** Every checkout a repo of the board points at: a worktree may be one. */
+  checkouts: string[]
 }
 
 async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
@@ -368,7 +380,8 @@ async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
   const keep = (name: string, why: string) => {
     if (name && !branches.has(name)) branches.set(name, why)
   }
-  const rows = listRepos().filter((r) => samePath(r.repoPath, repoPath))
+  const everyRepo = listRepos()
+  const rows = everyRepo.filter((r) => samePath(r.repoPath, repoPath))
   for (const r of rows) keep(r.baseBranch, "the repo's base branch")
   const mainBranch = git.worktrees[0]?.branch
   if (mainBranch) keep(mainBranch, 'checked out in the main checkout')
@@ -418,7 +431,7 @@ async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
       keep(pr.baseRef, `the base of open PR #${pr.number}`)
     }
   }
-  return { branches, inUse, paths }
+  return { branches, inUse, paths, checkouts: everyRepo.map((r) => r.repoPath) }
 }
 
 const landed = (r: Reach | null) => !!r && r.state !== 'unique'
@@ -535,15 +548,21 @@ export async function cleanupReport(
             ? baseRefs(into, state.refs).filter((b) => b !== name && b !== `origin/${name}`)
             : []
           // A branch that is its own destination has nothing to be judged against.
-          const judge = (sha: string | null) =>
+          const judge = (sha: string | null, against: string[]) =>
             reach && repo && state && sha && !into.includes(name)
-              ? reachAt(repo.repoPath, sha, bases, state.refs)
+              ? reachAt(repo.repoPath, sha, against, state.refs)
               : Promise.resolve(null)
-          const [localReach, remoteReach] = await Promise.all([
-            judge(local),
-            remote === local ? null : judge(remote),
+          // Origin's copy landed only once origin's bases have it: a base merged here and not pushed
+          // would lose it with the copy.
+          const [localReach, originReach] = await Promise.all([
+            judge(local, bases),
+            remote
+              ? judge(
+                  remote,
+                  bases.filter((b) => b.startsWith('origin/')),
+                )
+              : null,
           ])
-          const originReach = remote ? (remote === local ? localReach : remoteReach) : null
           const pr =
             repo && remote
               ? db
@@ -595,8 +614,8 @@ export async function cleanupReport(
             reach: reachOfBranch,
             remoteReach: originReach,
             mergedPr: pr ? { number: pr.number, url: pr.url } : null,
-            restore: tip ? `git branch ${name} ${tip}` : null,
-            restoreRemote: remote ? `git push origin ${remote}:refs/heads/${name}` : null,
+            restore: tip ? `git branch ${shellArg(name)} ${tip}` : null,
+            restoreRemote: remote ? `git push origin ${shellArg(`${remote}:refs/heads/${name}`)}` : null,
             protected: guarded ?? unsure,
             can: {
               local: verdict(
@@ -625,6 +644,7 @@ export async function cleanupReport(
           async function treeGuard(tree: Worktree, main: boolean): Promise<string | null> {
             if (main) return "the repo's main checkout"
             if (samePath(tree.path, process.cwd())) return 'the board runs from it'
+            if (kept?.checkouts.some((p) => samePath(p, tree.path))) return "a repo's checkout on the board"
             if (tree.locked) return 'locked'
             if (tree.branch && tree.branch !== name) return `has ${tree.branch} checked out`
             const registeredOn = kept?.paths.find((p) => samePath(p.path, tree.path))

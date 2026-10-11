@@ -596,6 +596,13 @@ describe('cleanupReport never calls a branch safe that is not', () => {
     expect(b.restoreRemote).toBe(`git push origin ${shas[2]}:refs/heads/feat/x`)
   })
 
+  it('quotes a branch name a shell would read as more than a name in its restore commands', async () => {
+    const { shellArg } = await import('./cleanup')
+    expect(shellArg('lane/47')).toBe('lane/47')
+    expect(shellArg('x;touch${IFS}y')).toBe(`'x;touch\${IFS}y'`)
+    expect(shellArg("it's")).toBe(String.raw`'it'\''s'`)
+  })
+
   it('folds the case of paths only where the file system does', async () => {
     const { samePath } = await import('./cleanup')
     expect(samePath('/tmp/x/WT', '/tmp/x/wt', 'linux')).toBe(false)

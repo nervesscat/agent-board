@@ -1,8 +1,10 @@
+import fs from 'node:fs'
+
 import { eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
-import { cleanupReport, type LeftoverBranch, pathKey, samePath } from './cleanup'
+import { cleanupReport, type LeftoverBranch, pathKey, samePath, shellArg } from './cleanup'
 import { deleteWorkspace } from './features'
 import { deleteLocalBranch, deleteOriginBranch, gitSaid, removeWorktree, worktreeChanges } from './git'
 import { activePreviews, stopPreview } from './managedPreview'
@@ -188,6 +190,9 @@ async function deleteOne(
   // All of them are checked before any is removed: git refuses one with changes, and a refusal
   // half-way would leave the rest removed for nothing.
   for (const w of trees) {
+    // A folder deleted by hand leaves git a worktree to prune (`git worktree prune`), not one to remove.
+    if (!fs.existsSync(w.path))
+      return result(item, 'refused', `${w.path} is gone: git worktree prune drops it`)
     const changes = await worktreeChanges(w.path).catch((err: unknown) => [gitSaid(err)])
     if (changes.length)
       return result(
@@ -209,8 +214,8 @@ async function deleteOne(
     removed.push(w.path)
     restore.push(
       w.branch
-        ? `git worktree add "${w.path}" ${w.branch}`
-        : `git worktree add --detach "${w.path}" ${w.head}`,
+        ? `git worktree add ${shellArg(w.path)} ${shellArg(w.branch)}`
+        : `git worktree add --detach ${shellArg(w.path)} ${w.head}`,
     )
     log(`removed the worktree ${w.path} (${w.branch ?? `detached at ${w.head}`})`)
     forgetWorkspaces(projectId, w.path, actor)

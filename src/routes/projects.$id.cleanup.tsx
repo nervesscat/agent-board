@@ -361,7 +361,8 @@ function Cleanup() {
               </div>
               <p className="text-xs text-muted-foreground">
                 As of the last fetch; the board fetches origin again before it deletes one. Each is judged by
-                origin's own commits, or by a merged PR whose head is that very commit.
+                its own commits against origin's copies of the bases, or by a merged PR whose head is that
+                very commit.
               </p>
               <div className="overflow-x-auto rounded-lg border">
                 <Table>
