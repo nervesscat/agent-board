@@ -37,10 +37,11 @@ your output file `05-merge.md`.
    - Clean: continue.
 5. If a dependency manifest differs between `HEAD_SHA` and the merged tree, note it: the
    tests below run with the head's environment, which may not match. Run the full suite
-   once with the test command from `00-env.md` on the merged tree. Compare failures with the head run in
-   `02-verification.md`. Failures that were not present at head are **new**. Result
-   `TESTS FAIL AFTER MERGE` with the new failures, or `NO ISSUE`. If the test command
-   is unavailable, result `UNVERIFIED (tests could not run)` with the merge outcome noted.
+   once with the test command from `00-env.md` on the merged tree. Compare failures with
+   the head run in `02-verification.md`. Failures that were not present at head are
+   **new**. Result `TESTS FAIL AFTER MERGE` with the new failures, or `NO ISSUE`. If the
+   test command is unavailable, result `UNVERIFIED (tests could not run)` with the merge
+   outcome noted.
 6. Restore: `git merge --abort` if the merge is still in progress, then
    `git reset --hard HEAD_SHA`. Confirm `git rev-parse HEAD` equals `HEAD_SHA` and
    `git status --porcelain` is empty. If restoration fails, say so loudly in the output.

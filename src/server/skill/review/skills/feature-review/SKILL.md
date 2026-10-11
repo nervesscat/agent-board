@@ -163,7 +163,7 @@ The spec's classification picks the work. A change with several classes takes th
 | `data-model`, `background-job` | the data services it uses | tests, a migration or one job run | the class, Security, Reliability |
 | `llm-prompt` | the app when a criterion calls it | tests, before/after outputs | `llm-prompt`, Security, Reliability |
 | `config-infra`, `dependency`, `refactor`, `cli-script` | the install; the app only to prove it starts | tests, the build, the script | the class, Security, Reliability |
-| `instructions` | the app only when it serves the text | the text read where its reader gets it, quoted | `instructions` |
+| `instructions` | the app only when it serves the text | the text read where its reader gets it, quoted | `instructions` (its check 5 is the safety check) |
 
 Every hunt also applies Diff guard analysis and the Project overlay.
 

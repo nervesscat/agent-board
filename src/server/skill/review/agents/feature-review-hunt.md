@@ -21,8 +21,8 @@ from it.
 Everything you execute runs from the worktree using the interpreter, test command, and
 base URLs in `00-env.md`. Run only targeted tests: the focus file's tests, or a probe for one
 candidate; never the full suite (verify runs it). Never start a server or container, and never
-call a port that `00-env.md` does not list. Use the browser only when the flag is `yes`. Data you create
-through the app carries your prefix in its name.
+call a port that `00-env.md` does not list. Use the browser only when the flag is `yes`. Data
+you create through the app carries your prefix in its name.
 
 ## Procedure
 
