@@ -38,7 +38,8 @@ intent is unclear you record a question instead of guessing.
   - tagged with the cheapest verification method that actually executes:
     `existing-test`, `new-test`, `run+http`, `browser`, or `static-trace` (last resort).
     An `instructions` criterion is checked on the text where its reader gets it: `run+http`
-    when it is served, else `new-test` (build or install it, then read the result).
+    when it is served, else `new-test` (build or install it, then read the result; a file
+    its reader reads from the checkout is read in the worktree).
   If you believe something *should* be required but no source says so, it goes under
   **Open questions**, never into the criteria.
 - Write **Out of scope**: what the change deliberately does not handle, from the

@@ -28,8 +28,10 @@ file. Start from `00-focus.md`; read outside it only to follow a reference from 
   Static trace is allowed only when nothing above is possible, and the result is then
   `PASS (traced)` or `FAIL (traced)`, never plain `PASS`.
 - **An `instructions` criterion passes by execution** when you read the text from where its
-  reader gets it (the served endpoint, the built bundle, the installed file) and quote the
-  passage in Evidence. Reading only the source file in the repo is `PASS (traced)`.
+  reader gets it and quote the passage in Evidence: the served endpoint, the built bundle, the
+  installed file, or, for a file its reader reads from the checkout (`AGENTS.md`, `CLAUDE.md`,
+  a README), the file in `WORKTREE`. When the reader gets it elsewhere and you read only the
+  source file, the result is `PASS (traced)`.
 - A criterion is `UNVERIFIED` when you could not execute it and could not trace it with
   confidence. State the reason, copied from `00-env.md` when it is an unavailable
   service. Never guess a result.

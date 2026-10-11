@@ -125,10 +125,13 @@ Parse `$ARGUMENTS` as space-separated tokens:
      ticket text the user pasted, and the full contents of the project's rule files if
      present in the worktree (`CLAUDE.md`, `.claude/rules/*`, `CONTRIBUTING.md`, `AGENTS.md`).
    - `00-focus.md`, one path per line with a few words on why: the changed files
-     (`git diff --name-only`); their tests (the test files the diff touches, and files named
-     after a changed module, e.g. `foo.test.ts`, `test_foo.py`, found with `git ls-files`); their
-     direct callers (`git grep -l` for each changed module's import path, or for a text file its
-     file name, run once per file, not recursively; cap it near 30 and say when capped).
+     (`git -C WORKTREE diff --name-only <merge-base> <commit>`, the same range as
+     `00-diff.patch`, plus the working patch's files and the untracked files copied in step 3;
+     for a path target, the folder's files); the tests of those files (the changed test files,
+     and files named after a changed module, e.g. `foo.test.ts`, `test_foo.py`, found with
+     `git ls-files`); their direct callers (`git grep -l` for each changed module's import path,
+     or for a text file its file name, run once per file, not recursively; cap it near 30 and
+     say when capped).
 5. The skill's own files are in `${CLAUDE_SKILL_DIR}`. Agents receive absolute paths to
    `${CLAUDE_SKILL_DIR}/checklists.md` and `${CLAUDE_SKILL_DIR}/report-template.md`.
 6. `NOTES` = `~/.claude/feature-review/notes/<repo-dir-name>.md`, the per-repo memory of
