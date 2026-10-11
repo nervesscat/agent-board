@@ -108,6 +108,8 @@ test('the New ticket dialog picks the stage a ticket starts in, from every stage
   await page.getByRole('button', { name: 'New ticket' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Title').fill('Already started')
+  // No branch to pick: whoever works the ticket sets it.
+  await expect(dialog.getByLabel('Branch (optional)')).toHaveCount(0)
   const stage = dialog.getByLabel('Stage')
   await expect(stageValue(dialog)).toHaveText('Backlog')
   await stage.click()
@@ -121,7 +123,7 @@ test('the New ticket dialog picks the stage a ticket starts in, from every stage
     page.locator('[data-column="in_progress"]').getByRole('link', { name: /Already started/ }),
   ).toBeVisible()
   const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
-  expect(row).toMatchObject({ title: 'Already started', status: 'in_progress' })
+  expect(row).toMatchObject({ title: 'Already started', status: 'in_progress', branch: '' })
 
   // Like every other field, the stage starts over for the next ticket.
   await page.getByRole('button', { name: 'New ticket' }).click()
@@ -162,7 +164,7 @@ test('a lane from the New lane dialog has no stage to pick and starts in To do',
   await page.getByRole('button', { name: 'New lane' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.getByLabel('Title').fill('A lane of it')
-  await expect(dialog.getByLabel('Branch (optional)')).toBeVisible()
+  await expect(dialog.getByLabel('Branch (optional)')).toHaveCount(0)
   await expect(dialog.getByLabel('Stage')).toHaveCount(0)
   await dialog.getByRole('button', { name: 'Create' }).click()
   await expect(dialog).toBeHidden()

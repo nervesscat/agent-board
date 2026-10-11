@@ -202,10 +202,10 @@ async function fillTall(page: Page, dialog: Locator, { files = true } = {}) {
     await expect(dialog.getByRole('img')).toHaveCount(FILES)
     await expect(dialog.getByLabel('uploading')).toHaveCount(0)
   }
-  const tasks = dialog.getByLabel('Initial tasks')
-  for (const task of TASKS) {
-    await tasks.fill(task)
-    await tasks.press('Enter')
+  const task = dialog.getByLabel('Initial tasks')
+  for (const t of TASKS) {
+    await task.fill(t)
+    await task.press('Enter')
   }
   await dialog.getByLabel('Tags (optional)').fill(TAGS.join(', '))
 }
@@ -246,8 +246,8 @@ test('the New ticket dialog with long content stays on screen, scrolls its field
 
   await expectInWindow(page, dialog, 'the dialog')
   await expectFieldsScroll(page, dialog, 'New ticket', [
+    dialog.getByLabel('Stage'),
     dialog.getByLabel('Tags (optional)'),
-    dialog.getByLabel('Branch (optional)'),
   ])
   await expectEndsInReach(page, dialog, 'New ticket')
   expect(await pageScroll(page)).toEqual({ y: 0, height: before.height })
@@ -403,9 +403,10 @@ test('the New lane dialog with long content stays on screen, scrolls its fields 
 
   await expectInWindow(page, dialog, 'the dialog')
   await expectEndsInReach(page, dialog, 'New lane')
-  // Tags is the last field. Its 20 tags, as chips, make it taller than the room under the lane's
-  // heading leaves for the row of Branch above it too.
-  await expectFieldsScroll(page, dialog, 'New lane', [dialog.getByLabel('Tags (optional)')])
+  await expectFieldsScroll(page, dialog, 'New lane', [
+    dialog.locator('#assignee'),
+    dialog.getByLabel('Tags (optional)'),
+  ])
   expect((await pageScroll(page)).y).toBe(before.y)
 
   await dialog.getByRole('button', { name: 'Create' }).click()

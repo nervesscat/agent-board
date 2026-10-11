@@ -120,7 +120,7 @@ test('the Tags field of the New ticket dialog makes chips of what is typed', asy
   await expect(again.input).toHaveAttribute('placeholder', 'High, Forms')
   // The label still reaches the text input, which takes the focus from the field before it by Tab.
   await expect(again.input).toHaveJSProperty('tagName', 'INPUT')
-  await again.dialog.getByLabel('Branch (optional)').focus()
+  await again.dialog.getByLabel('Stage').focus()
   await page.keyboard.press('Tab')
   await expect(again.input).toBeFocused()
 })
