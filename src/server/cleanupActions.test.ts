@@ -45,10 +45,14 @@ const worktreePaths = () =>
 
 let marks = 0
 /**
- * A commit adding `<name>.txt` on top of main (or `from`) for each branch, in one git process; main
- * then merges them as is unless `unique`. Returns each branch's sha.
+ * A commit adding `<name>.txt` (and `files`, a `link` committed as a symbolic link) on top of main (or
+ * `from`) for each branch, in one git process; main then merges them as is unless `unique`. Returns
+ * each branch's sha.
  */
-function land(names: string[], opts: { unique?: boolean; from?: string } = {}): Record<string, string> {
+function land(
+  names: string[],
+  opts: { unique?: boolean; from?: string; files?: { path: string; data: string; link?: boolean }[] } = {},
+): Record<string, string> {
   const data = (text: string) => `data ${Buffer.byteLength(text)}\n${text}`
   const who = `committer t <t@t> ${Math.floor(Date.now() / 1000)} +0000`
   const first = marks + 1
@@ -61,6 +65,7 @@ function land(names: string[], opts: { unique?: boolean; from?: string } = {}): 
       `from ${opts.from ?? 'refs/heads/main^0'}`,
       `M 100644 inline ${name.replace(/\W/g, '-')}.txt`,
       data(`${name}\n`),
+      ...(opts.files ?? []).flatMap((f) => [`M ${f.link ? 120000 : 100644} inline ${f.path}`, data(f.data)]),
       '',
     ].join('\n'),
   )
@@ -527,6 +532,224 @@ describe('deleting a worked branch with its worktrees', () => {
     ])
     expect(hasRef(repo, 'refs/heads/feat/b13dirty')).toBe(true)
     expect(hasRef(repo, 'refs/heads/feat/b13ok')).toBe(false)
+  })
+})
+
+describe('links in a worktree that lead out of it', () => {
+  // A directory junction on Windows (what agents link node_modules or data with), a symbolic link
+  // elsewhere.
+  const made: string[] = []
+  const linkDir = (target: string, link: string) => {
+    fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir')
+    made.push(link)
+  }
+  /** A folder outside every worktree, holding a file that must outlive their removal. */
+  const outside = (name: string) => {
+    const dir = path.join(tmp, `outside-${name}`)
+    fs.mkdirSync(dir)
+    fs.writeFileSync(path.join(dir, 'keep.txt'), name)
+    return dir
+  }
+  const kept = (dir: string) => fs.readFileSync(path.join(dir, 'keep.txt'), 'utf8')
+  /** Moves a worktree's folder outside it, and links it back in its place. */
+  const moveOut = (dir: string, name: string) => {
+    const target = path.join(tmp, `outside-${name}`)
+    fs.cpSync(dir, target, { recursive: true })
+    fs.rmSync(dir, { recursive: true })
+    linkDir(target, dir)
+    return target
+  }
+  const isLink = (p: string) => {
+    try {
+      return fs.lstatSync(p).isSymbolicLink()
+    } catch {
+      return false
+    }
+  }
+  // Symbolic links git checks out need the right to create them (Windows grants it only to admins and
+  // developer mode).
+  const canSymlink = (() => {
+    const probe = path.join(tmp, 'symlink-probe')
+    try {
+      fs.symlinkSync(path.join(tmp, 'marks'), probe, 'file')
+      fs.unlinkSync(probe)
+      return true
+    } catch {
+      return false
+    }
+  })()
+  const delTrees = async (ticketId: number, branch: string, sha: string) => {
+    const b = (await branchOf(ticketId, branch))!
+    expect(b.can.worktrees).toEqual({ ok: true, reason: null })
+    const [r] = await del([
+      { ticketId, branch, kind: 'worktrees', sha, worktrees: b.worktrees.map((w) => w.path) },
+    ])
+    return r!
+  }
+
+  afterAll(() => {
+    // The links first, never through them: then each outside folder is a plain one.
+    for (const link of made.filter(isLink)) {
+      try {
+        fs.unlinkSync(link)
+      } catch {
+        fs.rmdirSync(link)
+      }
+    }
+    for (const dir of fs.readdirSync(tmp).filter((d) => d.startsWith('outside-')))
+      fs.rmSync(path.join(tmp, dir), { recursive: true })
+  })
+
+  it('removes an ignored node_modules linked to another folder as a link, and keeps that folder’s files', async () => {
+    const { 'feat/l1': sha } = land(['feat/l1'])
+    git('worktree', 'add', '-q', wt('l1'), 'feat/l1')
+    const target = outside('l1')
+    const link = path.join(wt('l1'), 'node_modules')
+    linkDir(target, link)
+    // What the walk relies on: the link reads as one, from its folder and by itself.
+    expect(isLink(link)).toBe(true)
+    expect(
+      fs
+        .readdirSync(wt('l1'), { withFileTypes: true })
+        .find((e) => e.name === 'node_modules')!
+        .isSymbolicLink(),
+    ).toBe(true)
+    expect(gitIn(wt('l1'))('status', '--porcelain')).toBe('')
+    const t = done('l1', 'feat/l1')
+
+    const r = await delTrees(t.id, 'feat/l1', sha)
+    expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
+    expect(fs.existsSync(wt('l1'))).toBe(false)
+    expect(kept(target)).toBe('l1')
+    expect(r.unlinked.map((l) => [path.resolve(l.path), path.resolve(l.target)])).toEqual([[link, target]])
+    expect(hasRef(repo, 'refs/heads/feat/l1')).toBe(false)
+    expect(activity(t.id)).toContain(`removed the link ${r.unlinked[0]!.path} to ${r.unlinked[0]!.target}`)
+  })
+
+  it('removes one with links within it as pnpm makes them, and follows a chain of them out of it', async () => {
+    const { 'feat/l3': sha } = land(['feat/l3'])
+    git('worktree', 'add', '-q', wt('l3'), 'feat/l3')
+    const modules = path.join(wt('l3'), 'node_modules')
+    // pnpm's layout: each package a link into node_modules/.pnpm, which git reaches first.
+    fs.mkdirSync(path.join(modules, '.pnpm', 'pkg'), { recursive: true })
+    fs.writeFileSync(path.join(modules, '.pnpm', 'pkg', 'index.js'), 'x')
+    linkDir(path.join(modules, '.pnpm', 'pkg'), path.join(modules, 'pkg'))
+    // One that reads as within, but leads to a link out of it.
+    const target = outside('l3')
+    linkDir(target, path.join(modules, '.pnpm', 'ext'))
+    linkDir(path.join(modules, '.pnpm', 'ext'), path.join(modules, 'ext'))
+    const t = done('l3', 'feat/l3')
+
+    const r = await delTrees(t.id, 'feat/l3', sha)
+    expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
+    expect(fs.existsSync(wt('l3'))).toBe(false)
+    expect(kept(target)).toBe('l3')
+    expect(r.unlinked.map((l) => path.resolve(l.path)).sort()).toEqual(
+      [path.join(modules, '.pnpm', 'ext'), path.join(modules, 'ext')].sort(),
+    )
+  })
+
+  it.skipIf(!canSymlink)('refuses a link out of it that git tracks, and removes nothing', async () => {
+    const target = outside('l2')
+    const { 'feat/l2': sha } = land(['feat/l2'], {
+      files: [{ path: 'vendor', data: target, link: true }],
+    })
+    git('config', 'core.symlinks', 'true')
+    git('worktree', 'add', '-q', wt('l2'), 'feat/l2')
+    const link = path.join(wt('l2'), 'vendor')
+    made.push(link)
+    expect(isLink(link)).toBe(true)
+    expect(gitIn(wt('l2'))('status', '--porcelain')).toBe('')
+    const t = done('l2', 'feat/l2')
+
+    const r = await delTrees(t.id, 'feat/l2', sha)
+    expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [], unlinked: [] })
+    expect(r.reason).toContain('vendor')
+    expect(r.reason).toMatch(/git tracks/)
+    expect(isLink(link)).toBe(true)
+    expect(kept(target)).toBe('l2')
+    expect(worktreePaths()).toContain(wt('l2'))
+    expect(git('rev-parse', 'refs/heads/feat/l2')).toBe(sha)
+  })
+
+  it('refuses a link out of it over files git tracks, and removes nothing', async () => {
+    const { 'feat/l4': sha } = land(['feat/l4'], { files: [{ path: 'vendor/lib.txt', data: 'lib\n' }] })
+    git('worktree', 'add', '-q', wt('l4'), 'feat/l4')
+    // The same files, in a folder the worktree links to: git reads them through the link as its own.
+    const vendor = path.join(wt('l4'), 'vendor')
+    const target = moveOut(vendor, 'l4')
+    const t = done('l4', 'feat/l4')
+
+    const r = await delTrees(t.id, 'feat/l4', sha)
+    expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [], unlinked: [] })
+    expect(r.reason).toContain('vendor')
+    expect(isLink(vendor)).toBe(true)
+    expect(fs.readFileSync(path.join(target, 'lib.txt'), 'utf8').trim()).toBe('lib')
+    expect(worktreePaths()).toContain(wt('l4'))
+    expect(git('rev-parse', 'refs/heads/feat/l4')).toBe(sha)
+  })
+
+  // Root reads any folder.
+  it.skipIf(process.getuid?.() === 0)(
+    'refuses one with a folder it cannot read, and removes nothing',
+    async () => {
+      const { 'feat/l6': sha } = land(['feat/l6'])
+      git('worktree', 'add', '-q', wt('l6'), 'feat/l6')
+      const modules = path.join(wt('l6'), 'node_modules')
+      const sealed = path.join(modules, 'sealed')
+      fs.mkdirSync(sealed, { recursive: true })
+      const target = outside('l6')
+      linkDir(target, path.join(modules, 'ext'))
+      // Whatever the unread folder holds is not known, so the worktree is not known to be safe.
+      const seal = (on: boolean) =>
+        process.platform === 'win32'
+          ? execFileSync('icacls', [sealed, on ? '/deny' : '/remove:d', on ? '*S-1-1-0:(RD)' : '*S-1-1-0'], {
+              stdio: 'ignore',
+            })
+          : fs.chmodSync(sealed, on ? 0o000 : 0o755)
+      seal(true)
+      try {
+        expect(() => fs.readdirSync(sealed)).toThrow()
+        const t = done('l6', 'feat/l6')
+        const r = await delTrees(t.id, 'feat/l6', sha)
+        expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [], unlinked: [] })
+        expect(r.reason).toMatch(/could not be searched/)
+      } finally {
+        seal(false)
+      }
+      expect(isLink(path.join(modules, 'ext'))).toBe(true)
+      expect(kept(target)).toBe('l6')
+      expect(worktreePaths()).toContain(wt('l6'))
+      expect(git('rev-parse', 'refs/heads/feat/l6')).toBe(sha)
+    },
+  )
+
+  it('removes no worktree and no link while another worktree of the branch is refused', async () => {
+    const { 'feat/l5': sha } = land(['feat/l5'], { files: [{ path: 'vendor/lib.txt', data: 'lib\n' }] })
+    git('worktree', 'add', '-q', wt('l5a'), 'feat/l5')
+    git('worktree', 'add', '-q', '--detach', wt('l5b'), 'feat/l5')
+    // The first is fine: an ignored link out of it, removed as a link.
+    const modulesTarget = outside('l5a')
+    const modules = path.join(wt('l5a'), 'node_modules')
+    linkDir(modulesTarget, modules)
+    // The second links its tracked vendor folder out of it.
+    const vendor = path.join(wt('l5b'), 'vendor')
+    const vendorTarget = moveOut(vendor, 'l5b')
+    const t = done('l5', 'feat/l5')
+    features.addWorkspace(t.id, { name: 'review', branch: 'feat/l5', path: wt('l5b') }, 'claude')
+    const b = (await branchOf(t.id, 'feat/l5'))!
+    // The fine one comes first: a check made while removing would have removed it already.
+    expect(path.resolve(b.worktrees.filter((w) => !w.main)[0]!.path)).toBe(wt('l5a'))
+
+    const r = await delTrees(t.id, 'feat/l5', sha)
+    expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [], unlinked: [] })
+    expect(r.reason).toContain('vendor')
+    expect(isLink(modules)).toBe(true)
+    expect(isLink(vendor)).toBe(true)
+    expect(kept(modulesTarget)).toBe('l5a')
+    expect(fs.readFileSync(path.join(vendorTarget, 'lib.txt'), 'utf8').trim()).toBe('lib')
+    expect(worktreePaths()).toEqual(expect.arrayContaining([wt('l5a'), wt('l5b')]))
+    expect(git('rev-parse', 'refs/heads/feat/l5')).toBe(sha)
   })
 })
 

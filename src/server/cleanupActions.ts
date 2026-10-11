@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import path from 'node:path'
 
 import { eq, inArray } from 'drizzle-orm'
 
@@ -12,19 +13,22 @@ import {
   gitSaid,
   listWorktrees,
   removeWorktree,
+  trackedFiles,
   worktreeChanges,
 } from './git'
 import { activePreviews, stopPreview } from './managedPreview'
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
 import { listRepos } from './repos'
+import { inBatches, removeLink, type WorktreeLink, worktreeLinks } from './worktreeLinks'
 
 /**
  * The Cleanup page's delete actions, the human's alone: a closed ticket's worked branch deleted here,
  * on origin, or with its worktrees. Each item is checked again just before it is acted on, on git's
  * state as it is then (origin fetched first) and against the commit the human saw; the deletions in
  * one checkout run one at a time. Nothing is forced: a worktree with changes, a branch that moved and
- * an origin branch someone pushed to are all left alone.
+ * an origin branch someone pushed to are all left alone. A worktree's links are removed as links
+ * before it, so git never deletes through one what lies out of it (`worktreeLinks.ts`).
  */
 
 export const DELETE_KINDS = ['local', 'remote', 'worktrees'] as const
@@ -52,6 +56,11 @@ export interface DeleteResult extends DeleteItem {
   reason: string | null
   /** The worktrees removed, also when a later step failed. */
   removed: string[]
+  /**
+   * The links out of a worktree removed before it, each the link alone: what it leads to (`target`,
+   * as the link held it) stays.
+   */
+  unlinked: { path: string; target: string }[]
   /** The commands that put back what was deleted. */
   restore: string[]
 }
@@ -87,13 +96,14 @@ const result = (
   item: DeleteItem,
   outcome: DeleteResult['outcome'],
   reason: string | null,
-  done: { removed?: string[]; restore?: string[] } = {},
+  done: { removed?: string[]; unlinked?: DeleteResult['unlinked']; restore?: string[] } = {},
 ): DeleteResult => ({
   ...item,
   ok: outcome === 'deleted' || outcome === 'gone',
   outcome,
   reason,
   removed: done.removed ?? [],
+  unlinked: done.unlinked ?? [],
   restore: done.restore ?? [],
 })
 
@@ -217,16 +227,46 @@ async function deleteOne(
         'refused',
         `${w.path} has changes or untracked files: ${changes.slice(0, 3).join(', ')}${changes.length > 3 ? ', …' : ''}`,
       )
+    const links = await linksOut(w.path)
+    if (typeof links === 'string') return result(item, 'refused', links)
   }
   const removed: string[] = []
+  const unlinked: DeleteResult['unlinked'] = []
   // A worktree on the branch can only be added back once the branch is.
   const restore: string[] = []
   for (const w of trees) {
     await stopPreviews(w.path, actor)
+    // Looked for again: a link made since the check goes as a link too.
+    const links = await linksOut(w.path)
+    if (typeof links === 'string')
+      return result(item, 'failed', `${links}; ${b.name} is kept`, { removed, unlinked, restore })
+    const stuck: string[] = []
+    await inBatches(links, async (l) => {
+      try {
+        await removeLink(l)
+      } catch (err) {
+        return stuck.push(fsSaid(err))
+      }
+      // The ones within go with the worktree anyway.
+      if (!l.outward) return
+      unlinked.push({ path: l.path, target: l.target })
+      log(`removed the link ${l.path} to ${l.target} (the link alone; ${l.target} stays)`)
+    })
+    if (stuck.length)
+      return result(
+        item,
+        'failed',
+        `${stuck.slice(0, 3).join(', ')}${stuck.length > 3 ? ', …' : ''}; ${w.path} and ${b.name} are kept`,
+        { removed, unlinked, restore },
+      )
     try {
       await removeWorktree(repoPath, w.path)
     } catch (err) {
-      return result(item, 'failed', `${w.path}: ${gitSaid(err)}; ${b.name} is kept`, { removed, restore })
+      return result(item, 'failed', `${w.path}: ${gitSaid(err)}; ${b.name} is kept`, {
+        removed,
+        unlinked,
+        restore,
+      })
     }
     removed.push(w.path)
     restore.push(
@@ -241,13 +281,47 @@ async function deleteOne(
     try {
       await deleteLocalBranch(repoPath, b.name, b.local)
     } catch (err) {
-      return result(item, 'failed', `${b.name}: ${gitSaid(err)}`, { removed, restore })
+      return result(item, 'failed', `${b.name}: ${gitSaid(err)}`, { removed, unlinked, restore })
     }
     log(`deleted the branch ${b.name} @ ${b.local}`)
     restore.unshift(b.restore!)
   }
-  return result(item, 'deleted', null, { removed, restore })
+  return result(item, 'deleted', null, { removed, unlinked, restore })
 }
+
+/**
+ * The worktree's links to remove before it; or why it may not go: a link out of it that git tracks
+ * (removing it would change the worktree), or a folder or link that could not be read.
+ */
+async function linksOut(worktreePath: string): Promise<WorktreeLink[] | string> {
+  let links: WorktreeLink[]
+  try {
+    links = await worktreeLinks(worktreePath)
+  } catch (err) {
+    return `${worktreePath} could not be searched for links out of it: ${fsSaid(err)}`
+  }
+  const relative = links.map((l) => path.relative(worktreePath, l.path).split(path.sep).join('/'))
+  // What git tracks in the top folders the links are in (one git call for all of node_modules'), and
+  // every folder on the way to it: a link git tracks, or one over a folder of tracked files.
+  const held = new Set<string>()
+  try {
+    const tops = [...new Set(relative.map((r) => r.split('/')[0]!))]
+    for (const file of await trackedFiles(worktreePath, tops)) {
+      const parts = pathKey(file).split('/')
+      parts.forEach((_, i) => held.add(parts.slice(0, i + 1).join('/')))
+    }
+  } catch (err) {
+    return `${worktreePath}: ${gitSaid(err)}`
+  }
+  const isTracked = relative.map((r) => held.has(pathKey(r)))
+  const tracked = links.filter((l, i) => l.outward && isTracked[i])
+  if (tracked.length)
+    return `${tracked.map((l) => `${l.path} (to ${l.target})`).join(', ')} leads out of the worktree and git tracks it: removing the link would change the worktree`
+  // One within that git tracks is a link git checked out: git deletes it as one.
+  return links.filter((l, i) => l.outward || !isTracked[i])
+}
+
+const fsSaid = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 async function deleteLocal(
   item: DeleteItem,

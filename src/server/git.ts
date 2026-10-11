@@ -307,6 +307,25 @@ export async function worktreeChanges(worktreePath: string): Promise<string[]> {
   return out ? out.split('\n') : []
 }
 
+/**
+ * The files git tracks at these paths of the worktree (relative to it, with `/`), or under them; each
+ * path is taken literally, never as a pattern, in any case.
+ */
+export async function trackedFiles(worktreePath: string, paths: string[]): Promise<string[]> {
+  const files: string[] = []
+  const pathspecs = paths.map((p) => `:(literal,icase)${p}`)
+  // Some at a time: a command line has a length limit (32k characters on Windows).
+  while (pathspecs.length) {
+    let length = 0
+    let n = 0
+    while (n < pathspecs.length && (n === 0 || length + pathspecs[n]!.length < 16_000))
+      length += pathspecs[n++]!.length + 1
+    const out = await git(worktreePath, ['ls-files', '-z', '--', ...pathspecs.splice(0, n)])
+    files.push(...out.split('\0').filter(Boolean))
+  }
+  return files
+}
+
 /** git's own last word on why a command failed: its error lines, else the message. */
 export function gitSaid(err: unknown): string {
   const e = err as { killed?: boolean; stderr?: string; message?: string }
@@ -323,7 +342,9 @@ export function gitSaid(err: unknown): string {
 
 /**
  * Removes a worktree and its folder, never with `--force`: git refuses one with changed or untracked
- * files (ignored ones, such as node_modules, go with it), a locked one and the main checkout.
+ * files (ignored ones, such as node_modules, go with it), a locked one and the main checkout. On
+ * Windows git deletes through a directory junction in it, as through a folder: the caller removes its
+ * links first, each the link alone (`worktreeLinks.ts`).
  */
 export async function removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
   await git(repoPath, ['worktree', 'remove', '--', worktreePath])

@@ -105,7 +105,7 @@ const ACTIONS: Record<
     all: 'Remove every eligible worktree with its branch',
     title: (n) => `Remove the worktrees of ${plural(n, 'branch', 'branches')}, and the branches?`,
     confirm: (n) => `Remove worktrees and delete ${plural(n, 'branch', 'branches')}`,
-    what: 'Each worktree folder goes (ignored files such as node_modules with it), then the local branch. Origin keeps its copy.',
+    what: 'Each worktree folder goes (ignored files such as node_modules with it), then the local branch. A link in it goes as a link: a folder it leads to out of the worktree stays. Origin keeps its copy.',
   },
 }
 
@@ -683,6 +683,11 @@ function Results({ results, onClose }: { results: DeleteResult[]; onClose: () =>
             {r.removed.map((p) => (
               <div key={p} className="font-mono text-muted-foreground">
                 removed {p}
+              </div>
+            ))}
+            {r.unlinked.map((l) => (
+              <div key={l.path} className="font-mono text-muted-foreground">
+                removed the link {l.path} to {l.target}, which stays
               </div>
             ))}
             {r.restore.map((cmd) => (
