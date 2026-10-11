@@ -17,6 +17,7 @@ import type { ReportList, ReportPeriod, ReportView } from '#/server/reports'
 import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
 import type { WorkspacePreview } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
+import type { DeleteItem, DeleteKind, DeleteResult } from '#/server/cleanupActions'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
 import type { Handoff } from '#/server/handoff'
@@ -66,6 +67,9 @@ export type {
   Worktree,
   Reach,
   CleanupReport,
+  DeleteItem,
+  DeleteKind,
+  DeleteResult,
   Push,
   ProjectPush,
 }

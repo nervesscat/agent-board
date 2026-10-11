@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { Copy, FolderGit2, GitBranch, Layers, Paperclip, RefreshCw } from 'lucide-react'
+import { Copy, FolderGit2, GitBranch, Layers, Paperclip, RefreshCw, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -20,7 +20,16 @@ import {
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table'
-import { del, errorMessage, get, type CleanupReport } from '#/lib/api'
+import {
+  del,
+  errorMessage,
+  get,
+  post,
+  type CleanupReport,
+  type DeleteItem,
+  type DeleteKind,
+  type DeleteResult,
+} from '#/lib/api'
 import { shortSha } from '#/lib/format'
 import { useStages } from '#/lib/project'
 import { stageOf } from '#/lib/stages'
@@ -28,7 +37,11 @@ import { stageOf } from '#/lib/stages'
 export const Route = createFileRoute('/projects/$id/cleanup')({ component: Cleanup })
 
 type Leftover = CleanupReport['tickets'][number]
-type Row = { ticket: Leftover; branch: Leftover['branches'][number] | null }
+type Branch = Leftover['branches'][number]
+type Row = { ticket: Leftover; branch: Branch | null }
+type Target = { ticket: Leftover; branch: Branch }
+/** What the confirmation dialog asks about: one action on the branches listed, nothing else. */
+type Pending = { kind: DeleteKind; targets: Target[] }
 
 const GROUPS = [
   {
@@ -47,6 +60,11 @@ const GROUPS = [
     hint: 'The branch has changes its bases lack. Keep it, or check where the work went.',
   },
   {
+    key: 'kept',
+    title: 'Kept',
+    hint: "In use by a ticket in work or an open PR, a base, the repo's base branch, the main checkout's branch or origin's default branch: never deleted from here.",
+  },
+  {
     key: 'other',
     title: 'Nothing to compare',
     hint: 'Workspaces still registered without a branch, or a branch with no base to check against.',
@@ -54,11 +72,50 @@ const GROUPS = [
 ] as const
 
 const groupOf = (r: Row): (typeof GROUPS)[number]['key'] => {
+  if (r.branch?.protected) return 'kept'
   const state = r.branch?.reach?.state
   if (state === 'merged' || state === 'rebased') return 'safe'
   if (state === 'edited' || state === 'unique') return state
   return 'other'
 }
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+/** Each action's words: on a row, for every eligible row at once, and in the dialog. */
+const ACTIONS: Record<
+  DeleteKind,
+  { row: string; all: string; title: (n: number) => string; confirm: (n: number) => string; what: string }
+> = {
+  local: {
+    row: 'Delete branch',
+    all: 'Delete every eligible local branch',
+    title: (n) => `Delete ${plural(n, 'local branch', 'local branches')}?`,
+    confirm: (n) => `Delete ${plural(n, 'local branch', 'local branches')}`,
+    what: 'Each branch goes from the checkout. Origin keeps its copy.',
+  },
+  remote: {
+    row: 'Delete on origin',
+    all: 'Delete every eligible branch on origin',
+    title: (n) => `Delete ${plural(n, 'branch', 'branches')} on origin?`,
+    confirm: (n) => `Delete ${plural(n, 'branch', 'branches')} on origin`,
+    what: 'Each branch goes from origin, for everyone who works with it. Local branches stay.',
+  },
+  worktrees: {
+    row: 'Remove worktree + branch',
+    all: 'Remove every eligible worktree with its branch',
+    title: (n) => `Remove the worktrees of ${plural(n, 'branch', 'branches')}, and the branches?`,
+    confirm: (n) => `Remove worktrees and delete ${plural(n, 'branch', 'branches')}`,
+    what: 'Each worktree folder goes (ignored files such as node_modules with it), then the local branch. Origin keeps its copy.',
+  },
+}
+
+const itemOf = (kind: DeleteKind, { ticket, branch }: Target): DeleteItem => ({
+  ticketId: ticket.id,
+  branch: branch.name,
+  kind,
+  sha: kind === 'remote' ? branch.remote : branch.local,
+  ...(kind === 'worktrees' ? { worktrees: branch.worktrees.filter((w) => !w.main).map((w) => w.path) } : {}),
+})
 
 const size = (n: number) =>
   n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
@@ -81,7 +138,9 @@ function Cleanup() {
       ? ticket.branches.map((branch) => ({ ticket, branch }))
       : [{ ticket, branch: null }],
   )
-  const remote = rows.filter((r) => r.branch?.remote)
+  const targets = rows.filter((r): r is Target => !!r.branch)
+  const eligible = (kind: DeleteKind) => targets.filter((t) => t.branch.can[kind].ok)
+  const remote = targets.filter((r) => r.branch.remote)
   const uploads = data?.uploads
   const [confirmSweep, setConfirmSweep] = useState(false)
   const sweep = useMutation({
@@ -97,6 +156,26 @@ function Cleanup() {
     onError: (err) => toast.error(errorMessage(err)),
   })
 
+  const [pending, setPending] = useState<Pending | null>(null)
+  const [results, setResults] = useState<DeleteResult[] | null>(null)
+  const ask = (kind: DeleteKind, chosen: Target[]) => {
+    if (chosen.length) setPending({ kind, targets: chosen })
+  }
+  const remove = useMutation({
+    mutationFn: (items: DeleteItem[]) =>
+      post<DeleteResult[]>(`/api/projects/${id}/cleanup/delete`, { items }),
+    onSuccess: (r) => {
+      setResults(r)
+      const done = r.filter((x) => x.outcome === 'deleted').length
+      const kept = r.filter((x) => !x.ok).length
+      if (kept) toast.error(`${done} deleted; ${kept} kept: see why below`)
+      else toast.success(`${plural(done, 'item')} deleted`)
+      void refetch()
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  const actionsOff = data?.deleteOff ?? null
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
@@ -105,8 +184,9 @@ function Cleanup() {
           <p className="text-sm text-muted-foreground">
             Done and cancelled tickets that still have worktrees, branches, registered workspaces or a running
             preview, each branch checked against where its work should have landed: a lane's parent branch,
-            then the parent's base. Read-only; agents delete with{' '}
-            <span className="font-mono">/board cleanup</span> after you approve.
+            then the parent's base. Delete what landed from here, after a confirmation; the board checks each
+            item again first and never forces anything. Agents delete local branches with{' '}
+            <span className="font-mono">/board cleanup</span> after you approve, never origin's.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -114,12 +194,41 @@ function Cleanup() {
         </Button>
       </div>
       {error && <p className="text-sm text-destructive">{errorMessage(error)}</p>}
+      {actionsOff && (
+        <p className="rounded-lg border bg-muted/40 p-3 text-sm">Deleting is off: {actionsOff}.</p>
+      )}
+      {data?.repos
+        .filter((r) => r.error)
+        .map((r) => (
+          <p key={r.id} className="text-sm text-destructive">
+            {r.name}: {r.error}. Its branches and worktrees are unknown, so nothing in it can be deleted.
+          </p>
+        ))}
+      {results && <Results results={results} onClose={() => setResults(null)} />}
       {isLoading ? (
         <Skeleton className="h-64" />
       ) : !rows.length && !data?.untracked.length ? (
         <Empty>Nothing left behind. Every closed ticket is cleaned up.</Empty>
       ) : (
         <>
+          {!actionsOff && (eligible('local').length > 0 || eligible('worktrees').length > 0) && (
+            <div className="flex flex-wrap gap-2">
+              {(['worktrees', 'local'] as const).map(
+                (kind) =>
+                  eligible(kind).length > 0 && (
+                    <Button
+                      key={kind}
+                      variant="outline"
+                      size="sm"
+                      disabled={remove.isPending}
+                      onClick={() => ask(kind, eligible(kind))}
+                    >
+                      <Trash2 data-icon="inline-start" /> {ACTIONS[kind].all} ({eligible(kind).length})
+                    </Button>
+                  ),
+              )}
+            </div>
+          )}
           {GROUPS.map((g) => {
             const items = rows.filter((r) => groupOf(r) === g.key)
             if (!items.length) return null
@@ -139,11 +248,12 @@ function Cleanup() {
                         <TableHead>Worktree</TableHead>
                         <TableHead>Origin</TableHead>
                         <TableHead className="w-8" />
+                        <TableHead />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {items.map(({ ticket: t, branch: b }) => (
-                        <TableRow key={`${t.id}:${b?.name ?? ''}`}>
+                        <TableRow key={`${t.id}:${b?.name ?? ''}`} data-branch={b?.name}>
                           <TableCell className="max-w-72">
                             <Link
                               to="/projects/$id/features/$ticketId"
@@ -193,7 +303,7 @@ function Cleanup() {
                               <div
                                 key={w.path}
                                 className="flex items-center gap-1 truncate font-mono text-[11px]"
-                                title={w.path}
+                                title={w.protected ? `${w.path}: kept, ${w.protected}` : w.path}
                               >
                                 <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />
                                 <span className="truncate">{w.main ? 'main checkout' : w.path}</span>
@@ -215,6 +325,15 @@ function Cleanup() {
                               </button>
                             )}
                           </TableCell>
+                          <TableCell className="max-w-64">
+                            {b && !actionsOff && (
+                              <RowActions
+                                branch={b}
+                                busy={remove.isPending}
+                                onAsk={(kind) => ask(kind, [{ ticket: t, branch: b }])}
+                              />
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -225,30 +344,89 @@ function Cleanup() {
           })}
           {remote.length > 0 && (
             <section className="space-y-1.5">
-              <h2 className="text-sm font-medium">
-                Branches left on origin <span className="text-muted-foreground">· {remote.length}</span>
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                The board never writes to git, so these are yours to delete. As of the last fetch.
-              </p>
-              <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3">
-                <pre className="flex-1 overflow-x-auto font-mono text-xs">
-                  {`git push origin --delete ${remote.map((r) => r.branch!.name).join(' ')}`}
-                </pre>
-                <button
-                  type="button"
-                  title="Copy"
-                  onClick={() =>
-                    copy(`git push origin --delete ${remote.map((r) => r.branch!.name).join(' ')}`)
-                  }
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Copy className="size-3.5" />
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-medium">
+                  Branches left on origin <span className="text-muted-foreground">· {remote.length}</span>
+                </h2>
+                {!actionsOff && eligible('remote').length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={remove.isPending}
+                    onClick={() => ask('remote', eligible('remote'))}
+                  >
+                    <Trash2 data-icon="inline-start" /> {ACTIONS.remote.all} ({eligible('remote').length})
+                  </Button>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Check the reach first: a branch with unique work may still be needed.
+                As of the last fetch; the board fetches origin again before it deletes one. Each is judged by
+                origin's own commits, or by a merged PR whose head is that very commit.
               </p>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ticket</TableHead>
+                      <TableHead>Branch on origin</TableHead>
+                      <TableHead>Reach</TableHead>
+                      <TableHead className="w-8" />
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {remote.map(({ ticket: t, branch: b }) => (
+                      <TableRow key={`${t.id}:${b.name}`} data-origin-branch={b.name}>
+                        <TableCell className="max-w-72 truncate text-xs">
+                          #{t.id} {t.title}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-mono text-xs">{b.name}</div>
+                          <div className="font-mono text-[11px] text-muted-foreground">
+                            {shortSha(b.remote!)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {b.mergedPr ? (
+                            <span className="text-xs">PR #{b.mergedPr.number} merged at this commit</span>
+                          ) : b.remoteReach ? (
+                            <ReachBadge reach={b.remoteReach} />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {b.restoreRemote && (
+                            <button
+                              type="button"
+                              title={`Copy the restore command: ${b.restoreRemote}`}
+                              onClick={() => copy(b.restoreRemote!)}
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <Copy className="size-3.5" />
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-64">
+                          {!actionsOff &&
+                            (b.can.remote.ok ? (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                disabled={remove.isPending}
+                                onClick={() => ask('remote', [{ ticket: t, branch: b }])}
+                              >
+                                {ACTIONS.remote.row}
+                              </Button>
+                            ) : (
+                              <Kept reason={b.can.remote.reason} />
+                            ))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </section>
           )}
           {!!data?.untracked.length && (
@@ -276,6 +454,14 @@ function Cleanup() {
           )}
         </>
       )}
+      <ConfirmDelete
+        pending={pending}
+        onClose={() => setPending(null)}
+        onConfirm={(p) => {
+          setPending(null)
+          remove.mutate(p.targets.map((t) => itemOf(p.kind, t)))
+        }}
+      />
       {!!uploads?.count && (
         <section className="space-y-1.5">
           <h2 className="text-sm font-medium">
@@ -323,5 +509,197 @@ function Cleanup() {
         </section>
       )}
     </div>
+  )
+}
+
+/** Why something stays: no control, only the reason. */
+function Kept({ reason }: { reason: string | null }) {
+  return <div className="text-[11px] text-muted-foreground">Kept: {reason}</div>
+}
+
+/**
+ * What a row may do: remove its worktrees with the branch, or delete the branch alone; when neither,
+ * why it stays.
+ */
+function RowActions({
+  branch: b,
+  busy,
+  onAsk,
+}: {
+  branch: Branch
+  busy: boolean
+  onAsk: (kind: DeleteKind) => void
+}) {
+  const hasTrees = b.worktrees.some((w) => !w.main)
+  const kinds = (['worktrees', 'local'] as const).filter((k) => b.can[k].ok)
+  if (!kinds.length) {
+    if (!b.local && !hasTrees) return null
+    return <Kept reason={b.protected ?? (hasTrees ? b.can.worktrees.reason : b.can.local.reason)} />
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      {kinds.map((k) => (
+        <Button key={k} variant="outline" size="xs" disabled={busy} onClick={() => onAsk(k)}>
+          {ACTIONS[k].row}
+        </Button>
+      ))}
+    </div>
+  )
+}
+
+/** Every item exactly as it will go; nothing is sent until the action's own button is pressed. */
+function ConfirmDelete({
+  pending,
+  onClose,
+  onConfirm,
+}: {
+  pending: Pending | null
+  onClose: () => void
+  onConfirm: (p: Pending) => void
+}) {
+  const kind = pending?.kind ?? 'local'
+  const all = pending?.targets ?? []
+  // A branch edited on the way in differs from its base: listed apart, with the commits that differ.
+  const edited = all.filter(
+    (t) => (kind === 'remote' ? t.branch.remoteReach : t.branch.reach)?.state === 'edited',
+  )
+  const plain = all.filter((t) => !edited.includes(t))
+  const item = (t: Target) => {
+    const b = t.branch
+    const sha = kind === 'remote' ? b.remote : b.local
+    const reach = kind === 'remote' ? b.remoteReach : b.reach
+    const trees = b.worktrees.filter((w) => !w.main)
+    return (
+      <li key={`${t.ticket.id}:${b.name}`} className="space-y-0.5 rounded-md border p-2">
+        <div className="truncate font-medium">
+          #{t.ticket.id} {t.ticket.title}
+          {t.ticket.repo && (
+            <span className="font-normal text-muted-foreground"> · {t.ticket.repo.name}</span>
+          )}
+        </div>
+        <div className="font-mono">
+          {b.name} @ {sha ? shortSha(sha) : 'no local branch'}{' '}
+          <span className="text-muted-foreground">{kind === 'remote' ? 'on origin' : 'local'}</span>
+        </div>
+        {kind === 'remote' && b.mergedPr && (
+          <div className="text-muted-foreground">PR #{b.mergedPr.number} was merged at this commit</div>
+        )}
+        {reach?.state === 'edited' && (
+          <ul className="text-muted-foreground">
+            {reach.unique.map((c) => (
+              <li key={c.sha} className="font-mono">
+                {shortSha(c.sha)} {c.subject}
+              </li>
+            ))}
+          </ul>
+        )}
+        {kind === 'worktrees' &&
+          trees.map((w) => (
+            <div key={w.path} className="flex items-center gap-1 font-mono">
+              <FolderGit2 className="size-3 shrink-0 text-muted-foreground" /> worktree {w.path}
+              {w.previews.map((p) => (
+                <span key={p.workspaceId} className="font-sans text-amber-700 dark:text-amber-400">
+                  {' '}
+                  · stops its preview ({p.status === 'running' ? `running on :${p.port}` : p.status})
+                </span>
+              ))}
+            </div>
+          ))}
+      </li>
+    )
+  }
+  return (
+    <AlertDialog open={!!pending} onOpenChange={(open) => !open && onClose()}>
+      <AlertDialogContent className="data-[size=default]:sm:max-w-2xl">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{ACTIONS[kind].title(all.length)}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {ACTIONS[kind].what} Each is checked again just before it goes, and kept if anything changed;
+            nothing is forced. The restore commands are shown afterwards.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="max-h-[50vh] space-y-3 overflow-y-auto text-xs">
+          {plain.length > 0 && (
+            <ul aria-label="To delete" className="space-y-1.5">
+              {plain.map(item)}
+            </ul>
+          )}
+          {edited.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="font-medium">
+                Edited on the way in: these commits differ from the base, but merging would add nothing
+              </p>
+              <ul aria-label="To delete, edited" className="space-y-1.5">
+                {edited.map(item)}
+              </ul>
+            </div>
+          )}
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => pending && onConfirm(pending)}>
+            {ACTIONS[kind].confirm(all.length)}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+const OUTCOME: Record<DeleteResult['outcome'], { label: string; className: string }> = {
+  deleted: { label: 'deleted', className: 'text-emerald-700 dark:text-emerald-400' },
+  gone: { label: 'already gone', className: 'text-muted-foreground' },
+  refused: { label: 'kept', className: 'text-amber-700 dark:text-amber-400' },
+  failed: { label: 'failed', className: 'text-destructive' },
+}
+
+/** What the last deletion did, item by item, with the commands that put back what went. */
+function Results({ results, onClose }: { results: DeleteResult[]; onClose: () => void }) {
+  return (
+    <section className="space-y-1.5" aria-label="Deletion results">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-medium">
+          Last deletion <span className="text-muted-foreground">· {results.length}</span>
+        </h2>
+        <Button variant="ghost" size="icon-sm" title="Dismiss" onClick={onClose}>
+          <X />
+        </Button>
+      </div>
+      <ul className="space-y-1.5 rounded-lg border p-3 text-xs">
+        {results.map((r, i) => (
+          <li key={i} data-outcome={r.outcome} className="space-y-0.5">
+            <div>
+              <span className={`font-medium ${OUTCOME[r.outcome].className}`}>
+                {OUTCOME[r.outcome].label}
+              </span>{' '}
+              <span className="font-mono">{r.branch}</span>{' '}
+              <span className="text-muted-foreground">
+                {r.kind === 'remote' ? 'on origin' : r.kind === 'worktrees' ? 'with its worktrees' : 'local'}{' '}
+                · #{r.ticketId}
+              </span>
+            </div>
+            {r.reason && <div className="text-muted-foreground">{r.reason}</div>}
+            {r.removed.map((p) => (
+              <div key={p} className="font-mono text-muted-foreground">
+                removed {p}
+              </div>
+            ))}
+            {r.restore.map((cmd) => (
+              <div key={cmd} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1">
+                <code className="flex-1 overflow-x-auto font-mono">{cmd}</code>
+                <button
+                  type="button"
+                  title={`Copy: ${cmd}`}
+                  onClick={() => copy(cmd)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Copy className="size-3.5" />
+                </button>
+              </div>
+            ))}
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
