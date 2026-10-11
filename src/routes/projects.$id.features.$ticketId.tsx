@@ -399,7 +399,7 @@ function TicketPage() {
           <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
         </div>
         <aside className="min-w-0 space-y-4">
-          {t.handoff && <HandoffCard handoff={t.handoff} />}
+          {t.handoff && <HandoffCard handoff={t.handoff} git={git} pr={t.pr} />}
           <Previews t={t} git={git} onChange={invalidate} />
           <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />
           <GitPanel t={t} git={git} onChange={invalidate} />

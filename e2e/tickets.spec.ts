@@ -61,7 +61,16 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
   await dialog
     .getByRole('textbox', { name: 'Instructions' })
     .fill('The submit button does nothing on Safari.')
-  await dialog.getByLabel('Initial tasks, one per line').fill('Reproduce it\nFix it')
+  // Each task is added, by Enter or by +, and listed above the field before the ticket is created.
+  const tasks = dialog.getByLabel('Initial tasks')
+  await tasks.fill('Reproduce it')
+  await tasks.press('Enter')
+  await tasks.fill('Fix it')
+  await dialog.getByRole('button', { name: 'Add task' }).click()
+  await expect(dialog.getByRole('list', { name: 'Tasks', exact: true }).getByRole('listitem')).toHaveText([
+    'Reproduce it',
+    'Fix it',
+  ])
   await dialog.getByLabel('Tags (optional)').fill('High, Forms')
   // Left alone, the stage is Backlog, and it goes as Backlog's key: the kind `open` would be To do.
   await expect(stageValue(dialog)).toHaveText('Backlog')
@@ -69,7 +78,7 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
     (r) => r.method() === 'POST' && r.url().endsWith(`/api/projects/${project.id}/tickets`),
   )
   await dialog.getByRole('button', { name: 'Create' }).click()
-  expect((await sent).postDataJSON()).toMatchObject({ status: 'backlog' })
+  expect((await sent).postDataJSON()).toMatchObject({ status: 'backlog', tasks: ['Reproduce it', 'Fix it'] })
   await expect(dialog).toBeHidden()
 
   // A new ticket from the dialog starts in Backlog.
