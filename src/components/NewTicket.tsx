@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { newTicketStage } from '#/lib/stages'
-import { addTags } from '#/lib/tags'
+import { addTags, overTagLimits } from '#/lib/tags'
 import { addTasks } from '#/lib/tasks'
 import { ticketsKey } from '#/lib/tickets'
 import { cn } from '#/lib/utils'
@@ -55,6 +55,9 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const status = parent ? undefined : stage || newTicketStage(project?.stages ?? [])?.key
   // A ticket waits for its stage, so that leaving it alone always means Backlog.
   const ready = Boolean(parent || status)
+  // Tags the server would refuse: the field says why, and Create waits until they are fixed.
+  const over = overTagLimits(tags, tagText)
+  const tagsOver = over.tooMany || over.tooLong
   const files = useUploads()
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop(files.add)
@@ -120,7 +123,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
           style={{ scrollPaddingTop: caretRoom.top, scrollPaddingBottom: caretRoom.bottom }}
           onSubmit={(e) => {
             e.preventDefault()
-            if (!files.uploading && ready) create.mutate()
+            if (!files.uploading && ready && !tagsOver) create.mutate()
           }}
         >
           <DialogHeader
@@ -250,7 +253,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             </p>
           )}
           <DialogFooter className="sticky -bottom-4 z-10 bg-popover bg-linear-to-b from-muted/50 to-muted/50">
-            <Button type="submit" disabled={create.isPending || files.uploading || !ready}>
+            <Button type="submit" disabled={create.isPending || files.uploading || !ready || tagsOver}>
               {files.uploading ? 'Uploading…' : 'Create'}
             </Button>
           </DialogFooter>

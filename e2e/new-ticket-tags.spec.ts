@@ -32,6 +32,47 @@ const empty = async (input: Locator, chips: Locator) => {
   await expect(input).toHaveValue('')
 }
 
+/** `n` distinct tags: t1, t2, … */
+const someTags = (n: number) => Array.from({ length: n }, (_, i) => `t${i + 1}`)
+
+/** The Tags box's border colour and ring as drawn, once its transitions are over. */
+const look = (field: Locator) =>
+  field.evaluate(async (f) => {
+    await Promise.all(f.getAnimations().map((a) => a.finished.catch(() => {})))
+    const s = getComputedStyle(f)
+    return { border: s.borderTopColor, ring: s.boxShadow }
+  })
+
+/** The border colour and ring of an invalid `ui/input` (`aria-invalid`), in the page's theme. */
+const invalidLook = (page: Page) =>
+  page.evaluate(() => {
+    const probe = document.createElement('input')
+    probe.setAttribute('aria-invalid', 'true')
+    probe.className =
+      'border aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40'
+    document.body.append(probe)
+    const s = getComputedStyle(probe)
+    const drawn = { border: s.borderTopColor, ring: s.boxShadow }
+    probe.remove()
+    return drawn
+  })
+
+const TOO_MANY = 'At most 20 tags.'
+const TOO_LONG = 'A tag can have at most 40 characters.'
+
+/** The Tags field as valid: its usual look (`normal`), no `aria-invalid`, no message. */
+const valid = async (input: Locator, field: Locator, normal: Awaited<ReturnType<typeof look>>) => {
+  await expect.poll(() => look(field)).toEqual(normal)
+  await expect(input).not.toHaveAttribute('aria-invalid')
+  await expect(input).toHaveAccessibleDescription('')
+  await expect(field.locator('..').getByText(/^(At most|A tag can)/)).toHaveCount(0)
+}
+
+const ticketPost = (page: Page) =>
+  page.waitForResponse(
+    (r) => r.request().method() === 'POST' && /\/api\/projects\/\d+\/tickets$/.test(r.url()),
+  )
+
 test('the Tags field of the New ticket dialog makes chips of what is typed', async ({
   page,
   project,
@@ -146,23 +187,181 @@ test('Enter in the empty Tags field still creates the ticket, with its chips', a
 test('a refused Create keeps the chips, to fix and try again', async ({ page, project, human }) => {
   await page.goto(`/projects/${project.id}/features`)
   const { dialog, input, chips } = await openDialog(page)
-  await dialog.getByLabel('Title').fill('Too long a tag')
-  // The server takes tags of at most 40 characters.
-  const long = 'x'.repeat(41)
-  await input.fill(`High, ${long},`)
-  await expect(chips).toHaveText(['High', long])
+  // The server takes titles of at most 200 characters, and the dialog leaves that to it.
+  await dialog.getByLabel('Title').fill('x'.repeat(201))
+  await input.fill('High, Forms,')
+  await expect(chips).toHaveText(['High', 'Forms'])
+  const refused = ticketPost(page)
   await dialog.getByRole('button', { name: 'Create' }).click()
+  expect((await refused).status()).toBe(400)
   await expect(page.locator('[data-sonner-toast]')).toBeVisible()
   await expect(dialog).toBeVisible()
-  await expect(chips).toHaveText(['High', long])
+  await expect(chips).toHaveText(['High', 'Forms'])
   expect(await rows(human, project.id)).toEqual([])
 
-  await dialog.getByRole('button', { name: `Remove ${long}` }).click()
+  await dialog.getByLabel('Title').fill('A title that fits')
   await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+  const [row] = await rows(human, project.id)
+  expect(row).toMatchObject({ title: 'A title that fits', tags: ['High', 'Forms'] })
+})
+
+test('over 20 tags the Tags field turns red and says so, and Create waits until it is fixed', async ({
+  page,
+  project,
+  human,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, field, chips } = await openDialog(page)
+  const create = dialog.getByRole('button', { name: 'Create' })
+  await dialog.getByLabel('Title').fill('Twenty tags')
+  await input.focus()
+  const normal = await look(field)
+  const invalid = await invalidLook(page)
+  expect(invalid).not.toEqual(normal)
+
+  // 20 tags, one of 40 characters: the most the server takes.
+  const twenty = ['High', ...someTags(18), 'x'.repeat(40)]
+  await input.fill(`${twenty.join(',')},`)
+  await expect(chips).toHaveCount(20)
+  await expect(input).toBeFocused()
+  await valid(input, field, normal)
+  await expect(field.locator(':scope > span[data-invalid]')).toHaveCount(0)
+  await expect(create).toBeEnabled()
+  // A word that repeats a chip, in any casing, is not one more.
+  await input.pressSequentially('HIGH')
+  await valid(input, field, normal)
+
+  // The 21st tag turns it red while it is typed, focused: the word not yet a chip counts.
+  const sent = creates(page)
+  await input.fill('')
+  await input.pressSequentially('Forms')
+  await expect(input).toHaveAttribute('aria-invalid', 'true')
+  await expect.poll(() => look(field)).toEqual(invalid)
+  await input.press('Enter')
+  await expect(chips).toHaveCount(21)
+  await expect(input).toBeFocused()
+  await expect.poll(() => look(field)).toEqual(invalid)
+  await expect(input).toHaveAttribute('aria-invalid', 'true')
+  await expect(dialog.getByText(TOO_MANY)).toBeVisible()
+  await expect(input).toHaveAccessibleDescription(TOO_MANY)
+
+  // Create waits: the button is off, and Enter in the empty field does not create either.
+  await expect(create).toBeDisabled()
+  await input.press('Enter')
+  await expect(dialog).toBeVisible()
+  await expect(chips).toHaveCount(21)
+  expect(sent).toEqual([])
+  await expect(page.locator('[data-sonner-toast]')).toHaveCount(0)
+  // Away from the field it stays red.
+  await dialog.getByLabel('Title').click()
+  await expect.poll(() => look(field)).toEqual(invalid)
+  await expect(input).toHaveAttribute('aria-invalid', 'true')
+
+  // Backspace takes it back to 20: the field is as before, and Create works.
+  await input.focus()
+  await input.press('Backspace')
+  await expect(chips).toHaveCount(20)
+  await valid(input, field, normal)
+  await expect(create).toBeEnabled()
+  const created = ticketPost(page)
+  await create.click()
+  expect((await created).status()).toBe(201)
+  await expect(dialog).toBeHidden()
+  const [row] = await rows(human, project.id)
+  expect(row!.tags).toEqual(twenty)
+
+  // Opened again, the field is empty and not red.
+  const again = await openDialog(page)
+  await empty(again.input, again.chips)
+  await again.input.focus()
+  await valid(again.input, again.field, normal)
+  await expect(again.dialog.getByRole('button', { name: 'Create' })).toBeEnabled()
+})
+
+test('a tag over 40 characters turns the Tags field red, typed or as a chip, and marks that chip', async ({
+  page,
+  project,
+  human,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, field, chips } = await openDialog(page)
+  const create = dialog.getByRole('button', { name: 'Create' })
+  await dialog.getByLabel('Title').fill('A long tag')
+  await input.focus()
+  const normal = await look(field)
+  const invalid = await invalidLook(page)
+
+  // Typing is not stopped at 40: the 41st character is there, and turns the field red.
+  await input.pressSequentially('x'.repeat(40))
+  await valid(input, field, normal)
+  await input.pressSequentially('x')
+  await expect(input).toHaveValue('x'.repeat(41))
+  await expect.poll(() => look(field)).toEqual(invalid)
+  await expect(input).toHaveAttribute('aria-invalid', 'true')
+  await expect(dialog.getByText(TOO_LONG)).toBeVisible()
+  await expect(input).toHaveAccessibleDescription(TOO_LONG)
+  await expect(create).toBeDisabled()
+  // Shortening it fixes it.
+  await input.press('Backspace')
+  await valid(input, field, normal)
+  await expect(create).toBeEnabled()
+
+  // As a chip it is marked, and the chip beside it is not.
+  const long = 'x'.repeat(41)
+  const sent = creates(page)
+  await input.fill(`High, ${long},`)
+  await expect(chips).toHaveText(['High', long])
+  await expect(chips.nth(1)).toHaveAttribute('data-invalid', 'true')
+  await expect(chips.first()).not.toHaveAttribute('data-invalid')
+  const ring = (chip: Locator) => chip.evaluate((c) => getComputedStyle(c).boxShadow)
+  expect(await ring(chips.first())).toBe('none')
+  expect(await ring(chips.nth(1))).not.toBe('none')
+  await expect.poll(() => look(field)).toEqual(invalid)
+  await expect(input).toHaveAccessibleDescription(TOO_LONG)
+  await expect(create).toBeDisabled()
+  await input.press('Enter')
+  await expect(dialog).toBeVisible()
+  expect(sent).toEqual([])
+
+  // Both limits at once: both are said.
+  await input.fill(`${someTags(19).join(',')},`)
+  await expect(chips).toHaveCount(21)
+  await expect(input).toHaveAccessibleDescription(`${TOO_MANY} ${TOO_LONG}`)
+  for (let i = 0; i < 19; i++) await input.press('Backspace')
+  await expect(chips).toHaveText(['High', long])
+
+  // × on the long chip fixes it, and Create sends the rest.
+  await dialog.getByRole('button', { name: `Remove ${long}` }).click()
+  await valid(input, field, normal)
+  await create.click()
   await expect(dialog).toBeHidden()
   const [row] = await rows(human, project.id)
   expect(row!.tags).toEqual(['High'])
 })
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`the Tags field over its limits is red while focused, in the ${colorScheme} theme`, async ({
+    page,
+    project,
+  }) => {
+    await page.emulateMedia({ colorScheme })
+    await page.goto(`/projects/${project.id}/features`)
+    if (colorScheme === 'dark') await expect(page.locator('html')).toHaveClass(/\bdark\b/)
+    else await expect(page.locator('html')).not.toHaveClass(/\bdark\b/)
+    const { dialog, input, field, chips } = await openDialog(page)
+    await input.focus()
+    const normal = await look(field)
+    const invalid = await invalidLook(page)
+    expect(invalid).not.toEqual(normal)
+    await input.fill(`${someTags(21).join(',')},`)
+    await expect(chips).toHaveCount(21)
+    await expect(input).toBeFocused()
+    await expect.poll(() => look(field)).toEqual(invalid)
+    await dialog.getByLabel('Title').click()
+    await expect.poll(() => look(field)).toEqual(invalid)
+  })
+}
 
 test('a new lane takes its tags as chips too', async ({ page, project, api, human }) => {
   const parent = await api.ticket({ title: 'The parent' })
@@ -175,6 +374,28 @@ test('a new lane takes its tags as chips too', async ({ page, project, api, huma
   await expect(dialog).toBeHidden()
   const lane = (await rows(human, project.id)).find((t) => t.title === 'A lane with tags')
   expect(lane).toMatchObject({ parentId: parent.id, tags: ['Backend', 'Medium'] })
+})
+
+test('a new lane over 20 tags shows the red Tags field too, and Create waits', async ({
+  page,
+  project,
+  api,
+}) => {
+  const parent = await api.ticket({ title: 'The parent' })
+  await page.goto(`/projects/${project.id}/features/${parent.id}`)
+  const { dialog, input, field, chips } = await openDialog(page, 'New lane')
+  const sent = creates(page)
+  await dialog.getByLabel('Title').fill('A lane with too many tags')
+  await input.fill(`${someTags(21).join(',')},`)
+  await expect(chips).toHaveCount(21)
+  const invalid = await invalidLook(page)
+  await expect.poll(() => look(field)).toEqual(invalid)
+  await expect(input).toHaveAttribute('aria-invalid', 'true')
+  await expect(input).toHaveAccessibleDescription(TOO_MANY)
+  await expect(dialog.getByRole('button', { name: 'Create' })).toBeDisabled()
+  await input.press('Enter')
+  await expect(dialog).toBeVisible()
+  expect(sent).toEqual([])
 })
 
 test('a click in the Tags field around its chips goes to the text, and keeps the word being typed', async ({
