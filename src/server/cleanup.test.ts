@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import type { CleanupReport } from './cleanup'
@@ -165,8 +166,8 @@ describe('cleanupReport', () => {
     expect(byTitle.unique!.safe).toBe(false)
     // git lists worktree paths with forward slashes, also on Windows.
     const worktrees = byTitle.unique!.branches[0]!.worktrees.map((w) => ({
-      ...w,
       path: path.resolve(w.path),
+      main: w.main,
     }))
     expect(worktrees).toEqual([{ path: path.join(tmp, 'wt-unique'), main: false }])
     expect(byTitle.merged!.branches[0]!.restore).toBe(
@@ -235,7 +236,10 @@ describe('cleanupReport on detached worktrees', () => {
     const rows = (r: CleanupReport) =>
       Object.fromEntries(
         r.tickets.flatMap((t) =>
-          t.branches.map((b) => [b.name, b.worktrees.map((w) => ({ ...w, path: path.resolve(w.path) }))]),
+          t.branches.map((b) => [
+            b.name,
+            b.worktrees.map((w) => ({ path: path.resolve(w.path), main: w.main })),
+          ]),
         ),
       )
     const stray = ['wt-dangling', 'wt-main', 'wt-other'].map(at).sort()
@@ -432,5 +436,182 @@ describe('cleanupReport on detached worktrees', () => {
     addRow('detached-dup-again')
     expect((await report(projectId)).untracked).toEqual([])
     expect((await report(projectId, { reach: false })).untracked).toEqual([])
+  })
+})
+
+describe('cleanupReport never calls a branch safe that is not', () => {
+  const at = (name: string) => path.join(tmp, name)
+
+  /**
+   * A repo with `base` at a first commit and the branches of `commits`, all pushed to a bare origin
+   * beside it but those `local` lists, registered as a repo row of a new project. Returns the commits'
+   * shas, the base's first.
+   */
+  const pushedRepo = async (
+    name: string,
+    commits: Commit[],
+    opts: { base?: string; local?: string[] } = {},
+  ) => {
+    const { db, schema } = await import('#/db')
+    const base = opts.base ?? 'main'
+    const dir = at(name)
+    const origin = at(`${name}.git`)
+    execFileSync('git', ['init', '-q', '--bare', '-b', base, origin], { stdio: 'ignore' })
+    fs.mkdirSync(dir)
+    const git = gitIn(dir)
+    git('init', '-q', '-b', base)
+    git('config', 'user.email', 't@t')
+    git('config', 'user.name', 't')
+    git('remote', 'add', 'origin', origin)
+    const shas = commitsIn(dir)([
+      { ref: `refs/heads/${base}`, file: 'base.txt', text: 'base\n', msg: 'base' },
+      ...commits,
+    ])
+    git('reset', '-q', '--hard')
+    const branches = commits.filter((c) => c.ref.startsWith('refs/heads/')).map((c) => c.ref.slice(11))
+    const pushed = [...new Set([base, ...branches])].filter((b) => !opts.local?.includes(b))
+    git('push', '-q', 'origin', ...pushed)
+    const projectId = db.insert(schema.projects).values({ name }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId, name, repoPath: dir, baseBranch: base })
+      .returning()
+      .get().id
+    return { dir, origin, git, shas, projectId, repoId }
+  }
+  const report = async (projectId: number) => (await import('./cleanup')).cleanupReport(projectId)
+  const branchOf = (r: CleanupReport, ticketId: number, name: string) =>
+    r.tickets.find((t) => t.id === ticketId)?.branches.find((b) => b.name === name)
+  const safe = (r: CleanupReport, ticketId: number) => r.tickets.find((t) => t.id === ticketId)?.safe
+  const ticket = async (
+    projectId: number,
+    input: Parameters<(typeof import('./features'))['createTicket']>[1],
+  ) => (await import('./features')).createTicket(projectId, input, 'claude')
+
+  it('protects a branch that is its own base instead of calling it merged into origin’s copy', async () => {
+    const { projectId } = await pushedRepo('self-base', [], { base: 'dev' })
+    const t = await ticket(projectId, { title: 'on dev', branch: 'dev', baseBranch: 'dev', status: 'done' })
+    const r = await report(projectId)
+    const dev = branchOf(r, t.id, 'dev')!
+    expect(dev.reach).toBeNull()
+    expect(dev.protected).toMatch(/base/)
+    expect(dev.can.local.ok).toBe(false)
+    expect(dev.can.remote.ok).toBe(false)
+    expect(safe(r, t.id)).toBe(false)
+  })
+
+  it('protects a closed lane’s branch that is its open parent’s', async () => {
+    const { projectId } = await pushedRepo('lane-on-parent', [
+      { ref: 'refs/heads/feat/p', from: 'refs/heads/main', file: 'p.txt', text: 'p\n', msg: 'p' },
+    ])
+    const parent = await ticket(projectId, { title: 'parent', branch: 'feat/p', status: 'in_progress' })
+    const lane = await ticket(projectId, {
+      title: 'lane',
+      branch: 'feat/p',
+      status: 'done',
+      parentId: parent.id,
+    })
+    const r = await report(projectId)
+    const b = branchOf(r, lane.id, 'feat/p')!
+    expect(b.reach).toBeNull()
+    expect(b.protected).toEqual(expect.any(String))
+    expect(b.can.local.ok).toBe(false)
+    expect(b.can.remote.ok).toBe(false)
+    expect(safe(r, lane.id)).toBe(false)
+  })
+
+  it('protects a branch an open ticket also works on, and its worktree', async () => {
+    const { projectId, git } = await pushedRepo('shared-branch', [])
+    // A fresh branch: no commits of its own, so it reads merged.
+    git('branch', 'feat/x', 'main')
+    git('worktree', 'add', '-q', at('shared-wt'), 'feat/x')
+    const done = await ticket(projectId, { title: 'done', branch: 'feat/x', status: 'done' })
+    const open = await ticket(projectId, { title: 'open', branch: 'feat/x', status: 'in_progress' })
+    const r = await report(projectId)
+    expect(safe(r, done.id)).toBe(false)
+    const b = branchOf(r, done.id, 'feat/x')!
+    expect(b.protected).toContain(`#${open.id}`)
+    expect(b.can.local.ok).toBe(false)
+    expect(b.can.worktrees.ok).toBe(false)
+  })
+
+  it('is not safe while a branch’s reach is unknown', async () => {
+    const { db, schema } = await import('#/db')
+    const { projectId, repoId, git } = await pushedRepo('no-base', [])
+    git('branch', 'feat/lost', 'main')
+    // Neither the ticket's base nor the repo's is a branch: nothing to compare against.
+    db.update(schema.repos).set({ baseBranch: 'nowhere' }).where(eq(schema.repos.id, repoId)).run()
+    const t = await ticket(projectId, { title: 'lost', branch: 'feat/lost', status: 'done' })
+    const r = await report(projectId)
+    expect(safe(r, t.id)).toBe(false)
+    expect(branchOf(r, t.id, 'feat/lost')!.reach).toBeNull()
+    expect(branchOf(r, t.id, 'feat/lost')!.can.local.ok).toBe(false)
+  })
+
+  it('leaves untracked a detached checkout of the base’s tip a branch was fast-forwarded into', async () => {
+    const { projectId, git, shas } = await pushedRepo('ff-tip', [
+      { ref: 'refs/heads/feat/done', from: 'refs/heads/main', file: 'd.txt', text: 'd\n', msg: 'd' },
+    ])
+    git('update-ref', 'refs/heads/main', shas[1]!)
+    git('push', '-q', 'origin', 'main')
+    git('worktree', 'add', '-q', '--detach', at('ff-tip-wt'), 'main')
+    const t = await ticket(projectId, { title: 'done', branch: 'feat/done', status: 'done' })
+    const r = await report(projectId)
+    expect(r.untracked.map((w) => path.resolve(w.path))).toEqual([at('ff-tip-wt')])
+    expect(branchOf(r, t.id, 'feat/done')?.worktrees ?? []).toEqual([])
+  })
+
+  it('protects a detached worktree an open ticket also claims', async () => {
+    const { projectId, git, shas } = await pushedRepo('shared-detached', [
+      { ref: 'refs/heads/feat/a', from: 'refs/heads/main', file: 'a.txt', text: 'a\n', msg: 'a' },
+    ])
+    git('branch', 'feat/b', shas[1]!)
+    git('worktree', 'add', '-q', '--detach', at('shared-detached-wt'), shas[1]!)
+    const done = await ticket(projectId, { title: 'done', branch: 'feat/a', status: 'done' })
+    const open = await ticket(projectId, { title: 'open', branch: 'feat/b', status: 'in_progress' })
+    const b = branchOf(await report(projectId), done.id, 'feat/a')!
+    expect(b.worktrees.map((w) => path.resolve(w.path))).toEqual([at('shared-detached-wt')])
+    expect(b.worktrees[0]!.protected).toContain(`#${open.id}`)
+    expect(b.can.worktrees.ok).toBe(false)
+  })
+
+  it('judges origin’s copy by its own commits, and restores each copy that differs', async () => {
+    const { projectId, git, shas } = await pushedRepo('origin-ahead', [
+      { ref: 'refs/heads/feat/x', from: 'refs/heads/main', file: 'x.txt', text: 'x\n', msg: 'x' },
+      { ref: 'refs/heads/feat/x', file: 'x.txt', text: 'more\n', msg: 'more on origin' },
+    ])
+    // origin has both commits; here the branch is back at the first one, which main took as is.
+    git('update-ref', 'refs/heads/feat/x', shas[1]!)
+    git('update-ref', 'refs/heads/main', shas[1]!)
+    git('push', '-q', 'origin', 'main')
+    const t = await ticket(projectId, { title: 'x', branch: 'feat/x', status: 'done' })
+    const b = branchOf(await report(projectId), t.id, 'feat/x')!
+    expect(b.local).toBe(shas[1])
+    expect(b.remote).toBe(shas[2])
+    expect(b.reach?.state).toBe('merged')
+    expect(b.remoteReach?.state).toBe('unique')
+    expect(b.can.local.ok).toBe(true)
+    expect(b.can.remote.ok).toBe(false)
+    expect(b.restore).toBe(`git branch feat/x ${shas[1]}`)
+    expect(b.restoreRemote).toBe(`git push origin ${shas[2]}:refs/heads/feat/x`)
+  })
+
+  it('folds the case of paths only where the file system does', async () => {
+    const { samePath } = await import('./cleanup')
+    expect(samePath('/tmp/x/WT', '/tmp/x/wt', 'linux')).toBe(false)
+    expect(samePath('/tmp/x/wt/', '/tmp/x/wt', 'linux')).toBe(true)
+    expect(samePath('C:\\X\\WT\\', 'c:/x/wt', 'win32')).toBe(true)
+  })
+
+  it('says when git cannot read a repo instead of showing it clean', async () => {
+    const { db, schema } = await import('#/db')
+    const dir = at('not-a-repo')
+    fs.mkdirSync(dir)
+    const projectId = db.insert(schema.projects).values({ name: 'not-a-repo' }).returning().get().id
+    db.insert(schema.repos).values({ projectId, name: 'nope', repoPath: dir, baseBranch: 'main' }).run()
+    const t = await ticket(projectId, { title: 'gone', branch: 'feat/y', status: 'done' })
+    const r = await report(projectId)
+    expect(r.repos).toEqual([expect.objectContaining({ name: 'nope', error: expect.any(String) })])
+    expect(safe(r, t.id) ?? false).toBe(false)
   })
 })
