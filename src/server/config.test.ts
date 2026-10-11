@@ -7,6 +7,7 @@ import {
   LIVE_PORT,
   readAuthMode,
   readClaudeArgs,
+  readClaudeTimeout,
   StartupError,
 } from './config'
 
@@ -124,5 +125,18 @@ describe('readClaudeArgs', () => {
   it('refuses anything else', () => {
     for (const raw of ['e2e/fake-claude.mjs', '{"a": 1}', '[1]', '"x"'])
       expect(() => readClaudeArgs(raw)).toThrow(/CLAUDE_ARGS must be a JSON array of strings/)
+  })
+})
+
+describe('readClaudeTimeout', () => {
+  it('is two minutes when unset, else the milliseconds given', () => {
+    expect(readClaudeTimeout(undefined)).toBe(120_000)
+    expect(readClaudeTimeout('')).toBe(120_000)
+    expect(readClaudeTimeout('1500')).toBe(1500)
+  })
+
+  it('refuses anything but a whole number above 0', () => {
+    for (const raw of ['0', '-5', '1.5', 'soon'])
+      expect(() => readClaudeTimeout(raw)).toThrow(/CLAUDE_TIMEOUT_MS must be/)
   })
 })

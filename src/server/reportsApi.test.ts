@@ -217,7 +217,10 @@ describe('report routes the Daily page builds on', () => {
   it('answer, before their work is done, with nothing rather than something made up', async () => {
     const p = newProject('routes')
     await call('PATCH', `/api/projects/${p}/report-settings`, { cadence: 'daily' })
-    expect((await call('POST', `/api/projects/${p}/reports/generate`, {})).status).toBe(501)
+    // Without a cadence there is no period for claude to write.
+    expect(
+      (await call('POST', `/api/projects/${newProject('routes-off')}/reports/generate`, {})).status,
+    ).toBe(400)
     expect((await call('GET', '/api/report-due')).body).toEqual({ items: [] })
     expect((await call('GET', '/api/reports/overview?date=2026-10-04')).body).toEqual({
       date: '2026-10-04',
@@ -232,7 +235,7 @@ describe('report routes the Daily page builds on', () => {
     })
     expect((await call('GET', `/api/projects/${p}/report-settings/changes`)).body).toEqual([])
     expect((await call('GET', `/api/projects/${p}/report-settings/changes?field=nope`)).status).toBe(400)
-    expect((await call('GET', '/api/report-settings/changes/1')).status).toBe(404)
+    expect((await call('GET', '/api/report-settings/changes/987654')).status).toBe(404)
     expect((await call('GET', `/api/projects/${p}/reports`)).body).toMatchObject({
       generating: null,
       generateError: null,
