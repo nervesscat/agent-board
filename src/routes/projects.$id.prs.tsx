@@ -27,11 +27,12 @@ import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
 
-const FILTER_KEYS = ['me', 'others', 'all'] as const
+const FILTER_KEYS = ['me', 'others'] as const
 type Filter = (typeof FILTER_KEYS)[number]
 
 // ?result=<id> opens that review result over the queue (a verdict on a card links there); ?filter= is
-// the filter picked (none: the one this browser remembers, else all).
+// the filter picked (none, or one no longer offered such as an old `all`: the one this browser
+// remembers, else To review).
 export const Route = createFileRoute('/projects/$id/prs')({
   component: PrQueue,
   validateSearch: z.object({
@@ -59,8 +60,10 @@ const FILTERS: { key: Filter; label: string; title: string }[] = [
     title:
       "Your PRs (agents' too): pending approvals, approved by every reviewer, or on hold on their comments",
   },
-  { key: 'all', label: 'All', title: 'Every PR in the queue' },
 ]
+// A tab's underline, drawn by the line style only (these are the default style), hangs 5px below it:
+// without it, nothing of a tab reaches outside its list, so the list has nothing to scroll.
+const NO_UNDERLINE = 'after:hidden'
 // The last filter picked is remembered in this browser, for a visit whose URL names none.
 const FILTER_KEY = 'prs.filter'
 
@@ -72,7 +75,7 @@ function PrQueue() {
   const key = ['prs', id]
   const { data: project } = useProject(id)
   // The tab and the list both follow the URL, so the server's render and the browser's agree.
-  const filter = picked ?? 'all'
+  const filter = picked ?? 'me'
   const showFilter = (f: Filter) => navigate({ search: (s) => ({ ...s, filter: f }), replace: true })
   useRestoreRemembered(FILTER_KEY, picked, FILTER_KEYS, showFilter)
   const pickFilter = (f: Filter) => {
@@ -89,9 +92,9 @@ function PrQueue() {
     onSuccess: (rows) => qc.setQueryData(key, rows),
     onError: (err) => toast.error(errorMessage(err)),
   })
-  const inFilter = (p: PrRow, f: Filter) => f === 'all' || p.waitingOn === f
+  const inFilter = (p: PrRow, f: Filter) => p.waitingOn === f
   const shown = data?.filter((p) => inFilter(p, filter)) ?? []
-  const suffix = filter === 'all' ? '' : ` ${FILTERS.find((f) => f.key === filter)!.label.toLowerCase()}`
+  const suffix = FILTERS.find((f) => f.key === filter)!.label.toLowerCase()
 
   return (
     <div className="space-y-4">
@@ -108,7 +111,7 @@ function PrQueue() {
           <Tabs value={filter} onValueChange={(v) => pickFilter(v as Filter)}>
             <TabsList>
               {FILTERS.map((f) => (
-                <TabsTrigger key={f.key} value={f.key} title={f.title}>
+                <TabsTrigger key={f.key} value={f.key} title={f.title} className={NO_UNDERLINE}>
                   {f.label}
                   <span className="ml-1 rounded-full bg-background px-1.5 text-xs tabular-nums">
                     {data?.filter((p) => inFilter(p, f.key)).length ?? 0}
@@ -132,10 +135,11 @@ function PrQueue() {
         <Skeleton className="h-40" />
       ) : (
         <Tabs defaultValue="pending">
-          {/* Four stages do not fit a phone: the list scrolls instead of the page. */}
-          <TabsList className="max-w-full justify-start overflow-x-auto">
+          {/* Four stages do not fit one row on a phone: there they take two rows of two, so every stage
+              and its count shows without the list or the page scrolling. */}
+          <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-fit sm:group-data-horizontal/tabs:h-8">
             {TABS.map((t) => (
-              <TabsTrigger key={t.key} value={t.key}>
+              <TabsTrigger key={t.key} value={t.key} className={NO_UNDERLINE}>
                 {t.label}
                 <span className="ml-1.5 rounded-full bg-background px-1.5 text-xs tabular-nums">
                   {shown.filter((p) => p.status === t.key).length}
@@ -153,8 +157,7 @@ function PrQueue() {
                   ))
               ) : (
                 <Empty>
-                  Nothing {t.label.toLowerCase()}
-                  {suffix}.
+                  Nothing {t.label.toLowerCase()} {suffix}.
                 </Empty>
               )}
             </TabsContent>
