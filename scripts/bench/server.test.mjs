@@ -1,12 +1,14 @@
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 
-import { freePort, killAll, startServer } from './server.mjs'
+import { freePort, killAll, killTree, startServer } from './server.mjs'
 
 // A build of its own in place of the board's: `server/index.mjs` answers every request with its pid
 // and, like the board's server when its port is taken, exits quietly when it cannot listen.
@@ -84,6 +86,43 @@ describe('startServer', () => {
     expect(fs.readFileSync(log, 'utf8')).toMatch(/exited \(0\) with the port in use/)
   }, 60_000)
 
+  it('in a process of its own, moves on when a 200 comes from another server while its own exits', async () => {
+    // Vitest's worker keeps its own loop alive; a harness at its first start holds nothing but the
+    // server it waits for, so the start runs where nothing else does.
+    const port = await freePort(47380)
+    const other = http.createServer((req, res) => res.end('someone else'))
+    others.push(other)
+    await new Promise((r) => other.listen(port, '127.0.0.1', r))
+    const script = path.join(root, 'alone.mjs')
+    fs.writeFileSync(
+      script,
+      `import { startServer } from ${JSON.stringify(pathToFileURL(path.resolve('scripts/bench/server.mjs')).href)}
+const s = await startServer(JSON.parse(process.argv[2]))
+console.log(s.port)
+await s.stop()
+`,
+    )
+    const alone = path.join(root, 'alone.log')
+    const opts = {
+      target: process.cwd(),
+      buildDir,
+      dataDir: path.join(root, 'data'),
+      port,
+      human: 'h',
+      log: alone,
+    }
+    const child = spawn(process.execPath, [script, JSON.stringify(opts)], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let out = ''
+    child.stdout.on('data', (d) => (out += d))
+    child.stderr.on('data', (d) => (out += d))
+    const code = await new Promise((resolve) => child.once('exit', resolve))
+    expect(code, out).toBe(0)
+    expect(Number(out.trim())).toBeGreaterThan(port)
+    expect(fs.readFileSync(alone, 'utf8')).toContain(`port ${port} is another server's`)
+  }, 60_000)
+
   it('keeps its own server when its first answer is slow (vite dev compiling it)', async () => {
     process.env.SLOW_FIRST = '6000'
     try {
@@ -94,6 +133,29 @@ describe('startServer', () => {
     } finally {
       delete process.env.SLOW_FIRST
     }
+  }, 60_000)
+
+  it('fails clearly, with nothing left uncaught, when its server exits during the run', async () => {
+    const s = await start(await freePort(47380))
+    expect(await s.memory()).toMatchObject({ type: 'memory', rss: expect.any(Number) })
+    expect(await s.background()).toMatchObject({ type: 'background' })
+    killTree(s.proc)
+    await new Promise((resolve) =>
+      (s.proc.exitCode ?? s.proc.signalCode) !== null ? resolve() : s.proc.once('exit', resolve),
+    )
+    await expect(s.background()).rejects.toThrow(/bench server exited .*during the run/)
+    await expect(s.memory()).rejects.toThrow(/bench server exited .*during the run/)
+    await expect(s.request('/who')).rejects.toThrow(/bench server exited .*during the run/)
+    await s.stop()
+  }, 60_000)
+
+  it('fails clearly when the channel to its server has closed before its exit is seen', async () => {
+    const s = await start(await freePort(47380))
+    // Closed from this side: the server has not exited yet, so only the send itself can fail.
+    s.proc.disconnect()
+    await expect(s.background()).rejects.toThrow(/bench server exited.* during the run/)
+    await expect(s.memory()).rejects.toThrow(/bench server exited.* during the run/)
+    await s.stop()
   }, 60_000)
 
   it('fails clearly when its server exits on a free port, without trying another', async () => {

@@ -3,13 +3,14 @@ import os from 'node:os'
 import path from 'node:path'
 
 import Database from 'better-sqlite3'
-import { afterAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
   SLOT_MS,
   assertBenchDataDir,
   generate,
   generatedPlan,
+  generationMoment,
   msUntilSlot,
   pickTargets,
   prng,
@@ -83,10 +84,21 @@ describe('the generated dataset', () => {
 
 describe('the generated dataset, whatever the hour', () => {
   const DAY = 86_400_000
+  // In a zone with no clock change in the 60 days the dataset spans (the days of a change are tested
+  // below), whatever the machine's zone; the zone it had is put back after.
+  let zone
+  beforeAll(() => {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    process.env.TZ = 'America/Guatemala'
+  })
+  afterAll(() => {
+    process.env.TZ = zone
+  })
   // Local times: a run that starts just after midnight, one late in the evening two days later, and
-  // what the server reads for each, at its start and 23 minutes on (still the same day).
+  // what the server reads for each, at its start and 23 minutes on (still the same day). Taken when the
+  // tests run, in the zone above.
   const local = (day, h, m, s = 0) => new Date(2026, 9, day, h, m, s).getTime()
-  const runs = [
+  const runs = () => [
     { name: 'just after midnight', generated: local(7, 0, 1, 30), reads: [local(7, 0, 2), local(7, 0, 25)] },
     {
       name: 'late in the evening',
@@ -125,10 +137,36 @@ describe('the generated dataset, whatever the hour', () => {
     ).toThrow(/after midnight/)
   })
 
+  it('generates for the clock read the wait was decided on, also in the last moment before midnight', async () => {
+    const lastMoment = local(10, 0, 0) - 1
+    const reads = [lastMoment, lastMoment + 2]
+    const waits = []
+    const now = await generationMoment({ clock: () => reads.shift(), sleep: (ms) => waits.push(ms) })
+    expect(now).toBe(lastMoment)
+    expect(waits).toEqual([])
+    // A second read, past midnight and before the new day's ready moment, would be refused.
+    expect(msUntilSlot(lastMoment + 2)).toBeGreaterThan(0)
+    expect(() =>
+      generate(path.join(root, 'last-moment'), { scale: 0.05, seed: 3, migrationsFolder, now }),
+    ).not.toThrow()
+
+    // Too soon after midnight: it waits, then hands on the read after the wait.
+    const after = [local(10, 0, 0, 20), local(10, 0, 1) + 100]
+    const announced = []
+    const ready = await generationMoment({
+      clock: () => after.shift(),
+      sleep: (ms) => waits.push(ms),
+      onWait: (ms) => announced.push(ms),
+    })
+    expect(announced).toEqual([SLOT_MS - 20_000])
+    expect(waits).toEqual([SLOT_MS - 20_000 + 100])
+    expect(ready).toBe(local(10, 0, 1) + 100)
+  }, 60_000)
+
   it('reads the same through the server at any hour: today, carried over, stalled, days in progress, reports due', async () => {
     const seen = []
-    for (const run of runs) {
-      const dir = path.join(root, `hour-${runs.indexOf(run)}`)
+    for (const [i, run] of runs().entries()) {
+      const dir = path.join(root, `hour-${i}`)
       generate(dir, { scale: 0.05, seed: 3, migrationsFolder, now: run.generated })
       const db = new Database(path.join(dir, 'board.db'), { readonly: true })
       const newest = db
@@ -182,4 +220,116 @@ describe('the generated dataset, whatever the hour', () => {
       expect(s.reports, `${s.run} at ${s.at}: the report periods`).toBe(first.reports)
     }
   }, 120_000)
+})
+
+describe('the generated dataset, whatever the hour on a daylight saving change', () => {
+  const DAY = 86_400_000
+  // Each day's earliest moment it is generated for, in minutes after its midnight: an hour later on the
+  // day the clocks go back and in the days after they go forward.
+  const cases = [
+    { tz: 'Europe/Madrid', day: [2026, 9, 25], ready: 61, what: 'the clocks go back (a 25 h day)' },
+    { tz: 'Europe/Madrid', day: [2026, 10, 5], ready: 1, what: '11 days after they went back' },
+    { tz: 'Europe/Madrid', day: [2027, 2, 28], ready: 1, what: 'the clocks go forward (a 23 h day)' },
+    { tz: 'Europe/Madrid', day: [2027, 2, 29], ready: 61, what: 'the day after they went forward' },
+    { tz: 'America/New_York', day: [2026, 10, 1], ready: 61, what: 'the clocks go back (a 25 h day)' },
+    { tz: 'America/New_York', day: [2027, 2, 20], ready: 61, what: '6 days after they went forward' },
+  ]
+  const plain = [2026, 9, 14]
+
+  /** Runs `fn` with the process in time zone `tz`, then puts back the zone it had. */
+  const inZone = async (tz, fn) => {
+    const before = Intl.DateTimeFormat().resolvedOptions().timeZone
+    process.env.TZ = tz
+    try {
+      return await fn()
+    } finally {
+      process.env.TZ = before
+    }
+  }
+
+  /** Every moment in the database, row by row, as [calendar days before `today`, whole days before `now`]. */
+  const ages = (dir, today, now) => {
+    const db = new Database(path.join(dir, 'board.db'), { readonly: true })
+    const out = []
+    for (const { name } of db
+      .prepare("select name from sqlite_master where type = 'table' order by name")
+      .all())
+      for (const row of db.prepare(`select * from "${name}" order by rowid`).all())
+        for (const v of Object.values(row))
+          if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v)) {
+            const ms = Date.parse(v)
+            out.push([Math.round((today - startOfLocalDay(ms)) / DAY), Math.floor((now - ms) / DAY)])
+          }
+    db.close()
+    return out
+  }
+
+  /** What the server answers at `at`, with every moment and date in it blanked out. */
+  const answers = async (dir, at) => {
+    vi.resetModules()
+    process.env.DATA_DIR = dir
+    const { getSummary } = await import('#/server/summary')
+    const { dailyReport, today } = await import('#/server/daily')
+    const now = new Date(at)
+    const { generatedAt: _at, ...summary } = getSummary(undefined, { now })
+    const daily = dailyReport(today(now))
+    ;(await import('#/db')).db.$client.close()
+    const blank = (value) =>
+      JSON.stringify(value)
+        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, 'T')
+        .replace(/\d{4}-\d{2}-\d{2}/g, 'D')
+    const working = summary.projects.flatMap((p) => p.inProgress)
+    return {
+      stalled: working.filter((t) => t.stale).length,
+      going: working.filter((t) => !t.stale).length,
+      bytes: JSON.stringify(summary).length,
+      summary: blank(summary),
+      daily: blank(daily),
+    }
+  }
+
+  /** The dataset of a day generated at its earliest moment, read then and late that evening. */
+  const day = async (tz, [y, m, d], name) =>
+    inZone(tz, async () => {
+      const midnight = new Date(y, m, d).getTime()
+      const tomorrow = new Date(y, m, d + 1).getTime()
+      const at = midnight + 30_000
+      const ready = at + msUntilSlot(at)
+      const dir = path.join(root, name)
+      generate(dir, { scale: 0.05, seed: 3, migrationsFolder, now: ready })
+      const reads = [
+        ready,
+        new Date(y, m, d, 10).getTime(),
+        new Date(y, m, d, 23, 30).getTime(),
+        tomorrow - 1000,
+      ]
+      const read = []
+      for (const now of reads) read.push(await answers(dir, now))
+      return {
+        hours: (tomorrow - midnight) / 3_600_000,
+        readyAfter: (ready - midnight) / 60_000,
+        ages: reads.map((now) => ages(dir, midnight, now)),
+        answers: read,
+      }
+    })
+
+  it('keeps every row on its calendar day and its whole days old, and reads the same at any hour', async () => {
+    const plains = new Map()
+    for (const c of cases) {
+      const label = `${c.tz} ${c.day.join('-')}, ${c.what}`
+      if (!plains.has(c.tz)) plains.set(c.tz, await day(c.tz, plain, `dst-plain-${c.tz.replace('/', '-')}`))
+      const ref = plains.get(c.tz)
+      expect(ref.hours, `${c.tz}: the plain day`).toBe(24)
+      expect(ref.readyAfter).toBe(1)
+      const got = await day(c.tz, c.day, `dst-${c.tz.replace('/', '-')}-${c.day.join('-')}`)
+      expect(got.readyAfter, `${label}: generated from`).toBe(c.ready)
+      for (const [i, ages] of got.ages.entries())
+        expect(ages, `${label}: calendar and whole days of every row, read ${i}`).toEqual(ref.ages[0])
+      for (const [i, a] of got.answers.entries()) {
+        expect(a.stalled, `${label}: stalled, read ${i}`).toBe(ref.answers[0].stalled)
+        expect(a.going, `${label}: going on, read ${i}`).toBe(ref.answers[0].going)
+        expect(a, `${label}: read ${i}`).toEqual(ref.answers[0])
+      }
+    }
+  }, 600_000)
 })

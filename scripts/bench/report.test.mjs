@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { laidOutDays } from './data.mjs'
 import {
   Metrics,
   beyondNoise,
@@ -119,6 +120,39 @@ describe('Metrics', () => {
     expect(row).toContain('| n/a |')
     expect(row).not.toContain('| 0 |')
     expect(md).toContain('n/a: not counted under vite dev')
+  })
+})
+
+describe('markdownSummary of a run that went past midnight', () => {
+  it('names the day the data was first laid out on, then the day it was written again for', () => {
+    const generator = { plan: {}, scale: 1, seed: 1, day: '2026-10-11' }
+    // As the harness keeps them: laid out on the 11th, past midnight, written again for the 12th.
+    const days = laidOutDays(generator)
+    expect(days.over(new Date(2026, 9, 11, 23, 59).getTime())).toBe(false)
+    expect(days.over(new Date(2026, 9, 12, 0, 1).getTime())).toBe(true)
+    days.writtenAgain('2026-10-12')
+    expect(days.over(new Date(2026, 9, 12, 0, 2).getTime())).toBe(false)
+    expect(generator).toMatchObject({ day: '2026-10-11', days: ['2026-10-11', '2026-10-12'] })
+    const md = markdownSummary(
+      results(
+        {},
+        {
+          datasets: {
+            generated: {
+              source: { generator },
+              counts: {},
+              picks: {},
+              metrics: {},
+              details: {},
+              redone: [3],
+            },
+          },
+        },
+      ),
+    )
+    expect(md).toContain(
+      'Laid out on the local day 2026-10-11 (written again for 2026-10-12). Run again because they went past midnight: run 3.',
+    )
   })
 })
 
