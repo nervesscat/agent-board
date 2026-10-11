@@ -52,7 +52,7 @@ export function richExtensions(placeholder = '') {
 /**
  * Rich text in, markdown out: what agents write and read stays markdown, people get formatting
  * buttons instead of syntax. Tables, task lists, code and images round-trip. Files pasted or dropped
- * go to `onFiles` (the caller attaches them) instead of into the text. With `onAttach` the toolbar ends
+ * go to `onFiles` (the caller attaches them) instead of into the text. With `onAttach` the toolbar starts
  * with an attach button that calls it (the caller opens its file picker; `attaching` while it works);
  * forms that keep their attach in a row of their own leave it out. Ctrl/⌘+Enter calls `onSubmit`, Esc
  * `onCancel`.
@@ -76,7 +76,7 @@ export function RichEditor({
   onChange: (markdown: string) => void
   placeholder?: string
   onFiles?: (files: File[]) => void
-  /** Puts an attach button at the end of the toolbar. */
+  /** Puts an attach button at the start of the toolbar, before Bold. */
   onAttach?: () => void
   /** The attach button spins while the files it picked are on their way. */
   attaching?: boolean
@@ -163,7 +163,7 @@ export function RichEditor({
   }, [editor, value])
 
   // The text comes before the toolbar in the page, so Tab reaches the text first and the buttons after
-  // it, attach last (Shift+Tab the reverse); `flex-col-reverse` still draws the toolbar above the text.
+  // it, attach first (Shift+Tab the reverse); `flex-col-reverse` still draws the toolbar above the text.
   return (
     <div
       className={cn(
@@ -244,6 +244,19 @@ function Toolbar({
   const attachLabel = attaching ? 'Attaching files…' : 'Attach files'
   return (
     <div role="toolbar" aria-label="Formatting" className="flex flex-wrap gap-0.5 border-b px-1.5 py-1">
+      {onAttach && (
+        <button
+          type="button"
+          title={attachLabel}
+          aria-label={attachLabel}
+          aria-busy={attaching}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={onAttach}
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
+        </button>
+      )}
       {buttons.map((b) => (
         <button
           key={b.label}
@@ -262,19 +275,6 @@ function Toolbar({
           <b.icon className="size-3.5" />
         </button>
       ))}
-      {onAttach && (
-        <button
-          type="button"
-          title={attachLabel}
-          aria-label={attachLabel}
-          aria-busy={attaching}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onAttach}
-          className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
-        </button>
-      )}
     </div>
   )
 }
