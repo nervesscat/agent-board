@@ -148,7 +148,9 @@ http_headers = { Authorization = "Bearer gate_…" }
    `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
    each a `code` and a `text` (`no_pr`, `not_pushed`, `no_preview`, `no_handoff_post`: no progress
    post of yours since the branch's last commit, `checks_unknown`: the PR's CI is failing or still
-   running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff`
+   running). The move goes through anyway: fix each one. `handoff.checks` lists every item with
+   `ok`, first `not_merged` (Merged: the PR merged on GitHub, or the branch merged into its base),
+   which is never in `missing`: merging is the human's. `get_ticket` returns the same `handoff`
    while the ticket is in review, and its page shows it as a Hand-off card.
 
    `done` is the human's call unless the instructions say otherwise. A ticket with lanes goes to

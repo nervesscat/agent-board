@@ -9,11 +9,18 @@ import { ticketRepo } from './repos'
 /**
  * What a ticket handed to review still lacks: the parts of the hand-off the board can see for itself
  * (a PR, the branch on origin, a preview that runs, a hand-off post after the last commit, CI that is
- * not red). Warnings only: moving to review is never refused for them.
+ * not red). Warnings only: moving to review is never refused for them. Above them, whether the branch
+ * is merged yet: merging is the human's step, so it is listed but never missing.
  */
 
 /** Stable codes, for agents to act on; the text is for people. */
-export type HandoffCode = 'no_pr' | 'not_pushed' | 'no_preview' | 'no_handoff_post' | 'checks_unknown'
+export type HandoffCode =
+  | 'not_merged'
+  | 'no_pr'
+  | 'not_pushed'
+  | 'no_preview'
+  | 'no_handoff_post'
+  | 'checks_unknown'
 
 export interface HandoffCheck {
   code: HandoffCode
@@ -25,17 +32,20 @@ export interface HandoffCheck {
 }
 
 export interface Handoff {
-  /** The checks that failed, in checklist order. */
+  /** The checks that failed, in checklist order; never `not_merged`, which waits on the human. */
   missing: { code: HandoffCode; text: string }[]
-  /** Every item, met or not; CI only when the PR has checks. */
+  /** Every item, met or not, Merged first; CI only when the PR has checks. */
   checks: HandoffCheck[]
 }
 
 /** What the checks go by, gathered from the ticket, git, the previews and the PR queue. */
 export interface HandoffFacts {
   branch: string
-  /** The PR it was opened as (by prNumber or its branch), with CI from the PR queue when it is there. */
-  pr: { number: number; ci: CiState | null } | null
+  /**
+   * The PR it was opened as (by prNumber or its branch), with CI from the PR queue when it is there,
+   * and whether the queue saw it merged on GitHub.
+   */
+  pr: { number: number; ci: CiState | null; merged: boolean } | null
   push: Pick<Push, 'state' | 'ahead' | 'into'>
   /** Each workspace's preview: its link, and whether the board runs it or it answers. */
   previews: { url: string; running: boolean }[]
@@ -58,6 +68,18 @@ export function handoffOf(f: HandoffFacts): Handoff {
   const check = (code: HandoffCode, label: string, ok: boolean, text: string) =>
     checks.push({ code, label, ok, text })
 
+  const p = f.push
+  check(
+    'not_merged',
+    'Merged',
+    Boolean(f.pr?.merged) || p.state === 'merged',
+    f.pr?.merged
+      ? `PR #${f.pr.number} merged`
+      : p.state === 'merged'
+        ? `Merged into ${p.into ?? 'its base'}`
+        : 'Not merged yet',
+  )
+
   check(
     'no_pr',
     'PR',
@@ -65,7 +87,6 @@ export function handoffOf(f: HandoffFacts): Handoff {
     f.pr ? `PR #${f.pr.number}` : 'No PR: none set and none open on the branch',
   )
 
-  const p = f.push
   check(
     'not_pushed',
     'Pushed',
@@ -119,7 +140,9 @@ export function handoffOf(f: HandoffFacts): Handoff {
     )
   else if (ci === 'passing') check('checks_unknown', 'CI', true, "The PR's CI passed")
 
-  return { missing: checks.filter((c) => !c.ok).map(({ code, text }) => ({ code, text })), checks }
+  // Merging is the human's step: a branch not merged yet is pending, not something the hand-off lacks.
+  const missing = checks.filter((c) => !c.ok && c.code !== 'not_merged')
+  return { missing: missing.map(({ code, text }) => ({ code, text })), checks }
 }
 
 type TicketWithPush = Awaited<ReturnType<typeof getTicketWithPush>>
@@ -147,7 +170,9 @@ export async function ticketHandoff(t: TicketWithPush): Promise<Handoff> {
   ])
   return handoffOf({
     branch: t.branch,
-    pr: t.pr ? { number: t.pr.number, ci: t.pr.queue?.ci ?? null } : null,
+    pr: t.pr
+      ? { number: t.pr.number, ci: t.pr.queue?.ci ?? null, merged: t.pr.queue?.status === 'done' }
+      : null,
     push: t.push,
     previews,
     lastCommitAt: last,
