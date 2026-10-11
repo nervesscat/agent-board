@@ -1,23 +1,44 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, max, ne } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  max,
+  ne,
+  type SQL,
+  sql,
+} from 'drizzle-orm'
+import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 
 import { db, schema } from '#/db'
 import type { StageKind } from '#/lib/constants'
+import { localDate } from '#/lib/format'
 import { stageColumn } from '#/lib/stages'
 import { dayBounds } from './activity'
 import { listActors } from './actors'
 import { today } from './daily'
-import { gist, listHumanThreads, listTickets } from './features'
+import { gist, threadsOf, ticketRows, type ThreadFacts } from './features'
 import { getProject } from './projects'
 import { refreshPrsInBackground } from './prs'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
-import { handoffStates } from './resume'
+import { handoffFacts } from './resume'
 import { listStages, type Stage } from './stages'
 
 /**
  * The one-glance picture of a project (or of every project): what waits on the human, what is in
  * progress, what got done today, what is next, and what carries over from before today. Read by the
  * Home and Overview pages and by agents starting a session (`get_summary`).
+ *
+ * Every project's block is built from the same reads, a fixed number of statements whatever the
+ * number of projects and tickets: each table is read once for all of them, and what depends on the
+ * tickets in progress is read once for all of those.
  */
 
 const DAY_MS = 86_400_000
@@ -32,8 +53,8 @@ const inProgress = (kind: StageKind | undefined) => !!kind && IN_PROGRESS.includ
 const BACKLOG = /backlog|icebox|someday|later|parking/i
 export const isBacklog = (s: Pick<Stage, 'key' | 'name'>) => BACKLOG.test(s.key) || BACKLOG.test(s.name)
 
-/** A ticket as `listTickets` reads it, its resume columns included. */
-type Row = ReturnType<typeof listTickets>[number]
+/** A ticket as the ticket lists read it (`listTickets`), its resume columns included. */
+type Row = ReturnType<typeof ticketRows>[number]
 
 /**
  * Where the last session on a carried-over ticket left off: its resume note as one line of plain text
@@ -89,151 +110,356 @@ export function getSummary(projectId: number | undefined, opts: SummaryOptions =
   return {
     date,
     generatedAt: now.toISOString(),
-    projects: projects.map((p) => projectSummary(p, { now, date, humans })),
+    projects: summarize(projectId, projects, { now, date, humans }),
   }
 }
 
 export type Summary = ReturnType<typeof getSummary>
 export type ProjectSummary = Summary['projects'][number]
 
-function projectSummary(project: schema.Project, ctx: { now: Date; date: string; humans: string[] }) {
-  const { now, date, humans } = ctx
-  const { from, to } = dayBounds(date)
-  const stages = listStages(project.id)
-  const stageByKey = new Map(stages.map((s) => [s.key, s]))
-  const kind = (status: string) => stageByKey.get(status)?.kind
-  // Archived tickets are left out here, lanes of archived tickets with them.
-  const tickets = listTickets(project.id)
-  const byId = new Map(tickets.map((t) => [t.id, t]))
-  const ids = tickets.map((t) => t.id)
-  const top = tickets.filter((t) => t.parentId === null)
-  const children = new Map<number, Row[]>()
-  for (const t of tickets) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
-  const below = (id: number): number[] =>
-    (children.get(id) ?? []).flatMap((lane) => [lane.id, ...below(lane.id)])
-  const parentOf = (t: Row) => {
-    const p = t.parentId ? byId.get(t.parentId) : undefined
-    return p ? { id: p.id, title: p.title } : null
-  }
-  const parse = moveParser(stages)
+type Context = { now: Date; date: string; humans: string[] }
 
-  // --- needs you ---
-  const decisions = ids.length
-    ? db
-        .select({
-          id: schema.updates.id,
-          ticketId: schema.updates.ticketId,
-          author: schema.updates.author,
-          body: schema.updates.body,
-          decision: schema.updates.decision,
-          createdAt: schema.updates.createdAt,
-        })
-        .from(schema.updates)
-        .where(
-          and(
-            inArray(schema.updates.ticketId, ids),
-            isNotNull(schema.updates.decision),
-            isNull(schema.updates.decidedAt),
-          ),
+/** Rows in the order they came, by the project (or ticket) each belongs to. */
+function groupBy<T>(rows: T[], key: (row: T) => number | null | undefined): Map<number, T[]> {
+  const out = new Map<number, T[]>()
+  for (const row of rows) {
+    const k = key(row)
+    if (k === null || k === undefined) continue
+    const list = out.get(k)
+    if (list) list.push(row)
+    else out.set(k, [row])
+  }
+  return out
+}
+
+/**
+ * `column` is one of `ids`. The ids go in as one JSON parameter: a batch over every project can hold
+ * more of them than SQLite takes parameters in one statement.
+ */
+const inIds = (column: SQLiteColumn, ids: number[]) =>
+  sql`${column} in (select value from json_each(${JSON.stringify(ids)}))`
+
+/** Rows of the project asked for: no condition when every project is. */
+type Filter = (column: SQLiteColumn) => SQL | undefined
+
+/** What the summary reads, each table once, for the one project asked for or for every project. */
+function readAll(projectId: number | undefined, projects: schema.Project[], ctx: Context) {
+  const { from, to } = dayBounds(ctx.date)
+  // In the project, or anywhere when every project is summarised.
+  const ofProject: Filter = (column) => (projectId ? eq(column, projectId) : undefined)
+  const ofTickets: Filter = (column) =>
+    projectId
+      ? inArray(
+          column,
+          db
+            .select({ id: schema.tickets.id })
+            .from(schema.tickets)
+            .where(eq(schema.tickets.projectId, projectId)),
         )
-        .orderBy(desc(schema.updates.createdAt))
-        .all()
-        .map((d) => ({
-          postId: d.id,
-          ticketId: d.ticketId,
-          ticketTitle: byId.get(d.ticketId)?.title ?? '',
-          question: gist(d.body),
-          options: d.decision?.length ?? 0,
-          author: d.author,
-          createdAt: d.createdAt,
-        }))
-    : []
-  const repos = listRepos(project.id)
-  const repoName = (id: number | null) => repos.find((r) => r.id === id)?.name ?? null
-  // Someone else's open PRs the human has not approved and has no comments waiting on.
+      : undefined
+
+  const stages = groupBy(
+    db
+      .select()
+      .from(schema.stages)
+      .where(ofProject(schema.stages.projectId))
+      .orderBy(asc(schema.stages.position), asc(schema.stages.id))
+      .all(),
+    (s) => s.projectId,
+  )
+  // A project that has none yet gets the defaults, as on any read of its stages.
+  for (const p of projects) if (!stages.has(p.id)) stages.set(p.id, listStages(p.id))
+
+  // Every ticket, archived ones too: their threads and lanes count where the ticket lists count them.
+  const tickets = db
+    .select()
+    .from(schema.tickets)
+    .where(ofProject(schema.tickets.projectId))
+    .orderBy(desc(schema.tickets.updatedAt), asc(schema.tickets.id))
+    .all()
+  const projectOf = new Map(tickets.map((t) => [t.id, t.projectId]))
+  const ticketProject = (row: { ticketId: number }) => projectOf.get(row.ticketId)
+  const tasks = db
+    .select({ ticketId: schema.tasks.ticketId, done: schema.tasks.done })
+    .from(schema.tasks)
+    .where(ofTickets(schema.tasks.ticketId))
+    .all()
+  // Decisions still waiting on the human, newest first.
+  const decisions = db
+    .select({
+      id: schema.updates.id,
+      ticketId: schema.updates.ticketId,
+      author: schema.updates.author,
+      body: schema.updates.body,
+      decision: schema.updates.decision,
+      createdAt: schema.updates.createdAt,
+    })
+    .from(schema.updates)
+    .where(
+      and(
+        ofTickets(schema.updates.ticketId),
+        isNotNull(schema.updates.decision),
+        isNull(schema.updates.decidedAt),
+      ),
+    )
+    .orderBy(desc(schema.updates.createdAt), asc(schema.updates.id))
+    .all()
+  // Someone else's open PRs the human has not approved and has no comments waiting on. Ties in time
+  // go by number, as the project's PR index hands them out.
   const prsToReview = db
     .select()
     .from(schema.prs)
     .where(
       and(
-        eq(schema.prs.projectId, project.id),
+        ofProject(schema.prs.projectId),
         eq(schema.prs.open, true),
         eq(schema.prs.waitingOn, 'me'),
         eq(schema.prs.reviewStage, 'pending'),
         eq(schema.prs.hold, false),
       ),
     )
-    .orderBy(desc(schema.prs.updatedAt))
+    .orderBy(desc(schema.prs.updatedAt), asc(schema.prs.number), asc(schema.prs.id))
     .all()
-    .map((p) => ({
-      id: p.id,
-      number: p.number,
-      title: p.title,
-      url: p.url,
-      repo: repos.length > 1 ? repoName(p.repoId) : null,
-      author: p.author,
-      isDraft: p.isDraft,
-      updatedAt: p.updatedAt,
-    }))
-  const threads = humans.length
-    ? listHumanThreads(project.id, humans)
-        .filter((th) => th.ticketId === null || byId.has(th.ticketId))
-        .map(({ as: _as, ...th }) => th)
-    : []
-  const reviews = tickets
-    .filter((t) => kind(t.status) === 'review' && !t.approvedAt)
-    .map((t) => ({
-      id: t.id,
-      title: t.title,
-      status: t.status,
-      parent: parentOf(t),
-      assignee: t.assignee,
-      prNumber: t.prNumber,
-      updatedAt: t.updatedAt,
-    }))
+  // A PR leaves the open queue when it is merged or closed, once: fetching it merged again on a later
+  // day does not move when it left.
+  const closedPrs = db
+    .select()
+    .from(schema.prs)
+    .where(
+      and(
+        ofProject(schema.prs.projectId),
+        eq(schema.prs.open, false),
+        gte(schema.prs.closedAt, from),
+        lt(schema.prs.closedAt, to),
+      ),
+    )
+    .orderBy(desc(schema.prs.closedAt), asc(schema.prs.number), asc(schema.prs.id))
+    .all()
+  const todays = db
+    .select()
+    .from(schema.activity)
+    .where(
+      and(
+        ofProject(schema.activity.projectId),
+        eq(schema.activity.refType, 'ticket'),
+        eq(schema.activity.kind, 'ticket'),
+        gte(schema.activity.createdAt, from),
+        lt(schema.activity.createdAt, to),
+      ),
+    )
+    .orderBy(asc(schema.activity.createdAt), asc(schema.activity.id))
+    .all()
+  const activity = new Map(
+    db
+      .select({ projectId: schema.activity.projectId, n: count() })
+      .from(schema.activity)
+      .where(
+        and(
+          ofProject(schema.activity.projectId),
+          gte(schema.activity.createdAt, from),
+          lt(schema.activity.createdAt, to),
+        ),
+      )
+      .groupBy(schema.activity.projectId)
+      .all()
+      .map((r) => [r.projectId, r.n]),
+  )
+  // The first workspace preview registered on each ticket.
+  const previews = new Map<number, { url: string; workspace: string }>()
+  for (const r of db
+    .select({
+      ticketId: schema.workspaces.ticketId,
+      name: schema.workspaces.name,
+      url: schema.workspaces.previewUrl,
+    })
+    .from(schema.workspaces)
+    .where(and(ofTickets(schema.workspaces.ticketId), ne(schema.workspaces.previewUrl, '')))
+    .orderBy(asc(schema.workspaces.id))
+    .all())
+    if (!previews.has(r.ticketId)) previews.set(r.ticketId, { url: r.url, workspace: r.name })
 
-  // --- in progress: since when and the last progress post, for every ticket in progress ---
-  const working = top.filter((t) => inProgress(kind(t.status)))
-  // When the work started is on the ticket; only tickets that predate that are read from the log.
-  const unstarted = working.filter((t) => !t.startedAt).map((t) => t.id)
-  const events = unstarted.length
-    ? db
+  return {
+    stages,
+    tickets: groupBy(tickets, (t) => t.projectId),
+    tasks: groupBy(tasks, ticketProject),
+    agents: groupBy(listAgents(projectId), (a) => a.projectId),
+    decisions: groupBy(decisions, ticketProject),
+    repos: groupBy(listRepos(projectId), (r) => r.projectId),
+    prsToReview: groupBy(prsToReview, (p) => p.projectId),
+    closedPrs: groupBy(closedPrs, (p) => p.projectId),
+    todays: groupBy(todays, (e) => e.projectId),
+    activity,
+    previews,
+    threads: ctx.humans.length ? readThreads(projectId !== undefined, projectOf, ofProject, ofTickets) : null,
+  }
+}
+
+/** What the human's threads are read from (`listHumanThreads`), for every project in one go. */
+function readThreads(scoped: boolean, projectOf: Map<number, number>, ofProject: Filter, ofTickets: Filter) {
+  const posts = db
+    .select({
+      id: schema.updates.id,
+      ticketId: schema.updates.ticketId,
+      author: schema.updates.author,
+      body: schema.updates.body,
+      progress: schema.updates.progress,
+      decision: schema.updates.decision,
+      decidedAt: schema.updates.decidedAt,
+      createdAt: schema.updates.createdAt,
+    })
+    .from(schema.updates)
+    .where(ofTickets(schema.updates.ticketId))
+    .all()
+  const prs = db
+    .select({
+      id: schema.prs.id,
+      projectId: schema.prs.projectId,
+      number: schema.prs.number,
+      title: schema.prs.title,
+      author: schema.prs.author,
+    })
+    .from(schema.prs)
+    .where(ofProject(schema.prs.projectId))
+    .all()
+  const reviews = db
+    .select({
+      id: schema.reviewResults.id,
+      projectId: schema.reviewResults.projectId,
+      prNumber: schema.reviewResults.prNumber,
+      verdict: schema.reviewResults.verdict,
+      author: schema.reviewResults.author,
+    })
+    .from(schema.reviewResults)
+    .where(ofProject(schema.reviewResults.projectId))
+    .all()
+  // The comments on those parents, by the project of each: of one project, only its parents' are read;
+  // of every project, every comment of the kind, and one whose parent is gone is left out here.
+  const parents = scoped && {
+    update: db
+      .select({ id: schema.updates.id })
+      .from(schema.updates)
+      .where(ofTickets(schema.updates.ticketId)),
+    pr: db.select({ id: schema.prs.id }).from(schema.prs).where(ofProject(schema.prs.projectId)),
+    review: db
+      .select({ id: schema.reviewResults.id })
+      .from(schema.reviewResults)
+      .where(ofProject(schema.reviewResults.projectId)),
+  }
+  const parentProject = {
+    update: new Map(posts.map((u) => [u.id, projectOf.get(u.ticketId)])),
+    pr: new Map(prs.map((p) => [p.id, p.projectId])),
+    review: new Map(reviews.map((r) => [r.id, r.projectId])),
+  }
+  const comments = (['update', 'pr', 'review'] as const).map((type) =>
+    groupBy(
+      db
         .select()
-        .from(schema.activity)
+        .from(schema.comments)
         .where(
           and(
-            eq(schema.activity.refType, 'ticket'),
-            eq(schema.activity.kind, 'ticket'),
-            inArray(schema.activity.refId, unstarted),
+            eq(schema.comments.parentType, type),
+            parents ? inArray(schema.comments.parentId, parents[type]) : undefined,
           ),
         )
-        .orderBy(asc(schema.activity.createdAt), asc(schema.activity.id))
-        .all()
-    : []
-  const scope = new Map(working.map((t) => [t.id, [t.id, ...below(t.id)]]))
-  const lastPosts = lastProgressPosts([...scope.values()].flat())
+        .orderBy(asc(schema.comments.createdAt), asc(schema.comments.id))
+        .all(),
+      (c) => parentProject[type].get(c.parentId),
+    ),
+  )
+  const byProject = {
+    posts: groupBy(posts, (u) => projectOf.get(u.ticketId)),
+    prs: groupBy(prs, (p) => p.projectId),
+    reviews: groupBy(reviews, (r) => r.projectId),
+  }
+  return (id: number): Omit<ThreadFacts, 'tickets' | 'agents'> => ({
+    updates: byProject.posts.get(id) ?? [],
+    prs: byProject.prs.get(id) ?? [],
+    reviews: byProject.reviews.get(id) ?? [],
+    comments: comments.flatMap((byParent) => byParent.get(id) ?? []),
+  })
+}
+
+type Facts = ReturnType<typeof readAll>
+
+/** Every project's block, from one set of reads. */
+function summarize(projectId: number | undefined, projects: schema.Project[], ctx: Context) {
+  const facts = readAll(projectId, projects, ctx)
+  const boards = projects.map((p) => board(p, facts))
+  // What the log and the feeds say about the tickets in progress, for every project at once.
+  const working = boards.flatMap((b) => b.working)
+  const moves = groupBy(ticketMoves(working.filter((t) => !t.startedAt).map((t) => t.id)), (e) => e.refId)
+  const lastPosts = lastProgressPosts(boards.flatMap((b) => [...b.scope.values()].flat()))
+  const progress = boards.map((b) => inProgressOf(b, facts, moves, lastPosts, ctx))
+  const startOfToday = new Date(`${ctx.date}T00:00:00`).getTime()
+  const carried = progress.map((list) => list.filter((t) => new Date(t.since).getTime() < startOfToday))
+  const handoffs = handoffStates(
+    boards.flatMap((b, i) => carried[i]!.map((t) => b.byId.get(t.id)!)),
+    facts.stages,
+    ctx.now,
+  )
+  return boards.map((b, i) => projectSummary(b, facts, progress[i]!, carried[i]!, handoffs, ctx))
+}
+
+/** A project's tickets as the ticket lists see them, and how they hang together. */
+function board(project: schema.Project, facts: Facts) {
+  const stages = facts.stages.get(project.id)!
+  const stageByKey = new Map(stages.map((s) => [s.key, s]))
+  const kind = (status: string) => stageByKey.get(status)?.kind
+  // Archived tickets are left out here, lanes of archived tickets with them.
+  const tickets = ticketRows(facts.tickets.get(project.id) ?? [], {
+    stages,
+    tasks: facts.tasks.get(project.id) ?? [],
+    agents: facts.agents.get(project.id) ?? [],
+    openDecisions: (facts.decisions.get(project.id) ?? []).map((d) => d.ticketId),
+  }).filter((t) => !t.archivedAt)
+  const byId = new Map(tickets.map((t) => [t.id, t]))
+  const top = tickets.filter((t) => t.parentId === null)
+  const children = new Map<number, Row[]>()
+  for (const t of tickets) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
+  const below = (id: number): number[] =>
+    (children.get(id) ?? []).flatMap((lane) => [lane.id, ...below(lane.id)])
+  const working = top.filter((t) => inProgress(kind(t.status)))
+  return {
+    project,
+    stages,
+    kind,
+    tickets,
+    byId,
+    top,
+    working,
+    // Each ticket in progress with its lanes, all the way down.
+    scope: new Map(working.map((t) => [t.id, [t.id, ...below(t.id)]])),
+    parse: moveParser(stages),
+  }
+}
+
+type Board = ReturnType<typeof board>
+
+/** Since when and the last progress post, for every ticket in progress. */
+function inProgressOf(
+  b: Board,
+  facts: Facts,
+  moves: Map<number, schema.Activity[]>,
+  lastPosts: Map<number, Post>,
+  ctx: Context,
+) {
+  const { stages, kind, scope } = b
   const lastPost = (id: number): Post | null =>
     (scope.get(id) ?? [])
       .map((x) => lastPosts.get(x))
       .filter((p) => p !== undefined)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
-  const previews = previewsOf([...scope.values()].flat())
   const preview = (id: number) =>
-    (scope.get(id) ?? []).map((x) => previews.get(x)).find((p) => p !== undefined) ?? null
+    (scope.get(id) ?? []).map((x) => facts.previews.get(x)).find((p) => p !== undefined) ?? null
   const rank = (status: string) => {
     const i = stages.findIndex((s) => s.key === status)
     return i < 0 ? stages.length : i
   }
-  const startOfToday = new Date(`${date}T00:00:00`).getTime()
-  const progress = working
+  const startOfToday = new Date(`${ctx.date}T00:00:00`).getTime()
+  return b.working
     .map((t) => {
-      const since =
-        t.startedAt ??
-        progressSince(
-          t,
-          events.filter((e) => e.refId === t.id),
-          parse,
-        )
+      // When the work started is on the ticket; only tickets that predate that are read from the log.
+      const since = t.startedAt ?? progressSince(t, moves.get(t.id) ?? [], b.parse)
       const post = lastPost(t.id)
       return {
         id: t.id,
@@ -253,29 +479,81 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         // Handed off for review, it waits on the human rather than on its own posts.
         stale:
           kind(t.status) !== 'review' &&
-          now.getTime() - new Date(post?.createdAt ?? since).getTime() > STALE_MS,
+          ctx.now.getTime() - new Date(post?.createdAt ?? since).getTime() > STALE_MS,
         updatedAt: t.updatedAt,
       }
     })
     .sort((a, b) => rank(a.status) - rank(b.status) || b.updatedAt.localeCompare(a.updatedAt))
+}
+
+type InProgress = ReturnType<typeof inProgressOf>[number]
+
+function projectSummary(
+  b: Board,
+  facts: Facts,
+  progress: InProgress[],
+  carried: InProgress[],
+  handoffs: ReturnType<typeof handoffStates>,
+  ctx: Context,
+) {
+  const { project, stages, kind, tickets, byId, top, parse } = b
+  const parentOf = (t: Row) => {
+    const p = t.parentId ? byId.get(t.parentId) : undefined
+    return p ? { id: p.id, title: p.title } : null
+  }
+
+  // --- needs you ---
+  const decisions = (facts.decisions.get(project.id) ?? [])
+    .filter((d) => byId.has(d.ticketId))
+    .map((d) => ({
+      postId: d.id,
+      ticketId: d.ticketId,
+      ticketTitle: byId.get(d.ticketId)?.title ?? '',
+      question: gist(d.body),
+      options: d.decision?.length ?? 0,
+      author: d.author,
+      createdAt: d.createdAt,
+    }))
+  const repos = facts.repos.get(project.id) ?? []
+  const repoName = (id: number | null) => repos.find((r) => r.id === id)?.name ?? null
+  const prsToReview = (facts.prsToReview.get(project.id) ?? []).map((p) => ({
+    id: p.id,
+    number: p.number,
+    title: p.title,
+    url: p.url,
+    repo: repos.length > 1 ? repoName(p.repoId) : null,
+    author: p.author,
+    isDraft: p.isDraft,
+    updatedAt: p.updatedAt,
+  }))
+  const threads = facts.threads
+    ? threadsOf(
+        {
+          tickets: facts.tickets.get(project.id) ?? [],
+          agents: facts.agents.get(project.id) ?? [],
+          ...facts.threads(project.id),
+        },
+        ctx.humans,
+        { agents: false, discussion: true },
+      )
+        .filter((th) => th.ticketId === null || byId.has(th.ticketId))
+        .map(({ as: _as, ...th }) => th)
+    : []
+  const reviews = tickets
+    .filter((t) => kind(t.status) === 'review' && !t.approvedAt)
+    .map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      parent: parentOf(t),
+      assignee: t.assignee,
+      prNumber: t.prNumber,
+      updatedAt: t.updatedAt,
+    }))
 
   // --- done today ---
-  const todays = db
-    .select()
-    .from(schema.activity)
-    .where(
-      and(
-        eq(schema.activity.projectId, project.id),
-        eq(schema.activity.refType, 'ticket'),
-        eq(schema.activity.kind, 'ticket'),
-        gte(schema.activity.createdAt, from),
-        lt(schema.activity.createdAt, to),
-      ),
-    )
-    .orderBy(asc(schema.activity.createdAt), asc(schema.activity.id))
-    .all()
   const doneAt = new Map<number, string>()
-  for (const e of todays) {
+  for (const e of facts.todays.get(project.id) ?? []) {
     const t = e.refId === null ? undefined : byId.get(e.refId)
     if (t && kind(t.status) === 'done' && parse(e.text)?.to.kind === 'done') doneAt.set(t.id, e.createdAt)
   }
@@ -285,48 +563,21 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       return { id, title: t.title, status: t.status, parent: parentOf(t), assignee: t.assignee, doneAt: at }
     })
     .sort((a, b) => b.doneAt.localeCompare(a.doneAt))
-  // A PR leaves the open queue when it is merged or closed, once: fetching it merged again on a later
-  // day does not move when it left.
-  const closedPrs = db
-    .select()
-    .from(schema.prs)
-    .where(
-      and(
-        eq(schema.prs.projectId, project.id),
-        eq(schema.prs.open, false),
-        gte(schema.prs.closedAt, from),
-        lt(schema.prs.closedAt, to),
-      ),
-    )
-    .orderBy(desc(schema.prs.closedAt))
-    .all()
-    .map((p) => ({
-      id: p.id,
-      number: p.number,
-      title: p.title,
-      url: p.url,
-      repo: repos.length > 1 ? repoName(p.repoId) : null,
-      closedAt: p.closedAt!,
-      tickets: tickets
-        .filter(
-          (t) =>
-            (t.repoId ?? repos[0]?.id) === p.repoId &&
-            (t.prNumber === p.number || (t.prNumber === null && !!t.branch && t.branch === p.headRef)),
-        )
-        .map((t) => ({ id: t.id, title: t.title })),
-    }))
-  const activity =
-    db
-      .select({ n: count() })
-      .from(schema.activity)
-      .where(
-        and(
-          eq(schema.activity.projectId, project.id),
-          gte(schema.activity.createdAt, from),
-          lt(schema.activity.createdAt, to),
-        ),
+  const closedPrs = (facts.closedPrs.get(project.id) ?? []).map((p) => ({
+    id: p.id,
+    number: p.number,
+    title: p.title,
+    url: p.url,
+    repo: repos.length > 1 ? repoName(p.repoId) : null,
+    closedAt: p.closedAt!,
+    tickets: tickets
+      .filter(
+        (t) =>
+          (t.repoId ?? repos[0]?.id) === p.repoId &&
+          (t.prNumber === p.number || (t.prNumber === null && !!t.branch && t.branch === p.headRef)),
       )
-      .get()?.n ?? 0
+      .map((t) => ({ id: t.id, title: t.title })),
+  }))
 
   // --- next: the head of the first open column that lines work up (not a backlog) ---
   const open = stages.filter((s) => s.kind === 'open')
@@ -336,7 +587,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
   return {
     project: { id: project.id, name: project.name },
     stages: stages.map(({ key, name, kind, color }) => ({ key, name, kind, color })),
-    agents: listAgents(project.id).map((a) => ({ name: a.name, avatarUrl: a.avatarUrl })),
+    agents: (facts.agents.get(project.id) ?? []).map((a) => ({ name: a.name, avatarUrl: a.avatarUrl })),
     needsYou: {
       decisions,
       prs: prsToReview,
@@ -345,7 +596,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       total: decisions.length + prsToReview.length + threads.length + reviews.length,
     },
     inProgress: progress.filter((t) => t.kind !== 'review'),
-    doneToday: { tickets: doneTickets, prs: closedPrs, activity },
+    doneToday: { tickets: doneTickets, prs: closedPrs, activity: facts.activity.get(project.id) ?? 0 },
     next: {
       stage: nextStage ? { key: nextStage.key, name: nextStage.name } : null,
       tickets: column.slice(0, 5).map((t) => ({
@@ -361,23 +612,21 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       blocked: top.filter((t) => kind(t.status) === 'blocked').length,
       backlog: top.filter((t) => kind(t.status) === 'open' && t.status !== nextStage?.key).length,
     },
-    carryingOver: carryOver(
-      progress.filter((t) => new Date(t.since).getTime() < startOfToday),
-      byId,
-      now,
-    ),
+    carryingOver: carryOver(carried, byId, handoffs),
   }
 }
 
 /**
  * The tickets in progress since before today, each with where its last session left off: the resume
- * note and whether one is missing, from the ticket and its log only (no git), in one batch.
+ * note and whether one is missing, from the ticket and its log only (no git).
  */
-function carryOver(items: Omit<CarryOver, 'resume'>[], byId: Map<number, Row>, now: Date): CarryOver[] {
-  const rows = items.map((t) => byId.get(t.id)!)
-  const handoffs = handoffStates(rows, now)
-  return items.map(({ id, title, status, kind, assignee, since, days, lastPost, stale }, i) => {
-    const t = rows[i]!
+function carryOver(
+  items: Omit<CarryOver, 'resume'>[],
+  byId: Map<number, Row>,
+  handoffs: ReturnType<typeof handoffStates>,
+): CarryOver[] {
+  return items.map(({ id, title, status, kind, assignee, since, days, lastPost, stale }) => {
+    const t = byId.get(id)!
     const h = handoffs.get(id)!
     return {
       id,
@@ -399,6 +648,67 @@ function carryOver(items: Omit<CarryOver, 'resume'>[], byId: Map<number, Row>, n
       },
     }
   })
+}
+
+/**
+ * `handoffStates` (resume.ts) for the carried-over tickets of every project in two reads, with the
+ * stages already read.
+ */
+function handoffStates(tickets: Row[], stages: Map<number, Stage[]>, now: Date) {
+  const ids = tickets.map((t) => t.id)
+  const todayStart = dayBounds(localDate(now)).from
+  // The last thing done on each ticket before today.
+  const lastBefore = new Map<number, string>()
+  // The newest progress post on each ticket, handoffs aside.
+  const lastProgress = new Map<number, string>()
+  if (ids.length) {
+    for (const a of db
+      .select({ id: schema.activity.refId, at: max(schema.activity.createdAt) })
+      .from(schema.activity)
+      .where(
+        and(
+          eq(schema.activity.refType, 'ticket'),
+          inIds(schema.activity.refId, ids),
+          lt(schema.activity.createdAt, todayStart),
+          ne(schema.activity.kind, 'handoff'),
+        ),
+      )
+      .groupBy(schema.activity.refId)
+      .all())
+      if (a.id !== null && a.at) lastBefore.set(a.id, a.at)
+    for (const u of db
+      .select({ id: schema.updates.ticketId, at: max(schema.updates.createdAt) })
+      .from(schema.updates)
+      .where(
+        and(
+          inIds(schema.updates.ticketId, ids),
+          eq(schema.updates.progress, true),
+          eq(schema.updates.handoff, false),
+        ),
+      )
+      .groupBy(schema.updates.ticketId)
+      .all())
+      if (u.at) lastProgress.set(u.id, u.at)
+  }
+  return handoffFacts(tickets, now, { lastBefore, lastProgress, stages: (id) => stages.get(id)! })
+}
+
+/** The stage moves and claims in the log of these tickets, oldest first. */
+function ticketMoves(ids: number[]) {
+  return ids.length
+    ? db
+        .select()
+        .from(schema.activity)
+        .where(
+          and(
+            eq(schema.activity.refType, 'ticket'),
+            eq(schema.activity.kind, 'ticket'),
+            inIds(schema.activity.refId, ids),
+          ),
+        )
+        .orderBy(asc(schema.activity.createdAt), asc(schema.activity.id))
+        .all()
+    : []
 }
 
 /** Markdown as one line of plain text: line markers, emphasis and link targets dropped, cut to `max`. */
@@ -473,7 +783,7 @@ function lastProgressPosts(ids: number[]): Map<number, Post> {
   const newest = db
     .select({ ticketId: schema.updates.ticketId, at: max(schema.updates.createdAt) })
     .from(schema.updates)
-    .where(and(inArray(schema.updates.ticketId, ids), eq(schema.updates.progress, true)))
+    .where(and(inIds(schema.updates.ticketId, ids), eq(schema.updates.progress, true)))
     .groupBy(schema.updates.ticketId)
     .all()
   const at = new Map(newest.map((r) => [r.ticketId, r.at]))
@@ -488,11 +798,10 @@ function lastProgressPosts(ids: number[]): Map<number, Post> {
     .from(schema.updates)
     .where(
       and(
-        inArray(schema.updates.ticketId, [...at.keys()]),
-        inArray(
-          schema.updates.createdAt,
+        inIds(schema.updates.ticketId, [...at.keys()]),
+        sql`${schema.updates.createdAt} in (select value from json_each(${JSON.stringify(
           [...at.values()].filter((v) => v !== null),
-        ),
+        )}))`,
         eq(schema.updates.progress, true),
       ),
     )
@@ -506,23 +815,5 @@ function lastProgressPosts(ids: number[]): Map<number, Post> {
         text: gist(r.body),
         createdAt: r.createdAt,
       })
-  return out
-}
-
-/** The first workspace preview registered on each ticket, if any. */
-function previewsOf(ids: number[]) {
-  const out = new Map<number, { url: string; workspace: string }>()
-  if (!ids.length) return out
-  const rows = db
-    .select({
-      ticketId: schema.workspaces.ticketId,
-      name: schema.workspaces.name,
-      url: schema.workspaces.previewUrl,
-    })
-    .from(schema.workspaces)
-    .where(and(inArray(schema.workspaces.ticketId, ids), ne(schema.workspaces.previewUrl, '')))
-    .orderBy(asc(schema.workspaces.id))
-    .all()
-  for (const r of rows) if (!out.has(r.ticketId)) out.set(r.ticketId, { url: r.url, workspace: r.name })
   return out
 }
