@@ -202,7 +202,11 @@ async function fillTall(page: Page, dialog: Locator, { files = true } = {}) {
     await expect(dialog.getByRole('img')).toHaveCount(FILES)
     await expect(dialog.getByLabel('uploading')).toHaveCount(0)
   }
-  await dialog.getByLabel('Initial tasks, one per line').fill(TASKS.join('\n'))
+  const task = dialog.getByLabel('Initial tasks')
+  for (const t of TASKS) {
+    await task.fill(t)
+    await task.press('Enter')
+  }
   await dialog.getByLabel('Tags (optional)').fill(TAGS.join(', '))
 }
 
@@ -242,8 +246,8 @@ test('the New ticket dialog with long content stays on screen, scrolls its field
 
   await expectInWindow(page, dialog, 'the dialog')
   await expectFieldsScroll(page, dialog, 'New ticket', [
+    dialog.getByLabel('Stage'),
     dialog.getByLabel('Tags (optional)'),
-    dialog.getByLabel('Branch (optional)'),
   ])
   await expectEndsInReach(page, dialog, 'New ticket')
   expect(await pageScroll(page)).toEqual({ y: 0, height: before.height })
@@ -400,8 +404,8 @@ test('the New lane dialog with long content stays on screen, scrolls its fields 
   await expectInWindow(page, dialog, 'the dialog')
   await expectEndsInReach(page, dialog, 'New lane')
   await expectFieldsScroll(page, dialog, 'New lane', [
+    dialog.locator('#assignee'),
     dialog.getByLabel('Tags (optional)'),
-    dialog.getByLabel('Branch (optional)'),
   ])
   expect((await pageScroll(page)).y).toBe(before.y)
 
