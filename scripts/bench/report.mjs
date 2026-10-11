@@ -365,8 +365,10 @@ export function markdownSummary(res) {
 
 /**
  * Whether a change is beyond the noise: the ranges over the runs do not overlap. Bytes and counts are
- * the same on every run, so any change in them counts; a time taken in a single run on either side
- * has no range to judge it by (null: unknown).
+ * nearly always the same on every run, so a change in them counts even from a single run (a ticket's
+ * bytes are the exception: they differ by a few when the board's background push check fills in its
+ * time before or after the request); a time taken in a single run on either side has no range to
+ * judge it by (null: unknown).
  */
 export function beyondNoise(before, after) {
   if (before.median === null || after.median === null) return false
@@ -414,7 +416,7 @@ export function markdownComparison(before, after, rows = compareResults(before, 
     `Before: ${head(before)}, ${before.startedAt}, ${before.settings.runs} run(s).`,
     `After: ${head(after)}, ${after.startedAt}, ${after.settings.runs} run(s).`,
     '',
-    'Beyond noise: the ranges over the runs do not overlap. Bytes and counts do not vary between runs, so any change in them is; a time from a single run cannot be judged (?).',
+    "Beyond noise: the ranges over the runs do not overlap. Bytes and counts barely vary between runs, so a change in them usually is (a ticket's bytes can differ by a few between runs: the board's background push check fills in its time before or after the request); a time from a single run cannot be judged (?).",
   ]
   if (before.machine.cpu !== after.machine.cpu || before.machine.os !== after.machine.os)
     lines.push('', '**Warning:** the two runs come from different machines.')
