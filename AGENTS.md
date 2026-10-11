@@ -166,7 +166,9 @@ http_headers = { Authorization = "Bearer gate_…" }
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
    `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
-   remove its worktree and local branch, `remove_workspace`, and `post_update` the deleted branches
+   remove its worktree and local branch (first any link in it to a folder out of it, such as a
+   `node_modules` linked to another checkout's: on Windows `git worktree remove` deletes what a
+   junction leads to), `remove_workspace`, and `post_update` the deleted branches
    as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
    origin branches: list them for the human, who deletes them from the board's Cleanup page. Never
    delete a branch `cleanup_report` marks `protected` (a base, the main checkout's branch, in use by

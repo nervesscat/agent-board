@@ -290,7 +290,9 @@ worked:
 - Deleting: `git worktree remove <path>`, then `git branch -d|-D <name>`, then `remove_workspace`
   for each workspace, then **one** `post_update` on the ticket listing every deleted branch with
   its commit hash, as `branch @ sha` (e.g. `lane/47 @ 9ec12e8b`). That line is the only way back:
-  `git branch lane/47 9ec12e8b` restores it.
+  `git branch lane/47 9ec12e8b` restores it. Before `git worktree remove`, remove each link in the
+  worktree to a folder out of it (a `node_modules` or `data` linked to another checkout's), the link
+  alone: on Windows git deletes what a junction leads to.
 - Branches on origin: never delete them (git and GitHub stay read-only for you). List the ones
   left for closed tickets in the update, so the human deletes them from the board's Cleanup page.
 - A branch `cleanup_report` marks `protected` (a base, the main checkout's branch, origin's default
