@@ -223,9 +223,15 @@ describe('report routes the Daily page builds on', () => {
     ).toBe(400)
     // What it lists depends on the clock: reportDue.test.ts sets it.
     expect((await call('GET', '/api/report-due')).body).toHaveProperty('items')
-    expect((await call('GET', '/api/reports/overview?date=2026-10-04')).body).toEqual({
-      date: '2026-10-04',
-      projects: [],
+    // Tracked from today on, the project was not asked for a report on Oct 4 (reportsOverview.test.ts has more).
+    const overview = (await call('GET', '/api/reports/overview?date=2026-10-04')).body
+    expect(overview.date).toBe('2026-10-04')
+    expect(overview.projects.find((x: { id: number }) => x.id === p)).toMatchObject({
+      name: 'routes',
+      period: '2026-10-04',
+      status: 'off',
+      report: null,
+      versions: 0,
     })
     expect((await call('GET', '/api/reports/overview?date=soon')).status).toBe(400)
     expect((await call('GET', `/api/projects/${p}/pushed-today`)).body).toMatchObject({

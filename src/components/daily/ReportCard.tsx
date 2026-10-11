@@ -110,28 +110,31 @@ function PeriodReport({
         )}
       </div>
       {report ? (
-        <ReportBody report={report} />
+        <ReportBody report={report} note={`${period.versions} version${period.versions === 1 ? '' : 's'}`} />
       ) : (
         !writing && <p className="text-sm text-muted-foreground">No report for {period.label} yet.</p>
       )}
-      {period.versions > 0 && (
-        <div className="text-xs text-muted-foreground">
-          {period.versions} version{period.versions === 1 ? '' : 's'}
-        </div>
-      )}
       {period.versions > 1 && (
         <div>
-          <Button type="button" variant="ghost" size="xs" onClick={() => setHistory(!history)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            aria-expanded={history}
+            onClick={() => setHistory(!history)}
+          >
             <History data-icon="inline-start" />
             {history ? 'hide' : 'show'} {period.versions - 1} earlier version
             {period.versions === 2 ? '' : 's'}
           </Button>
           {history && (
-            <div className="mt-2 space-y-4 border-l pl-3">
-              {(versions ?? []).slice(1).map((v) => (
-                <ReportBody key={v.id} report={v} />
+            <ol className="mt-2 space-y-4 border-l pl-3" aria-label="Earlier versions">
+              {(versions ?? []).slice(1).map((v, i, earlier) => (
+                <li key={v.id}>
+                  <ReportBody report={v} note={`version ${earlier.length - i}`} />
+                </li>
               ))}
-            </div>
+            </ol>
           )}
         </div>
       )}
@@ -151,11 +154,13 @@ function PeriodReport({
   )
 }
 
-function ReportBody({ report }: { report: ReportView }) {
+/** One version: who wrote it and when (and `note`, e.g. how many versions there are), then the report. */
+function ReportBody({ report, note }: { report: ReportView; note?: string }) {
   return (
     <div>
       <div className="text-xs text-muted-foreground">
         <Actor name={report.author} /> · {stamp(report.createdAt)}
+        {note && ` · ${note}`}
       </div>
       {report.body && <Markdown className="mt-1">{report.body}</Markdown>}
       <Attachments items={report.attachments} />
