@@ -148,7 +148,15 @@ function StatusDay({ className, children, ...props }: ComponentProps<typeof DayB
   return (
     <CalendarDayButton
       {...props}
-      className={cn(className, s && TINT[s], props.modifiers.open && 'ring-1 ring-ring/60')}
+      className={cn(
+        className,
+        // The day on show keeps its own colours; its dot still says its status.
+        s && !props.modifiers.selected && TINT[s],
+        // Hovered (or last tapped, on a touch screen) it stays readable.
+        props.modifiers.selected &&
+          'hover:bg-primary/90 hover:text-primary-foreground dark:hover:text-primary-foreground',
+        props.modifiers.open && 'ring-1 ring-ring/60',
+      )}
     >
       {children}
       <i aria-hidden data-status={s} className={cn('size-1.5 rounded-full', s && MARK[s])} />

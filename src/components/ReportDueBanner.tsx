@@ -50,8 +50,8 @@ export function ReportDueBanner() {
       aria-label="Reports due"
       className="border-b border-amber-300/60 bg-amber-50 text-amber-950 dark:border-amber-400/20 dark:bg-amber-950/40 dark:text-amber-100"
     >
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2 text-sm">
-        <ul className="flex min-w-0 flex-1 flex-wrap gap-x-5 gap-y-1">
+      <div className="mx-auto flex max-w-7xl flex-col items-start gap-1.5 px-4 py-2 text-sm sm:flex-row sm:items-center sm:gap-4">
+        <ul className="flex w-full min-w-0 flex-1 flex-wrap gap-x-5 gap-y-1">
           {items.map((d) => {
             const missing = d.state === 'missing' || now >= Date.parse(d.dueAt)
             const Icon = missing ? TriangleAlert : AlarmClock
