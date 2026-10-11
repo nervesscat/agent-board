@@ -277,7 +277,24 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
   }
   const startupMs = Date.now() - started
 
+  // A server that exits during the run ends it: the harness's own error (and its clean-up), not the
+  // closed IPC channel's, which nothing would catch, nor a run of requests that cannot be answered.
+  const died = () =>
+    new Error(`the bench server exited${exited !== null ? ` (${exited})` : ''} during the run; see ${log}`)
   let seq = 0
+  /** The preload's answer to `type` (null when none comes in time). */
+  const ask = async (type) => {
+    if (exited !== null) throw died()
+    const n = ++seq
+    const key = `${type}:${n}`
+    const answer = reply(key)
+    // With a callback, a send on a closed channel fails here instead of as the child's 'error' event.
+    const sent = await new Promise((resolve) => proc.send({ type, seq: n }, (err) => resolve(!err)))
+    if (sent) return answer
+    waiting.get(key)?.(null)
+    waiting.delete(key)
+    throw died()
+  }
   const server = {
     proc,
     port,
@@ -292,6 +309,7 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
      * child processes it caused (null when the preload could not count them).
      */
     async request(urlPath, { actor, method = 'GET', body, headers = {} } = {}) {
+      if (exited !== null) throw died()
       const id = crypto.randomUUID()
       // Waited for from now (the report may come first), but given up on only 3 s after the answer:
       // a slow request is no reason to lose its counts.
@@ -314,7 +332,7 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
       }
       const ms = performance.now() - t0
       const late = setTimeout(() => waiting.get(id)?.(null), 3000)
-      const counts = await counted
+      const counts = await Promise.race([counted, gone.then(() => null)])
       clearTimeout(late)
       waiting.delete(id)
       return {
@@ -326,15 +344,11 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
         spawns: instrumentation?.spawn && counts ? counts.spawns : null,
       }
     },
-    async memory() {
-      const n = ++seq
-      proc.send({ type: 'memory', seq: n })
-      return reply(`memory:${n}`)
+    memory() {
+      return ask('memory')
     },
-    async background() {
-      const n = ++seq
-      proc.send({ type: 'background', seq: n })
-      return reply(`background:${n}`)
+    background() {
+      return ask('background')
     },
     async stop() {
       agent.destroy()
