@@ -41,7 +41,7 @@ function databaseAt(lastTag: string, file = ':memory:') {
 const columns = (sqlite: Database.Database, table: string) =>
   (sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
 
-describe('0023_daily_reports_and_shifts', () => {
+describe('0025_daily_reports_and_shifts', () => {
   it('turns the daily summaries into report versions and the due time into the shift end', () => {
     const sqlite = databaseAt('0022_pr_review_stages')
     const project = (name: string) =>
