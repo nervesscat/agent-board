@@ -2,7 +2,7 @@ import path from 'node:path'
 
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
-import type { Attachment, CleanupReport, PrRow, TicketFull } from '#/lib/api'
+import type { Attachment, CleanupReport, PrRow, ReviewResult, TicketFull } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { MAX_TAG_LENGTH } from '#/lib/tags'
 import { AGENT, e2eEnv, git, HUMAN } from './env'
@@ -68,6 +68,16 @@ async function expectWrappedOnScreen(page: Page) {
   expect(fits.overflows).toBe(false)
   // At most the bubble's width (max-w-xs, 20rem).
   expect(fits.width).toBeLessThanOrEqual(320)
+}
+
+/** Presses Tab until `target` has the focus, the way a person reaches it from the keyboard. */
+async function tabTo(target: Locator) {
+  const page = target.page()
+  for (let i = 0; i < 80; i++) {
+    if (await target.evaluate((el) => el === document.activeElement)) return
+    await page.keyboard.press('Tab')
+  }
+  await expect(target).toBeFocused()
 }
 
 /** The board, as columns. */
@@ -491,6 +501,82 @@ test('the folder picker says why Up is off at the top folder, over its dialog', 
   await up.click({ force: true })
   await expect(up).toBeDisabled()
   await expect(folder).toHaveValue(top)
+})
+
+// A dialog opened from the keyboard puts the focus on its first control, focus-visible: on a tooltip's
+// trigger, the tooltip would open with the dialog, and the first Escape would close only the tooltip.
+
+test('the gallery opened from the keyboard shows no tooltip, and one Escape closes it', async ({
+  page,
+  api,
+  human,
+  project,
+}) => {
+  // From a picture on a post: the gallery's first buttons have tooltips.
+  const t = await api.ticket({ title: 'Opened by keyboard' })
+  await postWithPicture(human, t.id, 'A picture to open.')
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const picture = page.getByRole('link', { name: 'shot.png' })
+  await tabTo(picture)
+  await page.keyboard.press('Enter')
+  const gallery = page.getByRole('dialog', { name: 'shot.png' })
+  await expect(gallery).toBeVisible()
+  await page.waitForTimeout(PAST_THE_DELAY)
+  await expect(tooltip(page)).toHaveCount(0)
+  await expect(gallery).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(gallery).toHaveCount(0)
+  await expect(picture).toBeFocused()
+})
+
+test('the folder picker opened from the keyboard shows no tooltip, and one Escape closes it', async ({
+  page,
+}) => {
+  // From the repository dialog: Up and Home, with their tooltips, come before the path.
+  await page.goto('/repositories')
+  await page.getByRole('button', { name: 'New repository' }).click()
+  const repo = page.getByRole('dialog', { name: 'New repository' })
+  const browse = repo.getByRole('button', { name: 'Browse…' })
+  await tabTo(browse)
+  await page.keyboard.press('Enter')
+  const picker = page.getByRole('dialog', { name: 'Choose the checkout' })
+  await expect(picker).toBeVisible()
+  await page.waitForTimeout(PAST_THE_DELAY)
+  await expect(tooltip(page)).toHaveCount(0)
+  await expect(picker.getByRole('textbox', { name: 'Folder path' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(picker).toHaveCount(0)
+  await expect(repo).toBeVisible()
+  await expect(browse).toBeFocused()
+})
+
+test('a review result opened from the keyboard shows no tooltip, and one Escape closes it', async ({
+  page,
+  human,
+  project,
+}) => {
+  // With a reply: once loaded, it opens on the reply's own buttons, which have tooltips.
+  const result = await ok<ReviewResult>(
+    human.post(`/api/projects/${project.id}/reviews/results`, {
+      data: { prNumber: 4, sha: 'abcdef0123456789', verdict: 'SHIP IT', summaryMd: 'Opened by keyboard.' },
+    }),
+  )
+  await ok(
+    human.post('/api/comments', { data: { parentType: 'review', parentId: result.id, body: 'Agreed.' } }),
+  )
+  await page.goto(`/projects/${project.id}/daily`)
+  const open = page.getByRole('button', { name: /SHIP IT/ })
+  await tabTo(open)
+  const dialog = page.getByRole('dialog', { name: 'Review result' })
+  for (let i = 0; i < 2; i++) {
+    await page.keyboard.press('Enter')
+    await expect(dialog.getByText('Agreed.')).toBeVisible()
+    await page.waitForTimeout(PAST_THE_DELAY)
+    await expect(tooltip(page)).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(open).toBeFocused()
+  }
 })
 
 test('nested tooltips: the innermost shows, the outer one on its own part, never two at once', async ({

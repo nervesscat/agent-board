@@ -94,6 +94,7 @@ export function Gallery() {
 
   // Set by the image viewer while it is shown: handles the zoom keys, true when it used the key.
   const zoomKeys = useRef<ZoomKeys | null>(null)
+  const popup = useRef<HTMLDivElement>(null)
 
   const item = open ? items[index] : undefined
 
@@ -105,6 +106,10 @@ export function Gallery() {
           // Keys are handled here rather than on the document: the dialog keeps focus inside, so the
           // popup always sees them first. Focusable itself, so clicking the image keeps focus inside.
           tabIndex={-1}
+          // It opens with the focus on itself, not on its first button: opened from the keyboard, that
+          // button's tooltip would open too, and the first Escape would close only the tooltip.
+          ref={popup}
+          initialFocus={popup}
           onKeyDown={(e) => {
             // The video's own seek keys win while it has focus.
             if (e.ctrlKey || e.metaKey || e.altKey || (e.target as HTMLElement).closest('video')) return

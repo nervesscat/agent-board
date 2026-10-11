@@ -1,4 +1,5 @@
 import * as React from 'react'
+import type { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
 import { cn } from 'cn'
 
@@ -63,10 +64,53 @@ function Tip({ content, children }: { content: React.ReactNode; children: React.
   const { id } = children.props as { id?: string }
   return (
     <Tooltip disabled={off} disableHoverablePopup>
-      <TooltipTrigger id={id} render={children} />
+      <TooltipTrigger id={id} data-tip={off ? undefined : ''} render={children} />
       {!off && <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>}
     </Tooltip>
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Tip }
+// What the browser would stop at on Tab, before the checks on each element below.
+const TABBABLE =
+  'a[href], button, input, select, textarea, summary, audio[controls], video[controls], [contenteditable]:not([contenteditable="false"]), [tabindex]'
+
+type InitialFocus = DialogPrimitive.Popup.Props['initialFocus']
+type OpenType = Parameters<Extract<InitialFocus, (...args: never[]) => unknown>>[0]
+
+/**
+ * Keeps a dialog or popover from opening onto a `Tip`. base-ui focuses the popup's first tabbable
+ * control as it opens; opened from the keyboard that focus is focus-visible, so the control's tooltip
+ * would open with it, unasked, and the first Escape would close only that tooltip, not the popup.
+ * When that control is a `Tip`, focus goes to the first one that is not, or to the popup itself.
+ * Returns the `ref` and `initialFocus` to give the popup; an `initialFocus` of the caller's wins.
+ */
+function useFocusPastTips<T extends HTMLElement>(ref: React.Ref<T> | undefined, initialFocus?: InitialFocus) {
+  const popup = React.useRef<T | null>(null)
+  const setRef = React.useCallback(
+    (el: T | null) => {
+      popup.current = el
+      if (typeof ref === 'function') ref(el)
+      else if (ref) ref.current = el
+    },
+    [ref],
+  )
+  const pastTips = React.useCallback((openType: OpenType) => {
+    const el = popup.current
+    // base-ui's own choice on touch, kept: the popup itself (and nothing is focus-visible on touch).
+    if (openType === 'touch') return el
+    if (!el) return true
+    const tabbable = [...el.querySelectorAll<HTMLElement>(TABBABLE)].filter(
+      (c) =>
+        Number(c.getAttribute('tabindex') ?? 0) >= 0 &&
+        !c.matches(':disabled') &&
+        !c.closest('[inert]') &&
+        c.checkVisibility({ visibilityProperty: true }),
+    )
+    const isTip = (c: HTMLElement) => c.closest('[data-tip]') !== null
+    if (!tabbable[0] || !isTip(tabbable[0])) return true
+    return tabbable.find((c) => !isTip(c)) ?? el
+  }, [])
+  return { ref: setRef, initialFocus: initialFocus ?? pastTips }
+}
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Tip, useFocusPastTips }
