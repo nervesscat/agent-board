@@ -309,6 +309,15 @@ as the board does), and `generated`, a large board written from a seed (`--scale
 projects, about 2,700 tickets with lanes, 22,000 posts, 20,000 replies, 2,000 attachments and 45,000
 activity rows at scale 1) with a git repo and a bare origin for its projects.
 
+The generated dataset gives the same answers at any hour: the board counts by the server's local day
+(today's activity, work carried over, reports due) and by whole days (stalled work), so its rows are
+laid out on the local day it is written on, each day's rows in that day's first minute, with half a
+day of work today. Within the first minute after midnight it waits for that minute to pass. When the
+day changes during a run, the dataset is written again for the new day before the next server
+starts, and a run that went past midnight is run again (the summary says so). What it cannot keep the
+same is a date written out in words, such as a report period's label (`Sun, Oct 4`), and how long ago
+today's rows were, so compare runs of different days with that in mind.
+
 Sections (`--sections`): `server` (p50/p95 of the hot endpoints after a warm-up, the first request
 apart, SQL statements and child processes per request), `mcp` (size and latency of the main tools'
 results, as an agent), `bundle` (JS and CSS each route downloads on a cold load, raw and gzip, sized

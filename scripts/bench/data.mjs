@@ -198,23 +198,83 @@ export function generatedPlan(scale = 1) {
   }
 }
 
+// --- the generated dataset's clock ---
+//
+// The board buckets by the server's local calendar day (what happened today, since when a ticket is in
+// progress, which report is missing) and compares ages with whole days (a ticket in progress with no
+// post for a day is stalled). The server's clock cannot be set, so the dataset is laid out relative
+// to the local day it is generated on, the same way whatever the hour: the rows are written on a
+// virtual clock (0 is the start of today, `VIRTUAL_NOW` is now, earlier days are negative), and each
+// virtual day lands in the first `SLOT_MS` of its local calendar day. Today's rows (half a day of
+// work) are then in the past from `SLOT_MS` after midnight on, and every row is the same number of
+// calendar days and of whole days old at any hour. A run that crosses midnight sees a new day: the
+// harness writes the dataset again for it (`bench.mjs`).
+
+const DAY = 86_400_000
+/** Where now is on the virtual clock: today has had half a day of work. */
+export const VIRTUAL_NOW = DAY / 2
+/** The part of each local day that holds that day's rows. */
+export const SLOT_MS = 60_000
+
+/** The local calendar day of `ms`, YYYY-MM-DD, as the board names days. */
+export function localDay(ms) {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** The local midnight that starts the day of `ms`. */
+export function startOfLocalDay(ms) {
+  const d = new Date(ms)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+/** How long until a dataset generated now has all of today's rows in the past (0: it has). */
+export const msUntilSlot = (now = Date.now()) => Math.max(0, startOfLocalDay(now) + SLOT_MS - now)
+
+/**
+ * The real moment of a virtual one, for a dataset generated at `now`: virtual day `d` (0 today, -1
+ * yesterday) is local calendar day `d` from now's, counted in calendar days (a day of a daylight saving
+ * change too), and a moment's place in its virtual day is its place in the slot.
+ */
+export function anchoredClock(now) {
+  const anchor = startOfLocalDay(now)
+  const real = (v) => {
+    const day = Math.floor(v / DAY)
+    const d = new Date(anchor)
+    d.setDate(d.getDate() + day)
+    return d.getTime() + Math.floor(((v - day * DAY) / DAY) * SLOT_MS)
+  }
+  return { day: localDay(anchor), real }
+}
+
 /**
  * Writes a large dataset into `dest`: a database migrated with `migrationsFolder` (the target's own
  * migrations) and filled from a seed, the attachments' bytes where local storage keeps them
- * (`uploads/<stored_as>`), and a git repo with an origin for the projects' repos to point at.
+ * (`uploads/<stored_as>`), and a git repo with an origin for the projects' repos to point at. `now` is
+ * the moment it is generated for: the rows are laid out on its local day (above), and it must be at
+ * least `SLOT_MS` past that day's midnight (`msUntilSlot`), or today's rows would be in its future.
  */
-export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now = Date.now() }) {
+export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: generatedAt = Date.now() }) {
+  if (msUntilSlot(generatedAt) > 0)
+    throw new Error(
+      `a dataset generated less than ${SLOT_MS / 1000} s after midnight would put today's rows in the future; wait ${msUntilSlot(generatedAt)} ms`,
+    )
+  const clock = anchoredClock(generatedAt)
+  // Every moment below is on the virtual clock; `iso` and `dayOf` turn one into a real one.
+  const now = VIRTUAL_NOW
   const plan = generatedPlan(scale)
   const r = prng(seed)
-  fs.rmSync(dest, { recursive: true, force: true })
+  fs.rmSync(dest, { recursive: true, force: true, maxRetries: 5 })
   fs.mkdirSync(path.join(dest, 'uploads'), { recursive: true })
   const sqlite = new Database(path.join(dest, 'board.db'))
   sqlite.pragma('journal_mode = WAL')
   sqlite.pragma('foreign_keys = ON')
   migrate(drizzle(sqlite), { migrationsFolder })
 
-  const iso = (ms) => new Date(ms).toISOString()
-  const ago = (maxDays) => now - Math.floor(r.next() * maxDays * 86_400_000)
+  const iso = (v) => new Date(clock.real(v)).toISOString()
+  const dayOf = (v) => localDay(clock.real(v))
+  const ago = (maxDays) => now - Math.floor(r.next() * maxDays * DAY)
   const ins = (table, cols) =>
     sqlite.prepare(`insert into ${table} (${cols.join(', ')}) values (${cols.map(() => '?').join(', ')})`)
   const q = {
@@ -372,7 +432,7 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now = Da
     for (const a of AGENTS) q.actor.run(a, 'agent', iso(now - r.int(0, 3) * 3_600_000))
 
     for (let p = 0; p < plan.projects; p++) {
-      const created = now - plan.days * 86_400_000
+      const created = now - plan.days * DAY
       const projectId = q.project.run(`project-${p + 1}`, markdown(r, 3), iso(created)).lastInsertRowid
       STAGES.forEach(([key, name, kind, color], i) => q.stage.run(projectId, key, name, kind, color, i))
       for (const name of PROJECT_AGENTS)
@@ -387,20 +447,12 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now = Da
         )
       const repoId = q.repo.run(projectId, 'app', repoDir, null, 'main', iso(created)).lastInsertRowid
       if (p % 2 === 0)
-        q.reportSettings.run(
-          projectId,
-          markdown(r, 2),
-          'daily',
-          5,
-          'text',
-          iso(created).slice(0, 10),
-          GENERATED_HUMAN,
-        )
+        q.reportSettings.run(projectId, markdown(r, 2), 'daily', 5, 'text', dayOf(created), GENERATED_HUMAN)
       for (let d = 0; d < 10; d++) {
-        const day = iso(now - d * 86_400_000).slice(0, 10)
+        const day = dayOf(now - d * DAY)
         if (p % 2 === 0 && r.chance(0.7))
-          q.report.run(projectId, 'daily', day, markdown(r, 3), r.pick(AGENTS), iso(now - d * 86_400_000))
-        if (r.chance(0.5)) q.daily.run(projectId, day, r.pick(AGENTS), sentence(r), iso(now - d * 86_400_000))
+          q.report.run(projectId, 'daily', day, markdown(r, 3), r.pick(AGENTS), iso(now - d * DAY))
+        if (r.chance(0.5)) q.daily.run(projectId, day, r.pick(AGENTS), sentence(r), iso(now - d * DAY))
       }
 
       const ticketIds = []
@@ -413,7 +465,7 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now = Da
         const branch = working || big ? `t${++ticketNo}-${r.pick(WORDS)}` : ''
         const baseBranch = parent?.branch || 'main'
         const archived = !big && status === 'done' && !parent && r.chance(0.35)
-        const updatedAt = Math.min(now, createdAt + r.int(0, 10) * 86_400_000)
+        const updatedAt = Math.min(now, createdAt + r.int(0, 10) * DAY)
         const id = q.ticket.run(
           projectId,
           repoId,
@@ -590,15 +642,16 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now = Da
   sqlite.pragma('wal_checkpoint(TRUNCATE)')
   sqlite.close()
 
-  makeRepo(path.join(dest, 'repos'), branches, now)
-  return { plan, scale, seed, counts: tableCounts(path.join(dest, 'board.db')) }
+  // Its commits are from early yesterday.
+  makeRepo(path.join(dest, 'repos'), branches, clock.real(-DAY))
+  return { plan, scale, seed, day: clock.day, counts: tableCounts(path.join(dest, 'board.db')) }
 }
 
 /**
  * The repo every generated project points at: main, a branch per ticket that has one (a lane's on its
  * parent's), most of them pushed to a bare origin beside it, some with commits origin lacks.
  */
-function makeRepo(dir, branches, now) {
+function makeRepo(dir, branches, from) {
   const repo = path.join(dir, 'app')
   const origin = path.join(dir, 'app.git')
   fs.mkdirSync(repo, { recursive: true })
@@ -613,7 +666,7 @@ function makeRepo(dir, branches, now) {
   git(repo, ['init', '-q', '-b', 'main'])
   git(repo, ['remote', 'add', 'origin', origin])
 
-  const when = Math.floor(now / 1000)
+  const when = Math.floor(from / 1000)
   let mark = 0
   const lines = []
   const commit = (ref, from, file, message) => {
@@ -622,7 +675,7 @@ function makeRepo(dir, branches, now) {
     lines.push(
       `commit ${ref}`,
       `mark :${m}`,
-      `committer bench <bench@example.com> ${when - 86_400 + m} +0000`,
+      `committer bench <bench@example.com> ${when + m} +0000`,
       `data ${Buffer.byteLength(message)}`,
       message,
     )

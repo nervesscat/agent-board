@@ -15,7 +15,15 @@ import { parseArgs } from 'node:util'
 
 import { isMainCheckout, mainCheckout } from '../checkout.mjs'
 import * as client from './client.mjs'
-import { assertBenchDataDir, copyLive, generate, pickTargets, tableCounts } from './data.mjs'
+import {
+  assertBenchDataDir,
+  copyLive,
+  generate,
+  localDay,
+  msUntilSlot,
+  pickTargets,
+  tableCounts,
+} from './data.mjs'
 import {
   Metrics,
   compareResults,
@@ -580,16 +588,25 @@ async function prepare(name) {
     if (!copied) return { skipped: `no live data at ${path.join(liveDir, 'board.db')}` }
     return { dir, source: copied }
   }
+  // Laid out on today's local day (data.mjs), which needs the first minute of the day behind it.
+  const wait = msUntilSlot()
+  if (wait > 0) {
+    log(`Waiting ${Math.ceil(wait / 1000)} s: just after midnight, today's rows would be in the future`)
+    await new Promise((r) => setTimeout(r, wait + 100))
+  }
   log(`Generating the large dataset (scale ${settings.scale}, seed ${settings.seed})`)
   const t = Date.now()
   const gen = generate(dir, {
     scale: settings.scale,
     seed: settings.seed,
     migrationsFolder: path.join(target, 'drizzle'),
+    now: Date.now(),
   })
   return {
     dir,
-    source: { generator: { plan: gen.plan, scale: gen.scale, seed: gen.seed, ms: Date.now() - t } },
+    source: {
+      generator: { plan: gen.plan, scale: gen.scale, seed: gen.seed, day: gen.day, ms: Date.now() - t },
+    },
   }
 }
 
@@ -616,7 +633,25 @@ async function measureDataset(name) {
   const serverLog = path.join(logsDir, `${name}-server.log`)
   fs.writeFileSync(serverLog, '')
 
+  // The generated dataset is laid out on the local day it was written on: once that day is over, it is
+  // written again for the new one (the same rows, as old relative to it), so every run sees the same
+  // today, and a run that went past midnight is run again.
+  const generated = name === 'generated' ? ds.source.generator : null
+  if (generated) generated.days = [generated.day]
+  const newDay = () => generated !== null && localDay(Date.now()) !== generated.day
+  const sameDay = async () => {
+    if (!newDay()) return
+    log(`The local day is now ${localDay(Date.now())}: writing the generated dataset again for it`)
+    const again = (await prepare(name)).source.generator
+    generated.day = again.day
+    generated.days.push(again.day)
+    const repicked = pickTargets(path.join(dir, 'board.db'))
+    if (JSON.stringify(repicked) !== JSON.stringify(picks))
+      throw new Error('the generated dataset written again for the new day has other targets to measure')
+  }
+
   const start = async () => {
+    await sameDay()
     const server = await startServer({
       mode: settings.server,
       target,
@@ -636,6 +671,12 @@ async function measureDataset(name) {
   }
 
   for (let run = 1; run <= settings.runs; run++) {
+    // What this run adds, to drop if it does not count.
+    const before = {
+      metrics: m.mark(),
+      details: structuredClone(ds.details),
+      background: { ...background },
+    }
     const server = await start()
     log(
       `${name} run ${run}/${settings.runs}: server on ${server.baseURL} (pid ${server.pid}), up in ${server.startupMs} ms`,
@@ -760,6 +801,15 @@ async function measureDataset(name) {
       }
     } finally {
       await server.stop()
+    }
+    if (newDay() && (ds.redone ??= []).length < 3) {
+      log(`  ${name} run ${run} went past midnight, so its today changed: running it again`)
+      m.rollback(before.metrics)
+      ds.details = before.details
+      Object.assign(background, before.background)
+      ds.runs.at(-1).discarded = 'went past local midnight'
+      ds.redone.push(run)
+      run--
     }
   }
   if (ds.details.server) ds.details.server.background = results.instrumentation.available ? background : null

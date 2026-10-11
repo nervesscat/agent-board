@@ -30,6 +30,23 @@ export class Metrics {
     if (value === null && na) m.na = na
   }
 
+  /** Where every metric stands now, for `rollback`. */
+  mark() {
+    return new Map([...this.map].map(([key, m]) => [key, { length: m.runs.length, na: m.na }]))
+  }
+
+  /** Drops every value added since `mark` (a run that does not count). */
+  rollback(mark) {
+    for (const [key, m] of this.map) {
+      const at = mark.get(key)
+      if (!at) this.map.delete(key)
+      else {
+        m.runs.length = at.length
+        m.na = at.na
+      }
+    }
+  }
+
   toJSON() {
     return Object.fromEntries([...this.map].map(([key, m]) => [key, finish(m)]))
   }
@@ -191,6 +208,13 @@ export function markdownSummary(res) {
       '',
       `Picked: project ${d.picks.projectId}, ticket ${d.picks.ticketId} (${d.picks.ticketPosts} posts), board ticket ${d.picks.boardTicketId}, thread of post ${d.picks.postId}; human ${d.picks.human}, agent ${d.picks.agent}.`,
     )
+    const day = d.source?.generator?.day
+    if (day)
+      lines.push(
+        '',
+        `Laid out on the local day ${day}${d.source.generator.days?.length > 1 ? ` (written again for ${d.source.generator.days.slice(1).join(', ')})` : ''}.` +
+          (d.redone?.length ? ` Run again because they went past midnight: run ${d.redone.join(', ')}.` : ''),
+      )
     const m = d.metrics
     if (m['server.startup_ms'])
       lines.push('', `Server start until it answers: ${fmtMetric(m['server.startup_ms'])}.`)

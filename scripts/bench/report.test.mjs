@@ -81,6 +81,19 @@ describe('Metrics', () => {
     })
   })
 
+  it('drops what a run added when it does not count', () => {
+    const m = new Metrics()
+    m.add('a', 1, 'ms')
+    const mark = m.mark()
+    m.add('a', 2, 'ms')
+    m.add('b', null, 'count', 'not counted')
+    m.rollback(mark)
+    m.add('a', 3, 'ms')
+    expect(m.toJSON()).toEqual({
+      a: { unit: 'ms', runs: [1, 3], median: 2, min: 1, max: 3, spread: 1 },
+    })
+  })
+
   it('reports a metric it could not measure as unavailable with the reason, never as 0', () => {
     const m = new Metrics()
     m.add('server.x.db_queries', null, 'count', 'not counted under vite dev')
