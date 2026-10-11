@@ -288,6 +288,11 @@ export async function originHead(repoPath: string): Promise<string | null> {
   return ref.startsWith('refs/remotes/origin/') ? ref.slice(20) : null
 }
 
+/** Where origin is (`git remote get-url origin`); null when the checkout has no origin. */
+export async function originUrl(repoPath: string): Promise<string | null> {
+  return (await git(repoPath, ['remote', 'get-url', 'origin']).catch(() => '')) || null
+}
+
 /** Whether commit `a` is in `b`'s history (`a` itself included). */
 export function isAncestor(repoPath: string, a: string, b: string): Promise<boolean> {
   return git(repoPath, ['merge-base', '--is-ancestor', a, b]).then(

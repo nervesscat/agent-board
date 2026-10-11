@@ -603,6 +603,20 @@ describe('cleanupReport never calls a branch safe that is not', () => {
     expect(shellArg("it's")).toBe(String.raw`'it'\''s'`)
   })
 
+  it('knows one origin however its URL is written', async () => {
+    const { remoteKey } = await import('./cleanup')
+    const key = 'github.com/owner/repo'
+    for (const url of [
+      'https://github.com/owner/repo.git',
+      'https://user@github.com/Owner/repo/',
+      'git@github.com:owner/repo.git',
+      'ssh://git@github.com/owner/repo',
+    ])
+      expect(remoteKey(url)).toBe(key)
+    expect(remoteKey(String.raw`C:\work\origin.git`)).toBe('c:/work/origin')
+    expect(remoteKey('https://github.com/owner/other')).not.toBe(key)
+  })
+
   it('folds the case of paths only where the file system does', async () => {
     const { samePath } = await import('./cleanup')
     expect(samePath('/tmp/x/WT', '/tmp/x/wt', 'linux')).toBe(false)

@@ -17,6 +17,7 @@ import {
   listWorktrees,
   NO_BRANCH,
   originHead,
+  originUrl,
   refsContaining,
   type Reach,
   type Refs,
@@ -371,34 +372,108 @@ export function deleteOff(auth: AuthMode = authMode()): string | null {
 }
 
 /**
- * What may never be deleted in one checkout, whichever project points at it: the repo's base branch,
- * the main checkout's branch, origin's default branch, the branches, workspace branches and bases of
- * every ticket still in work, and the head and base of every open PR. Also the worktree paths
- * registered on tickets in work, and the branches those tickets use (for a worktree at their tip).
+ * What may never be deleted in one repository, whichever project points at it and through whichever
+ * of its worktrees: the repo's base branch, the main checkout's branch, origin's default branch, the
+ * branches, workspace branches and bases of every ticket still in work, and the head and base of
+ * every open PR. Also the worktree paths registered on tickets in work, and the branches those
+ * tickets use (for a worktree at their tip). Another clone of the same origin has branches of its
+ * own, but shares origin's: what its work uses is kept on origin (`origin`).
  */
 interface Guard {
   branches: Map<string, string>
+  /** Kept on origin only: what the work of another clone of the same origin uses. */
+  origin: Map<string, string>
   inUse: Map<string, number>
   paths: { path: string; ticketId: number }[]
   /** Every checkout a repo of the board points at: a worktree may be one. */
   checkouts: string[]
 }
 
+/** Origin's URL per checkout, read again after a minute; a checkout without one has none. */
+const ORIGIN_TTL = 60_000
+const origins = new Map<string, { at: number; url: Promise<string | null> }>()
+
+function originOf(repoPath: string): Promise<string | null> {
+  const key = pathKey(repoPath)
+  const hit = origins.get(key)
+  if (hit && Date.now() - hit.at < ORIGIN_TTL) return hit.url
+  const url = fs.existsSync(repoPath)
+    ? originUrl(repoPath).then((u) => u && remoteKey(u))
+    : Promise.resolve(null)
+  origins.set(key, { at: Date.now(), url })
+  return url
+}
+
+/**
+ * A remote URL as a key: the same repository however it is written (https or ssh, a user, a trailing
+ * `.git` or slash aside).
+ */
+export function remoteKey(url: string) {
+  let u = url.trim().replace(/\\/g, '/')
+  u = u.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^[^@/]+@/, '')
+  // `host:owner/repo`, the scp-like form; a drive letter is one character.
+  if (/^[^/:]{2,}:/.test(u)) u = u.replace(':', '/')
+  return u
+    .replace(/\/+$/, '')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '')
+    .toLowerCase()
+}
+
 async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
   const branches = new Map<string, string>()
+  const origin = new Map<string, string>()
   const inUse = new Map<string, number>()
   const paths: Guard['paths'] = []
+  const everyRepo = listRepos()
+  // Every checkout of this repository shares its branches: its own path and each worktree git lists.
+  const trees = [repoPath, ...git.worktrees.map((w) => w.path)]
+  const rows = everyRepo.filter((r) => trees.some((p) => samePath(p, r.repoPath)))
+  const url = await originOf(repoPath)
+  const clones = url
+    ? (
+        await Promise.all(
+          everyRepo
+            .filter((r) => !rows.includes(r))
+            .map(async (r) => ((await originOf(r.repoPath)) === url ? r : null)),
+        )
+      ).filter((r) => r !== null)
+    : []
+
   const keep = (name: string, why: string) => {
     if (name && !branches.has(name)) branches.set(name, why)
   }
-  const everyRepo = listRepos()
-  const rows = everyRepo.filter((r) => samePath(r.repoPath, repoPath))
+  const keepOnOrigin = (name: string, why: string) => {
+    if (name && !origin.has(name)) origin.set(name, `${why} (another clone of origin)`)
+  }
   for (const r of rows) keep(r.baseBranch, "the repo's base branch")
+  for (const r of clones) keepOnOrigin(r.baseBranch, "the repo's base branch")
   const mainBranch = git.worktrees[0]?.branch
   if (mainBranch) keep(mainBranch, 'checked out in the main checkout')
   const head = await originHead(repoPath)
   if (head) keep(head, "origin's default branch")
+  workOf(
+    rows,
+    keep,
+    (name, id) => {
+      if (!inUse.has(name)) inUse.set(name, id)
+    },
+    (path, ticketId) => paths.push({ path, ticketId }),
+  )
+  workOf(clones, keepOnOrigin)
+  return { branches, origin, inUse, paths, checkouts: everyRepo.map((r) => r.repoPath) }
+}
 
+/**
+ * What the tickets in work and the open PRs of these repo rows use: each branch name to `keep` with
+ * why, and to `using` with the ticket; each workspace path registered on one to `registered`.
+ */
+function workOf(
+  rows: RepoRow[],
+  keep: (name: string, why: string) => void,
+  using: (name: string, ticketId: number) => void = () => {},
+  registered: (path: string, ticketId: number) => void = () => {},
+) {
   const rowIds = new Set(rows.map((r) => r.id))
   for (const projectId of new Set(rows.map((r) => r.projectId))) {
     const stages = listStages(projectId)
@@ -426,10 +501,10 @@ async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
       const own = spaces.filter((w) => w.ticketId === t.id)
       for (const name of [t.branch, ...own.map((w) => w.branch)].filter(Boolean)) {
         keep(name, `in use by #${t.id}`)
-        if (!inUse.has(name)) inUse.set(name, t.id)
+        using(name, t.id)
       }
       for (const name of baseChain(t, byId, repoOf(t))) keep(name, `the base of #${t.id}`)
-      for (const w of own) if (w.path) paths.push({ path: w.path, ticketId: t.id })
+      for (const w of own) if (w.path) registered(w.path, t.id)
     }
     const open = db
       .select()
@@ -442,7 +517,6 @@ async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
       keep(pr.baseRef, `the base of open PR #${pr.number}`)
     }
   }
-  return { branches, inUse, paths, checkouts: everyRepo.map((r) => r.repoPath) }
 }
 
 const landed = (r: Reach | null) => !!r && r.state !== 'unique'
@@ -638,7 +712,10 @@ export async function cleanupReport(
                       : unlanded(localReach, into)),
               ),
               remote: verdict(
-                shared ?? (!remote ? 'not on origin' : pr ? null : unlanded(originReach, into)),
+                shared ??
+                  (!remote
+                    ? 'not on origin'
+                    : (kept?.origin.get(name) ?? (pr ? null : unlanded(originReach, into)))),
               ),
               worktrees: verdict(
                 shared ??
@@ -695,7 +772,7 @@ export async function cleanupReport(
             (b) =>
               !b.protected &&
               (!b.local || landed(b.reach)) &&
-              (!b.remote || landed(b.remoteReach) || !!b.mergedPr) &&
+              (!b.remote || ((landed(b.remoteReach) || !!b.mergedPr) && !kept?.origin.has(b.name))) &&
               b.worktrees.every((w) => w.main || !w.protected),
           ),
       }

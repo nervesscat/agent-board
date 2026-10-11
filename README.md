@@ -179,7 +179,8 @@ exactly what will go. Just before it acts, the board checks every item again on 
   very commit;
 - the branch is still at the commit the human saw, and no worktree came up that they were not shown;
 - it is not protected: the repo's base branch, the main checkout's branch, origin's default branch, or
-  anything a ticket in work or an open PR uses or stands on, in any project on that checkout.
+  anything a ticket in work or an open PR uses or stands on, in any project that reads the repository
+  through any of its worktrees; on origin, also what such work in another clone of the same origin uses.
 
 A worktree goes only when git lists no changes or untracked files in it (ignored files such as
 `node_modules` go with it): never with `--force`, never the main checkout or a locked one. A preview

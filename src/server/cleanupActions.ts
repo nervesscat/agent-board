@@ -6,7 +6,14 @@ import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import { cleanupReport, type LeftoverBranch, pathKey, samePath, shellArg } from './cleanup'
 import { deleteWorkspace } from './features'
-import { deleteLocalBranch, deleteOriginBranch, gitSaid, removeWorktree, worktreeChanges } from './git'
+import {
+  deleteLocalBranch,
+  deleteOriginBranch,
+  gitSaid,
+  listWorktrees,
+  removeWorktree,
+  worktreeChanges,
+} from './git'
 import { activePreviews, stopPreview } from './managedPreview'
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
@@ -52,11 +59,21 @@ export interface DeleteResult extends DeleteItem {
 /** How long a push to origin may take. */
 const ORIGIN_TIMEOUT = 60_000
 
-/** Each checkout's deletions, one after the other: git's ref and worktree locks never collide. */
+/**
+ * Each repository's deletions, one after the other, whichever of its worktrees they are asked
+ * through: git's ref and worktree locks never collide.
+ */
 const queues = new Map<string, Promise<unknown>>()
 
-function inTurn<T>(repoPath: string, work: () => Promise<T>): Promise<T> {
-  const key = pathKey(repoPath)
+/** A repository by its main checkout, the first worktree git lists; a path git cannot read is its own. */
+const repositoryOf = (repoPath: string) =>
+  listWorktrees(repoPath).then(
+    (trees) => pathKey(trees[0]?.path ?? repoPath),
+    () => pathKey(repoPath),
+  )
+
+async function inTurn<T>(repoPath: string, work: () => Promise<T>): Promise<T> {
+  const key = await repositoryOf(repoPath)
   const next = (queues.get(key) ?? Promise.resolve()).then(work, work)
   const tail = next.catch(() => {})
   queues.set(key, tail)

@@ -657,6 +657,105 @@ describe('never deletes what is protected', () => {
 })
 
 describe('protects the same repository and origin, however a project reaches them', () => {
+  const now = new Date().toISOString()
+  const openPr = (pid: number, rid: number, number: number, headRef: string) =>
+    dbm.db
+      .insert(dbm.schema.prs)
+      .values({
+        projectId: pid,
+        repoId: rid,
+        number,
+        title: headRef,
+        url: `https://example.invalid/pr/${number}`,
+        author: 'enrique',
+        headRef,
+        baseRef: 'main',
+        headSha: git('rev-parse', headRef),
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .run()
+  const projectAt = (name: string, repoPath: string) => {
+    const pid = dbm.db.insert(dbm.schema.projects).values({ name }).returning().get().id
+    const rid = dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId: pid, name, repoPath, baseBranch: 'main' })
+      .returning()
+      .get().id
+    return { pid, rid }
+  }
+
+  it('a branch in use where another project reads the repo through a linked worktree', async () => {
+    // A fresh branch on origin: merged, so nothing but the guard keeps it.
+    git('branch', 'feat/f1-shared', 'main')
+    git('push', '-q', 'origin', 'feat/f1-shared', 'main')
+    const open = features.createTicket(
+      projectId,
+      { title: 'f1 open', branch: 'feat/f1-shared', status: 'in_progress' },
+      'claude',
+    )
+    openPr(projectId, repoId, 51, 'feat/f1-shared')
+    git('worktree', 'add', '-q', '--detach', wt('f1b'), 'main')
+    const b = projectAt('reads a linked worktree', wt('f1b'))
+    const t = features.createTicket(
+      b.pid,
+      { title: 'f1 done', branch: 'feat/f1-shared', status: 'done' },
+      'claude',
+    )
+    const sha = git('rev-parse', 'feat/f1-shared')
+    const results = await deleteLeftovers(
+      b.pid,
+      [
+        { ticketId: t.id, branch: 'feat/f1-shared', kind: 'local', sha },
+        { ticketId: t.id, branch: 'feat/f1-shared', kind: 'remote', sha },
+      ],
+      'enrique',
+    )
+    expect(results.map((r) => [r.outcome, r.reason])).toEqual([
+      ['refused', `in use by #${open.id}`],
+      ['refused', `in use by #${open.id}`],
+    ])
+    expect(hasRef(repo, 'refs/heads/feat/f1-shared')).toBe(true)
+    expect(hasRef(origin, 'refs/heads/feat/f1-shared')).toBe(true)
+  })
+
+  it('one deletion at a time in a repository, whichever worktree each project reads it through', async () => {
+    const { 'feat/f1-race': sha } = land(['feat/f1-race'])
+    git('worktree', 'add', '-q', '--detach', wt('f1r'), 'main')
+    const b = projectAt('races through a worktree', wt('f1r'))
+    const here = done('f1 race here', 'feat/f1-race')
+    const there = features.createTicket(
+      b.pid,
+      { title: 'f1 race there', branch: 'feat/f1-race', status: 'done' },
+      'claude',
+    )
+    const both = await Promise.all([
+      del([{ ticketId: here.id, branch: 'feat/f1-race', kind: 'local', sha }]),
+      deleteLeftovers(b.pid, [{ ticketId: there.id, branch: 'feat/f1-race', kind: 'local', sha }], 'enrique'),
+    ])
+    expect(both.map(([r]) => r!.outcome).sort()).toEqual(['deleted', 'gone'])
+    expect(hasRef(repo, 'refs/heads/feat/f1-race')).toBe(false)
+  })
+
+  it('origin’s copy of a branch in use in another clone of the same origin', async () => {
+    const { 'feat/f1-clone': sha } = land(['feat/f1-clone'])
+    git('push', '-q', 'origin', 'feat/f1-clone', 'main')
+    const c = projectAt('another clone', other)
+    const open = features.createTicket(
+      c.pid,
+      { title: 'f1 elsewhere', branch: 'feat/f1-clone', status: 'in_progress' },
+      'claude',
+    )
+    const t = done('f1 clone', 'feat/f1-clone')
+    const b = (await branchOf(t.id, 'feat/f1-clone'))!
+    // That clone's branches are its own: this one's local branch may go.
+    expect(b.can.local.ok).toBe(true)
+    expect(b.can.remote).toEqual({ ok: false, reason: `in use by #${open.id} (another clone of origin)` })
+    const [r] = await del([{ ticketId: t.id, branch: 'feat/f1-clone', kind: 'remote', sha }])
+    expect(r).toMatchObject({ outcome: 'refused', reason: `in use by #${open.id} (another clone of origin)` })
+    expect(hasRef(origin, 'refs/heads/feat/f1-clone')).toBe(true)
+  })
+
   it('origin’s copy against origin’s base, never a local branch named like it', async () => {
     // Merged into main here, which origin has not got yet.
     const { 'feat/f2': sha } = land(['feat/f2'])
