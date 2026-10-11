@@ -254,7 +254,10 @@ const status = sh('git', ['status', '--porcelain'], target)
 const targetInfo = {
   path: target,
   sha: sh('git', ['rev-parse', 'HEAD'], target) ?? 'unknown',
-  branch: sh('git', ['rev-parse', '--abbrev-ref', 'HEAD'], target) ?? 'unknown',
+  branch: (sh('git', ['rev-parse', '--abbrev-ref', 'HEAD'], target) ?? 'unknown').replace(
+    /^HEAD$/,
+    'detached',
+  ),
   dirty: status ? status.split('\n').length : 0,
   buildDir,
   buildMs: null,

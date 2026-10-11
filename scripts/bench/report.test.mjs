@@ -133,9 +133,11 @@ describe('comparing two results', () => {
     expect(beyondNoise(metric([10, 11, 12]), metric([11.5, 12, 13]))).toBe(false)
     expect(beyondNoise(metric([10, 11, 12]), metric([13, 14, 15]))).toBe(true)
     expect(beyondNoise(metric([10, 11, 12]), metric([7, 8, 9]))).toBe(true)
-    // Measured once on each side (bytes): any change counts.
+    // Bytes do not vary between runs: any change counts.
     expect(beyondNoise(metric([1000], 'bytes'), metric([1001], 'bytes'))).toBe(true)
     expect(beyondNoise(metric([1000], 'bytes'), metric([1000], 'bytes'))).toBe(false)
+    // A time from a single run has no range to judge it by.
+    expect(beyondNoise(metric([10]), metric([20, 21, 22]))).toBeNull()
   })
 
   it('lists every metric of both files with before, after and the change', () => {

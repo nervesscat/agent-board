@@ -340,11 +340,14 @@ export function markdownSummary(res) {
 // --- comparing two results files ---
 
 /**
- * Whether a change is beyond the noise: the ranges over the runs do not overlap. A metric measured once
- * on each side (bytes, counts) has no range, so any change counts.
+ * Whether a change is beyond the noise: the ranges over the runs do not overlap. Bytes and counts are
+ * the same on every run, so any change in them counts; a time taken in a single run on either side
+ * has no range to judge it by (null: unknown).
  */
 export function beyondNoise(before, after) {
   if (before.median === null || after.median === null) return false
+  const runs = (m) => m.runs.filter((x) => x !== null).length
+  if (before.unit === 'ms' && (runs(before) < 2 || runs(after) < 2)) return null
   return after.min > before.max || after.max < before.min
 }
 
@@ -387,7 +390,7 @@ export function markdownComparison(before, after, rows = compareResults(before, 
     `Before: ${head(before)}, ${before.startedAt}, ${before.settings.runs} run(s).`,
     `After: ${head(after)}, ${after.startedAt}, ${after.settings.runs} run(s).`,
     '',
-    'Beyond noise: the ranges over the runs do not overlap (a value measured once, such as bytes, has no range).',
+    'Beyond noise: the ranges over the runs do not overlap. Bytes and counts do not vary between runs, so any change in them is; a time from a single run cannot be judged (?).',
   ]
   if (before.machine.cpu !== after.machine.cpu || before.machine.os !== after.machine.os)
     lines.push('', '**Warning:** the two runs come from different machines.')
@@ -417,7 +420,7 @@ export function markdownComparison(before, after, rows = compareResults(before, 
           r.after ? fmtMetric(r.after) : '(absent)',
           r.delta === null ? '' : `${r.delta > 0 ? '+' : ''}${fmtNum(r.delta, (r.after ?? r.before).unit)}`,
           r.pct === null ? '' : `${r.pct > 0 ? '+' : ''}${r.pct.toFixed(1)}%`,
-          r.beyond ? (r.delta > 0 ? 'yes, up' : 'yes, down') : '',
+          r.beyond === null ? '?' : r.beyond ? (r.delta > 0 ? 'yes, up' : 'yes, down') : '',
         ]),
       ),
     )
