@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import Database from 'better-sqlite3'
-import { afterAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
   SLOT_MS,
@@ -83,10 +83,21 @@ describe('the generated dataset', () => {
 
 describe('the generated dataset, whatever the hour', () => {
   const DAY = 86_400_000
+  // In a zone with no clock change in the 60 days the dataset spans (the days of a change are tested
+  // below), whatever the machine's zone; the zone it had is put back after.
+  let zone
+  beforeAll(() => {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    process.env.TZ = 'America/Guatemala'
+  })
+  afterAll(() => {
+    process.env.TZ = zone
+  })
   // Local times: a run that starts just after midnight, one late in the evening two days later, and
-  // what the server reads for each, at its start and 23 minutes on (still the same day).
+  // what the server reads for each, at its start and 23 minutes on (still the same day). Taken when the
+  // tests run, in the zone above.
   const local = (day, h, m, s = 0) => new Date(2026, 9, day, h, m, s).getTime()
-  const runs = [
+  const runs = () => [
     { name: 'just after midnight', generated: local(7, 0, 1, 30), reads: [local(7, 0, 2), local(7, 0, 25)] },
     {
       name: 'late in the evening',
@@ -127,8 +138,8 @@ describe('the generated dataset, whatever the hour', () => {
 
   it('reads the same through the server at any hour: today, carried over, stalled, days in progress, reports due', async () => {
     const seen = []
-    for (const run of runs) {
-      const dir = path.join(root, `hour-${runs.indexOf(run)}`)
+    for (const [i, run] of runs().entries()) {
+      const dir = path.join(root, `hour-${i}`)
       generate(dir, { scale: 0.05, seed: 3, migrationsFolder, now: run.generated })
       const db = new Database(path.join(dir, 'board.db'), { readonly: true })
       const newest = db
