@@ -155,6 +155,7 @@ describe('an agent’s change', () => {
       changedBy: 'enrique',
       byAgent: false,
       state: 'accepted',
+      revertOf: change.id,
     })
     expect(linesOf(p).at(-1)).toMatchObject({
       actor: 'enrique',
@@ -190,6 +191,64 @@ describe('an agent’s change', () => {
     history.revertChange(first!.id, 'enrique')
     expect(reports.getReportSettings(p)).toMatchObject({ prompt: '', pending: [] })
   })
+
+  it('is not reverted while a later change stands that set the same value again', async () => {
+    const p = newProject()
+    human(p, { prompt: 'P0' })
+    agent(p, { prompt: 'X' })
+    human(p, { prompt: 'Y' })
+    agent(p, { prompt: 'X' })
+    const [newer, older] = history.pendingChanges(p)
+
+    // The human's Y stands after the older change: reverting that one would drop it.
+    const refused = await rest('POST', `/api/report-settings/changes/${older!.id}/revert`)
+    expect(refused.status).toBe(409)
+    expect(refused.body.error).toMatch(/changed again since: revert the later change first/)
+    expect(history.getChange(older!.id).state).toBe('pending')
+    expect(reports.getReportSettings(p).prompt).toBe('X')
+    // The notice offers Revert on the newer one only.
+    expect(history.pendingChanges(p)).toMatchObject([
+      { id: newer!.id, oldValue: 'Y', newValue: 'X', revertable: true },
+      { id: older!.id, oldValue: 'P0', newValue: 'X', revertable: false },
+    ])
+
+    // The newer one has no later change: it goes back to the human's Y.
+    expect((await rest('POST', `/api/report-settings/changes/${newer!.id}/revert`)).status).toBe(200)
+    expect(reports.getReportSettings(p).prompt).toBe('Y')
+    // The human's change still stands, so the older one stays refused.
+    expect(history.pendingChanges(p)).toMatchObject([{ id: older!.id, revertable: false }])
+    expect(() => history.revertChange(older!.id, 'enrique')).toThrow(/changed again since/)
+    expect(reports.getReportSettings(p).prompt).toBe('Y')
+  })
+
+  it('is undone newest first back to the start, past the records the reverts leave', () => {
+    const p = newProject()
+    human(p, { prompt: 'P0' })
+    agent(p, { prompt: 'X' })
+    agent(p, { prompt: 'Y' })
+    agent(p, { prompt: 'X' })
+    const [c, b, a] = history.pendingChanges(p)
+    expect([c, b, a].map((change) => change!.revertable)).toEqual([true, false, false])
+
+    history.revertChange(c!.id, 'enrique')
+    expect(reports.getReportSettings(p).prompt).toBe('Y')
+    expect(history.pendingChanges(p).map((change) => [change.id, change.revertable])).toEqual([
+      [b!.id, true],
+      [a!.id, false],
+    ])
+    history.revertChange(b!.id, 'enrique')
+    expect(reports.getReportSettings(p).prompt).toBe('X')
+    expect(history.pendingChanges(p)).toMatchObject([{ id: a!.id, revertable: true }])
+    history.revertChange(a!.id, 'enrique')
+    expect(reports.getReportSettings(p)).toMatchObject({ prompt: 'P0', pending: [] })
+    // Each revert is recorded as a change pointing at the one it undid.
+    expect(
+      history
+        .listChanges(p)
+        .filter((change) => change.revertOf !== null)
+        .map((change) => change.revertOf),
+    ).toEqual([a!.id, b!.id, c!.id])
+  })
 })
 
 describe('the history over REST', () => {
@@ -200,7 +259,9 @@ describe('the history over REST', () => {
     const list = await rest('GET', `/api/projects/${p}/report-settings/changes`)
     expect(list.body.map((c: { newValue: string }) => c.newValue)).toEqual(['B.', 'A.'])
     expect((await rest('GET', `/api/report-settings/changes/${list.body[0].id}`)).body).toEqual(list.body[0])
-    expect((await rest('GET', `/api/projects/${p}/report-settings`)).body.pending).toEqual([list.body[0]])
+    expect((await rest('GET', `/api/projects/${p}/report-settings`)).body.pending).toEqual([
+      { ...list.body[0], revertable: true },
+    ])
   })
 
   it('lets the human accept or revert, never an agent', async () => {

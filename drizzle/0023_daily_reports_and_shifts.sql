@@ -50,6 +50,7 @@ CREATE TABLE `report_settings_changes` (
 	`state` text DEFAULT 'accepted' NOT NULL,
 	`resolved_by` text DEFAULT '' NOT NULL,
 	`resolved_at` text,
+	`revert_of` integer,
 	`createdAt` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade
 );

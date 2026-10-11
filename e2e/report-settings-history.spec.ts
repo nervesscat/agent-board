@@ -144,6 +144,41 @@ test('an agent’s change of the template is shown as a diff and reverted, as a 
   ).toBeVisible()
 })
 
+test('Revert is offered only on the newest change while a later one stands, even one that set the same value', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const settingsUrl = `/api/projects/${project.id}/report-settings`
+  await ok(human.patch(settingsUrl, { data: { prompt: 'P0' } }))
+  await ok(agent.patch(settingsUrl, { data: { prompt: 'X' } }))
+  await ok(human.patch(settingsUrl, { data: { prompt: 'Y' } }))
+  await ok(agent.patch(settingsUrl, { data: { prompt: 'X' } }))
+  await page.goto(`/projects/${project.id}/daily`)
+
+  // Newest first: the later X, then the first one, whose revert would drop the human's Y.
+  const notices = page.getByRole('region', { name: 'Changes by agents to review' }).getByRole('article')
+  await expect(notices).toHaveCount(2)
+  const [newer, older] = (await ok<ReportSettingsView>(human.get(settingsUrl))).pending
+  expect([newer, older]).toMatchObject([
+    { oldValue: 'Y', newValue: 'X', revertable: true },
+    { oldValue: 'P0', newValue: 'X', revertable: false },
+  ])
+  await expect(notices.nth(0).getByRole('button', { name: 'Revert' })).toBeEnabled()
+  await expect(notices.nth(1).getByRole('button', { name: 'Revert' })).toBeDisabled()
+  expect((await human.post(`/api/report-settings/changes/${older!.id}/revert`)).status()).toBe(409)
+
+  await notices.nth(0).getByRole('button', { name: 'Revert' }).click()
+  await expect(notices).toHaveCount(1)
+  expect((await ok<ReportSettingsView>(human.get(settingsUrl))).prompt).toBe('Y')
+  // The human's Y still stands after the first change: its Revert stays off, Accept settles it.
+  await expect(notices.getByRole('button', { name: 'Revert' })).toBeDisabled()
+  await notices.getByRole('button', { name: 'Accept' }).click()
+  await expect(notices).toHaveCount(0)
+  expect(await ok<ReportSettingsView>(human.get(settingsUrl))).toMatchObject({ prompt: 'Y', pending: [] })
+})
+
 test('an activity line of a change opens its diff', async ({ page, project, human }) => {
   await ok(
     human.patch(`/api/projects/${project.id}/report-settings`, {

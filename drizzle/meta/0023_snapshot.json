@@ -1122,6 +1122,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "revert_of": {
+          "name": "revert_of",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "text",

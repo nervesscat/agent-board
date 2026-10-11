@@ -370,6 +370,8 @@ export const reportSettingsChanges = sqliteTable(
     state: text().$type<'accepted' | 'pending' | 'reverted'>().notNull().default('accepted'),
     resolvedBy: text('resolved_by').notNull().default(''),
     resolvedAt: text('resolved_at'),
+    // The change a revert undid, on the change the revert records; null on any other change.
+    revertOf: integer('revert_of'),
     createdAt: now(),
   },
   (t) => [index('report_settings_changes_project').on(t.projectId, t.createdAt)],

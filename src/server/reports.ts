@@ -21,7 +21,7 @@ import { logActivity } from './activity'
 import { HttpError } from './http'
 import { getProject } from './projects'
 import { generationState } from './reportGenerate'
-import { pendingChanges, recordSettingsChanges } from './reportSettingsHistory'
+import { pendingChanges, recordSettingsChanges, type PendingChange } from './reportSettingsHistory'
 import { attachTo, attachmentView, saveFromPath } from './uploads'
 
 /**
@@ -88,7 +88,7 @@ export type ReportSettingsPatch = z.infer<typeof ReportSettingsPatch>
 export interface ReportSettingsView extends Omit<schema.ReportSettings, 'template'> {
   template: string
   templateIsDefault: boolean
-  pending: schema.ReportSettingsChange[]
+  pending: PendingChange[]
 }
 
 const defaults = (projectId: number): schema.ReportSettings => ({

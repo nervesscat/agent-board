@@ -1,7 +1,7 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import type { ReportSettingsChange } from '#/db/schema'
+import type { ReportSettings, ReportSettingsChange } from '#/db/schema'
 import { DEFAULT_REPORT_TEMPLATE, effectiveTemplate } from '#/lib/reportTemplate'
 import { logActivity } from './activity'
 import { HttpError } from './http'
@@ -31,6 +31,7 @@ function record(
   actor: string,
   agent: boolean,
   text: string,
+  revertOf: number | null = null,
 ): ReportSettingsChange {
   const change = db
     .insert(schema.reportSettingsChanges)
@@ -42,6 +43,7 @@ function record(
       changedBy: actor,
       byAgent: agent,
       state: agent ? 'pending' : 'accepted',
+      revertOf,
     })
     .returning()
     .get()
@@ -93,8 +95,14 @@ export function getChange(id: number): ReportSettingsChange {
   return change
 }
 
+/** An agent's change waiting on the human, and whether the human can revert it now. */
+export interface PendingChange extends ReportSettingsChange {
+  revertable: boolean
+}
+
 /** Agents' changes the human has not accepted or reverted yet, newest first. */
-export function pendingChanges(projectId: number): ReportSettingsChange[] {
+export function pendingChanges(projectId: number): PendingChange[] {
+  const row = readReportSettings(projectId)
   return db
     .select()
     .from(schema.reportSettingsChanges)
@@ -106,6 +114,31 @@ export function pendingChanges(projectId: number): ReportSettingsChange[] {
     )
     .orderBy(...newestFirst)
     .all()
+    .map((change) => ({ ...change, revertable: !revertRefused(change, row) }))
+}
+
+/**
+ * Why the change cannot be reverted now, or null when it can: a later change of the field stands (one
+ * not reverted since, the record of a revert aside), or the field holds something else than it set.
+ */
+function revertRefused(change: ReportSettingsChange, row: ReportSettings): string | null {
+  const t = schema.reportSettingsChanges
+  const later = db
+    .select({ id: t.id })
+    .from(t)
+    .where(
+      and(
+        eq(t.projectId, change.projectId),
+        eq(t.field, change.field),
+        gt(t.id, change.id),
+        ne(t.state, 'reverted'),
+        isNull(t.revertOf),
+      ),
+    )
+    .get()
+  if (later || shown(change.field, row[change.field]) !== change.newValue)
+    return `the report ${change.field} changed again since: revert the later change first, or edit it in the report settings`
+  return null
 }
 
 function settle(id: number, state: 'accepted' | 'reverted', actor: string) {
@@ -127,8 +160,9 @@ export function acceptChange(id: number, actor: string): ReportSettingsChange {
 
 /**
  * Puts the field back to the value before the change, itself recorded as a change (by `actor`, not
- * pending). Only while the field still holds what the change set: after a later change of it, that one
- * is reverted first (409).
+ * pending, pointing at the change it reverts). Only while no later change of the field stands and the
+ * field still holds what the change set: a later change is reverted first (409), so changes are undone
+ * newest first, also when a later one set the same value again.
  */
 export function revertChange(
   id: number,
@@ -137,12 +171,8 @@ export function revertChange(
   const change = getChange(id)
   if (change.state === 'reverted') throw new HttpError(409, 'this change was already reverted')
   const { field, projectId } = change
-  const row = readReportSettings(projectId)
-  if (shown(field, row[field]) !== change.newValue)
-    throw new HttpError(
-      409,
-      `the report ${field} changed again since: revert the later change first, or edit it in the report settings`,
-    )
+  const refused = revertRefused(change, readReportSettings(projectId))
+  if (refused) throw new HttpError(409, refused)
 
   // The default template is kept as '', so it goes on following the board's default.
   const value = field === 'template' && change.oldValue === DEFAULT_REPORT_TEMPLATE ? '' : change.oldValue
@@ -161,6 +191,7 @@ export function revertChange(
       actor,
       false,
       `reverted ${by} change of the report ${field}`,
+      id,
     )
     return done
   })

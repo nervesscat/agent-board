@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { ChangeDiff } from '#/components/daily/SettingsChangeDiff'
 import { refreshReports } from '#/components/daily/refresh'
 import { Button } from '#/components/ui/button'
-import { errorMessage, get, post, type ReportSettingsChange, type ReportSettingsView } from '#/lib/api'
+import { errorMessage, get, post, type ReportSettingsView } from '#/lib/api'
 import { ago, stamp } from '#/lib/format'
 
 /**
@@ -25,21 +25,13 @@ export function SettingsChangeNotice({ projectId }: { projectId: number }) {
   return (
     <section aria-label="Changes by agents to review" className="space-y-2">
       {settings.pending.map((change) => (
-        <Notice key={change.id} projectId={projectId} change={change} settings={settings} />
+        <Notice key={change.id} projectId={projectId} change={change} />
       ))}
     </section>
   )
 }
 
-function Notice({
-  projectId,
-  change,
-  settings,
-}: {
-  projectId: number
-  change: ReportSettingsChange
-  settings: ReportSettingsView
-}) {
+function Notice({ projectId, change }: { projectId: number; change: ReportSettingsView['pending'][number] }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const settle = useMutation({
@@ -53,9 +45,8 @@ function Notice({
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  // A later change of the field has to be reverted first: this one no longer holds.
-  const current = change.field === 'prompt' ? settings.prompt : settings.template
-  const later = current !== change.newValue
+  // The server says whether a later change of the field stands: that one is reverted first.
+  const later = !change.revertable
 
   return (
     <article
