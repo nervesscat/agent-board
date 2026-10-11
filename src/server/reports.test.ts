@@ -5,6 +5,8 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import { DEFAULT_REPORT_TEMPLATE } from '#/lib/reportTemplate'
+
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-'))
 process.env.DATA_DIR = tmp
@@ -22,52 +24,106 @@ const activity = (projectId: number) =>
   dbm.db.select().from(dbm.schema.activity).where(eq(dbm.schema.activity.projectId, projectId)).all()
 
 describe('report settings', () => {
-  it('start off, and anyone (an agent too) can change them, each change logged', () => {
+  it('start off with the default template and shift, and anyone (an agent too) can change them', () => {
     const p = newProject('settings')
-    expect(reports.getReportSettings(p)).toMatchObject({ cadence: 'off', prompt: '', format: 'text' })
+    const fresh = reports.getReportSettings(p)
+    expect(fresh).toMatchObject({
+      cadence: 'off',
+      prompt: '',
+      format: 'text',
+      template: DEFAULT_REPORT_TEMPLATE,
+      templateIsDefault: true,
+      shiftStart: '09:00',
+      shiftEnd: '17:00',
+      workdays: [1, 2, 3, 4, 5],
+      alertMinutes: 30,
+      pending: [],
+    })
+    expect(fresh).not.toHaveProperty('dueTime')
 
     const s = reports.setReportSettings(
       p,
-      { prompt: '## By the hour\nWhat was done each hour.', cadence: 'daily', dueTime: '18:00' },
+      { prompt: '## By the hour\nWhat was done each hour.', cadence: 'daily', shiftEnd: '18:00' },
       'claude',
+      { agent: true },
       at('2026-10-04'),
     )
-    expect(s).toMatchObject({ cadence: 'daily', dueTime: '18:00', since: '2026-10-04', updatedBy: 'claude' })
+    expect(s).toMatchObject({ cadence: 'daily', shiftEnd: '18:00', since: '2026-10-04', updatedBy: 'claude' })
     expect(reports.getReportSettings(p).prompt).toBe('## By the hour\nWhat was done each hour.')
     expect(activity(p).map((a) => a.text)).toEqual([
-      'changed the report prompt and schedule (daily by 18:00, text)',
+      'changed the report prompt',
+      'changed the report schedule (daily by 18:00, text)',
     ])
 
-    // Only what changed is logged; nothing changed logs nothing. "" clears the due time.
-    reports.setReportSettings(p, { prompt: 'Two lines.' }, 'me', at('2026-10-05'))
-    reports.setReportSettings(p, { prompt: 'Two lines.' }, 'me', at('2026-10-05'))
-    reports.setReportSettings(p, { dueTime: '' }, 'me', at('2026-10-05'))
+    // Only what changed is logged; nothing changed logs nothing.
+    reports.setReportSettings(p, { prompt: 'Two lines.' }, 'me', {}, at('2026-10-05'))
+    reports.setReportSettings(p, { prompt: 'Two lines.' }, 'me', {}, at('2026-10-05'))
+    reports.setReportSettings(
+      p,
+      { workdays: [5, 1, 2, 3, 4, 6], alertMinutes: 45 },
+      'me',
+      {},
+      at('2026-10-05'),
+    )
     expect(activity(p).map((a) => a.text)).toEqual([
-      'changed the report prompt and schedule (daily by 18:00, text)',
       'changed the report prompt',
-      'changed the report schedule (daily, text)',
+      'changed the report schedule (daily by 18:00, text)',
+      'changed the report prompt',
+      'changed the report schedule (daily by 18:00, text)',
     ])
-    // Tracking starts again only when the cadence changes.
-    expect(reports.getReportSettings(p)).toMatchObject({ dueTime: null, since: '2026-10-04' })
-    reports.setReportSettings(p, { cadence: 'weekly', weekday: 1 }, 'me', at('2026-10-08'))
+    // Tracking starts again only when the cadence changes; workdays are kept in order.
+    expect(reports.getReportSettings(p)).toMatchObject({
+      since: '2026-10-04',
+      workdays: [1, 2, 3, 4, 5, 6],
+      alertMinutes: 45,
+    })
+    reports.setReportSettings(p, { cadence: 'weekly', weekday: 1 }, 'me', {}, at('2026-10-08'))
     expect(reports.getReportSettings(p).since).toBe('2026-10-05')
   })
 
-  it('reject a cadence, weekday, due time or format the board does not know', () => {
+  it("keep a template of the project's own verbatim, and go back to the default on ''", () => {
+    const p = newProject('template')
+    const mine = '# Weekly\n\n## Shipped\n\n## Risks\n'
+    reports.setReportSettings(p, { template: mine }, 'me')
+    expect(reports.getReportSettings(p)).toMatchObject({ template: mine, templateIsDefault: false })
+    reports.setReportSettings(p, { template: '' }, 'me')
+    expect(reports.getReportSettings(p)).toMatchObject({
+      template: DEFAULT_REPORT_TEMPLATE,
+      templateIsDefault: true,
+    })
+  })
+
+  it('reject a cadence, weekday, time, workday, alert, format or field the board does not know', () => {
     const p = newProject('validation')
+    reports.setReportSettings(p, { cadence: 'daily' }, 'me')
+    const before = reports.getReportSettings(p)
     const bad = [
       { cadence: 'monthly' },
       { weekday: 0 },
       { weekday: 8 },
-      { dueTime: '25:00' },
-      { dueTime: '6pm' },
+      { shiftEnd: '25:00' },
+      { shiftEnd: '6pm' },
+      { shiftStart: '9:00' },
+      { shiftStart: '' },
+      { shiftStart: '18:00', shiftEnd: '09:00' },
+      { shiftEnd: '09:00' },
+      { workdays: [] },
+      { workdays: [0] },
+      { workdays: [8] },
+      { workdays: [1, 1] },
+      { workdays: [1.5] },
+      { alertMinutes: -1 },
+      { alertMinutes: 721 },
+      { alertMinutes: 2.5 },
       { format: 'docx' },
+      { template: 'x'.repeat(50_001) },
+      { dueTime: '18:00' },
     ]
     for (const patch of bad)
-      expect(() => reports.setReportSettings(p, patch as never, 'claude')).toThrow(
+      expect(() => reports.setReportSettings(p, patch as never, 'claude'), JSON.stringify(patch)).toThrow(
         expect.objectContaining({ status: 400 }),
       )
-    expect(reports.getReportSettings(p).cadence).toBe('off')
+    expect(reports.getReportSettings(p)).toEqual(before)
   })
 })
 
@@ -75,7 +131,7 @@ describe('reports', () => {
   it('cannot be posted while the cadence is off, nor for a period that has not started', async () => {
     const p = newProject('off')
     await expect(reports.postReport(p, { body: 'hi' }, 'claude')).rejects.toMatchObject({ status: 400 })
-    reports.setReportSettings(p, { cadence: 'daily' }, 'me', at('2026-10-04'))
+    reports.setReportSettings(p, { cadence: 'daily' }, 'me', {}, at('2026-10-04'))
     await expect(
       reports.postReport(p, { body: 'hi', period: '2026-10-05' }, 'claude', at('2026-10-04')),
     ).rejects.toMatchObject({ status: 400 })
@@ -84,7 +140,7 @@ describe('reports', () => {
 
   it('track each day as done, missing or upcoming; a new post replaces the report and keeps history', async () => {
     const p = newProject('daily')
-    reports.setReportSettings(p, { cadence: 'daily', dueTime: '18:00' }, 'me', at('2026-10-01'))
+    reports.setReportSettings(p, { cadence: 'daily', shiftEnd: '18:00' }, 'me', {}, at('2026-10-01'))
     const r = await reports.postReport(
       p,
       { body: 'Shipped the export.', period: '2026-10-02' },
@@ -120,7 +176,13 @@ describe('reports', () => {
 
   it('take a file as a path, attach it to the report and hand back its local path', async () => {
     const p = newProject('pdf')
-    reports.setReportSettings(p, { cadence: 'weekly', weekday: 5, format: 'file' }, 'me', at('2026-09-29'))
+    reports.setReportSettings(
+      p,
+      { cadence: 'weekly', weekday: 5, format: 'file' },
+      'me',
+      {},
+      at('2026-09-29'),
+    )
     // A file report needs the file.
     await expect(
       reports.postReport(p, { body: 'see attached' }, 'claude', at('2026-10-02')),
@@ -146,26 +208,18 @@ describe('reports', () => {
     expect(reports.reportVersions(p, '2026-09-28')).toHaveLength(1)
   })
 
-  it('count a daily summary as the day’s report for a daily text project only', async () => {
-    const { addSummary } = await import('./activity')
-    const p = newProject('summaries')
-    reports.setReportSettings(p, { cadence: 'daily' }, 'me', at('2026-10-03'))
-    addSummary({ projectId: p, date: '2026-10-03', author: 'claude', body: '- export shipped' })
-
-    let day = reports.listReports(p, {}, at('2026-10-04')).periods.find((x) => x.period === '2026-10-03')!
-    expect(day.status).toBe('done')
-    expect(day.report).toMatchObject({ source: 'summary', body: '- export shipped', author: 'claude' })
-
-    // A posted report wins over the summary.
-    await reports.postReport(p, { body: 'The report.', period: '2026-10-03' }, 'me', at('2026-10-04'))
-    day = reports.listReports(p, {}, at('2026-10-04')).periods.find((x) => x.period === '2026-10-03')!
-    expect(day.report).toMatchObject({ source: 'report', body: 'The report.' })
-
-    // A file project's summaries are not reports.
-    const q = newProject('summaries-file')
-    reports.setReportSettings(q, { cadence: 'daily', format: 'file' }, 'me', at('2026-10-03'))
-    addSummary({ projectId: q, date: '2026-10-03', author: 'claude', body: '- done' })
-    day = reports.listReports(q, {}, at('2026-10-04')).periods.find((x) => x.period === '2026-10-03')!
-    expect(day.status).toBe('missing')
+  it('list no generation running or failed while nobody asked claude', () => {
+    const p = newProject('generation')
+    expect(reports.listReports(p, {}, at('2026-10-04'))).toMatchObject({
+      current: null,
+      periods: [],
+      generating: null,
+      generateError: null,
+    })
+    reports.setReportSettings(p, { cadence: 'daily' }, 'me', {}, at('2026-10-04'))
+    const list = reports.listReports(p, {}, at('2026-10-04'))
+    expect(list).toMatchObject({ current: '2026-10-04', generating: null, generateError: null })
+    expect(list).not.toHaveProperty('prompt')
+    expect(list).not.toHaveProperty('template')
   })
 })

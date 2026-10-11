@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { authOffBanner, builtServerBind, checkBind, LIVE_PORT, readAuthMode, StartupError } from './config'
+import {
+  authOffBanner,
+  builtServerBind,
+  checkBind,
+  LIVE_PORT,
+  readAuthMode,
+  readClaudeArgs,
+  StartupError,
+} from './config'
 
 const safe = { host: '127.0.0.1', port: 47131 }
 
@@ -103,5 +111,18 @@ describe('authOffBanner', () => {
     expect(authOffBanner(readAuthMode({ BOARD_ENV: 'test' }), 'human')).toMatch(
       /^AUTH OFF: test, signed in as human, do not expose this .*X-Test-Actor/,
     )
+  })
+})
+
+describe('readClaudeArgs', () => {
+  it('is no arguments when unset, else the JSON array of strings given', () => {
+    expect(readClaudeArgs(undefined)).toEqual([])
+    expect(readClaudeArgs(' ')).toEqual([])
+    expect(readClaudeArgs('["e2e/fake-claude.mjs", "--slow"]')).toEqual(['e2e/fake-claude.mjs', '--slow'])
+  })
+
+  it('refuses anything else', () => {
+    for (const raw of ['e2e/fake-claude.mjs', '{"a": 1}', '[1]', '"x"'])
+      expect(() => readClaudeArgs(raw)).toThrow(/CLAUDE_ARGS must be a JSON array of strings/)
   })
 })

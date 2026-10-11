@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { dueAt, periodLabel, periodOf, periodsBetween, reportStatus, type ReportSchedule } from './reports'
+import {
+  describeSchedule,
+  dueAt,
+  periodLabel,
+  periodOf,
+  periodsBetween,
+  reportStatus,
+  type ReportSchedule,
+} from './reports'
 
 // Every date here is local time, like the board's days.
 const at = (day: string, time = '00:00') => new Date(`${day}T${time}:00`)
+const shift = { shiftStart: '09:00', workdays: [1, 2, 3, 4, 5], alertMinutes: 30 }
 
 describe('periodOf', () => {
   it('is the day itself for a daily cadence', () => {
@@ -25,23 +34,22 @@ describe('periodOf', () => {
 })
 
 describe('dueAt', () => {
-  it('is the due time of the day, or the end of it', () => {
-    const daily: ReportSchedule = { cadence: 'daily', weekday: 5, dueTime: '18:00' }
+  it("is the shift's end on the day", () => {
+    const daily: ReportSchedule = { cadence: 'daily', weekday: 5, shiftEnd: '18:00', ...shift }
     expect(dueAt(daily, '2026-10-04')).toEqual(at('2026-10-04', '18:00'))
-    expect(dueAt({ ...daily, dueTime: null }, '2026-10-04')).toEqual(at('2026-10-05'))
+    expect(dueAt({ ...daily, shiftEnd: '23:59' }, '2026-10-04')).toEqual(at('2026-10-04', '23:59'))
   })
 
   it('falls on the weekday of the week for a weekly cadence', () => {
-    const weekly: ReportSchedule = { cadence: 'weekly', weekday: 5, dueTime: '17:30' }
+    const weekly: ReportSchedule = { cadence: 'weekly', weekday: 5, shiftEnd: '17:30', ...shift }
     expect(dueAt(weekly, '2026-09-28')).toEqual(at('2026-10-02', '17:30'))
     expect(dueAt({ ...weekly, weekday: 1 }, '2026-09-28')).toEqual(at('2026-09-28', '17:30'))
-    // Sunday with no time: due by the end of Sunday, which is Monday's midnight
-    expect(dueAt({ ...weekly, weekday: 7, dueTime: null }, '2026-09-28')).toEqual(at('2026-10-05'))
+    expect(dueAt({ ...weekly, weekday: 7 }, '2026-09-28')).toEqual(at('2026-10-04', '17:30'))
   })
 })
 
 describe('reportStatus', () => {
-  const daily: ReportSchedule = { cadence: 'daily', weekday: 5, dueTime: '18:00' }
+  const daily: ReportSchedule = { cadence: 'daily', weekday: 5, shiftEnd: '18:00', ...shift }
   it('is done with a report, missing from the due time on, upcoming before it', () => {
     expect(reportStatus(daily, '2026-10-04', false, at('2026-10-04', '17:59'))).toBe('upcoming')
     expect(reportStatus(daily, '2026-10-04', false, at('2026-10-04', '18:00'))).toBe('missing')
@@ -50,9 +58,9 @@ describe('reportStatus', () => {
   })
 
   it('counts a weekly report as missing only after its weekday', () => {
-    const weekly: ReportSchedule = { cadence: 'weekly', weekday: 5, dueTime: null }
-    expect(reportStatus(weekly, '2026-09-28', false, at('2026-10-02', '23:00'))).toBe('upcoming')
-    expect(reportStatus(weekly, '2026-09-28', false, at('2026-10-03', '00:00'))).toBe('missing')
+    const weekly: ReportSchedule = { cadence: 'weekly', weekday: 5, shiftEnd: '17:00', ...shift }
+    expect(reportStatus(weekly, '2026-09-28', false, at('2026-10-02', '16:59'))).toBe('upcoming')
+    expect(reportStatus(weekly, '2026-09-28', false, at('2026-10-02', '17:00'))).toBe('missing')
   })
 })
 
@@ -75,5 +83,17 @@ describe('periodsBetween', () => {
   it('names them for people', () => {
     expect(periodLabel('daily', '2026-10-04')).toBe('Sun, Oct 4')
     expect(periodLabel('weekly', '2026-09-28')).toBe('week of Sep 28')
+  })
+})
+
+describe('describeSchedule', () => {
+  it("says how often, by when (the shift's end) and as what", () => {
+    expect(describeSchedule({ cadence: 'daily', weekday: 5, shiftEnd: '18:00', format: 'file' })).toBe(
+      'daily by 18:00, a file',
+    )
+    expect(describeSchedule({ cadence: 'weekly', weekday: 5, shiftEnd: '17:00', format: 'text' })).toBe(
+      'weekly on Fridays by 17:00, text',
+    )
+    expect(describeSchedule({ cadence: 'off', weekday: 5, shiftEnd: '17:00', format: 'text' })).toBe('off')
   })
 })

@@ -16,6 +16,7 @@ import {
   type Worktree,
 } from './git'
 import { getProject } from './projects'
+import { noteOriginRefs } from './pushedToday'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
 
@@ -104,7 +105,18 @@ function repoState(repoPath: string): RepoState {
         fetchedAt: null,
         fetching: null,
         error: null,
-        refs: windowed(() => listRefs(repoPath)),
+        // Each fresh listing also records how origin's branches moved since the last (pushed today); a
+        // failure there is logged and never costs the push states.
+        refs: windowed(() =>
+          listRefs(repoPath).then((refs) => {
+            try {
+              noteOriginRefs(repoPath, refs)
+            } catch (err) {
+              console.error(`recording origin's branches of ${repoPath} failed:`, err)
+            }
+            return refs
+          }),
+        ),
         worktrees: windowed(() => listWorktrees(repoPath)),
       }),
     )

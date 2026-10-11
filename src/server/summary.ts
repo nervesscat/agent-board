@@ -11,6 +11,7 @@ import { getProject } from './projects'
 import { refreshPrsInBackground } from './prs'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
+import { reportDueFor } from './reportDue'
 import { handoffStates } from './resume'
 import { listStages, type Stage } from './stages'
 
@@ -366,6 +367,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       byId,
       now,
     ),
+    // The project's report, while the board is reminding about it (due soon, or missing): null otherwise.
+    reportDue: reportDueFor(project.id, now),
   }
 }
 

@@ -4,20 +4,36 @@
 import type { ReportCadence, ReportFormat } from './constants'
 import { localDate, shiftDate } from './format'
 
-export type ReportStatus = 'done' | 'missing' | 'upcoming'
+/** `off`: not asked for (not a workday, or before tracking began). */
+export type ReportStatus = 'done' | 'missing' | 'upcoming' | 'off'
 export type TrackedCadence = Exclude<ReportCadence, 'off'>
 
 export interface ReportSchedule {
   cadence: ReportCadence
   /** The day a weekly report is due, 1 (Monday) to 7 (Sunday). */
   weekday: number
-  /** Local `HH:MM`; null means by the end of the day. */
-  dueTime: string | null
+  /** The project's working hours, local `HH:MM`; a report is due at the shift's end. */
+  shiftStart: string
+  shiftEnd: string
+  /** The days a daily report is asked for, ISO weekdays 1 (Monday) to 7 (Sunday). */
+  workdays: number[]
+  /** How long before the shift's end the board starts saying the report is due. */
+  alertMinutes: number
+}
+
+/** Where the current period's report stands while the board reminds about it: due soon, or overdue. */
+export interface ReportDueState {
+  dueAt: string
+  alertAt: string
+  state: 'due' | 'missing'
+  /** Whole minutes to the due time; negative once it has passed. */
+  minutesLeft: number
 }
 
 export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
-export const DUE_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
+/** A local time of day, `HH:MM` on a 24-hour clock. */
+export const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 export const DAY = /^\d{4}-\d{2}-\d{2}$/
 
 /** The period a moment or a day falls in: the day itself, or the Monday of its week. */
@@ -28,16 +44,34 @@ export function periodOf(cadence: TrackedCadence, at: Date | string): string {
   return shiftDate(day, -((weekday + 6) % 7))
 }
 
-/** When a period's report is due: on its day (a weekly one on its weekday) at the due time, else by midnight. */
-export function dueAt(s: ReportSchedule, period: string): Date {
+/** When a period's report is due: at the shift's end on its day (a weekly one on its weekday). */
+export function dueAt(s: Pick<ReportSchedule, 'cadence' | 'weekday' | 'shiftEnd'>, period: string): Date {
   const day = s.cadence === 'weekly' ? shiftDate(period, s.weekday - 1) : period
-  if (s.dueTime) return new Date(`${day}T${s.dueTime}:00`)
-  return new Date(`${shiftDate(day, 1)}T00:00:00`)
+  return new Date(`${day}T${s.shiftEnd}:00`)
+}
+
+/** Whether a day (YYYY-MM-DD) is one of the project's workdays. */
+export function isWorkday(_s: Pick<ReportSchedule, 'workdays'>, _day: string): boolean {
+  return true
+}
+
+/**
+ * Whether the board should be reminding about the report of `period` at `now`: from `alertMinutes`
+ * before the shift's end while it has no report, `due` before the end and `missing` after it. Null
+ * when there is nothing to remind about.
+ */
+export function reportDueOf(
+  _s: ReportSchedule,
+  _period: string,
+  _hasReport: boolean,
+  _now = new Date(),
+): ReportDueState | null {
+  return null
 }
 
 /** Done once it has a report; missing once it is due without one; upcoming until then. */
 export function reportStatus(
-  s: ReportSchedule,
+  s: Pick<ReportSchedule, 'cadence' | 'weekday' | 'shiftEnd'>,
   period: string,
   hasReport: boolean,
   now = new Date(),
@@ -63,9 +97,11 @@ export function periodLabel(cadence: TrackedCadence, period: string): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-/** "daily by 18:00, a file", "weekly on Fridays, text", "off". */
-export function describeSchedule(s: ReportSchedule & { format: ReportFormat }): string {
+/** "daily by 18:00, a file", "weekly on Fridays by 17:00, text", "off". */
+export function describeSchedule(
+  s: Pick<ReportSchedule, 'cadence' | 'weekday' | 'shiftEnd'> & { format: ReportFormat },
+): string {
   if (s.cadence === 'off') return 'off'
   const when = s.cadence === 'weekly' ? `weekly on ${WEEKDAYS[s.weekday - 1] ?? '?'}s` : 'daily'
-  return `${when}${s.dueTime ? ` by ${s.dueTime}` : ''}, ${s.format === 'file' ? 'a file' : 'text'}`
+  return `${when} by ${s.shiftEnd}, ${s.format === 'file' ? 'a file' : 'text'}`
 }

@@ -152,8 +152,9 @@ Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview
 1. Write `QUEUE/summary.md`: one table of the tickets worked (the Step 4 rows), then the skipped
    tickets with their reasons, then what waits on the human: every blocked ticket with its one-line
    ask, and every PR to review.
-2. `post_daily_summary` for the project: at most three short lines (handed off, blocked, what
-   waits on the human).
+2. If the project keeps reports (`get_report_settings`: cadence not `off`), write the current
+   period's report as its prompt says, in the shape of its template, and `post_report` it (what
+   was handed off, what is blocked, what waits on the human) once the human agrees.
 3. Print the table to the user, then what waits on them, then `QUEUE`. Do not restate findings or
    diffs: the tickets and PRs carry them.
 
