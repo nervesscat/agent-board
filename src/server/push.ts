@@ -184,6 +184,13 @@ export const readRefs = (repoPath: string) => repoState(repoPath).refs.read()
 /** The checkout's worktrees, kept as long as its refs are. */
 export const readWorktrees = (repoPath: string) => repoState(repoPath).worktrees.read()
 
+/** The board changed the checkout itself (a Cleanup action): the next read lists it afresh. */
+export function dropListings(repoPath: string) {
+  const s = repoState(repoPath)
+  s.refs.drop()
+  s.worktrees.drop()
+}
+
 function memo<T>(cache: Map<string, Promise<T>>, key: string, work: () => Promise<T>) {
   if (!cache.has(key)) {
     // Shas are forever, but branches move: keep the memo from growing without end.

@@ -5,9 +5,12 @@ import { promisify } from 'node:util'
 import { HttpError } from './http'
 
 /**
- * The board never writes to git or GitHub. Every command here is a read, but for `fetchOrigin`, which
- * only refreshes the checkout's copy of origin's branches: the allowlist below is the whole
- * vocabulary, and nothing else in the codebase spawns `git` or `gh`.
+ * The board never writes to GitHub, and writes to git only for the human's Cleanup actions:
+ * `removeWorktree`, `deleteLocalBranch` and `deleteOriginBranch`, each run once the human confirmed it
+ * on the Cleanup page and the server checked again that the work landed (`cleanupActions.ts`). Every
+ * other command here is a read, but for `fetchOrigin`, which only refreshes the checkout's copy of
+ * origin's branches: the allowlist below is the whole vocabulary, and nothing else in the codebase
+ * spawns `git` or `gh`.
  */
 
 const run = promisify(execFile)
@@ -194,6 +197,8 @@ export interface Worktree {
   path: string
   branch: string | null
   head: string | null
+  /** Set when it is locked (`git worktree lock`): git keeps it until it is unlocked. */
+  locked?: true
 }
 
 export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
@@ -206,6 +211,7 @@ export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
       trees.push(current)
     } else if (current && line.startsWith('HEAD ')) current.head = line.slice(5)
     else if (current && line.startsWith('branch ')) current.branch = line.slice(7).replace('refs/heads/', '')
+    else if (current && (line === 'locked' || line.startsWith('locked '))) current.locked = true
   }
   return trees
 }
@@ -270,6 +276,85 @@ export async function fetchOrigin(repoPath: string, timeoutMs: number): Promise<
     windowsHide: true,
     timeout: timeoutMs,
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+  })
+}
+
+/** Origin's default branch (`refs/remotes/origin/HEAD`); null when the checkout does not know it. */
+export async function originHead(repoPath: string): Promise<string | null> {
+  const ref = await git(repoPath, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']).catch(() => '')
+  return ref.startsWith('refs/remotes/origin/') ? ref.slice(20) : null
+}
+
+/** Whether commit `a` is in `b`'s history (`a` itself included). */
+export function isAncestor(repoPath: string, a: string, b: string): Promise<boolean> {
+  return git(repoPath, ['merge-base', '--is-ancestor', a, b]).then(
+    () => true,
+    () => false,
+  )
+}
+
+/** What `git status` lists in a worktree: changed and untracked files, not the ignored ones. */
+export async function worktreeChanges(worktreePath: string): Promise<string[]> {
+  const out = await git(worktreePath, ['status', '--porcelain'])
+  return out ? out.split('\n') : []
+}
+
+/** git's own last word on why a command failed: its error lines, else the message. */
+export function gitSaid(err: unknown): string {
+  const e = err as { killed?: boolean; stderr?: string; message?: string }
+  if (e.killed) return 'git gave up waiting'
+  const lines = (e.stderr || e.message || String(err))
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('Command failed:'))
+  const errors = lines.filter((l) => /^(fatal|error):/.test(l))
+  return (errors.length ? errors : lines).join(' ') || 'git failed'
+}
+
+// --- writes: the human's Cleanup actions, nothing else ---
+
+/**
+ * Removes a worktree and its folder, never with `--force`: git refuses one with changed or untracked
+ * files (ignored ones, such as node_modules, go with it), a locked one and the main checkout.
+ */
+export async function removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
+  await git(repoPath, ['worktree', 'remove', '--', worktreePath])
+}
+
+/**
+ * Deletes the local branch, only while it is still at `sha`: one that moved since is left alone. By
+ * its full refname, so no branch name is ever read as an option.
+ */
+export async function deleteLocalBranch(repoPath: string, branch: string, sha: string): Promise<void> {
+  await git(repoPath, ['update-ref', '-d', '--end-of-options', `refs/heads/${branch}`, sha])
+}
+
+/**
+ * Deletes the branch on origin, only while origin still has it at `sha` (`--force-with-lease`): one
+ * someone pushed to since is left alone. Never prompts for credentials, gives up after `timeoutMs`.
+ * The checkout's copy (`origin/<branch>`) goes with it.
+ */
+export async function deleteOriginBranch(
+  repoPath: string,
+  branch: string,
+  sha: string,
+  timeoutMs: number,
+): Promise<void> {
+  const ref = `refs/heads/${branch}`
+  await run(
+    'git',
+    ['push', '--porcelain', `--force-with-lease=${ref}:${sha}`, 'origin', '--end-of-options', `:${ref}`],
+    {
+      cwd: repoPath,
+      windowsHide: true,
+      timeout: timeoutMs,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+    },
+  ).catch((err: { stdout?: string }) => {
+    // --porcelain says why on stdout; a lease that no longer holds reads "stale info".
+    if (err.stdout?.includes('(stale info)'))
+      throw new Error(`origin's ${branch} is no longer at ${sha.slice(0, 7)}`)
+    throw err
   })
 }
 
@@ -386,17 +471,12 @@ export async function holdsWorkOf(
   others: string[],
 ) {
   if (!bases.length) return false
-  const isAncestor = (a: string, b: string) =>
-    git(repoPath, ['merge-base', '--is-ancestor', a, b]).then(
-      () => true,
-      () => false,
-    )
-  if (await isAncestor(ref, other)) return false
+  if (await isAncestor(repoPath, ref, other)) return false
   // Quick way out: nothing the two share lies outside the bases.
   const shared = await git(repoPath, ['merge-base', '--all', ref, other]).catch(() => '')
   let outside = false
   for (const sha of shared ? shared.split('\n') : []) {
-    const landed = await Promise.all(bases.map((b) => isAncestor(sha, b)))
+    const landed = await Promise.all(bases.map((b) => isAncestor(repoPath, sha, b)))
     if (!landed.some(Boolean)) outside = true
   }
   if (!outside) return false
