@@ -289,7 +289,7 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
 Run it in a worktree: it refuses the main checkout (the live board), as target and as where it runs.
 
 ```
-pnpm bench                                   # everything, both datasets, 3 runs (about half an hour)
+pnpm bench                                   # everything, both datasets, 3 runs (about 25 minutes)
 pnpm bench --quick                           # one short pass, to see that it works
 pnpm bench --sections server,mcp --runs 5    # only what a change touches
 pnpm bench --server dev                      # vite dev, as the live board runs, instead of the build
