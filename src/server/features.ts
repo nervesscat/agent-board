@@ -23,6 +23,7 @@ import {
   startStage,
   startedPatch,
   stageOf,
+  type Stage,
 } from './stages'
 import { assertUnattached, attachTo, attachmentView } from './uploads'
 
@@ -50,31 +51,50 @@ function projectTickets(projectId: number) {
     .orderBy(desc(schema.tickets.updatedAt))
     .all()
   const ids = rows.map((t) => t.id)
-  const allTasks = ids.length
+  const tasks = ids.length
     ? db.select().from(schema.tasks).where(inArray(schema.tasks.ticketId, ids)).all()
     : []
+  // Decisions still waiting on the human: one entry per decision, its ticket's id.
+  const openDecisions = ids.length
+    ? db
+        .select({ ticketId: schema.updates.ticketId })
+        .from(schema.updates)
+        .where(
+          and(
+            inArray(schema.updates.ticketId, ids),
+            isNotNull(schema.updates.decision),
+            isNull(schema.updates.decidedAt),
+          ),
+        )
+        .all()
+        .map((u) => u.ticketId)
+    : []
+  return ticketRows(rows, { stages, tasks, agents: listAgents(projectId), openDecisions })
+}
+
+/** What `ticketRows` reads besides the project's tickets, each of them about those tickets only. */
+export interface TicketFacts {
+  stages: Stage[]
+  tasks: Pick<schema.Task, 'ticketId' | 'done'>[]
+  agents: { name: string }[]
+  /** The ticket of each decision still waiting on the human. */
+  openDecisions: number[]
+}
+
+/** `projectTickets` from rows already read: `rows` is every ticket of one project, in list order. */
+export function ticketRows(rows: schema.Ticket[], facts: TicketFacts) {
+  const { stages } = facts
   const own = new Map<number, Progress>(rows.map((t) => [t.id, { done: 0, total: 0 }]))
-  for (const task of allTasks) {
+  for (const task of facts.tasks) {
     const p = own.get(task.ticketId)!
     p.total++
     if (task.done) p.done++
   }
-  const agentNames = new Set(listAgents(projectId).map((a) => a.name.toLowerCase()))
+  const agentNames = new Set(facts.agents.map((a) => a.name.toLowerCase()))
   // Decisions still waiting on the human, per ticket.
   const openDecisions = new Map<number, number>()
-  if (ids.length)
-    for (const u of db
-      .select({ ticketId: schema.updates.ticketId })
-      .from(schema.updates)
-      .where(
-        and(
-          inArray(schema.updates.ticketId, ids),
-          isNotNull(schema.updates.decision),
-          isNull(schema.updates.decidedAt),
-        ),
-      )
-      .all())
-      openDecisions.set(u.ticketId, (openDecisions.get(u.ticketId) ?? 0) + 1)
+  for (const ticketId of facts.openDecisions)
+    openDecisions.set(ticketId, (openDecisions.get(ticketId) ?? 0) + 1)
   const children = new Map<number, schema.Ticket[]>()
   for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
   // A cancelled lane's tasks are no longer part of the work.
@@ -1100,9 +1120,7 @@ export function listHumanThreads(projectId: number, names: string[]) {
 
 function openThreads(projectId: number, me: string[], opts: { agents: boolean; discussion: boolean }) {
   getProject(projectId)
-  const isMe = (name: string) => me.includes(name)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
-  const ticketById = new Map(tickets.map((t) => [t.id, t]))
   const updates = tickets.length
     ? db
         .select({
@@ -1135,6 +1153,46 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
     .from(schema.reviewResults)
     .where(eq(schema.reviewResults.projectId, projectId))
     .all()
+  const parents = { update: updates, pr: prs, review: reviews }
+  const comments = (['update', 'pr', 'review'] as const).flatMap((type) => {
+    const parentIds = parents[type].map((p) => p.id)
+    return parentIds.length
+      ? db
+          .select()
+          .from(schema.comments)
+          .where(and(eq(schema.comments.parentType, type), inArray(schema.comments.parentId, parentIds)))
+          .orderBy(asc(schema.comments.createdAt), asc(schema.comments.id))
+          .all()
+      : []
+  })
+  return threadsOf({ tickets, updates, prs, reviews, comments, agents: listAgents(projectId) }, me, opts)
+}
+
+type Said = Pick<schema.Comment, 'id' | 'parentType' | 'parentId' | 'author' | 'body' | 'createdAt'>
+
+/** What `threadsOf` reads: one project's tickets (archived too), their posts, its PRs and review results. */
+export interface ThreadFacts {
+  tickets: Pick<schema.Ticket, 'id' | 'title' | 'assignee' | 'createdBy'>[]
+  updates: Pick<
+    schema.Update,
+    'id' | 'ticketId' | 'author' | 'body' | 'progress' | 'decision' | 'decidedAt' | 'createdAt'
+  >[]
+  prs: Pick<schema.Pr, 'id' | 'number' | 'title' | 'author'>[]
+  reviews: Pick<schema.ReviewResult, 'id' | 'prNumber' | 'verdict' | 'author'>[]
+  /**
+   * The comments on those posts, then on those PRs, then on those review results, each part oldest
+   * first (by time, then id).
+   */
+  comments: Said[]
+  /** The project's agents. */
+  agents: { name: string }[]
+}
+
+/** `openThreads` from rows already read. */
+export function threadsOf(facts: ThreadFacts, me: string[], opts: { agents: boolean; discussion: boolean }) {
+  const { tickets, updates, prs, reviews, comments } = facts
+  const isMe = (name: string) => me.includes(name)
+  const ticketById = new Map(tickets.map((t) => [t.id, t]))
 
   // owners: whose subject it is (a ticket's assignee and opener, a post's author).
   type Subject = { ticketId: number | null; title: string; owners: string[] }
@@ -1164,20 +1222,6 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
       owners: [r.author],
     })
 
-  const ids = (type: string) =>
-    [...subjects.keys()].filter((k) => k.startsWith(`${type}:`)).map((k) => Number(k.split(':')[1]))
-  const comments = (['update', 'pr', 'review'] as const).flatMap((type) => {
-    const parentIds = ids(type)
-    return parentIds.length
-      ? db
-          .select()
-          .from(schema.comments)
-          .where(and(eq(schema.comments.parentType, type), inArray(schema.comments.parentId, parentIds)))
-          .orderBy(asc(schema.comments.createdAt), asc(schema.comments.id))
-          .all()
-      : []
-  })
-  type Said = Pick<schema.Comment, 'id' | 'parentType' | 'parentId' | 'author' | 'body' | 'createdAt'>
   const threads = new Map<string, Said[]>()
   // A ticket's conversation is its posts, in order; a post's, PR's or review's is its comments.
   const posts = opts.discussion ? updates.filter((u) => !u.progress) : updates
@@ -1199,7 +1243,7 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
     threads.set(key, [...(threads.get(key) ?? []), c])
   }
 
-  const agents = listAgents(projectId)
+  const { agents } = facts
   const out = []
   for (const [key, list] of threads) {
     const subject = subjects.get(key)!

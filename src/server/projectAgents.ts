@@ -20,11 +20,10 @@ const NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/
 
 const view = (a: schema.Agent) => ({ ...a, avatarUrl: a.avatarId ? attachmentUrl({ id: a.avatarId }) : null })
 
-export function listAgents(projectId: number) {
-  return db
-    .select()
-    .from(schema.agents)
-    .where(eq(schema.agents.projectId, projectId))
+/** A project's agents by name; every project's when `projectId` is left out. */
+export function listAgents(projectId?: number) {
+  const q = db.select().from(schema.agents)
+  return (projectId ? q.where(eq(schema.agents.projectId, projectId)) : q)
     .orderBy(asc(schema.agents.name))
     .all()
     .map(view)

@@ -96,6 +96,24 @@ export function handoffStates(tickets: ResumeTicket[], now = new Date()) {
     if (!stagesOf.has(projectId)) stagesOf.set(projectId, listStages(projectId))
     return stagesOf.get(projectId)!
   }
+  return handoffFacts(tickets, now, { lastBefore, lastProgress, stages })
+}
+
+/**
+ * `handoffStates` from what it reads: the newest activity before today on each ticket (handoffs aside),
+ * the newest progress post on each (handoffs aside), and each project's stages.
+ */
+export function handoffFacts(
+  tickets: ResumeTicket[],
+  now: Date,
+  known: {
+    lastBefore: Map<number, string>
+    lastProgress: Map<number, string>
+    stages: (projectId: number) => Stage[]
+  },
+) {
+  const { lastBefore, lastProgress, stages } = known
+  const todayKey = localDate(now)
   const out = new Map<number, { noHandoff: boolean; day: number | null; newerProgress: boolean }>()
   for (const t of tickets) {
     const working = !t.archivedAt && isWorking(stages(t.projectId), t.status)
