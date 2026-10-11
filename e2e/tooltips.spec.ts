@@ -1,10 +1,12 @@
+import path from 'node:path'
+
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
-import type { Attachment, PrRow, TicketFull } from '#/lib/api'
+import type { Attachment, CleanupReport, PrRow, TicketFull } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { MAX_TAG_LENGTH } from '#/lib/tags'
-import { AGENT, HUMAN } from './env'
-import { png } from './files'
+import { AGENT, e2eEnv, git, HUMAN } from './env'
+import { pdf, png } from './files'
 import { expect, expectTooltip, ok, test, tooltip } from './fixtures'
 
 /*
@@ -50,6 +52,23 @@ const onTop = (page: Page) =>
     outer.style.pointerEvents = before
     return el.contains(hit)
   })
+
+/** The open tooltip keeps its text inside the bubble, at most the bubble's width, and on screen. */
+async function expectWrappedOnScreen(page: Page) {
+  const fits = await tooltip(page).evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    const { clientWidth, clientHeight } = document.documentElement
+    return {
+      inside: r.left >= 0 && r.right <= clientWidth && r.top >= 0 && r.bottom <= clientHeight,
+      width: r.width,
+      overflows: el.scrollWidth > el.clientWidth + 1,
+    }
+  })
+  expect(fits.inside).toBe(true)
+  expect(fits.overflows).toBe(false)
+  // At most the bubble's width (max-w-xs, 20rem).
+  expect(fits.width).toBeLessThanOrEqual(320)
+}
 
 /** The board, as columns. */
 async function board(page: Page, projectId: number) {
@@ -426,6 +445,52 @@ test('a button disabled for a reason says why on hover, and stays disabled', asy
   const zoomIn = gallery.getByRole('button', { name: 'Zoom in (+)' })
   await expectTooltip(zoomIn.locator('..'), 'Zoom in (+)')
   expect(await onTop(page)).toBe(true)
+
+  // A report that must be a file, before one is attached.
+  await ok(
+    human.patch(`/api/projects/${project.id}/report-settings`, {
+      data: { cadence: 'daily', format: 'file' },
+    }),
+  )
+  await page.goto(`/projects/${project.id}/daily`)
+  const panel = page.getByRole('region', { name: 'Report' })
+  await panel.getByRole('button', { name: 'post the report' }).click()
+  const post = panel.getByRole('button', { name: 'Post', exact: true })
+  await expect(post).toBeDisabled()
+  await expectTooltip(post.locator('..'), 'Attach the report file first')
+  await expect(post).toBeDisabled()
+  // With the file it can be posted, and there is nothing left to explain.
+  await panel
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'report.pdf', mimeType: 'application/pdf', buffer: pdf('Daily report') })
+  await expect(post).toBeEnabled()
+  await expectNoTooltip(post.locator('..'))
+})
+
+test('the folder picker says why Up is off at the top folder, over its dialog', async ({ page }) => {
+  await page.goto('/repositories')
+  await page.getByRole('button', { name: 'New repository' }).click()
+  await page.getByRole('button', { name: 'Browse…' }).click()
+  const picker = page.getByRole('dialog', { name: 'Choose the checkout' })
+  const up = picker.getByRole('button', { name: 'Up one folder' })
+  const folder = picker.getByRole('textbox', { name: 'Folder path' })
+  // In the home folder, where there is a folder above.
+  await expect(up).toBeEnabled()
+  await expectTooltip(up.locator('..'), 'Up one folder')
+  expect(await onTop(page)).toBe(true)
+  await expectTooltip(picker.getByRole('button', { name: 'Home' }), 'Home')
+  expect(await onTop(page)).toBe(true)
+
+  // The top of the drive (the filesystem's root elsewhere): nothing above it.
+  await folder.fill('/')
+  await folder.press('Enter')
+  await expect(up).toBeDisabled()
+  const top = await folder.inputValue()
+  await expectTooltip(up.locator('..'), 'Up one folder')
+  expect(await onTop(page)).toBe(true)
+  await up.click({ force: true })
+  await expect(up).toBeDisabled()
+  await expect(folder).toHaveValue(top)
 })
 
 test('nested tooltips: the innermost shows, the outer one on its own part, never two at once', async ({
@@ -470,23 +535,107 @@ test('nested tooltips: the innermost shows, the outer one on its own part, never
   await expect(tooltip(page)).toHaveCount(1)
 })
 
+test("nested tooltips on a board card: a badge's or a name's own, the card's title around them", async ({
+  page,
+  api,
+  human,
+  project,
+}) => {
+  await ok(human.post(`/api/projects/${project.id}/agents/defaults`, { data: {} }))
+  const name = DEFAULT_AGENT_NAMES[0]
+  const base = await api.ticket({ title: 'Underneath', status: 'todo' })
+  const t = await api.ticket({ title: 'On the card', status: 'in_progress' })
+  await ok(human.patch(`/api/tickets/${t.id}`, { data: { needs: [base.id], assignee: name } }))
+
+  const card = (await board(page, project.id))('in_progress', /On the card/)
+  const needs = card.locator('span[data-slot="tooltip-trigger"]').filter({ hasText: `needs #${base.id}` })
+  const needsTip = `Merge first:\n#${base.id} Underneath: not done, no branch`
+  const actor = card.locator('span[data-slot="tooltip-trigger"]').filter({ hasText: name })
+  const actorTip = `${name} (one of the project's agents)`
+  await expectTooltip(needs, needsTip)
+  await expect(tooltip(page)).toHaveCount(1)
+  // From the badge onto the card's own padding, and back: one bubble each time, the one under the pointer.
+  await card.hover({ position: { x: 4, y: 4 } })
+  await expect(tooltip(page)).toHaveText('On the card')
+  await expect(tooltip(page)).toHaveCount(1)
+  await needs.hover()
+  await expect(tooltip(page)).toHaveText(needsTip)
+  await expect(tooltip(page)).toHaveCount(1)
+  // The assignee's name, and from it onto the card.
+  await actor.hover()
+  await expect(tooltip(page)).toHaveText(actorTip)
+  await expect(tooltip(page)).toHaveCount(1)
+  await card.hover({ position: { x: 4, y: 4 } })
+  await expect(tooltip(page)).toHaveText('On the card')
+  await expect(tooltip(page)).toHaveCount(1)
+
+  // On the ticket, the reserved chip inside the Assignee label; the label itself says nothing.
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const label = page.getByRole('region', { name: 'Details' }).locator('label[for="assignee"]')
+  const reserved = label.locator('span[data-slot="tooltip-trigger"]')
+  await expect(reserved).toHaveText('reserved')
+  await expectTooltip(
+    reserved,
+    'Reserved for this project agent: other agents cannot take it, only you can reassign it',
+  )
+  await expect(tooltip(page)).toHaveCount(1)
+  await expectNoTooltip(label.getByText('Assignee'))
+})
+
 test('a long unbroken text wraps inside its tooltip, on screen', async ({ page, api, project }) => {
   const title = `Long${'x'.repeat(150)}`
   await api.ticket({ title, status: 'todo' })
   const card = (await board(page, project.id))('todo', new RegExp(title))
   await expectTooltip(card, title)
-  const fits = await tooltip(page).evaluate((el) => {
-    const r = el.getBoundingClientRect()
-    return {
-      inside: r.left >= 0 && r.right <= document.documentElement.clientWidth && r.top >= 0,
-      width: r.width,
-      overflows: el.scrollWidth > el.clientWidth + 1,
-    }
-  })
-  expect(fits.inside).toBe(true)
-  expect(fits.overflows).toBe(false)
-  // At most the bubble's width (max-w-xs, 20rem).
-  expect(fits.width).toBeLessThanOrEqual(320)
+  await expectWrappedOnScreen(page)
+})
+
+test('a truncated path or URL shows in full in its tooltip, wrapped on screen', async ({
+  page,
+  human,
+  project,
+}) => {
+  const { root } = e2eEnv()
+  // A finished ticket whose branch is still checked out, in a folder with a long unbroken name.
+  const branch = `e2e-${project.id}-leftover`
+  const folder = `wt-${project.id}-${'x'.repeat(100)}`
+  git('worktree', 'add', '-q', '-b', branch, path.join(root, folder), 'main')
+  const done = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Left a worktree', status: 'done', branch },
+    }),
+  )
+  // The path as git lists it (forward slashes on Windows), which is what the page shows.
+  const report = await ok<CleanupReport>(human.get(`/api/projects/${project.id}/cleanup?reach=0`))
+  const worktree = report.tickets.find((t) => t.id === done.id)!.branches[0]!.worktrees[0]!.path
+  expect(worktree).toContain(folder)
+
+  await page.goto(`/projects/${project.id}/cleanup`)
+  const cell = page
+    .getByRole('row')
+    .filter({ hasText: 'Left a worktree' })
+    .locator('div[data-slot="tooltip-trigger"]')
+    .filter({ hasText: folder })
+  // Cut short on the page (the path's own text, beside the icon), whole in the tooltip.
+  const shown = cell.getByText(worktree, { exact: true })
+  expect(await shown.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+  await expectTooltip(cell, worktree)
+  await expectWrappedOnScreen(page)
+
+  // The Preview card's link, on a ticket.
+  const url = `http://localhost:9/${'p'.repeat(150)}`
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, { data: { title: 'Has a preview' } }),
+  )
+  await ok(human.post(`/api/tickets/${t.id}/workspaces`, { data: { name: 'preview', previewUrl: url } }))
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const link = page
+    .getByRole('region', { name: 'Preview' })
+    .locator('div[data-slot="tooltip-trigger"]')
+    .filter({ hasText: url })
+  expect(await link.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+  await expectTooltip(link, url)
+  await expectWrappedOnScreen(page)
 })
 
 test("a tooltip in the projects' dialog shows over it", async ({ page, project }) => {
