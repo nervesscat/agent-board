@@ -1,7 +1,7 @@
 import { eq, ne } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { DAY, dueAt, periodLabel, periodOf, reportStatus, type ReportStatus } from '#/lib/reports'
+import { dueAt, isDay, periodLabel, periodOf, reportStatus, type ReportStatus } from '#/lib/reports'
 import { HttpError } from './http'
 import { reportVersions, type ReportView } from './reports'
 
@@ -29,8 +29,7 @@ export interface ReportsOverview {
  * asked for.
  */
 export function reportsOverview(date: string, now = new Date()): ReportsOverview {
-  if (!DAY.test(date) || Number.isNaN(new Date(`${date}T00:00:00`).getTime()))
-    throw new HttpError(400, 'date must be a date, YYYY-MM-DD')
+  if (!isDay(date)) throw new HttpError(400, 'date must be a date, YYYY-MM-DD')
   const rows = db
     .select({ settings: schema.reportSettings, name: schema.projects.name })
     .from(schema.reportSettings)

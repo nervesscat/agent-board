@@ -36,6 +36,16 @@ export const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
 export const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 export const DAY = /^\d{4}-\d{2}-\d{2}$/
 
+/**
+ * Whether a string is a day of the calendar, `YYYY-MM-DD`. `Date` rolls an impossible day over (Feb 30
+ * is Mar 2), so the day must read back as itself.
+ */
+export function isDay(day: string): boolean {
+  if (!DAY.test(day)) return false
+  const d = new Date(`${day}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === day
+}
+
 /** The period a moment or a day falls in: the day itself, or the Monday of its week. */
 export function periodOf(cadence: TrackedCadence, at: Date | string): string {
   const day = typeof at === 'string' ? at : localDate(at)

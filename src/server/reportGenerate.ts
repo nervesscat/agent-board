@@ -1,5 +1,5 @@
 import { localDate, shiftDate } from '#/lib/format'
-import { DAY, periodLabel, periodOf, type TrackedCadence } from '#/lib/reports'
+import { isDay, periodLabel, periodOf, type TrackedCadence } from '#/lib/reports'
 import { checkTemplate, effectiveTemplate, unwrapReport } from '#/lib/reportTemplate'
 import { listActivity } from './activity'
 import { runClaude } from './claude'
@@ -108,8 +108,6 @@ export function generationState(projectId: number): GenerationState {
 /** The template check, with an empty answer a miss of its own. */
 const checked = (template: string, body: string) =>
   body ? checkTemplate(template, body) : ({ ok: false, reason: 'the answer was empty' } as const)
-
-const isDay = (day: string) => DAY.test(day) && !Number.isNaN(new Date(`${day}T00:00:00`).getTime())
 
 /** The days of a period up to today: the day itself, or a week's days from its Monday. */
 function periodDays(cadence: TrackedCadence, period: string, now: Date): string[] {

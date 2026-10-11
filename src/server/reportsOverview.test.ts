@@ -116,4 +116,20 @@ describe('the reports overview', () => {
 
     expect((await get('/api/reports/overview?date=2026-13-45')).status).toBe(400)
   })
+
+  it('refuses a day the calendar does not have, rather than rolling it over into the next month', async () => {
+    tracked('Overview calendar', { cadence: 'daily' })
+    for (const date of ['2026-02-30', '2026-04-31', '2025-02-29']) {
+      const res = await get(`/api/reports/overview?date=${date}`, 'agent')
+      expect(res.status, date).toBe(400)
+      expect(res.body.error).toMatch(/date must be a date/)
+    }
+    const leap = await get('/api/reports/overview?date=2028-02-29')
+    expect(leap.status).toBe(200)
+    expect(leap.body.date).toBe('2028-02-29')
+    expect(leap.body.projects.find((x: { name: string }) => x.name === 'Overview calendar')).toMatchObject({
+      period: '2028-02-29',
+      label: expect.stringMatching(/Feb 29/),
+    })
+  })
 })

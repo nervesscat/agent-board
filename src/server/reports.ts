@@ -5,10 +5,10 @@ import { db, schema } from '#/db'
 import { REPORT_CADENCES, REPORT_FORMATS } from '#/lib/constants'
 import { localDate, shiftDate } from '#/lib/format'
 import {
-  DAY,
   TIME,
   describeSchedule,
   dueAt,
+  isDay,
   periodLabel,
   periodOf,
   periodsBetween,
@@ -193,8 +193,7 @@ const tracked = (s: Pick<schema.ReportSettings, 'cadence'>): TrackedCadence => {
 }
 
 const checkDay = (day: string, what: string) => {
-  if (!DAY.test(day) || Number.isNaN(new Date(`${day}T00:00:00`).getTime()))
-    throw new HttpError(400, `${what} must be a date, YYYY-MM-DD`)
+  if (!isDay(day)) throw new HttpError(400, `${what} must be a date, YYYY-MM-DD`)
   return day
 }
 

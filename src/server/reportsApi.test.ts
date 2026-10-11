@@ -249,6 +249,20 @@ describe('report routes the Daily page builds on', () => {
     })
   })
 
+  it('refuse a from or to the calendar does not have, rather than rolling it over into the next month', async () => {
+    const p = newProject('calendar-days')
+    await call('PATCH', `/api/projects/${p}/report-settings`, { cadence: 'daily' })
+    for (const day of ['2026-02-30', '2026-04-31', '2025-02-29'])
+      for (const query of [`from=${day}&to=2026-05-31`, `from=2025-01-01&to=${day}`]) {
+        const res = await call('GET', `/api/projects/${p}/reports?${query}`, undefined, 'agent')
+        expect(res.status, query).toBe(400)
+        expect(res.body.error).toMatch(/(from|to) must be a date/)
+      }
+    const leap = await call('GET', `/api/projects/${p}/reports?from=2028-02-29&to=2028-02-29`)
+    expect(leap.status).toBe(200)
+    expect(leap.body.periods.map((x: { period: string }) => x.period)).toEqual(['2028-02-29'])
+  })
+
   it('let only the human accept or revert a change of the prompt or template', async () => {
     for (const action of ['accept', 'revert'])
       expect(

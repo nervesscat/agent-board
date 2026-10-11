@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   describeSchedule,
   dueAt,
+  isDay,
   isWorkday,
   isoWeekday,
   periodLabel,
@@ -34,6 +35,25 @@ describe('periodOf', () => {
     // across a month and a year
     expect(periodOf('weekly', '2026-11-01')).toBe('2026-10-26')
     expect(periodOf('weekly', '2027-01-01')).toBe('2026-12-28')
+  })
+})
+
+describe('isDay', () => {
+  it('takes a day of the calendar only, not one Date rolls over into the next month', () => {
+    for (const day of ['2026-10-04', '2026-02-28', '2028-02-29', '2026-12-31', '2026-04-30'])
+      expect(isDay(day), day).toBe(true)
+    for (const day of [
+      '2026-02-30',
+      '2026-04-31',
+      '2025-02-29',
+      '2026-13-01',
+      '2026-00-10',
+      '2026-10-00',
+      '2026-1-5',
+      'soon',
+      '',
+    ])
+      expect(isDay(day), day).toBe(false)
   })
 })
 
