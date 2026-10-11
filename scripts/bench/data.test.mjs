@@ -183,3 +183,115 @@ describe('the generated dataset, whatever the hour', () => {
     }
   }, 120_000)
 })
+
+describe('the generated dataset, whatever the hour on a daylight saving change', () => {
+  const DAY = 86_400_000
+  // Each day's earliest moment it is generated for, in minutes after its midnight: an hour later on the
+  // day the clocks go back and in the days after they go forward.
+  const cases = [
+    { tz: 'Europe/Madrid', day: [2026, 9, 25], ready: 61, what: 'the clocks go back (a 25 h day)' },
+    { tz: 'Europe/Madrid', day: [2026, 10, 5], ready: 1, what: '11 days after they went back' },
+    { tz: 'Europe/Madrid', day: [2027, 2, 28], ready: 1, what: 'the clocks go forward (a 23 h day)' },
+    { tz: 'Europe/Madrid', day: [2027, 2, 29], ready: 61, what: 'the day after they went forward' },
+    { tz: 'America/New_York', day: [2026, 10, 1], ready: 61, what: 'the clocks go back (a 25 h day)' },
+    { tz: 'America/New_York', day: [2027, 2, 20], ready: 61, what: '6 days after they went forward' },
+  ]
+  const plain = [2026, 9, 14]
+
+  /** Runs `fn` with the process in time zone `tz`, then puts back the zone it had. */
+  const inZone = async (tz, fn) => {
+    const before = Intl.DateTimeFormat().resolvedOptions().timeZone
+    process.env.TZ = tz
+    try {
+      return await fn()
+    } finally {
+      process.env.TZ = before
+    }
+  }
+
+  /** Every moment in the database, row by row, as [calendar days before `today`, whole days before `now`]. */
+  const ages = (dir, today, now) => {
+    const db = new Database(path.join(dir, 'board.db'), { readonly: true })
+    const out = []
+    for (const { name } of db
+      .prepare("select name from sqlite_master where type = 'table' order by name")
+      .all())
+      for (const row of db.prepare(`select * from "${name}" order by rowid`).all())
+        for (const v of Object.values(row))
+          if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v)) {
+            const ms = Date.parse(v)
+            out.push([Math.round((today - startOfLocalDay(ms)) / DAY), Math.floor((now - ms) / DAY)])
+          }
+    db.close()
+    return out
+  }
+
+  /** What the server answers at `at`, with every moment and date in it blanked out. */
+  const answers = async (dir, at) => {
+    vi.resetModules()
+    process.env.DATA_DIR = dir
+    const { getSummary } = await import('#/server/summary')
+    const { dailyReport, today } = await import('#/server/daily')
+    const now = new Date(at)
+    const { generatedAt: _at, ...summary } = getSummary(undefined, { now })
+    const daily = dailyReport(today(now))
+    ;(await import('#/db')).db.$client.close()
+    const blank = (value) =>
+      JSON.stringify(value)
+        .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, 'T')
+        .replace(/\d{4}-\d{2}-\d{2}/g, 'D')
+    const working = summary.projects.flatMap((p) => p.inProgress)
+    return {
+      stalled: working.filter((t) => t.stale).length,
+      going: working.filter((t) => !t.stale).length,
+      bytes: JSON.stringify(summary).length,
+      summary: blank(summary),
+      daily: blank(daily),
+    }
+  }
+
+  /** The dataset of a day generated at its earliest moment, read then and late that evening. */
+  const day = async (tz, [y, m, d], name) =>
+    inZone(tz, async () => {
+      const midnight = new Date(y, m, d).getTime()
+      const tomorrow = new Date(y, m, d + 1).getTime()
+      const at = midnight + 30_000
+      const ready = at + msUntilSlot(at)
+      const dir = path.join(root, name)
+      generate(dir, { scale: 0.05, seed: 3, migrationsFolder, now: ready })
+      const reads = [
+        ready,
+        new Date(y, m, d, 10).getTime(),
+        new Date(y, m, d, 23, 30).getTime(),
+        tomorrow - 1000,
+      ]
+      const read = []
+      for (const now of reads) read.push(await answers(dir, now))
+      return {
+        hours: (tomorrow - midnight) / 3_600_000,
+        readyAfter: (ready - midnight) / 60_000,
+        ages: reads.map((now) => ages(dir, midnight, now)),
+        answers: read,
+      }
+    })
+
+  it('keeps every row on its calendar day and its whole days old, and reads the same at any hour', async () => {
+    const plains = new Map()
+    for (const c of cases) {
+      const label = `${c.tz} ${c.day.join('-')}, ${c.what}`
+      if (!plains.has(c.tz)) plains.set(c.tz, await day(c.tz, plain, `dst-plain-${c.tz.replace('/', '-')}`))
+      const ref = plains.get(c.tz)
+      expect(ref.hours, `${c.tz}: the plain day`).toBe(24)
+      expect(ref.readyAfter).toBe(1)
+      const got = await day(c.tz, c.day, `dst-${c.tz.replace('/', '-')}-${c.day.join('-')}`)
+      expect(got.readyAfter, `${label}: generated from`).toBe(c.ready)
+      for (const [i, ages] of got.ages.entries())
+        expect(ages, `${label}: calendar and whole days of every row, read ${i}`).toEqual(ref.ages[0])
+      for (const [i, a] of got.answers.entries()) {
+        expect(a.stalled, `${label}: stalled, read ${i}`).toBe(ref.answers[0].stalled)
+        expect(a.going, `${label}: going on, read ${i}`).toBe(ref.answers[0].going)
+        expect(a, `${label}: read ${i}`).toEqual(ref.answers[0])
+      }
+    }
+  }, 600_000)
+})

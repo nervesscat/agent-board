@@ -194,23 +194,32 @@ export function generatedPlan(scale = 1) {
     bigTicketLanes: n(24, 3),
     prsPerProject: n(25, 2),
     reviewsPerProject: n(10, 1),
-    days: 60,
+    days: DAYS,
   }
 }
 
 // --- the generated dataset's clock ---
 //
 // The board buckets by the server's local calendar day (what happened today, since when a ticket is in
-// progress, which report is missing) and compares ages with whole days (a ticket in progress with no
-// post for a day is stalled). The server's clock cannot be set, so the dataset is laid out relative
-// to the local day it is generated on, the same way whatever the hour: the rows are written on a
-// virtual clock (0 is the start of today, `VIRTUAL_NOW` is now, earlier days are negative), and each
-// virtual day lands in the first `SLOT_MS` of its local calendar day. Today's rows (half a day of
-// work) are then in the past from `SLOT_MS` after midnight on, and every row is the same number of
-// calendar days and of whole days old at any hour. A run that crosses midnight sees a new day: the
-// harness writes the dataset again for it (`bench.mjs`).
+// progress, which report is missing) and compares ages with whole days of elapsed time (a ticket in
+// progress with no post for a day is stalled; a PR merged in the last 14 days is in the queue). The
+// server's clock cannot be set, so the dataset is laid out relative to the local day it is generated
+// on, the same way whatever the hour: the rows are written on a virtual clock (0 is the start of
+// today, `VIRTUAL_NOW` is now, earlier days are negative), and the rows of each virtual day land in a
+// slot of `SLOT_MS` early in its local calendar day, placed so that from the moment the dataset may be
+// generated (`ready`) until the day ends, a row of k days ago is between k and k + 1 whole days old.
+// On most days each slot is the first minute of its day, and `ready` is a minute after midnight.
+// Calendar days are not all 24 h long, though: when a daylight saving change makes the days from day
+// k ago through today an hour longer than k + 1 whole days, day k's slot starts an hour after its
+// midnight (or the rows would be k + 1 whole days old before the day is over); when it makes them an
+// hour shorter, `ready` is an hour after today's midnight (or the rows would be under k whole days old
+// before then). So on the day the clocks go back, and for the 60 days after they go forward, the
+// dataset waits until 1:01 to be generated. A run that crosses midnight sees a new day: the harness
+// writes the dataset again for it (`bench.mjs`).
 
 const DAY = 86_400_000
+/** How many days back the generated dataset goes. */
+const DAYS = 60
 /** Where now is on the virtual clock: today has had half a day of work. */
 export const VIRTUAL_NOW = DAY / 2
 /** The part of each local day that holds that day's rows. */
@@ -229,23 +238,41 @@ export function startOfLocalDay(ms) {
   return d.getTime()
 }
 
-/** How long until a dataset generated now has all of today's rows in the past (0: it has). */
-export const msUntilSlot = (now = Date.now()) => Math.max(0, startOfLocalDay(now) + SLOT_MS - now)
+/** How long until a dataset can be generated (0: now), see `anchoredClock`. */
+export const msUntilSlot = (now = Date.now()) => Math.max(0, anchoredClock(now).ready - now)
 
 /**
- * The real moment of a virtual one, for a dataset generated at `now`: virtual day `d` (0 today, -1
- * yesterday) is local calendar day `d` from now's, counted in calendar days (a day of a daylight saving
- * change too), and a moment's place in its virtual day is its place in the slot.
+ * The clock of a dataset generated on the local day of `now`: `real(v)` is the real moment of a
+ * virtual one, where virtual day `d` (0 today, -1 yesterday) is local calendar day `d` from now's and a
+ * moment's place in its virtual day is its place in that day's slot; `ready` is the first moment it
+ * can be generated (above).
  */
 export function anchoredClock(now) {
-  const anchor = startOfLocalDay(now)
+  const today = startOfLocalDay(now)
+  const midnight = (d) => {
+    const x = new Date(today)
+    x.setDate(x.getDate() + d)
+    return x.getTime()
+  }
+  const tomorrow = midnight(1)
+  // Day k ago's slot: its midnight, or as much later as the days from it through today are longer
+  // than k + 1 whole days, so that its rows are under k + 1 whole days old until tomorrow.
+  const slots = new Map()
+  const slot = (k) => {
+    if (!slots.has(k)) {
+      const start = midnight(-k)
+      slots.set(k, start + Math.max(0, tomorrow - start - (k + 1) * DAY))
+    }
+    return slots.get(k)
+  }
+  // The first moment each day's rows are over k whole days old, past the end of its slot.
+  let ready = 0
+  for (let k = 0; k <= DAYS; k++) ready = Math.max(ready, slot(k) + k * DAY + SLOT_MS)
   const real = (v) => {
     const day = Math.floor(v / DAY)
-    const d = new Date(anchor)
-    d.setDate(d.getDate() + day)
-    return d.getTime() + Math.floor(((v - day * DAY) / DAY) * SLOT_MS)
+    return slot(-day) + Math.floor(((v - day * DAY) / DAY) * SLOT_MS)
   }
-  return { day: localDay(anchor), real }
+  return { day: localDay(today), ready, real }
 }
 
 /**
@@ -265,15 +292,16 @@ export function laidOutDays(generator) {
  * Writes a large dataset into `dest`: a database migrated with `migrationsFolder` (the target's own
  * migrations) and filled from a seed, the attachments' bytes where local storage keeps them
  * (`uploads/<stored_as>`), and a git repo with an origin for the projects' repos to point at. `now` is
- * the moment it is generated for: the rows are laid out on its local day (above), and it must be at
- * least `SLOT_MS` past that day's midnight (`msUntilSlot`), or today's rows would be in its future.
+ * the moment it is generated for: the rows are laid out on its local day (above), and it must be no
+ * earlier than that day's `ready` moment (`msUntilSlot`), or rows would be in its future or younger
+ * than the whole days they stand for.
  */
 export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: generatedAt = Date.now() }) {
-  if (msUntilSlot(generatedAt) > 0)
-    throw new Error(
-      `a dataset generated less than ${SLOT_MS / 1000} s after midnight would put today's rows in the future; wait ${msUntilSlot(generatedAt)} ms`,
-    )
   const clock = anchoredClock(generatedAt)
+  if (generatedAt < clock.ready)
+    throw new Error(
+      `a dataset generated this soon after midnight (before ${new Date(clock.ready).toString()}) would put rows in the future or make them younger than their whole days; wait ${clock.ready - generatedAt} ms`,
+    )
   // Every moment below is on the virtual clock; `iso` and `dayOf` turn one into a real one.
   const now = VIRTUAL_NOW
   const plan = generatedPlan(scale)
@@ -401,6 +429,7 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
       'format',
       'since',
       'updated_by',
+      'updatedAt',
     ]),
     report: ins('reports', ['project_id', 'cadence', 'period', 'body', 'author', 'createdAt']),
     actor: ins('actors', ['name', 'kind', 'last_seen_at']),
@@ -460,7 +489,16 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
         )
       const repoId = q.repo.run(projectId, 'app', repoDir, null, 'main', iso(created)).lastInsertRowid
       if (p % 2 === 0)
-        q.reportSettings.run(projectId, markdown(r, 2), 'daily', 5, 'text', dayOf(created), GENERATED_HUMAN)
+        q.reportSettings.run(
+          projectId,
+          markdown(r, 2),
+          'daily',
+          5,
+          'text',
+          dayOf(created),
+          GENERATED_HUMAN,
+          iso(created),
+        )
       for (let d = 0; d < 10; d++) {
         const day = dayOf(now - d * DAY)
         if (p % 2 === 0 && r.chance(0.7))
