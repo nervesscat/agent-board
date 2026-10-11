@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test'
 
+import { named, pushedPill, reminder, seedDailyPage, today, yesterday } from './dailyPage'
 import { expect, ok, seededProject, test } from './fixtures'
 
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
@@ -100,6 +101,76 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Cleanu
     await page.goto(agents)
     await expect(page.getByText(/^\$t = Join-Path|^mkdir -p/).first()).toBeVisible()
     expect(await scrollsSideways(page), agents).toBe(false)
+  }
+})
+
+test("a project's whole Daily page, every project's, and the reports-due banner fit 390px and answer taps", async ({
+  page,
+  human,
+  agent,
+}, info) => {
+  const { project, due, ticket, quiet } = await seedDailyPage(
+    human,
+    agent,
+    `A project with a long name to show on a phone ${info.workerIndex}.${info.repeatEachIndex}`,
+  )
+  try {
+    await page.goto(`/projects/${project.id}/daily`)
+    // The header: what was pushed today and today's shift.
+    await expect(pushedPill(page)).toHaveAttribute('data-pushed', 'yes')
+    await expect(page.getByRole('img', { name: /^Shift / })).toBeVisible()
+    await expect(reminder(page, due)).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Changes by agents to review' })).toContainText(
+      'changed by claude',
+    )
+    const card = page.getByRole('region', { name: 'Report', exact: true })
+    await expect(card.getByRole('heading', { name: 'Done' })).toBeVisible()
+    await expect(card).toContainText('2 versions')
+    await expect(card.getByRole('button', { name: 'Generate with claude' })).toBeEnabled()
+    const calendar = page.getByRole('region', { name: 'Report calendar' })
+    await expect(calendar.getByRole('button', { name: `${named(today)}: done` })).toBeVisible()
+    expect(await scrollsSideways(page)).toBe(false)
+
+    // Each part opened by a tap: the pill's breakdown, the earlier version, the hours, the settings.
+    await pushedPill(page).tap()
+    await expect(page.getByRole('list', { name: 'Pushed today by repo' })).toContainText(ticket.title)
+    expect(await scrollsSideways(page)).toBe(false)
+    await page.keyboard.press('Escape')
+    await card.getByRole('button', { name: 'show 1 earlier version' }).tap()
+    await expect(card.getByRole('list', { name: 'Earlier versions' })).toContainText('first pass')
+    await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).tap()
+    await expect(page.getByText('posted the daily report').first()).toBeVisible()
+    const settings = page.getByRole('region', { name: 'Report settings' })
+    await settings.getByRole('button', { name: /^Report settings/ }).tap()
+    await expect(settings.getByRole('group', { name: 'Template' })).toBeVisible()
+    for (const name of ['Shift start', 'Shift end'])
+      await expect(settings.getByRole('slider', { name })).toBeVisible()
+    expect(await scrollsSideways(page)).toBe(false)
+    await page.screenshot({ path: info.outputPath('daily-project-phone.png'), fullPage: true })
+
+    // A day picked on the calendar opens that day.
+    await calendar.getByRole('button', { name: `${named(yesterday)}: done` }).tap()
+    await expect(card).toContainText('The parser')
+    expect(await scrollsSideways(page)).toBe(false)
+
+    await page.goto('/daily')
+    const reports = page.getByRole('region', { name: 'Reports', exact: true })
+    await expect(reports.getByRole('article', { name: project.name, exact: true })).toContainText('Ship it')
+    await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).tap()
+    await expect(page.getByText(`[${project.name}]`).first()).toBeVisible()
+    expect(await scrollsSideways(page)).toBe(false)
+    await page.screenshot({ path: info.outputPath('daily-all-phone.png'), fullPage: true })
+
+    // The banner, on a ticket page.
+    await page.goto(`/projects/${project.id}/features/${ticket.id}`)
+    await expect(reminder(page, due)).toBeVisible()
+    await expect(reminder(page, due)).toBeInViewport()
+    expect(await scrollsSideways(page)).toBe(false)
+    await page.screenshot({ path: info.outputPath('banner-ticket-phone.png') })
+    await reminder(page, due).tap()
+    await expect(page).toHaveURL(new RegExp(`/projects/${due.id}/daily$`))
+  } finally {
+    await quiet()
   }
 })
 
