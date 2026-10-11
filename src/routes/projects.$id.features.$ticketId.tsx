@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { type HistoryState, Link, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   Archive,
   ArchiveRestore,
@@ -109,7 +109,7 @@ import {
   validateLaneSearch,
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
-import { columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
+import { type StepList, columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 export const Route = createFileRoute('/projects/$id/features/$ticketId')({
@@ -130,8 +130,9 @@ function TicketPage() {
       params: { id, ticketId },
       search: laneSearch(f),
       replace: true,
-      // A filter change is the same page: stay where the reader is.
+      // A filter change is the same page: stay where the reader is, and keep the list it steps through.
       resetScroll: false,
+      state: true,
     })
   const key = ['ticket', ticketId]
   // Fold the lanes' updates into this ticket's feed.
@@ -290,7 +291,7 @@ function TicketPage() {
         <span className="text-foreground">#{t.id}</span>
         {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
         {!t.parentId && board && (
-          <StageNav projectId={id} tickets={board} t={t} pageIsNewer={readAt >= boardReadAt} />
+          <StageNav key={t.id} projectId={id} tickets={board} t={t} pageIsNewer={readAt >= boardReadAt} />
         )}
       </nav>
 
@@ -1115,11 +1116,21 @@ function LaneNav({
   )
 }
 
+declare module '@tanstack/react-router' {
+  interface HistoryState {
+    /** The tickets ‹ › were stepping through on the ticket page this one was stepped to from. */
+    stepList?: StepList
+  }
+}
+
 /**
- * "‹ 3 of 7 in In progress ›" among the top-level tickets in this ticket's board column, in its order.
- * This ticket's own stage and place come from whichever was read last, its page or the board's list:
- * the page has a stage change made here before the list catches up, and the list has a placement made
- * on the board, which ranks the tickets above the moved one too, before their pages are read again.
+ * "‹ 3 of 7 in In progress ›" among the top-level tickets in a board column, in its order: the list the
+ * reader stepped here through, else this ticket's column. The list holds on through stage changes, like
+ * the lanes do: a ticket moved out of its stage, this one too, keeps its place in it until the reader
+ * leaves the steps. This ticket's own stage and place come from whichever was read last, its page or
+ * the board's list: the page has a stage change made here before the list catches up, and the list has
+ * a placement made on the board, which ranks the tickets above the moved one too, before their pages
+ * are read again.
  */
 function StageNav({
   projectId,
@@ -1133,14 +1144,28 @@ function StageNav({
   pageIsNewer: boolean
 }) {
   const stages = useStages(projectId)
+  const stepped = useLocation({ select: (l) => l.state.stepList })
+  // The list as this page last had it (the page is keyed by ticket), so moving this ticket keeps it.
+  const [kept, setKept] = useState<StepList>()
   const listed = tickets.find((x) => x.id === t.id)
   const self = pageIsNewer || !listed ? t : listed
   const rows = [...tickets.filter((x) => x.id !== t.id && x.parentId === null), self]
-  const around = columnNeighbours(rows, t.id)
-  if (!around) return null
-  const stage = stageOf(stages, self.status)
+  const around = columnNeighbours(rows, t.id, kept ?? stepped)
+  const list = around?.list
+  const same = list && kept && list.stage === kept.stage && list.ids.join() === kept.ids.join()
+  useEffect(() => {
+    if (list && !same) setKept(list)
+  }, [list, same])
+  if (!around || !list) return null
+  const stage = stageOf(stages, list.stage)
   return (
-    <StepNav projectId={projectId} prev={around.prev} next={around.next} noun={`ticket in ${stage.name}`}>
+    <StepNav
+      projectId={projectId}
+      prev={around.prev}
+      next={around.next}
+      state={{ stepList: list }}
+      noun={`ticket in ${stage.name}`}
+    >
       {around.index + 1} of {around.count} in {stage.name}
     </StepNav>
   )
@@ -1167,6 +1192,7 @@ function StepNav({
   prev,
   next,
   search = {},
+  state,
   noun,
   children,
 }: {
@@ -1174,6 +1200,8 @@ function StepNav({
   prev: Step
   next: Step
   search?: LaneSearch
+  /** History state for the page stepped to. */
+  state?: HistoryState
   noun: string
   children: ReactNode
 }) {
@@ -1188,11 +1216,12 @@ function StepNav({
         to: '/projects/$id/features/$ticketId',
         params: { id: projectId, ticketId: String(to.id) },
         search,
+        state,
       })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, projectId, prev, next, search])
+  }, [navigate, projectId, prev, next, search, state])
   const step = (to: Step, dir: 'prev' | 'next') => {
     const icon = dir === 'prev' ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />
     return to ? (
@@ -1200,6 +1229,7 @@ function StepNav({
         to="/projects/$id/features/$ticketId"
         params={{ id: projectId, ticketId: String(to.id) }}
         search={search}
+        state={state}
         title={`#${to.id} ${to.title}`}
         className="inline-flex size-7 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
         aria-label={`${dir === 'prev' ? 'Previous' : 'Next'} ${noun}`}

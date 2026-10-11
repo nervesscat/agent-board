@@ -82,13 +82,52 @@ export const columnOrder = (a: Card, b: Card) =>
 export const stageColumn = <T extends Card>(items: T[], status: string): T[] =>
   items.filter((t) => t.status === status).sort(columnOrder)
 
-/** The tickets before and after `id` in its board column, and where it sits there (null if absent). */
-export function columnNeighbours<T extends Card>(items: T[], id: number) {
+/** A list of tickets to step through: a board column, by its stage, and the tickets in it, in order. */
+export type StepList = { stage: string; ids: number[] }
+
+/**
+ * `list`'s stage's column as it is now, with the tickets of `list` that have left the stage since kept
+ * in it: each right after the one before it in `list` (first if none is), so a ticket keeps its place.
+ * Tickets no longer in `items` drop out.
+ */
+function carriedColumn<T extends Card>(items: T[], list: StepList): T[] {
+  const column = stageColumn(items, list.stage)
+  let at = 0
+  for (const id of list.ids) {
+    const i = column.findIndex((t) => t.id === id)
+    if (i >= 0) {
+      at = i + 1
+      continue
+    }
+    const left = items.find((t) => t.id === id)
+    if (left) column.splice(at++, 0, left)
+  }
+  return column
+}
+
+/**
+ * The tickets before and after `id` in the list being stepped through, where it sits there (null if
+ * absent from `items`), and the list itself, to carry on to the next step. That list is `id`'s board
+ * column, unless `carried` (the list the reader stepped here with) holds it: then that list as it is
+ * now, which keeps a ticket that has moved to another stage since.
+ */
+export function columnNeighbours<T extends Card>(items: T[], id: number, carried?: StepList) {
   const self = items.find((t) => t.id === id)
   if (!self) return null
-  const column = stageColumn(items, self.status)
+  let stage = carried?.stage ?? self.status
+  let column = carried ? carriedColumn(items, carried) : []
+  if (!column.includes(self)) {
+    stage = self.status
+    column = stageColumn(items, stage)
+  }
   const index = column.indexOf(self)
-  return { prev: column[index - 1] ?? null, next: column[index + 1] ?? null, index, count: column.length }
+  return {
+    prev: column[index - 1] ?? null,
+    next: column[index + 1] ?? null,
+    index,
+    count: column.length,
+    list: { stage, ids: column.map((t) => t.id) },
+  }
 }
 
 /**
