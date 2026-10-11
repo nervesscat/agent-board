@@ -252,6 +252,7 @@ pnpm format          # prettier
 pnpm test            # vitest (path mapping, actors, PR status, …)
 pnpm test:e2e        # Playwright against a built board in test mode (Testing, below)
 pnpm check:migrations # the drizzle folder and its journal agree
+pnpm bench           # in a worktree: the benchmark (Benchmark, below)
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
@@ -281,6 +282,46 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
 - **CI** (`.github/workflows/ci.yml`, on pull requests and pushes to `main`): install, typecheck,
   lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
   Playwright report and traces are uploaded as the `playwright-report` artifact.
+
+## Benchmark
+
+`pnpm bench` measures a checkout so a change can be compared before and after on the same machine.
+Run it in a worktree: it refuses the main checkout (the live board), as target and as where it runs.
+
+```
+pnpm bench                                   # everything, both datasets, 3 runs (about half an hour)
+pnpm bench --quick                           # one short pass, to see that it works
+pnpm bench --sections server,mcp --runs 5    # only what a change touches
+pnpm bench --server dev                      # vite dev, as the live board runs, instead of the build
+pnpm bench --target ../agent-board-main --label main   # another checkout, e.g. a worktree of main
+pnpm bench compare <before.json> <after.json>          # every metric, before and after
+pnpm bench --help                            # every flag
+```
+
+It builds the target into `.bench/build/<folder>` (never `.output`) and starts the build in test mode
+on `127.0.0.1`, on a free port from 47200 (never 47100), with a data folder of its own in
+`.bench/work`, once per run so the runs are independent. Two datasets: `live-copy`, a backup of the
+main checkout's `data/board.db` and its uploads (skipped where there is none; its repos are the real
+checkouts, so the PR queue calls `gh` and the push state fetches origin, as the board does), and
+`generated`, a large board written from a seed (`--scale`, `--seed`: 20 projects, about 2,700 tickets
+with lanes, 22,000 posts, 20,000 replies, 2,000 attachments and 45,000 activity rows at scale 1) with a
+git repo and a bare origin for its projects.
+
+Sections (`--sections`): `server` (p50/p95 of the hot endpoints after a warm-up, the first request
+apart, SQL statements and child processes per request), `mcp` (size and latency of the main tools'
+results, as an agent), `bundle` (JS and CSS each route downloads on a cold load, raw and gzip, sized
+from the build), `load` (cold first loads in Chromium: TTFB, DOMContentLoaded, load, hydration, data
+shown, requests and bytes), `nav` (client-side navigations until the destination shows), `idle`
+(requests per minute of pages left open, per API path) and `memory` (RSS and heap under a steady
+request load, once per dataset). The counts per request come from `scripts/bench/preload.mjs`, which
+the harness loads into the server it starts (`node --import`); the board has no switch for it. Under
+`--server dev` the server code runs in a worker thread out of its reach, so those counts are n/a there,
+and there is no bundle section.
+
+Results go to `.bench/results/<time>-<sha>[-label].json` (every run's value of every metric, its
+median and range) and `.md` (the summary, also printed), with the machine, the commit and the settings.
+`compare` flags a change as beyond noise when the ranges over the runs do not overlap. The server and
+browser it started stop when it ends, fails or is interrupted.
 
 ## Pushed or not
 

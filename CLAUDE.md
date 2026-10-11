@@ -57,6 +57,10 @@ free loopback port above 47140 with throwaway data, so it is safe beside the liv
 checkout too. CI (`.github/workflows/ci.yml`) runs all of these on every pull request. Prettier
 without `--end-of-line auto` flags every CRLF file.
 
+A change made for speed comes with numbers: `pnpm bench` in a worktree before and after it, then
+`pnpm bench compare <before.json> <after.json>` (README: "Benchmark"). It never runs against :47100
+or the live `data/`.
+
 ## Files
 
 All attachment bytes go through `src/server/storage.ts` (`fileStore`: local `data/uploads`, or S3 with
