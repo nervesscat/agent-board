@@ -9,14 +9,13 @@ import {
   type BranchInfo,
   branchReach,
   commitSummary,
-  listRefs,
-  listWorktrees,
   NO_BRANCH,
   refsContaining,
   type Reach,
   type Refs,
   type Worktree,
 } from './git'
+import { currentListing } from './listings'
 import { activePreviews, type ManagedPreview } from './managedPreview'
 import { getProject } from './projects'
 import { readRefs, readWorktrees } from './push'
@@ -34,18 +33,18 @@ type Chainable = Pick<schema.Ticket, 'id' | 'parentId' | 'repoId' | 'baseBranch'
 type RepoRow = schema.Repo
 
 /**
- * One `for-each-ref` and one `worktree list` per repo, however many tickets ask. `recent` takes them
- * from the listings every read shares for a few seconds (`readRefs`), instead of listing afresh.
+ * One ref listing and one worktree listing per repo, however many tickets ask: the repo as it is now
+ * (`currentListing`, which asks git only once something moved). `recent` takes them from the listings
+ * every read shares for a few seconds (`readRefs`) instead.
  */
 export function gitCache(opts: { recent?: boolean } = {}) {
   const cache = new Map<string, Promise<{ refs: Refs; worktrees: Worktree[] }>>()
-  const refsOf = opts.recent ? readRefs : (p: string) => listRefs(p).catch(() => null)
-  const worktreesOf = opts.recent ? readWorktrees : (p: string) => listWorktrees(p).catch(() => null)
+  const listingOf = opts.recent ? (p: string) => Promise.all([readRefs(p), readWorktrees(p)]) : currentListing
   return (repoPath: string) => {
     if (!cache.has(repoPath))
       cache.set(
         repoPath,
-        Promise.all([refsOf(repoPath), worktreesOf(repoPath)]).then(([refs, worktrees]) => ({
+        listingOf(repoPath).then(([refs, worktrees]) => ({
           refs: refs ?? { local: new Map(), remote: new Map() },
           worktrees: worktrees ?? [],
         })),

@@ -15,6 +15,7 @@ import {
   type Refs,
   type Worktree,
 } from './git'
+import { dropListings } from './listings'
 import { getProject } from './projects'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
@@ -155,6 +156,7 @@ export function fetchRepo(repoPath: string, opts: { force?: boolean } = {}): Pro
       s.fetching = null
       s.refs.drop()
       s.worktrees.drop()
+      dropListings(repoPath)
     })
   return s.fetching
 }

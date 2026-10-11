@@ -9,7 +9,7 @@ import { holdsWorkOf, type Reach } from './git'
 import { type Handoff, ticketHandoff } from './handoff'
 import { HttpError } from './http'
 import { listRepos } from './repos'
-import { withResume, withResumeBriefs } from './resume'
+import { type RefsOf, withResume, withResumeBriefs } from './resume'
 import { deleteStage, firstOfKind, kindOf, listStages, resolveStage, stageOf } from './stages'
 
 /**
@@ -143,6 +143,12 @@ function context(projectId: number, git: GitCache = gitCache()) {
 }
 type Context = ReturnType<typeof context>
 
+/** The read's ref listing, for the resume state and the hand-off to share. */
+const refsOf =
+  (ctx: Context): RefsOf =>
+  async (repoPath) =>
+    (await ctx.git(repoPath)).refs
+
 const landed = (r: Reach | null) => Boolean(r && r.state !== 'unique')
 
 /**
@@ -227,15 +233,20 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
       return t ? [{ id: t.id, title: t.title, branch: t.branch, prNumber: t.prNumber, status: t.status }] : []
     })
   const handoff: Handoff | null =
-    kindOf(ctx.stages, full.status) === 'review' ? await ticketHandoff(full) : null
-  return withResume({ ...full, needs, neededBy, handoff })
+    kindOf(ctx.stages, full.status) === 'review' ? await ticketHandoff(full, refsOf(ctx)) : null
+  return withResume({ ...full, needs, neededBy, handoff }, undefined, refsOf(ctx))
 }
 
 /** `listTickets` with each ticket's needs, met or not, and whether its resume note holds (`resume`). */
 export async function ticketRows(projectId: number, filter: features.TicketFilter = {}) {
   const rows = features.listTickets(projectId, filter)
-  const needs = await needsFor(rows, context(projectId))
-  return withResumeBriefs(rows.map((t) => ({ ...t, needs: needs.get(t.id) ?? [] })))
+  const ctx = context(projectId)
+  const needs = await needsFor(rows, ctx)
+  return withResumeBriefs(
+    rows.map((t) => ({ ...t, needs: needs.get(t.id) ?? [] })),
+    undefined,
+    refsOf(ctx),
+  )
 }
 
 // --- what a branch took in from other tickets' branches ---

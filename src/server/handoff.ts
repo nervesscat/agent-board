@@ -1,10 +1,13 @@
 import { listActors } from './actors'
 import type { getTicketWithPush } from './features'
-import { lastCommitAt } from './git'
+import { memo } from './cleanup'
+import { committedAt } from './git'
+import { currentRefs } from './listings'
 import { isLocalUrl, previewState } from './preview'
 import type { CiState } from './prs'
 import type { Push } from './push'
 import { ticketRepo } from './repos'
+import type { RefsOf } from './resume'
 
 /**
  * What a ticket handed to review still lacks: the parts of the hand-off the board can see for itself
@@ -161,12 +164,35 @@ async function previewsOf(t: TicketWithPush): Promise<HandoffFacts['previews']> 
   )
 }
 
-/** The checklist for a ticket read with `getTicketWithPush` (its feed, workspaces, PR and push state). */
-export async function ticketHandoff(t: TicketWithPush): Promise<Handoff> {
+/** When a commit was made, by its sha: that never changes. */
+const COMMITTED_MEMO_MAX = 2000
+const committedMemo = new Map<string, Promise<string>>()
+
+/**
+ * When the branch's last commit was made (committer date): the local branch's head, else origin's, as
+ * the repo's listing has them now. Null when it is on neither, or git cannot tell.
+ */
+async function lastCommitAt(repoPath: string, branch: string, refsOf: RefsOf): Promise<string | null> {
+  const refs = await refsOf(repoPath)
+  for (const sha of [refs?.local.get(branch), refs?.remote.get(branch)]) {
+    if (!sha) continue
+    const at = await memo(committedMemo, COMMITTED_MEMO_MAX, `${repoPath}\0${sha}`, () =>
+      committedAt(repoPath, sha),
+    ).catch(() => '')
+    if (at) return at
+  }
+  return null
+}
+
+/**
+ * The checklist for a ticket read with `getTicketWithPush` (its feed, workspaces, PR and push state).
+ * `refsOf` is the read's own ref listing, when it has one.
+ */
+export async function ticketHandoff(t: TicketWithPush, refsOf: RefsOf = currentRefs): Promise<Handoff> {
   const repo = ticketRepo(t)
   const [previews, last] = await Promise.all([
     previewsOf(t),
-    repo && t.branch ? lastCommitAt(repo.repoPath, t.branch).catch(() => null) : null,
+    repo && t.branch ? lastCommitAt(repo.repoPath, t.branch, refsOf).catch(() => null) : null,
   ])
   return handoffOf({
     branch: t.branch,

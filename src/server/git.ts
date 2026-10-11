@@ -183,11 +183,9 @@ export async function branchHead(repoPath: string, branch: string): Promise<stri
   )
 }
 
-/** How many commits the local branch has that `sha` does not; null when either is unknown here. */
-export async function commitsSince(repoPath: string, branch: string, sha: string): Promise<number | null> {
-  if (!branch || !sha) return null
-  const out = await git(repoPath, ['rev-list', '--count', `${sha}..refs/heads/${branch}`]).catch(() => null)
-  return out === null ? null : Number(out)
+/** How many commits `head` has that `sha` does not. Throws when either is no commit here. */
+export async function commitsSince(repoPath: string, sha: string, head: string): Promise<number> {
+  return Number(await git(repoPath, ['rev-list', '--count', `${sha}..${head}`]))
 }
 
 export interface Worktree {
@@ -304,14 +302,10 @@ export async function mergedInto(repoPath: string, sha: string, base: string): P
   return firstParent !== sha
 }
 
-/** When the branch's last commit was made (committer date): the local branch, else origin's. */
-export async function lastCommitAt(repoPath: string, branch: string): Promise<string | null> {
-  if (!branch) return null
-  for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
-    const at = await git(repoPath, ['log', '-1', '--format=%cI', ref, '--']).catch(() => '')
-    if (at) return new Date(at).toISOString()
-  }
-  return null
+/** When commit `sha` was made (committer date); '' when git has no date for it. Throws when it is no commit here. */
+export async function committedAt(repoPath: string, sha: string): Promise<string> {
+  const at = await git(repoPath, ['log', '-1', '--format=%cI', sha, '--'])
+  return at && new Date(at).toISOString()
 }
 
 /**

@@ -3,7 +3,9 @@ import { and, eq, inArray, lt, max, ne } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { localDate } from '#/lib/format'
 import { dayBounds } from './activity'
-import { commitsSince, listRefs } from './git'
+import { memo } from './cleanup'
+import { commitsSince, type Refs } from './git'
+import { currentRefs } from './listings'
 import { ticketRepo } from './repos'
 import { type Stage, isWorking, listStages } from './stages'
 
@@ -114,20 +116,28 @@ export function handoffStates(tickets: ResumeTicket[], now = new Date()) {
   return out
 }
 
+/** Commits between a note's sha and a branch head, by the two shas: the count never changes. */
+const SINCE_MEMO_MAX = 2000
+const sinceMemo = new Map<string, Promise<number>>()
+
+/** A repo's branches and origin's, as one read of the repo shares them; null when git cannot list it. */
+export type RefsOf = (repoPath: string) => Promise<Refs | null>
+
 /**
  * The full resume state of each ticket: the note and who wrote it when, the commits on its branch since
- * (git, read-only, local branches only), `stale`, `noHandoff` and `day`. One git ref listing per repo;
- * commits are only counted for a branch that moved since its note.
+ * (git, read-only, local branches only), `stale`, `noHandoff` and `day`. One ref listing per repo, as it
+ * is now (`refsOf`, the read's own when it has one); commits are only counted for a branch that moved
+ * since its note, once per pair of commits.
  */
-export async function resumeStates(tickets: ResumeTicket[], now = new Date()) {
+export async function resumeStates(tickets: ResumeTicket[], now = new Date(), refsOf: RefsOf = currentRefs) {
   const facts = handoffStates(tickets, now)
   const refs = new Map<string, Promise<Map<string, string>>>()
   const heads = (repoPath: string) => {
     if (!refs.has(repoPath))
       refs.set(
         repoPath,
-        listRefs(repoPath).then(
-          (r) => r.local,
+        refsOf(repoPath).then(
+          (r) => r?.local ?? new Map<string, string>(),
           () => new Map<string, string>(),
         ),
       )
@@ -140,7 +150,13 @@ export async function resumeStates(tickets: ResumeTicket[], now = new Date()) {
       if (!repo) return null
       const head = (await heads(repo.repoPath)).get(t.branch)
       if (!head) return null
-      return head === t.resumeSha ? 0 : commitsSince(repo.repoPath, t.branch, t.resumeSha)
+      if (head === t.resumeSha) return 0
+      // Counted between the listed head and the note's sha, not the branch as it is by then. A sha that
+      // is no commit here reads as unknown, and is asked again next time.
+      const sha = t.resumeSha
+      return memo(sinceMemo, SINCE_MEMO_MAX, `${repo.repoPath}\0${sha}..${head}`, () =>
+        commitsSince(repo.repoPath, sha, head),
+      ).catch(() => null)
     }),
   )
   const out = new Map<number, Resume>()
@@ -162,8 +178,8 @@ export async function resumeStates(tickets: ResumeTicket[], now = new Date()) {
 }
 
 /** One ticket's resume state: see `resumeStates`. `now` decides what "today" is. */
-export async function resumeState(ticket: ResumeTicket, now = new Date()): Promise<Resume> {
-  return (await resumeStates([ticket], now)).get(ticket.id)!
+export async function resumeState(ticket: ResumeTicket, now = new Date(), refsOf?: RefsOf): Promise<Resume> {
+  return (await resumeStates([ticket], now, refsOf)).get(ticket.id)!
 }
 
 /** The ticket without its resume columns. */
@@ -175,8 +191,12 @@ export function withoutResume<T extends Partial<Record<ResumeColumn, unknown>>>(
 export type WithResume<T> = Omit<T, ResumeColumn> & { resume: Resume }
 
 /** A ticket as reads hand it out: its resume note and state under `resume`. */
-export async function withResume<T extends ResumeTicket>(t: T, now = new Date()): Promise<WithResume<T>> {
-  return { ...withoutResume(t), resume: await resumeState(t, now) }
+export async function withResume<T extends ResumeTicket>(
+  t: T,
+  now = new Date(),
+  refsOf?: RefsOf,
+): Promise<WithResume<T>> {
+  return { ...withoutResume(t), resume: await resumeState(t, now, refsOf) }
 }
 
 export type WithResumeBrief<T> = Omit<T, ResumeColumn> & { resume: ResumeBrief }
@@ -185,8 +205,9 @@ export type WithResumeBrief<T> = Omit<T, ResumeColumn> & { resume: ResumeBrief }
 export async function withResumeBriefs<T extends ResumeTicket>(
   tickets: T[],
   now = new Date(),
+  refsOf?: RefsOf,
 ): Promise<WithResumeBrief<T>[]> {
-  const states = await resumeStates(tickets, now)
+  const states = await resumeStates(tickets, now, refsOf)
   return tickets.map((t) => {
     const { at, stale, noHandoff, day } = states.get(t.id)!
     return { ...withoutResume(t), resume: { at, stale, noHandoff, day } }
