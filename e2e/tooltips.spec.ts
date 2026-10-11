@@ -543,11 +543,43 @@ test('the folder picker opened from the keyboard shows no tooltip, and one Escap
   await expect(picker).toBeVisible()
   await page.waitForTimeout(PAST_THE_DELAY)
   await expect(tooltip(page)).toHaveCount(0)
-  await expect(picker.getByRole('textbox', { name: 'Folder path' })).toBeFocused()
+  // The picker itself has the focus, not Up or Home, nor the path further on.
+  await expect(picker).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(picker).toHaveCount(0)
   await expect(repo).toBeVisible()
   await expect(browse).toBeFocused()
+
+  // Tab from there reaches its first control, and that tooltip shows: the person moved the focus.
+  await page.keyboard.press('Enter')
+  await expect(picker).toBeFocused()
+  const up = picker.getByRole('button', { name: 'Up one folder' })
+  await expect(up).toBeEnabled()
+  await page.keyboard.press('Tab')
+  await expect(up).toBeFocused()
+  await expect(tooltip(page)).toHaveText('Up one folder')
+})
+
+test.describe('on a touch screen', () => {
+  test.use({ hasTouch: true })
+
+  test('the folder picker opened by a tap focuses itself, not a text field, and shows no tooltip', async ({
+    page,
+  }) => {
+    // Focus on the path's text field would raise a phone's keyboard, unasked.
+    await page.goto('/repositories')
+    await page.getByRole('button', { name: 'New repository' }).tap()
+    const repo = page.getByRole('dialog', { name: 'New repository' })
+    await repo.getByRole('button', { name: 'Browse…' }).tap()
+    const picker = page.getByRole('dialog', { name: 'Choose the checkout' })
+    await expect(picker).toBeVisible()
+    await page.waitForTimeout(PAST_THE_DELAY)
+    await expect(picker).toBeFocused()
+    expect(
+      await page.evaluate(() => document.activeElement?.matches('input, textarea, [contenteditable]')),
+    ).toBe(false)
+    await expect(tooltip(page)).toHaveCount(0)
+  })
 })
 
 test('a review result opened from the keyboard shows no tooltip, and one Escape closes it', async ({
@@ -576,6 +608,61 @@ test('a review result opened from the keyboard shows no tooltip, and one Escape 
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
     await expect(open).toBeFocused()
+  }
+})
+
+test('a long review result with replies opens at its top, every time, by click or by keyboard', async ({
+  page,
+  human,
+  project,
+}) => {
+  // No link in the summary: the first control is a reply's own button, which has a tooltip, and the
+  // reply editor is at the bottom. Cached from the second open on, it is all there as it opens.
+  const result = await ok<ReviewResult>(
+    human.post(`/api/projects/${project.id}/reviews/results`, {
+      data: {
+        prNumber: 5,
+        sha: 'abcdef0123456789',
+        verdict: 'SHIP IT',
+        summaryMd: 'Nothing to follow here.',
+      },
+    }),
+  )
+  for (let n = 1; n <= 4; n++) {
+    const body = Array.from({ length: 6 }, (_, i) => `Reply ${n}, paragraph ${i + 1}.`).join('\n\n')
+    await ok(human.post('/api/comments', { data: { parentType: 'review', parentId: result.id, body } }))
+  }
+  await page.goto(`/projects/${project.id}/daily`)
+  const open = page.getByRole('button', { name: /SHIP IT/ })
+  const dialog = page.getByRole('dialog', { name: 'Review result' })
+  for (const by of ['click', 'keyboard'] as const) {
+    for (let i = 0; i < 2; i++) {
+      const at = `${by}, open ${i + 1}`
+      if (by === 'click') await open.click()
+      else {
+        await tabTo(open)
+        await page.keyboard.press('Enter')
+      }
+      await expect(dialog.getByText('Reply 4, paragraph 6.')).toBeVisible()
+      await page.waitForTimeout(PAST_THE_DELAY)
+      const box = await dialog.evaluate((el) => ({
+        top: el.scrollTop,
+        scrolls: el.scrollHeight > el.clientHeight,
+      }))
+      expect(box.scrolls, at).toBe(true)
+      expect(box.top, at).toBe(0)
+      await expect(dialog.getByRole('heading', { name: 'Review result' })).toBeInViewport()
+      await expect(dialog.getByText('Nothing to follow here.')).toBeInViewport()
+      // Never in the reply editor. The first open focuses before the result is there (on Close);
+      // from then on a reply's button comes first, so the dialog itself.
+      expect(await page.evaluate(() => !!document.activeElement?.closest('[contenteditable]')), at).toBe(
+        false,
+      )
+      if (i > 0) await expect(dialog, at).toBeFocused()
+      await expect(tooltip(page)).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+    }
   }
 })
 

@@ -81,8 +81,10 @@ type OpenType = Parameters<Extract<InitialFocus, (...args: never[]) => unknown>>
  * Keeps a dialog or popover from opening onto a `Tip`. base-ui focuses the popup's first tabbable
  * control as it opens; opened from the keyboard that focus is focus-visible, so the control's tooltip
  * would open with it, unasked, and the first Escape would close only that tooltip, not the popup.
- * When that control is a `Tip`, focus goes to the first one that is not, or to the popup itself.
- * Returns the `ref` and `initialFocus` to give the popup; an `initialFocus` of the caller's wins.
+ * When that control is a `Tip`, focus goes to the popup itself, as base-ui does on touch: not to a
+ * control further down, which could scroll the popup away from its top or raise a phone's keyboard.
+ * Tab from there reaches the first control. Returns the `ref` and `initialFocus` to give the popup;
+ * an `initialFocus` of the caller's wins.
  */
 function useFocusPastTips<T extends HTMLElement>(ref: React.Ref<T> | undefined, initialFocus?: InitialFocus) {
   const popup = React.useRef<T | null>(null)
@@ -108,7 +110,7 @@ function useFocusPastTips<T extends HTMLElement>(ref: React.Ref<T> | undefined, 
     )
     const isTip = (c: HTMLElement) => c.closest('[data-tip]') !== null
     if (!tabbable[0] || !isTip(tabbable[0])) return true
-    return tabbable.find((c) => !isTip(c)) ?? el
+    return el
   }, [])
   return { ref: setRef, initialFocus: initialFocus ?? pastTips }
 }
