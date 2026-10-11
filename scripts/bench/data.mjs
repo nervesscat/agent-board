@@ -249,6 +249,19 @@ export function anchoredClock(now) {
 }
 
 /**
+ * The local days a generated dataset was laid out on during one benchmark, in `generator.days`: the
+ * day it was first written for (`generator.day`, which stays that day), then each day it was written
+ * again for. `over()`: the last of them has ended.
+ */
+export function laidOutDays(generator) {
+  generator.days = [generator.day]
+  return {
+    over: (now = Date.now()) => localDay(now) !== generator.days.at(-1),
+    writtenAgain: (day) => generator.days.push(day),
+  }
+}
+
+/**
  * Writes a large dataset into `dest`: a database migrated with `migrationsFolder` (the target's own
  * migrations) and filled from a seed, the attachments' bytes where local storage keeps them
  * (`uploads/<stored_as>`), and a git repo with an origin for the projects' repos to point at. `now` is

@@ -19,6 +19,7 @@ import {
   assertBenchDataDir,
   copyLive,
   generate,
+  laidOutDays,
   localDay,
   msUntilSlot,
   pickTargets,
@@ -636,15 +637,12 @@ async function measureDataset(name) {
   // The generated dataset is laid out on the local day it was written on: once that day is over, it is
   // written again for the new one (the same rows, as old relative to it), so every run sees the same
   // today, and a run that went past midnight is run again.
-  const generated = name === 'generated' ? ds.source.generator : null
-  if (generated) generated.days = [generated.day]
-  const newDay = () => generated !== null && localDay(Date.now()) !== generated.day
+  const generated = name === 'generated' ? laidOutDays(ds.source.generator) : null
+  const newDay = () => generated !== null && generated.over()
   const sameDay = async () => {
     if (!newDay()) return
     log(`The local day is now ${localDay(Date.now())}: writing the generated dataset again for it`)
-    const again = (await prepare(name)).source.generator
-    generated.day = again.day
-    generated.days.push(again.day)
+    generated.writtenAgain((await prepare(name)).source.generator.day)
     const repicked = pickTargets(path.join(dir, 'board.db'))
     if (JSON.stringify(repicked) !== JSON.stringify(picks))
       throw new Error('the generated dataset written again for the new day has other targets to measure')
