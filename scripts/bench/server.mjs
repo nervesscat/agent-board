@@ -97,6 +97,16 @@ export async function freePort(from = 47200) {
 
 // --- the server ---
 
+/** `promise`, or nothing after `ms`; the timer holds the process open meanwhile and is cleared after. */
+async function within(promise, ms) {
+  let timer
+  try {
+    await Promise.race([promise, new Promise((resolve) => (timer = setTimeout(resolve, ms)))])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /**
  * An HTTP request with node:http over a kept-alive connection. Not fetch: on Windows undici adds about
  * 15 ms to every request on a reused loopback connection, which would hide the server's own time.
@@ -205,12 +215,18 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
       resolve(msg)
     }
   })
+  // Every wait below keeps the harness alive with a timer of its own (cleared once it is over): once its
+  // server has exited, nothing else may (the first start of a dataset holds no other handle), and
+  // Node would end the run in the middle of the wait, with no error and none of its clean-up.
   const reply = (key, ms = 3000) =>
     new Promise((resolve) => {
-      waiting.set(key, resolve)
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         if (waiting.delete(key)) resolve(null)
-      }, ms).unref()
+      }, ms)
+      waiting.set(key, (msg) => {
+        clearTimeout(timer)
+        resolve(msg)
+      })
     })
 
   const agent = new http.Agent({ keepAlive: true, maxSockets: 8 })
@@ -224,7 +240,7 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
   const giveUp = async (taken) => {
     agent.destroy()
     killTree(proc)
-    await Promise.race([gone, new Promise((r) => setTimeout(r, 5000).unref())])
+    await within(gone, 5000)
     return { taken }
   }
   for (;;) {
@@ -238,8 +254,9 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
       throw new Error(`the bench server did not answer within 2 minutes; see ${log}`)
     }
     // The preload in its own process reports every request carrying this id. Waited for from now (the
-    // report may come first), but given up on only 5 s after the answer: under vite dev the first
-    // answer can take longer than that to compile.
+    // report may come first), but given up on only 5 s after the answer (under vite dev the first
+    // answer can take longer than that to compile), or as soon as its own process exits: it could not
+    // bind the port, and the 200 was another server's.
     const id = crypto.randomUUID()
     const reported = new Promise((resolve) => waiting.set(id, resolve))
     let status = 0
@@ -248,7 +265,7 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
     } catch {}
     if (status === 200) {
       const late = setTimeout(() => waiting.get(id)?.(null), 5000)
-      const own = await reported
+      const own = await Promise.race([reported, gone.then(() => null)])
       clearTimeout(late)
       waiting.delete(id)
       if (own && exited === null) break
@@ -323,10 +340,7 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
       agent.destroy()
       killTree(proc)
       if (proc.exitCode === null && proc.signalCode === null)
-        await new Promise((resolve) => {
-          proc.once('exit', resolve)
-          setTimeout(resolve, 5000).unref()
-        })
+        await within(new Promise((resolve) => proc.once('exit', resolve)), 5000)
     },
   }
   return { server }
