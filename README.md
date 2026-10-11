@@ -300,12 +300,14 @@ pnpm bench --help                            # every flag
 
 It builds the target into `.bench/build/<folder>` (never `.output`) and starts the build in test mode
 on `127.0.0.1`, on a free port from 47200 (never 47100), with a data folder of its own in
-`.bench/work`, once per run so the runs are independent. Two datasets: `live-copy`, a backup of the
-main checkout's `data/board.db` and its uploads (skipped where there is none; its repos are the real
-checkouts, so the PR queue calls `gh` and the push state fetches origin, as the board does), and
-`generated`, a large board written from a seed (`--scale`, `--seed`: 20 projects, about 2,700 tickets
-with lanes, 22,000 posts, 20,000 replies, 2,000 attachments and 45,000 activity rows at scale 1) with a
-git repo and a bare origin for its projects.
+`.bench/work`, once per run so the runs are independent. A server counts as its own only when the
+preload in its process reports the health check; when another process holds the port (another bench
+run took it between the probe and the start), it starts again on the next free port. Two datasets:
+`live-copy`, a backup of the main checkout's `data/board.db` and its uploads (skipped where there is
+none; its repos are the real checkouts, so the PR queue calls `gh` and the push state fetches origin,
+as the board does), and `generated`, a large board written from a seed (`--scale`, `--seed`: 20
+projects, about 2,700 tickets with lanes, 22,000 posts, 20,000 replies, 2,000 attachments and 45,000
+activity rows at scale 1) with a git repo and a bare origin for its projects.
 
 Sections (`--sections`): `server` (p50/p95 of the hot endpoints after a warm-up, the first request
 apart, SQL statements and child processes per request), `mcp` (size and latency of the main tools'

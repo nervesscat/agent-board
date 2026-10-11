@@ -117,11 +117,32 @@ function send(agent, url, { method = 'GET', body, headers = {} } = {}) {
 /**
  * Starts the board from the target checkout (migrations load from its drizzle/), in test mode with
  * `human` as the browser's caller, on its own data folder: `build` runs `<buildDir>/server/index.mjs`,
- * `dev` runs `vite dev` as the live board does. Resolves once /api/health answers, with what the
- * harness needs to talk to it. Under `vite dev` the server code runs in Nitro's worker thread, out of
- * the preload's reach, so SQL statements and child processes are not counted there.
+ * `dev` runs `vite dev` as the live board does. Resolves once its own process answers /api/health,
+ * with what the harness needs to talk to it. Under `vite dev` the server code runs in Nitro's worker
+ * thread, out of the preload's reach, so SQL statements and child processes are not counted there.
+ *
+ * A port found free can be taken before the server binds it (another bench run probing at the same
+ * moment): an answer counts only when the preload in its own process reports the request, and when
+ * something else holds the port, the server is started again on the next free one, up to `attempts`.
  */
-export async function startServer({ mode = 'build', target, buildDir, dataDir, port, human, log }) {
+export async function startServer({ port, log, attempts = 5, ...opts }) {
+  for (let attempt = 1; ; attempt++) {
+    const started = await launch({ ...opts, port, log })
+    if (started.server) return started.server
+    if (attempt >= attempts)
+      throw new Error(
+        `another server held each port the bench server was started on (${attempts} tries, the last ${port}); see ${log}`,
+      )
+    fs.appendFileSync(
+      log,
+      `[bench] port ${port} is another server's (${started.taken}); trying the next free port\n`,
+    )
+    port = await freePort(port + 1)
+  }
+}
+
+/** One start on `port`: `{ server }`, or `{ taken }` when another process holds the port. */
+async function launch({ mode = 'build', target, buildDir, dataDir, port, human, log }) {
   if (port === LIVE_PORT) throw new Error(`${LIVE_PORT} is the live board's port`)
   const baseURL = `http://127.0.0.1:${port}`
   const env = {
@@ -194,23 +215,47 @@ export async function startServer({ mode = 'build', target, buildDir, dataDir, p
 
   const agent = new http.Agent({ keepAlive: true, maxSockets: 8 })
   let exited = null
-  proc.once('exit', (code) => (exited = code ?? 'signal'))
+  const gone = new Promise((resolve) =>
+    proc.once('exit', (code) => {
+      exited = code ?? 'signal'
+      resolve()
+    }),
+  )
+  const giveUp = async (taken) => {
+    agent.destroy()
+    killTree(proc)
+    await Promise.race([gone, new Promise((r) => setTimeout(r, 5000).unref())])
+    return { taken }
+  }
   for (;;) {
-    if (exited !== null) throw new Error(`the bench server exited (${exited}) before it answered; see ${log}`)
+    if (exited !== null) {
+      // It stopped before it answered: when another process holds the port, it could not bind it.
+      if (!(await isFree(port))) return giveUp(`its own server exited (${exited}) with the port in use`)
+      throw new Error(`the bench server exited (${exited}) before it answered; see ${log}`)
+    }
     if (Date.now() - started > 120_000) {
       killTree(proc)
       throw new Error(`the bench server did not answer within 2 minutes; see ${log}`)
     }
+    // The preload in its own process reports every request carrying this id.
+    const id = crypto.randomUUID()
+    const reported = reply(id, 5000)
+    let status = 0
     try {
-      const res = await send(agent, `${baseURL}/api/health`)
-      if (res.status === 200) break
+      status = (await send(agent, `${baseURL}/api/health`, { headers: { 'x-bench-req': id } })).status
     } catch {}
+    if (status === 200) {
+      if ((await reported) && exited === null) break
+      if (exited === null) return giveUp('a 200 its own process did not serve')
+      continue
+    }
+    waiting.delete(id)
     await new Promise((r) => setTimeout(r, 50))
   }
   const startupMs = Date.now() - started
 
   let seq = 0
-  return {
+  const server = {
     proc,
     port,
     baseURL,
@@ -278,4 +323,5 @@ export async function startServer({ mode = 'build', target, buildDir, dataDir, p
         })
     },
   }
+  return { server }
 }

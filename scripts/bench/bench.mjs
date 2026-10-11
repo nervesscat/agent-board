@@ -617,17 +617,16 @@ async function measureDataset(name) {
   fs.writeFileSync(serverLog, '')
 
   const start = async () => {
-    const port = await freePort()
-    if (!results.server.ports.includes(port)) results.server.ports.push(port)
     const server = await startServer({
       mode: settings.server,
       target,
       buildDir,
       dataDir: dir,
-      port,
+      port: await freePort(),
       human: picks.human,
       log: serverLog,
     })
+    if (!results.server.ports.includes(server.port)) results.server.ports.push(server.port)
     const inst = server.instrumentation
     results.instrumentation = {
       available: Boolean(inst?.db && inst?.spawn),
