@@ -1,7 +1,10 @@
+import fs from 'node:fs'
 import http from 'node:http'
 import type { AddressInfo } from 'node:net'
+import path from 'node:path'
 
-import type { ProjectPreview, TicketFull, Workspace } from '#/lib/api'
+import type { ManagedPreview, ProjectPreview, TicketFull, Workspace } from '#/lib/api'
+import { e2eEnv, git } from './env'
 import { expect, ok, seedProject, test } from './fixtures'
 
 /** A server on this machine that answers, as a branch an agent runs would; closed when the test ends. */
@@ -130,4 +133,131 @@ test("lists the project's previews, the running ones apart, each with its ticket
 test('a project route that does not exist answers 404', async ({ human }) => {
   const res = await human.get('/api/projects/999999/previews')
   expect(res.status()).toBe(404)
+})
+
+test("Start, Restart and Stop on a row run the board's own preview of the worktree; a refusal comes up as a toast", async ({
+  page,
+  human,
+  project,
+}) => {
+  const { root } = e2eEnv()
+  const branch = `e2e-${project.id}-previews`
+  // A worktree of the run's repo, next to it, that reads as a checkout of the board with its
+  // dependencies installed, and whose build never ends: the board starts it for real, and it stays
+  // building until it is stopped.
+  const worktree = path.join(root, `wt-previews-${project.id}`)
+  git('worktree', 'add', '-q', '-b', branch, worktree, 'main')
+  const lock = "lockfileVersion: '9.0'\n"
+  fs.writeFileSync(
+    path.join(worktree, 'package.json'),
+    JSON.stringify({
+      name: 'agent-board',
+      private: true,
+      scripts: { build: 'node -e "setInterval(() => {}, 1000)"' },
+    }),
+  )
+  fs.writeFileSync(path.join(worktree, 'pnpm-lock.yaml'), lock)
+  fs.mkdirSync(path.join(worktree, 'node_modules', '.pnpm'), { recursive: true })
+  fs.writeFileSync(path.join(worktree, 'node_modules', '.pnpm', 'lock.yaml'), lock)
+
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Run it from here', status: 'in_progress', branch },
+    }),
+  )
+  const dead = `http://127.0.0.1:${await closedPort()}`
+  const ws = await ok<Workspace>(
+    human.post(`/api/tickets/${t.id}/workspaces`, {
+      data: { name: 'worktree', branch, path: worktree, previewUrl: dead },
+    }),
+  )
+  const managed = async () =>
+    (await ok<{ managed: ManagedPreview | null }>(human.get(`/api/workspaces/${ws.id}/preview`))).managed
+
+  try {
+    await page.goto(`/projects/${project.id}/previews`)
+    const running = page.getByRole('region', { name: 'Running', exact: true })
+    const stopped = page.getByRole('region', { name: 'Not running' })
+    const row = stopped.getByRole('listitem').filter({ hasText: 'Run it from here' })
+    await expect(row).toContainText('Not running')
+    await expect(row.getByRole('button', { name: 'Stop' })).toHaveCount(0)
+
+    // Start: the board builds it, and the row says so once the page asked again.
+    await row.getByRole('button', { name: 'Start', exact: true }).click()
+    const building = running.getByRole('listitem').filter({ hasText: 'Run it from here' })
+    await expect(building).toContainText('Building…')
+    await expect(building).toContainText('building')
+    await expect(building.getByRole('button', { name: 'Start', exact: true })).toHaveCount(0)
+    await expect(row).toHaveCount(0)
+    await expect.poll(async () => (await managed())?.step).toBe('build')
+    const first = (await managed())!
+    expect(first).toMatchObject({ status: 'building', path: worktree })
+
+    // Restart: stopped and started again, still building.
+    await building.getByRole('button', { name: 'Restart' }).click()
+    await expect
+      .poll(async () => {
+        const m = await managed()
+        return m && m.startedAt !== first.startedAt && m.status === 'building'
+      })
+      .toBe(true)
+    await expect(building).toContainText('Building…')
+
+    // Stop: back with the rest, with who stopped it, and Start offered again.
+    await building.getByRole('button', { name: 'Stop' }).click()
+    await expect(row).toContainText('Stopped by enrique')
+    await expect(building).toHaveCount(0)
+    expect(await managed()).toMatchObject({ status: 'stopped', reason: 'stopped by enrique', pid: null })
+    await expect(row.getByRole('button', { name: 'Start', exact: true })).toBeVisible()
+
+    // The board refuses a start the page still offers (the ticket was finished meanwhile): its reason
+    // comes up as a toast. Refreshed just before, so the page does not ask again in between.
+    const refresh = page.getByRole('button', { name: 'Refresh' })
+    await refresh.click()
+    await expect(refresh).toBeEnabled()
+    await ok(human.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))
+    await row.getByRole('button', { name: 'Start', exact: true }).click()
+    await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'the ticket is done' })).toBeVisible()
+    expect(await managed()).toMatchObject({ status: 'stopped' })
+  } finally {
+    await human.post(`/api/workspaces/${ws.id}/preview/stop`)
+  }
+})
+
+test('Refresh, and the page asking again on its own, pick up a preview registered meanwhile', async ({
+  page,
+  api,
+  human,
+  project,
+}) => {
+  const register = async (title: string) => {
+    const t = await api.ticket({ title, status: 'in_progress' })
+    await ok<Workspace>(
+      human.post(`/api/tickets/${t.id}/workspaces`, {
+        data: { name: 'hosted', previewUrl: `https://example.com/${t.id}` },
+      }),
+    )
+  }
+  // The page's timers run on a clock the test moves.
+  await page.clock.install()
+  await register('Registered first')
+  await page.goto(`/projects/${project.id}/previews`)
+  const rows = page.getByRole('region').getByRole('listitem')
+  await expect(rows).toHaveCount(1)
+
+  // Nothing new shows before the page asks again...
+  await register('Registered while the page is open')
+  await page.clock.runFor('00:10')
+  await expect(rows).toHaveCount(1)
+  // ...and Refresh asks at once.
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  await expect(rows.filter({ hasText: 'Registered while the page is open' })).toBeVisible()
+  await expect(rows).toHaveCount(2)
+
+  // Without a click, the page asks again every 15 seconds.
+  await register('Registered later still')
+  await expect(rows).toHaveCount(2)
+  await page.clock.fastForward('00:16')
+  await expect(rows.filter({ hasText: 'Registered later still' })).toBeVisible()
+  await expect(rows).toHaveCount(3)
 })
