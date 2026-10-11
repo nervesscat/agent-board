@@ -22,6 +22,7 @@ import {
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { Tip } from '#/components/ui/tooltip'
 import { ReviewSkills, useShell } from '#/components/ReviewSkills'
 import { RichEditor } from '#/components/RichEditor'
 import { SHELLS } from '#/lib/agents'
@@ -179,15 +180,19 @@ function AgentCard({
             <div className="mt-1 text-xs text-muted-foreground">no tickets reserved for it</div>
           )}
         </div>
-        <Button variant="ghost" size="icon-sm" title="Edit" onClick={() => setEditing(true)}>
-          <Pencil />
-        </Button>
+        <Tip content="Edit">
+          <Button variant="ghost" size="icon-sm" aria-label="Edit" onClick={() => setEditing(true)}>
+            <Pencil />
+          </Button>
+        </Tip>
         <AlertDialog>
-          <AlertDialogTrigger
-            render={<Button variant="ghost" size="icon-sm" title={`Remove ${agent.name}`} />}
-          >
-            <Trash2 className="text-destructive" />
-          </AlertDialogTrigger>
+          <Tip content={`Remove ${agent.name}`}>
+            <AlertDialogTrigger
+              render={<Button variant="ghost" size="icon-sm" aria-label={`Remove ${agent.name}`} />}
+            >
+              <Trash2 className="text-destructive" />
+            </AlertDialogTrigger>
+          </Tip>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Remove {agent.name}?</AlertDialogTitle>
@@ -298,29 +303,33 @@ function AgentForm({
         <div className="space-y-2">
           <Label>Picture</Label>
           <div className="relative">
-            <button
-              type="button"
-              onClick={() => file.current?.click()}
-              className="flex size-16 items-center justify-center overflow-hidden rounded-full border bg-muted text-muted-foreground hover:text-foreground"
-              title="Choose a picture"
-            >
-              {avatar ? (
-                <img src={avatar.url} alt="" className="size-full object-cover" />
-              ) : name ? (
-                <AgentAvatar agent={{ name, avatarUrl: null }} className="size-full text-2xl" />
-              ) : (
-                <ImagePlus className="size-5" />
-              )}
-            </button>
-            {avatar && (
+            <Tip content="Choose a picture">
               <button
                 type="button"
-                onClick={() => setAvatar(null)}
-                className="absolute -top-1 -right-1 rounded-full border bg-background p-0.5 text-muted-foreground hover:text-foreground"
-                title="Remove the picture"
+                onClick={() => file.current?.click()}
+                className="flex size-16 items-center justify-center overflow-hidden rounded-full border bg-muted text-muted-foreground hover:text-foreground"
+                aria-label="Choose a picture"
               >
-                <X className="size-3" />
+                {avatar ? (
+                  <img src={avatar.url} alt="" className="size-full object-cover" />
+                ) : name ? (
+                  <AgentAvatar agent={{ name, avatarUrl: null }} className="size-full text-2xl" />
+                ) : (
+                  <ImagePlus className="size-5" />
+                )}
               </button>
+            </Tip>
+            {avatar && (
+              <Tip content="Remove the picture">
+                <button
+                  type="button"
+                  onClick={() => setAvatar(null)}
+                  className="absolute -top-1 -right-1 rounded-full border bg-background p-0.5 text-muted-foreground hover:text-foreground"
+                  aria-label="Remove the picture"
+                >
+                  <X className="size-3" />
+                </button>
+              </Tip>
             )}
             <input
               ref={file}

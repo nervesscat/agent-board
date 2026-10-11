@@ -11,8 +11,10 @@ import { ReportPanel } from '#/components/ReportPanel'
 import { ReviewResultButton } from '#/components/ReviewResult'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type DailyPayload } from '#/lib/api'
 import { clock, localDate, shiftDate } from '#/lib/format'
+import { cn } from '#/lib/utils'
 
 const KIND_LABEL: Record<string, string> = {
   ticket: 'tickets',
@@ -109,20 +111,25 @@ export function DailyView({ projectId }: { projectId?: number }) {
               nothing happened yet, so nothing to summarize
             </span>
           )}
-          <Button
-            variant="outline"
-            size="xs"
-            className={data?.activity.length ? 'ml-auto' : ''}
-            onClick={() => generate.mutate()}
-            disabled={busy || !data?.activity.length}
-            title={
+          {/* The tooltip is on a wrapper: a disabled button gets no pointer events, and its tooltip says why. */}
+          <Tip
+            content={
               data?.activity.length
                 ? 'Ask claude for a three-line summary of this day'
                 : 'No activity on this day yet'
             }
           >
-            <Sparkles data-icon="inline-start" /> {busy ? 'Asking claude…' : 'Summarize with claude'}
-          </Button>
+            <span className={cn('inline-flex', data?.activity.length && 'ml-auto')}>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => generate.mutate()}
+                disabled={busy || !data?.activity.length}
+              >
+                <Sparkles data-icon="inline-start" /> {busy ? 'Asking claude…' : 'Summarize with claude'}
+              </Button>
+            </span>
+          </Tip>
         </div>
         {data?.summaries.length ? (
           <div className="space-y-3">
@@ -197,7 +204,7 @@ export function DailyView({ projectId }: { projectId?: number }) {
                       <ReviewResultButton
                         resultId={a.refId}
                         className="min-w-0 text-left wrap-anywhere hover:underline"
-                        title="Open the review result"
+                        tip="Open the review result"
                       >
                         {a.text}
                       </ReviewResultButton>

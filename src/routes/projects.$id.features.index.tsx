@@ -12,6 +12,7 @@ import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/componen
 import { ArchivedList, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, patch, post, type CleanupReport, type Push, type TicketRow } from '#/lib/api'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
@@ -197,19 +198,22 @@ function UnpushedLine({
         active ? 'border-red-500/50 bg-red-500/5' : 'border-dashed'
       }`}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-pressed={active}
-        className="flex min-w-0 items-center gap-2 text-left hover:underline"
-        title={active ? 'Show every ticket' : 'Show only these'}
-      >
-        <span className="size-2 shrink-0 rounded-full bg-red-500" />
-        <span>
-          {n === 1 ? '1 branch' : `${n} branches`} not pushed
-          {active && <span className="text-muted-foreground"> · showing only {n === 1 ? 'it' : 'them'}</span>}
-        </span>
-      </button>
+      <Tip content={active ? 'Show every ticket' : 'Show only these'}>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-pressed={active}
+          className="flex min-w-0 items-center gap-2 text-left hover:underline"
+        >
+          <span className="size-2 shrink-0 rounded-full bg-red-500" />
+          <span>
+            {n === 1 ? '1 branch' : `${n} branches`} not pushed
+            {active && (
+              <span className="text-muted-foreground"> · showing only {n === 1 ? 'it' : 'them'}</span>
+            )}
+          </span>
+        </button>
+      </Tip>
       <span className="ml-auto shrink-0 text-xs text-muted-foreground">{oldest && checkedText(oldest)}</span>
       <RefreshPush projectId={projectId} />
     </div>

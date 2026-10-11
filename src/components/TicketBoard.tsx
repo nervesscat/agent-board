@@ -27,6 +27,7 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
+import { Tip } from '#/components/ui/tooltip'
 import type { Push, TicketRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
@@ -133,74 +134,74 @@ export function TicketBoard({
               </div>
               <div data-column={status} className="min-h-12 flex-1 space-y-2 overflow-y-auto">
                 {column.map((t) => (
-                  <Link
-                    key={t.id}
-                    to="/projects/$id/features/$ticketId"
-                    params={{ id: projectId, ticketId: String(t.id) }}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = 'move'
-                      e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
-                      setDragging(t.id)
-                    }}
-                    onDragEnd={() => {
-                      setDragging(null)
-                      setOver(null)
-                    }}
-                    // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
-                    className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
-                      dragging === t.id ? 'opacity-40' : ''
-                    }`}
-                    title={t.title}
-                  >
-                    <div className="line-clamp-2 font-medium leading-snug">
-                      <span className="text-muted-foreground">#{t.id}</span> {t.title}
-                    </div>
-                    {(t.decisions > 0 || t.needs.some((n) => !n.merged) || hasResumeBadge(t.resume)) && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                        <NeedsBadge needs={t.needs} />
-                        <ResumeBadges resume={t.resume} />
+                  <Tip key={t.id} content={t.title}>
+                    <Link
+                      to="/projects/$id/features/$ticketId"
+                      params={{ id: projectId, ticketId: String(t.id) }}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
+                        setDragging(t.id)
+                      }}
+                      onDragEnd={() => {
+                        setDragging(null)
+                        setOver(null)
+                      }}
+                      // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
+                      className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
+                        dragging === t.id ? 'opacity-40' : ''
+                      }`}
+                    >
+                      <div className="line-clamp-2 font-medium leading-snug">
+                        <span className="text-muted-foreground">#{t.id}</span> {t.title}
                       </div>
-                    )}
-                    {/* The time sits at the end of the last of these rows, so it always shares a line. */}
-                    {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
-                      <div className={INFO_ROW}>
-                        {repoLabel(project, t.repoId) && (
-                          <span className="shrink-0 rounded bg-muted px-1">
-                            {repoLabel(project, t.repoId)}
-                          </span>
-                        )}
-                        {t.assignee && <Actor name={t.assignee} className="shrink-0" />}
-                        {t.branch && (
-                          <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-                            {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
-                            <GitBranch className="size-3 shrink-0" />{' '}
-                            <span className="truncate">{t.branch}</span>
-                          </span>
-                        )}
-                        {!t.tags.length && <Updated at={t.updatedAt} />}
-                      </div>
-                    )}
-                    {t.tags.length > 0 && (
-                      <div className={INFO_ROW}>
-                        {/* Tags clip on their own, so a long list never pushes the time out of view. */}
-                        <div className="flex min-w-0 gap-1 overflow-hidden">
-                          {[...t.tags].sort(compareTags).map((tag) => (
-                            <Tag key={tag} tag={tag} className="shrink-0" />
-                          ))}
+                      {(t.decisions > 0 || t.needs.some((n) => !n.merged) || hasResumeBadge(t.resume)) && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                          <NeedsBadge needs={t.needs} />
+                          <ResumeBadges resume={t.resume} />
                         </div>
-                        <Updated at={t.updatedAt} />
-                      </div>
-                    )}
-                    {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
-                      <div className={INFO_ROW}>
-                        <Updated at={t.updatedAt} />
-                      </div>
-                    )}
-                    {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
-                    {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
-                  </Link>
+                      )}
+                      {/* The time sits at the end of the last of these rows, so it always shares a line. */}
+                      {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
+                        <div className={INFO_ROW}>
+                          {repoLabel(project, t.repoId) && (
+                            <span className="shrink-0 rounded bg-muted px-1">
+                              {repoLabel(project, t.repoId)}
+                            </span>
+                          )}
+                          {t.assignee && <Actor name={t.assignee} className="shrink-0" />}
+                          {t.branch && (
+                            <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                              {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
+                              <GitBranch className="size-3 shrink-0" />{' '}
+                              <span className="truncate">{t.branch}</span>
+                            </span>
+                          )}
+                          {!t.tags.length && <Updated at={t.updatedAt} />}
+                        </div>
+                      )}
+                      {t.tags.length > 0 && (
+                        <div className={INFO_ROW}>
+                          {/* Tags clip on their own, so a long list never pushes the time out of view. */}
+                          <div className="flex min-w-0 gap-1 overflow-hidden">
+                            {[...t.tags].sort(compareTags).map((tag) => (
+                              <Tag key={tag} tag={tag} className="shrink-0" />
+                            ))}
+                          </div>
+                          <Updated at={t.updatedAt} />
+                        </div>
+                      )}
+                      {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
+                        <div className={INFO_ROW}>
+                          <Updated at={t.updatedAt} />
+                        </div>
+                      )}
+                      {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
+                      {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
+                    </Link>
+                  </Tip>
                 ))}
               </div>
             </div>
@@ -217,18 +218,19 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 function ArchiveAll({ stage, n, onConfirm }: { stage: string; n: number; onConfirm: () => void }) {
   return (
     <AlertDialog>
-      <AlertDialogTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="xs"
-            className="h-5 px-1.5 font-normal tracking-normal normal-case"
-            title={`Archive the ${plural(n, 'ticket')} in ${stage}`}
-          />
-        }
-      >
-        <Archive /> Archive all
-      </AlertDialogTrigger>
+      <Tip content={`Archive the ${plural(n, 'ticket')} in ${stage}`}>
+        <AlertDialogTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="xs"
+              className="h-5 px-1.5 font-normal tracking-normal normal-case"
+            />
+          }
+        >
+          <Archive /> Archive all
+        </AlertDialogTrigger>
+      </Tip>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Archive {plural(n, 'ticket')}?</AlertDialogTitle>
@@ -270,20 +272,18 @@ function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
   return (
     <>
       {resume.noHandoff && (
-        <span
-          className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
-          title="Worked on an earlier day, and nobody left a resume note on where it was left"
-        >
-          <BookmarkX className="size-3" /> no handoff
-        </span>
+        <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
+          <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+            <BookmarkX className="size-3" /> no handoff
+          </span>
+        </Tip>
       )}
       {multiDay(resume) && (
-        <span
-          className="inline-flex w-fit items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
-          title="Which day of work this is, counted from when it was started"
-        >
-          day {resume.day}
-        </span>
+        <Tip content="Which day of work this is, counted from when it was started">
+          <span className="inline-flex w-fit items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            day {resume.day}
+          </span>
+        </Tip>
       )}
     </>
   )
@@ -478,12 +478,13 @@ export function TicketList({
               params={{ id: projectId, ticketId: String(t.id) }}
               className="flex min-w-0 items-start gap-3 px-3 py-2.5"
             >
-              <span
-                className={`mt-px w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stage)}`}
-                title={stage.name}
-              >
-                {stage.name}
-              </span>
+              <Tip content={stage.name}>
+                <span
+                  className={`mt-px w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stage)}`}
+                >
+                  {stage.name}
+                </span>
+              </Tip>
               <div className="min-w-0 flex-1">
                 <div className="text-sm leading-snug">
                   <span className="text-muted-foreground">#{t.id}</span>{' '}
@@ -562,12 +563,13 @@ export function ArchivedList({
         const stage = stageOf(stages, t.status)
         return (
           <li key={t.id} className="flex min-w-0 items-center gap-3 px-3 py-2.5">
-            <span
-              className={`w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stage)}`}
-              title={stage.name}
-            >
-              {stage.name}
-            </span>
+            <Tip content={stage.name}>
+              <span
+                className={`w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stage)}`}
+              >
+                {stage.name}
+              </span>
+            </Tip>
             <div className="min-w-0 flex-1">
               <Link
                 to="/projects/$id/features/$ticketId"

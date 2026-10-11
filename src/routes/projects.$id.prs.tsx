@@ -22,6 +22,7 @@ import {
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Textarea } from '#/components/ui/textarea'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
@@ -111,12 +112,14 @@ function PrQueue() {
           <Tabs value={filter} onValueChange={(v) => pickFilter(v as Filter)}>
             <TabsList>
               {FILTERS.map((f) => (
-                <TabsTrigger key={f.key} value={f.key} title={f.title} className={NO_UNDERLINE}>
-                  {f.label}
-                  <span className="ml-1 rounded-full bg-background px-1.5 text-xs tabular-nums">
-                    {data?.filter((p) => inFilter(p, f.key)).length ?? 0}
-                  </span>
-                </TabsTrigger>
+                <Tip key={f.key} content={f.title}>
+                  <TabsTrigger value={f.key} className={NO_UNDERLINE}>
+                    {f.label}
+                    <span className="ml-1 rounded-full bg-background px-1.5 text-xs tabular-nums">
+                      {data?.filter((p) => inFilter(p, f.key)).length ?? 0}
+                    </span>
+                  </TabsTrigger>
+                </Tip>
               ))}
             </TabsList>
           </Tabs>
@@ -179,24 +182,25 @@ function PrQueue() {
 function MergeAfter({ pr }: { pr: PrRow }) {
   if (!pr.mergeAfter.length) return null
   return (
-    <span
-      className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400"
-      title={`Its ticket needs these merged first:\n${pr.mergeAfter.map((m) => `PR #${m.number} (from #${m.ticketId} ${m.title})`).join('\n')}`}
+    <Tip
+      content={`Its ticket needs these merged first:\n${pr.mergeAfter.map((m) => `PR #${m.number} (from #${m.ticketId} ${m.title})`).join('\n')}`}
     >
-      <GitMerge className="size-3" /> merge after{' '}
-      {pr.mergeAfter.map((m, i) => (
-        <span key={`${m.repoId}:${m.number}`}>
-          {i > 0 && ', '}
-          {m.url ? (
-            <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">
-              #{m.number}
-            </a>
-          ) : (
-            `#${m.number}`
-          )}
-        </span>
-      ))}
-    </span>
+      <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+        <GitMerge className="size-3" /> merge after{' '}
+        {pr.mergeAfter.map((m, i) => (
+          <span key={`${m.repoId}:${m.number}`}>
+            {i > 0 && ', '}
+            {m.url ? (
+              <a href={m.url} target="_blank" rel="noreferrer" className="hover:underline">
+                #{m.number}
+              </a>
+            ) : (
+              `#${m.number}`
+            )}
+          </span>
+        ))}
+      </span>
+    </Tip>
   )
 }
 
@@ -256,19 +260,16 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
         </div>
         <div className="flex items-center gap-1">
           {pr.latestReview && (
-            <Link
-              to="/projects/$id/prs"
-              params={{ id: projectId }}
-              search={{ result: pr.latestReview.id }}
-              title={pr.latestReview.fresh ? 'reviewed at this SHA' : 'review is for an older SHA'}
-            >
-              <Badge
-                variant={verdictTone(pr.latestReview.verdict)}
-                className={pr.latestReview.fresh ? '' : 'opacity-60'}
-              >
-                {pr.latestReview.verdict}
-              </Badge>
-            </Link>
+            <Tip content={pr.latestReview.fresh ? 'reviewed at this SHA' : 'review is for an older SHA'}>
+              <Link to="/projects/$id/prs" params={{ id: projectId }} search={{ result: pr.latestReview.id }}>
+                <Badge
+                  variant={verdictTone(pr.latestReview.verdict)}
+                  className={pr.latestReview.fresh ? '' : 'opacity-60'}
+                >
+                  {pr.latestReview.verdict}
+                </Badge>
+              </Link>
+            </Tip>
           )}
           <Button variant="ghost" size="sm" onClick={() => setThread((v) => !v)}>
             <MessageSquare data-icon="inline-start" /> thread

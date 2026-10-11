@@ -72,6 +72,7 @@ import { Switch } from '#/components/ui/switch'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
+import { Tip } from '#/components/ui/tooltip'
 import {
   del,
   errorMessage,
@@ -308,12 +309,13 @@ function TicketPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {t.archivedAt && (
-            <span
-              className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
-              title={`Archived by ${t.archivedBy || 'someone'} ${ago(t.archivedAt)}${t.parentId ? ', with the ticket it is a lane of' : ''}`}
+            <Tip
+              content={`Archived by ${t.archivedBy || 'someone'} ${ago(t.archivedAt)}${t.parentId ? ', with the ticket it is a lane of' : ''}`}
             >
-              <Archive className="size-3.5" /> Archived
-            </span>
+              <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
+                <Archive className="size-3.5" /> Archived
+              </span>
+            </Tip>
           )}
           {t.archivedAt && !t.parentId && (
             <Button
@@ -326,12 +328,11 @@ function TicketPage() {
             </Button>
           )}
           {lanesWarning && (
-            <span
-              className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400"
-              title="This ticket is marked further along than its lanes"
-            >
-              <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
-            </span>
+            <Tip content="This ticket is marked further along than its lanes">
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-400">
+                <TriangleAlert className="size-3.5" /> {openLanes} lane{openLanes === 1 ? '' : 's'} not done
+              </span>
+            </Tip>
           )}
           <NeedsStatus t={t} />
           {t.updates.some((u) => u.decision && !u.decidedAt) && (
@@ -344,15 +345,16 @@ function TicketPage() {
           )}
           <StatusSelect stages={stages} value={t.status} onChange={(status) => update.mutate({ status })} />
           {!t.archivedAt && !t.parentId && isClosed(kind) && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={archive.isPending}
-              onClick={() => archive.mutate('archive')}
-              title="Take it off the board, with its lanes; Archived on the features page brings it back"
-            >
-              <Archive /> Archive
-            </Button>
+            <Tip content="Take it off the board, with its lanes; Archived on the features page brings it back">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={archive.isPending}
+                onClick={() => archive.mutate('archive')}
+              >
+                <Archive /> Archive
+              </Button>
+            </Tip>
           )}
           <AlertDialog>
             <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
@@ -453,17 +455,18 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
   return (
     <h1 className="text-xl font-semibold tracking-tight">
       <span className="text-muted-foreground">#{t.id}</span>{' '}
-      <button
-        type="button"
-        title="Click to rename"
-        onClick={() => {
-          setValue(t.title)
-          setEditing(true)
-        }}
-        className="cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
-      >
-        {t.title}
-      </button>
+      <Tip content="Click to rename">
+        <button
+          type="button"
+          onClick={() => {
+            setValue(t.title)
+            setEditing(true)
+          }}
+          className="cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
+        >
+          {t.title}
+        </button>
+      </Tip>
     </h1>
   )
 }
@@ -501,16 +504,13 @@ function InlineTags({ t, onSave }: { t: TicketFull; onSave: (tags: string[]) => 
     setEditing(true)
   }
   return t.tags.length > 0 ? (
-    <button
-      type="button"
-      title="Click to edit the tags"
-      onClick={open}
-      className="inline-flex flex-wrap gap-1"
-    >
-      {[...t.tags].sort(compareTags).map((tag) => (
-        <Tag key={tag} tag={tag} />
-      ))}
-    </button>
+    <Tip content="Click to edit the tags">
+      <button type="button" onClick={open} className="inline-flex flex-wrap gap-1">
+        {[...t.tags].sort(compareTags).map((tag) => (
+          <Tag key={tag} tag={tag} />
+        ))}
+      </button>
+    </Tip>
   ) : (
     <button type="button" onClick={open} className="hover:text-foreground">
       + tags
@@ -616,20 +616,21 @@ function Instructions({
         </div>
       ) : t.body ? (
         // Clicking the text edits it; a link inside still opens.
-        <div
-          role="button"
-          tabIndex={0}
-          title="Click to edit"
-          className="cursor-text rounded-md hover:bg-muted/30"
-          onClick={(e) => {
-            if (!(e.target as HTMLElement).closest('a, img')) open()
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') open()
-          }}
-        >
-          <Markdown>{t.body}</Markdown>
-        </div>
+        <Tip content="Click to edit">
+          <div
+            role="button"
+            tabIndex={0}
+            className="cursor-text rounded-md hover:bg-muted/30"
+            onClick={(e) => {
+              if (!(e.target as HTMLElement).closest('a, img')) open()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') open()
+            }}
+          >
+            <Markdown>{t.body}</Markdown>
+          </div>
+        </Tip>
       ) : (
         <button type="button" onClick={open} className="text-sm text-muted-foreground hover:text-foreground">
           No instructions yet. Click to write them.
@@ -642,15 +643,16 @@ function Instructions({
             {t.attachments.map((a) => (
               <li key={a.id} className="inline-flex items-center gap-1">
                 <span className="max-w-48 truncate">{a.name}</span>
-                <button
-                  type="button"
-                  title={`Remove ${a.name}`}
-                  aria-label={`Remove ${a.name}`}
-                  className="hover:text-destructive"
-                  onClick={() => detach.mutate(a.id)}
-                >
-                  <X className="size-3" />
-                </button>
+                <Tip content={`Remove ${a.name}`}>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${a.name}`}
+                    className="hover:text-destructive"
+                    onClick={() => detach.mutate(a.id)}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Tip>
               </li>
             ))}
           </ul>
@@ -732,10 +734,12 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
           <Bookmark className="size-4" /> Resume here
         </h2>
         {r.at && (
-          <span className="text-xs text-muted-foreground" title={stamp(r.at)}>
-            by <Actor name={r.by} /> {ago(r.at)}
-            {r.sha && <span className="font-mono"> at {shortSha(r.sha)}</span>}
-          </span>
+          <Tip content={stamp(r.at)}>
+            <span className="text-xs text-muted-foreground">
+              by <Actor name={r.by} /> {ago(r.at)}
+              {r.sha && <span className="font-mono"> at {shortSha(r.sha)}</span>}
+            </span>
+          </Tip>
         )}
         {!editing && (
           <Button type="button" variant="ghost" size="xs" className="ml-auto" onClick={open}>
@@ -745,19 +749,25 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       </div>
       <div className="mb-3 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
         {commits > 0 && (
-          <span className={warn} title="Commits on the ticket's branch after the note was written">
-            <GitCommitHorizontal className="size-3.5" /> {plural(commits, 'commit')} since this note
-          </span>
+          <Tip content="Commits on the ticket's branch after the note was written">
+            <span className={warn}>
+              <GitCommitHorizontal className="size-3.5" /> {plural(commits, 'commit')} since this note
+            </span>
+          </Tip>
         )}
         {r.stale && commits === 0 && (
-          <span className={warn} title="A progress post came after the note">
-            <TriangleAlert className="size-3.5" /> progress posted since this note
-          </span>
+          <Tip content="A progress post came after the note">
+            <span className={warn}>
+              <TriangleAlert className="size-3.5" /> progress posted since this note
+            </span>
+          </Tip>
         )}
         {r.noHandoff && r.note && (
-          <span className={warn} title="It was worked on a later day than this note was written">
-            <TriangleAlert className="size-3.5" /> no handoff since the last session
-          </span>
+          <Tip content="It was worked on a later day than this note was written">
+            <span className={warn}>
+              <TriangleAlert className="size-3.5" /> no handoff since the last session
+            </span>
+          </Tip>
         )}
         {t.tasks.length > 0 && (
           <span className={cn(chip, 'bg-muted')}>
@@ -771,20 +781,18 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
           </span>
         )}
         {waiting > 0 && (
-          <span
-            className={cn(chip, 'bg-muted')}
-            title={`Posts where someone spoke after ${t.assignee}, the assignee`}
-          >
-            <MessageSquare className="size-3.5" /> {plural(waiting, 'unanswered thread')}
-          </span>
+          <Tip content={`Posts where someone spoke after ${t.assignee}, the assignee`}>
+            <span className={cn(chip, 'bg-muted')}>
+              <MessageSquare className="size-3.5" /> {plural(waiting, 'unanswered thread')}
+            </span>
+          </Tip>
         )}
         {r.day !== null && (
-          <span
-            className={cn(chip, 'bg-muted')}
-            title={t.startedAt ? `Work on it started ${stamp(t.startedAt)}` : undefined}
-          >
-            <CalendarDays className="size-3.5" /> day {r.day} in progress
-          </span>
+          <Tip content={t.startedAt ? `Work on it started ${stamp(t.startedAt)}` : undefined}>
+            <span className={cn(chip, 'bg-muted')}>
+              <CalendarDays className="size-3.5" /> day {r.day} in progress
+            </span>
+          </Tip>
         )}
       </div>
       {editing ? (
@@ -863,12 +871,11 @@ function Details({
         <Label htmlFor="assignee" className="text-xs text-muted-foreground">
           Assignee
           {t.reserved && (
-            <span
-              className="ml-auto inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-normal"
-              title="Reserved for this project agent: other agents cannot take it, only you can reassign it"
-            >
-              <Lock className="size-3" /> reserved
-            </span>
+            <Tip content="Reserved for this project agent: other agents cannot take it, only you can reassign it">
+              <span className="ml-auto inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-normal">
+                <Lock className="size-3" /> reserved
+              </span>
+            </Tip>
           )}
         </Label>
         <AssigneeSelect id="assignee" value={t.assignee} onChange={(assignee) => onSave({ assignee })} />
@@ -926,31 +933,30 @@ function Details({
         />
       </div>
       <div className="space-y-1">
-        <Label
-          htmlFor="needs"
-          className="text-xs text-muted-foreground"
-          title="Tickets whose branches must be merged into this one's base before it can be done"
-        >
-          Needs
-          {t.neededBy.length > 0 && (
-            <span className="ml-auto font-normal">
-              needed by{' '}
-              {t.neededBy.map((n, i) => (
-                <span key={n.id}>
-                  {i > 0 && ', '}
-                  <Link
-                    to="/projects/$id/features/$ticketId"
-                    params={{ id: String(t.projectId), ticketId: String(n.id) }}
-                    className="hover:text-foreground hover:underline"
-                    title={n.title}
-                  >
-                    #{n.id}
-                  </Link>
-                </span>
-              ))}
-            </span>
-          )}
-        </Label>
+        <Tip content="Tickets whose branches must be merged into this one's base before it can be done">
+          <Label htmlFor="needs" className="text-xs text-muted-foreground">
+            Needs
+            {t.neededBy.length > 0 && (
+              <span className="ml-auto font-normal">
+                needed by{' '}
+                {t.neededBy.map((n, i) => (
+                  <span key={n.id}>
+                    {i > 0 && ', '}
+                    <Tip content={n.title}>
+                      <Link
+                        to="/projects/$id/features/$ticketId"
+                        params={{ id: String(t.projectId), ticketId: String(n.id) }}
+                        className="hover:text-foreground hover:underline"
+                      >
+                        #{n.id}
+                      </Link>
+                    </Tip>
+                  </span>
+                ))}
+              </span>
+            )}
+          </Label>
+        </Tip>
         <NeedsField t={t} includes={includes} onSave={(needs) => onSave({ needs })} />
       </div>
     </section>
@@ -998,14 +1004,16 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
               onCheckedChange={(v) => toggle.mutate({ id: task.id, done: Boolean(v) })}
             />
             <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
-            <button
-              type="button"
-              className="ml-auto opacity-0 group-hover:opacity-100"
-              onClick={() => remove.mutate(task.id)}
-              title="remove"
-            >
-              <X className="size-3.5 text-muted-foreground" />
-            </button>
+            <Tip content="remove">
+              <button
+                type="button"
+                className="ml-auto opacity-0 group-hover:opacity-100"
+                onClick={() => remove.mutate(task.id)}
+                aria-label="remove"
+              >
+                <X className="size-3.5 text-muted-foreground" />
+              </button>
+            </Tip>
           </li>
         ))}
       </ul>
@@ -1205,18 +1213,19 @@ function StepNav({
   const step = (to: Step, dir: 'prev' | 'next') => {
     const icon = dir === 'prev' ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />
     return to ? (
-      <Link
-        to="/projects/$id/features/$ticketId"
-        params={{ id: projectId, ticketId: String(to.id) }}
-        search={search}
-        state={state}
-        title={`#${to.id} ${to.title}`}
-        className="inline-flex size-7 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
-        aria-label={`${dir === 'prev' ? 'Previous' : 'Next'} ${noun}`}
-        aria-keyshortcuts={dir === 'prev' ? '[' : ']'}
-      >
-        {icon}
-      </Link>
+      <Tip content={`#${to.id} ${to.title}`}>
+        <Link
+          to="/projects/$id/features/$ticketId"
+          params={{ id: projectId, ticketId: String(to.id) }}
+          search={search}
+          state={state}
+          className="inline-flex size-7 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
+          aria-label={`${dir === 'prev' ? 'Previous' : 'Next'} ${noun}`}
+          aria-keyshortcuts={dir === 'prev' ? '[' : ']'}
+        >
+          {icon}
+        </Link>
+      </Tip>
     ) : (
       <span className="inline-flex size-7 items-center justify-center rounded-md border opacity-40">
         {icon}
@@ -1226,9 +1235,9 @@ function StepNav({
   return (
     <span className="ml-auto inline-flex items-center gap-2 text-xs">
       {step(prev, 'prev')}
-      <span className="tabular-nums" title="[ and ] step back and forward">
-        {children}
-      </span>
+      <Tip content="[ and ] step back and forward">
+        <span className="tabular-nums">{children}</span>
+      </Tip>
       {step(next, 'next')}
     </span>
   )
@@ -1376,12 +1385,13 @@ function Lanes({
                   search={laneSearch(filter)}
                   className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pr-3 pl-2"
                 >
-                  <span
-                    className={`mt-px w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stageOf(stages, l.status))}`}
-                    title={stageOf(stages, l.status).name}
-                  >
-                    {stageOf(stages, l.status).name}
-                  </span>
+                  <Tip content={stageOf(stages, l.status).name}>
+                    <span
+                      className={`mt-px w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stageOf(stages, l.status))}`}
+                    >
+                      {stageOf(stages, l.status).name}
+                    </span>
+                  </Tip>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm leading-snug">
                       <span className="text-muted-foreground">#{l.id}</span>{' '}
@@ -1570,24 +1580,25 @@ function TimelineRow({
   const today = new Date(at).toDateString() === new Date().toDateString()
   return (
     <li className="group grid grid-cols-[minmax(2.25rem,max-content)_1.25rem_minmax(0,1fr)] sm:grid-cols-[minmax(2.25rem,max-content)_1.5rem_minmax(0,1fr)]">
-      <time
-        dateTime={at}
-        title={stamp(at)}
-        suppressHydrationWarning
-        className="pt-3 pb-3 text-xs whitespace-nowrap text-muted-foreground [writing-mode:vertical-rl]"
-      >
-        {agoLong(at)}
-        <span className="block text-[11px] opacity-70" suppressHydrationWarning>
-          {today
-            ? clock(at)
-            : new Date(at).toLocaleString([], {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-        </span>
-      </time>
+      <Tip content={stamp(at)}>
+        <time
+          dateTime={at}
+          suppressHydrationWarning
+          className="pt-3 pb-3 text-xs whitespace-nowrap text-muted-foreground [writing-mode:vertical-rl]"
+        >
+          {agoLong(at)}
+          <span className="block text-[11px] opacity-70" suppressHydrationWarning>
+            {today
+              ? clock(at)
+              : new Date(at).toLocaleString([], {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+          </span>
+        </time>
+      </Tip>
       <div className="relative">
         <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border group-first:top-4 group-last:bottom-auto group-last:h-4" />
         <span
@@ -1634,12 +1645,11 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Actor name={u.author} via={u.via} className="text-foreground" />
           {u.handoff ? (
-            <span
-              className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium"
-              title="A resume note as it was saved: where the work was left off then"
-            >
-              <Bookmark className="size-3" /> resume note
-            </span>
+            <Tip content="A resume note as it was saved: where the work was left off then">
+              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
+                <Bookmark className="size-3" /> resume note
+              </span>
+            </Tip>
           ) : (
             u.progress && (
               <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">progress</span>
@@ -1915,64 +1925,67 @@ function PreviewRow({
           </a>
         )}
         {!active && data?.cannotStart === null && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={action.isPending}
-            onClick={() => action.mutate('start')}
-            title="Build this worktree and run it on a free port, with a fresh copy of the live data"
-          >
-            <Play /> Start
-          </Button>
+          <Tip content="Build this worktree and run it on a free port, with a fresh copy of the live data">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={action.isPending}
+              onClick={() => action.mutate('start')}
+            >
+              <Play /> Start
+            </Button>
+          </Tip>
         )}
         {active && (
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={action.isPending}
-              onClick={() => action.mutate('stop')}
-              title="Stop the preview and free its port"
-            >
-              <Square /> Stop
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={action.isPending}
-              onClick={() => action.mutate('restart')}
-              title="Stop it, build again and start it with a fresh copy of the data"
-            >
-              <RotateCw /> Restart
-            </Button>
+            <Tip content="Stop the preview and free its port">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={action.isPending}
+                onClick={() => action.mutate('stop')}
+              >
+                <Square /> Stop
+              </Button>
+            </Tip>
+            <Tip content="Stop it, build again and start it with a fresh copy of the data">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={action.isPending}
+                onClick={() => action.mutate('restart')}
+              >
+                <RotateCw /> Restart
+              </Button>
+            </Tip>
           </>
         )}
         {state && (
-          <span
-            className={cn(
-              'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
-              state.className,
-            )}
-            title={state.title}
-          >
-            {data && <span className="size-1.5 rounded-full bg-current" />}
-            {state.label}
-          </span>
+          <Tip content={state.title}>
+            <span
+              className={cn(
+                'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
+                state.className,
+              )}
+            >
+              {data && <span className="size-1.5 rounded-full bg-current" />}
+              {state.label}
+            </span>
+          </Tip>
         )}
       </div>
       {url && (
-        <div className="truncate font-mono text-xs text-muted-foreground" title={url}>
-          {url}
-        </div>
+        <Tip content={url}>
+          <div className="truncate font-mono text-xs text-muted-foreground">{url}</div>
+        </Tip>
       )}
       {m && <ManagedLine m={m} logUrl={logUrl} />}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <span
-          className="inline-flex min-w-0 items-center gap-1 font-mono"
-          title={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}
-        >
-          <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
-        </span>
+        <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
+          <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+            <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
+          </span>
+        </Tip>
         {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
       </div>
       {w.lane && (
@@ -2107,7 +2120,7 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
               <ReviewResultButton
                 resultId={t.pr.latestReview.id}
                 className={`rounded bg-muted px-1 hover:underline ${t.pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
-                title={t.pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
+                tip={t.pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
               >
                 {t.pr.latestReview.verdict}
               </ReviewResultButton>
@@ -2130,14 +2143,16 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
               <div className="flex items-center gap-2">
                 <span className="font-medium">{w.name}</span>
                 {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
-                <button
-                  type="button"
-                  className="ml-auto opacity-0 group-hover:opacity-100"
-                  onClick={() => remove.mutate(w.id)}
-                  title="remove"
-                >
-                  <X className="size-3.5 text-muted-foreground" />
-                </button>
+                <Tip content="remove">
+                  <button
+                    type="button"
+                    className="ml-auto opacity-0 group-hover:opacity-100"
+                    onClick={() => remove.mutate(w.id)}
+                    aria-label="remove"
+                  >
+                    <X className="size-3.5 text-muted-foreground" />
+                  </button>
+                </Tip>
               </div>
               {w.lane && (
                 <Link
@@ -2156,9 +2171,11 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
               )}
               {w.info && <Info info={w.info} />}
               {w.worktree && (
-                <div className="truncate font-mono text-[11px] text-muted-foreground" title={w.worktree.path}>
-                  {w.worktree.path}
-                </div>
+                <Tip content={w.worktree.path}>
+                  <div className="truncate font-mono text-[11px] text-muted-foreground">
+                    {w.worktree.path}
+                  </div>
+                </Tip>
               )}
             </li>
           ))}

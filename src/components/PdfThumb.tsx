@@ -2,6 +2,7 @@ import { FileText } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
 import { galleryItem } from '#/components/Gallery'
+import { Tip } from '#/components/ui/tooltip'
 
 // pdf.js is big: load it (and its worker) the first time a PDF scrolls into view, then share it.
 let pdfjs: Promise<typeof import('pdfjs-dist')> | null = null
@@ -75,30 +76,31 @@ export function PdfThumb({ url, name, size }: { url: string; name: string; size:
   )
 
   return (
-    <a
-      ref={box}
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      title={name}
-      className="group flex w-56 flex-col overflow-hidden rounded-md border bg-card"
-      {...galleryItem({ src: url, name, mime: 'application/pdf' })}
-    >
-      <span className="flex h-72 cursor-zoom-in items-start justify-center overflow-hidden bg-muted">
-        {failed ? (
-          <FileText className="mt-24 size-10 text-muted-foreground" />
-        ) : (
-          // max sizes with auto width/height keep the page's proportions inside the box
-          <canvas
-            ref={canvas}
-            style={{ maxHeight: HEIGHT }}
-            className={`h-auto max-w-full bg-white transition-opacity group-hover:opacity-90 ${
-              drawn ? '' : 'invisible'
-            }`}
-          />
-        )}
-      </span>
-      <span className="border-t px-2 py-1.5">{caption}</span>
-    </a>
+    <Tip content={name}>
+      <a
+        ref={box}
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="group flex w-56 flex-col overflow-hidden rounded-md border bg-card"
+        {...galleryItem({ src: url, name, mime: 'application/pdf' })}
+      >
+        <span className="flex h-72 cursor-zoom-in items-start justify-center overflow-hidden bg-muted">
+          {failed ? (
+            <FileText className="mt-24 size-10 text-muted-foreground" />
+          ) : (
+            // max sizes with auto width/height keep the page's proportions inside the box
+            <canvas
+              ref={canvas}
+              style={{ maxHeight: HEIGHT }}
+              className={`h-auto max-w-full bg-white transition-opacity group-hover:opacity-90 ${
+                drawn ? '' : 'invisible'
+              }`}
+            />
+          )}
+        </span>
+        <span className="border-t px-2 py-1.5">{caption}</span>
+      </a>
+    </Tip>
   )
 }

@@ -2,6 +2,7 @@ import { PlayIcon } from 'lucide-react'
 
 import { galleryItem } from '#/components/Gallery'
 import { PdfThumb } from '#/components/PdfThumb'
+import { Tip } from '#/components/ui/tooltip'
 import type { Attachment } from '#/lib/api'
 
 /** Image, video and PDF thumbnails, everything else a link; a click opens the gallery. */
@@ -12,31 +13,34 @@ export function Attachments({ items }: { items: (Attachment & { url: string })[]
       {items.map((a) => {
         const gallery = galleryItem({ src: a.url, name: a.name, mime: a.mime })
         return a.mime.startsWith('image/') ? (
-          <a key={a.id} href={a.url} target="_blank" rel="noreferrer" title={a.name} {...gallery}>
-            <img
-              src={a.url}
-              alt={a.name}
-              className="max-h-72 cursor-zoom-in rounded-md border object-contain"
-              loading="lazy"
-            />
-          </a>
+          <Tip key={a.id} content={a.name}>
+            <a href={a.url} target="_blank" rel="noreferrer" {...gallery}>
+              <img
+                src={a.url}
+                alt={a.name}
+                className="max-h-72 cursor-zoom-in rounded-md border object-contain"
+                loading="lazy"
+              />
+            </a>
+          </Tip>
         ) : a.mime.startsWith('video/') ? (
-          <a
-            key={a.id}
-            href={a.url}
-            target="_blank"
-            rel="noreferrer"
-            title={a.name}
-            className="group relative block overflow-hidden rounded-md border bg-black"
-            {...gallery}
-          >
-            <video src={a.url} preload="metadata" muted className="max-h-72 max-w-xl" />
-            <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/35">
-              <span className="flex size-12 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/20">
-                <PlayIcon className="size-5 translate-x-px fill-current" />
+          <Tip key={a.id} content={a.name}>
+            <a
+              href={a.url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={a.name}
+              className="group relative block overflow-hidden rounded-md border bg-black"
+              {...gallery}
+            >
+              <video src={a.url} preload="metadata" muted className="max-h-72 max-w-xl" />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group-hover:bg-black/35">
+                <span className="flex size-12 items-center justify-center rounded-full bg-black/60 text-white ring-1 ring-white/20">
+                  <PlayIcon className="size-5 translate-x-px fill-current" />
+                </span>
               </span>
-            </span>
-          </a>
+            </a>
+          </Tip>
         ) : a.mime === 'application/pdf' ? (
           <PdfThumb key={a.id} url={a.url} name={a.name} size={a.size} />
         ) : (

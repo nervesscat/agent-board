@@ -12,6 +12,7 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
+import { Tip } from '#/components/ui/tooltip'
 import {
   errorMessage,
   get,
@@ -98,20 +99,21 @@ export function ReportPanel({ projectId, date }: { projectId: number; date: stri
         />
       ) : settings.prompt ? (
         // Clicking the prompt edits it; a link inside still opens.
-        <div
-          role="button"
-          tabIndex={0}
-          title="Click to edit"
-          className="cursor-text rounded-md hover:bg-muted/30"
-          onClick={(e) => {
-            if (!(e.target as HTMLElement).closest('a, img')) setEditing(true)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') setEditing(true)
-          }}
-        >
-          <Markdown>{settings.prompt}</Markdown>
-        </div>
+        <Tip content="Click to edit">
+          <div
+            role="button"
+            tabIndex={0}
+            className="cursor-text rounded-md hover:bg-muted/30"
+            onClick={(e) => {
+              if (!(e.target as HTMLElement).closest('a, img')) setEditing(true)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') setEditing(true)
+            }}
+          >
+            <Markdown>{settings.prompt}</Markdown>
+          </div>
+        </Tip>
       ) : (
         <button
           type="button"
@@ -130,20 +132,21 @@ export function ReportPanel({ projectId, date }: { projectId: number; date: stri
             <ol className="flex flex-wrap items-end gap-1" aria-label="Report periods">
               {[...periods].reverse().map((p) => (
                 <li key={p.period}>
-                  <button
-                    type="button"
-                    onClick={() => setPick({ date, period: p.period })}
-                    title={`${p.label}: ${STATUS[p.status].label}, due ${stamp(p.due)}`}
-                    aria-label={`${p.label}: ${STATUS[p.status].label}`}
-                    aria-current={open?.period === p.period}
-                    className={cn(
-                      'flex min-w-8 flex-col items-center gap-1 rounded-md px-1 py-1 text-[10px] text-muted-foreground hover:bg-muted',
-                      open?.period === p.period && 'bg-muted font-medium text-foreground',
-                    )}
-                  >
-                    <span className={cn('h-4 w-6 rounded-sm', STATUS[p.status].dot)} />
-                    {shortLabel(settings.cadence, p.period)}
-                  </button>
+                  <Tip content={`${p.label}: ${STATUS[p.status].label}, due ${stamp(p.due)}`}>
+                    <button
+                      type="button"
+                      onClick={() => setPick({ date, period: p.period })}
+                      aria-label={`${p.label}: ${STATUS[p.status].label}`}
+                      aria-current={open?.period === p.period}
+                      className={cn(
+                        'flex min-w-8 flex-col items-center gap-1 rounded-md px-1 py-1 text-[10px] text-muted-foreground hover:bg-muted',
+                        open?.period === p.period && 'bg-muted font-medium text-foreground',
+                      )}
+                    >
+                      <span className={cn('h-4 w-6 rounded-sm', STATUS[p.status].dot)} />
+                      {shortLabel(settings.cadence, p.period)}
+                    </button>
+                  </Tip>
                 </li>
               ))}
             </ol>
@@ -468,14 +471,14 @@ function PostReport({
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={!ready || send.isPending}
-            title={format === 'file' && !files.length ? 'Attach the report file first' : undefined}
-          >
-            {send.isPending ? 'Posting…' : period.report ? 'Replace' : 'Post'}
-          </Button>
+          {/* On a wrapper: without the file the button is disabled, and its tooltip says why. */}
+          <Tip content={format === 'file' && !files.length ? 'Attach the report file first' : undefined}>
+            <span className="inline-flex">
+              <Button type="submit" size="sm" disabled={!ready || send.isPending}>
+                {send.isPending ? 'Posting…' : period.report ? 'Replace' : 'Post'}
+              </Button>
+            </span>
+          </Tip>
         </div>
       </div>
     </form>

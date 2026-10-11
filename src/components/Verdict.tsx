@@ -1,5 +1,6 @@
 import { Check, X } from 'lucide-react'
 
+import { Tip } from '#/components/ui/tooltip'
 import { ago } from '#/lib/format'
 
 export type Verdict = 'approved' | 'disapproved' | null
@@ -47,20 +48,21 @@ export function VerdictButtons({
         ? 'Approve'
         : 'Disapprove: cancels this lane'
     return (
-      <button
-        type="button"
-        aria-pressed={on}
-        aria-label={label}
-        title={title}
-        disabled={disabled}
-        onClick={() => onSet(on ? null : v)}
-        className={`inline-flex items-center justify-center gap-1 rounded-md border font-medium transition-colors disabled:opacity-50 ${
-          compact ? 'size-6' : 'h-7 px-2.5 text-[0.8rem]'
-        } ${on ? ON[v] : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'}`}
-      >
-        <Icon className={compact ? 'size-3.5' : 'size-3.5'} />
-        {!compact && (on ? (v === 'approved' ? 'Approved' : 'Disapproved') : label)}
-      </button>
+      <Tip content={title}>
+        <button
+          type="button"
+          aria-pressed={on}
+          aria-label={label}
+          disabled={disabled}
+          onClick={() => onSet(on ? null : v)}
+          className={`inline-flex items-center justify-center gap-1 rounded-md border font-medium transition-colors disabled:opacity-50 ${
+            compact ? 'size-6' : 'h-7 px-2.5 text-[0.8rem]'
+          } ${on ? ON[v] : 'border-border text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+        >
+          <Icon className={compact ? 'size-3.5' : 'size-3.5'} />
+          {!compact && (on ? (v === 'approved' ? 'Approved' : 'Disapproved') : label)}
+        </button>
+      </Tip>
     )
   }
   return (

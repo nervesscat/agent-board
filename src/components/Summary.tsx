@@ -26,6 +26,7 @@ import { Empty } from '#/components/Empty'
 import { DecisionBadge, Progress } from '#/components/TicketBoard'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { Skeleton } from '#/components/ui/skeleton'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
@@ -67,14 +68,11 @@ export function Summary({ projectId }: { projectId?: number }) {
         <section key={p.project.id} className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-lg font-semibold tracking-tight">
-              <Link
-                to="/projects/$id"
-                params={{ id: String(p.project.id) }}
-                className="hover:underline"
-                title={`${p.project.name}: overview`}
-              >
-                {p.project.name}
-              </Link>
+              <Tip content={`${p.project.name}: overview`}>
+                <Link to="/projects/$id" params={{ id: String(p.project.id) }} className="hover:underline">
+                  {p.project.name}
+                </Link>
+              </Tip>
             </h2>
             <span className="text-xs text-muted-foreground">{headline(p)}</span>
           </div>
@@ -197,13 +195,12 @@ function Who({ p, name }: { p: ProjectSummary; name: string }) {
   const agent = p.agents.find((a) => a.name.toLowerCase() === name.toLowerCase())
   if (!agent) return <Actor name={name} />
   return (
-    <span
-      className="inline-flex items-center gap-1 font-medium"
-      title={`${agent.name} (one of the project's agents)`}
-    >
-      <AgentAvatar agent={agent} />
-      {agent.name}
-    </span>
+    <Tip content={`${agent.name} (one of the project's agents)`}>
+      <span className="inline-flex items-center gap-1 font-medium">
+        <AgentAvatar agent={agent} />
+        {agent.name}
+      </span>
+    </Tip>
   )
 }
 
@@ -240,12 +237,11 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
 
 function Stale() {
   return (
-    <span
-      className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400"
-      title="No progress post in over 24 hours"
-    >
-      <Hourglass className="size-3" /> stale
-    </span>
+    <Tip content="No progress post in over 24 hours">
+      <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400">
+        <Hourglass className="size-3" /> stale
+      </span>
+    </Tip>
   )
 }
 
@@ -304,15 +300,17 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                 </>
               }
               side={
-                <a
-                  href={pr.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-muted-foreground hover:text-foreground"
-                  title="Open on GitHub"
-                >
-                  <ExternalLink className="size-3.5" />
-                </a>
+                <Tip content="Open on GitHub">
+                  <a
+                    href={pr.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Open on GitHub"
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                </Tip>
               }
             />
           ))}
@@ -397,7 +395,9 @@ function InProgress({ p }: { p: ProjectSummary }) {
                 <div className="w-full min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <Who p={p} name={t.assignee} />
-                    <span title={new Date(t.since).toLocaleString()}>{since(t.since)}</span>
+                    <Tip content={new Date(t.since).toLocaleString()}>
+                      <span>{since(t.since)}</span>
+                    </Tip>
                     {t.lanes > 0 && (
                       <span className="inline-flex items-center gap-1">
                         <Layers className="size-3" /> {plural(t.lanes, 'lane')}
@@ -405,15 +405,16 @@ function InProgress({ p }: { p: ProjectSummary }) {
                     )}
                     {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                     {t.preview && (
-                      <a
-                        href={t.preview.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-foreground hover:underline"
-                        title={`Preview of ${t.preview.workspace}`}
-                      >
-                        <ExternalLink className="size-3" /> Preview
-                      </a>
+                      <Tip content={`Preview of ${t.preview.workspace}`}>
+                        <a
+                          href={t.preview.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-foreground hover:underline"
+                        >
+                          <ExternalLink className="size-3" /> Preview
+                        </a>
+                      </Tip>
                     )}
                   </div>
                   {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-1.5" />}
@@ -462,7 +463,9 @@ function DoneToday({ p }: { p: ProjectSummary }) {
               meta={
                 <>
                   {pr.repo && <span className="rounded bg-muted px-1">{pr.repo}</span>}
-                  <span title="Merged or closed: it left the review queue">closed {clock(pr.closedAt)}</span>
+                  <Tip content="Merged or closed: it left the review queue">
+                    <span>closed {clock(pr.closedAt)}</span>
+                  </Tip>
                   {pr.tickets.map((t) => (
                     <TicketLink key={t.id} p={p} id={t.id} title={t.title} />
                   ))}
@@ -542,12 +545,11 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
       count={items.length}
       extra={
         missing > 0 && (
-          <span
-            className="inline-flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400"
-            title="Worked on an earlier day, and nobody left a resume note on where it was left"
-          >
-            <BookmarkX className="size-3" /> {missing} without a handoff
-          </span>
+          <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
+            <span className="inline-flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400">
+              <BookmarkX className="size-3" /> {missing} without a handoff
+            </span>
+          </Tip>
         )
       }
       className="lg:col-span-2"
@@ -570,9 +572,9 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
                 <div className="w-full min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <Who p={p} name={t.assignee} />
-                    <span title={`Work on it started ${new Date(t.since).toLocaleString()}`}>
-                      {t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}
-                    </span>
+                    <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
+                      <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
+                    </Tip>
                     {t.resume.noHandoff && <NoHandoff p={p} id={t.id} />}
                   </div>
                   <Resume p={p} t={t} />
@@ -591,25 +593,27 @@ function ResumeLink({
   p,
   id,
   className,
-  title,
+  tip,
   children,
 }: {
   p: ProjectSummary
   id: number
   className: string
-  title?: string
+  /** Its tooltip, if any. */
+  tip?: string
   children: ReactNode
 }) {
   return (
-    <Link
-      to="/projects/$id/features/$ticketId"
-      params={{ id: String(p.project.id), ticketId: String(id) }}
-      hash="resume"
-      className={className}
-      title={title}
-    >
-      {children}
-    </Link>
+    <Tip content={tip}>
+      <Link
+        to="/projects/$id/features/$ticketId"
+        params={{ id: String(p.project.id), ticketId: String(id) }}
+        hash="resume"
+        className={className}
+      >
+        {children}
+      </Link>
+    </Tip>
   )
 }
 
@@ -619,7 +623,7 @@ function NoHandoff({ p, id }: { p: ProjectSummary; id: number }) {
       p={p}
       id={id}
       className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 hover:underline dark:text-amber-400"
-      title="Worked on an earlier day, and nobody left a resume note on where it was left: open it to write one"
+      tip="Worked on an earlier day, and nobody left a resume note on where it was left: open it to write one"
     >
       <BookmarkX className="size-3" /> no handoff
     </ResumeLink>
@@ -639,7 +643,7 @@ function Resume({ p, t }: { p: ProjectSummary; t: CarryOver }) {
         p={p}
         id={t.id}
         className="mt-1 line-clamp-2 border-l-2 border-primary/40 pl-2 text-xs text-muted-foreground hover:text-foreground"
-        title="Its resume note: open it on the ticket"
+        tip="Its resume note: open it on the ticket"
       >
         <Bookmark className="mr-1 inline size-3 align-[-1px]" />
         {r.note}

@@ -4,6 +4,7 @@ import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '#/components/ui/button'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type ProjectPush, type Push } from '#/lib/api'
 import { ago } from '#/lib/format'
 
@@ -61,12 +62,13 @@ export const checkedText = (p: Pick<Push, 'checkedAt'>) =>
 export function PushDot({ push, className }: { push: Push; className?: string }) {
   const title = `${pushText(push).title}\n${checkedText(push)}`
   return (
-    <span
-      role="img"
-      aria-label={title}
-      title={title}
-      className={cn('inline-block size-2 shrink-0 rounded-full', DOT[push.state], className)}
-    />
+    <Tip content={title}>
+      <span
+        role="img"
+        aria-label={title}
+        className={cn('inline-block size-2 shrink-0 rounded-full', DOT[push.state], className)}
+      />
+    </Tip>
   )
 }
 
@@ -74,11 +76,13 @@ export function PushDot({ push, className }: { push: Push; className?: string })
 export function PushBadge({ push, className }: { push: Push; className?: string }) {
   const { label, title } = pushText(push)
   return (
-    <span className={cn('inline-flex min-w-0 items-center gap-1.5 text-xs', className)} title={title}>
-      <PushDot push={push} />
-      <span className={isUnpushed(push) ? 'font-medium text-red-700 dark:text-red-400' : ''}>{label}</span>
-      <span className="truncate text-muted-foreground">· {checkedText(push)}</span>
-    </span>
+    <Tip content={title}>
+      <span className={cn('inline-flex min-w-0 items-center gap-1.5 text-xs', className)}>
+        <PushDot push={push} />
+        <span className={isUnpushed(push) ? 'font-medium text-red-700 dark:text-red-400' : ''}>{label}</span>
+        <span className="truncate text-muted-foreground">· {checkedText(push)}</span>
+      </span>
+    </Tip>
   )
 }
 
@@ -108,21 +112,22 @@ export function RefreshPush({ projectId, className }: { projectId: string | numb
     },
   })
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-xs"
-      className={className}
-      disabled={refresh.isPending}
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        refresh.mutate()
-      }}
-      title="Fetch origin now"
-      aria-label="Fetch origin now"
-    >
-      <RefreshCw className={refresh.isPending ? 'animate-spin' : ''} />
-    </Button>
+    <Tip content="Fetch origin now">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className={className}
+        disabled={refresh.isPending}
+        onClick={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          refresh.mutate()
+        }}
+        aria-label="Fetch origin now"
+      >
+        <RefreshCw className={refresh.isPending ? 'animate-spin' : ''} />
+      </Button>
+    </Tip>
   )
 }
