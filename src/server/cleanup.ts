@@ -5,7 +5,7 @@ import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
-import { authMode } from './config'
+import { type AuthMode, authMode } from './config'
 import {
   aheadBehind,
   type BranchInfo,
@@ -239,16 +239,17 @@ async function detachedClaims(
 }
 
 /**
- * Whether two paths name the same folder: slashes either way and a trailing one aside, and the case
- * only where the file system ignores it (Windows).
+ * A folder's path as a key: slashes either way and a trailing one aside, and the case only where the
+ * file system ignores it (Windows).
  */
-export function samePath(a: string, b: string, platform: NodeJS.Platform = process.platform) {
-  const norm = (p: string) => {
-    const s = p.replace(/\\/g, '/').replace(/\/+$/, '')
-    return platform === 'win32' ? s.toLowerCase() : s
-  }
-  return norm(a) === norm(b)
+export function pathKey(p: string, platform: NodeJS.Platform = process.platform) {
+  const s = p.replace(/\\/g, '/').replace(/\/+$/, '')
+  return platform === 'win32' ? s.toLowerCase() : s
 }
+
+/** Whether two paths name the same folder (`pathKey`). */
+export const samePath = (a: string, b: string, platform: NodeJS.Platform = process.platform) =>
+  pathKey(a, platform) === pathKey(b, platform)
 
 /** Whether the human may delete it from the Cleanup page; `reason` says why not. */
 export interface Verdict {
@@ -342,8 +343,8 @@ export interface CleanupReport {
  * Why a board deletes nothing: a preview runs on a copy of the live data, whose repos are the real
  * ones, so a delete there would land on them all the same.
  */
-export function deleteOff(): string | null {
-  return authMode().boardEnv === 'development'
+export function deleteOff(auth: AuthMode = authMode()): string | null {
+  return auth.boardEnv === 'development'
     ? 'this board is a preview on a copy of the live data: delete from the live board'
     : null
 }
