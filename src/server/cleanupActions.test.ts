@@ -656,6 +656,25 @@ describe('never deletes what is protected', () => {
   })
 })
 
+describe('protects the same repository and origin, however a project reaches them', () => {
+  it('origin’s copy against origin’s base, never a local branch named like it', async () => {
+    // Merged into main here, which origin has not got yet.
+    const { 'feat/f2': sha } = land(['feat/f2'])
+    git('push', '-q', 'origin', 'feat/f2')
+    git('branch', 'origin/main', 'main')
+    try {
+      const t = done('f2', 'feat/f2')
+      const b = (await branchOf(t.id, 'feat/f2'))!
+      expect(b.remoteReach).toMatchObject({ state: 'unique', into: 'origin/main' })
+      const [r] = await del([{ ticketId: t.id, branch: 'feat/f2', kind: 'remote', sha }])
+      expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/not in origin\/main/) })
+      expect(hasRef(origin, 'refs/heads/feat/f2')).toBe(true)
+    } finally {
+      git('update-ref', '-d', 'refs/heads/origin/main')
+    }
+  })
+})
+
 describe('a repo it cannot be sure of', () => {
   it('refuses every item in a repo git cannot read, instead of calling it gone', async () => {
     const dir = path.join(tmp, 'not-a-repo')

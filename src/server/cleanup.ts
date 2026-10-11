@@ -93,21 +93,32 @@ export function baseChain(ticket: Chainable, byId: Map<number, Chainable>, repo:
   return [...new Set(chain.filter(Boolean))]
 }
 
+/**
+ * How a local branch is named among refs: by its name, but by its full refname when the name starts
+ * with `origin/`, so a local branch called `origin/main` is never taken for origin's main.
+ */
+export const localRef = (branch: string) => (branch.startsWith('origin/') ? `refs/heads/${branch}` : branch)
+
 /** The refs a base name stands for: the local branch, then origin's copy; either may be ahead. */
 export function baseRefs(chain: string[], refs: Refs): string[] {
   return chain.flatMap((b) => [
-    ...(refs.local.has(b) ? [b] : []),
+    ...(refs.local.has(b) ? [localRef(b)] : []),
     ...(refs.remote.has(b) ? [`origin/${b}`] : []),
   ])
 }
 
 /** The ref a branch is read from: the local branch, else origin's. */
 export const branchRef = (branch: string, refs: Refs) =>
-  refs.local.has(branch) ? branch : refs.remote.has(branch) ? `origin/${branch}` : null
+  refs.local.has(branch) ? localRef(branch) : refs.remote.has(branch) ? `origin/${branch}` : null
 
-/** The commit a ref from `branchRef` or `baseRefs` points at. */
+/**
+ * The commit a ref from `branchRef` or `baseRefs` points at: `origin/<name>` is origin's branch only,
+ * `refs/heads/<name>` and a plain name the local one.
+ */
 export const refSha = (ref: string, refs: Refs) =>
-  refs.local.get(ref) ?? (ref.startsWith('origin/') ? refs.remote.get(ref.slice(7)) : undefined)
+  ref.startsWith('origin/')
+    ? refs.remote.get(ref.slice(7))
+    : refs.local.get(ref.startsWith('refs/heads/') ? ref.slice(11) : ref)
 
 /**
  * Answers already worked out, by the commits they were worked out for: a verdict on the same commits
@@ -192,8 +203,8 @@ const containsMemo = new Map<string, Promise<Set<string>>>()
 
 const refsKey = (refs: Refs) => {
   const hash = crypto.createHash('sha1')
-  for (const [name, sha] of refs.local) hash.update(`${name} ${sha}\n`)
-  for (const [name, sha] of refs.remote) hash.update(`origin/${name} ${sha}\n`)
+  for (const [name, sha] of refs.local) hash.update(`refs/heads/${name} ${sha}\n`)
+  for (const [name, sha] of refs.remote) hash.update(`refs/remotes/origin/${name} ${sha}\n`)
   return hash.digest('hex')
 }
 
@@ -235,7 +246,7 @@ async function detachedClaims(
   )
   const tips = own.flatMap((t) => claims(t, (n) => refs.local.get(n) === head || refs.remote.get(n) === head))
   if (tips.length) return tips
-  return own.flatMap((t) => claims(t, (n) => holding.has(n) || holding.has(`origin/${n}`)))
+  return own.flatMap((t) => claims(t, (n) => holding.has(localRef(n)) || holding.has(`origin/${n}`)))
 }
 
 /**
@@ -545,7 +556,7 @@ export async function cleanupReport(
             kept?.branches.get(name) ?? (into.includes(name) ? 'a base of this ticket’s own work' : null)
           // Its own copy on origin is no destination of the branch: each copy is judged on its own.
           const bases = state
-            ? baseRefs(into, state.refs).filter((b) => b !== name && b !== `origin/${name}`)
+            ? baseRefs(into, state.refs).filter((b) => b !== localRef(name) && b !== `origin/${name}`)
             : []
           // A branch that is its own destination has nothing to be judged against.
           const judge = (sha: string | null, against: string[]) =>

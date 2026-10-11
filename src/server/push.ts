@@ -258,7 +258,7 @@ async function pushOf(
       const onBase = base && base !== branch ? refs.remote.get(base) : undefined
       if (!ahead && onBase) {
         const merged = await memo(merges, `${local}>${onBase}`, () =>
-          mergedInto(repoPath, local, `origin/${base}`),
+          mergedInto(repoPath, local, `refs/remotes/origin/${base}`),
         )
         if (merged) return { state: 'merged', ahead: 0, behind: 0, into: base, ...at }
       }
