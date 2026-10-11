@@ -50,33 +50,67 @@ export function dueAt(s: Pick<ReportSchedule, 'cadence' | 'weekday' | 'shiftEnd'
   return new Date(`${day}T${s.shiftEnd}:00`)
 }
 
+/** A day's ISO weekday, 1 (Monday) to 7 (Sunday). */
+export function isoWeekday(day: string): number {
+  return new Date(`${day}T00:00:00`).getDay() || 7
+}
+
 /** Whether a day (YYYY-MM-DD) is one of the project's workdays. */
-export function isWorkday(_s: Pick<ReportSchedule, 'workdays'>, _day: string): boolean {
-  return true
+export function isWorkday(s: Pick<ReportSchedule, 'workdays'>, day: string): boolean {
+  return s.workdays.includes(isoWeekday(day))
+}
+
+/** Whether a period is asked for at all: a weekly one always, a daily one on a workday. */
+export function isAskedFor(s: Pick<ReportSchedule, 'cadence' | 'workdays'>, period: string): boolean {
+  return s.cadence === 'weekly' || (s.cadence === 'daily' && isWorkday(s, period))
+}
+
+/** The first day after a period (a day, or a week from its Monday). */
+export function periodEnd(cadence: TrackedCadence, period: string): string {
+  return shiftDate(period, cadence === 'daily' ? 1 : 7)
 }
 
 /**
  * Whether the board should be reminding about the report of `period` at `now`: from `alertMinutes`
- * before the shift's end while it has no report, `due` before the end and `missing` after it. Null
- * when there is nothing to remind about.
+ * before the shift's end (not before the period starts) while it has no report, `due` before the end
+ * and `missing` after it, until the period is over. Null when there is nothing to remind about: no
+ * cadence, a report already, a daily period on a day off, or outside that window. A weekly report is
+ * due on its weekday whatever the workdays.
  */
 export function reportDueOf(
-  _s: ReportSchedule,
-  _period: string,
-  _hasReport: boolean,
-  _now = new Date(),
+  s: ReportSchedule,
+  period: string,
+  hasReport: boolean,
+  now = new Date(),
 ): ReportDueState | null {
-  return null
+  if (s.cadence === 'off' || hasReport || !isAskedFor(s, period)) return null
+  const due = dueAt(s, period).getTime()
+  const alert = Math.max(due - s.alertMinutes * 60_000, new Date(`${period}T00:00:00`).getTime())
+  const end = new Date(`${periodEnd(s.cadence, period)}T00:00:00`).getTime()
+  const t = now.getTime()
+  if (t < alert || t >= end) return null
+  const left = due - t
+  return {
+    dueAt: new Date(due).toISOString(),
+    alertAt: new Date(alert).toISOString(),
+    state: left > 0 ? 'due' : 'missing',
+    // Rounded away from the due time: 1 while any of the last minute is left, -1 once it has passed.
+    minutesLeft: left > 0 ? Math.ceil(left / 60_000) : Math.min(-1, Math.floor(left / 60_000)),
+  }
 }
 
-/** Done once it has a report; missing once it is due without one; upcoming until then. */
+/**
+ * Done once it has a report; off when it is not asked for (a daily period on a day off); missing once
+ * it is due without one; upcoming until then.
+ */
 export function reportStatus(
-  s: Pick<ReportSchedule, 'cadence' | 'weekday' | 'shiftEnd'>,
+  s: Pick<ReportSchedule, 'cadence' | 'weekday' | 'shiftEnd' | 'workdays'>,
   period: string,
   hasReport: boolean,
   now = new Date(),
 ): ReportStatus {
   if (hasReport) return 'done'
+  if (!isAskedFor(s, period)) return 'off'
   return now.getTime() >= dueAt(s, period).getTime() ? 'missing' : 'upcoming'
 }
 
