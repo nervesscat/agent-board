@@ -70,6 +70,7 @@ export function RichEditor({
   minHeight = 'min-h-20',
   label = 'Text',
   className,
+  caretRoom,
 }: {
   value: string
   onChange: (markdown: string) => void
@@ -86,6 +87,13 @@ export function RichEditor({
   /** Accessible name of the editing area. */
   label?: string
   className?: string
+  /**
+   * Pixels to keep between the caret and the top and the bottom of what scrolls the text, for a
+   * heading or a footer pinned over them. The editor scrolls the caret itself after Enter, Backspace,
+   * paste or undo, and goes by this, not by CSS `scroll-padding` (which the browser keeps when it
+   * moves the caret, so set both). Left out, it scrolls only once the caret is out of the box.
+   */
+  caretRoom?: { top: number; bottom: number }
 }) {
   // The latest callbacks, for handlers the editor captured when it was created.
   const handlers = useRef({ onChange, onFiles, onSubmit, onCancel })
@@ -99,7 +107,11 @@ export function RichEditor({
     // The server render has no editor; it appears once the page is live.
     immediatelyRender: false,
     autofocus: autoFocus ? 'end' : false,
+    // The options are applied again on every render, so a room that changes (a heading measured once
+    // drawn, or resized) reaches the editor. Scrolls when the caret is closer than the room, to the room.
     editorProps: {
+      scrollThreshold: caretRoom && { ...caretRoom, left: 0, right: 0 },
+      scrollMargin: caretRoom && { ...caretRoom, left: 5, right: 5 },
       attributes: {
         role: 'textbox',
         'aria-multiline': 'true',
