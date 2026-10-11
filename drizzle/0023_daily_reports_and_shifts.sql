@@ -4,7 +4,10 @@ ALTER TABLE `report_settings` ADD `shift_start` text DEFAULT '09:00' NOT NULL;--
 ALTER TABLE `report_settings` ADD `shift_end` text DEFAULT '17:00' NOT NULL;--> statement-breakpoint
 ALTER TABLE `report_settings` ADD `workdays` text DEFAULT '[1,2,3,4,5]' NOT NULL;--> statement-breakpoint
 ALTER TABLE `report_settings` ADD `alert_minutes` integer DEFAULT 30 NOT NULL;--> statement-breakpoint
-UPDATE `report_settings` SET `shift_end` = `due_time` WHERE `due_time` IS NOT NULL;--> statement-breakpoint
+-- A due time of 00:00 was due as its day began. A shift ends after it starts and within its day (there is no
+-- 24:00), so the nearest end the shift can have is 00:01: due one minute later, where 23:59 would be almost
+-- a day later.
+UPDATE `report_settings` SET `shift_end` = CASE `due_time` WHEN '00:00' THEN '00:01' ELSE `due_time` END WHERE `due_time` IS NOT NULL;--> statement-breakpoint
 -- A shift starts before it ends: a due time not after the default start moves the start to midnight.
 UPDATE `report_settings` SET `shift_start` = '00:00' WHERE `shift_end` <= `shift_start`;--> statement-breakpoint
 ALTER TABLE `report_settings` DROP COLUMN `due_time`;--> statement-breakpoint

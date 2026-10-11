@@ -31,8 +31,8 @@ function migrationsUpTo(lastTag: string) {
   return dir
 }
 
-function databaseAt(lastTag: string) {
-  const sqlite = new Database(':memory:')
+function databaseAt(lastTag: string, file = ':memory:') {
+  const sqlite = new Database(file)
   sqlite.pragma('foreign_keys = ON')
   migrate(drizzle(sqlite), { migrationsFolder: migrationsUpTo(lastTag) })
   return sqlite
@@ -149,5 +149,74 @@ describe('0023_daily_reports_and_shifts', () => {
     for (const table of ['report_settings_changes', 'origin_refs', 'origin_ref_moves'])
       expect(columns(sqlite, table).length).toBeGreaterThan(0)
     sqlite.close()
+  })
+
+  it('gives every due time the board took a shift that ends after it starts', () => {
+    const sqlite = databaseAt('0022_pr_review_stages')
+    // Every HH:MM of a day, as the due time took them.
+    const times = Array.from(
+      { length: 24 * 60 },
+      (_, m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`,
+    )
+    const project = sqlite.prepare('INSERT INTO projects (name) VALUES (?)')
+    const setting = sqlite.prepare(
+      'INSERT INTO report_settings (project_id, cadence, due_time) VALUES (?, ?, ?)',
+    )
+    const ids = new Map<number, string>()
+    for (const time of times) {
+      const id = Number(project.run(`due ${time}`).lastInsertRowid)
+      setting.run(id, 'daily', time)
+      ids.set(id, time)
+    }
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const shifts = sqlite.prepare('SELECT project_id, shift_start, shift_end FROM report_settings').all() as {
+      project_id: number
+      shift_start: string
+      shift_end: string
+    }[]
+    expect(shifts).toHaveLength(times.length)
+    const shiftOf = (time: string) => shifts.find((s) => ids.get(s.project_id) === time)
+    for (const s of shifts) {
+      const time = ids.get(s.project_id)!
+      expect(s.shift_end > s.shift_start, `${time}: ${s.shift_start} to ${s.shift_end}`).toBe(true)
+      // Due when it was, but for midnight, which is due a minute later.
+      expect(s.shift_end, time).toBe(time === '00:00' ? '00:01' : time)
+    }
+    expect(shiftOf('00:00')).toMatchObject({ shift_start: '00:00', shift_end: '00:01' })
+    expect(shiftOf('00:05')).toMatchObject({ shift_start: '00:00', shift_end: '00:05' })
+    expect(shiftOf('09:00')).toMatchObject({ shift_start: '00:00', shift_end: '09:00' })
+    expect(shiftOf('09:01')).toMatchObject({ shift_start: '09:00', shift_end: '09:01' })
+    sqlite.close()
+  })
+
+  it('leaves a due time of midnight with settings the board saves again', async () => {
+    // The board's own database, migrated as it starts: from 0022 with a due time of 00:00.
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-migrated-'))
+    const sqlite = databaseAt('0022_pr_review_stages', path.join(dataDir, 'board.db'))
+    const id = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('midnight').lastInsertRowid,
+    )
+    sqlite
+      .prepare('INSERT INTO report_settings (project_id, prompt, cadence, due_time) VALUES (?, ?, ?, ?)')
+      .run(id, 'Old prompt.', 'daily', '00:00')
+    sqlite.close()
+    process.env.DATA_DIR = dataDir
+    const reports = await import('#/server/reports')
+
+    // Changes that leave the shift alone: the prompt, an agent's template, the format.
+    const prompt = () => reports.setReportSettings(id, { prompt: 'Say what got done.' }, 'enrique')
+    expect(prompt).not.toThrow()
+    expect(() =>
+      reports.setReportSettings(id, { template: '## Done\n' }, 'claude', { agent: true }),
+    ).not.toThrow()
+    expect(() => reports.setReportSettings(id, { format: 'file' }, 'claude', { agent: true })).not.toThrow()
+    expect(reports.getReportSettings(id)).toMatchObject({
+      prompt: 'Say what got done.',
+      format: 'file',
+      shiftStart: '00:00',
+      shiftEnd: '00:01',
+    })
   })
 })
