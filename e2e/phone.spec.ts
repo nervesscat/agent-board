@@ -43,7 +43,7 @@ test('no sideways scroll at 390px on Home, Repositories, the PR queue, the board
   expect(await scrollsSideways(page)).toBe(false)
 })
 
-test('no sideways scroll at 390px on the Overview, Daily (with a report), Cleanup and Agents pages', async ({
+test('no sideways scroll at 390px on the Overview, Daily (with a report), Previews, Cleanup and Agents pages', async ({
   page,
   api,
   human,
@@ -80,6 +80,20 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Cleanu
   }
   await page.goto(`/projects/${project.id}/daily`)
   await expect(page.getByRole('list', { name: 'Report periods' })).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+
+  // A preview with a long branch and a long link: both must wrap or truncate.
+  await ok(
+    human.post(`/api/tickets/${t.id}/workspaces`, {
+      data: {
+        name: 'wt',
+        branch: 'feature/a-very-long-branch-name-that-does-not-fit-on-a-phone-screen-at-all',
+        previewUrl: 'https://example.com/a/very/long/path/that/goes/on/and/on/without/a/break/at/all',
+      },
+    }),
+  )
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(page.getByRole('link', { name: 'Open preview' })).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
 
   await page.goto(`/projects/${project.id}/cleanup`)

@@ -28,6 +28,7 @@ import * as needs from './needs'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
+import { projectPreviews } from './projectPreviews'
 import * as projects from './projects'
 import * as reports from './reports'
 import * as repos from './repos'
@@ -397,6 +398,10 @@ api.post('/api/projects/:id/push/refresh', async ({ params }) => json(await refr
 // Closed tickets that still have workspaces, branches or worktrees; `reach=0` skips the merge checks.
 api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
   json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),
+)
+// Every preview of the project's tickets, running or not, running first; reads only.
+api.get('/api/projects/:id/previews', async ({ params }) =>
+  json({ previews: await projectPreviews(id(params)) }),
 )
 
 api.post('/api/tickets/:id/tasks', async ({ request, params, actor }) => {
