@@ -246,8 +246,8 @@ export async function listRefs(repoPath: string): Promise<Refs> {
 
 /**
  * The branches whose history holds commit `sha`, named as `baseRefs` names them: a local branch by its
- * name (its full refname when that starts with `origin/`), origin's as `origin/<name>`. Throws when
- * `sha` is no commit here.
+ * name (its full refname when that starts with `origin/` or `refs/`), origin's as `origin/<name>`.
+ * Throws when `sha` is no commit here.
  */
 export async function refsContaining(repoPath: string, sha: string): Promise<Set<string>> {
   const out = await git(repoPath, [
@@ -260,8 +260,8 @@ export async function refsContaining(repoPath: string, sha: string): Promise<Set
   ])
   const names = new Set<string>()
   for (const name of out ? out.split('\n') : []) {
-    // A local branch called `origin/<x>` keeps its full refname: it is not origin's `<x>`.
-    if (name.startsWith('refs/heads/origin/')) names.add(name)
+    // A local branch called `origin/<x>` or `refs/<x>` keeps its full refname, as `localRef` names it.
+    if (name.startsWith('refs/heads/origin/') || name.startsWith('refs/heads/refs/')) names.add(name)
     else if (name.startsWith('refs/heads/')) names.add(name.slice(11))
     else if (name !== 'refs/remotes/origin/HEAD') names.add(`origin/${name.slice(20)}`)
   }

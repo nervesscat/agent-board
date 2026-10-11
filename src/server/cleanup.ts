@@ -96,9 +96,11 @@ export function baseChain(ticket: Chainable, byId: Map<number, Chainable>, repo:
 
 /**
  * How a local branch is named among refs: by its name, but by its full refname when the name starts
- * with `origin/`, so a local branch called `origin/main` is never taken for origin's main.
+ * with `origin/` or `refs/`, so a local branch called `origin/main` is never taken for origin's main,
+ * nor one called `refs/heads/foo` for `foo`. `refSha` undoes exactly this.
  */
-export const localRef = (branch: string) => (branch.startsWith('origin/') ? `refs/heads/${branch}` : branch)
+const wrapped = (branch: string) => branch.startsWith('origin/') || branch.startsWith('refs/')
+export const localRef = (branch: string) => (wrapped(branch) ? `refs/heads/${branch}` : branch)
 
 /** The refs a base name stands for: the local branch, then origin's copy; either may be ahead. */
 export function baseRefs(chain: string[], refs: Refs): string[] {
@@ -114,12 +116,13 @@ export const branchRef = (branch: string, refs: Refs) =>
 
 /**
  * The commit a ref from `branchRef` or `baseRefs` points at: `origin/<name>` is origin's branch only,
- * `refs/heads/<name>` and a plain name the local one.
+ * anything else a local branch, named as `localRef` names it.
  */
-export const refSha = (ref: string, refs: Refs) =>
-  ref.startsWith('origin/')
-    ? refs.remote.get(ref.slice(7))
-    : refs.local.get(ref.startsWith('refs/heads/') ? ref.slice(11) : ref)
+export const refSha = (ref: string, refs: Refs) => {
+  if (ref.startsWith('origin/')) return refs.remote.get(ref.slice(7))
+  const name = ref.slice(11)
+  return refs.local.get(ref.startsWith('refs/heads/') && wrapped(name) ? name : ref)
+}
 
 /**
  * Answers already worked out, by the commits they were worked out for: a verdict on the same commits

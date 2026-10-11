@@ -234,6 +234,27 @@ describe('deleting a worked local branch', () => {
   })
 })
 
+describe('a branch named like a full refname', () => {
+  it('is read as itself, not as the branch its name ends in', async () => {
+    const { 'refs/heads/f3': own } = land(['refs/heads/f3'], { unique: true })
+    git('branch', 'f3', 'main')
+    try {
+      const t = features.createTicket(
+        projectId,
+        { title: 'f3', branch: 'refs/heads/f3', status: 'in_progress' },
+        'claude',
+      )
+      // The git panel reads the checkout a few seconds at a time: this read is to see the branches now.
+      ;(await import('./push')).dropListings(repo)
+      const g = await features.ticketGit(t.id)
+      expect(g.info.sha).toBe(own)
+      expect(g.info.reach?.state).toBe('unique')
+    } finally {
+      git('update-ref', '-d', 'refs/heads/refs/heads/f3')
+    }
+  })
+})
+
 describe('deleting a worked branch on origin', () => {
   it('deletes origin’s copy alone, after fetching, and answers how to put it back', async () => {
     const { 'feat/b2': sha } = land(['feat/b2'])
