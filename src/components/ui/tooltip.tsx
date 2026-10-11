@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
 import { cn } from 'cn'
 
@@ -48,4 +49,24 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+/**
+ * The app's tooltip on one element, where a `title` would go: it shows `content` on hover and on
+ * keyboard focus. The element stays what it is (a span stays a span, a link a link, a button is not
+ * wrapped in another): it becomes the trigger through `render`, so it must take a ref and spread the
+ * props it is given. With no `content` the tooltip is off and nothing shows. Like a native title it
+ * closes as the pointer leaves the element, and never catches the pointer itself. Line breaks in the
+ * text are kept, and a long path or URL wraps inside the bubble.
+ */
+function Tip({ content, children }: { content: React.ReactNode; children: React.ReactElement }) {
+  const off = content === undefined || content === null || content === false || content === ''
+  // The trigger takes the element's own id if it has one: base-ui tells its triggers apart by it.
+  const { id } = children.props as { id?: string }
+  return (
+    <Tooltip disabled={off} disableHoverablePopup>
+      <TooltipTrigger id={id} render={children} />
+      {!off && <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>}
+    </Tooltip>
+  )
+}
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Tip }
