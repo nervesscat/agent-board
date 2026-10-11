@@ -670,7 +670,69 @@ describe('repo layouts', () => {
   })
 })
 
+/** Real time passing, for ref folders to settle (the file system's clock, not the board's). */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 2_600))
+
 describe('the kept listings', () => {
+  it('go by a settled folder alone, and still see a change in it on the very next read', async () => {
+    const x = await fixture('settled')
+    await reads(x.pid, x.work.id)
+    await settle()
+    // Read once settled: from now on the folders are checked by their own time.
+    later()
+    const first = await reads(x.pid, x.work.id)
+    quiet()
+    later()
+    expect(await reads(x.pid, x.work.id)).toEqual(first)
+    expect(ran()).toEqual({ refs: 1, worktrees: 0, other: [] })
+
+    // A branch moved in a settled folder, one made in a new folder, one deleted: each seen at once.
+    commitOn(x.b('work'), 'in a settled folder')
+    expect((await view(x.work.id)).resume).toMatchObject({ commitsSince: 1, stale: true })
+    await settle()
+    later()
+    await reads(x.pid, x.work.id)
+    const [sha] = branches(`refs/heads/${x.dev}`, `${x.b('new')}/folder`)
+    const t = (await features()).createTicket(
+      x.pid,
+      { title: 'new', branch: `${x.b('new')}/folder`, baseBranch: x.dev, status: 'done' },
+      't',
+    )
+    expect(branchIn(await report(x.pid), `${x.b('new')}/folder`)).toMatchObject({ local: sha })
+    await settle()
+    await reads(x.pid, t.id)
+    git('branch', '-q', '-D', `${x.b('new')}/folder`)
+    expect(branchIn(await report(x.pid), `${x.b('new')}/folder`)).toBeUndefined()
+    await matchesCold(x.pid, t.id)
+  }, 60_000)
+
+  it('ask git each read while a folder of many refs is recent, and nothing once it settled', async () => {
+    const big = path.join(tmp, 'big')
+    fs.mkdirSync(big)
+    gitIn(big, 'init', '-q', '-b', 'main')
+    gitIn(big, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'one')
+    const head = gitIn(big, 'rev-parse', 'HEAD')
+    execFileSync('git', ['update-ref', '--stdin'], {
+      cwd: big,
+      input: Array.from({ length: 600 }, (_, i) => `create refs/heads/many-${i} ${head}\n`).join(''),
+    })
+    gitIn(big, 'checkout', '-q', '--detach')
+    const { currentRefs } = await import('./listings')
+    quiet()
+    expect((await currentRefs(big))?.local.size).toBe(601)
+    expect((await currentRefs(big))?.local.size).toBe(601)
+    expect(ran().refs).toBe(2)
+
+    await settle()
+    await currentRefs(big)
+    quiet()
+    expect((await currentRefs(big))?.local.size).toBe(601)
+    expect(ran().refs).toBe(0)
+
+    gitIn(big, 'branch', '-q', '-D', 'many-7')
+    expect((await currentRefs(big))?.local.has('many-7')).toBe(false)
+  }, 60_000)
+
   it('keep one per repo, at most their maximum, the oldest repo going first', async () => {
     const { currentRefs } = await import('./listings')
     const tiny = path.join(tmp, 'tiny')
