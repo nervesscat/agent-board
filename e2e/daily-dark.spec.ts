@@ -26,15 +26,17 @@ const MARK = 3
 const QUIET = 1.5
 
 const dark = (page: Page) => expect(page.locator('html')).toHaveClass(/\bdark\b/)
-/** A screenshot into the test's output; a part of the page first scrolled clear of the sticky top bar. */
-async function shot(el: Locator | Page, name: string) {
-  if (!('goto' in el))
-    await el.evaluate((e) => {
-      e.scrollIntoView({ block: 'start' })
-      window.scrollBy(0, -(document.querySelector('header')?.clientHeight ?? 0) - 8)
-    })
-  await el.screenshot({ path: test.info().outputPath(`${name}.png`), animations: 'disabled' })
-}
+/** The top bar stays at the top in a screenshot, not over the part of the page shot. */
+const UNSTICK = 'body header { position: static !important }'
+
+/** A screenshot of the page, or of a part of it, into the test's output. */
+const shot = (el: Locator | Page, name: string, fullPage = false) =>
+  el.screenshot({
+    path: test.info().outputPath(`${name}.png`),
+    animations: 'disabled',
+    style: UNSTICK,
+    ...(fullPage && { fullPage }),
+  })
 
 test("a project's Daily page in the dark: banner, header, notice, report, calendar, settings and activity", async ({
   page,
@@ -170,7 +172,7 @@ test("a project's Daily page in the dark: banner, header, notice, report, calend
 
     expect(await scrollsSideways(page)).toBe(false)
     await shot(page, 'daily-project-dark')
-    await page.screenshot({ path: info.outputPath('daily-project-dark-full.png'), fullPage: true })
+    await shot(page, 'daily-project-dark-full', true)
   } finally {
     await quiet()
   }
@@ -208,7 +210,7 @@ test("every project's Daily page in the dark: the reports and the activity", asy
     await expect(tag).toBeVisible()
     await standsOut(tag, TEXT)
     expect(await scrollsSideways(page)).toBe(false)
-    await page.screenshot({ path: info.outputPath('daily-all-dark-full.png'), fullPage: true })
+    await shot(page, 'daily-all-dark-full', true)
   } finally {
     await quiet()
   }
@@ -233,7 +235,7 @@ test.describe('on a phone', () => {
       await settings.getByRole('button', { name: /^Report settings/ }).tap()
       await expect(settings.getByRole('slider', { name: 'Shift end' })).toBeVisible()
       expect(await scrollsSideways(page)).toBe(false)
-      await page.screenshot({ path: info.outputPath('daily-project-phone-dark-full.png'), fullPage: true })
+      await shot(page, 'daily-project-phone-dark-full', true)
     } finally {
       await quiet()
     }

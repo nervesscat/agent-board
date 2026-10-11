@@ -146,7 +146,11 @@ test("a project's whole Daily page, every project's, and the reports-due banner 
     for (const name of ['Shift start', 'Shift end'])
       await expect(settings.getByRole('slider', { name })).toBeVisible()
     expect(await scrollsSideways(page)).toBe(false)
-    await page.screenshot({ path: info.outputPath('daily-project-phone.png'), fullPage: true })
+    await page.screenshot({
+      path: info.outputPath('daily-project-phone.png'),
+      fullPage: true,
+      style: 'body header { position: static !important }',
+    })
 
     // A day picked on the calendar opens that day.
     await calendar.getByRole('button', { name: `${named(yesterday)}: done` }).tap()
@@ -159,7 +163,11 @@ test("a project's whole Daily page, every project's, and the reports-due banner 
     await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).tap()
     await expect(page.getByText(`[${project.name}]`).first()).toBeVisible()
     expect(await scrollsSideways(page)).toBe(false)
-    await page.screenshot({ path: info.outputPath('daily-all-phone.png'), fullPage: true })
+    await page.screenshot({
+      path: info.outputPath('daily-all-phone.png'),
+      fullPage: true,
+      style: 'body header { position: static !important }',
+    })
 
     // The banner, on a ticket page.
     await page.goto(`/projects/${project.id}/features/${ticket.id}`)
