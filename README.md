@@ -302,7 +302,8 @@ the refresh action fetches at once. The board never pushes.
 
 **Pushed today** (`GET /api/projects/:id/pushed-today`) counts what reached origin on the local day:
 each time the board reads a checkout's copy of origin's branches it records which of them moved
-(old sha to new sha; the first look at a repo only notes where they are), and the commits those
+(old sha to new sha; the first look at a repo only notes where they are, and one that finds origin
+empty after the board's own fetch is a look too, so a new repo's first push counts), and the commits those
 moves brought that no origin branch had just before count once each, under the first branch that
 brought them, whenever they were written. Merge commits do not count. Lines added and removed are
 their `git diff --shortstat`. The answer is `{date, commits, added, removed, checkedAt, repos}`, each

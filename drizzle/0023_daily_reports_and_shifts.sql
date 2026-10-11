@@ -11,7 +11,14 @@ UPDATE `report_settings` SET `shift_end` = CASE `due_time` WHEN '00:00' THEN '00
 -- A shift starts before it ends: a due time not after the default start moves the start to midnight.
 UPDATE `report_settings` SET `shift_start` = '00:00' WHERE `shift_end` <= `shift_start`;--> statement-breakpoint
 ALTER TABLE `report_settings` DROP COLUMN `due_time`;--> statement-breakpoint
--- Every prompt or template change, kept with the value before it; origin's branches as last seen, and each move.
+-- Every prompt or template change, kept with the value before it; origin's branches as last seen, each move,
+-- and the repos the board has looked at.
+CREATE TABLE `origin_looks` (
+	`repo_id` integer PRIMARY KEY NOT NULL,
+	`seenAt` text DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) NOT NULL,
+	FOREIGN KEY (`repo_id`) REFERENCES `repos`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `origin_ref_moves` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`repo_id` integer NOT NULL,

@@ -110,6 +110,7 @@ export async function updateRepo(
     if (repath) {
       tx.delete(schema.originRefs).where(eq(schema.originRefs.repoId, id)).run()
       tx.delete(schema.originRefMoves).where(eq(schema.originRefMoves.repoId, id)).run()
+      tx.delete(schema.originLooks).where(eq(schema.originLooks.repoId, id)).run()
     }
     return r
   })

@@ -463,6 +463,45 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "origin_looks": {
+      "name": "origin_looks",
+      "columns": {
+        "repo_id": {
+          "name": "repo_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seenAt": {
+          "name": "seenAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "origin_looks_repo_id_repos_id_fk": {
+          "name": "origin_looks_repo_id_repos_id_fk",
+          "tableFrom": "origin_looks",
+          "tableTo": "repos",
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "origin_ref_moves": {
       "name": "origin_ref_moves",
       "columns": {

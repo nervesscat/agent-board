@@ -426,6 +426,15 @@ export const originRefMoves = sqliteTable(
   (t) => [index('origin_ref_moves_repo_seen').on(t.repoId, t.seenAt)],
 )
 
+// The repos the board has looked at origin's branches of, since when: a look that found none counts,
+// so the first branch pushed after it is a move, not the starting point.
+export const originLooks = sqliteTable('origin_looks', {
+  repoId: integer('repo_id')
+    .primaryKey()
+    .references(() => repos.id, { onDelete: 'cascade' }),
+  seenAt: now(),
+})
+
 // Board-wide preferences the human sets in Settings, one row per key (the value is JSON).
 export const settings = sqliteTable('settings', {
   key: text().primaryKey(),

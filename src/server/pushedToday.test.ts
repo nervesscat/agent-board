@@ -105,6 +105,50 @@ async function fixture(name: string, history = 1) {
   }
 }
 
+/**
+ * A repo of the board whose checkout has `commits` commits on main and has not fetched or pushed yet,
+ * on an origin that is empty unless `pushed`, which has the checkout's commits pushed there by
+ * someone else's clone. The board has not looked at it.
+ */
+async function unseen(name: string, commits: number, opts: { pushed?: boolean } = {}) {
+  const origin = path.join(tmp, 'git', `${name}.git`)
+  const repo = path.join(tmp, 'git', name)
+  fs.mkdirSync(origin, { recursive: true })
+  gitIn(origin, ['init', '-q', '--bare', '-b', 'main'])
+  fs.mkdirSync(repo)
+  const git = (...args: string[]) => gitIn(repo, args)
+  git('init', '-q', '-b', 'main')
+  git('config', 'user.email', 't@t')
+  git('config', 'user.name', 't')
+  git('remote', 'add', 'origin', origin)
+  for (let i = 0; i < commits; i++) {
+    fs.writeFileSync(
+      path.join(repo, `n-${i}.txt`),
+      `n ${i}
+`,
+    )
+    git('add', '.')
+    git('commit', '-q', '-m', `n ${i}`)
+  }
+  // Pushed from elsewhere: the checkout's copy of origin still has no branch.
+  if (opts.pushed) gitIn(origin, ['fetch', '-q', repo, 'main:main'])
+  const { db, schema } = await import('#/db')
+  const projectId = db.insert(schema.projects).values({ name }).returning().get().id
+  const repoId = db
+    .insert(schema.repos)
+    .values({ projectId, name, repoPath: repo, baseBranch: 'main' })
+    .returning()
+    .get().id
+  return {
+    projectId,
+    repoId,
+    repo,
+    git,
+    moves: () =>
+      db.select().from(schema.originRefMoves).where(eq(schema.originRefMoves.repoId, repoId)).all(),
+  }
+}
+
 /** What the board does now and then: fetch origin into the checkout, then read its branches afresh. */
 async function look(repo: string) {
   const push = await import('./push')
@@ -167,6 +211,37 @@ describe('noteOriginRefs', slow, () => {
     // Its first look at the other checkout: nothing arrived, whatever history that one has.
     await look(g.repo)
     expect(f.refs().map((r) => r.ref)).toEqual(['main'])
+    const { pushedToday } = await counting()
+    expect(await pushedToday(f.projectId)).toMatchObject({ commits: 0, repos: [] })
+  })
+
+  it('counts the first push to an origin that had no branch when the board first looked', async () => {
+    const f = await unseen('empty-origin', 3)
+    // The board fetches the empty origin and lists no branch of it: a look all the same.
+    await look(f.repo)
+    expect(f.moves()).toEqual([])
+
+    f.git('push', '-q', 'origin', 'main')
+    await look(f.repo)
+    expect(f.moves()).toMatchObject([{ ref: 'main', oldSha: null, newSha: f.git('rev-parse', 'main') }])
+    const { pushedToday } = await counting()
+    expect(await pushedToday(f.projectId)).toMatchObject({
+      commits: 3,
+      added: 3,
+      removed: 0,
+      repos: [{ repoId: f.repoId, branches: [{ branch: 'main', commits: 3 }] }],
+    })
+  })
+
+  it('does not take a checkout that never fetched for a look at an empty origin', async () => {
+    // Origin has history the checkout has never fetched: its listing shows no branch of origin.
+    const f = await unseen('never-fetched', 2, { pushed: true })
+    const push = await import('./push')
+    expect((await push.readRefs(f.repo))!.remote.size).toBe(0)
+
+    // The board's first fetch: origin's history was there before the board looked, not pushed today.
+    await look(f.repo)
+    expect(f.moves()).toEqual([])
     const { pushedToday } = await counting()
     expect(await pushedToday(f.projectId)).toMatchObject({ commits: 0, repos: [] })
   })

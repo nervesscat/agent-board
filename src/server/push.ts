@@ -106,17 +106,20 @@ function repoState(repoPath: string): RepoState {
         fetching: null,
         error: null,
         // Each fresh listing also records how origin's branches moved since the last (pushed today); a
-        // failure there is logged and never costs the push states.
-        refs: windowed(() =>
-          listRefs(repoPath).then((refs) => {
+        // failure there is logged and never costs the push states. Whether the board's fetch had
+        // succeeded before the listing began says whether a listing without origin's branches is
+        // origin's (noteOriginRefs).
+        refs: windowed(() => {
+          const fetched = repos.get(repoPath)?.fetchedAt != null
+          return listRefs(repoPath).then((refs) => {
             try {
-              noteOriginRefs(repoPath, refs)
+              noteOriginRefs(repoPath, refs, new Date(), { fetched })
             } catch (err) {
               console.error(`recording origin's branches of ${repoPath} failed:`, err)
             }
             return refs
-          }),
-        ),
+          })
+        }),
         worktrees: windowed(() => listWorktrees(repoPath)),
       }),
     )

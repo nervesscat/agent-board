@@ -48,12 +48,34 @@ const KEEP_MOVES_DAYS = 30
  * that checkout, which of origin's branches moved since the last listing (old sha to new sha; null
  * for a branch that appeared or went away). The first look at a repo only takes note of where
  * origin's branches are: what was there before the board looked was not seen arriving.
+ *
+ * Which repos the board has looked at is kept (`origin_looks`), since a look can find no branch on
+ * origin (a new, empty repo): its first push is then a move like any other. But a checkout that never
+ * fetched lists no branch of origin either, whatever origin has, and FETCH_HEAD does not tell the two
+ * apart (a failed fetch leaves an empty one too). So a listing without one is a look only when
+ * `fetched`: the board's own fetch of the checkout had succeeded before the listing began. Taking
+ * the other for a look would count all of origin's history as pushed on the day it is first fetched.
  */
-export function noteOriginRefs(repoPath: string, refs: Refs, now = new Date()) {
+export function noteOriginRefs(
+  repoPath: string,
+  refs: Refs,
+  now = new Date(),
+  opts: { fetched?: boolean } = {},
+) {
   const repos = db.select().from(schema.repos).where(eq(schema.repos.repoPath, repoPath)).all()
   const seenAt = now.toISOString()
   for (const repo of repos) {
     db.transaction((tx) => {
+      const firstLook = !tx
+        .select({ repoId: schema.originLooks.repoId })
+        .from(schema.originLooks)
+        .where(eq(schema.originLooks.repoId, repo.id))
+        .get()
+      if (firstLook) {
+        // Nothing listed and nothing fetched: not a look at origin.
+        if (!refs.remote.size && !opts.fetched) return
+        tx.insert(schema.originLooks).values({ repoId: repo.id, seenAt }).run()
+      }
       const known = new Map(
         tx
           .select()
@@ -62,14 +84,6 @@ export function noteOriginRefs(repoPath: string, refs: Refs, now = new Date()) {
           .all()
           .map((r) => [r.ref, r.sha]),
       )
-      const firstLook =
-        !known.size &&
-        !tx
-          .select({ id: schema.originRefMoves.id })
-          .from(schema.originRefMoves)
-          .where(eq(schema.originRefMoves.repoId, repo.id))
-          .limit(1)
-          .get()
       const moves: (typeof schema.originRefMoves.$inferInsert)[] = []
       for (const [ref, sha] of refs.remote) {
         const old = known.get(ref)
