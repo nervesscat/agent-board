@@ -793,6 +793,48 @@ describe('protects the same repository and origin, however a project reaches the
       git('update-ref', '-d', 'refs/heads/origin/main')
     }
   })
+
+  it('a detached worktree a ticket in work in another project on the repository claims', async () => {
+    // feat/f4a went in squashed, so its own commit is in no base; feat/f4b, in work, is built on it.
+    const { 'feat/f4a': c } = land(['feat/f4a'], { unique: true })
+    git(
+      'update-ref',
+      'refs/heads/main',
+      git('commit-tree', `${c}^{tree}`, '-p', 'main', '-m', 'f4a, squashed'),
+    )
+    land(['feat/f4b'], { unique: true, from: c })
+    const open = features.createTicket(
+      projectId,
+      { title: 'f4 open', branch: 'feat/f4b', status: 'in_progress' },
+      'claude',
+    )
+    git('worktree', 'add', '-q', '--detach', wt('f4c'), c)
+    git('worktree', 'add', '-q', '--detach', wt('f4view'), 'main')
+    const b = projectAt('reads it through a worktree too', wt('f4view'))
+    const t = features.createTicket(b.pid, { title: 'f4 done', branch: 'feat/f4a', status: 'done' }, 'claude')
+    const branch = (await cleanupReport(b.pid)).tickets
+      .find((x) => x.id === t.id)!
+      .branches.find((x) => x.name === 'feat/f4a')!
+    expect(branch.reach?.state).toMatch(/rebased|edited/)
+    expect(branch.worktrees.map((w) => [path.resolve(w.path), w.protected])).toEqual([
+      [wt('f4c'), `also at the work of #${open.id}`],
+    ])
+    const [r] = await deleteLeftovers(
+      b.pid,
+      [
+        {
+          ticketId: t.id,
+          branch: 'feat/f4a',
+          kind: 'worktrees',
+          sha: c,
+          worktrees: branch.worktrees.map((w) => w.path),
+        },
+      ],
+      'enrique',
+    )
+    expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/also at the work of/) })
+    expect(fs.existsSync(wt('f4c'))).toBe(true)
+  })
 })
 
 describe('a repo it cannot be sure of', () => {

@@ -378,8 +378,8 @@ export function deleteOff(auth: AuthMode = authMode()): string | null {
  * What may never be deleted in one repository, whichever project points at it and through whichever
  * of its worktrees: the repo's base branch, the main checkout's branch, origin's default branch, the
  * branches, workspace branches and bases of every ticket still in work, and the head and base of
- * every open PR. Also the worktree paths registered on tickets in work, and the branches those
- * tickets use (for a worktree at their tip). Another clone of the same origin has branches of its
+ * every open PR. Also the worktree paths registered on tickets in work, the branches those tickets
+ * use (for a worktree at their tip), and the detached worktrees they claim. Another clone of the same origin has branches of its
  * own, but shares origin's: what its work uses is kept on origin (`origin`).
  */
 interface Guard {
@@ -388,6 +388,8 @@ interface Guard {
   origin: Map<string, string>
   inUse: Map<string, number>
   paths: { path: string; ticketId: number }[]
+  /** A detached worktree (by `pathKey`) a ticket in work claims, and which. */
+  claims: Map<string, number>
   /** Every checkout a repo of the board points at: a worktree may be one. */
   checkouts: string[]
 }
@@ -428,6 +430,7 @@ async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
   const origin = new Map<string, string>()
   const inUse = new Map<string, number>()
   const paths: Guard['paths'] = []
+  const working: { id: number; names: string[]; chain: string[] }[] = []
   const everyRepo = listRepos()
   // Every checkout of this repository shares its branches: its own path and each worktree git lists.
   const trees = [repoPath, ...git.worktrees.map((w) => w.path)]
@@ -462,20 +465,31 @@ async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
       if (!inUse.has(name)) inUse.set(name, id)
     },
     (path, ticketId) => paths.push({ path, ticketId }),
+    (t) => working.push(t),
   )
   workOf(clones, keepOnOrigin)
-  return { branches, origin, inUse, paths, checkouts: everyRepo.map((r) => r.repoPath) }
+  // A detached worktree at a commit of their work belongs to them, whichever project they are in.
+  const claims = new Map<string, number>()
+  const detached = git.worktrees.slice(1).filter((tree) => !tree.branch && tree.head)
+  if (working.length)
+    for (const tree of detached) {
+      const [claim] = await detachedClaims(repoPath, tree.head!, git.refs, working)
+      if (claim) claims.set(pathKey(tree.path), claim.ticketId)
+    }
+  return { branches, origin, inUse, paths, claims, checkouts: everyRepo.map((r) => r.repoPath) }
 }
 
 /**
  * What the tickets in work and the open PRs of these repo rows use: each branch name to `keep` with
- * why, and to `using` with the ticket; each workspace path registered on one to `registered`.
+ * why, and to `using` with the ticket; each workspace path registered on one to `registered`; each
+ * ticket, with its branch names and base chain, to `ticket`.
  */
 function workOf(
   rows: RepoRow[],
   keep: (name: string, why: string) => void,
   using: (name: string, ticketId: number) => void = () => {},
   registered: (path: string, ticketId: number) => void = () => {},
+  ticket: (t: { id: number; names: string[]; chain: string[] }) => void = () => {},
 ) {
   const rowIds = new Set(rows.map((r) => r.id))
   for (const projectId of new Set(rows.map((r) => r.projectId))) {
@@ -502,12 +516,15 @@ function workOf(
       : []
     for (const t of working) {
       const own = spaces.filter((w) => w.ticketId === t.id)
-      for (const name of [t.branch, ...own.map((w) => w.branch)].filter(Boolean)) {
+      const names = [...new Set([t.branch, ...own.map((w) => w.branch)].filter(Boolean))]
+      for (const name of names) {
         keep(name, `in use by #${t.id}`)
         using(name, t.id)
       }
-      for (const name of baseChain(t, byId, repoOf(t))) keep(name, `the base of #${t.id}`)
+      const chain = baseChain(t, byId, repoOf(t))
+      for (const name of chain) keep(name, `the base of #${t.id}`)
       for (const w of own) if (w.path) registered(w.path, t.id)
+      ticket({ id: t.id, names, chain })
     }
     const open = db
       .select()
@@ -746,6 +763,8 @@ export async function cleanupReport(
               (c) => c.ticketId !== t.id && isOpen(byId.get(c.ticketId)!),
             )
             if (openClaim) return `also at the work of #${openClaim.ticketId}`
+            const theirs = kept?.claims.get(pathKey(tree.path))
+            if (theirs) return `also at the work of #${theirs}`
             const at = (n: string) => state?.refs.local.get(n) === head || state?.refs.remote.get(n) === head
             const tipOf = [...(kept?.inUse ?? [])].find(([n]) => at(n))
             if (tipOf) return `at the tip of ${tipOf[0]}, in use by #${tipOf[1]}`
