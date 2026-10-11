@@ -145,7 +145,10 @@ Spawn a subagent briefed with the **spec** agent's `instructions`, the project's
 the ticket (everything from step 1.2), the worktree, and an output path `WORKDIR/01-spec.md` (there
 is no diff yet). Then:
 
-- `add_tasks` with the acceptance criteria, unless the ticket's tasks already cover them.
+- `add_tasks` with the acceptance criteria, unless the ticket's tasks already cover them, in the
+  board skill's two levels: a few high-level phases of the work (plan, code, tests, docs…) at the
+  top, each criterion a subtask of the phase it belongs to (`{text, subtasks}`, or `parentTaskId`
+  for a phase the ticket already has).
 - Post its result on the ticket `as: spec` (`post_update`, `progress: true`): the intent, the
   criteria, the open questions.
 - A **decisive** open question (the answer changes what counts as correct): `ask_decision` with the
@@ -213,7 +216,7 @@ and return `STATUS: needs-browser`: the orchestrator runs you again with the bro
 ### 7. Hand off
 
 Every item, in order, as the board skill's hand-off checklist says:
-1. Tasks ticked (`set_task_done`); the workspace registered.
+1. Tasks and subtasks ticked (`set_task_done`); the workspace registered.
 2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`.
    The push updates `REPO`'s refs: a lock error is retried as **Shared with the other tickets of
    this repo** says.

@@ -70,8 +70,9 @@ instructions, the worktree, and the diff when there is one (none before the firs
 **Returns:** the spec: intent, acceptance criteria with how each is checked, out of scope, the
 runbook, open questions.
 
-**Next:** the criteria become the ticket's tasks (\`add_tasks\`). An open question that changes what
-counts as correct → \`ask_decision\` and wait. Otherwise **builder**.`,
+**Next:** the criteria become the ticket's plan (\`add_tasks\`): a few high-level phases of the work
+(plan, code, tests, docs…), with the criteria as the subtasks of the phase each belongs to. An open
+question that changes what counts as correct → \`ask_decision\` and wait. Otherwise **builder**.`,
   },
   {
     name: 'builder',
