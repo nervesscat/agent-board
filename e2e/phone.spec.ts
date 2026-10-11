@@ -82,9 +82,7 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Cleanu
   await expect(page.getByRole('region', { name: 'Report', exact: true })).toContainText(
     'daily by 17:00, text',
   )
-  await expect(
-    page.getByRole('region', { name: 'Report calendar' }).getByRole('list', { name: 'Report periods' }),
-  ).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Report calendar' }).getByRole('grid')).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
   // The settings, opened: the prompt and the schedule fit too.
   const settings = page.getByRole('region', { name: 'Report settings' })

@@ -12,6 +12,10 @@ test('sets the report prompt and a daily cadence, posts today’s report; an age
 }) => {
   const today = localDate()
   const label = periodLabel('daily', today)
+  const monthDay = new Date(`${today}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+  })
   // A shift that covers the whole day, every day: today's report is not due before the test is over.
   await ok(
     human.patch(`/api/projects/${project.id}/report-settings`, {
@@ -41,15 +45,16 @@ test('sets the report prompt and a daily cadence, posts today’s report; an age
   await expect(settings).toContainText('daily by 23:59, text')
 
   // Today is the only period (none before the cadence was set), not due yet.
-  const strip = calendar.getByRole('list', { name: 'Report periods' })
-  await expect(strip.getByRole('button')).toHaveCount(1)
-  await expect(strip.getByRole('button', { name: `${label}: upcoming` })).toBeVisible()
+  const day = (status: string) =>
+    calendar.getByRole('button', { name: `${monthDay}: ${status}`, exact: true })
+  await expect(calendar.getByRole('button', { name: /: (done|missing)$/ })).toHaveCount(0)
+  await expect(day('upcoming')).toBeVisible()
   await expect(card).toContainText(`No report for ${label} yet.`)
 
   await card.getByRole('button', { name: 'post the report' }).click()
   await card.getByRole('textbox', { name: `Report for ${label}` }).fill('Shipped the parser. Next: tests.')
   await card.getByRole('button', { name: 'Post', exact: true }).click()
-  await expect(strip.getByRole('button', { name: `${label}: done` })).toBeVisible()
+  await expect(day('done')).toBeVisible()
   await expect(card).toContainText('Shipped the parser. Next: tests.')
   await expect(calendar).toContainText('1 done · 0 missing')
 
@@ -66,7 +71,7 @@ test('sets the report prompt and a daily cadence, posts today’s report; an age
 
   await page.reload()
   await expect(card).toContainText('daily by 23:59, a file')
-  await expect(strip.getByRole('button', { name: `${label}: done` })).toBeVisible()
+  await expect(day('done')).toBeVisible()
   const thumb = card.getByRole('link', { name: /report\.pdf/ })
   // pdf.js read it: the thumbnail counts its pages.
   await expect(thumb).toContainText('1 page')

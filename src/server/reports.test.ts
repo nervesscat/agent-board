@@ -140,7 +140,14 @@ describe('reports', () => {
 
   it('track each day as done, missing or upcoming; a new post replaces the report and keeps history', async () => {
     const p = newProject('daily')
-    reports.setReportSettings(p, { cadence: 'daily', shiftEnd: '18:00' }, 'me', {}, at('2026-10-01'))
+    // Every day a workday: Oct 3 and 4 are a weekend.
+    reports.setReportSettings(
+      p,
+      { cadence: 'daily', shiftEnd: '18:00', workdays: [1, 2, 3, 4, 5, 6, 7] },
+      'me',
+      {},
+      at('2026-10-01'),
+    )
     const r = await reports.postReport(
       p,
       { body: 'Shipped the export.', period: '2026-10-02' },
@@ -172,6 +179,52 @@ describe('reports', () => {
     expect(day.versions).toBe(2)
     expect(reports.reportVersions(p, '2026-10-02').map((v) => v.author)).toEqual(['me', 'claude'])
     expect(activity(p).some((a) => a.text === 'posted the daily report for Fri, Oct 2')).toBe(true)
+  })
+
+  it('mark days off outside the workdays, never missing, and done when they have a report anyway', async () => {
+    const p = newProject('workdays')
+    reports.setReportSettings(p, { cadence: 'daily', shiftEnd: '17:00' }, 'me', {}, at('2026-10-01'))
+    // Saturday Oct 10 has a report; Sunday Oct 11 none.
+    await reports.postReport(p, { body: 'Weekend fix.', period: '2026-10-10' }, 'me', at('2026-10-12'))
+    const list = reports.listReports(p, { from: '2026-10-08', to: '2026-10-12' }, at('2026-10-12', '17:30'))
+    expect(list.periods.map((x) => [x.period, x.status])).toEqual([
+      ['2026-10-12', 'missing'],
+      ['2026-10-11', 'off'],
+      ['2026-10-10', 'done'],
+      ['2026-10-09', 'missing'],
+      ['2026-10-08', 'missing'],
+    ])
+    // Before Friday's end it was not missing yet.
+    const friday = reports.listReports(p, { from: '2026-10-09', to: '2026-10-09' }, at('2026-10-09', '16:59'))
+    expect(friday.periods.map((x) => x.status)).toEqual(['upcoming'])
+  })
+
+  it('list a whole month, days after today included: upcoming on workdays, off on the others', () => {
+    const p = newProject('month')
+    reports.setReportSettings(p, { cadence: 'daily' }, 'me', {}, at('2026-09-01'))
+    const list = reports.listReports(p, { from: '2026-10-01', to: '2026-10-31' }, at('2026-10-14', '12:00'))
+    expect(list.periods).toHaveLength(31)
+    expect(list.periods[0]!.period).toBe('2026-10-31')
+    expect(list.periods.at(-1)!.period).toBe('2026-10-01')
+    const status = new Map(list.periods.map((x) => [x.period, x.status]))
+    expect(status.get('2026-10-13')).toBe('missing') // Tuesday, past
+    expect(status.get('2026-10-14')).toBe('upcoming') // today, before 17:00
+    expect(status.get('2026-10-15')).toBe('upcoming') // Thursday, ahead
+    expect(status.get('2026-10-17')).toBe('off') // Saturday, ahead
+    expect(status.get('2026-10-11')).toBe('off') // Sunday, past
+    // The default range still ends today.
+    expect(reports.listReports(p, {}, at('2026-10-14', '12:00')).periods[0]!.period).toBe('2026-10-14')
+
+    // A weekly cadence gives the weeks touching the month, each due on its weekday.
+    reports.setReportSettings(p, { cadence: 'weekly', weekday: 5 }, 'me', {}, at('2026-09-01'))
+    const weeks = reports.listReports(p, { from: '2026-10-01', to: '2026-10-31' }, at('2026-10-14', '12:00'))
+    expect(weeks.periods.map((x) => [x.period, x.status])).toEqual([
+      ['2026-10-26', 'upcoming'],
+      ['2026-10-19', 'upcoming'],
+      ['2026-10-12', 'upcoming'],
+      ['2026-10-05', 'missing'],
+      ['2026-09-28', 'missing'],
+    ])
   })
 
   it('take a file as a path, attach it to the report and hand back its local path', async () => {

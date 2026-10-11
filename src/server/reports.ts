@@ -297,7 +297,8 @@ export interface ReportList extends Omit<ReportSettingsView, 'prompt' | 'templat
 /**
  * The project's periods from `from` to `to` (days; by default the last two weeks of a daily cadence or
  * eight weeks of a weekly one, up to today), newest first, each with when it is due, its status and
- * its latest report. Periods before tracking began are left out unless they have a report.
+ * its latest report. `to` may be after today (a whole month for a calendar): those periods are
+ * upcoming, or off. Periods before tracking began are left out unless they have a report.
  */
 export function listReports(
   projectId: number,
@@ -316,8 +317,7 @@ export function listReports(
   if (settings.cadence === 'off') return { ...base, current: null, periods: [] }
   const cadence = settings.cadence
   const today = localDate(now)
-  const to = range.to ? checkDay(range.to, 'to') : today
-  const end = to > today ? today : to
+  const end = range.to ? checkDay(range.to, 'to') : today
   const from = range.from ? checkDay(range.from, 'from') : shiftDate(end, cadence === 'daily' ? -13 : -7 * 7)
   const periods = periodsBetween(cadence, from, end)
   const first = periods.at(-1) ?? end
