@@ -59,23 +59,42 @@ export async function projectPreviews(projectId: number): Promise<ProjectPreview
     .all()
     .map((workspace) => ({ workspace, managed: managedPreview(workspace.id) }))
     .filter(({ workspace, managed }) => workspace.previewUrl || managed)
+    // Everything but the link checks is read here, at one moment, while every row still exists: a
+    // workspace removed while the links answer cannot fail the listing (cannotStart reads it by id).
+    .map((row) => ({ ...row, cannotStart: cannotStart(row.workspace.id) }))
+  if (!found.length) return []
   const checks = await Promise.all(
     found.map(({ workspace: w }) =>
       w.previewUrl && isLocalUrl(w.previewUrl) ? previewState(w.previewUrl) : null,
     ),
   )
+  // One removed meanwhile (with its ticket, too) is left out: it has nothing left to open or start.
+  const remaining = new Set(
+    db
+      .select({ id: schema.workspaces.id })
+      .from(schema.workspaces)
+      .where(
+        inArray(
+          schema.workspaces.id,
+          found.map(({ workspace }) => workspace.id),
+        ),
+      )
+      .all()
+      .map(({ id }) => id),
+  )
   return found
-    .map(({ workspace, managed }, i): ProjectPreview => {
-      const check = checks[i] ?? null
-      return {
+    .map((row, i) => ({ ...row, check: checks[i] ?? null }))
+    .filter(({ workspace }) => remaining.has(workspace.id))
+    .map(
+      ({ workspace, managed, cannotStart, check }): ProjectPreview => ({
         workspace,
         ticket: byId.get(workspace.ticketId)!,
         url: workspace.previewUrl,
         check,
         managed,
-        cannotStart: cannotStart(workspace.id),
+        cannotStart,
         running: isActive(managed) || !!check?.running,
-      }
-    })
+      }),
+    )
     .sort((a, b) => Number(b.running) - Number(a.running) || lastAt(b).localeCompare(lastAt(a)))
 }

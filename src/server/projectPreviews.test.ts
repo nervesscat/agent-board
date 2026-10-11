@@ -342,6 +342,37 @@ describe('the project previews', () => {
     expect(others).not.toContain(mine.id)
   })
 
+  it('leaves out a workspace removed while the links answer, and lists the rest', async () => {
+    useFake()
+    const project = dbm.db.insert(dbm.schema.projects).values({ name: 'removing' }).returning().get().id
+    dbm.db.insert(dbm.schema.repos).values({ projectId: project, name: 'agent-board', repoPath: main }).run()
+    const t = ticket({ project })
+    // Its link never answers: the listing waits on it for the check's whole timeout.
+    const slow = workspace(t.id, { previewUrl: `${silentUrl}/removing` })
+    const kept = workspace(t.id, { previewUrl: 'https://example.com/kept' })
+    const removed = workspace(t.id, { previewUrl: 'https://example.com/removed' })
+    const removedManaged = workspace(t.id, { path: freshWorktree() })
+    await startRunning(removedManaged.id)
+    const gone = ticket({ project })
+    const wsOfGone = workspace(gone.id, { previewUrl: 'https://example.com/gone' })
+
+    const listing = projectPreviews(project)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    features.deleteWorkspace(removed.id, 'claude')
+    features.deleteWorkspace(removedManaged.id, 'claude')
+    features.deleteTicket(gone.id, 'enrique')
+    const list = await listing
+
+    const ids = list.map((p) => p.workspace.id)
+    expect(ids).toContain(slow.id)
+    expect(ids).toContain(kept.id)
+    expect(ids).not.toContain(removed.id)
+    expect(ids).not.toContain(removedManaged.id)
+    expect(ids).not.toContain(wsOfGone.id)
+    expect(list.find((p) => p.workspace.id === slow.id)).toMatchObject({ check: { running: false } })
+    expect(list.find((p) => p.workspace.id === kept.id)).toMatchObject({ cannotStart: expect.any(String) })
+  })
+
   it('is empty for a project without previews', async () => {
     const empty = dbm.db.insert(dbm.schema.projects).values({ name: 'empty' }).returning().get().id
     expect(await projectPreviews(empty)).toEqual([])
@@ -370,6 +401,31 @@ describe('GET /api/projects/:id/previews', () => {
     const missing = await call('/api/projects/999999/previews')
     expect(missing.status).toBe(404)
     expect(await missing.json()).toEqual({ error: 'project not found' })
+  })
+
+  it('still answers the rest when a workspace is removed while the links answer', async () => {
+    const project = dbm.db
+      .insert(dbm.schema.projects)
+      .values({ name: 'removing over http' })
+      .returning()
+      .get().id
+    dbm.db.insert(dbm.schema.repos).values({ projectId: project, name: 'agent-board', repoPath: main }).run()
+    const t = ticket({ project })
+    const slow = workspace(t.id, { previewUrl: `${silentUrl}/removing-http` })
+    const removed = workspace(t.id, { previewUrl: 'https://example.com/removed-http' })
+
+    const pending = call(`/api/projects/${project}/previews`)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const { api } = await import('./api')
+    const del = await api.handle(
+      new Request(`http://localhost/api/workspaces/${removed.id}`, { method: 'DELETE' }),
+      'claude',
+    )
+    expect(del.status).toBeLessThan(300)
+    const res = await pending
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { previews: { workspace: { id: number } }[] }
+    expect(body.previews.map((p) => p.workspace.id)).toEqual([slow.id])
   })
 
   it('only reads: no link, preview or activity changes, however often it is asked', async () => {
