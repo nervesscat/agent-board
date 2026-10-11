@@ -185,7 +185,7 @@ export const tickets = sqliteTable(
     createdAt: now(),
     updatedAt: now(),
   },
-  (t) => [index('tickets_parent').on(t.parentId)],
+  (t) => [index('tickets_parent').on(t.parentId), index('tickets_project').on(t.projectId)],
 )
 
 // A ticket that cannot be done before another ticket's branch is merged into its base: a stacked
@@ -203,54 +203,72 @@ export const ticketNeeds = sqliteTable(
   (t) => [primaryKey({ columns: [t.ticketId, t.needsId] }), index('ticket_needs_needs').on(t.needsId)],
 )
 
-export const tasks = sqliteTable('tasks', {
-  id: id(),
-  ticketId: integer('ticket_id')
-    .notNull()
-    .references(() => tickets.id, { onDelete: 'cascade' }),
-  text: text().notNull(),
-  done: integer({ mode: 'boolean' }).notNull().default(false),
-  position: integer().notNull().default(0),
-})
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    text: text().notNull(),
+    done: integer({ mode: 'boolean' }).notNull().default(false),
+    position: integer().notNull().default(0),
+  },
+  (t) => [index('tasks_ticket').on(t.ticketId)],
+)
 
-export const workspaces = sqliteTable('workspaces', {
-  id: id(),
-  ticketId: integer('ticket_id')
-    .notNull()
-    .references(() => tickets.id, { onDelete: 'cascade' }),
-  name: text().notNull(),
-  branch: text().notNull().default(''),
-  path: text().notNull().default(''),
-  agent: text().notNull().default(''),
-  // Where the branch runs for the human to try (`http://localhost:<port>`); '' when nothing runs.
-  previewUrl: text('preview_url').notNull().default(''),
-  createdAt: now(),
-})
+export const workspaces = sqliteTable(
+  'workspaces',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    branch: text().notNull().default(''),
+    path: text().notNull().default(''),
+    agent: text().notNull().default(''),
+    // Where the branch runs for the human to try (`http://localhost:<port>`); '' when nothing runs.
+    previewUrl: text('preview_url').notNull().default(''),
+    createdAt: now(),
+  },
+  (t) => [index('workspaces_ticket').on(t.ticketId)],
+)
 
 // A post on a ticket: progress (`progress`, what agents report as they go) or discussion. Its replies
 // are the comments whose parent is the post (parent_type 'update', the table's historical name).
-export const updates = sqliteTable('updates', {
-  id: id(),
-  ticketId: integer('ticket_id')
-    .notNull()
-    .references(() => tickets.id, { onDelete: 'cascade' }),
-  author: text().notNull(),
-  // The connected agent that posted it on `author`'s behalf when `author` is one of the project's agents.
-  via: text().notNull().default(''),
-  body: text().notNull(),
-  progress: integer({ mode: 'boolean' }).notNull().default(true),
-  // A resume note as it was saved (see tickets.resumeNote): the ticket's handoffs, oldest to newest.
-  handoff: integer({ mode: 'boolean' }).notNull().default(false),
-  // A decision the human is asked to make: the post's body is the question, these are the answers
-  // to pick from. Null on any other post.
-  decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),
-  // The human's pick (an index into `decision`), who and when; null until decided.
-  decidedOption: integer('decided_option'),
-  decidedBy: text('decided_by').notNull().default(''),
-  decidedAt: text('decided_at'),
-  createdAt: now(),
-  editedAt: text('edited_at'),
-})
+export const updates = sqliteTable(
+  'updates',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    author: text().notNull(),
+    // The connected agent that posted it on `author`'s behalf when `author` is one of the project's agents.
+    via: text().notNull().default(''),
+    body: text().notNull(),
+    progress: integer({ mode: 'boolean' }).notNull().default(true),
+    // A resume note as it was saved (see tickets.resumeNote): the ticket's handoffs, oldest to newest.
+    handoff: integer({ mode: 'boolean' }).notNull().default(false),
+    // A decision the human is asked to make: the post's body is the question, these are the answers
+    // to pick from. Null on any other post.
+    decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),
+    // The human's pick (an index into `decision`), who and when; null until decided.
+    decidedOption: integer('decided_option'),
+    decidedBy: text('decided_by').notNull().default(''),
+    decidedAt: text('decided_at'),
+    createdAt: now(),
+    editedAt: text('edited_at'),
+  },
+  (t) => [
+    index('updates_ticket').on(t.ticketId),
+    // The decisions still waiting on the human: a few among every post.
+    index('updates_open_decisions')
+      .on(t.createdAt)
+      .where(sql`decision is not null and decided_at is null`),
+  ],
+)
 
 export type DecisionOption = { label: string; detail?: string; recommended?: boolean }
 
@@ -319,7 +337,8 @@ export const activity = sqliteTable(
     text: text().notNull(),
     createdAt: now(),
   },
-  (t) => [index('activity_created').on(t.createdAt)],
+  // By what it is about: the id first, so a read of one day's rows still goes by when they were made.
+  (t) => [index('activity_created').on(t.createdAt), index('activity_ref').on(t.refId, t.refType)],
 )
 
 // The highest-level line for a day: what got done, in a sentence or three.

@@ -162,6 +162,13 @@
       "when": 1791293825195,
       "tag": "0022_pr_review_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791717861013,
+      "tag": "0023_summary_lookup_indexes",
+      "breakpoints": true
     }
   ]
 }
