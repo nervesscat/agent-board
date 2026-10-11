@@ -26,6 +26,18 @@ export function readClaudeArgs(raw: string | undefined): string[] {
   return value
 }
 
+/**
+ * CLAUDE_TIMEOUT_MS: how long one run of claude may take before it is stopped, in milliseconds (two
+ * minutes by default).
+ */
+export function readClaudeTimeout(raw: string | undefined): number {
+  if (!raw?.trim()) return 120_000
+  const ms = Number(raw)
+  if (!Number.isInteger(ms) || ms <= 0)
+    throw new Error(`CLAUDE_TIMEOUT_MS must be a whole number of milliseconds above 0, got ${raw}`)
+  return ms
+}
+
 export const config = {
   port: Number(env('PORT', '47100')),
   boardUrl: env('BOARD_URL', 'http://localhost:47100').replace(/\/$/, ''),
@@ -34,6 +46,7 @@ export const config = {
   // The Claude Code CLI that writes generated reports, and arguments to put before its own.
   claudeBin: env('CLAUDE_BIN', 'claude'),
   claudeArgs: readClaudeArgs(process.env.CLAUDE_ARGS),
+  claudeTimeoutMs: readClaudeTimeout(process.env.CLAUDE_TIMEOUT_MS),
   // Where attachment files live: 'local' (data/uploads) or 's3' (MinIO or any S3-compatible store).
   storage: env('STORAGE', 'local') === 's3' ? ('s3' as const) : ('local' as const),
   s3: {
