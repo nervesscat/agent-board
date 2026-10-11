@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 
 import { db, schema } from '#/db'
@@ -167,6 +168,11 @@ export interface RepoSkills {
 /** The user-wide copy: the `.claude` folder in the home of the machine the board runs on. */
 export interface GlobalSkills {
   path: string
+  /**
+   * The folder its install line puts the bundle in: `path` when CLAUDE_HOME names another folder than
+   * `~/.claude`, null when it is `~/.claude` (the line then says `~/.claude`).
+   */
+  installTo: string | null
   status: RepoSkillsStatus
   files: SkillFiles
 }
@@ -242,8 +248,10 @@ async function repoSkills(repoPath: string): Promise<Pick<RepoSkills, 'status' |
  */
 async function globalSkills(): Promise<GlobalSkills> {
   const dir = config.claudeHome
-  if (!(await globalReadable())) return { path: dir, status: 'unreachable', files: [] }
-  return { path: dir, ...(await claudeSkills(dir)) }
+  // `~/.claude` of the user the board runs as (Windows compares the two without case).
+  const installTo = path.relative(dir, path.join(os.homedir(), '.claude')) === '' ? null : dir
+  if (!(await globalReadable())) return { path: dir, installTo, status: 'unreachable', files: [] }
+  return { path: dir, installTo, ...(await claudeSkills(dir)) }
 }
 
 /** Whether the user-wide folder can be read: there and listable, or not there at all. */

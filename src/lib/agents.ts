@@ -90,7 +90,7 @@ const powershellArg = (dir: string) => `'${dir.replace(/['‘’‚‛]/g, '$&$&
 /**
  * One line that installs feature-review, review-queue and their agents into ~/.claude (Claude Code's
  * skills and agents; OpenCode reads ~/.claude/skills too), or into `dir` (a repo's own `.claude`, see
- * `repoClaudeDir`), replacing the files of the same name.
+ * `repoClaudeDir`, or the folder CLAUDE_HOME names), replacing the files of the same name.
  */
 export function reviewSkillsInstall(shell: Shell, boardUrl: string, token: string, dir?: string) {
   const src = `${boardUrl}/api/agent-setup/review-skills`

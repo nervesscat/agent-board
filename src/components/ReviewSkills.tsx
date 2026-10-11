@@ -162,7 +162,7 @@ function InstalledSkills({
         </Tabs>
       </div>
       {tracking === 'global' ? (
-        <GlobalSkills line={reviewSkillsInstall(shell, boardUrl, token)} projectId={projectId} />
+        <GlobalSkills boardUrl={boardUrl} token={token} shell={shell} projectId={projectId} />
       ) : (
         <RepoSkills boardUrl={boardUrl} token={token} shell={shell} projectId={projectId} />
       )}
@@ -194,22 +194,44 @@ function CheckAgain({ status }: { status: ReturnType<typeof useSkillsStatus> }) 
 }
 
 /**
- * The user-wide copy, in the `.claude` folder in the home of the machine the board runs on. An outdated
- * copy opens to the files that are not current and the install line.
+ * The user-wide copy, in the `.claude` folder in the home of the machine the board runs on (or the one
+ * CLAUDE_HOME names). An outdated copy opens to the files that are not current and the install line, the
+ * one above unless the folder is not `~/.claude`: then its own, into that folder, also when none are there.
  */
-function GlobalSkills({ line, projectId }: { line: string; projectId?: string }) {
+function GlobalSkills({
+  boardUrl,
+  token,
+  shell,
+  projectId,
+}: {
+  boardUrl: string
+  token: string
+  shell: Shell
+  projectId?: string
+}) {
   const status = useSkillsStatus(projectId)
   const { data, error } = status
+  const installTo = data?.global.installTo ?? null
   return (
     <section className="space-y-2" aria-label="On this machine">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-xs font-medium">On this machine</h3>
         <CheckAgain status={status} />
       </div>
-      <p className="text-xs text-muted-foreground">
-        The copy in <code className="rounded bg-muted px-1">~/.claude</code> on the machine the board runs on,
-        which Claude Code uses in every repo without a copy of its own. The line above brings it up to date.
-      </p>
+      {installTo === null ? (
+        <p className="text-xs text-muted-foreground">
+          The copy in <code className="rounded bg-muted px-1">~/.claude</code> on the machine the board runs
+          on, which Claude Code uses in every repo without a copy of its own. The line above brings it up to
+          date.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          The copy in the folder <code className="rounded bg-muted px-1">CLAUDE_HOME</code> names on the
+          machine the board runs on, in place of <code className="rounded bg-muted px-1">~/.claude</code>. The
+          line above installs into <code className="rounded bg-muted px-1">~/.claude</code>: this copy has a
+          line of its own that installs the files into that folder.
+        </p>
+      )}
       {error && <p className="text-xs text-destructive">{errorMessage(error)}</p>}
       {data && (
         <ul className="divide-y rounded-md border">
@@ -219,10 +241,15 @@ function GlobalSkills({ line, projectId }: { line: string; projectId?: string })
             path={data.global.path}
             status={data.global.status}
             statusLabel={GLOBAL_LABEL[data.global.status]}
-            none="None of these files are there yet: the line above installs them."
+            none={
+              installTo === null
+                ? 'None of these files are there yet: the line above installs them.'
+                : 'None of these files are there yet: this line installs them.'
+            }
+            noneLine={installTo !== null}
             files={data.global.files}
             total={data.files.length}
-            line={line}
+            line={reviewSkillsInstall(shell, boardUrl, token, installTo ?? undefined)}
           />
         </ul>
       )}
@@ -310,6 +337,7 @@ function SkillsItem({
   status,
   statusLabel,
   none,
+  noneLine = false,
   files,
   total,
   line,
@@ -323,6 +351,8 @@ function SkillsItem({
   statusLabel: string
   /** What a copy with none of the files means. */
   none: ReactNode
+  /** Whether a copy with none of the files shows the line too. */
+  noneLine?: boolean
   files: RepoSkillsRow['files']
   total: number
   line: string
@@ -350,6 +380,7 @@ function SkillsItem({
         </Badge>
       </div>
       {status === 'none' && <p className="text-xs text-muted-foreground">{none}</p>}
+      {status === 'none' && noneLine && <CopyBlock text={line} />}
       {outdated && (
         <>
           <button

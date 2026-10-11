@@ -15,7 +15,8 @@ export const config = {
   gateUrl: env('GATE_URL', 'http://localhost:47110').replace(/\/$/, ''),
   dataDir: expandPath(env('DATA_DIR', './data')),
   claudeBin: env('CLAUDE_BIN', 'claude'),
-  // The user-wide .claude folder on this machine: where the review skills' install line puts them.
+  // The user-wide .claude folder on this machine the review skills are checked in, and installed into by
+  // its line on the Agents pages.
   claudeHome: expandPath(env('CLAUDE_HOME', '~/.claude')),
   // Where attachment files live: 'local' (data/uploads) or 's3' (MinIO or any S3-compatible store).
   storage: env('STORAGE', 'local') === 's3' ? ('s3' as const) : ('local' as const),

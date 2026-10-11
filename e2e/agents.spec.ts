@@ -18,6 +18,9 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   page.on('console', (m) => /hydrat/i.test(m.text()) && hydration.push(m.text()))
   const tabs = (name: string) => page.getByRole('tab', { name })
   const bash = 'bash / zsh'
+  // The review skills' line at the top, into ~/.claude: the global copy in the run's CLAUDE_HOME may show
+  // a line of its own, into that folder.
+  const reviewLine = page.getByText(/^\$t = Join-Path .*-C "\$HOME\\\.claude"; Remove-Item \$t$/)
 
   await page.goto('/agents')
   await expect(page.getByRole('heading', { name: 'Connect agents' })).toBeVisible()
@@ -31,11 +34,11 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   // One choice for the page: the review skills' line follows.
   for (const tab of await tabs('PowerShell').all()) await expect(tab).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText(/^New-Item -ItemType Directory/)).toBeVisible()
-  await expect(page.getByText(/^\$t = Join-Path/)).toBeVisible()
+  await expect(reviewLine).toBeVisible()
 
   await page.reload()
   for (const tab of await tabs('PowerShell').all()) await expect(tab).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByText(/^\$t = Join-Path/)).toBeVisible()
+  await expect(reviewLine).toBeVisible()
 
   // Without one in the URL, the shell this browser remembers comes back, and the URL says so: here and
   // on a project's Agents page.
@@ -45,7 +48,7 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   await page.goto(`/projects/${project.id}/agents`)
   await expect(page).toHaveURL(/[?&]shell=powershell(&|$)/)
   await expect(tabs('PowerShell')).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByText(/^\$t = Join-Path/)).toBeVisible()
+  await expect(reviewLine).toBeVisible()
   await tabs(bash).click()
   await expect(page).toHaveURL(/[?&]shell=bash(&|$)/)
   await expect(page.getByText(/^\$t = Join-Path/)).toHaveCount(0)
@@ -102,6 +105,37 @@ function emptyHome() {
   fs.rmSync(path.dirname(claudeHome), { recursive: true, force: true })
   fs.mkdirSync(path.dirname(claudeHome), { recursive: true })
   return claudeHome
+}
+
+/**
+ * Runs the install line `entry` shows, with a token in it: the PowerShell one on Windows (with Windows'
+ * own tar first, as a PowerShell terminal finds it), the bash one elsewhere. Run only once the entry shows
+ * the line `line` builds for the folder checked, and with a home and a temp folder of its own, so that a
+ * line for any other folder never reaches the real ones.
+ */
+async function runShownLine(
+  page: Page,
+  entry: Locator,
+  line: (shell: 'bash' | 'powershell', token?: string) => Locator,
+) {
+  const shell = process.platform === 'win32' ? 'powershell' : 'bash'
+  await page
+    .getByRole('tab', { name: shell === 'bash' ? 'bash / zsh' : 'PowerShell' })
+    .first()
+    .click()
+  await page.getByLabel('Gate token').fill('gate_e2e')
+  await expect(line(shell, 'gate_e2e')).toBeVisible()
+  const text = (await entry.locator('pre').textContent())!
+  const scratch = fs.mkdtempSync(path.join(e2eEnv().root, 'shell '))
+  if (shell === 'bash') {
+    execFileSync('bash', ['-c', text], { cwd: scratch, env: { ...process.env, HOME: scratch } })
+  } else {
+    const system32 = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32')
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', text], {
+      cwd: scratch,
+      env: { ...process.env, TEMP: scratch, PATH: `${system32};${process.env.PATH}` },
+    })
+  }
 }
 
 /** The bundle as served, file by file: the tar extracted into a folder of its own. */
@@ -231,6 +265,9 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await track(human, 'global')
     const total = (await ok<string[]>(human.get('/api/agent-setup/review-skills?list'))).length
     const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+    // The run's CLAUDE_HOME is not ~/.claude: the status says the line installs into it.
+    const status = await ok<{ global: object }>(human.get('/api/agent-setup/review-skills/status'))
+    expect(status.global).toMatchObject({ path: path.resolve(claude), installTo: path.resolve(claude) })
 
     await page.goto('/agents?shell=bash')
     const here = page.getByRole('region', { name: 'On this machine' })
@@ -239,8 +276,14 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await expect(entry.getByText(path.resolve(claude), { exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: 'In your repos' })).toHaveCount(0)
     await expect(page.getByRole('listitem', { name: / in / })).toHaveCount(0)
+    // Said of the folder CLAUDE_HOME names, not of ~/.claude, which the line above still installs into.
+    await expect(here).toContainText(
+      'The copy in the folder CLAUDE_HOME names on the machine the board runs on',
+    )
+    await expect(here).not.toContainText('The line above brings it up to date')
+    await expect(page.getByText(reviewSkillsInstall('bash', boardUrl, ''), { exact: true })).toBeVisible()
 
-    // Opened: the files that are not current and the line that installs into ~/.claude.
+    // Opened: the files that are not current and the line that installs into the folder checked.
     const more = entry.getByRole('button', { name: `3 of ${total} files differ or are missing` })
     await more.click()
     await expect(more).toHaveAttribute('aria-expanded', 'true')
@@ -250,7 +293,7 @@ test.describe('the copy of the review skills the Agents pages track', () => {
       /^missing\s*\.claude\/skills\/todo-review\/SKILL\.md$/,
     ])
     const line = (shell: 'bash' | 'powershell', token = '') =>
-      entry.getByText(reviewSkillsInstall(shell, boardUrl, token), { exact: true })
+      entry.getByText(reviewSkillsInstall(shell, boardUrl, token, path.resolve(claude)), { exact: true })
     await expect(line('bash')).toBeVisible()
     await expect(entry.getByRole('button', { name: 'Copy' })).toBeVisible()
     await page.getByRole('tab', { name: 'PowerShell' }).first().click()
@@ -258,22 +301,28 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await page.getByLabel('Gate token').fill('gate_e2e')
     await expect(line('powershell', 'gate_e2e')).toBeVisible()
 
-    // What the line does: the bundle extracted into ~/.claude. Checked again, it is up to date and its
-    // own skill is still there.
-    await install(human, claude)
+    // What the line does, run as shown: the bundle extracted into the folder checked. Checked again, it
+    // is up to date and its own skill is still there.
+    await runShownLine(page, entry, line)
     await here.getByRole('button', { name: 'Check again' }).click()
     await expect(entry.getByText('Up to date', { exact: true })).toBeVisible()
     await expect(entry.getByRole('button')).toHaveCount(0)
     expect(fs.readFileSync(path.join(claude, 'skills', 'x', 'SKILL.md'), 'utf8')).toBe('Not the bundle.\n')
 
-    // Nothing there: not installed, said of ~/.claude and not of a repo.
+    // Nothing there: not installed, said of that folder and not of a repo, with the line that installs
+    // into it (the one above would not).
     emptyHome()
     await here.getByRole('button', { name: 'Check again' }).click()
     await expect(entry.getByText('Not installed', { exact: true })).toBeVisible()
     await expect(entry).not.toContainText('in the repo')
     await expect(entry).not.toContainText('Uses the ~/.claude install')
-    await expect(entry.getByRole('button')).toHaveCount(0)
+    await expect(entry.getByText('None of these files are there yet: this line installs them.')).toBeVisible()
+    await expect(entry.getByRole('button')).toHaveCount(1)
     expect(fs.existsSync(claude)).toBe(false)
+    await runShownLine(page, entry, line)
+    await here.getByRole('button', { name: 'Check again' }).click()
+    await expect(entry.getByText('Up to date', { exact: true })).toBeVisible()
+    emptyHome()
 
     // A project's Agents page shows the same copy.
     await drifted(human, claude)

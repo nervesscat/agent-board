@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { eq } from 'drizzle-orm'
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { ReviewSkillsStatus, SkillFileDiff } from './agents'
 
@@ -378,7 +378,7 @@ describe('the review skills in ~/.claude', () => {
     homeWith(drifted())
     const status = await agents.reviewSkillsStatus()
     expect(Object.keys(status).sort()).toEqual(['files', 'global', 'repos'])
-    expect(Object.keys(status.global).sort()).toEqual(['files', 'path', 'status'])
+    expect(Object.keys(status.global).sort()).toEqual(['files', 'installTo', 'path', 'status'])
     expect(status.global.path).toBe(claude)
     expect(path.isAbsolute(status.global.path)).toBe(true)
     expect(status.global.files.map((f) => f.path)).toEqual(status.files)
@@ -422,8 +422,35 @@ describe('the review skills in ~/.claude', () => {
   it('calls a .claude that is not a folder unreachable, and still answers for the repos', async () => {
     homeWith({ '.claude': 'not a folder\n' })
     const status = await agents.reviewSkillsStatus()
-    expect(status.global).toEqual({ path: claude, status: 'unreachable', files: [] })
+    expect(status.global).toEqual({ path: claude, installTo: claude, status: 'unreachable', files: [] })
     expect(status.repos.find((r) => r.repoName === 'drifted')!.status).toBe('outdated')
+  })
+
+  it('says the install line goes to the folder CLAUDE_HOME names, unless that is ~/.claude', async () => {
+    // The test's CLAUDE_HOME is not the ~/.claude of the user it runs as: the line installs into it.
+    for (const files of [undefined, drifted(), { '.claude': 'not a folder\n' }]) {
+      homeWith(files)
+      expect((await global()).installTo, JSON.stringify(files)).toBe(claude)
+    }
+    homeWith(drifted())
+    const { api } = await import('./api')
+    const res = await api.handle(
+      new Request('http://localhost/api/agent-setup/review-skills/status'),
+      'enrique',
+    )
+    expect(((await res.json()) as ReviewSkillsStatus).global.installTo).toBe(claude)
+
+    // The same folder as the home of the user the board runs as: the line says ~/.claude, as it always has.
+    const homedir = vi.spyOn(os, 'homedir')
+    try {
+      for (const at of process.platform === 'win32' ? [home, home.toUpperCase()] : [home]) {
+        homedir.mockReturnValue(at)
+        expect(await global(), at).toMatchObject({ path: claude, installTo: null, status: 'outdated' })
+      }
+    } finally {
+      homedir.mockRestore()
+    }
+    expect((await global()).installTo).toBe(claude)
   })
 
   it('only reads: the home is left as it was, and no .claude appears', async () => {

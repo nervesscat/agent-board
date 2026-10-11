@@ -19,6 +19,31 @@ describe('the review skills install line', () => {
     )
   })
 
+  it('installs into the folder CLAUDE_HOME names, as given, in either shell', () => {
+    // The folder itself is the target, not a checkout that holds one: nothing is added to it.
+    expect(reviewSkillsInstall('bash', board, 'gate_abc', '/srv/claude home')).toBe(
+      `mkdir -p '/srv/claude home' && (cd '/srv/claude home' && ` +
+        `curl -fsS -H "Authorization: Bearer gate_abc" "${src}" | tar -x)`,
+    )
+    expect(reviewSkillsInstall('powershell', board, 'gate_abc', '/srv/claude home')).toBe(
+      `$t = Join-Path $env:TEMP 'review-skills.tar'; New-Item -ItemType Directory -Force '/srv/claude home' | Out-Null; ` +
+        `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = 'Bearer gate_abc' } '${src}' -OutFile $t; ` +
+        `tar -xf $t -C '/srv/claude home'; Remove-Item $t`,
+    )
+    const windows = 'D:\\Agents\\claude'
+    expect(reviewSkillsInstall('powershell', board, '', windows)).toBe(
+      `$t = Join-Path $env:TEMP 'review-skills.tar'; New-Item -ItemType Directory -Force 'D:\\Agents\\claude' | Out-Null; ` +
+        `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = 'Bearer gate_…' } '${src}' -OutFile $t; ` +
+        `tar -xf $t -C 'D:\\Agents\\claude'; Remove-Item $t`,
+    )
+    expect(reviewSkillsInstall('bash', board, '', windows)).toBe(
+      `mkdir -p 'D:/Agents/claude' && (cd 'D:/Agents/claude' && ` +
+        `curl -fsS -H "Authorization: Bearer gate_…" "${src}" | tar -x)`,
+    )
+    for (const shell of ['bash', 'powershell'] as const)
+      expect(reviewSkillsInstall(shell, board, '', windows), shell).not.toMatch(/~\/\.claude|\$HOME/)
+  })
+
   it("finds the repo's .claude the board reads: a Windows path with its own separator, any other with /", () => {
     expect(repoClaudeDir('F:\\Code\\my repo')).toBe('F:\\Code\\my repo\\.claude')
     expect(repoClaudeDir('F:\\Code\\my repo\\')).toBe('F:\\Code\\my repo\\.claude')
