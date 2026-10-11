@@ -723,12 +723,23 @@ async function reviewFromCachedQueue(page: Page, project: Project) {
   expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('others')
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
+  await recordMarks(page)
   await link.click()
   await expect(page).toHaveURL(new RegExp(`filter=me#pr-${target.id}$`))
+  await expect(page.getByRole('tab', { name: /^To review/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: /^All/ })).toHaveCount(0)
   const card = page.locator(`#pr-${target.id}`)
   await expectRevealed(page, card, topBar(page))
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
   expect(await noSidewaysScroll(page)).toBe(true)
+  // Shown for this visit, not remembered.
+  expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('others')
+  // Revealed once, after the list settled, and the filter put in the URL on the way is no step of
+  // the history.
+  await expectMarkGone(page)
+  expect((await marks(page)).map((m) => m.id)).toEqual([`pr-${target.id}`])
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
 }
 
 test('a PR to review lands on its card with the queue already loaded and a filter that hides it', async ({
@@ -820,6 +831,9 @@ test("a reply on a PR's thread opens it on the PR's tab", async ({ page, project
   const link = needsYou(page).getByRole('link', { name: `PR #${pr.number} Mine, reviewed` })
   await expect(link).toHaveAttribute('href', `/projects/${project.id}/prs#pr-${pr.id}-reply-${r.id}`)
   await link.click()
+  // To review shows no PR of the human's own: the queue switches to the filter that shows it.
+  await expect(page.getByRole('tab', { name: /^Waiting on others/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(new RegExp(`filter=others#pr-${pr.id}-reply-${r.id}$`))
   await expect(page.getByRole('tab', { name: /^Reviewed/ })).toHaveAttribute('aria-selected', 'true')
   const card = page.locator(`#pr-${pr.id}`)
   await expect(card.getByRole('button', { name: 'thread' })).toHaveAttribute('aria-expanded', 'true')
