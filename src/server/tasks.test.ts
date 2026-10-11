@@ -166,6 +166,33 @@ describe('ticks keep a task and its subtasks in step', () => {
   })
 })
 
+describe('a task write and the sync it causes are one transaction', () => {
+  it('a sync that fails after the write leaves nothing written', async () => {
+    const { db } = await import('#/db')
+    const { sql } = await import('drizzle-orm')
+    const t = ticket('atomic', [{ text: 'a', subtasks: ['a1', 'a2'] }])
+    const a = byText(t.id, 'a')
+    const snapshot = () => tasks(t.id).map((x) => [x.text, x.done, x.parentId])
+    const before = snapshot()
+    // Each write below changes a subtask first, then settles its task: that second statement fails.
+    db.run(
+      sql.raw(`create trigger fail_settle before update on tasks
+        when new.parent_id is null and new.ticket_id = ${t.id}
+        begin select raise(abort, 'settle failed'); end`),
+    )
+    try {
+      expect(() => features.addTasks(t.id, ['a3'], 'claude', { parentTaskId: a.id })).toThrow(/settle failed/)
+      expect(() => features.updateTask(byText(t.id, 'a1').id, { done: true }, 'claude')).toThrow(
+        /settle failed/,
+      )
+      expect(() => features.deleteTask(byText(t.id, 'a2').id, 'claude')).toThrow(/settle failed/)
+    } finally {
+      db.run(sql`drop trigger fail_settle`)
+    }
+    expect(snapshot()).toEqual(before)
+  })
+})
+
 describe('counts', () => {
   it('take in every task and subtask: progress, rollup over lanes, get_ticket and the summary', async () => {
     const { db, schema } = await import('#/db')
