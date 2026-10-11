@@ -16,16 +16,20 @@ intent is unclear you record a question instead of guessing.
 1. Repo root.
 2. Working dir containing `00-diff.patch` (the change) and `00-context.md` (PR body,
    commit messages, ticket text, project rule files).
-3. Output path.
+3. `00-focus.md`: the changed files, their tests, their direct callers. Start from it; read
+   outside it only to follow a reference from it.
+4. Output path.
 
 ## Task
 
-- Read the context first, then the diff, then the surrounding code the diff touches:
-  callers, callees, and the tests it adds or changes. Tests the author wrote are the
+- Read the context first, then the diff, then the files in `00-focus.md`: callers,
+  callees, and the tests it adds or changes. Tests the author wrote are the
   strongest evidence of intent.
 - Classify the change with one or more of: `api-endpoint`, `data-model`, `ui`,
-  `background-job`, `llm-prompt`, `auth`, `config-infra`, `dependency`, `refactor`,
-  `cli-script`. These select the checklists a later agent applies.
+  `background-job`, `llm-prompt` (code that calls a model), `auth`, `config-infra`,
+  `dependency`, `refactor`, `cli-script`, `instructions` (text agents or people follow: skills,
+  agent files, `AGENTS.md`, `CLAUDE.md`, README, docs). These select the checklists, the
+  services and the verify methods later agents use.
 - Write acceptance criteria. Each must be:
   - observable: a request, a screen, a job run, or a function call and its result;
   - derived from a source you cite: `author` (PR or commit text), `ticket`, `test` (a
@@ -33,6 +37,8 @@ intent is unclear you record a question instead of guessing.
     the author clearly relied on);
   - tagged with the cheapest verification method that actually executes:
     `existing-test`, `new-test`, `run+http`, `browser`, or `static-trace` (last resort).
+    An `instructions` criterion is checked on the text where its reader gets it: `run+http`
+    when it is served, else `new-test` (build or install it, then read the result).
   If you believe something *should* be required but no source says so, it goes under
   **Open questions**, never into the criteria.
 - Write **Out of scope**: what the change deliberately does not handle, from the
