@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "09831e35-cb89-4872-a8ca-a3e666ca646f",
+  "id": "eb10e0ce-5620-4d30-addf-eb0e6a3f6ca6",
   "prevId": "65b62026-33da-42fd-916b-ea2e96d0e5c6",
   "tables": {
     "activity": {
@@ -463,46 +463,18 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "daily_summaries": {
-      "name": "daily_summaries",
+    "origin_looks": {
+      "name": "origin_looks",
       "columns": {
-        "id": {
-          "name": "id",
+        "repo_id": {
+          "name": "repo_id",
           "type": "integer",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
-        "date": {
-          "name": "date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "author": {
-          "name": "author",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
+        "seenAt": {
+          "name": "seenAt",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -510,22 +482,14 @@
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
         }
       },
-      "indexes": {
-        "daily_summaries_date": {
-          "name": "daily_summaries_date",
-          "columns": [
-            "date"
-          ],
-          "isUnique": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "daily_summaries_project_id_projects_id_fk": {
-          "name": "daily_summaries_project_id_projects_id_fk",
-          "tableFrom": "daily_summaries",
-          "tableTo": "projects",
+        "origin_looks_repo_id_repos_id_fk": {
+          "name": "origin_looks_repo_id_repos_id_fk",
+          "tableFrom": "origin_looks",
+          "tableTo": "repos",
           "columnsFrom": [
-            "project_id"
+            "repo_id"
           ],
           "columnsTo": [
             "id"
@@ -535,6 +499,143 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "origin_ref_moves": {
+      "name": "origin_ref_moves",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "repo_id": {
+          "name": "repo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ref": {
+          "name": "ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "old_sha": {
+          "name": "old_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "new_sha": {
+          "name": "new_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "seenAt": {
+          "name": "seenAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {
+        "origin_ref_moves_repo_seen": {
+          "name": "origin_ref_moves_repo_seen",
+          "columns": [
+            "repo_id",
+            "seenAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "origin_ref_moves_repo_id_repos_id_fk": {
+          "name": "origin_ref_moves_repo_id_repos_id_fk",
+          "tableFrom": "origin_ref_moves",
+          "tableTo": "repos",
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "origin_refs": {
+      "name": "origin_refs",
+      "columns": {
+        "repo_id": {
+          "name": "repo_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ref": {
+          "name": "ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sha": {
+          "name": "sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "seenAt": {
+          "name": "seenAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "origin_refs_repo_id_repos_id_fk": {
+          "name": "origin_refs_repo_id_repos_id_fk",
+          "tableFrom": "origin_refs",
+          "tableTo": "repos",
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "origin_refs_repo_id_ref_pk": {
+          "columns": [
+            "repo_id",
+            "ref"
+          ],
+          "name": "origin_refs_repo_id_ref_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -834,6 +935,14 @@
           "autoincrement": false,
           "default": "''"
         },
+        "template": {
+          "name": "template",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
         "cadence": {
           "name": "cadence",
           "type": "text",
@@ -850,12 +959,37 @@
           "autoincrement": false,
           "default": 5
         },
-        "due_time": {
-          "name": "due_time",
+        "shift_start": {
+          "name": "shift_start",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'09:00'"
+        },
+        "shift_end": {
+          "name": "shift_end",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'17:00'"
+        },
+        "workdays": {
+          "name": "workdays",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[1,2,3,4,5]'"
+        },
+        "alert_minutes": {
+          "name": "alert_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 30
         },
         "format": {
           "name": "format",
@@ -895,6 +1029,129 @@
         "report_settings_project_id_projects_id_fk": {
           "name": "report_settings_project_id_projects_id_fk",
           "tableFrom": "report_settings",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "report_settings_changes": {
+      "name": "report_settings_changes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "field": {
+          "name": "field",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "old_value": {
+          "name": "old_value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "new_value": {
+          "name": "new_value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "changed_by": {
+          "name": "changed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "by_agent": {
+          "name": "by_agent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'accepted'"
+        },
+        "resolved_by": {
+          "name": "resolved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revert_of": {
+          "name": "revert_of",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {
+        "report_settings_changes_project": {
+          "name": "report_settings_changes_project",
+          "columns": [
+            "project_id",
+            "createdAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "report_settings_changes_project_id_projects_id_fk": {
+          "name": "report_settings_changes_project_id_projects_id_fk",
+          "tableFrom": "report_settings_changes",
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
@@ -1321,13 +1578,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "parent_id": {
-          "name": "parent_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "text": {
           "name": "text",
           "type": "text",
@@ -1352,15 +1602,7 @@
           "default": 0
         }
       },
-      "indexes": {
-        "tasks_parent": {
-          "name": "tasks_parent",
-          "columns": [
-            "parent_id"
-          ],
-          "isUnique": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "tasks_ticket_id_tickets_id_fk": {
           "name": "tasks_ticket_id_tickets_id_fk",
@@ -1368,19 +1610,6 @@
           "tableTo": "tickets",
           "columnsFrom": [
             "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "tasks_parent_id_tasks_id_fk": {
-          "name": "tasks_parent_id_tasks_id_fk",
-          "tableFrom": "tasks",
-          "tableTo": "tasks",
-          "columnsFrom": [
-            "parent_id"
           ],
           "columnsTo": [
             "id"

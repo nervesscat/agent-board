@@ -15,14 +15,19 @@ export function useRestoreRemembered<T extends string>(
 ) {
   useEffect(() => {
     if (current !== undefined) return
-    let saved: string | null = null
-    try {
-      saved = localStorage.getItem(key)
-    } catch {}
-    const value = allowed.find((v) => v === saved)
+    const value = recall(key, allowed)
     if (value !== undefined) restore(value)
     // Once per visit without a value in the URL: `allowed` is a constant and `restore` only navigates.
   }, [key, current])
+}
+
+/** The choice this browser remembers, if it is one of `allowed`. Only after mount (see above). */
+export function recall<T extends string>(key: string, allowed: readonly T[]): T | undefined {
+  let saved: string | null = null
+  try {
+    saved = localStorage.getItem(key)
+  } catch {}
+  return allowed.find((v) => v === saved)
 }
 
 /** Remembers a choice in this browser; storage can be unavailable, and then it is not remembered. */

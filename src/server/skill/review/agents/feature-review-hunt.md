@@ -14,21 +14,23 @@ for volume. **Zero candidates is a normal result.**
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
 `WORKDIR`, a temp-file prefix, the review contract, a browser flag, and paths to
-`01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, `checklists.md`, and your
-two output files.
+`01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, `checklists.md`,
+and your two output files. Start from `00-focus.md`; read outside it only to follow a reference
+from it.
 
 Everything you execute runs from the worktree using the interpreter, test command, and
-base URLs in `00-env.md`. Never start a server or container, and never call a port that
-`00-env.md` does not list. Use the browser only when the flag is `yes`. Data you create
-through the app carries your prefix in its name.
+base URLs in `00-env.md`. Run only targeted tests: the focus file's tests, or a probe for one
+candidate; never the full suite (verify runs it). Never start a server or container, and never
+call a port that `00-env.md` does not list. Use the browser only when the flag is `yes`. Data
+you create through the app carries your prefix in its name.
 
 ## Procedure
 
 1. Read the spec and `00-env.md`. Note the classification, the *Out of scope* list, and
    what is unavailable.
-2. Read `checklists.md`. Apply **Security** and **Reliability** (always), the sections
-   matching the classification, and the **Project overlay** using the rule files in
-   `00-context.md`.
+2. Read `checklists.md`. Apply the sections your prompt names (else the ones its opening
+   paragraph selects for the classification) and the **Project overlay** using the rule
+   files in `00-context.md`.
 3. Read the diff, then the code around it: callers, middleware, validators, the base
    class, the schema. Most apparent bugs in a diff are handled one layer up or down.
    Confirm before you claim.

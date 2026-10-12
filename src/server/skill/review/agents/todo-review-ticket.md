@@ -141,8 +141,16 @@ Only the holder of `LOCK` starts one in this repo.
 
 ### 2. Spec
 
-Spawn a subagent briefed with the **spec** agent's `instructions`, the project's `instructions`,
-the ticket (everything from step 1.2), the worktree, and an output path `WORKDIR/01-spec.md` (there
+A `RETRY` or re-queued run keeps the `WORKDIR/01-spec.md` its first run wrote and posted,
+unless `RETRY` names it. A lane of a split ticket whose body carries its part of the parent's spec
+(**Escalation**) writes all of that part, Intent and Classification included, to
+`WORKDIR/01-spec.md`. Otherwise spawn a
+subagent briefed with the **spec** agent's `instructions`, the project's `instructions`, the
+ticket (everything from step 1.2), and a brief in four parts, so it reads only what matters.
+Focus: the files the ticket names or its words point to, and the repo's rule files (`AGENTS.md`,
+`CLAUDE.md`, `CONTRIBUTING.md`). Known (facts it does not rediscover): the worktree and branch, the
+project's check commands, `PORTS`, and the repo's rule on what it may mention. Return: the spec's
+path and its open questions. Done when: the spec is written to `WORKDIR/01-spec.md` (there
 is no diff yet). Then:
 
 - `add_tasks` with the acceptance criteria, unless the ticket's tasks already cover them, in the
@@ -158,12 +166,17 @@ is no diff yet). Then:
 ### 3. Build
 
 Spawn a subagent briefed with the **builder** agent's `instructions`, the project's `instructions`,
-the ticket, `WORKDIR/01-spec.md`, the worktree and branch, the test lock's rule as written in
-**Shared with the other tickets of this repo** (the `LOCK` path, the holder line
-`#<TICKET> builder <ISO time>`, take it before each heavy run and release it right after), and on a
-later round the findings and failed criteria to fix, each with its scenario. It commits on the
-branch and never pushes. When it returns, release `LOCK` if `holder.txt` still names your ticket.
-Post its summary `as: builder`.
+the ticket, `WORKDIR/01-spec.md`, and a brief in the same four parts. Focus: the spec's Surfaces
+and their tests. Known: the worktree and branch, the project's check commands, `PORTS`, the repo's
+rule on what it may mention, and the test lock's rule as written in **Shared with the other
+tickets of this repo** (the `LOCK` path, the holder line `#<TICKET> builder <ISO time>`, take it
+before each heavy run and release it right after). Done when: every criterion has its check, the
+checks pass, and the work is committed on the branch, never pushed. Return: the commits, what
+changed per criterion or finding, the checks run with their results. On a later round the brief
+carries the findings and failed criteria to fix, each with its scenario, and the Focus is only
+their `path:line` and their tests: the builder does not re-read or rework the rest of the change.
+When it returns, release `LOCK` if `holder.txt` still names your ticket. Post its summary
+`as: builder`.
 
 ### 4. Your own gate, before every review
 
@@ -181,12 +194,22 @@ From the worktree:
    `|| true`, `continue-on-error`, and for tests or snapshots the diff deletes or loosens. Each hit
    breaks the contract unless it is plainly legitimate (say why in the hand-off); otherwise it goes
    back to the builder.
-3. Pick the review depth for this round (**Review depth**, below) and note it with its measure in
-   `WORKDIR/depth.md`.
+3. Pick the review depth for this round (**Review depth**, below) and add a line with it, its
+   measure and the head SHA to `WORKDIR/depth.md`.
 
 ### 5. Review
 
-Still holding `LOCK` (rewrite its holder line to `#<TICKET> review <ISO time>`), run
+A review that is done is not run again. Read the branch's head SHA
+(`git -C <worktree> rev-parse HEAD`) and `git -C REPO fetch origin BASE`. Skip the review, on a
+`RETRY` or re-queued run too, only when all of these hold: the newest review of that SHA, in
+`~/.claude/feature-review/ledger.jsonl` (its review folder has the criteria) and on the board
+(`list_review_results` with `sha`, or the review's posts on the ticket), survived (the rule
+below); an earlier line of `WORKDIR/depth.md` for that SHA shows it ran at least the depth step
+4.3 picked; `origin/BASE` is already in that SHA (`git merge-base --is-ancestor origin/BASE <sha>`)
+or is the base its merge check used; and `RETRY` does not name that review, its depth or its
+findings. Then release `LOCK` and go on to step 6 with that review.
+
+Otherwise, still holding `LOCK` (rewrite its holder line to `#<TICKET> review <ISO time>`), run
 `/feature-review` through the Skill tool, unattended:
 `repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER>`, plus `light` when the depth
 is `light` and `deep` when it is `deep` (nothing more for `standard`). It reviews the branch's
@@ -226,7 +249,12 @@ Every item, in order, as the board skill's hand-off checklist says:
    its `prNumber`. Then wait for the PR's CI to finish (`gh pr checks <number> --watch`): CI runs
    on another platform than yours, and a failure there is a failed check like any other, fixed
    through the builder before you hand off, never waved through as flaky without a rerun that
-   passes.
+   passes. When the PR's head SHA is the SHA whose review survived, record that review on the PR so
+   the review queue does not run it again: `post_review_result` with its verdict, its `summary.md`
+   as `summaryMd`, the `sha`, its checks and counts, and `repoId` when the project has several
+   repos. Right before, check `list_review_results` (with `sha`) and the ledger for a newer review
+   of that SHA: post only when there is none. A newer one that did not survive is not posted over:
+   the change did not survive, and its findings go back to the builder (step 5).
 5. The preview: `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
    project's way and `set_preview`. When the change cannot be tried (docs, a script), say why in
@@ -284,7 +312,7 @@ obstacle you hit, try what applies, and keep a list of what you tried:
 | A server will not start, a port is busy | Another port from `PORTS`; read its log; start it alone. Contention you cannot get past: `STATUS: error` with the port and the process holding it (the orchestrator re-runs you alone). |
 | A tool is missing | Install it inside the worktree or the project's way. Only a machine-level install (admin rights, a licence): `environment`, with the exact command. |
 | The ticket is unclear | Its attachments, its posts, related tickets (`list_tickets` with `q`), the code and `git log` around it. Then the spec's assumption; `ask_decision` only when the readings lead to different products. |
-| The ticket is too big for one branch | Lanes: `create_ticket` with `parentId` for the parts, deliver the first one, say so on the ticket. |
+| The ticket is too big for one branch | Split it into the ticket's lanes on the board (`create_ticket` with `parentId`), by disjoint files, deliver the first one, say so on the ticket. One spec per ticket: each lane gets its part of `WORKDIR/01-spec.md` in its body (the Intent and Classification, and its own criteria and Surfaces), not a new spec run. |
 | The next step is outward or irreversible (production data, real users, payments, emails, a force-push, a migration that drops data) | Never do it: `destructive`, with the exact step for the human. |
 
 When you do block: move the ticket to `blocked` (an `ask_decision` card does it for you), and post

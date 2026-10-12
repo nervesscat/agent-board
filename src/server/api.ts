@@ -2,14 +2,14 @@ import { Readable } from 'node:stream'
 import { z } from 'zod'
 
 import { AGENT_CLIENTS, COMMENT_PARENTS, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
-import { addSummary } from './activity'
+import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
 import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
 import { authMode } from './config'
-import { dailyReport, generateSummary, today } from './daily'
+import { dailyReport, today } from './daily'
 import * as features from './features'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
@@ -28,8 +28,13 @@ import * as needs from './needs'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
+import { pushedToday } from './pushedToday'
 import * as projects from './projects'
+import { reportsDue } from './reportDue'
+import { generateReport } from './reportGenerate'
 import * as reports from './reports'
+import * as settingsHistory from './reportSettingsHistory'
+import { reportsOverview } from './reportsOverview'
 import * as repos from './repos'
 import { withResume } from './resume'
 import * as reviews from './reviews'
@@ -67,7 +72,7 @@ const TicketPatch = z.object({
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
   repoId: z.number().int().optional(),
-  tags: z.array(z.string().max(40)).max(20).optional(),
+  tags: z.array(z.string().max(MAX_TAG_LENGTH)).max(MAX_TAGS).optional(),
   prNumber: z.number().int().positive().nullable().optional(),
   // The tickets whose branches must be merged into this one's base before it can be done; replaces the list.
   needs: z.array(z.number().int()).max(50).optional(),
@@ -666,36 +671,53 @@ api.get('/api/summary', ({ url }) => {
 
 // --- daily ---
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
+/** A query parameter that must match `schema`: a 400 naming it otherwise. */
+const query = <T extends z.ZodType>(schema: T, value: unknown, name: string): z.infer<T> => {
+  const parsed = schema.safeParse(value)
+  if (!parsed.success) throw new HttpError(400, `${name}: ${z.prettifyError(parsed.error)}`)
+  return parsed.data
+}
 api.get('/api/daily', ({ url }) => {
   const date = Day.parse(url.searchParams.get('date') ?? today())
   const project = url.searchParams.get('projectId')
   return json(dailyReport(date, project ? intParam(project, 'projectId') : undefined))
 })
-api.post('/api/daily/summaries', async ({ request, actor }) => {
-  const body = await readJson(
-    request,
-    z.object({
-      date: Day.default(today()),
-      projectId: z.number().int().nullable().default(null),
-      body: z.string().min(1).max(5000),
+
+// --- reports: how a project's reports are made and when they are due, and the reports per period ---
+api.get('/api/projects/:id/report-settings', ({ params }) => json(reports.getReportSettings(id(params))))
+// Agents may change them too; a change of the prompt or template by an agent waits on the human.
+api.patch('/api/projects/:id/report-settings', async ({ request, params, actor }) =>
+  json(
+    reports.setReportSettings(id(params), await readJson(request, reports.ReportSettingsPatch), actor, {
+      agent: isAgent(request),
+    }),
+  ),
+)
+// Every change of the prompt or the template, newest first; ?field=prompt|template keeps one.
+api.get('/api/projects/:id/report-settings/changes', async ({ params, url }) => {
+  const field = url.searchParams.get('field')
+  return json(
+    await settingsHistory.listChanges(id(params), {
+      field: field ? query(z.enum(['prompt', 'template']), field, 'field') : undefined,
     }),
   )
-  return json(addSummary({ ...body, author: actor }), 201)
 })
-api.post('/api/daily/summaries/generate', async ({ request }) => {
-  const body = await readJson(
-    request,
-    z.object({ date: Day.default(today()), projectId: z.number().int().nullable().default(null) }),
-  )
-  return json(await generateSummary(body.date, body.projectId), 201)
-})
-
-// --- reports: the prompt and schedule of a project's reports, and the reports per period ---
-api.get('/api/projects/:id/report-settings', ({ params }) => json(reports.getReportSettings(id(params))))
-// Agents may change them too (the prompt included); every change shows in the activity feed.
-api.patch('/api/projects/:id/report-settings', async ({ request, params, actor }) =>
-  json(reports.setReportSettings(id(params), await readJson(request, reports.ReportSettingsPatch), actor)),
+api.get('/api/report-settings/changes/:id', async ({ params }) =>
+  json(await settingsHistory.getChange(id(params))),
 )
+// Only the human settles an agent's change: keep it, or put the field back as it was before it.
+const humanSettles = (request: Request) => {
+  if (isAgent(request))
+    throw new HttpError(403, "only the human accepts or reverts a change of the report's prompt or template")
+}
+api.post('/api/report-settings/changes/:id/accept', async ({ request, params, actor }) => {
+  humanSettles(request)
+  return json(await settingsHistory.acceptChange(id(params), actor))
+})
+api.post('/api/report-settings/changes/:id/revert', async ({ request, params, actor }) => {
+  humanSettles(request)
+  return json(await settingsHistory.revertChange(id(params), actor))
+})
 // ?from=&to= (YYYY-MM-DD): the periods in between, newest first, each with its status and latest report.
 api.get('/api/projects/:id/reports', async ({ request, params, url }) =>
   json(
@@ -720,10 +742,30 @@ api.post('/api/projects/:id/reports', async ({ request, params, actor }) => {
   )
   return json(await reports.postReport(id(params), body, actor), 201)
 })
+// claude writes the period's report (the current one without period) from the prompt, the template and
+// the period's activity, stored as a new version; 409 while one is being written for the project.
+api.post('/api/projects/:id/reports/generate', async ({ request, params }) => {
+  const GenerateBody = z.object({ period: Day.optional() })
+  const body = (await request.clone().text()).trim() ? await readJson(request, GenerateBody) : {}
+  return json(await generateReport(id(params), body), 201)
+})
 // Every version posted for a period, newest first.
 api.get('/api/projects/:id/reports/:period', async ({ request, params }) =>
   json(await forAgent(request, reports.reportVersions(id(params), params.period!))),
 )
+// Every project's report for the period holding ?date= (today by default), for the all-projects Daily page.
+api.get('/api/reports/overview', async ({ request, url }) =>
+  json(
+    await forAgent(
+      request,
+      await reportsOverview(query(Day, url.searchParams.get('date') ?? today(), 'date')),
+    ),
+  ),
+)
+// The projects whose report the board is reminding about right now (due soon, or missing).
+api.get('/api/report-due', async () => json({ items: await reportsDue() }))
+// What reached origin today on the project's repos: commits and lines, by repo and branch.
+api.get('/api/projects/:id/pushed-today', async ({ params }) => json(await pushedToday(id(params))))
 
 // --- MCP ---
 api.on('POST', '/api/mcp', ({ request, actor }) => handleMcp(request, actor))

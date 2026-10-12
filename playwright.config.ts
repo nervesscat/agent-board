@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import { defineConfig, devices } from '@playwright/test'
 
 import { HUMAN, e2eEnv } from './e2e/env'
@@ -47,6 +49,9 @@ export default defineConfig({
       BOARD_URL: env.baseURL,
       DATA_DIR: env.dataDir,
       STORAGE: 'local',
+      // claude is a stand-in that reads the prompt from stdin and answers with a report.
+      CLAUDE_BIN: process.execPath,
+      CLAUDE_ARGS: JSON.stringify([path.resolve('e2e/fake-claude.mjs')]),
     },
   },
 })
