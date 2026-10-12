@@ -17,3 +17,6 @@ __unconfig*
 test-results
 playwright-report
 blob-report
+
+# benchmark (pnpm bench): builds, copies of the data, logs and results
+.bench

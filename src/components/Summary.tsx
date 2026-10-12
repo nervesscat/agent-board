@@ -177,11 +177,12 @@ function Row({
 
 const Rows = ({ children }: { children: ReactNode }) => <ul className="space-y-3">{children}</ul>
 
-function TicketLink({ p, id, title }: { p: ProjectSummary; id: number; title: string }) {
+function TicketLink({ p, id, title, hash }: { p: ProjectSummary; id: number; title: string; hash?: string }) {
   return (
     <Link
       to="/projects/$id/features/$ticketId"
       params={{ id: String(p.project.id), ticketId: String(id) }}
+      hash={hash}
       className="hover:underline"
     >
       <span className="text-muted-foreground">#{id}</span> {title}
@@ -247,6 +248,20 @@ function Stale() {
 
 // --- the sections ---
 
+type HumanThread = ProjectSummary['needsYou']['threads'][number]
+
+/**
+ * Where a thread waiting on the human is, as an anchor its page lands on (src/lib/reveal.ts): its
+ * latest message. On a ticket, a post of the feed; a reply, by the post or PR whose thread holds it;
+ * on a review result, which its dialog shows alone.
+ */
+function threadAnchor(th: HumanThread) {
+  if (th.parentType === 'ticket') return `post-${th.last.id}`
+  if (th.parentType === 'update') return `post-${th.parentId}-reply-${th.last.id}`
+  if (th.parentType === 'pr') return `pr-${th.parentId}-reply-${th.last.id}`
+  return `reply-${th.last.id}`
+}
+
 function NeedsYou({ p }: { p: ProjectSummary }) {
   const { decisions, prs, threads, reviews, total } = p.needsYou
   const pid = String(p.project.id)
@@ -264,6 +279,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                 <Link
                   to="/projects/$id/features/$ticketId"
                   params={{ id: pid, ticketId: String(d.ticketId) }}
+                  hash={`post-${d.postId}`}
                   className="hover:underline"
                 >
                   Decide: {d.question}
@@ -286,7 +302,12 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               key={`p${pr.id}`}
               icon={<GitPullRequest />}
               title={
-                <Link to="/projects/$id/prs" params={{ id: pid }} className="hover:underline">
+                <Link
+                  to="/projects/$id/prs"
+                  params={{ id: pid }}
+                  hash={`pr-${pr.id}`}
+                  className="hover:underline"
+                >
                   Review PR #{pr.number} {pr.title}
                 </Link>
               }
@@ -323,6 +344,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                   <Link
                     to="/projects/$id/features/$ticketId"
                     params={{ id: pid, ticketId: String(th.ticketId) }}
+                    hash={threadAnchor(th)}
                     className="hover:underline"
                   >
                     {th.parentType === 'ticket' ? `#${th.ticketId} ${th.title}` : th.title}
@@ -332,6 +354,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                     to="/projects/$id/prs"
                     params={{ id: pid }}
                     search={th.parentType === 'review' ? { result: th.parentId } : {}}
+                    hash={threadAnchor(th)}
                     className="hover:underline"
                   >
                     {th.title}
@@ -355,7 +378,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
             <Row
               key={`r${t.id}`}
               icon={<Eye />}
-              title={<TicketLink p={p} id={t.id} title={t.title} />}
+              title={<TicketLink p={p} id={t.id} title={t.title} hash="handoff" />}
               meta={
                 <>
                   <StageBadge p={p} status={t.status} />

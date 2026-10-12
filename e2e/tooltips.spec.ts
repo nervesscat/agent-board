@@ -391,6 +391,8 @@ test('a trigger that also opens a dialog, a select or a tab shows its tooltip an
     }),
   )
   await page.goto(`/projects/${project.id}/daily`)
+  // The day's activity opens folded by the hour.
+  await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).click()
   const result = page.getByRole('button', { name: /SHIP IT/ })
   await expectTooltip(result, 'Open the review result')
   await result.click()
@@ -428,14 +430,12 @@ test('a button disabled for a reason says why on hover, and stays disabled', asy
   human,
   project,
 }) => {
-  // The day before the project was made: no summary to ask for.
+  // Reports off: no report for claude to write.
   await page.goto(`/projects/${project.id}/daily`)
-  await page.locator('button:has(svg.lucide-chevron-left)').click()
-  await expect(page.getByText('nothing happened yet, so nothing to summarize')).toBeVisible()
-  const summarize = page.getByRole('button', { name: 'Summarize with claude' })
-  await expect(summarize).toBeDisabled()
-  await expectTooltip(summarize.locator('..'), 'No activity on this day yet')
-  await expect(summarize).toBeDisabled()
+  const generate = page.getByRole('button', { name: 'Generate with claude' })
+  await expect(generate).toBeDisabled()
+  await expectTooltip(generate.locator('..'), 'Reports are off: set a cadence in the report settings first')
+  await expect(generate).toBeDisabled()
 
   // The gallery's zoom out, before any zoom.
   const t = await ok<TicketFull>(
@@ -463,7 +463,7 @@ test('a button disabled for a reason says why on hover, and stays disabled', asy
     }),
   )
   await page.goto(`/projects/${project.id}/daily`)
-  const panel = page.getByRole('region', { name: 'Report' })
+  const panel = page.getByRole('region', { name: 'Report', exact: true })
   await panel.getByRole('button', { name: 'post the report' }).click()
   const post = panel.getByRole('button', { name: 'Post', exact: true })
   await expect(post).toBeDisabled()
@@ -597,6 +597,8 @@ test('a review result opened from the keyboard shows no tooltip, and one Escape 
     human.post('/api/comments', { data: { parentType: 'review', parentId: result.id, body: 'Agreed.' } }),
   )
   await page.goto(`/projects/${project.id}/daily`)
+  // The day's activity opens folded by the hour.
+  await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).click()
   const open = page.getByRole('button', { name: /SHIP IT/ })
   await tabTo(open)
   const dialog = page.getByRole('dialog', { name: 'Review result' })
@@ -633,6 +635,8 @@ test('a long review result with replies opens at its top, every time, by click o
     await ok(human.post('/api/comments', { data: { parentType: 'review', parentId: result.id, body } }))
   }
   await page.goto(`/projects/${project.id}/daily`)
+  // The day's activity opens folded by the hour.
+  await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).click()
   const open = page.getByRole('button', { name: /SHIP IT/ })
   const dialog = page.getByRole('dialog', { name: 'Review result' })
   for (const by of ['click', 'keyboard'] as const) {

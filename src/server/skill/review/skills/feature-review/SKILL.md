@@ -124,6 +124,14 @@ Parse `$ARGUMENTS` as space-separated tokens:
    - `00-context.md`: PR title, body and URL, commit messages since the merge base, any
      ticket text the user pasted, and the full contents of the project's rule files if
      present in the worktree (`CLAUDE.md`, `.claude/rules/*`, `CONTRIBUTING.md`, `AGENTS.md`).
+   - `00-focus.md`, one path per line with a few words on why: the changed files
+     (`git -C WORKTREE diff --name-only <merge-base> <commit>`, the same range as
+     `00-diff.patch`, plus the working patch's files and the untracked files copied in step 3;
+     for a path target, the folder's files); the tests of those files (the changed test files,
+     and files named after a changed module, e.g. `foo.test.ts`, `test_foo.py`, found with
+     `git ls-files`); their direct callers (`git grep -l` for each changed module's import path,
+     or for a text file its file name, run once per file, not recursively; cap it near 30 and
+     say when capped).
 5. The skill's own files are in `${CLAUDE_SKILL_DIR}`. Agents receive absolute paths to
    `${CLAUDE_SKILL_DIR}/checklists.md` and `${CLAUDE_SKILL_DIR}/report-template.md`.
 6. `NOTES` = `~/.claude/feature-review/notes/<repo-dir-name>.md`, the per-repo memory of
@@ -132,13 +140,14 @@ Parse `$ARGUMENTS` as space-separated tokens:
    or not it exists yet; the env agent appends to it.
 
 Every agent prompt from here on includes: `MAIN`, `WORKTREE`, `WORKDIR`, `SLUG`, the
-absolute paths of the files it reads and writes, and the full text of the contract.
+absolute paths of the files it reads and writes, the full text of the contract, and the path of
+`00-focus.md` with this rule: start from it; read outside it only to follow a reference from it.
 Agents treat `WORKTREE` as the repo root.
 
 ## Phase 1: Spec (1 agent)
 
-Spawn `feature-review-spec` with paths to `00-diff.patch`, `00-context.md`, and the
-output path `01-spec.md`. Wait for it.
+Spawn `feature-review-spec` with paths to `00-diff.patch`, `00-context.md`, `00-focus.md`, and
+the output path `01-spec.md`. Wait for it.
 
 Read `01-spec.md`. If its **Open questions** section contains a question whose answer
 changes what counts as *correct* (not merely nice to know), ask the user that one
@@ -146,15 +155,31 @@ question with AskUserQuestion, offering the interpretations as options. If the u
 not available or the question is not decisive, continue with the assumption the spec
 states. Do not ask about anything else.
 
+## Strategy by kind
+
+The spec's classification picks the work. A change with several classes takes the union.
+
+| Classification | Env starts at most | Verify methods | Hunt's checklist sections |
+|---|---|---|---|
+| `api-endpoint`, `auth` | data services, the app | tests, `run+http` | the class, Security, Reliability |
+| `ui` | data services, the app, the frontend | tests, `browser` | `ui`, Security, Reliability |
+| `data-model`, `background-job` | the data services it uses | tests, a migration or one job run | the class, Security, Reliability |
+| `llm-prompt` | the app when a criterion calls it | tests, before/after outputs | `llm-prompt`, Security, Reliability |
+| `config-infra`, `dependency`, `refactor`, `cli-script` | the install; the app only to prove it starts | tests, the build, the script | the class, Security, Reliability |
+| `instructions` | the app only when it serves the text | the text read where its reader gets it, quoted | `instructions` (its check 5 is the safety check) |
+
+Every hunt also applies Diff guard analysis and the Project overlay.
+
 ## Phase 1b: Environment (1 agent)
 
-Spawn `feature-review-env` with `01-spec.md`, `NOTES`, the port range, the browser flag,
-`FRONTEND` if given, and the output path `00-env.md`. Wait for it. It installs or reuses
-dependencies inside the worktree, proves imports resolve to the worktree, allocates free
-ports, starts the supporting services (review-owned instances on remapped ports when the
-developer's are in the way), the app from the worktree, the seed, and the frontend dev
-server, all in the background, records PIDs and logs under `WORKDIR`, and lists what is
-unavailable and why.
+Spawn `feature-review-env` with `01-spec.md`, `00-focus.md`, `NOTES`, the port range, the
+browser flag, `FRONTEND` if given, the services the strategy table allows, and the output path
+`00-env.md`, with this rule: start only what the criteria's methods need: no app server when no
+criterion uses `run+http` or `browser`, no frontend when none uses `browser`. Wait for it. It
+installs or reuses dependencies inside the worktree, proves imports resolve to the worktree,
+allocates free ports, starts those services in the background (review-owned instances on remapped
+ports when the developer's are in the way) and the seed, records PIDs and logs under `WORKDIR`,
+and lists what is unavailable and why.
 
 Read `00-env.md`. If nothing could be started, continue: the verify agent will record
 runtime criteria as `UNVERIFIED` and the hunt still runs on the code. Do not start
@@ -171,8 +196,11 @@ Spawn in a single message:
 | `feature-review-hunt` (deep mode only, second instance) | `_frh2_` | `03-candidates-b.md`, `03-hunt-notes-b.md` |
 
 Each prompt includes paths to `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`,
-`checklists.md`, its output paths, and the browser flag. Agents use the test command,
-interpreter, and base URLs from `00-env.md` and start no servers of their own.
+`00-focus.md`, `checklists.md`, its output paths, and the browser flag; the hunt's also names its
+checklist sections from the strategy table. Agents use the test command, interpreter, and base
+URLs from `00-env.md` and start no servers of their own. Verify runs the full test suite, once:
+the only run at head. The hunt runs only targeted tests (the focus file's tests, or a probe for
+one candidate), never the full suite.
 
 Wait for all. Then build the refutation input, `03-all-candidates.md`:
 - every candidate from `03-candidates.md` (and `03-candidates-b.md` in deep mode,
@@ -201,14 +229,16 @@ says that two hunts ran: it says one hunt ran, in light mode (Phase 4).
 ## Phase 3: Refute (1 agent)
 
 Spawn `feature-review-refute` with temp-file prefix `_frr_` and paths to `01-spec.md`,
-`00-env.md`, `00-diff.patch`, `02-verification.md`, `03-all-candidates.md`, and the
-output path `04-verdicts.md`. Wait for it.
+`00-env.md`, `00-diff.patch`, `00-focus.md`, `02-verification.md`, `03-all-candidates.md`, and
+the output path `04-verdicts.md`. Like the hunt, it runs only targeted tests, never the full
+suite. Wait for it.
 
 ## Phase 3b: Merge check (1 agent)
 
 Runs after every other agent has finished, because it temporarily changes the worktree.
 Spawn `feature-review-merge` with `HEAD_SHA`, the base branch name, and paths to
-`00-env.md`, `02-verification.md`, and the output path `05-merge.md`. Wait for it. Read
+`00-env.md`, `00-focus.md`, `02-verification.md`, and the output path `05-merge.md`. It runs the
+full suite once, on the merged tree. Wait for it. Read
 its `Result` line and its `Worktree restored` line; if the worktree was not restored,
 run `git -C WORKTREE reset --hard <commit>` yourself before continuing. For `diff`,
 `staged`, and path targets the base is `HEAD`, so the result is `NO ISSUE (up to date)`
@@ -250,7 +280,7 @@ without spawning the agent.
    | Check | YES when | otherwise NO, reason says |
    |---|---|---|
    | Is this reliable? | verdict is `SHIP` | the finding IDs, or "not verified: <reason>" |
-   | Did you make sure this works and is running? | every acceptance criterion is `PASS` by execution (not traced), and the test suite ran and passed apart from pre-existing failures | which criteria are unverified or failed, and why |
+   | Did you make sure this works and is running? | every acceptance criterion is `PASS` by execution, not traced (an `instructions` criterion read where its reader gets it and quoted is execution), and the test suite ran and passed apart from pre-existing failures | which criteria are unverified or failed, and why |
    | Will this have any issue with the latest version of the base branch? | this one is inverted: **NO** when the merge check result is `NO ISSUE`; **YES** for `CONFLICTS`, `TESTS FAIL AFTER MERGE`, or `UNVERIFIED` | the conflicting files, the new failures, or "not verified: <reason>" |
 4. Append one line to `~/.claude/feature-review/ledger.jsonl`:
    `{"repo": "<origin url, or MAIN path if none>", "target": "<pr N | branch | diff>", "sha": "<commit>", "verdict": "<verdict>", "confirmed": n, "plausible": n, "refuted": n, "unverified": n, "merge": "<merge result>", "checks": {"reliable": "YES|NO", "works": "YES|NO", "base_issue": "YES|NO"}, "stale": bool, "path": "<WORKDIR>/review.md", "at": "<ISO timestamp>"}`

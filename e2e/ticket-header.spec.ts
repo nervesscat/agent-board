@@ -1,72 +1,10 @@
-import type { APIRequestContext, Locator, Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 import { startedAt, yesterdayNoon } from './db'
-import { type Api, expect, expectTooltip, ok, section, test } from './fixtures'
+import { expect, expectTooltip, ok, section, test } from './fixtures'
+import { box, coveredAt, feedDrawn, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
 
-const POSTS = 20
-
-/** A ticket with a feed several screens long, so the page scrolls well past its header. */
-async function longTicket(api: Api, human: APIRequestContext, title: string, status = 'in_progress') {
-  const t = await api.ticket({
-    title,
-    status,
-    body: Array.from({ length: 8 }, (_, i) => `Paragraph ${i + 1} of the instructions.`).join('\n\n'),
-  })
-  for (let i = 1; i <= POSTS; i++) {
-    const body = `Post ${i}.\n\n${'Some progress on the work, said at some length. '.repeat(6)}\n\nMore.`
-    await ok(human.post(`/api/tickets/${t.id}/updates`, { data: { body } }))
-  }
-  return t
-}
-
-/** Waits for the feed to be drawn: its posts all come in one read. */
-const feedDrawn = (page: Page) =>
-  expect(page.getByRole('article').filter({ hasText: 'Post 1.' })).toHaveCount(1)
-
-/** The ticket page, with the whole feed drawn and the page several screens long. */
-async function openLong(page: Page, path: string) {
-  await page.goto(path)
-  await feedDrawn(page)
-  const { height, screen } = await page.evaluate(() => ({
-    height: document.documentElement.scrollHeight,
-    screen: window.innerHeight,
-  }))
-  expect(height).toBeGreaterThan(3 * screen)
-}
-
-const ticketHeader = (page: Page) => page.getByRole('main').locator('header')
 const title = (page: Page) => page.getByRole('heading', { level: 1 })
-
-async function box(l: Locator) {
-  const b = await l.boundingBox()
-  expect(b, 'drawn on the page').not.toBeNull()
-  return b!
-}
-
-const scrollTo = (page: Page, y: number | 'bottom') =>
-  page.evaluate((y) => {
-    window.scrollTo(0, y === 'bottom' ? document.documentElement.scrollHeight : y)
-    return window.scrollY
-  }, y)
-
-/**
- * Points spread over the element's box that hit something other than the element or what is in it:
- * whatever is drawn over it there. Empty when the element is on top all over.
- */
-const coveredAt = (l: Locator) =>
-  l.evaluate((el) => {
-    const r = el.getBoundingClientRect()
-    const covered: string[] = []
-    for (let i = 0; i <= 10; i++)
-      for (let j = 0; j <= 4; j++) {
-        const x = r.left + 1 + ((r.width - 2) * i) / 10
-        const y = r.top + 1 + ((r.height - 2) * j) / 4
-        const hit = document.elementFromPoint(x, y)
-        if (!hit || !el.contains(hit))
-          covered.push(`${Math.round(x)},${Math.round(y)}: ${hit?.outerHTML.slice(0, 80)}`)
-      }
-    return covered
-  })
 
 /** Whether the page's own content (the feed, the side cards) is right under the header's middle. */
 const contentUnder = (header: Locator) =>

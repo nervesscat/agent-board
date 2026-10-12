@@ -28,7 +28,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `model=<name>` | model for the runner agents, which their phase agents inherit (e.g. `opus`) | the session model |
 | `frontend=<path>` | UI repo checkout passed through to every review; each review then starts the dashboard against its own backend and drives it, so every review holds the browser lane and they run one at a time | none |
 | `deep` | pass through to every review | off |
-| `force` | review PRs even if the ledger already has their current head SHA, and include PRs with merge conflicts | off |
+| `force` | review PRs even if the ledger or the board already has a review of their current head SHA, and include PRs with merge conflicts | off |
 | `drafts` | include draft PRs | off |
 | `post` | pass through: each fresh review posts itself as a PR comment | off |
 | `parallel=N` | maximum concurrent reviews, 1 to 3 | 2 |
@@ -164,7 +164,9 @@ have renamed, rewritten or added some, so route by the notes, not by these names
 
 **Reviews.** Step 1's inventory comes from `list_prs` (status `pending`, not `on_hold`), not
 `gh pr list`; the board's queue is what the human wants reviewed. A PR whose head SHA already has
-a result in `list_review_results` counts as reviewed (as the ledger does), unless `force`. Each
+a result in `list_review_results` (with `sha`), or a ledger entry for that SHA from any target (a
+review of its branch before the PR, such as `/todo-review`'s, included), counts as reviewed and is
+skipped, unless `force`. Each
 runner gets `ticket=<id>` (the PR's first ticket) so the review reports on the board (the
 feature-review skill's **On the board** section); after Step 5, check that a result for that SHA
 is in `list_review_results`, and record it yourself with `post_review_result` from the runner's
