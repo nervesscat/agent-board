@@ -11,6 +11,7 @@ import {
   Settings,
 } from 'lucide-react'
 
+import { PushedTodayBadge } from '#/components/daily/PushedToday'
 import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
@@ -34,6 +35,7 @@ function ProjectLayout() {
       <aside className="md:w-52 md:shrink-0">
         <div className="mb-3 px-2">
           <div className="truncate font-semibold">{project?.name ?? '…'}</div>
+          <PushedTodayBadge projectId={Number(id)} compact />
           <ul className="mt-1 space-y-0.5">
             {project?.repos.map((r) => (
               <li
