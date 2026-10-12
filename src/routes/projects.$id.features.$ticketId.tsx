@@ -1455,9 +1455,10 @@ function Lanes({
 }
 
 /**
- * The ticket's feed: one kind of post, newest first, with one box to write one. A post marked
- * progress is a step of the work (what agents post as they go); one written here is not, until its
- * mark progress action makes it one. Any post can have replies.
+ * The ticket's feed: one kind of post, newest first, with one box to write one. A decision still
+ * waiting on the human comes first, however old, until it is decided. A post marked progress is a
+ * step of the work (what agents post as they go); one written here is not, until its mark progress
+ * action makes it one. Any post can have replies.
  */
 function Activity({
   t,
@@ -1489,6 +1490,9 @@ function Activity({
     onError: (err) => toast.error(errorMessage(err)),
   })
   const submit = () => body.trim() && !send.isPending && send.mutate()
+  // Open decisions on top, newest first among them; the rest keep their place.
+  const open = (u: UpdateRow) => u.decision && !u.decidedAt
+  const feed = [...t.updates.filter(open), ...t.updates.filter((u) => !open(u))]
 
   return (
     <section>
@@ -1539,7 +1543,7 @@ function Activity({
         <Empty>No posts yet.</Empty>
       ) : (
         <Timeline>
-          {t.updates.map((u) => (
+          {feed.map((u) => (
             <TimelineRow key={u.id} at={u.createdAt} dot={u.progress ? undefined : 'bg-sky-500/70'}>
               <PostCard u={u} projectId={String(t.projectId)} onChange={onChange} />
             </TimelineRow>
