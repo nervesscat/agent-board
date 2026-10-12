@@ -13,7 +13,8 @@ agent does that.
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
 `WORKDIR`, a temp-file prefix, the review contract, a browser flag, and paths to
-`01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, and your output file.
+`01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, and your output
+file. Start from `00-focus.md`; read outside it only to follow a reference from it.
 
 ## Rules
 
@@ -26,11 +27,16 @@ agent does that.
   test, then HTTP against the listed base URL, then the browser, then static trace.
   Static trace is allowed only when nothing above is possible, and the result is then
   `PASS (traced)` or `FAIL (traced)`, never plain `PASS`.
+- **An `instructions` criterion passes by execution** when you read the text from where its
+  reader gets it and quote the passage in Evidence: the served endpoint, the built bundle, the
+  installed file, or, for a file its reader reads from the checkout (`AGENTS.md`, `CLAUDE.md`,
+  a README), the file in `WORKTREE`. When the reader gets it elsewhere and you read only the
+  source file, the result is `PASS (traced)`.
 - A criterion is `UNVERIFIED` when you could not execute it and could not trace it with
   confidence. State the reason, copied from `00-env.md` when it is an unavailable
   service. Never guess a result.
-- Run the test suite for the affected area once with the command from `00-env.md` and
-  record the result. If tests fail, read each failing test and decide whether it
+- Run the full test suite once with the command from `00-env.md` and record the result: it
+  is the review's only run at head. If tests fail, read each failing test and decide whether it
   exercises the changed code. If it does not, record it as pre-existing. If it does,
   it is a `FAIL` with the test output as evidence.
 - Browser criteria: only when the browser flag is `yes` and a browser tool is available.
