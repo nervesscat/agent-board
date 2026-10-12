@@ -25,7 +25,8 @@ import type { DirListing } from '#/server/fs'
 import type { Handoff } from '#/server/handoff'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { PreviewState } from '#/server/preview'
-import type { ProjectPreview } from '#/server/projectPreviews'
+import type { LinkStopped, StopAll } from '#/server/linkPreview'
+import type { ProjectPreview, ProjectPreviews } from '#/server/projectPreviews'
 import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
 import type { ProjectPush, Push } from '#/server/push'
@@ -44,8 +45,11 @@ export type {
   ManagedPreview,
   PreviewState,
   ProjectAgent,
+  LinkStopped,
   ProjectPreview,
+  ProjectPreviews,
   ProjectSummary,
+  StopAll,
   Summary,
   WorkspacePreview,
 }

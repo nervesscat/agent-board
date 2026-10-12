@@ -396,8 +396,18 @@ describe('GET /api/projects/:id/previews', () => {
     const ws = workspace(ticket().id, { previewUrl: 'https://example.com/rest' })
     const res = await call(`/api/projects/${projectId}/previews`)
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { previews: { workspace: { id: number } }[] }
+    const body = (await res.json()) as {
+      previews: { workspace: { id: number }; linkStop: string | null }[]
+      inUse: number
+      limit: number
+    }
     expect(body.previews.map((p) => p.workspace.id)).toContain(ws.id)
+    // The board-wide use of the preview limit, and why the link off this machine is not stoppable.
+    expect(body).toMatchObject({ inUse: 0, limit: 8 })
+    expect(body.previews.find((p) => p.workspace.id === ws.id)!.linkStop).toMatch(/is not on this machine/)
+    useFake()
+    await startRunning(workspace(ticket({ project: otherId }).id, { path: freshWorktree() }).id)
+    expect(await (await call(`/api/projects/${projectId}/previews`)).json()).toMatchObject({ inUse: 1 })
     const missing = await call('/api/projects/999999/previews')
     expect(missing.status).toBe(404)
     expect(await missing.json()).toEqual({ error: 'project not found' })

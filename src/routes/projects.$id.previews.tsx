@@ -1,13 +1,32 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { GitBranch, Layers, RefreshCw } from 'lucide-react'
+import { GitBranch, Layers, RefreshCw, Square } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
-import { ManagedLine, PreviewActions, PreviewBadge, previewActive } from '#/components/Preview'
+import {
+  ManagedLine,
+  PreviewActions,
+  PreviewBadge,
+  PreviewLimitEditor,
+  previewActive,
+} from '#/components/Preview'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '#/components/ui/alert-dialog'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'
-import { errorMessage, get, type ProjectPreview } from '#/lib/api'
+import { errorMessage, get, post, type ProjectPreview, type ProjectPreviews, type StopAll } from '#/lib/api'
 import { useStages } from '#/lib/project'
 import { type StageLike, stageBadge, stageOf } from '#/lib/stages'
 
@@ -32,7 +51,7 @@ function Previews() {
   // Polled only while the page is in view, faster while the board builds or starts one, as on a ticket.
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ['previews', id],
-    queryFn: () => get<{ previews: ProjectPreview[] }>(`/api/projects/${id}/previews`),
+    queryFn: () => get<ProjectPreviews>(`/api/projects/${id}/previews`),
     refetchInterval: (q) =>
       q.state.data?.previews.some((p) => previewActive(p.managed) && p.managed?.status !== 'running')
         ? 2_000
@@ -54,6 +73,15 @@ function Previews() {
           <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} /> Refresh
         </Button>
       </div>
+      {data && (
+        <PreviewsBar
+          projectId={id}
+          inUse={data.inUse}
+          limit={data.limit}
+          anyRunning={previews.some((p) => p.running)}
+          onChange={() => void refetch()}
+        />
+      )}
       {error && <p className="text-sm text-destructive">{errorMessage(error)}</p>}
       {isLoading ? (
         <Skeleton className="h-64" />
@@ -93,6 +121,88 @@ function Previews() {
   )
 }
 
+/** "Stopped 2 · could not stop 1: …", for the toast after Stop all. */
+function stopAllSummary({ stopped, skipped }: StopAll) {
+  if (!stopped.length && !skipped.length) return 'Nothing to stop'
+  const could = skipped.length
+    ? `could not stop ${skipped.length}: ${skipped.map((s) => `#${s.ticketId} ${s.reason}`).join('; ')}`
+    : ''
+  return [stopped.length || !could ? `Stopped ${stopped.length}` : '', could].filter(Boolean).join(' · ')
+}
+
+/**
+ * The board-wide use of the preview limit (the previews the board builds or runs, every project's),
+ * the limit itself, and Stop all for this project's previews, after a confirmation.
+ */
+function PreviewsBar({
+  projectId,
+  inUse,
+  limit,
+  anyRunning,
+  onChange,
+}: {
+  projectId: string
+  inUse: number
+  limit: number
+  anyRunning: boolean
+  onChange: () => void
+}) {
+  const [confirm, setConfirm] = useState(false)
+  const stopAll = useMutation({
+    mutationFn: () => post<StopAll>(`/api/projects/${projectId}/previews/stop`),
+    onSuccess: (r) => {
+      if (r.skipped.length) toast.warning(stopAllSummary(r))
+      else toast.success(stopAllSummary(r))
+      onChange()
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2 text-sm">
+      <span title="Previews the board builds or runs, in every project, and how many it runs at most at once">
+        Board-run previews:{' '}
+        <span className="font-medium">
+          {inUse} of {limit} in use
+        </span>{' '}
+        <span className="text-muted-foreground">(board-wide)</span>
+      </span>
+      <PreviewLimitEditor key={limit} id="previews-limit" limit={limit} />
+      {anyRunning && (
+        <AlertDialog open={confirm} onOpenChange={setConfirm}>
+          <AlertDialogTrigger
+            render={
+              <Button variant="outline" size="sm" className="sm:ml-auto" disabled={stopAll.isPending} />
+            }
+          >
+            <Square /> Stop all
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Stop every running preview of this project?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The previews the board runs stop and free their ports. Links stop when the board can tell
+                their server runs from the workspace's worktree; the others keep running, and the toast says
+                why. The links stay on the page.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep them</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  setConfirm(false)
+                  stopAll.mutate()
+                }}
+              >
+                Stop all
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </div>
+  )
+}
+
 function PreviewItem({
   p,
   projectId,
@@ -105,6 +215,8 @@ function PreviewItem({
   onChange: () => void
 }) {
   const { workspace: w, ticket: t } = p
+  // A link that answers, not a preview the board runs: whether the board may stop the server behind it.
+  const link = !previewActive(p.managed) && !!p.check?.running
   return (
     <li className="min-w-0 space-y-1.5 rounded-lg border p-3 text-sm">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -144,12 +256,18 @@ function PreviewItem({
         </span>
         {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
       </div>
+      {link && p.linkStop && (
+        <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+          The board will not stop it: {p.linkStop}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2 empty:hidden">
         <PreviewActions
           workspaceId={w.id}
           url={p.url}
           managed={p.managed}
           cannotStart={p.cannotStart}
+          linkStop={link ? p.linkStop : undefined}
           onChange={onChange}
         />
       </div>

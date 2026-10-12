@@ -1,3 +1,6 @@
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
+
 import type { Page } from '@playwright/test'
 
 import { named, pushedPill, reminder, seedDailyPage, today, yesterday } from './dailyPage'
@@ -103,9 +106,28 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Previe
       },
     }),
   )
-  await page.goto(`/projects/${project.id}/previews`)
-  await expect(page.getByRole('link', { name: 'Open preview' })).toBeVisible()
-  expect(await scrollsSideways(page)).toBe(false)
+  // A running link the board will not stop, with a long reason, and the limit and Stop all above.
+  const live = http.createServer((_req, res) => res.end('a preview'))
+  await new Promise<void>((resolve) => live.listen(0, '127.0.0.1', resolve))
+  try {
+    await ok(
+      human.post(`/api/tickets/${t.id}/workspaces`, {
+        data: {
+          name: 'running',
+          path: 'a-very-long-relative-worktree-path-that-does-not-fit-on-a-phone-screen-at-all',
+          previewUrl: `http://127.0.0.1:${(live.address() as AddressInfo).port}`,
+        },
+      }),
+    )
+    await page.goto(`/projects/${project.id}/previews`)
+    await expect(page.getByRole('link', { name: 'Open preview' })).toHaveCount(2)
+    await expect(page.getByText(/^The board will not stop it: a-very-long-relative/)).toBeVisible()
+    await expect(page.getByLabel('Preview limit')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Stop all' })).toBeVisible()
+    expect(await scrollsSideways(page)).toBe(false)
+  } finally {
+    await new Promise((resolve) => live.close(resolve))
+  }
 
   await page.goto(`/projects/${project.id}/cleanup`)
   await expect(page.getByRole('heading', { name: 'Cleanup' })).toBeVisible()

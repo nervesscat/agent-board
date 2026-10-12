@@ -7,6 +7,7 @@ import Database from 'better-sqlite3'
 import { and, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { readPreviewLimit } from '#/lib/constants'
 import { logActivity } from './activity'
 import { authMode, config, uploadsDir } from './config'
 import { HttpError, notFound } from './http'
@@ -57,8 +58,14 @@ export interface ManagedPreview {
 const ACTIVE = new Set<ManagedStatus>(['building', 'starting', 'running'])
 export const isActive = (p: Pick<ManagedPreview, 'status'> | null | undefined) => !!p && ACTIVE.has(p.status)
 
-/** At most this many build or run at once: each is a whole board with its own copy of the data. */
-export const MAX_RUNNING = 8
+/**
+ * At most this many build or run at once, board-wide: the human's preview limit (`previewLimit` in the
+ * settings, 8 by default). Each is a whole board with its own copy of the data.
+ */
+export function previewLimit(): number {
+  const row = db.select().from(schema.settings).where(eq(schema.settings.key, 'previewLimit')).get()
+  return readPreviewLimit(row?.value)
+}
 export const PORTS = { from: 47101, to: 47199 }
 const READY_MS = 90_000
 const WIN = process.platform === 'win32'
@@ -98,12 +105,12 @@ function worktreeOf(dir: string): string | null {
 export type PreviewTarget = { ok: true; path: string } | { ok: false; reason: string }
 
 /**
- * Whether the board may build and run this workspace: its path must be a git worktree of the ticket's
- * repo sitting next to that repo's main checkout (`../agent-board-<branch>`), never the main checkout
- * or the board's own folder, and a checkout of the board itself (that is what it knows how to run).
- * The path comes from the workspace the agent registered, never from the request.
+ * Whether the workspace's path is a worktree the board may act on: a git worktree of the ticket's repo
+ * sitting next to that repo's main checkout (`../<repo>-<branch>`), never the main checkout or the
+ * board's own folder. `path` is its real path. The path comes from the workspace the agent registered,
+ * never from the request.
  */
-export function previewTarget(
+export function worktreeTarget(
   ws: Pick<schema.Workspace, 'path'>,
   repo: Pick<schema.Repo, 'repoPath'> | null,
   boardRoot = process.cwd(),
@@ -124,13 +131,32 @@ export function previewTarget(
   const owner = worktreeOf(dir)
   if (!owner || norm(real(owner) ?? owner) !== norm(main))
     return no(`${ws.path} is not a git worktree of ${repo.repoPath}`)
+  return { ok: true, path: dir }
+}
+
+/**
+ * Whether the board may build and run this workspace: a worktree it may act on (`worktreeTarget`) that
+ * is a checkout of the board itself (that is what it knows how to run).
+ */
+export function previewTarget(
+  ws: Pick<schema.Workspace, 'path'>,
+  repo: Pick<schema.Repo, 'repoPath'> | null,
+  boardRoot = process.cwd(),
+): PreviewTarget {
+  const target = worktreeTarget(ws, repo, boardRoot)
+  if (!target.ok) return target
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')) as { name?: string }
+    const pkg = JSON.parse(fs.readFileSync(path.join(target.path, 'package.json'), 'utf8')) as {
+      name?: string
+    }
     if (pkg.name !== 'agent-board') throw new Error()
   } catch {
-    return no('the board runs previews of its own repo only (package.json name agent-board)')
+    return {
+      ok: false,
+      reason: 'the board runs previews of its own repo only (package.json name agent-board)',
+    }
   }
-  return { ok: true, path: dir }
+  return target
 }
 
 // --- the processes: real by default, a fake in the tests ---
@@ -372,7 +398,11 @@ export function cannotStart(workspaceId: number): string | null {
  * lockfile changed since the last install there), build, copy the live data, start the built server
  * on a free port, and set the workspace's previewUrl once it answers. Returns at once, building.
  */
-export function startPreview(workspaceId: number, actor: string): ManagedPreview {
+export function startPreview(
+  workspaceId: number,
+  actor: string,
+  opts: { replacing?: boolean } = {},
+): ManagedPreview {
   const ws = getWorkspace(workspaceId)
   const refused = cannotStart(workspaceId)
   if (refused) throw new HttpError(400, refused)
@@ -380,9 +410,8 @@ export function startPreview(workspaceId: number, actor: string): ManagedPreview
   const before = all().get(workspaceId)
   if (isActive(before))
     throw new HttpError(409, `its preview is already ${before!.status}: stop it first, or restart it`)
-  const running = [...all().values()].filter(isActive).length
-  if (running >= MAX_RUNNING)
-    throw new HttpError(409, `${running} previews already run, at most ${MAX_RUNNING}: stop one first`)
+  // A restart puts back the one it just stopped: it adds none, so the limit does not stop it.
+  if (!opts.replacing) assertRoom()
   const dataDir = path.join(target.path, 'data', 'preview')
   const logs = path.join(dataDir, 'logs')
   const e: Entry = {
@@ -602,11 +631,33 @@ export async function stopPreview(workspaceId: number, reason: string, actor: st
   return view(e)
 }
 
-/** Stop it if it runs, then build and start it again. */
+/** How many build or run right now, board-wide. */
+export const previewsInUse = () => [...all().values()].filter(isActive).length
+
+/** A refusal when the preview limit is reached: as many build or run as the human allows. */
+function assertRoom() {
+  const running = previewsInUse()
+  const limit = previewLimit()
+  if (running >= limit)
+    throw new HttpError(
+      409,
+      `${running} previews already run, at most ${limit} (the preview limit): stop one first`,
+    )
+}
+
+/**
+ * Stop it if it runs, then build and start it again. Restarting one that runs is allowed at or over
+ * the preview limit (it adds none); one that does not run is a start and counts. Whatever would refuse
+ * the start refuses before anything is stopped.
+ */
 export async function restartPreview(workspaceId: number, actor: string) {
   getWorkspace(workspaceId)
+  const refused = cannotStart(workspaceId)
+  if (refused) throw new HttpError(400, refused)
+  const replacing = isActive(all().get(workspaceId))
+  if (!replacing) assertRoom()
   await stopPreview(workspaceId, `restarted by ${actor}`, actor)
-  return startPreview(workspaceId, actor)
+  return startPreview(workspaceId, actor, { replacing })
 }
 
 /** Every ticket under these, their lanes (and theirs) included. */

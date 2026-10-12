@@ -93,7 +93,9 @@ http_headers = { Authorization = "Bearer gate_…" }
      port from 47101 without the passkey gate, then sets the workspace's `previewUrl`. It returns
      at once; `get_ticket` shows the workspace's `managedPreview` going `building` → `starting` →
      `running`, or `failed` with the last log lines (`logs` has the paths). `start_preview` with
-     `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board stops it
+     `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board runs as
+     many at once as the human's preview limit (8 by default); a start beyond it is refused with
+     the limit, so stop the ones you no longer need. The board stops it
      by itself when the PR is merged, the ticket moves to done or cancelled or is archived, or the
      workspace is removed, and when the board itself stops (it does not start them again). Do not
      run `pnpm dev` in your session for the human: it dies with your session and the dev server
@@ -102,7 +104,9 @@ http_headers = { Authorization = "Bearer gate_…" }
      data rather than the real one (the project's instructions say how), and register its link on
      the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it as
      a Preview card with an Open button and whether it is running. Stop it once the ticket is
-     merged or dropped, and clear it (`set_preview` with `previewUrl: ""`).
+     merged or dropped, and clear it (`set_preview` with `previewUrl: ""`). The human can stop it
+     from the project's Previews page when it listens on loopback and runs from the workspace's
+     worktree; the link stays, as not running.
 
    To exercise the board yourself without the passkey gate, run your own copy: `AUTH=off pnpm dev`,
    or `BOARD_ENV=test` with an `X-Test-Actor` header (README: "Test mode"); never on port 47100,

@@ -1,14 +1,23 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { cannotStart, isActive, managedPreview, type ManagedPreview } from './managedPreview'
+import { linkStopReasons } from './linkPreview'
+import {
+  cannotStart,
+  isActive,
+  managedPreview,
+  previewLimit,
+  previewsInUse,
+  type ManagedPreview,
+} from './managedPreview'
 import { isLocalUrl, previewState, type PreviewState } from './preview'
 import { getProject } from './projects'
 
 /**
  * Every preview of a project on one page: each workspace of its tickets (lanes, done and cancelled
  * ones too; archived ones are put away) that has a preview link or a preview the board ran, running or
- * not. It only reads: the links answer from the shared liveness check, all at once.
+ * not. It only reads: the links answer from the shared liveness check, all at once, and whether each
+ * link could be stopped comes from one look at the listening processes, alongside.
  */
 
 export interface ProjectPreview {
@@ -22,8 +31,19 @@ export interface ProjectPreview {
   managed: ManagedPreview | null
   /** Why the board would not start one, null when it would. */
   cannotStart: string | null
+  /**
+   * Why the board would not stop the server behind the link (`linkPreview.ts`), null when it would:
+   * the Stop of a running link.
+   */
+  linkStop: string | null
   /** Building, starting or running on the board, or its link answers. */
   running: boolean
+}
+
+// Every row has its answer; null is a yes, so a missing one must not read as one.
+const linkStopOf = (reasons: Map<number, string | null>, id: number) => {
+  const reason = reasons.get(id)
+  return reason === undefined ? 'not looked at' : reason
 }
 
 /** When it last changed as far as the board knows, for the order: most recent first. */
@@ -63,11 +83,14 @@ export async function projectPreviews(projectId: number): Promise<ProjectPreview
     // workspace removed while the links answer cannot fail the listing (cannotStart reads it by id).
     .map((row) => ({ ...row, cannotStart: cannotStart(row.workspace.id) }))
   if (!found.length) return []
-  const checks = await Promise.all(
-    found.map(({ workspace: w }) =>
-      w.previewUrl && isLocalUrl(w.previewUrl) ? previewState(w.previewUrl) : null,
+  const [checks, linkStops] = await Promise.all([
+    Promise.all(
+      found.map(({ workspace: w }) =>
+        w.previewUrl && isLocalUrl(w.previewUrl) ? previewState(w.previewUrl) : null,
+      ),
     ),
-  )
+    linkStopReasons(found.map(({ workspace }) => workspace)),
+  ])
   // One removed meanwhile (with its ticket, too) is left out: it has nothing left to open or start.
   const remaining = new Set(
     db
@@ -93,8 +116,23 @@ export async function projectPreviews(projectId: number): Promise<ProjectPreview
         check,
         managed,
         cannotStart,
+        linkStop: linkStopOf(linkStops, workspace.id),
         running: isActive(managed) || !!check?.running,
       }),
     )
     .sort((a, b) => Number(b.running) - Number(a.running) || lastAt(b).localeCompare(lastAt(a)))
+}
+
+/** The Previews page: the project's previews, and the board-wide use of the preview limit. */
+export interface ProjectPreviews {
+  previews: ProjectPreview[]
+  /** Previews the board builds or runs right now, in every project. */
+  inUse: number
+  /** The preview limit: at most this many at once, board-wide. */
+  limit: number
+}
+
+export async function projectPreviewsPage(projectId: number): Promise<ProjectPreviews> {
+  const previews = await projectPreviews(projectId)
+  return { previews, inUse: previewsInUse(), limit: previewLimit() }
 }

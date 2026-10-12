@@ -1,11 +1,23 @@
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Loader2, Play, RotateCw, Square } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button, buttonVariants } from '#/components/ui/button'
-import { errorMessage, post, type ManagedPreview, type PreviewState } from '#/lib/api'
+import { Input } from '#/components/ui/input'
+import { Label } from '#/components/ui/label'
+import {
+  errorMessage,
+  patch,
+  post,
+  type LinkStopped,
+  type ManagedPreview,
+  type PreviewState,
+} from '#/lib/api'
+import { PREVIEW_LIMIT } from '#/lib/constants'
 import { clock } from '#/lib/format'
 import { cn } from '#/lib/utils'
+import type { Settings } from '#/server/agents'
 
 /**
  * The pieces of a preview row, shared by a ticket's Preview card and the project's Previews page: the
@@ -26,13 +38,15 @@ const STEP_LABEL: Record<NonNullable<ManagedPreview['step']>, string> = {
 /**
  * Open the link in a new tab, and Start, Stop and Restart the board's own preview of the workspace:
  * Start only when none runs and the board would start one (`cannotStart` null), Stop and Restart while
- * it builds or runs. Errors come up as a toast.
+ * it builds or runs. With `linkStop` null (a link that answers, whose server the board may stop), a Stop
+ * of that server. Errors come up as a toast.
  */
 export function PreviewActions({
   workspaceId,
   url,
   managed,
   cannotStart,
+  linkStop,
   onChange,
 }: {
   workspaceId: number
@@ -40,6 +54,8 @@ export function PreviewActions({
   managed: ManagedPreview | null
   /** undefined until the board said. */
   cannotStart: string | null | undefined
+  /** null: the board may stop the server behind the link; undefined or a reason: no Stop for it. */
+  linkStop?: string | null
   onChange: () => void
 }) {
   const action = useMutation({
@@ -48,6 +64,18 @@ export function PreviewActions({
     onSuccess: onChange,
     onError: (err) => toast.error(errorMessage(err)),
   })
+  const stopLink = useMutation({
+    mutationFn: () => post<LinkStopped>(`/api/workspaces/${workspaceId}/preview/stop-link`),
+    onSuccess: (r) => {
+      if (!r.freed) toast.warning(`Stopped, but something still listens on :${r.port}`)
+      onChange()
+    },
+    // Refused (it changed since the page looked): the toast says why, and the row asks again.
+    onError: (err) => {
+      toast.error(errorMessage(err))
+      onChange()
+    },
+  })
   const active = previewActive(managed)
   return (
     <>
@@ -55,6 +83,17 @@ export function PreviewActions({
         <a href={url} target="_blank" rel="noreferrer" className={buttonVariants({ size: 'sm' })}>
           Open preview <ExternalLink />
         </a>
+      )}
+      {!active && url && linkStop === null && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={stopLink.isPending}
+          onClick={() => stopLink.mutate()}
+          title="Stop the server behind this link (it runs from the workspace's worktree) and free its port"
+        >
+          <Square /> Stop
+        </Button>
       )}
       {!active && cannotStart === null && (
         <Button
@@ -188,5 +227,52 @@ export function ManagedLine({ m, workspaceId }: { m: ManagedPreview; workspaceId
         : `Stopped${m.reason ? `: ${m.reason}` : ''}`}
       {m.stoppedAt && ` (${clock(m.stoppedAt)})`}
     </div>
+  )
+}
+
+/**
+ * The preview limit, board-wide: how many previews the board builds or runs at once. Out of range or
+ * not a whole number, the board refuses it and the toast says why.
+ */
+export function PreviewLimitEditor({ id, limit }: { id: string; limit: number }) {
+  const qc = useQueryClient()
+  const [value, setValue] = useState(String(limit))
+  const save = useMutation({
+    mutationFn: () => patch<Settings>('/api/settings', { previewLimit: Number(value) }),
+    onSuccess: (s) => {
+      qc.setQueryData(['settings'], s)
+      void qc.invalidateQueries({ queryKey: ['previews'] })
+      toast.success('Saved')
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    // The board checks the value: what it refuses comes up as a toast, not a browser bubble.
+    <form
+      noValidate
+      className="flex items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        save.mutate()
+      }}
+    >
+      <Label htmlFor={id} className="text-xs whitespace-nowrap">
+        Preview limit
+      </Label>
+      <Input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={PREVIEW_LIMIT.min}
+        max={PREVIEW_LIMIT.max}
+        step={1}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-20"
+      />
+      <Button type="submit" variant="outline" size="sm" disabled={save.isPending || value === String(limit)}>
+        {save.isPending ? 'Saving…' : 'Save'}
+      </Button>
+    </form>
   )
 }

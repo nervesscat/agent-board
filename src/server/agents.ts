@@ -1,5 +1,5 @@
 import { db, schema } from '#/db'
-import { AGENT_CLIENTS, type AgentClient } from '#/lib/constants'
+import { AGENT_CLIENTS, PREVIEW_LIMIT, readPreviewLimit, type AgentClient } from '#/lib/constants'
 import { config } from './config'
 import { listProjects } from './projects'
 import rawTemplate from './skill/board.md?raw'
@@ -12,9 +12,11 @@ const template = rawTemplate.replace(/\r\n/g, '\n')
 export interface Settings {
   /** The agent CLI the Connect agents page opens on. */
   defaultAgent: AgentClient
+  /** How many previews the board builds or runs at once, board-wide (`PREVIEW_LIMIT`). */
+  previewLimit: number
 }
 
-const DEFAULTS: Settings = { defaultAgent: 'claude' }
+const DEFAULTS: Settings = { defaultAgent: 'claude', previewLimit: PREVIEW_LIMIT.default }
 
 export function getSettings(): Settings {
   const rows = db.select().from(schema.settings).all()
@@ -24,6 +26,7 @@ export function getSettings(): Settings {
     defaultAgent: AGENT_CLIENTS.includes(agent as AgentClient)
       ? (agent as AgentClient)
       : DEFAULTS.defaultAgent,
+    previewLimit: readPreviewLimit(stored.previewLimit),
   }
 }
 
