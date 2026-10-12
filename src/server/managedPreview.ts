@@ -282,13 +282,18 @@ interface Kept {
   entries: Map<number, Entry> | undefined
   portQueue: Promise<unknown>
   hooked: boolean
+  /** Workspaces whose running preview a restart is replacing: their slot stays taken meanwhile. */
+  restarting: Set<number> | undefined
 }
 export const KEPT = Symbol.for('agent-board.managedPreviews')
 const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
   entries: undefined,
   portQueue: Promise.resolve(),
   hooked: false,
+  restarting: undefined,
 })
+// A module loaded before this field existed kept its object: give it one.
+const restarting = (kept.restarting ??= new Set<number>())
 const stateFile = () => path.join(config.dataDir, 'previews.json')
 
 function save() {
@@ -631,8 +636,12 @@ export async function stopPreview(workspaceId: number, reason: string, actor: st
   return view(e)
 }
 
-/** How many build or run right now, board-wide. */
-export const previewsInUse = () => [...all().values()].filter(isActive).length
+/**
+ * How many build or run right now, board-wide; one a restart is replacing counts while it is being
+ * stopped, so no other start takes its slot in the meantime.
+ */
+export const previewsInUse = () =>
+  [...all().values()].filter((e) => isActive(e) || restarting.has(e.workspaceId)).length
 
 /** A refusal when the preview limit is reached: as many build or run as the human allows. */
 function assertRoom() {
@@ -656,8 +665,16 @@ export async function restartPreview(workspaceId: number, actor: string) {
   if (refused) throw new HttpError(400, refused)
   const replacing = isActive(all().get(workspaceId))
   if (!replacing) assertRoom()
-  await stopPreview(workspaceId, `restarted by ${actor}`, actor)
-  return startPreview(workspaceId, actor, { replacing })
+  // Its slot stays taken while it is stopped (killing its processes takes a moment), so a start in
+  // between cannot take it and leave the board over the limit once this one is back.
+  const reserved = replacing && !restarting.has(workspaceId)
+  if (reserved) restarting.add(workspaceId)
+  try {
+    await stopPreview(workspaceId, `restarted by ${actor}`, actor)
+    return startPreview(workspaceId, actor, { replacing })
+  } finally {
+    if (reserved) restarting.delete(workspaceId)
+  }
 }
 
 /** Every ticket under these, their lanes (and theirs) included. */

@@ -426,6 +426,33 @@ describe('a preview the board runs', () => {
     expect(fake.killed).toHaveLength(killed)
   })
 
+  it('a start while a restart is still stopping its preview cannot take its slot', async () => {
+    const fake = useFake()
+    const [a, b, c] = Array.from({ length: 3 }, () => ticketWithWorktree())
+    for (const { ws } of [a!, b!]) await startRunning(ws.id)
+    setLimit(2)
+    // Killing takes a moment, as taskkill does.
+    const kill = fake.killTree.bind(fake)
+    fake.killTree = async (pid) => {
+      await new Promise((r) => setTimeout(r, 200))
+      await kill(pid)
+    }
+    fake.codes['pnpm build'] = 'hang'
+
+    const restart = mp.restartPreview(a!.ws.id, 'enrique')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(status(a!.ws.id)).toBe('stopped')
+    expect(mp.previewsInUse()).toBe(2)
+    expect(() => mp.startPreview(c!.ws.id, 'claude')).toThrow(/2 previews already run, at most 2/)
+    expect((await restart).status).toBe('building')
+    expect(status(c!.ws.id)).toBeUndefined()
+    expect(mp.previewsInUse()).toBe(2)
+    // Once it is back, its slot is its own again, counted once.
+    await mp.stopPreview(b!.ws.id, 'make room', 'enrique')
+    expect(mp.previewsInUse()).toBe(1)
+    expect(mp.startPreview(c!.ws.id, 'claude').status).toBe('building')
+  })
+
   it('refuses closed and archived tickets, and workspaces without a usable path', () => {
     useFake()
     const done = features.createTicket(projectId, { title: 'done', status: 'done' }, 'claude')
