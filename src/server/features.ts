@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { RESUME_TEMPLATE } from '#/lib/constants'
+import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
 import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
 import { branchHead, NO_BRANCH } from './git'
@@ -13,6 +14,7 @@ import { previewState, previewUrl, type PreviewState } from './preview'
 import { prForTicket } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
+import { reportDueFor } from './reportDue'
 import { type WithResume, type WithResumeBrief, resumeState, withoutResume } from './resume'
 import {
   firstOfKind,
@@ -364,17 +366,17 @@ function touch(ticketId: number) {
   if (row?.parentId) touch(row.parentId)
 }
 
-/** Trimmed, at most 40 characters each, no repeats in any casing, at most 20. */
+/** Trimmed, cut to `MAX_TAG_LENGTH` characters each, no repeats in any casing, at most `MAX_TAGS`. */
 export function cleanTags(tags: string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const raw of tags) {
-    const tag = raw.replace(/\s+/g, ' ').trim().slice(0, 40)
+    const tag = raw.replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_LENGTH)
     if (!tag || seen.has(tag.toLowerCase())) continue
     seen.add(tag.toLowerCase())
     out.push(tag)
   }
-  return out.slice(0, 20)
+  return out.slice(0, MAX_TAGS)
 }
 
 export function updateTicket(
@@ -1265,6 +1267,8 @@ export function checkInbox(projectId: number, actor: string, since?: string | nu
   return {
     count: threads.length,
     cursor,
+    // The project's report, while the board is reminding about it: write it with the human's go-ahead.
+    reportDue: reportDueFor(projectId),
     threads: threads.map((t) => ({
       ticketId: t.ticketId,
       title: t.title,

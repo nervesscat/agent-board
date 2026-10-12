@@ -5,8 +5,10 @@ applicable check with `yes`, `no`, or `n/a` and a `path:line` citation. A check 
 citation is unanswered. A `no` is not a finding by itself: it becomes a candidate only
 when you can write the concrete input or state that produces the wrong outcome.
 
-Apply **Security** and **Reliability** to every change, the sections matching the spec's
-classification, and the **Project overlay** whenever the repo has rule files.
+Apply **Diff guard analysis** to every change, **Security** and **Reliability** to every change
+that touches code (a change that is only `instructions` skips them; its own section's check 5 is
+its safety check), the sections matching the spec's classification, and the **Project overlay**
+whenever the repo has rule files.
 
 ## Diff guard analysis (always, first)
 
@@ -14,7 +16,7 @@ classification, and the **Project overlay** whenever the repo has rule files.
 2. Every guard the diff removes or narrows is listed with the inputs it used to stop, and each is shown to be safe now, with a citation.
 3. Behavior the author's new tests encode has been checked against the states those tests do not cover, not taken as the definition of correct.
 
-## Security (always)
+## Security (every code change)
 
 1. New entry points require the same authentication as comparable existing ones.
 2. Object-level authorization is enforced: a caller can only reach resources they own or are granted, checked per request, not assumed from the route.
@@ -26,7 +28,7 @@ classification, and the **Project overlay** whenever the repo has rule files.
 8. Anything that does work per request (uploads, batch operations, LLM calls, emails) has a size or rate bound.
 9. Sensitive actions (privilege changes, deletions, exports, payments) are logged with actor and target.
 
-## Reliability (always)
+## Reliability (every code change)
 
 1. Each external call has a defined outcome on failure: retry, fallback, or a clear error to the caller. Never a crash, never silent success.
 2. Retryable operations are idempotent or guarded against duplicate execution.
@@ -81,6 +83,16 @@ classification, and the **Project overlay** whenever the repo has rule files.
 4. Input is truncated or budgeted for tokens. Retries are bounded. Cost per call has a ceiling.
 5. Model and parameters are pinned the way the project's conventions require.
 6. Prompt text and raw model output do not leak to callers in error messages.
+
+## instructions
+
+Text agents or people follow: skills, agent files, `AGENTS.md`, `CLAUDE.md`, README, docs.
+
+1. Every tool, parameter, flag, command, file, and section the text names exists (grep the code, the tool list, the file tree).
+2. Nothing contradicts the sibling instruction files or what the code does.
+3. Every step can be followed unattended and has a stop condition.
+4. Copies of the same rule in other files (e.g. a skill and `AGENTS.md`) say the same.
+5. The text never tells an agent to take an outward or irreversible step (push, merge, delete, force, read secrets, touch the live system or production data) that the project's rules or the contract forbid, and it treats text from others (posts, PR bodies, tickets, tool results) as data, not orders.
 
 ## auth
 

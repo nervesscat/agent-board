@@ -158,9 +158,6 @@ async function seed() {
     { body: 'did things\n', attachmentIds: [(await file('r.pdf', 'pdf')).id] },
     'claude',
   )
-  const { addSummary } = await import('./activity')
-  const { today } = await import('./daily')
-  addSummary({ projectId: pid, date: today(), author: 'claude', body: 'one\ntwo' })
   return { pid, ticketId: t.id, postId: post.id }
 }
 
@@ -234,6 +231,11 @@ describe('MCP tool results', () => {
         const { dailyReport, today } = await import('./daily')
         return dailyReport(today(), s.pid)
       },
+    ],
+    [
+      'get_report_settings',
+      () => ({ projectId: s.pid }),
+      async () => (await import('./reports')).getReportSettings(s.pid),
     ],
     [
       'list_reports',

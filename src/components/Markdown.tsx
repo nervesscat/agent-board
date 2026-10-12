@@ -1,3 +1,4 @@
+import { useRouter } from '@tanstack/react-router'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -31,6 +32,7 @@ function linkMentions(md: string, agents: ProjectAgent[]): string {
 /** Markdown as agents write it; images and links are the board's own uploads or external URLs. */
 export function Markdown({ children, className = '' }: { children: string; className?: string }) {
   const agents = useProjectAgents()
+  const router = useRouter()
   return (
     <div className={`prose prose-sm dark:prose-invert max-w-none break-words ${className}`}>
       <ReactMarkdown
@@ -48,6 +50,21 @@ export function Markdown({ children, className = '' }: { children: string; class
                 >
                   <AgentAvatar agent={agent} className="size-3.5" />@{agent.name}
                 </span>
+              )
+            // A #link is to something on the same page (a post, a reply): it lands there, in this tab,
+            // as a step of the router's history, so Back and Forward return to where the reader was.
+            const hash = props.href?.startsWith('#') && !props.href.startsWith(MENTION) ? props.href : null
+            if (hash)
+              return (
+                <a
+                  {...props}
+                  onClick={(e) => {
+                    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                    e.preventDefault()
+                    const { pathname, search } = window.location
+                    router.history.push(`${pathname}${search}${hash}`)
+                  }}
+                />
               )
             return <a {...props} target="_blank" rel="noreferrer" />
           },
