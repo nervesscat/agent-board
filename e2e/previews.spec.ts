@@ -108,6 +108,13 @@ async function serveFrom(worktree: string) {
 const register = (human: APIRequestContext, t: TicketFull, data: Record<string, string>) =>
   ok<Workspace>(human.post(`/api/tickets/${t.id}/workspaces`, { data: { name: 'wt', ...data } }))
 
+/**
+ * The rows of the page: the Running and Not running sections only (a banner of another test's project,
+ * such as a report due soon, is a region of its own).
+ */
+const previewRows = (page: Page) =>
+  page.getByRole('region', { name: /^(Running|Not running)$/ }).getByRole('listitem')
+
 const toast = (page: Page, text: string | RegExp) =>
   page.locator('[data-sonner-toast]').filter({ hasText: text })
 
@@ -123,7 +130,7 @@ test('the Previews module opens from the sidebar, and says so when the project h
   await expect(page.getByRole('heading', { level: 1, name: 'Previews' })).toBeVisible()
   await expect(link).toHaveClass(/(^|\s)active(\s|$)/)
   await expect(page.getByText(/^No previews yet\./)).toBeVisible()
-  await expect(page.getByRole('region').getByRole('listitem')).toHaveCount(0)
+  await expect(previewRows(page)).toHaveCount(0)
   await expect(page.getByRole('region', { name: 'Running', exact: true })).toHaveCount(0)
 })
 
@@ -169,7 +176,7 @@ test("lists the project's previews, the running ones apart, each with its ticket
 
     await page.goto(`/projects/${project.id}/previews`)
     // The rows sit in the Running and Not running sections.
-    const rows = page.getByRole('region').getByRole('listitem')
+    const rows = previewRows(page)
     const row = (title: string) => rows.filter({ hasText: title })
     const running = page.getByRole('region', { name: 'Running', exact: true })
     const stopped = page.getByRole('region', { name: 'Not running' })
@@ -330,7 +337,7 @@ test.describe('board-run previews and the preview limit', () => {
 
       // A start counts, in any project.
       await page
-        .getByRole('region')
+        .getByRole('region', { name: /^(Running|Not running)$/ })
         .getByRole('listitem')
         .filter({ hasText: 'Counted against the limit' })
         .getByRole('button', { name: 'Start', exact: true })
@@ -597,7 +604,7 @@ test('Refresh, and the page asking again on its own, pick up a preview registere
   await page.clock.install()
   await register('Registered first')
   await page.goto(`/projects/${project.id}/previews`)
-  const rows = page.getByRole('region').getByRole('listitem')
+  const rows = previewRows(page)
   await expect(rows).toHaveCount(1)
 
   // Nothing new shows before the page asks again...
