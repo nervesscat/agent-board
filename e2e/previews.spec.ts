@@ -8,7 +8,7 @@ import path from 'node:path'
 import type { APIRequestContext, Page } from '@playwright/test'
 
 import type { ManagedPreview, ProjectPreview, ProjectPreviews, TicketFull, Workspace } from '#/lib/api'
-import { e2eEnv, git } from './env'
+import { END_BUILD as END, e2eEnv, git } from './env'
 import { expect, ok, seedProject, test } from './fixtures'
 
 /** A server on this machine that answers, as a branch an agent runs would; closed when the test ends. */
@@ -52,7 +52,9 @@ function worktreeOf(name: string) {
 
 /**
  * A worktree that reads as a checkout of the board with its dependencies installed, and whose build
- * never ends: the board starts it for real, and it stays building until it is stopped.
+ * never ends: the board starts it for real, and it stays building until it is stopped. `end()` makes
+ * the build exit by itself as well: a stop on Windows (`taskkill /T`) can miss a process its tree starts
+ * at that very moment, and a build left behind would outlive the run. Every test calls it as it ends.
  */
 function buildingWorktree(name: string) {
   const { worktree, branch } = worktreeOf(name)
@@ -62,13 +64,15 @@ function buildingWorktree(name: string) {
     JSON.stringify({
       name: 'agent-board',
       private: true,
-      scripts: { build: 'node -e "setInterval(() => {}, 1000)"' },
+      scripts: {
+        build: `node -e "setInterval(() => { if (require('fs').existsSync('${END}')) process.exit() }, 200)"`,
+      },
     }),
   )
   fs.writeFileSync(path.join(worktree, 'pnpm-lock.yaml'), lock)
   fs.mkdirSync(path.join(worktree, 'node_modules', '.pnpm'), { recursive: true })
   fs.writeFileSync(path.join(worktree, 'node_modules', '.pnpm', 'lock.yaml'), lock)
-  return { worktree, branch }
+  return { worktree, branch, end: () => fs.writeFileSync(path.join(worktree, END), '') }
 }
 
 /**
@@ -241,7 +245,7 @@ test.describe('board-run previews and the preview limit', () => {
     human,
     project,
   }) => {
-    const { worktree, branch } = buildingWorktree(`${project.id}-previews`)
+    const { worktree, branch, end } = buildingWorktree(`${project.id}-previews`)
 
     const t = await ok<TicketFull>(
       human.post(`/api/projects/${project.id}/tickets`, {
@@ -306,6 +310,7 @@ test.describe('board-run previews and the preview limit', () => {
       expect(await managed()).toMatchObject({ status: 'stopped' })
     } finally {
       await human.post(`/api/workspaces/${ws.id}/preview/stop`)
+      end()
     }
   })
 
@@ -314,7 +319,7 @@ test.describe('board-run previews and the preview limit', () => {
     human,
     project,
   }) => {
-    const { worktree, branch } = buildingWorktree(`${project.id}-limit`)
+    const { worktree, branch, end } = buildingWorktree(`${project.id}-limit`)
     const t = await ok<TicketFull>(
       human.post(`/api/projects/${project.id}/tickets`, {
         data: { title: 'Counted against the limit', status: 'in_progress', branch },
@@ -355,6 +360,7 @@ test.describe('board-run previews and the preview limit', () => {
       await expect(inUse(page)).toHaveText('Board-run previews: 1 of 3 in use (board-wide)')
     } finally {
       await human.post(`/api/workspaces/${ws.id}/preview/stop`)
+      end()
       await limitBack(human)
     }
   })
@@ -397,6 +403,9 @@ test.describe('board-run previews and the preview limit', () => {
       expect(managed.managed).toBeNull()
     } finally {
       await human.post(`/api/workspaces/${a.id}/preview/stop`)
+      await human.post(`/api/workspaces/${b.id}/preview/stop`)
+      first.end()
+      second.end()
       await limitBack(human)
     }
   })
@@ -499,6 +508,7 @@ test.describe('board-run previews and the preview limit', () => {
       server.stop()
       await stranger.close()
       await human.post(`/api/projects/${project.id}/previews/stop`)
+      board.end()
     }
   })
 })
