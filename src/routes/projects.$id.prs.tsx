@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ExternalLink, GitMerge, MessageSquare, PauseCircle, PlayCircle, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -25,14 +25,16 @@ import { Textarea } from '#/components/ui/textarea'
 import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
-import { remember, useRestoreRemembered } from '#/lib/remembered'
+import { recall, remember, useRestoreRemembered } from '#/lib/remembered'
+import { anchorId, useAnchor, useReveal } from '#/lib/reveal'
 
 const FILTER_KEYS = ['me', 'others'] as const
 type Filter = (typeof FILTER_KEYS)[number]
 
 // ?result=<id> opens that review result over the queue (a verdict on a card links there); ?filter= is
 // the filter picked (none, or one no longer offered such as an old `all`: the one this browser
-// remembers, else To review).
+// remembers, else To review). A link lands on a PR's card as #pr-<id>, on a reply in its thread as
+// #pr-<id>-reply-<id>, on a reply to the review result as #reply-<id> (src/lib/reveal.ts).
 export const Route = createFileRoute('/projects/$id/prs')({
   component: PrQueue,
   validateSearch: z.object({
@@ -76,10 +78,13 @@ function PrQueue() {
   const { data: project } = useProject(id)
   // The tab and the list both follow the URL, so the server's render and the browser's agree.
   const filter = picked ?? 'me'
-  const showFilter = (f: Filter) => navigate({ search: (s) => ({ ...s, filter: f }), replace: true })
+  // Put in the URL for the reader (the remembered one, or the one that shows a linked PR): the link's
+  // anchor stays. A filter the reader picks ends what the link had to show.
+  const showFilter = (f: Filter) =>
+    navigate({ search: (s) => ({ ...s, filter: f }), hash: true, replace: true })
   useRestoreRemembered(FILTER_KEY, picked, FILTER_KEYS, showFilter)
   const pickFilter = (f: Filter) => {
-    showFilter(f)
+    navigate({ search: (s) => ({ ...s, filter: f }), replace: true })
     remember(FILTER_KEY, f)
   }
   const { data, isLoading, isFetching, error } = useQuery({
@@ -94,6 +99,38 @@ function PrQueue() {
   })
   const inFilter = (p: PrRow, f: Filter) => p.waitingOn === f
   const shown = data?.filter((p) => inFilter(p, filter)) ?? []
+
+  const anchor = useAnchor()
+  // The PR a link lands on: its stage's tab, once per link, and the filter that shows it (the side it
+  // waits on) if the filter in the URL (once it is there, remembered or not) hides it.
+  const linkedId = anchorId(anchor?.holder ?? anchor?.target, 'pr')
+  const linked = data?.find((p) => p.id === linkedId)
+  // The filter this browser remembers, read after mount: undefined for none, null until read.
+  const [remembered, setRemembered] = useState<Filter | undefined | null>(null)
+  useEffect(() => setRemembered(recall(FILTER_KEY, FILTER_KEYS)), [])
+  // The filter the list stays on: the one in the URL, else To review once nothing remembered is to be
+  // put there; null while that is not known yet.
+  const staying = picked ?? (remembered === undefined ? 'me' : null)
+  // The anchor is brought into view once the list it is in has settled: the remembered filter put in
+  // the URL, then switched to the one that shows the linked PR if that hides it. Each switch redraws
+  // the list, and an anchor revealed before them would be lost under them.
+  const settled =
+    staying !== null && (!linked || inFilter(linked, staying)) && (linkedId === null || data !== undefined)
+  useReveal(anchor, { ready: settled })
+  const [tab, setTab] = useState<string>('pending')
+  const tabFor = useRef<string | null>(null)
+  const switchedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!anchor || !linked) return
+    if (tabFor.current !== anchor.hash) {
+      tabFor.current = anchor.hash
+      setTab(linked.status)
+    }
+    if (staying !== null && switchedFor.current !== anchor.hash) {
+      switchedFor.current = anchor.hash
+      if (!inFilter(linked, staying)) showFilter(linked.waitingOn)
+    }
+  }, [anchor, linked, staying])
   const suffix = FILTERS.find((f) => f.key === filter)!.label.toLowerCase()
 
   return (
@@ -134,7 +171,7 @@ function PrQueue() {
       {isLoading ? (
         <Skeleton className="h-40" />
       ) : (
-        <Tabs defaultValue="pending">
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           {/* Four stages do not fit one row on a phone: there they take two rows of two, so every stage
               and its count shows without the list or the page scrolling. */}
           <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-fit sm:group-data-horizontal/tabs:h-8">
@@ -205,6 +242,12 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
   const [thread, setThread] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
   const [note, setNote] = useState(pr.holdNote)
+  // A link to a reply in its thread (#pr-<id>-reply-<id>) opens the thread, once per link.
+  const anchor = useAnchor()
+  const opensFor = anchor?.holder === `pr-${pr.id}` ? anchor.hash : null
+  useEffect(() => {
+    if (opensFor) setThread(true)
+  }, [opensFor])
   const hold = useMutation({
     mutationFn: (v: { hold: boolean; holdNote: string }) => patch<PrRow>(`/api/prs/${pr.id}`, v),
     onSuccess: () => {
@@ -214,7 +257,11 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <div className="rounded-lg border p-3">
+    // A link lands on it as #pr-<id>, below the top bar.
+    <div
+      id={`pr-${pr.id}`}
+      className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-3"
+    >
       <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -270,7 +317,7 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
               </Badge>
             </Link>
           )}
-          <Button variant="ghost" size="sm" onClick={() => setThread((v) => !v)}>
+          <Button variant="ghost" size="sm" aria-expanded={thread} onClick={() => setThread((v) => !v)}>
             <MessageSquare data-icon="inline-start" /> thread
           </Button>
           {pr.hold ? (

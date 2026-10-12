@@ -3,7 +3,7 @@ import { Fragment, useState } from 'react'
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/components/ui/dialog'
 import { errorMessage, get } from '#/lib/api'
-import type { DiffLine } from '#/lib/diff'
+import type { DiffLine } from '#/lib/hunks'
 import { cn } from '#/lib/utils'
 import type { SkillFileDiff } from '#/server/agents'
 

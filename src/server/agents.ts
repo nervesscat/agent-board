@@ -4,7 +4,7 @@ import path from 'node:path'
 
 import { db, schema } from '#/db'
 import { AGENT_CLIENTS, type AgentClient, SKILLS_TRACKING, type SkillsTracking } from '#/lib/constants'
-import { type DiffHunk, diffLines } from '#/lib/diff'
+import { type DiffHunk, diffLines } from '#/lib/hunks'
 import { config } from './config'
 import { HttpError, notFound } from './http'
 import { getProject, listProjects } from './projects'

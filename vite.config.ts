@@ -82,6 +82,7 @@ export default defineConfig({
     connectionGoneIsNotAnError(),
   ],
   ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
-  // The board writes its database, uploads and logs under data/ all the time; none of it is code.
-  server: { watch: { ignored: ['**/data/**', '**/.output*/**'] } },
+  // The board writes its database, uploads and logs under data/ all the time; none of it is code. Nor
+  // is what the benchmark keeps in .bench/ (its builds, copies of the data and results).
+  server: { watch: { ignored: ['**/data/**', '**/.output*/**', '**/.bench/**'] } },
 })

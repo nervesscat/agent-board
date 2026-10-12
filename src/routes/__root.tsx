@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { CrossBoardMark } from '#/components/CrossBoardMark'
 import { Gallery } from '#/components/Gallery'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
+import { ReportDueBanner } from '#/components/ReportDueBanner'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
@@ -91,6 +92,7 @@ function App() {
           <PagesMenu />
         </nav>
       </header>
+      <ReportDueBanner />
       <main className="mx-auto w-full max-w-7xl px-4 py-6">
         <Outlet />
       </main>

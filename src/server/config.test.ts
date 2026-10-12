@@ -3,7 +3,16 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { authOffBanner, builtServerBind, checkBind, LIVE_PORT, readAuthMode, StartupError } from './config'
+import {
+  authOffBanner,
+  builtServerBind,
+  checkBind,
+  LIVE_PORT,
+  readAuthMode,
+  readClaudeArgs,
+  readClaudeTimeout,
+  StartupError,
+} from './config'
 
 const safe = { host: '127.0.0.1', port: 47131 }
 
@@ -122,5 +131,31 @@ describe('claudeHome', () => {
     expect(await load('')).toBe(path.join(os.homedir(), '.claude'))
     expect(await load('~/elsewhere/.claude')).toBe(path.join(os.homedir(), 'elsewhere', '.claude'))
     expect(await load('rel/.claude')).toBe(path.resolve('rel', '.claude'))
+  })
+})
+
+describe('readClaudeArgs', () => {
+  it('is no arguments when unset, else the JSON array of strings given', () => {
+    expect(readClaudeArgs(undefined)).toEqual([])
+    expect(readClaudeArgs(' ')).toEqual([])
+    expect(readClaudeArgs('["e2e/fake-claude.mjs", "--slow"]')).toEqual(['e2e/fake-claude.mjs', '--slow'])
+  })
+
+  it('refuses anything else', () => {
+    for (const raw of ['e2e/fake-claude.mjs', '{"a": 1}', '[1]', '"x"'])
+      expect(() => readClaudeArgs(raw)).toThrow(/CLAUDE_ARGS must be a JSON array of strings/)
+  })
+})
+
+describe('readClaudeTimeout', () => {
+  it('is two minutes when unset, else the milliseconds given', () => {
+    expect(readClaudeTimeout(undefined)).toBe(120_000)
+    expect(readClaudeTimeout('')).toBe(120_000)
+    expect(readClaudeTimeout('1500')).toBe(1500)
+  })
+
+  it('refuses anything but a whole number above 0', () => {
+    for (const raw of ['0', '-5', '1.5', 'soon'])
+      expect(() => readClaudeTimeout(raw)).toThrow(/CLAUDE_TIMEOUT_MS must be/)
   })
 })

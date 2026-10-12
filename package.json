@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "check:migrations": "node scripts/check-migrations.mjs",
+    "bench": "node scripts/bench/bench.mjs",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
   },
