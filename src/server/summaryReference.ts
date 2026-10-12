@@ -13,6 +13,7 @@ import { gist, type LaneCounts } from './features'
 import { getProject } from './projects'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
+import { reportDueFor } from './reportDue'
 import { type ResumeTicket } from './resume'
 import { isWorking, kindOf, listStages, type Stage } from './stages'
 import {
@@ -625,6 +626,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       byId,
       now,
     ),
+    // The project's report, while the board is reminding about it (due soon, or missing): null otherwise.
+    reportDue: reportDueFor(project.id, now),
   }
 }
 

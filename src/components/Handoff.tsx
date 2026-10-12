@@ -54,8 +54,13 @@ export function HandoffCard({
   const checks = handoff.checks.map((c) => withReach(c, git, pr))
   const done = checks.every((c) => c.ok)
   return (
+    // A link lands on it as #handoff (src/lib/reveal.ts), below the ticket page's stuck header.
     <section
-      className={cn('rounded-lg border p-3', done && 'border-emerald-500/60 dark:border-emerald-400/60')}
+      id="handoff"
+      className={cn(
+        'scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-3',
+        done && 'border-emerald-500/60 dark:border-emerald-400/60',
+      )}
       aria-label="Hand-off"
     >
       <h2 className="mb-2 flex items-center justify-between gap-2 text-sm font-medium">

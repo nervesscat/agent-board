@@ -17,7 +17,10 @@ precisely; never fall back to a server or environment you did not start.
 - `WORKDIR`: the review's working dir. Write `00-env.md`, `logs/`, and `pids` here.
 - `SLUG`: the review slug. Use it to name anything you create (compose project,
   temp dirs, database names).
-- `01-spec.md`: its **Runbook** section is your starting point.
+- `01-spec.md`: its **Runbook** section is your starting point; its criteria's methods say
+  what to start.
+- `00-focus.md`: the changed files, their tests, their direct callers. Start from it; read
+  outside it only to follow a reference from it.
 - `NOTES`: the per-repo notes file path. Read it first if it exists; it records what
   earlier reviews learned about this machine (installed tools, taken ports, runbook
   corrections) and saves you from rediscovering it. Before you finish, append one dated
@@ -70,7 +73,9 @@ precisely; never fall back to a server or environment you did not start.
 ## Procedure
 
 1. Read the runbook. List the services, ports, env vars, install command, test command,
-   and start command it names.
+   and start command it names. Start only what the criteria's methods need: no app server
+   when no criterion uses `run+http` or `browser`, no frontend when none uses `browser`, and
+   only the data services the app or the tests need. Say in `00-env.md` what you left out.
 2. Establish the dependency environment (invariant 1) and the import proof (2).
 3. Allocate ports (3). Start supporting services (4), then the app (5). Reuse nothing
    that was already running.

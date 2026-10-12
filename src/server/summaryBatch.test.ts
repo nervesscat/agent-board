@@ -161,7 +161,19 @@ describe('the batched summary answers as the per-project one did', () => {
     // Two projects inserted out of name order, so the all-projects block order is by name.
     const beta = project('Beta', { repos: ['web', 'api'] })
     const alpha = project('Alpha')
-    project('Empty')
+    const empty = project('Empty')
+    // The report each project is reminded of at NOW (15:00): Alpha's is missing (its shift ended at
+    // 14:00), Beta's due (it ends at 15:20), Empty's is in.
+    db.insert(schema.reportSettings)
+      .values([
+        { projectId: alpha.id, cadence: 'daily', shiftEnd: '14:00' },
+        { projectId: beta.id, cadence: 'daily', shiftEnd: '15:20' },
+        { projectId: empty.id, cadence: 'daily', shiftEnd: '14:00' },
+      ])
+      .run()
+    db.insert(schema.reports)
+      .values({ projectId: empty.id, cadence: 'daily', period: '2026-10-07', body: 'done', author: 'claude' })
+      .run()
 
     // --- Alpha: the stages renamed and extended, a backlog-named open stage, agents ---
     db.insert(schema.stages)
@@ -369,7 +381,10 @@ describe('the batched summary answers as the per-project one did', () => {
     expect(s.carryingOver.length).toBeGreaterThan(3)
     expect(s.doneToday.tickets.map((t) => t.id).sort()).toEqual([shipped.id, verdict.id].sort())
     expect(s.next.total).toBe(10)
+    expect(s.reportDue).toMatchObject({ state: 'missing', minutesLeft: -60 })
+    expect(summary.getSummary(empty.id, { now: NOW, humans: [HUMAN] }).projects[0]!.reportDue).toBeNull()
     const b = summary.getSummary(beta.id, { now: NOW, humans: [HUMAN] }).projects[0]!
+    expect(b.reportDue).toMatchObject({ state: 'due', minutesLeft: 20 })
     expect(b.doneToday.prs.map((p) => [p.number, p.repo, p.tickets.map((t) => t.title)])).toEqual([
       [42, 'api', ['No repo']],
       [40, 'api', ['By number']],

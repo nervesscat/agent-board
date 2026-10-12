@@ -28,6 +28,7 @@ import { getProject } from './projects'
 import { refreshPrsInBackground } from './prs'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
+import { reportDueFor } from './reportDue'
 import { handoffFacts } from './resume'
 import { listStages, type Stage } from './stages'
 
@@ -613,6 +614,8 @@ function projectSummary(
       backlog: top.filter((t) => kind(t.status) === 'open' && t.status !== nextStage?.key).length,
     },
     carryingOver: carryOver(carried, byId, handoffs),
+    // The project's report, while the board is reminding about it (due soon, or missing): null otherwise.
+    reportDue: reportDueFor(project.id, ctx.now),
   }
 }
 
