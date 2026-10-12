@@ -69,6 +69,14 @@ http_headers = { Authorization = "Bearer gate_…" }
    sibling lanes and never in the title. Register where code runs
    (worktree, sub-branch, sandbox) with `add_workspace`, every worktree as soon as you open it:
    the registered workspaces are the cleanup list. `remove_workspace` when it is gone.
+   Split lanes by files: one owning lane per file (a file two lanes need goes to one, or the other
+   waits on it with `needs`). Before starting or delegating, check what is done or in flight
+   (`get_ticket`: lanes, their status, posts; `get_ticket_git`: workspaces; `list_review_results`
+   for the head SHA) and do not redo it. A lookup of one or two calls (a grep, a file read, one
+   board call) you do yourself. Every brief you hand another agent (a subagent's prompt, a lane's
+   `body`, a project agent's run) has five parts: **Goal**; **Focus** (files to read first, what to
+   leave alone); **Known** (facts already established, not to re-derive: commands, ports, paths,
+   earlier results); **Done when**; **Return** (the exact shape of the answer).
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
    the board copies them). One update per meaningful step, not per keystroke. A ticket has one
@@ -208,8 +216,9 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 **Orchestrating.** Each agent also carries **delegation notes** (`agents[].delegation`): when to
 call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
 orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
-agent's instructions, the project's and the ticket's, and the hand-off checklist (step 7); its result
-is posted on the ticket as that agent; the notes pick the next agent. Before moving the ticket to
+agent's instructions, the project's, and a five-part brief (step 4) holding the ticket's step and
+the hand-off checklist (step 7); its result is posted on the ticket as that agent; the notes pick
+the next agent. Before moving the ticket to
 `review`, check every item of that checklist yourself. The Agents page adds a default set (spec, builder, runner, and
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
 → build again with the confirmed findings (at most three rounds) → hand off. The `/review-queue`

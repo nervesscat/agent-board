@@ -93,11 +93,13 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   `remove_task` drops one that no longer applies, so the progress bar stays honest.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
-  brief as `body`, its own `branch`, `assignee` and `tasks`. Its repo and base branch default to
-  the parent's repo and branch, so the lane's PR goes into the parent's branch, not `main`. Hand
-  each subagent its lane's `ticketId`: it works the lane like any ticket (tasks, updates, thread,
-  review) and may split it into lanes of its own. One-step helpers that finish inside your own
-  turn need no lane.
+  brief as `body` ([Delegating](#delegating)), its own `branch`, `assignee` and `tasks`. Its repo
+  and base branch default to the parent's repo and branch, so the lane's PR goes into the parent's
+  branch, not `main`. Hand each subagent its lane's `ticketId`: it works the lane like any ticket
+  (tasks, updates, thread, review) and may split it into lanes of its own. One-step helpers that
+  finish inside your own turn need no lane. Split lanes by files: each file has one owning lane,
+  and two lanes never edit the same file (a file both need goes to one of them, or the other waits
+  on it with `needs`).
 - Tag every lane with `tags` so the human can filter the list: a severity (`Critical`, `High`,
   `Medium`, `Low`, `Cosmetic`), an area or a kind, one or two words in Title Case. Reuse the words
   sibling lanes already carry, and keep them out of the title (no `[High] …`). `update_ticket`
@@ -151,6 +153,24 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.
+
+### Delegating
+
+Every spawned agent and lane costs time: hand out only what is new, and only what is worth it.
+
+- Before starting or delegating anything, check what is already done or in flight: the ticket's
+  lanes with their status, and its posts (`get_ticket`), its workspaces (`get_ticket_git`), and
+  `list_review_results` for the branch's head SHA. Do not start or hand out what is already there.
+- A lookup of one or two calls (a grep, a file read, one board call) you do yourself; do not spawn
+  an agent for it.
+- Every brief you hand another agent (a subagent's prompt, a lane's `create_ticket` `body`, a
+  project agent's run under [Orchestrating](#orchestrating-the-projects-agents)) has five parts:
+  1. Goal: what to achieve.
+  2. Focus: the files or dirs to read first, and what to leave alone.
+  3. Known: facts already established that it must not re-derive: commands, ports, paths,
+     earlier results.
+  4. Done when: the condition to stop at.
+  5. Return: the exact shape of the answer.
 
 ### Watch for feedback
 
@@ -356,11 +376,12 @@ Without those skills, or for one ticket, orchestrate by hand:
 1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its
    brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
 2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
-   prompt is its `instructions`, the project's `instructions`, the ticket (`get_ticket`), the
-   worktree and branch, what the previous step returned (subagents share nothing else) and the
-   checklist from [Hand off](#4-hand-off), as it stands; post
-   what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`, its
-   evidence in `files`); tick the tasks it finished; go where its notes say next.
+   prompt is its `instructions`, the project's `instructions` and a brief in the five parts of
+   [Delegating](#delegating): the step's goal from the ticket (`get_ticket`), its focus, what is
+   known (the worktree and branch, what earlier steps returned: subagents share nothing else),
+   done when (with the checklist from [Hand off](#4-hand-off), as it stands) and what to return;
+   post what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`,
+   its evidence in `files`); tick the tasks it finished; go where its notes say next.
 3. A call that is the human's (two valid behaviours, a finding that keeps coming back, ship as is
    or not) → `ask_decision`, and work on something else until it is decided.
 4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests. Check
