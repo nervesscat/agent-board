@@ -6,7 +6,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
-import { config } from './config'
+import { authMode, config } from './config'
 import { HttpError, notFound } from './http'
 import { activePreviews, isActive, managedPreview, stopPreview, worktreeTarget } from './managedPreview'
 import { forgetPreviewState, isLocalUrl } from './preview'
@@ -29,6 +29,9 @@ import { ticketRepo } from './repos'
  *
  * It then kills each listening process with everything it started. A stop always looks again at the
  * moment it is asked; only the Previews page's answer reuses what it read about a process lately.
+ *
+ * A preview board (development) stops none: it runs on a copy of the live data, so its links point at
+ * the servers agents really run for the live board.
  */
 
 const WIN = process.platform === 'win32'
@@ -350,6 +353,8 @@ interface Target {
 /** What can be said without looking at the processes: the link, its port and the worktree. */
 function linkTarget(ws: schema.Workspace): Target | Refusal {
   if (!ws.previewUrl) return refuse(409, 'the workspace has no preview link')
+  if (authMode().boardEnv === 'development')
+    return refuse(400, 'links are stopped by the live board (or a test-mode one), not by a preview')
   if (isActive(managedPreview(ws.id)))
     return refuse(
       409,

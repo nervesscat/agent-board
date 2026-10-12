@@ -738,3 +738,44 @@ describe('Stop all', { timeout: 60_000 }, () => {
     expect(wsRow(building.id).previewUrl).toBe(`http://127.0.0.1:${first.port}`)
   })
 })
+
+describe('on a preview board', { timeout: 60_000 }, () => {
+  it('stops no link: the Stop is refused, Stop all skips it, and the row says why', async () => {
+    // A preview board runs on a copy of the live data: its links point at servers that really run.
+    const reason = 'links are stopped by the live board (or a test-mode one), not by a preview'
+    const project = dbm.db.insert(dbm.schema.projects).values({ name: 'preview board' }).returning().get().id
+    dbm.db.insert(dbm.schema.repos).values({ projectId: project, name: 'app', repoPath: main }).run()
+    const wt = freshWorktree()
+    const s = await serve('server.js', { cwd: wt })
+    const ws = workspace(wt, `http://127.0.0.1:${s.port}`, project)
+    expect((await rowOf(ws.id, project)).linkStop).toBeNull()
+
+    const config = await import('./config')
+    const mode = vi
+      .spyOn(config, 'authMode')
+      .mockReturnValue({ boardEnv: 'development', off: true, human: 'enrique' })
+    try {
+      expect((await rowOf(ws.id, project)).linkStop).toBe(reason)
+      expect(await stopLink(ws.id)).toEqual({ status: 400, body: { error: reason } })
+      expect(await call('POST', `/api/projects/${project}/previews/stop`)).toEqual({
+        status: 200,
+        body: { stopped: [], skipped: [{ workspaceId: ws.id, ticketId: ws.ticketId, reason }] },
+      })
+      expect(alive(s.pid)).toBe(true)
+    } finally {
+      mode.mockRestore()
+    }
+
+    // A test-mode board (the e2e suite's) stops it, as the live board does.
+    const testMode = vi
+      .spyOn(config, 'authMode')
+      .mockReturnValue({ boardEnv: 'test', off: true, human: 'human' })
+    try {
+      expect((await rowOf(ws.id, project)).linkStop).toBeNull()
+      expect((await stopLink(ws.id)).status).toBe(200)
+    } finally {
+      testMode.mockRestore()
+    }
+    await s.exited
+  })
+})

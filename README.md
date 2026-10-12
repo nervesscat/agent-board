@@ -153,6 +153,8 @@ its descendants elsewhere), answers once the port is free (`freed`), keeps the l
 Not running) and logs it on the ticket. Otherwise the row says why it is not stopped, and the stop
 looks again when asked. **Stop all** stops the project's previews the board runs and the links it may
 stop; links off this machine or that nothing listens on are left out, the rest are skipped with why.
+A preview board (development) stops no link: it runs on a copy of the live data, so its links point at
+servers that really run. Its Stop is refused, its rows say why, and Stop all skips them.
 
 ## Storing files in MinIO
 
