@@ -1,80 +1,32 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 
-import { Actor } from '#/components/Actor'
 import { DatePicker } from '#/components/DatePicker'
-import { Empty } from '#/components/Empty'
-import { Markdown } from '#/components/Markdown'
-import { ReportPanel } from '#/components/ReportPanel'
-import { ReviewResultButton } from '#/components/ReviewResult'
+import { ActivityLog } from '#/components/daily/ActivityLog'
+import { AllProjectsReports } from '#/components/daily/AllProjectsReports'
+import { PushedTodayBadge } from '#/components/daily/PushedToday'
+import { ReportCalendar } from '#/components/daily/ReportCalendar'
+import { ReportCard } from '#/components/daily/ReportCard'
+import { ReportSettingsPanel } from '#/components/daily/ReportSettingsPanel'
+import { SettingsChangeNotice } from '#/components/daily/SettingsChangeNotice'
+import { ShiftClock } from '#/components/daily/ShiftClock'
 import { Button } from '#/components/ui/button'
-import { Textarea } from '#/components/ui/textarea'
-import { errorMessage, get, post, type DailyPayload } from '#/lib/api'
-import { clock, localDate, shiftDate } from '#/lib/format'
-
-const KIND_LABEL: Record<string, string> = {
-  ticket: 'tickets',
-  task: 'tasks',
-  update: 'updates',
-  comment: 'comments',
-  pr: 'PRs',
-  review: 'reviews',
-  workspace: 'workspaces',
-  agent: 'agents',
-  project: 'projects',
-  summary: 'summaries',
-  report: 'reports',
-}
+import { get, type DailyPayload } from '#/lib/api'
+import { localDate, shiftDate } from '#/lib/format'
 
 /**
- * One day, hour by hour: what every person and agent did, and the shortest possible summary on top. A
- * project's page also has its report: the prompt, and which periods are reported.
+ * One day on the board. A project's page puts its report for the period first (with its calendar,
+ * its settings and its shift), then what everyone did that day, hour by hour; the all-projects page
+ * has every project's report and the whole board's activity.
  */
 export function DailyView({ projectId }: { projectId?: number }) {
-  const qc = useQueryClient()
   const [date, setDate] = useState(localDate())
-  const key = ['daily', date, projectId ?? 'all']
   const { data } = useQuery({
-    queryKey: key,
+    queryKey: ['daily', date, projectId ?? 'all'],
     queryFn: () => get<DailyPayload>(`/api/daily?date=${date}${projectId ? `&projectId=${projectId}` : ''}`),
-    // While claude is writing the summary, poll fast so it shows up as soon as it lands.
-    refetchInterval: (q) => (q.state.data?.generating ? 2_000 : 15_000),
+    refetchInterval: 15_000,
   })
-  const onError = (err: unknown) => toast.error(errorMessage(err))
-  // A summary also stands in for a daily text report, so the report strip goes with it.
-  const refresh = () => {
-    qc.invalidateQueries({ queryKey: ['daily'] })
-    qc.invalidateQueries({ queryKey: ['reports'] })
-  }
-  const [body, setBody] = useState('')
-  const postSummary = useMutation({
-    mutationFn: () => post('/api/daily/summaries', { date, projectId: projectId ?? null, body }),
-    onSuccess: () => {
-      setBody('')
-      refresh()
-    },
-    onError,
-  })
-  const generate = useMutation({
-    mutationFn: () => post('/api/daily/summaries/generate', { date, projectId: projectId ?? null }),
-    onMutate: () =>
-      qc.setQueryData(key, (old: DailyPayload | undefined) => old && { ...old, generating: true }),
-    onSettled: refresh,
-    onError,
-  })
-  // Server-side flag, so the state survives navigating away and back while claude is still writing.
-  const busy = generate.isPending || Boolean(data?.generating)
-
-  const hours = new Map<string, DailyPayload['activity']>()
-  for (const a of data?.activity ?? []) {
-    const h = `${String(new Date(a.createdAt).getHours()).padStart(2, '0')}:00`
-    hours.set(h, [...(hours.get(h) ?? []), a])
-  }
-  const kinds = new Map<string, number>()
-  for (const a of data?.activity ?? []) kinds.set(a.kind, (kinds.get(a.kind) ?? 0) + 1)
-  const actors = new Set((data?.activity ?? []).map((a) => a.actor))
 
   return (
     <div className="space-y-6">
@@ -82,17 +34,31 @@ export function DailyView({ projectId }: { projectId?: number }) {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Daily</h1>
           <p className="text-sm text-muted-foreground">
-            What got done, hour by hour, the one-glance summary{projectId ? ' and the report' : ''}.
+            {projectId
+              ? "The period's report, and what got done hour by hour."
+              : "Every project's report, and what got done hour by hour."}
           </p>
         </div>
+        {projectId !== undefined && (
+          <div className="flex items-center gap-2">
+            <PushedTodayBadge projectId={projectId} />
+            <ShiftClock projectId={projectId} />
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" onClick={() => setDate(shiftDate(date, -1))}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Previous day"
+            onClick={() => setDate(shiftDate(date, -1))}
+          >
             <ChevronLeft />
           </Button>
           <DatePicker value={date} onChange={setDate} />
           <Button
             variant="ghost"
             size="icon-sm"
+            aria-label="Next day"
             onClick={() => setDate(shiftDate(date, 1))}
             disabled={date >= localDate()}
           >
@@ -101,116 +67,21 @@ export function DailyView({ projectId }: { projectId?: number }) {
         </div>
       </div>
 
-      <section className="rounded-lg border p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <h2 className="text-sm font-medium">Summary</h2>
-          {data && data.activity.length === 0 && (
-            <span className="ml-auto text-xs text-muted-foreground">
-              nothing happened yet, so nothing to summarize
-            </span>
-          )}
-          <Button
-            variant="outline"
-            size="xs"
-            className={data?.activity.length ? 'ml-auto' : ''}
-            onClick={() => generate.mutate()}
-            disabled={busy || !data?.activity.length}
-            title={
-              data?.activity.length
-                ? 'Ask claude for a three-line summary of this day'
-                : 'No activity on this day yet'
-            }
-          >
-            <Sparkles data-icon="inline-start" /> {busy ? 'Asking claude…' : 'Summarize with claude'}
-          </Button>
-        </div>
-        {data?.summaries.length ? (
-          <div className="space-y-3">
-            {data.summaries.map((s) => (
-              <div key={s.id}>
-                <div className="text-xs text-muted-foreground">
-                  <Actor name={s.author} /> · {clock(s.createdAt)}
-                  {!projectId &&
-                    s.projectId &&
-                    ` · ${data.projects.find((p) => p.id === s.projectId)?.name ?? ''}`}
-                </div>
-                <Markdown className="mt-0.5">{s.body}</Markdown>
-              </div>
-            ))}
+      {projectId !== undefined ? (
+        <>
+          <SettingsChangeNotice projectId={projectId} />
+          {/* The report beside its calendar; stacked on a phone. */}
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <ReportCard projectId={projectId} date={date} />
+            <ReportCalendar projectId={projectId} date={date} onDate={setDate} />
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Nobody has summarized this day yet.</p>
-        )}
-        <form
-          className="mt-3 flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (body.trim()) postSummary.mutate()
-          }}
-        >
-          <Textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={2}
-            placeholder="Highest level, three lines at most."
-          />
-          <Button type="submit" size="sm" variant="outline" disabled={!body.trim()}>
-            Post
-          </Button>
-        </form>
-      </section>
-
-      {projectId !== undefined && <ReportPanel projectId={projectId} date={date} />}
-
-      {data && data.activity.length > 0 && (
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span>{data.activity.length} actions</span>
-          {[...kinds].map(([k, n]) => (
-            <span key={k} className="rounded bg-muted px-1.5 py-0.5">
-              {n} {KIND_LABEL[k] ?? k}
-            </span>
-          ))}
-          <span className="ml-auto">by {[...actors].join(', ')}</span>
-        </div>
-      )}
-
-      {!data ? null : data.activity.length === 0 ? (
-        <Empty>Nothing happened on {date}.</Empty>
+          <ReportSettingsPanel projectId={projectId} />
+        </>
       ) : (
-        <ol className="space-y-4">
-          {[...hours].map(([hour, items]) => (
-            <li key={hour} className="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3">
-              <div className="pt-0.5 text-right font-mono text-xs text-muted-foreground">
-                {hour}
-                <div className="text-[10px]">{items.length}</div>
-              </div>
-              <ul className="space-y-1 border-l pl-3">
-                {items.map((a) => (
-                  <li key={a.id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                    <span className="font-mono text-[11px] text-muted-foreground">{clock(a.createdAt)}</span>
-                    <Actor name={a.actor} />
-                    {!projectId && a.project && (
-                      <span className="text-xs text-muted-foreground">[{a.project}]</span>
-                    )}
-                    {/* A long word (a URL, a path) breaks anywhere rather than widen the page on a phone. */}
-                    {a.refType === 'review' && a.refId ? (
-                      <ReviewResultButton
-                        resultId={a.refId}
-                        className="min-w-0 text-left wrap-anywhere hover:underline"
-                        title="Open the review result"
-                      >
-                        {a.text}
-                      </ReviewResultButton>
-                    ) : (
-                      <span className="min-w-0 wrap-anywhere">{a.text}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ol>
+        <AllProjectsReports date={date} />
       )}
+
+      <ActivityLog activity={data?.activity} projectId={projectId} date={date} />
     </div>
   )
 }

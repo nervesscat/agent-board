@@ -1,4 +1,5 @@
 import { cn } from 'cn'
+import type { ComponentProps } from 'react'
 
 // Severity words read the same everywhere; any other tag gets a steady colour from its name.
 const SEVERITY: Record<string, { rank: number; className: string }> = {
@@ -36,9 +37,11 @@ export function compareTags(a: string, b: string) {
   return ra - rb || a.localeCompare(b)
 }
 
-export function Tag({ tag, className }: { tag: string; className?: string }) {
+/** A tag's chip. `children` go after its name, inside the chip (a remove button). */
+export function Tag({ tag, className, children, ...props }: { tag: string } & ComponentProps<'span'>) {
   return (
     <span
+      {...props}
       className={cn(
         'inline-flex shrink-0 rounded px-1.5 py-px text-[11px] font-medium',
         tagClass(tag),
@@ -46,6 +49,7 @@ export function Tag({ tag, className }: { tag: string; className?: string }) {
       )}
     >
       {tag}
+      {children}
     </span>
   )
 }

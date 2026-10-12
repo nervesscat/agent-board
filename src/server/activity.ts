@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lt } from 'drizzle-orm'
+import { and, asc, eq, gte, lt } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 
@@ -43,28 +43,4 @@ export function listActivity(date: string, projectId?: number) {
     .where(and(...where))
     .orderBy(asc(schema.activity.createdAt))
     .all()
-}
-
-export function listSummaries(date: string, projectId?: number) {
-  const where = [eq(schema.dailySummaries.date, date)]
-  if (projectId) where.push(eq(schema.dailySummaries.projectId, projectId))
-  return db
-    .select()
-    .from(schema.dailySummaries)
-    .where(and(...where))
-    .orderBy(desc(schema.dailySummaries.createdAt))
-    .all()
-}
-
-export function addSummary(input: { projectId: number | null; date: string; author: string; body: string }) {
-  const row = db.insert(schema.dailySummaries).values(input).returning().get()
-  logActivity({
-    projectId: input.projectId,
-    actor: input.author,
-    kind: 'summary',
-    text: `posted the daily summary for ${input.date}`,
-    refType: 'summary',
-    refId: row.id,
-  })
-  return row
 }

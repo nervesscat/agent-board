@@ -71,8 +71,12 @@ export function CommentItem({
   const remove = useMutation({ mutationFn: () => del(`/api/comments/${c.id}`), onSuccess: refresh, onError })
   return (
     <div className={depth ? 'ml-6 border-l pl-3' : ''}>
-      {/* The comment without its replies: hovering it shows its own edit and delete, not theirs. */}
-      <div className="group/comment">
+      {/* The comment without its replies: hovering it shows its own edit and delete, not theirs. A link
+            lands on it as #reply-<id> (src/lib/reveal.ts), below the ticket page's stuck header. */}
+      <div
+        id={`reply-${c.id}`}
+        className="group/comment scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-md"
+      >
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Actor name={c.author} via={c.via} className="text-foreground" />
           {label && <span>{label}</span>}

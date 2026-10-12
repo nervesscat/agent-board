@@ -17,6 +17,7 @@ import {
 } from './git'
 import { dropListings } from './listings'
 import { getProject } from './projects'
+import { noteOriginRefs } from './pushedToday'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
 
@@ -105,7 +106,21 @@ function repoState(repoPath: string): RepoState {
         fetchedAt: null,
         fetching: null,
         error: null,
-        refs: windowed(() => listRefs(repoPath)),
+        // Each fresh listing also records how origin's branches moved since the last (pushed today); a
+        // failure there is logged and never costs the push states. Whether the board's fetch had
+        // succeeded before the listing began says whether a listing without origin's branches is
+        // origin's (noteOriginRefs).
+        refs: windowed(() => {
+          const fetched = repos.get(repoPath)?.fetchedAt != null
+          return listRefs(repoPath).then((refs) => {
+            try {
+              noteOriginRefs(repoPath, refs, new Date(), { fetched })
+            } catch (err) {
+              console.error(`recording origin's branches of ${repoPath} failed:`, err)
+            }
+            return refs
+          })
+        }),
         worktrees: windowed(() => listWorktrees(repoPath)),
       }),
     )
@@ -134,7 +149,8 @@ function lastFetch(repoPath: string): number | null {
 /**
  * Fetches origin into the checkout unless it was fetched less than `FETCH_EVERY` ago (`force` skips
  * that check). A fetch already running is joined instead of started again. Returns null when it
- * skipped; the promise never rejects (a failure is kept as the repo's `error`).
+ * skipped; the promise settles once a fetch that succeeded has been listed, and never rejects (a
+ * failure is kept as the repo's `error`).
  */
 export function fetchRepo(repoPath: string, opts: { force?: boolean } = {}): Promise<void> | null {
   const s = repoState(repoPath)
@@ -147,16 +163,27 @@ export function fetchRepo(repoPath: string, opts: { force?: boolean } = {}): Pro
       () => {
         s.fetchedAt = Date.now()
         s.error = null
+        return true
       },
       (err: unknown) => {
         s.error = fetchError(err)
+        return false
       },
     )
-    .finally(() => {
-      s.fetching = null
+    .then(async (fetched) => {
       s.refs.drop()
       s.worktrees.drop()
       dropListings(repoPath)
+      // A fetch that succeeded is itself a look at origin: the checkout is listed at once, so a push
+      // made right after it is a move from what the fetch found (an empty origin's first push too),
+      // not the baseline of whichever read lists next. That listing is not kept: one made before a
+      // change in the checkout (a push from it) would hide it from a read that waited for the fetch.
+      if (!fetched) return
+      await s.refs.read()
+      s.refs.drop()
+    })
+    .finally(() => {
+      s.fetching = null
     })
   return s.fetching
 }

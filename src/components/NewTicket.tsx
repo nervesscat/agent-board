@@ -7,6 +7,7 @@ import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
+import { TagsInput } from '#/components/TagsInput'
 import { TasksInput } from '#/components/TasksInput'
 import { Button } from '#/components/ui/button'
 import {
@@ -24,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { newTicketStage } from '#/lib/stages'
+import { addTags, overTagLimits } from '#/lib/tags'
 import { addTasks } from '#/lib/tasks'
 import { ticketsKey } from '#/lib/tickets'
 import { cn } from '#/lib/utils'
@@ -42,7 +44,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const [tasks, setTasks] = useState<string[]>([])
   const [taskText, setTaskText] = useState('')
   const [assignee, setAssignee] = useState('')
-  const [tags, setTags] = useState('')
+  const [tags, setTags] = useState<string[]>([])
+  const [tagText, setTagText] = useState('')
   const { data: project } = useProject(projectId)
   const [picked, setPicked] = useState('')
   const repos = project?.repos ?? []
@@ -52,6 +55,9 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const status = parent ? undefined : stage || newTicketStage(project?.stages ?? [])?.key
   // A ticket waits for its stage, so that leaving it alone always means Backlog.
   const ready = Boolean(parent || status)
+  // Tags the server would refuse: the field says why, and Create waits until they are fixed.
+  const over = overTagLimits(tags, tagText)
+  const tagsOver = over.tooMany || over.tooLong
   const files = useUploads()
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop(files.add)
@@ -74,10 +80,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         title,
         body,
         assignee,
-        tags: tags
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        tags: addTags(tags, tagText),
         parentId: parent?.id,
         status,
         repoId: repoId ? Number(repoId) : undefined,
@@ -93,7 +96,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       setTasks([])
       setTaskText('')
       setAssignee('')
-      setTags('')
+      setTags([])
+      setTagText('')
       setStage('')
       files.clear()
     },
@@ -119,7 +123,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
           style={{ scrollPaddingTop: caretRoom.top, scrollPaddingBottom: caretRoom.bottom }}
           onSubmit={(e) => {
             e.preventDefault()
-            if (!files.uploading && ready) create.mutate()
+            if (!files.uploading && ready && !tagsOver) create.mutate()
           }}
         >
           <DialogHeader
@@ -232,10 +236,12 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             )}
             <div className="space-y-2">
               <Label htmlFor="tags">Tags (optional)</Label>
-              <Input
+              <TagsInput
                 id="tags"
                 value={tags}
-                onChange={(e) => setTags(e.target.value)}
+                onChange={setTags}
+                text={tagText}
+                onTextChange={setTagText}
                 placeholder="High, Forms"
               />
             </div>
@@ -247,7 +253,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             </p>
           )}
           <DialogFooter className="sticky -bottom-4 z-10 bg-popover bg-linear-to-b from-muted/50 to-muted/50">
-            <Button type="submit" disabled={create.isPending || files.uploading || !ready}>
+            <Button type="submit" disabled={create.isPending || files.uploading || !ready || tagsOver}>
               {files.uploading ? 'Uploading…' : 'Create'}
             </Button>
           </DialogFooter>

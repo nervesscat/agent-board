@@ -60,6 +60,35 @@ describe('RichEditor markdown', () => {
     expect(roundTrip(once)).toBe(once)
   })
 
+  it('keeps lines typed with Enter as paragraphs, one apiece, with nothing empty between them', () => {
+    const md = 'line 1\n\nline 2\n\nline 3'
+    expect(roundTrip(md)).toBe(md)
+    const doc = markdown.parse(md)
+    expect(doc.content?.map((n) => n.type)).toEqual(['paragraph', 'paragraph', 'paragraph'])
+    expect(doc.content?.map((n) => n.content?.map((c) => c.text))).toEqual([
+      ['line 1'],
+      ['line 2'],
+      ['line 3'],
+    ])
+  })
+
+  it('keeps a line broken with Shift+Enter as a hard break inside one paragraph', () => {
+    const doc = schema.node('doc', null, [
+      schema.node('paragraph', null, [
+        schema.text('line 1'),
+        schema.node('hardBreak'),
+        schema.text('line 2'),
+      ]),
+    ])
+    const md = tidy(markdown.serialize(doc.toJSON()))
+    expect(md).toBe('line 1  \nline 2')
+    expect(roundTrip(md)).toBe(md)
+    const [p, ...rest] = markdown.parse(md).content ?? []
+    expect(rest).toEqual([])
+    expect(p?.type).toBe('paragraph')
+    expect(p?.content?.map((n) => n.type)).toEqual(['text', 'hardBreak', 'text'])
+  })
+
   it('collapses blank lines outside code blocks only', () => {
     expect(tidy('a\n\n\n\nb\n```\nc\n\n\n\nd\n```\n\n')).toBe('a\n\nb\n```\nc\n\n\n\nd\n```')
   })
