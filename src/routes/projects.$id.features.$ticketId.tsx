@@ -29,7 +29,7 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -406,8 +406,12 @@ function TicketPage() {
         {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
               widen the page */}
         <div className="min-w-0 space-y-6">
-          <ResumeNote key={t.id} t={t} onChange={invalidate} />
-          <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+          {/* Keyed by ticket, so an open editor and its draft do not follow to the next one; one key for
+                both, as siblings sharing a key would leave one of them behind on screen. */}
+          <Fragment key={t.id}>
+            <ResumeNote t={t} onChange={invalidate} />
+            <Instructions t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+          </Fragment>
           <Tasks t={t} onChange={invalidate} />
           <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
           <ShownAnchor value={drawn ? anchor : null}>
