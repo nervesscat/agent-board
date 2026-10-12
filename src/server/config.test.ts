@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { authOffBanner, builtServerBind, checkBind, LIVE_PORT, readAuthMode, StartupError } from './config'
+import {
+  authOffBanner,
+  builtServerBind,
+  checkBind,
+  LIVE_PORT,
+  readAuthMode,
+  readClaudeArgs,
+  readClaudeTimeout,
+  StartupError,
+} from './config'
 
 const safe = { host: '127.0.0.1', port: 47131 }
 
@@ -103,5 +112,31 @@ describe('authOffBanner', () => {
     expect(authOffBanner(readAuthMode({ BOARD_ENV: 'test' }), 'human')).toMatch(
       /^AUTH OFF: test, signed in as human, do not expose this .*X-Test-Actor/,
     )
+  })
+})
+
+describe('readClaudeArgs', () => {
+  it('is no arguments when unset, else the JSON array of strings given', () => {
+    expect(readClaudeArgs(undefined)).toEqual([])
+    expect(readClaudeArgs(' ')).toEqual([])
+    expect(readClaudeArgs('["e2e/fake-claude.mjs", "--slow"]')).toEqual(['e2e/fake-claude.mjs', '--slow'])
+  })
+
+  it('refuses anything else', () => {
+    for (const raw of ['e2e/fake-claude.mjs', '{"a": 1}', '[1]', '"x"'])
+      expect(() => readClaudeArgs(raw)).toThrow(/CLAUDE_ARGS must be a JSON array of strings/)
+  })
+})
+
+describe('readClaudeTimeout', () => {
+  it('is two minutes when unset, else the milliseconds given', () => {
+    expect(readClaudeTimeout(undefined)).toBe(120_000)
+    expect(readClaudeTimeout('')).toBe(120_000)
+    expect(readClaudeTimeout('1500')).toBe(1500)
+  })
+
+  it('refuses anything but a whole number above 0', () => {
+    for (const raw of ['0', '-5', '1.5', 'soon'])
+      expect(() => readClaudeTimeout(raw)).toThrow(/CLAUDE_TIMEOUT_MS must be/)
   })
 })

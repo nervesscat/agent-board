@@ -166,8 +166,15 @@
     {
       "idx": 23,
       "version": "6",
-      "when": 1791527169842,
-      "tag": "0023_ticket_rank_in_stage",
+      "when": 1791729844221,
+      "tag": "0023_daily_reports_and_shifts",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791769695870,
+      "tag": "0024_ticket_rank_in_stage",
       "breakpoints": true
     }
   ]

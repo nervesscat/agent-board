@@ -90,7 +90,8 @@ export async function updateRepo(
   const before = getRepo(id)
   if (patch.projectId) getProject(patch.projectId)
   const set: Partial<schema.Repo> = { ...patch }
-  if (patch.repoPath && patch.repoPath !== before.repoPath) {
+  const repath = !!patch.repoPath && patch.repoPath !== before.repoPath
+  if (patch.repoPath && repath) {
     assertRepo(patch.repoPath)
     set.githubRepo = await repoNameWithOwner(patch.repoPath)
   }
@@ -107,6 +108,13 @@ export async function updateRepo(
         .where(eq(schema.tickets.repoId, id))
         .run()
       tx.update(schema.reviewResults).set(to).where(eq(schema.reviewResults.repoId, id)).run()
+    }
+    // Another checkout: what origin's branches were in the old one says nothing about it, so the
+    // board's next look at it is a first look (pushed today).
+    if (repath) {
+      tx.delete(schema.originRefs).where(eq(schema.originRefs.repoId, id)).run()
+      tx.delete(schema.originRefMoves).where(eq(schema.originRefMoves.repoId, id)).run()
+      tx.delete(schema.originLooks).where(eq(schema.originLooks.repoId, id)).run()
     }
     return r
   })

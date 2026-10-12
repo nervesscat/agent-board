@@ -5,27 +5,33 @@ import { db, schema } from '#/db'
 import { REPORT_CADENCES, REPORT_FORMATS } from '#/lib/constants'
 import { localDate, shiftDate } from '#/lib/format'
 import {
-  DAY,
-  DUE_TIME,
+  TIME,
   describeSchedule,
   dueAt,
+  isDay,
   periodLabel,
   periodOf,
   periodsBetween,
   reportStatus,
+  type ReportStatus,
   type TrackedCadence,
 } from '#/lib/reports'
+import { DEFAULT_REPORT_TEMPLATE, effectiveTemplate } from '#/lib/reportTemplate'
 import { logActivity } from './activity'
 import { HttpError } from './http'
 import { getProject } from './projects'
+import { generationState } from './reportGenerate'
+import { pendingChanges, recordSettingsChanges, type PendingChange } from './reportSettingsHistory'
 import { attachTo, attachmentView, saveFromPath } from './uploads'
 
 /**
- * A project's reports: the prompt saying what each must contain, when one is due (daily, or weekly on
- * a weekday, by a time), and the reports posted for each period. A period is done once it has a
- * report, missing once it is due without one, upcoming until then. For a daily project whose reports
- * are text, the daily summary of a day counts as that day's report when nobody posted one.
+ * A project's reports: the prompt saying what each must contain, the template fixing its shape, the
+ * shift whose end it is due at (daily on workdays, or weekly on a weekday), and the reports posted
+ * for each period. A period is done once it has a report, missing once it is due without one,
+ * upcoming until then.
  */
+
+const Time = z.string().regex(TIME, 'HH:MM, 24-hour')
 
 /** What the settings take, for the REST body and the MCP tool alike. */
 export const reportSettingsShape = {
@@ -34,12 +40,19 @@ export const reportSettingsShape = {
     .max(50_000)
     .optional()
     .describe(
-      'markdown: what the report must contain and how (by the hour, sections, audience, tone, a short text or a PDF)',
+      'markdown: what the report must say and how (audience, tone, what to stress, a short text or a PDF)',
+    ),
+  template: z
+    .string()
+    .max(50_000)
+    .optional()
+    .describe(
+      'markdown skeleton a generated report must fill: its headings, in order, are the sections; "" goes back to the default',
     ),
   cadence: z
     .enum(REPORT_CADENCES)
     .optional()
-    .describe('off (not tracked), daily, or weekly (once a week, due on weekday)'),
+    .describe('off (not tracked), daily (on workdays), or weekly (once a week, due on weekday)'),
   weekday: z
     .number()
     .int()
@@ -47,34 +60,55 @@ export const reportSettingsShape = {
     .max(7)
     .optional()
     .describe('the day a weekly report is due, 1 (Monday) to 7 (Sunday)'),
-  dueTime: z
-    .string()
-    .regex(DUE_TIME, 'HH:MM, 24-hour')
-    .or(z.literal(''))
-    .nullable()
+  shiftStart: Time.optional().describe('local HH:MM the shift starts'),
+  shiftEnd: Time.optional().describe('local HH:MM the shift ends, after shiftStart: the report is due then'),
+  workdays: z
+    .array(z.number().int().min(1).max(7))
+    .min(1)
+    .refine((days) => new Set(days).size === days.length, 'each workday once')
     .optional()
-    .describe('local HH:MM the report is due by on its day; null or "" for by the end of that day'),
+    .describe('the days a daily report is asked for, ISO weekdays 1 (Monday) to 7 (Sunday)'),
+  alertMinutes: z
+    .number()
+    .int()
+    .min(0)
+    .max(720)
+    .optional()
+    .describe('how many minutes before the shift ends the board starts reminding that the report is due'),
   format: z
     .enum(REPORT_FORMATS)
     .optional()
     .describe('text (written on the board) or file (an attached file, e.g. a PDF, is required)'),
 }
-export const ReportSettingsPatch = z.object(reportSettingsShape)
+// Strict: a field the board does not take (the old dueTime, say) is refused rather than ignored.
+export const ReportSettingsPatch = z.object(reportSettingsShape).strict()
 export type ReportSettingsPatch = z.infer<typeof ReportSettingsPatch>
+
+/** The settings as the API answers them: the template in force, and agents' changes waiting on the human. */
+export interface ReportSettingsView extends Omit<schema.ReportSettings, 'template'> {
+  template: string
+  templateIsDefault: boolean
+  pending: PendingChange[]
+}
 
 const defaults = (projectId: number): schema.ReportSettings => ({
   projectId,
   prompt: '',
+  template: '',
   cadence: 'off',
   weekday: 5,
-  dueTime: null,
+  shiftStart: '09:00',
+  shiftEnd: '17:00',
+  workdays: [1, 2, 3, 4, 5],
+  alertMinutes: 30,
   format: 'text',
   since: '',
   updatedBy: '',
   updatedAt: '',
 })
 
-export function getReportSettings(projectId: number): schema.ReportSettings {
+/** The stored row (the template as stored: '' for the default), or the defaults. */
+export function readReportSettings(projectId: number): schema.ReportSettings {
   getProject(projectId)
   return (
     db.select().from(schema.reportSettings).where(eq(schema.reportSettings.projectId, projectId)).get() ??
@@ -82,64 +116,84 @@ export function getReportSettings(projectId: number): schema.ReportSettings {
   )
 }
 
-/** Anyone may change them, agents included; every change is a line in the activity feed. */
+function view(row: schema.ReportSettings): ReportSettingsView {
+  return {
+    ...row,
+    template: effectiveTemplate(row.template),
+    templateIsDefault: !row.template.trim(),
+    pending: pendingChanges(row.projectId),
+  }
+}
+
+export function getReportSettings(projectId: number): ReportSettingsView {
+  return view(readReportSettings(projectId))
+}
+
+/**
+ * Anyone may change them, agents included. A change of the prompt or the template goes into their
+ * history (an agent's waits on the human there); a change of the schedule is a line in the activity.
+ */
 export function setReportSettings(
   projectId: number,
   patch: ReportSettingsPatch,
   actor: string,
+  opts: { agent?: boolean } = {},
   now = new Date(),
-) {
+): ReportSettingsView {
   const parsed = ReportSettingsPatch.safeParse(patch)
   if (!parsed.success) throw new HttpError(400, z.prettifyError(parsed.error))
-  const before = getReportSettings(projectId)
-  const { dueTime, ...rest } = parsed.data
+  const before = readReportSettings(projectId)
   const next = {
     ...before,
-    ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)),
-    ...(dueTime !== undefined ? { dueTime: dueTime || null } : {}),
+    ...Object.fromEntries(Object.entries(parsed.data).filter(([, v]) => v !== undefined)),
   } as schema.ReportSettings
+  next.workdays = [...next.workdays].sort((a, b) => a - b)
+  // The default template is kept as '', so it follows the board's default.
+  if (next.template === DEFAULT_REPORT_TEMPLATE) next.template = ''
+  if (next.shiftEnd <= next.shiftStart)
+    throw new HttpError(400, `the shift must end after it starts (${next.shiftStart} to ${next.shiftEnd})`)
   // Periods before tracking began are not missing: they were never asked for.
   if (next.cadence !== before.cadence) next.since = next.cadence === 'off' ? '' : periodOf(next.cadence, now)
 
-  const changed: string[] = []
-  if (next.prompt !== before.prompt) changed.push('prompt')
-  if (
-    next.cadence !== before.cadence ||
-    next.weekday !== before.weekday ||
-    next.dueTime !== before.dueTime ||
-    next.format !== before.format
-  )
-    changed.push(`schedule (${describeSchedule(next)})`)
-  if (!changed.length && before.updatedAt) return before
+  const text = next.prompt !== before.prompt || next.template !== before.template
+  const schedule =
+    SCHEDULE.some((k) => next[k] !== before[k]) || next.workdays.join() !== before.workdays.join()
+  if (!text && !schedule && before.updatedAt) return view(before)
 
   const values = { ...next, updatedBy: actor, updatedAt: now.toISOString() }
-  const row = db
-    .insert(schema.reportSettings)
-    .values(values)
-    .onConflictDoUpdate({ target: schema.reportSettings.projectId, set: values })
-    .returning()
-    .get()
-  if (changed.length)
+  const row = db.transaction(() => {
+    const saved = db
+      .insert(schema.reportSettings)
+      .values(values)
+      .onConflictDoUpdate({ target: schema.reportSettings.projectId, set: values })
+      .returning()
+      .get()
+    recordSettingsChanges(projectId, before, saved, actor, { agent: opts.agent })
+    return saved
+  })
+  if (schedule)
     logActivity({
       projectId,
       actor,
       kind: 'report',
-      text: `changed the report ${changed.join(' and ')}`,
+      text: `changed the report schedule (${describeSchedule(row)})`,
       refType: 'project',
       refId: projectId,
     })
-  return row
+  return view(row)
 }
 
-const tracked = (s: schema.ReportSettings): TrackedCadence => {
+/** The settings that say when a report is due and what it is; `workdays` is compared on its own. */
+const SCHEDULE = ['cadence', 'weekday', 'shiftStart', 'shiftEnd', 'alertMinutes', 'format'] as const
+
+const tracked = (s: Pick<schema.ReportSettings, 'cadence'>): TrackedCadence => {
   if (s.cadence === 'off')
     throw new HttpError(400, 'reports are off for this project: set a cadence first (report settings)')
   return s.cadence
 }
 
 const checkDay = (day: string, what: string) => {
-  if (!DAY.test(day) || Number.isNaN(new Date(`${day}T00:00:00`).getTime()))
-    throw new HttpError(400, `${what} must be a date, YYYY-MM-DD`)
+  if (!isDay(day)) throw new HttpError(400, `${what} must be a date, YYYY-MM-DD`)
   return day
 }
 
@@ -150,7 +204,6 @@ function withFiles(rows: schema.Report[]) {
     : []
   return rows.map((r) => ({
     ...r,
-    source: 'report' as 'report' | 'summary',
     attachments: files.filter((f) => f.reportId === r.id).map((f) => attachmentView(f)),
   }))
 }
@@ -168,7 +221,7 @@ export async function postReport(
   actor: string,
   now = new Date(),
 ) {
-  const settings = getReportSettings(projectId)
+  const settings = readReportSettings(projectId)
   const cadence = tracked(settings)
   const current = periodOf(cadence, now)
   const period = input.period ? periodOf(cadence, checkDay(input.period, 'period')) : current
@@ -203,7 +256,7 @@ export async function postReport(
 
 /** Every version posted for one period, newest first (the first is the report). */
 export function reportVersions(projectId: number, period: string) {
-  const cadence = tracked(getReportSettings(projectId))
+  const cadence = tracked(readReportSettings(projectId))
   const key = periodOf(cadence, checkDay(period, 'period'))
   return withFiles(
     db
@@ -221,19 +274,49 @@ export function reportVersions(projectId: number, period: string) {
   )
 }
 
+export interface ReportPeriod {
+  period: string
+  label: string
+  due: string
+  status: ReportStatus
+  report: ReportView | null
+  versions: number
+}
+
+export interface ReportList extends Omit<ReportSettingsView, 'prompt' | 'template' | 'pending'> {
+  /** The period now falls in; null while the cadence is off. */
+  current: string | null
+  periods: ReportPeriod[]
+  /** The period claude is writing the report of right now, or null. */
+  generating: string | null
+  /** Why the last generation failed, until a later one succeeds. */
+  generateError: { period: string; message: string; at: string } | null
+}
+
 /**
  * The project's periods from `from` to `to` (days; by default the last two weeks of a daily cadence or
  * eight weeks of a weekly one, up to today), newest first, each with when it is due, its status and
- * its latest report. Periods before tracking began are left out unless they have a report.
+ * its latest report. `to` may be after today (a whole month for a calendar): those periods are
+ * upcoming, or off. Periods before tracking began are left out unless they have a report.
  */
-export function listReports(projectId: number, range: { from?: string; to?: string } = {}, now = new Date()) {
-  const settings = getReportSettings(projectId)
-  const { prompt: _prompt, ...schedule } = settings
-  if (settings.cadence === 'off') return { ...schedule, current: null, periods: [] }
+export function listReports(
+  projectId: number,
+  range: { from?: string; to?: string } = {},
+  now = new Date(),
+): ReportList {
+  const settings = readReportSettings(projectId)
+  const { prompt: _prompt, template, ...schedule } = settings
+  const generation = generationState(projectId)
+  const base = {
+    ...schedule,
+    templateIsDefault: !template.trim(),
+    generating: generation.period,
+    generateError: generation.error,
+  }
+  if (settings.cadence === 'off') return { ...base, current: null, periods: [] }
   const cadence = settings.cadence
   const today = localDate(now)
-  const to = range.to ? checkDay(range.to, 'to') : today
-  const end = to > today ? today : to
+  const end = range.to ? checkDay(range.to, 'to') : today
   const from = range.from ? checkDay(range.from, 'from') : shiftDate(end, cadence === 'daily' ? -13 : -7 * 7)
   const periods = periodsBetween(cadence, from, end)
   const first = periods.at(-1) ?? end
@@ -260,41 +343,11 @@ export function listReports(projectId: number, range: { from?: string; to?: stri
   }
   const views = new Map(withFiles([...latest.values()]).map((v) => [v.period, v]))
 
-  // A daily text report and the day's summary are the same thing: a summary stands in for a missing report.
-  const summaries = new Map<string, ReportView>()
-  if (cadence === 'daily' && settings.format === 'text') {
-    const found = db
-      .select()
-      .from(schema.dailySummaries)
-      .where(
-        and(
-          eq(schema.dailySummaries.projectId, projectId),
-          gte(schema.dailySummaries.date, first),
-          lte(schema.dailySummaries.date, last),
-        ),
-      )
-      .orderBy(desc(schema.dailySummaries.createdAt), desc(schema.dailySummaries.id))
-      .all()
-    for (const s of found)
-      if (!summaries.has(s.date))
-        summaries.set(s.date, {
-          id: s.id,
-          projectId,
-          cadence,
-          period: s.date,
-          body: s.body,
-          author: s.author,
-          createdAt: s.createdAt,
-          source: 'summary',
-          attachments: [],
-        })
-  }
-
   return {
-    ...schedule,
+    ...base,
     current: periodOf(cadence, now),
     periods: periods.flatMap((period) => {
-      const report = views.get(period) ?? summaries.get(period) ?? null
+      const report = views.get(period) ?? null
       if (!report && settings.since && period < settings.since) return []
       return [
         {
@@ -309,6 +362,3 @@ export function listReports(projectId: number, range: { from?: string; to?: stri
     }),
   }
 }
-
-export type ReportList = ReturnType<typeof listReports>
-export type ReportPeriod = ReportList['periods'][number]
