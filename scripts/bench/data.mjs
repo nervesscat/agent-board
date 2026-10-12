@@ -439,6 +439,7 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
       'createdAt',
     ]),
     activity: ins('activity', ['project_id', 'actor', 'kind', 'ref_type', 'ref_id', 'text', 'createdAt']),
+    daily: ins('daily_summaries', ['project_id', 'date', 'author', 'body', 'createdAt']),
     reportSettings: ins('report_settings', [
       'project_id',
       'prompt',
@@ -446,7 +447,6 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
       'weekday',
       'format',
       'since',
-      'workdays',
       'updated_by',
       'updatedAt',
     ]),
@@ -515,8 +515,6 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
           5,
           'text',
           dayOf(created),
-          // Every day a workday: what the dataset reads does not depend on the weekday it lands on.
-          '[1,2,3,4,5,6,7]',
           GENERATED_HUMAN,
           iso(created),
         )
@@ -524,11 +522,7 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
         const day = dayOf(now - d * DAY)
         if (p % 2 === 0 && r.chance(0.7))
           q.report.run(projectId, 'daily', day, markdown(r, 3), r.pick(AGENTS), iso(now - d * DAY))
-        // A daily summary is a version of its day's report (migration 0023 moved them there).
-        if (r.chance(0.5)) {
-          const author = r.pick(AGENTS)
-          q.report.run(projectId, 'daily', day, sentence(r), author, iso(now - d * DAY))
-        }
+        if (r.chance(0.5)) q.daily.run(projectId, day, r.pick(AGENTS), sentence(r), iso(now - d * DAY))
       }
 
       const ticketIds = []
