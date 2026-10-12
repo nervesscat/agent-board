@@ -524,7 +524,8 @@ export interface StopAll {
  * Stop every preview of the project (its tickets and lanes, archived ones aside): the ones the board
  * runs, building or running, and the links on this machine that something listens on and that the rule
  * allows. Links off this machine and links nothing listens on are left out; the other links are skipped
- * with the reason.
+ * with the reason. A workspace whose preview the board ran can still link an agent's own server (one it
+ * linked while the board's was building, or after): its link is read again once that preview stopped.
  */
 export async function stopProjectLinksAndPreviews(projectId: number, actor: string): Promise<StopAll> {
   getProject(projectId)
@@ -550,8 +551,23 @@ export async function stopProjectLinksAndPreviews(projectId: number, actor: stri
       result.stopped.push({ workspaceId: w.id, ticketId: w.ticketId, kind: 'managed', port })
     }),
   )
+  // Stopping a preview the board ran cleared the link that was its own; another link stays, judged as any.
+  const relinked = managed.length
+    ? db
+        .select()
+        .from(schema.workspaces)
+        .where(
+          inArray(
+            schema.workspaces.id,
+            managed.map((w) => w.id),
+          ),
+        )
+        .all()
+    : []
 
-  const links = workspaces.filter((w) => w.previewUrl && isLocalUrl(w.previewUrl) && !managed.includes(w))
+  const links = [...workspaces.filter((w) => !managed.includes(w)), ...relinked].filter(
+    (w) => w.previewUrl && isLocalUrl(w.previewUrl),
+  )
   const listeners = await listenersOn(links.map((w) => linkPort(w.previewUrl)!))
   const running = links.filter((w) => listeners.get(linkPort(w.previewUrl)!)?.length)
   const checked = running.map((w) => ({ w, t: linkTarget(w) }))

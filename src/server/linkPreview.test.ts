@@ -675,4 +675,66 @@ describe('Stop all', { timeout: 60_000 }, () => {
     })
     expect((await call('POST', '/api/projects/999999/previews/stop')).status).toBe(404)
   })
+
+  it('stops a link of its own on a workspace whose preview the board runs, building or relinked meanwhile', async () => {
+    const project = dbm.db.insert(dbm.schema.projects).values({ name: 'both kinds' }).returning().get().id
+    dbm.db.insert(dbm.schema.repos).values({ projectId: project, name: 'app', repoPath: main }).run()
+    const f = useFake()
+
+    // Running, its link replaced by an agent's own server (set_preview) while it runs.
+    const relinkedWt = boardWorktree()
+    const relinked = features.addWorkspace(
+      ticket(project).id,
+      { name: 'relinked', path: relinkedWt },
+      'claude',
+    )
+    mp.startPreview(relinked.id, 'claude')
+    await vi.waitFor(() => expect(mp.managedPreview(relinked.id)?.status).toBe('running'))
+    const second = await serve('server.js', { cwd: relinkedWt })
+    features.setWorkspacePreview(relinked.id, `http://127.0.0.1:${second.port}`, 'claude')
+
+    // Running on its own link: its stop clears the link, and nothing is stopped twice.
+    const own = features.addWorkspace(ticket(project).id, { name: 'own', path: boardWorktree() }, 'claude')
+    mp.startPreview(own.id, 'claude')
+    await vi.waitFor(() => expect(mp.managedPreview(own.id)?.status).toBe('running'))
+
+    // Building (its build never ends): the board sets its link only once its preview answers, so the
+    // agent's link stays meanwhile.
+    f.codes['pnpm build'] = 'hang'
+    const buildingWt = boardWorktree()
+    const first = await serve('server.js', { cwd: buildingWt })
+    const building = features.addWorkspace(
+      ticket(project).id,
+      { name: 'building', path: buildingWt, previewUrl: `http://127.0.0.1:${first.port}` },
+      'claude',
+    )
+    const build = mp.startPreview(building.id, 'claude').logs.build
+    await vi.waitFor(() => expect(fs.readFileSync(build, 'utf8')).toContain('pnpm build'))
+    expect(mp.managedPreview(building.id)?.status).toBe('building')
+    expect(wsRow(building.id).previewUrl).toBe(`http://127.0.0.1:${first.port}`)
+
+    const res = await call('POST', `/api/projects/${project}/previews/stop`)
+    expect(res.status).toBe(200)
+    const stopped = res.body.stopped as { workspaceId: number; kind: string; port: number }[]
+    expect(stopped.map((s) => [s.workspaceId, s.kind]).sort()).toEqual(
+      [
+        [building.id, 'managed'],
+        [building.id, 'link'],
+        [relinked.id, 'managed'],
+        [relinked.id, 'link'],
+        [own.id, 'managed'],
+      ].sort(),
+    )
+    expect(
+      stopped
+        .filter((s) => s.kind === 'link')
+        .map((s) => s.port)
+        .sort(),
+    ).toEqual([first.port, second.port].sort())
+    expect(res.body.skipped).toEqual([])
+    await first.exited
+    await second.exited
+    expect(wsRow(own.id).previewUrl).toBe('')
+    expect(wsRow(building.id).previewUrl).toBe(`http://127.0.0.1:${first.port}`)
+  })
 })
