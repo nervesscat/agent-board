@@ -107,7 +107,12 @@ describe('watching for new comments', () => {
       cursor: T(10),
       threads: [{ ticketId: t.id, as: 'Designer', last: { author: 'enrique' } }],
     })
-    expect(features.checkInbox(pid, 'codex', T(10))).toEqual({ count: 0, cursor: T(10), threads: [] })
+    expect(features.checkInbox(pid, 'codex', T(10))).toEqual({
+      count: 0,
+      cursor: T(10),
+      threads: [],
+      reportDue: null,
+    })
     // Answered as the agent: off the list, even with an old since.
     said(
       features.addComment({ parentType: 'ticket', parentId: t.id, body: 'On it.', as: 'Designer' }, 'codex'),
@@ -147,7 +152,13 @@ describe('watching for new comments', () => {
 
   it('check_inbox lists where each new thread is, without bodies', () => {
     const pid = newProject('inbox')
-    expect(features.checkInbox(pid, 'claude')).toEqual({ count: 0, cursor: null, threads: [] })
+    // A project whose reports are off has no report due.
+    expect(features.checkInbox(pid, 'claude')).toEqual({
+      count: 0,
+      cursor: null,
+      threads: [],
+      reportDue: null,
+    })
     const t = features.createTicket(pid, { title: 'nav', assignee: 'claude' }, 'enrique')
     const post = features.addComment(
       { parentType: 'ticket', parentId: t.id, body: 'the menu jumps' },
@@ -168,6 +179,7 @@ describe('watching for new comments', () => {
           lastAt: T(10),
         },
       ],
+      reportDue: null,
     })
     expect(JSON.stringify(features.checkInbox(pid, 'claude'))).not.toContain('menu jumps')
   })

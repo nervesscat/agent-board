@@ -174,17 +174,23 @@ http_headers = { Authorization = "Bearer gate_…" }
    blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that
    another agent can continue without asking. It is the ticket's one current "Where we left off"
    note, shown at the top of its page; each version is also posted to its feed as a handoff. Then
-   `post_daily_summary` — at most three short lines at the highest level: what got done, what is
-   open. `daily_report` shows what everyone else did that day.
-10. **Reports**: a project can ask for a report every day or once a week (`get_report_settings`:
-    `cadence`, the `weekday` and `dueTime` it is due by, `format` text or file, and the `prompt`
-    saying what it must contain and how: by the hour, sections, audience, a short text or a PDF).
-    At the end of a session, `list_reports` shows each recent period as `done`, `missing` (due,
-    nothing posted) or `upcoming`; write the current or missing one exactly as the prompt says and
-    `post_report` it (`body`, and `files` as absolute paths: the board does not make PDFs; a `file`
-    project needs one). Posting again for a period replaces its report and keeps the old one as
-    history. For a daily text project the day's summary counts as its report until one is posted.
-    `set_report_settings` changes the prompt or schedule; do that only when the human asks.
+   the project's report, if it keeps one (step 10); `daily_report` shows what everyone else did that
+   day.
+10. **Reports**: a project can ask for one report per period, every workday or once a week
+    (`get_report_settings`: `cadence`, the `weekday` of a weekly one, the shift `shiftStart`–`shiftEnd`
+    whose end it is due at, the `workdays`, `format` text or file, the `prompt` saying what it must
+    say and how, and the `template`, the markdown skeleton whose headings, in order, are its
+    sections). `list_reports` shows each period as `done`, `missing` (due, nothing posted),
+    `upcoming` or `off` (not asked for); write the current or a missing one as the prompt says, in
+    the shape of the template, from `daily_report` for the days it covers, and `post_report` it
+    (`body`, and `files` as absolute paths: the board does not make PDFs; a `file` project needs
+    one). Posting again for a period adds a newer version and keeps the old one as history.
+    `reportDue` on `get_summary` and `check_inbox` says when the human expects it (`due` soon, or
+    `missing` after the shift's end): offer to write it then, with their go-ahead.
+    `set_report_settings` changes the schedule, and the prompt or the template only when the human
+    asked for that change in this conversation: each such change is kept with the old version and
+    stays flagged for the human until they accept or revert it. (`post_daily_summary` is an old name
+    for `post_report` on the current period.)
 
 ## The project's agents
 
