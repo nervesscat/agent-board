@@ -439,12 +439,12 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
       'createdAt',
     ]),
     activity: ins('activity', ['project_id', 'actor', 'kind', 'ref_type', 'ref_id', 'text', 'createdAt']),
+    daily: ins('daily_summaries', ['project_id', 'date', 'author', 'body', 'createdAt']),
     reportSettings: ins('report_settings', [
       'project_id',
       'prompt',
       'cadence',
       'weekday',
-      'workdays',
       'format',
       'since',
       'updated_by',
@@ -513,8 +513,6 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
           markdown(r, 2),
           'daily',
           5,
-          // Every day a workday, so the report periods read the same whatever weekday it is generated on.
-          '[1,2,3,4,5,6,7]',
           'text',
           dayOf(created),
           GENERATED_HUMAN,
@@ -524,16 +522,7 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
         const day = dayOf(now - d * DAY)
         if (p % 2 === 0 && r.chance(0.7))
           q.report.run(projectId, 'daily', day, markdown(r, 3), r.pick(AGENTS), iso(now - d * DAY))
-        // Today's report is always in: whether the board reminds about it hangs on the hour against the
-        // shift's end, and the dataset must read the same at any hour. No draws, so the rest is unchanged.
-        else if (p % 2 === 0 && d === 0)
-          q.report.run(projectId, 'daily', day, 'Today so far.', AGENTS[0], iso(now))
-        // The daily summaries are retired (reports took their place); their draws stay so the rest of
-        // the dataset is the one earlier runs measured.
-        if (r.chance(0.5)) {
-          r.pick(AGENTS)
-          sentence(r)
-        }
+        if (r.chance(0.5)) q.daily.run(projectId, day, r.pick(AGENTS), sentence(r), iso(now - d * DAY))
       }
 
       const ticketIds = []
