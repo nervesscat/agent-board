@@ -22,8 +22,10 @@ import { ticketRepo } from './repos'
  * - the workspace's path is a worktree the board may act on (`worktreeTarget`: a git worktree of the
  *   ticket's repo next to its main checkout, never the main checkout or the board's folder);
  * - something listens on that port, and every listening process runs from inside that worktree: its
- *   executable, an argument that is a path, or its working directory (where the OS gives it) is the
- *   worktree or under it, after resolving `..`, without regard to case on Windows.
+ *   executable, an argument that is a path (not on macOS, where `ps` cannot tell where one ends), or
+ *   its working directory (where the OS gives it) is the worktree or under it, after resolving `..`,
+ *   without regard to case on Windows. The worktree is its real path, and the path as registered only
+ *   when that is the same folder.
  *
  * It then kills each listening process with everything it started. A stop always looks again at the
  * moment it is asked; only the Previews page's answer reuses what it read about a process lately.
@@ -247,20 +249,41 @@ async function readProcesses(ids: number[]): Promise<Map<number, ProcessInfo>> {
       })
     }
   } else {
-    // macOS: no /proc. ps gives the command line (split on spaces), lsof the working directory.
+    // macOS: no /proc. lsof gives the working directory and the executable, each whole.
     for (const pid of ids) {
-      const command = (await exec('ps', ['-ww', '-o', 'command=', '-p', String(pid)]).catch(() => '')).trim()
-      if (!command) continue
-      const cwd = await exec('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn']).catch(() => '')
-      found.set(pid, {
-        pid,
-        exe: null,
-        args: command.split(/\s+/),
-        cwd: /^n(.+)$/m.exec(cwd)?.[1] ?? null,
-      })
+      const out = await exec('lsof', ['-a', '-p', String(pid), '-d', 'cwd,txt', '-Ffn']).catch(() => '')
+      const info = parseLsofProcess(pid, out)
+      if (info) found.set(pid, info)
     }
   }
   return found
+}
+
+/**
+ * A macOS process from `lsof -a -p <pid> -d cwd,txt -Ffn`: its working directory, and its executable
+ * (the first `txt` file; the rest are the libraries it loaded). No arguments: `ps` prints them joined by
+ * spaces, so `<worktree> copy/server.js` could not be told from `<worktree>` and `copy/server.js`, and
+ * a fragment of a path must never count as one.
+ */
+export function parseLsofProcess(pid: number, out: string): ProcessInfo | null {
+  let fd: string | null = null
+  let cwd: string | null = null
+  let exe: string | null = null
+  let ours = false
+  let seen = false
+  for (const line of out.split(/\r?\n/)) {
+    if (line.startsWith('p')) {
+      ours = Number(line.slice(1)) === pid
+      seen ||= ours
+      fd = null
+    } else if (line.startsWith('f')) fd = line.slice(1)
+    else if (line.startsWith('n') && ours) {
+      if (fd === 'cwd') cwd ??= line.slice(1)
+      else if (fd === 'txt') exe ??= line.slice(1)
+    }
+  }
+  // Gone meanwhile: nothing to say about it.
+  return seen ? { pid, exe, args: [], cwd } : null
 }
 
 // --- inside a worktree ---
@@ -301,7 +324,7 @@ function pathsOf(info: ProcessInfo): string[] {
   return [...paths]
 }
 
-/** Whether the process runs from inside one of `roots` (the worktree as registered, and its real path). */
+/** Whether the process runs from inside one of `roots` (the worktree's real path, and its spelling as registered). */
 export function runsFrom(info: ProcessInfo, roots: string[]) {
   return pathsOf(info).some((p) => {
     const resolved = real(p)
@@ -342,7 +365,21 @@ function linkTarget(ws: schema.Workspace): Target | Refusal {
   if (!ticket) return refuse(409, 'the ticket is gone')
   const target = worktreeTarget(ws, ticketRepo(ticket))
   if (!target.ok) return refuse(400, target.reason)
-  return { ok: true, ws, ticket, port, worktree: target.path, roots: [target.path, ws.path] }
+  return { ok: true, ws, ticket, port, worktree: target.path, roots: worktreeRoots(ws.path, target.path) }
+}
+
+/**
+ * What a process may name the worktree by: its real path (the one `worktreeTarget` checked), and the
+ * path as registered only when that path, read as the rule reads it (`..` resolved first), is the same
+ * folder, such as a symlink to the worktree. On Linux and macOS `<symlink>/..` is the parent of the
+ * link's target to the OS but the folder holding the link to `path.resolve`: never a root then.
+ */
+export function worktreeRoots(registered: string, worktree: string): string[] {
+  const roots = [worktree]
+  const lexical = path.resolve(registered)
+  const same = real(lexical)
+  if (norm(lexical) !== norm(worktree) && same !== null && norm(same) === norm(worktree)) roots.push(lexical)
+  return roots
 }
 
 /** The listening processes, if every one of them runs from the worktree. */

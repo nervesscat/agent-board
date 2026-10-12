@@ -300,6 +300,60 @@ describe('the rule, by itself', () => {
     ])
   })
 
+  it('on macOS takes the working directory and the executable from lsof, never a fragment of the command line', () => {
+    const dir = path.join(tmp, 'mac')
+    const wt = path.join(dir, 'app-a')
+    const copy = path.join(dir, 'app-a copy')
+    for (const d of [wt, copy]) fs.mkdirSync(d, { recursive: true })
+    const lsof = (cwd: string, ...txt: string[]) =>
+      ['p42', 'fcwd', `n${cwd}`, ...txt.flatMap((t) => ['ftxt', `n${t}`])].join('\n')
+
+    // `node "<wt> copy/server.js"` run from the copy: ps would print `node <wt> copy/server.js`, whose
+    // fragment `<wt>` is the worktree. lsof gives the copy as a whole, and no arguments are read.
+    const fromCopy = lp.parseLsofProcess(42, lsof(copy, '/usr/local/bin/node', '/usr/lib/dyld'))!
+    expect(fromCopy).toEqual({ pid: 42, exe: '/usr/local/bin/node', args: [], cwd: copy })
+    expect(lp.runsFrom(fromCopy, [wt])).toBe(false)
+    expect(lp.runsFrom({ ...fromCopy, args: ['/usr/local/bin/node', wt, 'copy/server.js'] }, [wt])).toBe(true)
+
+    // Run from the worktree, or its executable in it: from the worktree.
+    expect(lp.runsFrom(lp.parseLsofProcess(42, lsof(wt, '/usr/local/bin/node'))!, [wt])).toBe(true)
+    const esbuild = path.join(wt, 'node_modules', '@esbuild', 'darwin-arm64', 'bin', 'esbuild')
+    expect(lp.runsFrom(lp.parseLsofProcess(42, lsof(copy, esbuild))!, [wt])).toBe(true)
+    // A library it loaded from the worktree is not its executable.
+    expect(lp.runsFrom(lp.parseLsofProcess(42, lsof(copy, '/usr/local/bin/node', esbuild))!, [wt])).toBe(
+      false,
+    )
+    // Another process's lines, or none (it is gone): nothing about this one.
+    expect(lp.parseLsofProcess(42, ['p43', 'fcwd', `n${wt}`].join('\n'))).toBeNull()
+    expect(lp.parseLsofProcess(42, '')).toBeNull()
+  })
+
+  it('names the worktree by its real path, and as registered only when that is the same folder', () => {
+    const code = path.join(tmp, 'roots')
+    const feat = path.join(code, 'app-feat')
+    fs.mkdirSync(path.join(feat, 'src'), { recursive: true })
+    const type = WIN ? 'junction' : 'dir'
+    fs.symlinkSync(path.join(feat, 'src'), path.join(code, 'lnk'), type)
+    fs.symlinkSync(feat, path.join(code, 'feat-link'), type)
+    const real = (p: string) => fs.realpathSync.native(p)
+
+    // A link to the worktree: both name it.
+    expect(lp.worktreeRoots(path.join(code, 'feat-link'), feat)).toEqual([feat, path.join(code, 'feat-link')])
+    expect(lp.worktreeRoots(feat, feat)).toEqual([feat])
+
+    // `<link>/..`: to the OS (Linux, macOS) the worktree, the link's target's parent; read as the rule
+    // reads paths, the folder holding the link. Only the folder that was checked is a root.
+    const registered = [code, 'lnk', '..'].join(path.sep)
+    const checked = real(registered)
+    const roots = lp.worktreeRoots(registered, checked)
+    for (const root of roots) expect(real(root)).toBe(checked)
+    if (!WIN) {
+      expect(checked).toBe(feat)
+      expect(roots).toEqual([feat])
+      expect(roots.some((root) => lp.isInside(path.join(code, 'app-other', 'server.js'), root))).toBe(false)
+    }
+  })
+
   it('splits a Windows command line by its quotes', () => {
     expect(
       lp.splitCommandLine(
@@ -405,6 +459,30 @@ describe('stopping a link preview, against real processes', { timeout: 60_000 },
     expect(res2.body.error).toMatch(/does not run from/)
     expect(alive(escaped.pid)).toBe(true)
     expect((await rowOf(ws2.id)).linkStop).toMatch(/does not run from/)
+  })
+
+  it('refuses a path written through a link and .. that leaves the worktree as the rule reads it', async () => {
+    const wt = freshWorktree()
+    fs.mkdirSync(path.join(wt, 'src'), { recursive: true })
+    const link = path.join(repos, `lnk-${path.basename(wt)}`)
+    fs.symlinkSync(path.join(wt, 'src'), link, WIN ? 'junction' : 'dir')
+    // A server in a folder next to the worktree, under the folder holding the link.
+    const sibling = await serve('server.js', { cwd: path.join(repos, `next-to-${path.basename(wt)}`) })
+    const ws = workspace([link, '..'].join(path.sep), `http://127.0.0.1:${sibling.port}`)
+    const res = await stopLink(ws.id)
+    // Linux and macOS resolve it to the worktree, which passes, but the server is not in it; Windows
+    // reads `..` first, and the folder holding the link is no worktree.
+    if (WIN)
+      expect(res).toMatchObject({
+        status: 400,
+        body: { error: expect.stringMatching(/only worktrees next to/) },
+      })
+    else
+      expect(res).toMatchObject({
+        status: 409,
+        body: { error: `the process on :${sibling.port} (pid ${sibling.pid}) does not run from ${wt}` },
+      })
+    expect(alive(sibling.pid)).toBe(true)
   })
 
   it('refuses, and kills nothing, for every case the rule leaves out', async () => {

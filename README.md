@@ -147,8 +147,8 @@ that worktree's: the link is on loopback, on a port that is neither the board's 
 board runs; the workspace's path is a git worktree of the ticket's repo next to its main checkout
 (not the main checkout or the board's folder); and every process listening on the port (`netstat -ano`
 on Windows, `ss -ltnp` or `lsof` elsewhere) runs from inside that worktree: its executable, an
-argument that is a path, or its working directory (Linux, macOS) is the worktree or under it, `..`
-resolved, case aside on Windows. The board then kills each with its process tree (`taskkill /T /F`, or
+argument that is a path (Windows, Linux), or its working directory (Linux, macOS) is the worktree or
+under it, `..` resolved, case aside on Windows. The board then kills each with its process tree (`taskkill /T /F`, or
 its descendants elsewhere), answers once the port is free (`freed`), keeps the link (the row moves to
 Not running) and logs it on the ticket. Otherwise the row says why it is not stopped, and the stop
 looks again when asked. **Stop all** stops the project's previews the board runs and the links it may
