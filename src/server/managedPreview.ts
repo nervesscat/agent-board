@@ -284,6 +284,11 @@ interface Kept {
   hooked: boolean
   /** Workspaces whose running preview a restart is replacing: their slot stays taken meanwhile. */
   restarting: Set<number> | undefined
+  /**
+   * Each start's run until it settles, stopped ones too: a stop kills the run's process, but the copy
+   * of the live data has none and goes on writing into the worktree until it ends.
+   */
+  runs: Map<Entry, Promise<void>> | undefined
 }
 export const KEPT = Symbol.for('agent-board.managedPreviews')
 const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
@@ -291,9 +296,11 @@ const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
   portQueue: Promise.resolve(),
   hooked: false,
   restarting: undefined,
+  runs: undefined,
 })
-// A module loaded before this field existed kept its object: give it one.
+// A module loaded before these fields existed kept its object: give it them.
 const restarting = (kept.restarting ??= new Set<number>())
+const runs = (kept.runs ??= new Map<Entry, Promise<void>>())
 const stateFile = () => path.join(config.dataDir, 'previews.json')
 
 function save() {
@@ -441,8 +448,21 @@ export function startPreview(
   all().set(workspaceId, e)
   save()
   log(e, actor, 'started a preview')
-  void run(e).catch((err: unknown) => fail(e, `could not start: ${(err as Error).message ?? err}`, null))
+  const running = run(e)
+    .catch((err: unknown) => fail(e, `could not start: ${(err as Error).message ?? err}`, null))
+    .finally(() => runs.delete(e))
+  runs.set(e, running)
   return view(e)
+}
+
+/**
+ * Settles once nothing the board started from this worktree still runs there, stopped previews
+ * included: a stop returns at once, while the step it caught may still be writing into the worktree
+ * (the copy of the live data, which no process holds). What removes the worktree waits for this.
+ */
+export async function previewsSettled(worktreePath: string) {
+  const dir = norm(real(worktreePath) ?? worktreePath)
+  await Promise.all([...runs].filter(([e]) => norm(e.path) === dir).map(([, settled]) => settled))
 }
 
 /** Still the preview being started: not stopped, restarted or forgotten meanwhile. */
@@ -501,6 +521,8 @@ async function run(e: Entry) {
   await fs.promises.mkdir(path.dirname(e.logs.build), { recursive: true })
   const env = worktreeEnv()
   const step = async (name: ManagedStep, command: string) => {
+    // Stopped while it cleared the last run's data: nothing more starts.
+    if (!current(e)) return false
     e.step = name
     fs.appendFileSync(e.logs.build, `> ${command}\n`)
     const proc = runner.spawn(command, [], { cwd: e.path, env, log: e.logs.build, shell: true })

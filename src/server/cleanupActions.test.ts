@@ -116,7 +116,7 @@ class FakeRunner implements PreviewRunner {
   killTreeSync() {}
   isFree = async () => true
   answers = async () => true
-  copyData = async () => {}
+  copyData: PreviewRunner['copyData'] = async () => {}
 }
 
 let projectId: number
@@ -516,6 +516,67 @@ describe('deleting a worked branch with its worktrees', () => {
       dbm.db.select().from(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.id, ws.id)).get(),
     ).toBeUndefined()
     expect(fs.existsSync(wt('b9'))).toBe(false)
+  })
+
+  it('waits for a stopped preview’s copy of the live data to end before it removes the worktree', async () => {
+    const mp = await import('./managedPreview')
+    const runner = new FakeRunner()
+    mp.setPreviewRunner(runner)
+    // The copy writes part of the data, then the rest once the test lets it: a copy of many uploads.
+    let release!: () => void
+    const released = new Promise<void>((r) => (release = r))
+    /** Each write, with whether the delete had answered by then. */
+    const wrote: boolean[] = []
+    let answered = false
+    let copied = false
+    runner.copyData = async (dest: string) => {
+      const write = (name: string) => {
+        fs.mkdirSync(path.join(dest, 'uploads'), { recursive: true })
+        fs.writeFileSync(path.join(dest, 'uploads', name), 'an upload')
+        wrote.push(answered)
+      }
+      write('1')
+      await released
+      write('2')
+      copied = true
+    }
+    const { 'feat/b9c': sha } = land(['feat/b9c'])
+    git('worktree', 'add', '-q', wt('b9c'), 'feat/b9c')
+    fs.mkdirSync(path.join(wt('b9c'), 'node_modules', '.pnpm'), { recursive: true })
+    fs.writeFileSync(path.join(wt('b9c'), 'node_modules', '.pnpm', 'lock.yaml'), LOCK)
+    const t = features.createTicket(
+      projectId,
+      { title: 'b9c', branch: 'feat/b9c', status: 'in_progress' },
+      'claude',
+    )
+    const ws = features.addWorkspace(t.id, { name: 'wt', branch: 'feat/b9c', path: wt('b9c') }, 'claude')
+    mp.startPreview(ws.id, 'enrique')
+    await expect.poll(() => wrote.length, { timeout: 10_000 }).toBe(1)
+    expect(mp.managedPreview(ws.id)).toMatchObject({ status: 'building', step: 'copy' })
+    dbm.db.update(dbm.schema.tickets).set({ status: 'done' }).where(eq(dbm.schema.tickets.id, t.id)).run()
+    const b = (await branchOf(t.id, 'feat/b9c'))!
+
+    const deleting = del([
+      {
+        ticketId: t.id,
+        branch: 'feat/b9c',
+        kind: 'worktrees',
+        sha,
+        worktrees: b.worktrees.map((w) => w.path),
+      },
+    ]).finally(() => (answered = true))
+    // The copy goes on for a while after the stop; it ends sooner only if the delete answers first.
+    await Promise.race([deleting, new Promise((r) => setTimeout(r, 1500))])
+    release()
+    const [r] = await deleting
+    await expect.poll(() => copied, { timeout: 10_000 }).toBe(true)
+
+    expect(r).toMatchObject({ outcome: 'deleted', removed: b.worktrees.map((w) => w.path) })
+    expect(mp.managedPreview(ws.id)).toBeNull()
+    expect(wrote).toEqual([false, false])
+    expect(fs.existsSync(wt('b9c'))).toBe(false)
+    expect(worktreePaths()).not.toContain(wt('b9c'))
+    expect(hasRef(repo, 'refs/heads/feat/b9c')).toBe(false)
   })
 
   describe('a server an agent started from the worktree', { timeout: 60_000 }, () => {

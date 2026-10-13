@@ -325,6 +325,46 @@ describe('a preview the board runs', () => {
     expect(fake.calls.at(-1)).toBe(build)
   })
 
+  it('stopped while it copies the data: the stop answers at once, and settles once the copy ends', async () => {
+    const fake = useFake()
+    let release!: () => void
+    const released = new Promise<void>((r) => (release = r))
+    let copied = false
+    fake.copyData = async (dest: string) => {
+      fs.mkdirSync(dest, { recursive: true })
+      await released
+      fs.writeFileSync(path.join(dest, 'board.db'), 'a copy')
+      copied = true
+    }
+    const { ws, dir } = ticketWithWorktree()
+    mp.startPreview(ws.id, 'claude')
+    await vi.waitFor(() => expect(mp.managedPreview(ws.id)?.step).toBe('copy'))
+    expect(await mp.stopPreview(ws.id, 'stopped by enrique', 'enrique')).toMatchObject({ status: 'stopped' })
+
+    let settled = false
+    const settling = mp.previewsSettled(dir).then(() => (settled = true))
+    // Another worktree's are not waited for.
+    await mp.previewsSettled(freshWorktree())
+    await new Promise((r) => setTimeout(r, 20))
+    expect(settled).toBe(false)
+    release()
+    await settling
+    expect(copied).toBe(true)
+    // Nothing starts after it.
+    expect(fake.calls.map((c) => c.command)).toEqual(['pnpm build'])
+    expect(status(ws.id)).toBe('stopped')
+  })
+
+  it('stopped before its first step: nothing runs, and it settles', async () => {
+    const fake = useFake()
+    const { ws, dir } = ticketWithWorktree()
+    mp.startPreview(ws.id, 'claude')
+    await mp.stopPreview(ws.id, 'stopped by enrique', 'enrique')
+    await mp.previewsSettled(dir)
+    expect(fake.calls).toEqual([])
+    expect(status(ws.id)).toBe('stopped')
+  })
+
   it('restarts: stops the running one and builds again', async () => {
     const fake = useFake()
     const { ws } = ticketWithWorktree()

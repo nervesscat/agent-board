@@ -24,7 +24,7 @@ import {
   worktreeChanges,
 } from './git'
 import { stopLinkPreview } from './linkPreview'
-import { activePreviews, stopPreview } from './managedPreview'
+import { activePreviews, previewsSettled, stopPreview } from './managedPreview'
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
 import { listRepos } from './repos'
@@ -351,10 +351,15 @@ async function deleteLocal(
   return result(item, 'deleted', null, { restore: [b.restore!] })
 }
 
-/** A preview the board builds or runs from the worktree stops first, and is waited for. */
+/**
+ * A preview the board builds or runs from the worktree stops first, and is waited for until its run
+ * settles: one stopped while it copies the live data into the worktree goes on writing there, and git
+ * could not delete a folder still filling.
+ */
 async function stopPreviews(worktreePath: string, actor: string) {
   for (const p of activePreviews().filter((p) => samePath(p.path, worktreePath)))
     await stopPreview(p.workspaceId, 'its worktree was removed', actor)
+  await previewsSettled(worktreePath)
 }
 
 /**
