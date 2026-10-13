@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Eye,
   GitPullRequest,
+  Hand,
   Hourglass,
   Inbox,
   Layers,
@@ -23,7 +24,7 @@ import type { ReactNode } from 'react'
 import { Actor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
-import { DecisionBadge, Progress } from '#/components/TicketBoard'
+import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
@@ -267,7 +268,7 @@ function threadAnchor(th: HumanThread) {
 }
 
 function NeedsYou({ p }: { p: ProjectSummary }) {
-  const { decisions, prs, threads, reviews, total } = p.needsYou
+  const { decisions, prs, threads, reviews, blockedTasks, total } = p.needsYou
   const pid = String(p.project.id)
   return (
     <Section icon={Inbox} title="Needs you" count={total}>
@@ -376,6 +377,35 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               }
             />
           ))}
+          {blockedTasks.map((task) => (
+            <Row
+              key={`b${task.taskId}`}
+              icon={<Hand className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <span>
+                  <span className="mr-1.5 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                    blocked
+                  </span>
+                  {task.parentTask && <span className="text-muted-foreground">{task.parentTask} › </span>}
+                  {task.text}
+                  {task.reason && <span className="text-muted-foreground">: {task.reason}</span>}
+                </span>
+              }
+              meta={
+                <>
+                  <span className="truncate">
+                    <TicketLink
+                      p={p}
+                      id={task.ticketId}
+                      title={task.ticketTitle}
+                      hash={`task-${task.taskId}`}
+                    />
+                  </span>
+                  {task.parent && <span className="truncate">lane of #{task.parent.id}</span>}
+                </>
+              }
+            />
+          ))}
           {reviews.map((t) => (
             <Row
               key={`r${t.id}`}
@@ -427,6 +457,7 @@ function InProgress({ p }: { p: ProjectSummary }) {
                       </span>
                     )}
                     {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                    {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
                     {t.preview && (
                       <a
                         href={t.preview.url}
