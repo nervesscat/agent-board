@@ -44,8 +44,11 @@ describe('the board skill', () => {
 
 describe('settings', () => {
   it('default to Claude Code and keep what is picked', () => {
-    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude' })
-    expect(agents.updateSettings({ defaultAgent: 'codex' })).toEqual({ defaultAgent: 'codex' })
+    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude', previewLimit: 8 })
+    expect(agents.updateSettings({ defaultAgent: 'codex' })).toEqual({
+      defaultAgent: 'codex',
+      previewLimit: 8,
+    })
     expect(agents.updateSettings({ defaultAgent: 'opencode' }).defaultAgent).toBe('opencode')
   })
 })

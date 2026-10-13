@@ -844,12 +844,42 @@ test('a card dragged to another column moves, and leaves no tooltip behind', asy
   await expect(anyTooltip(page)).toHaveCount(0)
 })
 
+test("the Previews page's hints are tooltips: the limit's use, a row's state, link and workspace", async ({
+  page,
+  api,
+  human,
+  project,
+}) => {
+  const t = await api.ticket({ title: 'Hosted elsewhere', status: 'in_progress' })
+  const url = 'https://example.com/hosted-preview'
+  await ok(
+    human.post(`/api/tickets/${t.id}/workspaces`, {
+      data: { name: 'hosted', branch: 'feat/hosted', path: 'somewhere', previewUrl: url },
+    }),
+  )
+  await page.goto(`/projects/${project.id}/previews`)
+  await expectTooltip(
+    page.getByText(/^Board-run previews: \d+ of \d+ in use \(board-wide\)$/),
+    'Previews the board builds or runs, in every project, and how many it runs at most at once',
+  )
+  const row = page.getByRole('listitem').filter({ hasText: 'Hosted elsewhere' })
+  // A link off this machine is never checked, and its badge says why.
+  await expectTooltip(row.getByText('Not checked', { exact: true }), 'The board checks links on this machine only')
+  await expectTooltip(row.locator('div[data-slot="tooltip-trigger"]').filter({ hasText: url }), url)
+  await expectTooltip(row.getByText('feat/hosted', { exact: true }), 'workspace hosted in somewhere')
+  expect(await nativeTitles(page)).toEqual([])
+})
+
 test('no native title is left on the main pages', async ({ page, api, human, project }) => {
   await ok(human.post(`/api/projects/${project.id}/agents/defaults`, { data: {} }))
   const t = await api.ticket({ title: 'Everything on it', status: 'in_progress' })
   await postWithPicture(human, t.id, 'A post with a picture.')
   await ok(human.post(`/api/tickets/${t.id}/tasks`, { data: { tasks: ['One task'] } }))
-  await ok(human.post(`/api/tickets/${t.id}/workspaces`, { data: { name: 'sandbox', branch: 'sb' } }))
+  await ok(
+    human.post(`/api/tickets/${t.id}/workspaces`, {
+      data: { name: 'sandbox', branch: 'sb', previewUrl: 'https://example.com/sandbox' },
+    }),
+  )
   await stubQueue(page, project.id, [
     prRow(project.id, 5, { isDraft: true, ci: 'failing', merge: 'conflicts' }),
     prRow(project.id, 6, {
@@ -863,6 +893,7 @@ test('no native title is left on the main pages', async ({ page, api, human, pro
     `/projects/${project.id}/features?view=list`,
     `/projects/${project.id}/features/${t.id}`,
     `/projects/${project.id}/prs`,
+    `/projects/${project.id}/previews`,
     `/projects/${project.id}/cleanup`,
     `/projects/${project.id}/agents`,
     `/projects/${project.id}/settings`,
