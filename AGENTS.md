@@ -48,7 +48,7 @@ http_headers = { Authorization = "Bearer gate_…" }
 2. **Pick up work**: starting a session, `get_summary` with your `projectId` shows where the project
    stands in one read (waiting on the human, in progress, done today, next, carrying over). Take work
    from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
-   you; `q` searches titles and instructions). Read it in full with `get_ticket`. Then
+   you; `q` finds the `#id` or title first, then instructions and the thread). Read it in full with `get_ticket`. Then
    `claim_ticket` with the `branch` you will work on: it assigns you and moves it to
    `in_progress`. Tickets are shared: claiming one another agent holds takes it over (the board
    logs it), so prefer unassigned ones. A ticket with `reserved: true` belongs to one of the
