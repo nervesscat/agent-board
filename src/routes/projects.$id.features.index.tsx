@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { Archive, BrushCleaning, Columns3, List } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Archive, BrushCleaning, Columns3, List, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -10,19 +10,25 @@ import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/components/PushDot'
 import { ArchivedList, TicketBoard, TicketList } from '#/components/TicketBoard'
+import { Input } from '#/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, patch, post, type CleanupReport, type Push, type TicketRow } from '#/lib/api'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
-import { ticketsKey, ticketsQuery } from '#/lib/tickets'
+import { type TicketsScope, ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 const VIEWS = ['board', 'list', 'archived'] as const
 type View = (typeof VIEWS)[number]
 
-// ?view= is the view picked (none: the one this browser remembers, else board).
+// ?view= is the view picked (none: the one this browser remembers, else board). ?q= searches the List
+// and the Archived tickets; the Board shows them all. A query that reads as a number (`?q=84`) comes in
+// as one.
 export const Route = createFileRoute('/projects/$id/features/')({
   component: Features,
-  validateSearch: z.object({ view: z.enum(VIEWS).optional().catch(undefined) }),
+  validateSearch: z.object({
+    view: z.enum(VIEWS).optional().catch(undefined),
+    q: z.union([z.string(), z.number()]).transform(String).optional().catch(undefined),
+  }),
 })
 
 // The last of board and list picked is remembered in this browser, for a visit whose URL names none
@@ -32,7 +38,7 @@ const REMEMBERED_VIEWS = ['board', 'list'] as const
 
 function Features() {
   const { id } = Route.useParams()
-  const { view: picked } = Route.useSearch()
+  const { view: picked, q = '' } = Route.useSearch()
   const navigate = Route.useNavigate()
   const qc = useQueryClient()
   // The tabs and the page both follow the URL, so the server's render and the browser's agree.
@@ -91,12 +97,27 @@ function Features() {
       qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
     },
   })
+  // The search of the List or the Archived tickets: the server finds them, those found by name first.
+  const searching = view === 'board' ? '' : q.trim()
+  const scope: TicketsScope = view === 'archived' ? 'archived' : 'root'
+  const found = useQuery({
+    ...ticketsQuery(id, scope, searching),
+    enabled: searching !== '',
+    // While the next query loads, the rows of the last one stay, if they are of the same list.
+    placeholderData: (rows, last) => (last?.queryKey[2] === scope ? rows : undefined),
+    refetchInterval: view === 'archived' ? 30_000 : 10_000,
+  })
+  const search = (next: string) =>
+    navigate({ search: (s) => ({ ...s, q: next || undefined }), replace: true })
   const { data: pushData } = useProjectPush(id)
   const push = useMemo(() => new Map(pushData?.tickets.map((t) => [t.id, t.push])), [pushData])
   // Only the tickets whose branch is not on origin, from the line under the header.
   const [onlyUnpushed, setOnlyUnpushed] = useState(false)
   const unpushed = (data ?? []).filter((t) => isUnpushed(push.get(t.id)))
   const shown = onlyUnpushed ? unpushed : (data ?? [])
+  const listed = searching
+    ? (found.data ?? []).filter((t) => !onlyUnpushed || isUnpushed(push.get(t.id)))
+    : shown
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -139,7 +160,36 @@ function Features() {
           onToggle={() => setOnlyUnpushed((v) => !v)}
         />
       )}
-      {view === 'archived' ? (
+      {view !== 'board' && <TicketSearch q={q} onSearch={search} />}
+      {searching ? (
+        found.data === undefined ? (
+          found.isError ? (
+            <p className="text-sm text-destructive">{errorMessage(found.error)}</p>
+          ) : (
+            <Skeleton className="h-64" />
+          )
+        ) : listed.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No tickets match “{searching}”.{' '}
+            <button type="button" className="underline hover:text-foreground" onClick={() => search('')}>
+              Clear the search
+            </button>
+          </p>
+        ) : (
+          <div className={found.isPlaceholderData ? 'opacity-60 transition-opacity' : undefined}>
+            {view === 'archived' ? (
+              <ArchivedList
+                projectId={id}
+                items={listed}
+                onRestore={(ticketId) => restore.mutate(ticketId)}
+                restoring={restore.isPending ? restore.variables : undefined}
+              />
+            ) : (
+              <TicketList projectId={id} items={listed} push={push} />
+            )}
+          </div>
+        )
+      ) : view === 'archived' ? (
         archiveLoading ? (
           <Skeleton className="h-64" />
         ) : (
@@ -162,6 +212,65 @@ function Features() {
           onMove={(ticketId, status) => move.mutate({ ticketId, status })}
           onArchiveAll={(status) => archiveAll.mutate(status)}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * The search over the List and the Archived tickets. What is typed goes to the URL (`?q=`) once the
+ * typing pauses; Escape or the clear button empty it at once.
+ */
+function TicketSearch({ q, onSearch }: { q: string; onSearch: (q: string) => void }) {
+  const [text, setText] = useState(q)
+  // The query this field last sent: another one in the URL came from elsewhere (a link, Back).
+  const sent = useRef(q)
+  const send = useRef(onSearch)
+  send.current = onSearch
+  useEffect(() => {
+    if (q === sent.current) return
+    sent.current = q
+    setText(q)
+  }, [q])
+  useEffect(() => {
+    const next = text.trim()
+    if (next === sent.current) return
+    const typing = setTimeout(() => {
+      sent.current = next
+      send.current(next)
+    }, 250)
+    return () => clearTimeout(typing)
+  }, [text])
+  const clear = () => {
+    setText('')
+    sent.current = ''
+    send.current('')
+  }
+  return (
+    <div className="relative max-w-sm">
+      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        type="search"
+        aria-label="Search tickets"
+        placeholder="Search by name or thread"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Escape' || !text) return
+          e.preventDefault()
+          clear()
+        }}
+        className="pr-8 pl-8 [&::-webkit-search-cancel-button]:hidden"
+      />
+      {text && (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={clear}
+          className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+        >
+          <X className="size-4" />
+        </button>
       )}
     </div>
   )
