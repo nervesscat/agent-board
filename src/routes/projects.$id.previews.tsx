@@ -32,14 +32,24 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, post, type ProjectPreview, type ProjectPreviews, type StopAll } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { recall, remember } from '#/lib/remembered'
-import { ALL_STAGES, countByStage, inStageFilter, isStageFilter, resolveStageFilter } from '#/lib/stageFilter'
+import {
+  ALL_STAGES,
+  countByStage,
+  inStageFilter,
+  isStageFilter,
+  resolveStageFilter,
+  stageInSearch,
+} from '#/lib/stageFilter'
 import { type StageLike, stageBadge, stageOf } from '#/lib/stages'
 
 // ?stage= is the stage whose previews show, `_all` for every stage (none, or a stage the project no
-// longer has: the one this browser remembers for the project, else its first review stage).
+// longer has: the one this browser remembers for the project, else its first review stage). The router
+// JSON-parses it, so a key such as `2026` or `true` arrives as a number or a boolean (`stageInSearch`).
 export const Route = createFileRoute('/projects/$id/previews')({
   component: Previews,
-  validateSearch: z.object({ stage: z.string().optional().catch(undefined) }),
+  validateSearch: z.object({
+    stage: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional().catch(undefined),
+  }),
 })
 
 // The last stage picked is remembered in this browser, per project, for a visit whose URL names none.
@@ -60,10 +70,11 @@ const GROUPS = [
 
 function Previews() {
   const { id } = Route.useParams()
-  const { stage: inUrl } = Route.useSearch()
+  const search = Route.useSearch()
   const navigate = Route.useNavigate()
   const project = useProject(id)
   const stages = project.data?.stages ?? []
+  const inUrl = stageInSearch(stages, search.stage)
   // Polled only while the page is in view, faster while the board builds or starts one, as on a ticket.
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ['previews', id],
@@ -82,25 +93,28 @@ function Previews() {
   const stagesKnown = !project.isPending
   const storageKey = stageKey(id)
   const stageKeys = [ALL_STAGES, ...stages.map((s) => s.key)]
+  const urlNamesStage = isStageFilter(stages, inUrl)
   // The stage remembered for the project read (undefined for none), null until read.
   const [remembered, setRemembered] = useState<{ key: string; value: string | undefined } | null>(null)
+  // Read whenever the URL names no stage of the project: on every visit without one, the sidebar's link
+  // included while the page stays mounted (a stage may have been picked since, in another tab too), for
+  // another project, and once its stages have changed. The stage read goes in the URL, and a stage the
+  // project does not have leaves it; the default stays out of it. The URL takes the value just read,
+  // not the one this render holds, which can be older.
   useEffect(() => {
-    if (stagesKnown) setRemembered({ key: storageKey, value: recall(storageKey, stageKeys) })
-    // Read again for another project, or once its stages have changed.
-  }, [storageKey, stagesKnown, stageKeys.join()])
+    if (!stagesKnown || urlNamesStage) return
+    const value = recall(storageKey, stageKeys)
+    setRemembered({ key: storageKey, value })
+    if (value !== inUrl) navigate({ search: (s) => ({ ...s, stage: value }), replace: true })
+  }, [storageKey, stagesKnown, urlNamesStage, inUrl, stageKeys.join()])
   const recalled = remembered?.key === storageKey ? remembered.value : null
-  const known = stagesKnown && (isStageFilter(stages, inUrl) || recalled !== null)
+  const known = stagesKnown && (urlNamesStage || recalled !== null)
   const filter = resolveStageFilter(stages, inUrl, recalled)
-  // The remembered stage goes in the URL, and a stage the project does not have leaves it; the default
-  // stays out of it.
-  useEffect(() => {
-    if (!known || isStageFilter(stages, inUrl)) return
-    const restored = isStageFilter(stages, recalled) ? recalled : undefined
-    if (restored !== inUrl) navigate({ search: (s) => ({ ...s, stage: restored }), replace: true })
-  }, [known, inUrl, recalled, stageKeys.join()])
   const pickStage = (key: string) => {
     navigate({ search: (s) => ({ ...s, stage: key }), replace: true })
     remember(storageKey, key)
+    // So a visit without a stage in the URL (the sidebar's link) shows it from its first render.
+    setRemembered({ key: storageKey, value: key })
   }
 
   // None until the previews have loaded, rather than a 0 for every stage.
@@ -196,18 +210,19 @@ function StageFilter({
 }: {
   stages: StageLike[]
   value: string
-  counts: Record<string, number> | undefined
+  counts: Map<string, number> | undefined
   onChange: (key: string) => void
 }) {
   const options = [{ key: ALL_STAGES, name: 'All stages' }, ...stages]
-  const items = Object.fromEntries(options.map((o) => [o.key, o.name]))
+  // A list, not an object by key: a key such as `constructor` would be read from its prototype.
+  const items = options.map((o) => ({ value: o.key, label: o.name }))
   // After a space, so the option reads "Done 2" to a screen reader; the flex layout drops the space.
   const count = (key: string) =>
     counts && (
       <>
         {' '}
         <span className="ml-auto rounded-full bg-muted px-1.5 text-xs text-muted-foreground tabular-nums">
-          {counts[key] ?? 0}
+          {counts.get(key) ?? 0}
         </span>
       </>
     )
@@ -224,7 +239,7 @@ function StageFilter({
           <SelectValue>
             {(v: string) => (
               <>
-                <span className="truncate">{items[v] ?? v}</span>
+                <span className="truncate">{options.find((o) => o.key === v)?.name ?? v}</span>
                 {count(v)}
               </>
             )}

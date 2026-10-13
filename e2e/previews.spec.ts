@@ -837,6 +837,101 @@ test('the last stage picked is remembered per project and restored on a visit wi
   expect(hydration).toEqual([])
 })
 
+test("the sidebar's Previews link, clicked on the Previews page, shows the stage just picked, here or in another tab", async ({
+  page,
+  human,
+  project,
+}) => {
+  await hosted(human, project.id, 'Waiting for review', 'review')
+  await hosted(human, project.id, 'Shipped', 'done')
+  await hosted(human, project.id, 'Being built', 'in_progress')
+  const sidebarPreviews = () =>
+    page.getByRole('navigation').getByRole('link', { name: 'Previews', exact: true }).click()
+
+  // Nothing remembered: the default, then Done picked, then the sidebar's link without leaving the page.
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(shownStage(page)).toHaveText(/^In review\s*1$/)
+  await pickStage(page, 'Done')
+  await expect(page).toHaveURL(/\?stage=done$/)
+  await sidebarPreviews()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=done$`))
+  await expect(shownStage(page)).toHaveText(/^Done\s*1$/)
+  await expect(previewRows(page)).toHaveCount(1)
+  await expect(previewRows(page)).toContainText('Shipped')
+
+  // Done remembered, All stages picked: the sidebar's link shows All stages, and the URL says so.
+  await pickStage(page, 'All stages')
+  await expect(page).toHaveURL(/\?stage=_all$/)
+  await sidebarPreviews()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=_all$`))
+  await expect(shownStage(page)).toHaveText(/^All stages\s*3$/)
+  await expect(previewRows(page)).toHaveCount(3)
+  expect(await page.evaluate((k) => localStorage.getItem(k), `previews.stage.${project.id}`)).toBe('_all')
+
+  // A stage picked in another tab: the sidebar's link here reads it.
+  const other = await page.context().newPage()
+  await other.goto(`/projects/${project.id}/previews`)
+  await expect(shownStage(other)).toHaveText(/^All stages\s*3$/)
+  await pickStage(other, 'In progress')
+  await expect(other).toHaveURL(/\?stage=in_progress$/)
+  await other.close()
+  await sidebarPreviews()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=in_progress$`))
+  await expect(shownStage(page)).toHaveText(/^In progress\s*1$/)
+  await expect(previewRows(page)).toContainText('Being built')
+})
+
+test('a stage whose key reads as a number or a boolean opens from ?stage=<key>, and one named Constructor shows its count', async ({
+  page,
+  human,
+  project,
+}) => {
+  const stage = (name: string) =>
+    ok<{ key: string }>(human.post(`/api/projects/${project.id}/stages`, { data: { name, kind: 'active' } }))
+  const year = await stage('2026')
+  const yes = await stage('True')
+  const ctor = await stage('Constructor')
+  expect([year.key, yes.key, ctor.key]).toEqual(['2026', 'true', 'constructor'])
+  await hosted(human, project.id, 'Waiting for review', 'review')
+  await hosted(human, project.id, 'Planned for the year', '2026')
+  await hosted(human, project.id, 'Answered yes', 'true')
+
+  // Written by hand, unquoted: the router reads 2026 as a number and true as a boolean.
+  await page.goto(`/projects/${project.id}/previews?stage=2026`)
+  await expect(shownStage(page)).toHaveText(/^2026\s*1$/)
+  await expect(previewRows(page)).toHaveCount(1)
+  await expect(previewRows(page)).toContainText('Planned for the year')
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=2026$`))
+  await page.goto(`/projects/${project.id}/previews?stage=true`)
+  await expect(shownStage(page)).toHaveText(/^True\s*1$/)
+  await expect(previewRows(page)).toContainText('Answered yes')
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=true$`))
+
+  // Picked, the app writes the key quoted, and that URL loads as well.
+  await page.goto(`/projects/${project.id}/previews?stage=review`)
+  await pickStage(page, '2026')
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=%222026%22$`))
+  await expect(previewRows(page)).toContainText('Planned for the year')
+  await page.reload()
+  await expect(shownStage(page)).toHaveText(/^2026\s*1$/)
+  await expect(previewRows(page)).toContainText('Planned for the year')
+  // Remembered as well: a visit without a stage restores it.
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(shownStage(page)).toHaveText(/^2026\s*1$/)
+
+  // A stage keyed `constructor`: 0 while it holds no preview, then 1.
+  await stageFilter(page).click()
+  await expect(stageOption(page, 'Constructor')).toHaveText(/^Constructor\s*0$/)
+  await page.keyboard.press('Escape')
+  await hosted(human, project.id, 'Built from scratch', ctor.key)
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  await stageFilter(page).click()
+  await expect(stageOption(page, 'Constructor')).toHaveText(/^Constructor\s*1$/)
+  await stageOption(page, 'Constructor').click()
+  await expect(shownStage(page)).toHaveText(/^Constructor\s*1$/)
+  await expect(previewRows(page)).toContainText('Built from scratch')
+})
+
 test('a stage without previews says so, and Show all stages shows them all', async ({
   page,
   human,

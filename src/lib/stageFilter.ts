@@ -34,10 +34,33 @@ export const inStageFilter = (filter: string, status: string) => filter === ALL_
 
 /**
  * How many rows each status holds, and every row under ALL_STAGES. A status no stage has any more is
- * no option of the filter: its rows show, and count, under every stage only.
+ * no option of the filter: its rows show, and count, under every stage only. A Map, as a stage key can
+ * be any slug, `constructor` included, which a plain object would read from its prototype.
  */
-export function countByStage(statuses: string[]): Record<string, number> {
-  const counts: Record<string, number> = { [ALL_STAGES]: statuses.length }
-  for (const s of statuses) counts[s] = (counts[s] ?? 0) + 1
+export function countByStage(statuses: string[]): Map<string, number> {
+  const counts = new Map([[ALL_STAGES, statuses.length]])
+  for (const s of statuses) counts.set(s, (counts.get(s) ?? 0) + 1)
   return counts
+}
+
+/** What `?stage=` holds once the router has read it: it JSON-parses a value, so `2026` is a number. */
+export type StageInSearch = string | number | boolean | null | undefined
+
+/**
+ * The stage key `?stage=` names. The router JSON-parses search values, so a key such as `2026`, `1e3`,
+ * `true` or `null`, written by hand without quotes, arrives as a number, a boolean or null: it names
+ * the project's stage whose key parses to it (the app writes such a key quoted, which arrives as the
+ * key itself).
+ */
+export function stageInSearch(stages: StageLike[], value: StageInSearch): string | undefined {
+  if (value === undefined || typeof value === 'string') return value
+  return stages.find((s) => parsesTo(s.key, value))?.key ?? String(value)
+}
+
+function parsesTo(key: string, value: number | boolean | null) {
+  try {
+    return JSON.parse(key) === value
+  } catch {
+    return false
+  }
 }
