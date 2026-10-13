@@ -313,10 +313,11 @@ describe('over REST and MCP', () => {
     expect(long.status).toBe(400)
     expect(await listed(t.id)).toHaveLength(4)
 
-    // A new ticket takes the same items.
+    // A new ticket takes the same items (as given, without the default phases).
     const created = await call('POST', `/api/projects/${projectId}/tickets`, {
       title: 'rest new',
       tasks: [{ text: 'x', subtasks: ['y'] }],
+      defaultPhases: false,
     })
     expect(created.status).toBe(201)
     const { id: newId } = (await created.json()) as { id: number }
@@ -332,6 +333,7 @@ describe('over REST and MCP', () => {
       projectId,
       title: 'mcp',
       tasks: ['a', { text: 'b', subtasks: ['b1'] }],
+      defaultPhases: false,
     })
     expect(created.error).toBe(false)
     const t = JSON.parse(created.text) as { id: number }

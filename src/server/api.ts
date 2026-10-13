@@ -133,11 +133,20 @@ api.post('/api/projects', async ({ request, actor }) => {
   return json(projects.createProject(body, actor), 201)
 })
 api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
+// The phases every new ticket of the project starts with; null goes back to the built-in list.
+const DefaultPhases = z.array(z.string().trim().min(1).max(500)).max(20).nullable()
 api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({ name: z.string().min(1).max(100).optional(), instructions: Instructions.optional() }),
+    z.object({
+      name: z.string().min(1).max(100).optional(),
+      instructions: Instructions.optional(),
+      defaultPhases: DefaultPhases.optional(),
+    }),
   )
+  // They shape every new ticket of the project: agents change the phases of a ticket instead.
+  if (body.defaultPhases !== undefined && isAgent(request))
+    throw new HttpError(403, "only the human sets the project's default phases")
   return json(projects.updateProject(id(params), body, actor))
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
@@ -312,6 +321,8 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
       tasks: z.array(NewTask).optional(),
       parentId: z.number().int().optional(),
       attachmentIds: z.array(z.number().int()).optional(),
+      // Start with the project's default phases: a top-level ticket does unless false, a lane only if true.
+      defaultPhases: z.boolean().optional(),
     }),
   )
   return json(await needs.newTicket(id(params), body, actor, { agent: isAgent(request) }), 201)

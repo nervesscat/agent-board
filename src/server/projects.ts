@@ -7,6 +7,25 @@ import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
 import { listStages } from './stages'
 
+/**
+ * The top-level phases a new ticket starts with when its project keeps no list of its own: the
+ * implementation, then the hand-off's items in the order the work does them (push before the PR, CI
+ * once the PR runs it, the preview, then the post). Each is the label of a hand-off check.
+ */
+export const BUILT_IN_PHASES: readonly string[] = [
+  'Implementation',
+  'Pushed',
+  'PR',
+  'CI',
+  'Preview',
+  'Hand-off post',
+]
+
+/** A project as it is handed out: `defaultPhases` is the list in effect, never null. */
+function withPhases<T extends { defaultPhases: string[] | null }>(p: T) {
+  return { ...p, defaultPhases: p.defaultPhases ?? [...BUILT_IN_PHASES] }
+}
+
 /** Projects with their repos and what they hold, for the top-bar menu and agents' `list_projects`. */
 export function listProjects() {
   const repos = listRepos()
@@ -18,7 +37,7 @@ export function listProjects() {
     .orderBy(asc(schema.projects.name))
     .all()
     .map((p) => ({
-      ...p,
+      ...withPhases(p),
       repos: repos.filter((r) => r.projectId === p.id),
       counts: { tickets: tickets.get(p.id) ?? 0, openPrs: prs.get(p.id) ?? 0 },
     }))
@@ -37,7 +56,7 @@ function countBy(
 export function getProject(id: number) {
   const p = db.select().from(schema.projects).where(eq(schema.projects.id, id)).get()
   if (!p) throw notFound('project')
-  return p
+  return withPhases(p)
 }
 
 /**
@@ -64,16 +83,22 @@ export function createProject(input: { name: string; instructions?: string }, ac
     refType: 'project',
     refId: row.id,
   })
-  return row
+  return withPhases(row)
 }
 
+/** `defaultPhases`: the names trimmed, null for the built-in list again. */
 export function updateProject(
   id: number,
-  patch: Partial<Pick<schema.Project, 'name' | 'instructions'>>,
+  patch: Partial<Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases'>>,
   actor: string,
 ) {
   getProject(id)
-  const row = db.update(schema.projects).set(patch).where(eq(schema.projects.id, id)).returning().get()!
+  const { defaultPhases, ...rest } = patch
+  const set = {
+    ...rest,
+    ...(defaultPhases !== undefined && { defaultPhases: defaultPhases?.map((name) => name.trim()) ?? null }),
+  }
+  const row = db.update(schema.projects).set(set).where(eq(schema.projects.id, id)).returning().get()!
   logActivity({
     projectId: id,
     actor,
@@ -82,7 +107,7 @@ export function updateProject(
     refType: 'project',
     refId: id,
   })
-  return row
+  return withPhases(row)
 }
 
 export function deleteProject(id: number, actor: string) {

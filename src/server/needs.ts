@@ -8,6 +8,7 @@ import * as features from './features'
 import { holdsWorkOf, type Reach } from './git'
 import { type Handoff, ticketHandoff } from './handoff'
 import { HttpError } from './http'
+import { getProject } from './projects'
 import { listRepos } from './repos'
 import { withResume, withResumeBriefs } from './resume'
 import { deleteStage, firstOfKind, kindOf, listStages, resolveStage, stageOf } from './stages'
@@ -405,21 +406,40 @@ export async function changeTicket(
   return row
 }
 
-/** `createTicket` with `needs`; a ticket created straight into a done stage is held to them too. */
+/**
+ * A new ticket's tasks under its project's default phases: the given plain texts become the steps of
+ * the first phase, the given `{text, subtasks}` items are phases of the caller's that come right after
+ * it, then the rest of the defaults. Without default phases the tasks stay as given.
+ */
+function phasedTasks(phases: string[], tasks: features.NewTask[]): features.NewTask[] {
+  const [first, ...rest] = phases
+  if (first === undefined) return tasks
+  const steps = tasks.filter((t) => typeof t === 'string')
+  const added = tasks.filter((t) => typeof t !== 'string')
+  return [{ text: first, subtasks: steps }, ...added, ...rest]
+}
+
+/**
+ * `createTicket` with `needs`; a ticket created straight into a done stage is held to them too. A
+ * top-level ticket starts with its project's default phases, a lane does not (its parent carries the
+ * hand-off); `defaultPhases` true or false says otherwise.
+ */
 export async function newTicket(
   projectId: number,
-  input: Parameters<typeof features.createTicket>[1] & { needs?: number[] },
+  input: Parameters<typeof features.createTicket>[1] & { needs?: number[]; defaultPhases?: boolean },
   actor: string,
   opts: { agent: boolean },
 ) {
-  const { needs = [], ...rest } = input
+  const { needs = [], defaultPhases, ...rest } = input
   const ids = checkNeeds({ id: null, projectId }, needs)
   if (ids.length && rest.status) {
     const { repo, baseBranch } = features.placement(projectId, rest)
     const to = resolveStage(listStages(projectId), rest.status).key
     await guardDone({ id: null, projectId, repoId: repo.id, baseBranch }, to, ids, opts)
   }
-  const row = features.createTicket(projectId, rest, actor)
+  const seeded = defaultPhases ?? !rest.parentId
+  const tasks = seeded ? phasedTasks(getProject(projectId).defaultPhases, rest.tasks ?? []) : rest.tasks
+  const row = features.createTicket(projectId, { ...rest, tasks }, actor)
   if (ids.length) setNeeds(row.id, ids, actor)
   return row
 }

@@ -63,9 +63,9 @@ describe('handoffOf', () => {
     const none = handoffOf(facts({ tasks: { done: 0, total: 0 } }))
     expect(none.checks[1]).toMatchObject({ code: 'tasks_open', ok: false })
     expect(none.missing).toEqual([{ code: 'tasks_open', text: expect.stringMatching(/^No tasks/) }])
-    // It says how to plan: high-level phases, their steps as subtasks.
+    // It points to the default phases, with the steps under Implementation.
     expect(none.checks[1]!.text).toBe(
-      'No tasks: plan the work as high-level phases (plan, code, tests…) with their steps as subtasks, and tick them',
+      'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Hand-off post), put the steps under Implementation, and tick each as you finish it',
     )
     expect(handoffOf(facts({ tasks: { done: 3, total: 5 } })).missing).toEqual([
       { code: 'tasks_open', text: '3 of 5 tasks done' },
@@ -335,5 +335,72 @@ describe('moving a ticket to review', () => {
     expect(merged.push.state).toBe('pushed')
     expect(merged.handoff!.missing).toEqual([])
     expect(merged.handoff!.checks[0]).toMatchObject({ code: 'not_merged', ok: true, text: 'PR #12 merged' })
+  }, 30_000)
+
+  it('with the default phases: Implementation is met once they are ticked too, and ticks never undo the post', async () => {
+    const { db, schema } = await import('#/db')
+    const features = await import('./features')
+    const needs = await import('./needs')
+    const { fetchRepo } = await import('./push')
+    const projectId = db.insert(schema.projects).values({ name: 'phases' }).returning().get().id
+    db.insert(schema.repos).values({ projectId, name: 'repo', repoPath: repo, baseBranch: 'main' }).run()
+    // The branch's last commit is a minute old, and it is on origin.
+    git('checkout', '-q', '-b', 'feat/phases', 'main')
+    fs.writeFileSync(path.join(repo, 'phases.txt'), 'phases\n')
+    git('add', 'phases.txt')
+    const at = new Date(Date.now() - 60_000).toISOString()
+    execFileSync('git', ['commit', '-q', '-m', 'phases'], {
+      cwd: repo,
+      stdio: 'ignore',
+      env: { ...process.env, GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at },
+    })
+    git('checkout', '-q', 'main')
+    git('push', '-q', 'origin', 'feat/phases')
+    await fetchRepo(repo, { force: true })
+
+    const t = await needs.newTicket(
+      projectId,
+      { title: 'phased', branch: 'feat/phases', status: 'in_progress', tasks: ['code', 'test'] },
+      'claude',
+      { agent: true },
+    )
+    const task = (text: string) => features.getTicketFull(t.id).tasks.find((x) => x.text === text)!
+    const ticks = () => Object.fromEntries(features.getTicketFull(t.id).tasks.map((x) => [x.text, x.done]))
+    // The work done: Implementation's steps ticked, which ticks it.
+    features.updateTask(task('code').id, { done: true }, 'claude')
+    features.updateTask(task('test').id, { done: true }, 'claude')
+    // The rest of the hand-off done, not ticked: pushed above, the PR, a preview that runs, the post.
+    features.addWorkspace(t.id, { name: 'wt', branch: 'feat/phases', previewUrl }, 'claude')
+    await needs.changeTicket(t.id, { prNumber: 13 }, 'claude', { agent: true })
+    features.postUpdate(t.id, 'Hand-off: PR #13, preview at …', [], 'claude')
+    // The board ticks nothing on its own.
+    expect(ticks()).toEqual({
+      Implementation: true,
+      code: true,
+      test: true,
+      Pushed: false,
+      PR: false,
+      CI: false,
+      Preview: false,
+      'Hand-off post': false,
+    })
+
+    // The move goes through; Implementation is all that is missing.
+    const moved = await needs.changeTicket(t.id, { status: 'review' }, 'claude', { agent: true })
+    expect(moved.status).toBe('review')
+    expect('handoff' in moved && moved.handoff.missing).toEqual([
+      { code: 'tasks_open', text: '3 of 8 tasks done' },
+    ])
+
+    // Each phase ticked: a tick is not a commit, so the post made before them still counts.
+    for (const phase of ['Pushed', 'PR', 'CI', 'Preview', 'Hand-off post'])
+      features.updateTask(task(phase).id, { done: true }, 'claude')
+    const view = await needs.ticketView(t.id)
+    expect(view.handoff!.missing).toEqual([])
+    expect(view.handoff!.checks.find((c) => c.code === 'tasks_open')).toMatchObject({
+      ok: true,
+      text: '8 of 8 tasks done',
+    })
+    expect(view.handoff!.checks.find((c) => c.code === 'no_handoff_post')).toMatchObject({ ok: true })
   }, 30_000)
 })
