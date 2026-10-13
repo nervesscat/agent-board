@@ -819,6 +819,8 @@ export async function cleanupReport(
               ),
           )
           const checkedOut = worktrees.find((w) => w.branch === name)
+          // A rebase or a bisect of the branch in progress there (git lists it detached meanwhile).
+          const busy = checkedOut && state?.worktrees.find((w) => w.path === checkedOut.path)?.busy
           const removable = worktrees.filter((w) => !w.main)
           const blocked = removable.find((w) => w.protected)
           const reachOfBranch = local ? localReach : originReach
@@ -845,7 +847,7 @@ export async function cleanupReport(
                   (!local
                     ? 'no local branch'
                     : checkedOut
-                      ? `checked out in ${checkedOut.main ? 'the main checkout' : checkedOut.path}`
+                      ? `checked out in ${checkedOut.main ? 'the main checkout' : checkedOut.path}${busy ? ` (${busy})` : ''}`
                       : notLanded.local),
               ),
               remote: verdict(
@@ -872,6 +874,7 @@ export async function cleanupReport(
             // git deletes the folder with all it holds: what the board keeps in it would go too.
             const inside = keptIn(tree.path)
             if (inside) return inside
+            if (tree.busy) return tree.busy
             if (tree.branch && tree.branch !== name) return `has ${tree.branch} checked out`
             const registeredOn = kept?.paths.find((p) => same(p.path, tree.path))
             if (registeredOn) return `registered on #${registeredOn.ticketId}`

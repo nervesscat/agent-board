@@ -1,6 +1,7 @@
 import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
+import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { HttpError } from './http'
@@ -200,6 +201,11 @@ export interface Worktree {
   head: string | null
   /** Set when it is locked (`git worktree lock`): git keeps it until it is unlocked. */
   locked?: true
+  /**
+   * What it is in the middle of on `branch` (`rebase in progress`, `bisect in progress`): git lists it
+   * detached meanwhile, yet holds the branch as checked out there.
+   */
+  busy?: string
 }
 
 export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
@@ -214,7 +220,53 @@ export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
     else if (current && line.startsWith('branch ')) current.branch = line.slice(7).replace('refs/heads/', '')
     else if (current && (line === 'locked' || line.startsWith('locked '))) current.locked = true
   }
+  await Promise.all(
+    trees
+      .filter((tree) => !tree.branch)
+      .map(async (tree) => {
+        const busy = await busyWith(tree.path)
+        if (busy) Object.assign(tree, busy)
+      }),
+  )
   return trees
+}
+
+/**
+ * The branch a worktree git lists detached is busy with: a rebase (`git rebase`, or `git am` that
+ * names a branch) or a bisect started on it. Git holds such a branch as checked out there
+ * (`branch_checked_out`), and deleting it would break `git rebase --continue` or `git bisect reset`.
+ * Read from the worktree's own git folder; null when it is busy with none, or that cannot be read.
+ */
+async function busyWith(worktreePath: string): Promise<{ branch: string; busy: string } | null> {
+  const dir = await gitDirOf(worktreePath)
+  if (!dir) return null
+  const read = (file: string) =>
+    fs.promises.readFile(path.join(dir, file), 'utf8').then(
+      (text) => text.trim(),
+      () => '',
+    )
+  for (const file of ['rebase-merge/head-name', 'rebase-apply/head-name']) {
+    const name = await read(file)
+    if (name.startsWith('refs/heads/')) return { branch: name.slice(11), busy: 'rebase in progress' }
+  }
+  // The branch bisect started on, by its short name; a commit's sha when it started detached.
+  const start = await read('BISECT_START')
+  const name = start.startsWith('refs/heads/') ? start.slice(11) : start
+  if (name && !name.startsWith('refs/') && !/^([0-9a-f]{40}|[0-9a-f]{64})$/.test(name))
+    return { branch: name, busy: 'bisect in progress' }
+  return null
+}
+
+/** A worktree's own git folder: its `.git` folder, or where its `.git` file points; null when neither. */
+async function gitDirOf(worktreePath: string): Promise<string | null> {
+  const dotGit = path.join(worktreePath, '.git')
+  const stat = await fs.promises.stat(dotGit).catch(() => null)
+  if (!stat) return null
+  if (stat.isDirectory()) return dotGit
+  const text = await fs.promises.readFile(dotGit, 'utf8').catch(() => '')
+  const to = /^gitdir: (.+)$/m.exec(text)?.[1]?.trim()
+  // A relative one is relative to the worktree (`worktree.useRelativePaths`).
+  return to ? path.resolve(worktreePath, to) : null
 }
 
 export async function listBranches(repoPath: string): Promise<string[]> {

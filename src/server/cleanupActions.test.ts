@@ -2190,6 +2190,83 @@ describe('a branch whose patches are in the base but its content is not', () => 
   })
 })
 
+describe('a branch a rebase or a bisect in its worktree is on', () => {
+  // `git rebase -i` stops at its first commit, as with `edit` typed in the editor.
+  const editor = path.join(tmp, 'edit-first.cjs')
+  fs.writeFileSync(
+    editor,
+    "const fs = require('fs')\nconst f = process.argv[2]\nfs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^pick /, 'edit '))\n",
+  )
+  const fwd = (p: string) => p.replace(/\\/g, '/')
+  const run = (cwd: string, ...args: string[]) =>
+    execFileSync('git', args, {
+      cwd,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        GIT_SEQUENCE_EDITOR: `"${fwd(process.execPath)}" "${fwd(editor)}"`,
+        GIT_EDITOR: 'true',
+      },
+    }).trim()
+  /** What the Cleanup page offers for it, and what each delete answers; the branch is kept. */
+  const refusedWhile = async (branch: string, tree: string, busy: string) => {
+    const t = done(branch, branch)
+    const sha = git('rev-parse', `refs/heads/${branch}`)
+    const b = (await branchOf(t.id, branch))!
+    expect(b.worktrees.map((w) => [path.resolve(w.path), w.protected])).toEqual([[tree, busy]])
+    expect(b.can.local).toEqual({ ok: false, reason: `checked out in ${b.worktrees[0]!.path} (${busy})` })
+    expect(b.can.worktrees.ok).toBe(false)
+    const [local, trees] = await del([
+      { ticketId: t.id, branch, kind: 'local', sha },
+      { ticketId: t.id, branch, kind: 'worktrees', sha, worktrees: [tree] },
+    ])
+    expect(local).toMatchObject({ outcome: 'refused', reason: expect.stringContaining(busy) })
+    expect(trees).toMatchObject({ outcome: 'refused', removed: [] })
+    expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+    expect(fs.existsSync(tree)).toBe(true)
+  }
+
+  it('keeps one stopped on a conflict, and the rebase goes on afterwards', async () => {
+    // Another commit beside it adding the same file: the rebase onto it stops on the conflict.
+    land(['q1-onto'], { unique: true, files: [{ path: 'feat-q1.txt', data: 'other\n' }] })
+    land(['feat/q1'])
+    git('worktree', 'add', '-q', wt('q1'), 'feat/q1')
+    expect(() => run(wt('q1'), 'rebase', 'q1-onto')).toThrow()
+    expect(git('worktree', 'list', '--porcelain')).toMatch(/agent-board-q1\nHEAD \w+\ndetached/)
+
+    await refusedWhile('feat/q1', wt('q1'), 'rebase in progress')
+    fs.writeFileSync(path.join(wt('q1'), 'feat-q1.txt'), 'resolved\n')
+    run(wt('q1'), 'add', 'feat-q1.txt')
+    run(wt('q1'), 'rebase', '--continue')
+    expect(run(wt('q1'), 'symbolic-ref', 'HEAD')).toBe('refs/heads/feat/q1')
+  })
+
+  it('keeps one stopped at an edit of rebase -i, and the rebase goes on afterwards', async () => {
+    const { 'feat/q2': sha } = land(['feat/q2'])
+    git('worktree', 'add', '-q', wt('q2'), 'feat/q2')
+    run(wt('q2'), 'rebase', '-i', `${sha}~1`)
+    expect(run(wt('q2'), 'rev-parse', 'HEAD')).toBe(sha)
+    expect(git('worktree', 'list', '--porcelain')).toMatch(/agent-board-q2\nHEAD \w+\ndetached/)
+
+    await refusedWhile('feat/q2', wt('q2'), 'rebase in progress')
+    run(wt('q2'), 'rebase', '--continue')
+    expect(run(wt('q2'), 'symbolic-ref', 'HEAD')).toBe('refs/heads/feat/q2')
+  })
+
+  it('keeps one a bisect started on', async () => {
+    for (const n of [1, 2, 3]) land([`feat/q3-${n}`])
+    const { 'feat/q3': sha } = land(['feat/q3'])
+    git('worktree', 'add', '-q', wt('q3'), 'feat/q3')
+    run(wt('q3'), 'bisect', 'start', sha, `${sha}~4`)
+    expect(git('worktree', 'list', '--porcelain')).toMatch(/agent-board-q3\nHEAD \w+\ndetached/)
+
+    await refusedWhile('feat/q3', wt('q3'), 'bisect in progress')
+    run(wt('q3'), 'bisect', 'reset')
+    expect(run(wt('q3'), 'symbolic-ref', 'HEAD')).toBe('refs/heads/feat/q3')
+  })
+})
+
 // Last: it loads the module afresh, as a hot reload of the board's server code does.
 describe('a hot reload of the server code', () => {
   it('still takes the deletions in one repository one after the other', async () => {
