@@ -87,12 +87,7 @@ export function PreviewActions({
       )}
       {!active && url && linkStop === null && (
         <Tip content="Stop the server behind this link (it runs from the workspace's worktree) and free its port">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={stopLink.isPending}
-            onClick={() => stopLink.mutate()}
-          >
+          <Button variant="outline" size="sm" disabled={stopLink.isPending} onClick={() => stopLink.mutate()}>
             <Square /> Stop
           </Button>
         </Tip>

@@ -284,7 +284,10 @@ test.describe('board-run previews and the preview limit', () => {
       const first = (await managed())!
       expect(first).toMatchObject({ status: 'building', path: worktree })
 
-      await expectTooltip(building.getByRole('button', { name: 'Stop' }), 'Stop the preview and free its port')
+      await expectTooltip(
+        building.getByRole('button', { name: 'Stop' }),
+        'Stop the preview and free its port',
+      )
       await expectTooltip(
         building.getByRole('button', { name: 'Restart' }),
         'Stop it, build again and start it with a fresh copy of the data',

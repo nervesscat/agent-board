@@ -864,7 +864,10 @@ test("the Previews page's hints are tooltips: the limit's use, a row's state, li
   )
   const row = page.getByRole('listitem').filter({ hasText: 'Hosted elsewhere' })
   // A link off this machine is never checked, and its badge says why.
-  await expectTooltip(row.getByText('Not checked', { exact: true }), 'The board checks links on this machine only')
+  await expectTooltip(
+    row.getByText('Not checked', { exact: true }),
+    'The board checks links on this machine only',
+  )
   await expectTooltip(row.locator('div[data-slot="tooltip-trigger"]').filter({ hasText: url }), url)
   await expectTooltip(row.getByText('feat/hosted', { exact: true }), 'workspace hosted in somewhere')
   expect(await nativeTitles(page)).toEqual([])
