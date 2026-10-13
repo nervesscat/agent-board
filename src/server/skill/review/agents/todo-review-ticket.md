@@ -153,10 +153,10 @@ project's check commands, `PORTS`, and the repo's rule on what it may mention. R
 path and its open questions. Done when: the spec is written to `WORKDIR/01-spec.md` (there
 is no diff yet). Then:
 
-- `add_tasks` with the acceptance criteria, unless the ticket's tasks already cover them, in the
-  board skill's two levels: a few high-level phases of the work (plan, code, tests, docs…) at the
-  top, each criterion a subtask of the phase it belongs to (`{text, subtasks}`, or `parentTaskId`
-  for a phase the ticket already has).
+- `add_tasks` with the acceptance criteria, unless the ticket's tasks already cover them, as the
+  subtasks of the ticket's Implementation phase (`parentTaskId` = its id). A ticket with no tasks
+  gets the project's default phases first (`add_tasks` with the names from `get_project` →
+  `defaultPhases`).
 - Post its result on the ticket `as: spec` (`post_update`, `progress: true`): the intent, the
   criteria, the open questions.
 - A **decisive** open question (the answer changes what counts as correct): `ask_decision` with the
@@ -238,9 +238,12 @@ and return `STATUS: needs-browser`: the orchestrator runs you again with the bro
 
 ### 7. Hand off
 
-Every item, in order, as the board skill's hand-off checklist says:
-1. Tasks and subtasks ticked (`set_task_done`); the workspace registered.
-2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`.
+Every item, in order, as the board skill's hand-off checklist says, ticking each hand-off phase of
+the ticket (`set_task_done`) as its step finishes; the board ticks none itself. On a rework round,
+untick the phases the new work redoes first.
+1. Implementation and its subtasks ticked (`set_task_done`); the workspace registered.
+2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`. Tick
+   Pushed.
    The push updates `REPO`'s refs: a lock error is retried as **Shared with the other tickets of
    this repo** says.
 3. Any unmerged branch yours builds on: `update_ticket` with `needs`.
@@ -255,12 +258,14 @@ Every item, in order, as the board skill's hand-off checklist says:
    repos. Right before, check `list_review_results` (with `sha`) and the ledger for a newer review
    of that SHA: post only when there is none. A newer one that did not survive is not posted over:
    the change did not survive, and its findings go back to the builder (step 5).
+   Tick PR once it is open, and CI once its checks are green.
 5. The preview: `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
    project's way and `set_preview`. When the change cannot be tried (docs, a script), say why in
    the post instead.
    The preview's build is a heavy run: take `LOCK` (holder `#<TICKET> preview <ISO time>`) before
    `start_preview` or the project's start, and release it once the preview runs or has failed.
+   Tick Preview once it runs; when the change cannot be tried, remove the Preview phase instead.
 6. The hand-off post (`post_update`, `progress: true`): the PR link, the preview link and exactly
    what to try there, how it was tested (the review's verdict and counts, the checks and the e2e
    summary), any fake used at an edge and any contract hit you judged legitimate, with the
@@ -268,6 +273,7 @@ Every item, in order, as the board skill's hand-off checklist says:
    "How it was tested" also says which review depth ran and why: the depth, and the measure that
    put the change there (lines and files, the classes that decided it), or that the human chose it
    (`DEPTH`).
+   Then tick Hand-off post: a tick is not a commit, so the post still counts.
 7. `update_ticket` to `review`, and read `handoff.missing` in its answer: fix every item it lists
    and check again. `no_preview` may stay only when the post says why.
 
