@@ -52,6 +52,7 @@ vi.mock('./git', async (original) => ({
   },
   currentGithubLogin: async () => 'enrique',
   prMerged: async () => false,
+  repoNameWithOwner: async () => 'acme/app',
 }))
 
 const failing = () => {
@@ -106,9 +107,9 @@ const FORK_HEAD = '0123456789abcdef0123456789abcdef01234567'
 /**
  * A repo on GitHub (`githubRepo` set): a bare origin, the board's checkout of it, and someone else's
  * clone (`other`) that pushes behind its back. Origin's main has `a.txt`; `feat`, pushed from the
- * checkout, changes its first line. The board has looked at it once.
+ * checkout, changes its first line. The board has looked at it once, unless not `looked`.
  */
-async function fixture(name: string) {
+async function fixture(name: string, { looked = true } = {}) {
   const origin = path.join(tmp, 'git', `${name}.git`)
   const repo = path.join(tmp, 'git', name)
   const other = path.join(tmp, 'git', `${name}-other`)
@@ -140,7 +141,7 @@ async function fixture(name: string) {
     .values({ projectId, name, repoPath: repo, baseBranch: 'main', githubRepo: `acme/${name}` })
     .returning()
     .get().id
-  await look(repo)
+  if (looked) await look(repo)
   let n = 0
   /** Someone else's commit writing `text` to `file`, pushed to origin's `branch`. */
   const move = (file: string, text: string, branch = 'main') => {
@@ -155,6 +156,7 @@ async function fixture(name: string) {
   return {
     projectId,
     repoId,
+    origin,
     repo,
     git,
     feat: git('rev-parse', 'feat'),
@@ -197,7 +199,12 @@ const ghPr = (f: Fixture, over: Partial<MyGhPr> = {}): MyGhPr => ({
   ...over,
 })
 
-const queued = async (f: Fixture) => (await prs.listPrs(f.projectId)).find((p) => p.number === 1)!
+const queued = async (f: Fixture, number = 1) =>
+  (await prs.listPrs(f.projectId)).find((p) => p.number === number)!
+
+/** A PR from a fork, number 2: its head is in no checkout of the board. */
+const forkPr = (f: Fixture, over: Partial<MyGhPr> = {}) =>
+  ghPr(f, { number: 2, headRefName: 'fork/feat', headRefOid: FORK_HEAD, ...over })
 const mergeTrees = () => spawned.filter((s) => s.file === 'git' && s.args[0] === 'merge-tree').length
 
 describe("a PR's merge state, checked in the checkout", { timeout: 60_000 }, () => {
@@ -380,6 +387,85 @@ describe("a PR's merge state, checked in the checkout", { timeout: 60_000 }, () 
     expect((await queued(f)).merge).toBe('conflicts')
     expect(mergeTrees()).toBe(1)
     expect(state()).toEqual(before)
+  })
+})
+
+describe('a first look at origin, which is no move', { timeout: 60_000 }, () => {
+  /** GitHub's word on both PRs: the one of `feat` blocked by branch protection, the fork's mergeable. */
+  const said = (f: Fixture) => [ghPr(f, { mergeStateStatus: 'BLOCKED' }), forkPr(f)]
+
+  const expectGithubsWord = async (f: Fixture) => {
+    const fetchedAt = f.row().fetchedAt
+    expect(await queued(f)).toMatchObject({
+      merge: 'blocked',
+      mergeCheck: { source: 'github', at: fetchedAt, outdated: false },
+    })
+    expect(await queued(f, 2)).toMatchObject({
+      merge: 'clean',
+      mergeCheck: { source: 'github', at: fetchedAt, outdated: false },
+    })
+  }
+
+  it("leaves GitHub's word standing after the board first looks at a repo just added", async () => {
+    const f = await fixture('first-look', { looked: false })
+    answer = () => said(f)
+    await prs.refreshPrs(f.projectId)
+    await look(f.repo)
+    await settle()
+    expect(asked).toHaveLength(1)
+    await expectGithubsWord(f)
+  })
+
+  it('leaves it standing after the repo is pointed at another checkout of origin, until the base really moves', async () => {
+    const f = await fixture('repath')
+    answer = () => said(f)
+    await prs.refreshPrs(f.projectId)
+    const again = path.join(tmp, 'git', 'repath-again')
+    execFileSync('git', ['clone', '-q', f.origin, again], { stdio: 'ignore' })
+    const { updateRepo } = await import('./repos')
+    await updateRepo(f.repoId, { repoPath: again }, 'enrique')
+    await look(again)
+    await settle()
+    expect(asked).toHaveLength(1)
+    expect(
+      dbm.db
+        .select()
+        .from(dbm.schema.originRefMoves)
+        .where(eq(dbm.schema.originRefMoves.repoId, f.repoId))
+        .all(),
+    ).toEqual([])
+    await expectGithubsWord(f)
+
+    // A real move after GitHub's word, which GitHub does not answer for: the fork's PR is checking, and
+    // the conflict found here wins.
+    answer = failing
+    f.conflictingMove()
+    await look(again)
+    await settle()
+    expect(await queued(f)).toMatchObject({ merge: 'conflicts', mergeCheck: { source: 'local' } })
+    expect(await queued(f, 2)).toMatchObject({
+      merge: 'checking',
+      mergeCheck: { source: 'github', outdated: true },
+    })
+  })
+})
+
+describe('no gh of its own', { timeout: 60_000 }, () => {
+  it('runs no gh to serve the queue and a ticket, the refresh a move starts included', async () => {
+    const f = await fixture('no-gh')
+    answer = () => [ghPr(f)]
+    await prs.refreshPrs(f.projectId)
+    const t = f.ticket()
+    spawned.length = 0
+    f.conflictingMove()
+    await look(f.repo)
+    await settle()
+    // The move had GitHub asked, through the fake.
+    expect(asked).toHaveLength(2)
+    expect((await needs.ticketView(t.id)).pr!.queue!.merge).toBe('conflicts')
+    expect((await queued(f)).merge).toBe('conflicts')
+    expect(mergeTrees()).toBe(1)
+    expect(spawned.filter((s) => s.file === 'gh')).toEqual([])
   })
 })
 

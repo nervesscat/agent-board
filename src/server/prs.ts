@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, or } from 'drizzle-orm'
+import { and, desc, eq, gt, gte, inArray, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import type { PrCheck } from '#/lib/constants'
@@ -143,7 +143,7 @@ export interface MergeCheck {
   at: string | null
   /** The base branch, on origin. */
   base: string
-  /** GitHub's word was given before the board saw origin's base where it is now: `checking` until asked again. */
+  /** The board saw origin's base move after GitHub gave its word: `checking` until asked again. */
   outdated: boolean
 }
 
@@ -168,11 +168,29 @@ const originRef = (repoId: number | null, ref: string) =>
         .get()
 
 /**
+ * Whether the board saw origin's branch move after `since`. Only a recorded move counts: a first look
+ * at a repo (a new one, or one pointed at another checkout) notes where the branch is without it
+ * having moved.
+ */
+const movedSince = (repoId: number, ref: string, since: string) =>
+  !!db
+    .select({ id: schema.originRefMoves.id })
+    .from(schema.originRefMoves)
+    .where(
+      and(
+        eq(schema.originRefMoves.repoId, repoId),
+        eq(schema.originRefMoves.ref, ref),
+        gt(schema.originRefMoves.seenAt, since),
+      ),
+    )
+    .get()
+
+/**
  * GitHub's word on an open PR, unless the board saw origin's base move after it was given: that word
  * is about an older base, so the PR is `checking` until a refresh brings a new one.
  */
-function githubMerge(pr: MergeRow, base: schema.OriginRef | undefined): Merge {
-  const outdated = pr.open && !!base && pr.fetchedAt < base.seenAt
+function githubMerge(pr: MergeRow): Merge {
+  const outdated = pr.open && pr.repoId !== null && movedSince(pr.repoId, pr.baseRef, pr.fetchedAt)
   return {
     merge: outdated ? 'checking' : mergeState(pr),
     mergeCheck: { source: 'github', at: pr.fetchedAt, base: pr.baseRef, outdated },
@@ -211,14 +229,14 @@ function localConflicts(repoPath: string, base: string, head: string, fetchedAt:
  * origin's base as the board last saw it, in the repo's checkout (no GitHub call), so a base that moved
  * on origin since GitHub was asked shows at the next fetch:
  * - conflicts here are conflicts, whatever GitHub said;
- * - a clean merge here is clean, unless GitHub, asked since the board saw the base there, says it
+ * - a clean merge here is clean, unless GitHub, asked since the board last saw the base move, says it
  *   conflicts, is behind or is blocked (branch protection is GitHub's call);
  * - without a verdict here (a fork's head is not in the checkout, git failed), GitHub's word, as
  *   `githubMerge` reads it.
  */
 async function prMerge(pr: MergeRow, repo: schema.Repo | undefined): Promise<Merge> {
   const base = pr.open && repo ? originRef(repo.id, pr.baseRef) : undefined
-  const github = githubMerge(pr, base)
+  const github = githubMerge(pr)
   if (!repo || !base) return github
   const { checkedAt } = fetchStatus(repo.repoPath)
   const conflicts = await localConflicts(repo.repoPath, base.sha, pr.headSha, checkedAt)
@@ -661,7 +679,7 @@ export function prForTicket(ticket: schema.Ticket) {
           open: row.open,
           status: prStatus(row),
           headSha: row.headSha,
-          ...prState(row, githubMerge(row, row.open ? originRef(repo.id, row.baseRef) : undefined)),
+          ...prState(row, githubMerge(row)),
         }
       : null,
     latestReview: r
