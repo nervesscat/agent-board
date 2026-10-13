@@ -8,6 +8,7 @@ import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
 import { type AuthMode, authMode } from './config'
 import {
+  addsNothing,
   aheadBehind,
   type BranchInfo,
   branchReach,
@@ -164,6 +165,22 @@ export function reachAt(repoPath: string, sha: string, bases: string[], refs: Re
     // Bases at the same commit answer alike and the first of them is kept: so is its name.
     return reach && { ...reach, into: bases[shas.indexOf(reach.into)]! }
   })
+}
+
+/**
+ * Whether merging a commit into a base would change nothing, by both commits: what a `rebased` verdict
+ * needs before its branch may go. `git cherry` matches patches only, and passes a merge commit's own
+ * change (a merge commit has no patch) or one that differs in whitespace alone.
+ */
+const contentMemo = new Map<string, Promise<boolean>>()
+
+/** `addsNothing` for commit `sha` and a base ref as `baseRefs` names it; false when git cannot tell. */
+function contentIn(repoPath: string, sha: string, base: string, refs: Refs): Promise<boolean> {
+  const baseSha = refSha(base, refs)
+  if (!baseSha) return Promise.resolve(false)
+  return memo(contentMemo, REACH_MEMO_MAX, [repoPath, baseSha, sha].join('\0'), () =>
+    addsNothing(repoPath, baseSha, sha),
+  ).catch(() => false)
 }
 
 /** A commit's subject and date, and how far apart two commits are: by their shas, so never stale. */
@@ -615,11 +632,14 @@ function workOf(
   }
 }
 
-const landed = (r: Reach | null) => !!r && r.state !== 'unique'
-
-/** Why a copy whose work did not land may not go: its own commits, or nothing to tell by. */
-function unlanded(reach: Reach | null, chain: string[]): string | null {
+/**
+ * Why a copy whose work did not land may not go: its own commits, its content when only its patches
+ * are in the base (`held`: whether merging it would change nothing), or nothing to tell by.
+ */
+function unlanded(reach: Reach | null, chain: string[], held: boolean): string | null {
   if (!reach) return `nothing to compare it against (${chain.join(', ') || 'no base'})`
+  if (reach.state === 'rebased' && !held)
+    return `its patches match ${reach.into} but its content does not: merging it would change ${reach.into}`
   if (reach.state !== 'unique') return null
   const n = reach.unique.length
   return `${n} commit${n === 1 ? '' : 's'} of its own not in ${reach.into}`
@@ -722,6 +742,8 @@ export async function cleanupReport(
       // A detached worktree several of the ticket's branches hold is one worktree: it goes with the
       // first of them, the ticket's own branch when that is one (claims follow `names`).
       const claimedBy = (tree: Worktree) => claimed.get(tree)?.find((c) => c.ticketId === t.id)?.branch
+      // Why each branch's local and origin copies may not go for where their work got; null when they may.
+      const unlandedOf = new Map<string, { local: string | null; remote: string | null }>()
       const branches = await Promise.all(
         names.map(async (name): Promise<LeftoverBranch> => {
           const local = state?.refs.local.get(name) ?? null
@@ -749,6 +771,15 @@ export async function cleanupReport(
                   bases.filter((b) => b.startsWith('origin/')),
                 )
               : null,
+          ])
+          // A `rebased` copy goes only once merging it would change nothing, as an `edited` one.
+          const content = (r: Reach | null, sha: string | null) =>
+            r?.state === 'rebased' && repo && state && sha
+              ? contentIn(repo.repoPath, sha, r.into, state.refs)
+              : Promise.resolve(true)
+          const [localHeld, originHeld] = await Promise.all([
+            content(localReach, local),
+            content(originReach, remote),
           ])
           const pr =
             repo && remote
@@ -792,6 +823,11 @@ export async function cleanupReport(
           const blocked = removable.find((w) => w.protected)
           const reachOfBranch = local ? localReach : originReach
           const shared = common ?? guarded
+          const notLanded = {
+            local: unlanded(localReach, into, localHeld),
+            remote: unlanded(originReach, into, originHeld),
+          }
+          unlandedOf.set(name, notLanded)
           return {
             name,
             local,
@@ -810,13 +846,11 @@ export async function cleanupReport(
                     ? 'no local branch'
                     : checkedOut
                       ? `checked out in ${checkedOut.main ? 'the main checkout' : checkedOut.path}`
-                      : unlanded(localReach, into)),
+                      : notLanded.local),
               ),
               remote: verdict(
                 shared ??
-                  (!remote
-                    ? 'not on origin'
-                    : (kept?.origin.get(name) ?? (pr ? null : unlanded(originReach, into)))),
+                  (!remote ? 'not on origin' : (kept?.origin.get(name) ?? (pr ? null : notLanded.remote))),
               ),
               worktrees: verdict(
                 shared ??
@@ -824,7 +858,7 @@ export async function cleanupReport(
                     ? 'no worktree to remove'
                     : blocked
                       ? `${blocked.path}: ${blocked.protected}`
-                      : unlanded(reachOfBranch, into)),
+                      : notLanded[local ? 'local' : 'remote']),
               ),
             },
           }
@@ -891,8 +925,9 @@ export async function cleanupReport(
           branches.every(
             (b) =>
               !b.protected &&
-              (!b.local || landed(b.reach)) &&
-              (!b.remote || ((landed(b.remoteReach) || !!b.mergedPr) && !kept?.origin.has(b.name))) &&
+              (!b.local || !unlandedOf.get(b.name)!.local) &&
+              (!b.remote ||
+                ((!unlandedOf.get(b.name)!.remote || !!b.mergedPr) && !kept?.origin.has(b.name))) &&
               b.worktrees.every((w) => w.main || !w.protected),
           ),
       }

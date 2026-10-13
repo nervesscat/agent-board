@@ -2082,6 +2082,114 @@ describe('a repository or another worktree inside the worktree', () => {
   })
 })
 
+describe('a branch whose patches are in the base but its content is not', () => {
+  // Made by git itself, in a worktree of its own: the repo has main checked out.
+  const scratch = path.join(tmp, 'rebased-scratch')
+  const s = gitIn(scratch)
+  const write = (file: string, text: string) => fs.writeFileSync(path.join(scratch, file), text)
+  const commit = (message: string, files: Record<string, string>) => {
+    for (const [file, text] of Object.entries(files)) write(file, text)
+    s('add', '--', ...Object.keys(files))
+    s('commit', '-q', '-m', message)
+    return s('rev-parse', 'HEAD')
+  }
+  /** Starts `branch` at main, in the scratch worktree. */
+  const branchOff = (branch: string) => s('checkout', '-q', '-b', branch, 'main')
+  /** Main moves to what the scratch worktree has checked out, which then leaves its branch. */
+  const mainHere = () => {
+    git('update-ref', 'refs/heads/main', s('rev-parse', 'HEAD'))
+    s('checkout', '-q', '--detach', 'main')
+  }
+  const why = (base: string) => `its patches match ${base} but its content does not`
+
+  beforeAll(() => git('worktree', 'add', '-q', '--detach', scratch, 'main'))
+  afterAll(() => git('worktree', 'remove', '--force', scratch))
+
+  it('keeps one whose fix was made in a merge commit the base never took, here and on origin', async () => {
+    branchOff('feat/r1')
+    const work = commit('r1 work', { 'r1.txt': 'work\n' })
+    s('checkout', '-q', '--detach', 'main')
+    commit('r1 meanwhile on main', { 'r1-main.txt': 'main\n' })
+    mainHere()
+    s('checkout', '-q', 'feat/r1')
+    s('merge', '-q', '--no-commit', 'main')
+    write('r1-fix.txt', 'the fix, made in the merge\n')
+    s('add', 'r1-fix.txt')
+    s('commit', '-q', '-m', 'merge main, fixing the build')
+    const sha = s('rev-parse', 'HEAD')
+    // Main takes the branch's commit alone (cherry-picked, or a rebase merge): the merge's fix stays out.
+    s('checkout', '-q', '--detach', 'main')
+    s('cherry-pick', work)
+    mainHere()
+    git('push', '-q', 'origin', 'main', 'feat/r1')
+    expect(git('diff', 'main', 'feat/r1', '--name-only')).toBe('r1-fix.txt')
+    const t = done('r1', 'feat/r1')
+
+    const b = (await branchOf(t.id, 'feat/r1'))!
+    expect(b.reach?.state).toBe('rebased')
+    expect(b.remoteReach?.state).toBe('rebased')
+    expect(b.can.local).toEqual({ ok: false, reason: expect.stringContaining(why('main')) })
+    expect(b.can.remote).toEqual({ ok: false, reason: expect.stringContaining(why('origin/main')) })
+    const [local, remote] = await del([
+      { ticketId: t.id, branch: 'feat/r1', kind: 'local', sha },
+      { ticketId: t.id, branch: 'feat/r1', kind: 'remote', sha },
+    ])
+    expect(local).toMatchObject({ outcome: 'refused', reason: expect.stringContaining(why('main')) })
+    expect(remote).toMatchObject({ outcome: 'refused', reason: expect.stringContaining(why('origin/main')) })
+    expect(git('rev-parse', 'refs/heads/feat/r1')).toBe(sha)
+    expect(hasRef(origin, 'refs/heads/feat/r1')).toBe(true)
+
+    git('worktree', 'add', '-q', wt('r1'), 'feat/r1')
+    const withTree = (await branchOf(t.id, 'feat/r1'))!
+    expect(withTree.can.worktrees).toEqual({ ok: false, reason: expect.stringContaining(why('main')) })
+    const [trees] = await del([
+      { ticketId: t.id, branch: 'feat/r1', kind: 'worktrees', sha, worktrees: [wt('r1')] },
+    ])
+    expect(trees).toMatchObject({ outcome: 'refused', removed: [] })
+    expect(fs.existsSync(wt('r1'))).toBe(true)
+    expect(git('rev-parse', 'refs/heads/feat/r1')).toBe(sha)
+  })
+
+  it('keeps one amended in whitespace alone after the base took its commit', async () => {
+    branchOff('feat/r2')
+    const work = commit('r2 add g', { 'r2.py': 'def g(x):\n    if x:\n        pass\n    return 1\n' })
+    s('checkout', '-q', '--detach', 'main')
+    s('cherry-pick', work)
+    mainHere()
+    s('checkout', '-q', 'feat/r2')
+    // Indentation alone, which patch ids do not see: in Python, another program.
+    write('r2.py', 'def g(x):\n    if x:\n        pass\n        return 1\n')
+    s('commit', '-q', '--amend', '-a', '-m', 'r2 add g')
+    const sha = s('rev-parse', 'HEAD')
+    s('checkout', '-q', '--detach', 'main')
+    const t = done('r2', 'feat/r2')
+
+    const b = (await branchOf(t.id, 'feat/r2'))!
+    expect(b.reach?.state).toBe('rebased')
+    expect(b.can.local).toEqual({ ok: false, reason: expect.stringContaining(why('main')) })
+    const [r] = await del([{ ticketId: t.id, branch: 'feat/r2', kind: 'local', sha }])
+    expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringContaining(why('main')) })
+    expect(git('rev-parse', 'refs/heads/feat/r2')).toBe(sha)
+  })
+
+  it('still deletes one whose commits the base took with the same content', async () => {
+    branchOff('feat/r3')
+    const work = commit('r3 work', { 'r3.txt': 'work\n' })
+    s('checkout', '-q', '--detach', 'main')
+    commit('r3 meanwhile on main', { 'r3-main.txt': 'main\n' })
+    s('cherry-pick', work)
+    mainHere()
+    const t = done('r3', 'feat/r3')
+
+    const b = (await branchOf(t.id, 'feat/r3'))!
+    expect(b.reach?.state).toBe('rebased')
+    expect(b.can.local).toEqual({ ok: true, reason: null })
+    const [r] = await del([{ ticketId: t.id, branch: 'feat/r3', kind: 'local', sha: work }])
+    expect(r).toMatchObject({ outcome: 'deleted' })
+    expect(hasRef(repo, 'refs/heads/feat/r3')).toBe(false)
+  })
+})
+
 // Last: it loads the module afresh, as a hot reload of the board's server code does.
 describe('a hot reload of the server code', () => {
   it('still takes the deletions in one repository one after the other', async () => {

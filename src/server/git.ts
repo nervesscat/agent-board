@@ -674,13 +674,20 @@ async function reachInto(repoPath: string, ref: string, base: string): Promise<R
       return { sha: sha!, subject: subject.join(' ') }
     })
   if (!unique.length) return { state: 'rebased', into: base, unique }
+  return { state: (await addsNothing(repoPath, base, ref)) ? 'edited' : 'unique', into: base, unique }
+}
+
+/**
+ * Whether merging `ref` into `base` would change nothing: the merge's tree is the base's own. Written
+ * by `merge-tree`, which touches no ref and no checkout.
+ */
+export async function addsNothing(repoPath: string, base: string, ref: string): Promise<boolean> {
   // A conflicting merge exits non-zero: that branch surely still has something of its own.
   const [merged, baseTree] = await Promise.all([
     git(repoPath, ['merge-tree', '--write-tree', base, ref]).catch(() => ''),
     git(repoPath, ['rev-parse', `${base}^{tree}`]),
   ])
-  const tree = merged.split('\n')[0]
-  return { state: tree === baseTree ? 'edited' : 'unique', into: base, unique }
+  return merged.split('\n')[0] === baseTree
 }
 
 /**

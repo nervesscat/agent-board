@@ -199,7 +199,8 @@ exactly what will go. Just before it acts, the board checks every item again on 
 
 - the ticket is done, cancelled or archived;
 - the work landed: merged, rebased or edited in, or for origin's copy a merged PR whose head is that
-  very commit;
+  very commit; a rebased branch also needs its content in the base, as an edited one does (patches
+  match without a merge commit's own change, or one in whitespace alone);
 - the branch is still at the commit the human saw, and no worktree came up that they were not shown;
 - it is not protected: the repo's base branch, the main checkout's branch, origin's default branch, or
   anything a ticket in work or an open PR uses or stands on, in any project that reads the repository
