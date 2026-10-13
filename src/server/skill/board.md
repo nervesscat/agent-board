@@ -143,14 +143,16 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
     log lines and the log paths). Do not run `pnpm dev` in your session for it: that dies with
     your session. `start_preview` with `restart: true` rebuilds after more commits;
     `stop_preview` stops it, and the board stops it by itself once the PR is merged or the
-    ticket is done, cancelled, archived or its workspace removed.
+    ticket is done, cancelled, archived or its workspace removed. The human's preview limit (8 by
+    default) caps how many the board runs at once; a start beyond it is refused with the limit.
   - Anything else: start your branch from your worktree on a free port, with a copy of the data
     rather than the real one (the project's `instructions` say how), then `set_preview` with the
     `workspaceId` and `previewUrl` once it answers (or `previewUrl` on `add_workspace` when it
     already runs). The ticket page then shows a Preview card with an Open button and whether it
     is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
     `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port
-    the human uses day to day.
+    the human uses day to day. The human may stop it from the Previews page when it listens on
+    loopback and runs from the workspace's worktree; its link stays, as not running.
 - Questions are posts too: `comment` on the ticket; the human answers with a post or a reply
   under yours (`comment` on the post, `parentType: update`, replies there). A choice between clear
   options (an approach, a trade-off, a scope call) is an `ask_decision` instead: the question with
