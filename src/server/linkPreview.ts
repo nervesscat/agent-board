@@ -350,12 +350,17 @@ interface Target {
   roots: string[]
 }
 
-/** What can be said without looking at the processes: the link, its port and the worktree. */
-function linkTarget(ws: schema.Workspace): Target | Refusal {
+/**
+ * What can be said without looking at the processes: the link, its port and the worktree. `ownStopped`
+ * judges it as it will be once the board-run preview of the workspace itself is stopped, for a caller
+ * that stops that preview first: every other check stands, and that preview still holds its port, so a
+ * link to it (its own url) stays refused.
+ */
+function linkTarget(ws: schema.Workspace, opts: { ownStopped?: boolean } = {}): Target | Refusal {
   if (!ws.previewUrl) return refuse(409, 'the workspace has no preview link')
   if (authMode().boardEnv === 'development')
     return refuse(400, 'links are stopped by the live board (or a test-mode one), not by a preview')
-  if (isActive(managedPreview(ws.id)))
+  if (!opts.ownStopped && isActive(managedPreview(ws.id)))
     return refuse(
       409,
       'the board runs this preview itself: stop it with the Stop of a preview the board runs',
@@ -376,9 +381,10 @@ function linkTarget(ws: schema.Workspace): Target | Refusal {
 /**
  * The port of a workspace's link when the rule could stop the server behind it, as far as that can be
  * told without looking at the processes (`linkTarget`); null when the rule refuses it before that.
+ * `ownStopped`: as it will be once the workspace's own board-run preview is stopped.
  */
-export function stoppableLinkPort(ws: schema.Workspace): number | null {
-  const t = linkTarget(ws)
+export function stoppableLinkPort(ws: schema.Workspace, opts: { ownStopped?: boolean } = {}): number | null {
+  const t = linkTarget(ws, opts)
   return t.ok ? t.port : null
 }
 

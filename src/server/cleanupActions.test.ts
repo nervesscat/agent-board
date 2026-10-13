@@ -543,6 +543,14 @@ s.listen(0, '127.0.0.1', () => console.log(s.address().port))`
     afterAll(() => {
       for (const child of running) child.kill('SIGKILL')
     })
+    // A port free now and out of the range the live board's own previews use: the fake never binds it.
+    const free = (): Promise<number> =>
+      new Promise((resolve) => {
+        const s = net.createServer().listen(0, '127.0.0.1', () => {
+          const port = (s.address() as AddressInfo).port
+          s.close(() => resolve(port >= 47100 && port <= 47199 ? free() : port))
+        })
+      })
 
     it('stops it before the worktree goes, when it runs from there', async () => {
       const { 'feat/g5': sha } = land(['feat/g5'])
@@ -650,14 +658,6 @@ s.listen(0, '127.0.0.1', () => console.log(s.address().port))`
       const mp = await import('./managedPreview')
       const lp = await import('./linkPreview')
       mp.setPreviewRunner(new FakeRunner())
-      // A port free now and out of the range the live board's own previews use: the fake never binds it.
-      const free = (): Promise<number> =>
-        new Promise((resolve) => {
-          const s = net.createServer().listen(0, '127.0.0.1', () => {
-            const port = (s.address() as AddressInfo).port
-            s.close(() => resolve(port >= 47100 && port <= 47199 ? free() : port))
-          })
-        })
       const held = await free()
       const ports = { ...mp.PORTS }
       const asks = vi.spyOn(lp, 'stopLinkPreview')
@@ -716,6 +716,72 @@ s.listen(0, '127.0.0.1', () => console.log(s.address().port))`
         await s.exited
         expect(activity(t.id)).toContain(`stopped the preview on :${s.port}`)
         expect(fs.existsSync(wt('g5d'))).toBe(false)
+      } finally {
+        asks.mockRestore()
+        Object.assign(mp.PORTS, ports)
+      }
+    })
+
+    it('stops one linked on the workspace whose preview it stopped first, as the report listed it', async () => {
+      const mp = await import('./managedPreview')
+      const lp = await import('./linkPreview')
+      const runner = new FakeRunner()
+      mp.setPreviewRunner(runner)
+      const held = await free()
+      const ports = { ...mp.PORTS }
+      const asks = vi.spyOn(lp, 'stopLinkPreview')
+      try {
+        const { 'feat/g5e': sha } = land(['feat/g5e'])
+        git('worktree', 'add', '-q', wt('g5e'), 'feat/g5e')
+        // Installed already: the preview goes straight to its build.
+        fs.mkdirSync(path.join(wt('g5e'), 'node_modules', '.pnpm'), { recursive: true })
+        fs.writeFileSync(path.join(wt('g5e'), 'node_modules', '.pnpm', 'lock.yaml'), LOCK)
+        runner.watch = wt('g5e')
+        const t = features.createTicket(
+          projectId,
+          { title: 'g5e', branch: 'feat/g5e', status: 'in_progress' },
+          'claude',
+        )
+        const ws = features.addWorkspace(t.id, { name: 'wt', branch: 'feat/g5e', path: wt('g5e') }, 'claude')
+        Object.assign(mp.PORTS, { from: held, to: held })
+        mp.startPreview(ws.id, 'enrique')
+        await expect.poll(() => mp.managedPreview(ws.id)?.status, { timeout: 10_000 }).toBe('running')
+        expect(mp.managedPreview(ws.id)!.port).toBe(held)
+        // The agent's own server, from the worktree, linked on that same workspace while its preview runs.
+        const s = await serve(path.join(wt('g5e'), 'data', 'server.js'), wt('g5e'))
+        expect(s.port).not.toBe(held)
+        const url = `http://127.0.0.1:${s.port}`
+        features.setWorkspacePreview(ws.id, url, 'claude')
+        // Closed behind the board's back: its preview still runs.
+        dbm.db.update(dbm.schema.tickets).set({ status: 'done' }).where(eq(dbm.schema.tickets.id, t.id)).run()
+        const b = (await branchOf(t.id, 'feat/g5e'))!
+        expect(b.worktrees.map((w) => w.previews.map((p) => p.workspaceId))).toEqual([[ws.id]])
+        expect(b.worktrees.map((w) => w.linkedPreviews)).toEqual([
+          [{ workspaceId: ws.id, ticketId: t.id, url, port: s.port }],
+        ])
+
+        const [r] = await del([
+          {
+            ticketId: t.id,
+            branch: 'feat/g5e',
+            kind: 'worktrees',
+            sha,
+            worktrees: b.worktrees.map((w) => w.path),
+          },
+        ])
+        expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
+        expect(runner.killed).toEqual([{ pid: expect.any(Number), worktreeThere: true }])
+        expect(asks.mock.calls.map(([workspaceId]) => workspaceId)).toEqual([ws.id])
+        await s.exited
+        expect(await answers(s.port)).toBe(false)
+        // Its preview first, then the server.
+        const log = activity(t.id)
+        expect(log).toContain('stopped the preview (its worktree was removed)')
+        expect(log.indexOf(`stopped the preview on :${s.port}`)).toBeGreaterThan(
+          log.indexOf('stopped the preview (its worktree was removed)'),
+        )
+        expect(fs.existsSync(wt('g5e'))).toBe(false)
+        expect(hasRef(repo, 'refs/heads/feat/g5e')).toBe(false)
       } finally {
         asks.mockRestore()
         Object.assign(mp.PORTS, ports)

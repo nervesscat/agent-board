@@ -779,3 +779,90 @@ describe('on a preview board', { timeout: 60_000 }, () => {
     await s.exited
   })
 })
+
+describe('the links a worktree’s removal stops', () => {
+  // A port free now and out of the range the live board's own previews use: a fake preview takes it,
+  // and never binds it.
+  const previewPort = async (): Promise<number> => {
+    const port = await freePort()
+    return port >= 47100 && port <= 47199 ? previewPort() : port
+  }
+  /** The board runs the workspace's preview (faked) on `port`. */
+  async function runPreview(workspaceId: number, port: number) {
+    const ports = { ...mp.PORTS }
+    Object.assign(mp.PORTS, { from: port, to: port })
+    try {
+      mp.startPreview(workspaceId, 'claude')
+      await vi.waitFor(() => expect(mp.managedPreview(workspaceId)?.status).toBe('running'))
+    } finally {
+      Object.assign(mp.PORTS, ports)
+    }
+    expect(mp.managedPreview(workspaceId)!.port).toBe(port)
+  }
+  const linkedAt = async (worktree: string) => (await import('./cleanup')).linkedPreviews()(worktree)
+
+  it('lists a link of its own on a workspace whose preview the board runs from the worktree', async () => {
+    useFake()
+    const wt = boardWorktree()
+    const ws = features.addWorkspace(ticket().id, { name: 'wt', path: wt }, 'claude')
+    await runPreview(ws.id, await previewPort())
+    // The agent's own server, linked while the board's preview runs: the removal stops that preview first.
+    const port = await freePort()
+    const url = `http://127.0.0.1:${port}`
+    features.setWorkspacePreview(ws.id, url, 'claude')
+    expect(await linkedAt(wt)).toEqual([{ workspaceId: ws.id, ticketId: ws.ticketId, url, port }])
+    // The Previews page's Stop still refuses it while that preview runs.
+    expect(lp.stoppableLinkPort(wsRow(ws.id))).toBeNull()
+  })
+
+  it('never lists a link to the port of that preview itself', async () => {
+    useFake()
+    const wt = boardWorktree()
+    const ws = features.addWorkspace(ticket().id, { name: 'wt', path: wt }, 'claude')
+    const port = await previewPort()
+    await runPreview(ws.id, port)
+    // Its own link, as the board set it.
+    expect(wsRow(ws.id).previewUrl).toBe(mp.managedPreview(ws.id)!.url)
+    expect(await linkedAt(wt)).toEqual([])
+    features.setWorkspacePreview(ws.id, `http://localhost:${port}`, 'claude')
+    expect(await linkedAt(wt)).toEqual([])
+  })
+
+  it('leaves out a link the rule refuses for another reason while that preview runs', async () => {
+    useFake()
+    const wt = boardWorktree()
+    const ws = features.addWorkspace(ticket().id, { name: 'wt', path: wt }, 'claude')
+    await runPreview(ws.id, await previewPort())
+    const linked = async (url: string, at = wt) => {
+      features.setWorkspacePreview(ws.id, url, 'claude')
+      return linkedAt(at)
+    }
+    // The board's own port, and one off this machine.
+    expect(await linked(`http://127.0.0.1:${boardPort}`)).toEqual([])
+    expect(await linked('https://example.com')).toEqual([])
+    // A port the board's preview of another worktree holds.
+    const theirs = features.addWorkspace(ticket().id, { name: 'wt', path: boardWorktree() }, 'claude')
+    const theirPort = await previewPort()
+    await runPreview(theirs.id, theirPort)
+    expect(await linked(`http://127.0.0.1:${theirPort}`)).toEqual([])
+
+    const own = `http://127.0.0.1:${await freePort()}`
+    // Registered at another folder since its preview started: that folder's removal stops no preview of it.
+    const moved = boardWorktree()
+    dbm.db.update(dbm.schema.workspaces).set({ path: moved }).where(eq(dbm.schema.workspaces.id, ws.id)).run()
+    expect(await linked(own, moved)).toEqual([])
+    dbm.db.update(dbm.schema.workspaces).set({ path: wt }).where(eq(dbm.schema.workspaces.id, ws.id)).run()
+    expect(await linked(own)).toHaveLength(1)
+
+    // A preview board stops no link.
+    const config = await import('./config')
+    const mode = vi
+      .spyOn(config, 'authMode')
+      .mockReturnValue({ boardEnv: 'development', off: true, human: 'enrique' })
+    try {
+      expect(await linkedAt(wt)).toEqual([])
+    } finally {
+      mode.mockRestore()
+    }
+  })
+})

@@ -297,14 +297,18 @@ export interface LinkedPreview {
  * there. A link that rule refuses before it looks at any process is left out (`stoppableLinkPort`): off
  * this machine, on the board's own port, on a port a preview the board runs holds (one from this
  * worktree is listed and stopped as that preview), or at a folder the board may not act on for the
- * workspace's ticket (one not next to its repo's main checkout, or not a worktree of that repo).
+ * workspace's ticket (one not next to its repo's main checkout, or not a worktree of that repo). The
+ * removal stops a preview the board runs from the worktree first, so a workspace's link is judged as
+ * once its own such preview stopped: an agent's own server it links is listed, its preview's url not.
  */
 export function linkedPreviews(): (worktreePath: string) => LinkedPreview[] {
   const links = db.select().from(schema.workspaces).where(isNotNull(schema.workspaces.previewUrl)).all()
+  const previews = activePreviews()
   return (worktreePath) =>
     links.flatMap((w) => {
       if (!w.path || !samePath(w.path, worktreePath)) return []
-      const port = stoppableLinkPort(w)
+      const ownStopped = previews.some((p) => p.workspaceId === w.id && samePath(p.path, worktreePath))
+      const port = stoppableLinkPort(w, { ownStopped })
       return port ? [{ workspaceId: w.id, ticketId: w.ticketId, url: w.previewUrl!, port }] : []
     })
 }

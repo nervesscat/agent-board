@@ -361,9 +361,10 @@ async function stopPreviews(worktreePath: string, actor: string) {
  * A server an agent started from the worktree and linked on a workspace registered at it stops too,
  * when the rule of `linkPreview.ts` tells it is that worktree's (that stop logs it): the ones the
  * report read for this delete lists for it (`linkedPreviews`), as it listed them before the worktree's
- * own preview stopped. A link to that preview's port was the preview's: once the port is free it is
- * no server to ask about. One the rule leaves alone, or a link nothing listens on, changes nothing:
- * the removal stays within the worktree.
+ * own preview stopped. That list judged each link as once that preview stopped: a link to its port was
+ * the preview's, and once the port is free it is no server to ask about; another link on its workspace
+ * is an agent's own server, asked about now. One the rule leaves alone, or a link nothing listens on,
+ * changes nothing: the removal stays within the worktree.
  */
 async function stopLinkPreviews(linked: LinkedPreview[], actor: string) {
   for (const l of linked) await stopLinkPreview(l.workspaceId, actor).catch(() => null)
