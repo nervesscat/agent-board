@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { eq, inArray } from 'drizzle-orm'
+import { eq, inArray, isNotNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
@@ -16,7 +16,9 @@ import {
   trackedFiles,
   worktreeChanges,
 } from './git'
+import { stopLinkPreview } from './linkPreview'
 import { activePreviews, stopPreview } from './managedPreview'
+import { isLocalUrl } from './preview'
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
 import { listRepos } from './repos'
@@ -236,6 +238,7 @@ async function deleteOne(
   const restore: string[] = []
   for (const w of trees) {
     await stopPreviews(w.path, actor)
+    await stopLinkPreviews(w.path, actor)
     // Looked for again: a link made since the check goes as a link too.
     const links = await linksOut(w.path)
     if (typeof links === 'string')
@@ -341,6 +344,21 @@ async function deleteLocal(
 async function stopPreviews(worktreePath: string, actor: string) {
   for (const p of activePreviews().filter((p) => samePath(p.path, worktreePath)))
     await stopPreview(p.workspaceId, 'its worktree was removed', actor)
+}
+
+/**
+ * A server an agent started from the worktree and linked on a workspace registered at it stops too,
+ * when the rule of `linkPreview.ts` tells it is that worktree's (that stop logs it). One the rule
+ * leaves alone, or a link nothing listens on, changes nothing: the removal stays within the worktree.
+ */
+async function stopLinkPreviews(worktreePath: string, actor: string) {
+  const linked = db
+    .select()
+    .from(schema.workspaces)
+    .where(isNotNull(schema.workspaces.previewUrl))
+    .all()
+    .filter((w) => w.path && w.previewUrl && isLocalUrl(w.previewUrl) && samePath(w.path, worktreePath))
+  for (const w of linked) await stopLinkPreview(w.id, actor).catch(() => null)
 }
 
 /** The project's workspaces registered at a removed worktree go too. */

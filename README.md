@@ -211,7 +211,10 @@ A worktree goes only when git lists no changes or untracked files in it (ignored
 each the link alone: on Windows git would delete what a junction leads to. A folder one leads to out
 of the worktree stays, and the result names each such link with where it led (`unlinked`); one of
 those that git tracks, or a folder that cannot be read, keeps the worktree. A preview the board runs
-from it is stopped first, and the workspaces registered at it are unregistered. Each
+from it is stopped first, and so is a server an agent started from it and linked on a workspace
+registered at it, when the rule of the Previews page's Stop tells it runs from there (one it does
+not stays running, and the worktree goes all the same); the workspaces registered at it are
+unregistered. Each
 deletion is logged on its ticket as `branch @ sha`, and the page keeps the commands that restore it.
 Agents never get these actions (403, and no MCP tool deletes); they delete local branches and
 worktrees themselves with the human's go-ahead, and never origin's. A board on a copy of the live

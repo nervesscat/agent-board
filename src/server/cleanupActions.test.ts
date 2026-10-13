@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -509,6 +509,93 @@ describe('deleting a worked branch with its worktrees', () => {
       dbm.db.select().from(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.id, ws.id)).get(),
     ).toBeUndefined()
     expect(fs.existsSync(wt('b9'))).toBe(false)
+  })
+
+  describe('a server an agent started from the worktree', { timeout: 60_000 }, () => {
+    // Listens on 127.0.0.1 and prints its port, as `pnpm dev` would serve a preview.
+    const SERVER = `const s = require('node:http').createServer((_q, r) => r.end('dev'))
+s.listen(0, '127.0.0.1', () => console.log(s.address().port))`
+    const running: ChildProcess[] = []
+    const serve = async (script: string, cwd: string) => {
+      fs.mkdirSync(path.dirname(script), { recursive: true })
+      fs.writeFileSync(script, SERVER)
+      const child = spawn(process.execPath, [script], { cwd, stdio: ['ignore', 'pipe', 'inherit'] })
+      running.push(child)
+      const exited = new Promise((resolve) => child.once('exit', resolve))
+      const port = await new Promise<number>((resolve, reject) => {
+        child.stdout!.once('data', (d: Buffer) => resolve(Number(d.toString().trim())))
+        child.once('exit', (code) => reject(new Error(`the server exited (${code}) before it listened`)))
+      })
+      return { child, port, exited }
+    }
+    const answers = (port: number) =>
+      fetch(`http://127.0.0.1:${port}`).then(
+        (r) => r.ok,
+        () => false,
+      )
+    afterAll(() => {
+      for (const child of running) child.kill('SIGKILL')
+    })
+
+    it('stops it before the worktree goes, when it runs from there', async () => {
+      const { 'feat/g5': sha } = land(['feat/g5'])
+      git('worktree', 'add', '-q', wt('g5'), 'feat/g5')
+      // In an ignored folder, as a dev server's files are: the worktree stays clean.
+      const s = await serve(path.join(wt('g5'), 'data', 'server.js'), wt('g5'))
+      const t = done('g5', 'feat/g5')
+      features.addWorkspace(
+        t.id,
+        { name: 'dev', branch: 'feat/g5', path: wt('g5'), previewUrl: `http://127.0.0.1:${s.port}` },
+        'claude',
+      )
+      expect(await answers(s.port)).toBe(true)
+      const b = (await branchOf(t.id, 'feat/g5'))!
+
+      const [r] = await del([
+        {
+          ticketId: t.id,
+          branch: 'feat/g5',
+          kind: 'worktrees',
+          sha,
+          worktrees: b.worktrees.map((w) => w.path),
+        },
+      ])
+      expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
+      await s.exited
+      expect(await answers(s.port)).toBe(false)
+      expect(fs.existsSync(wt('g5'))).toBe(false)
+      expect(hasRef(repo, 'refs/heads/feat/g5')).toBe(false)
+      expect(activity(t.id)).toContain(`stopped the preview on :${s.port}`)
+    })
+
+    it('leaves one alone that does not run from it, and removes the worktree all the same', async () => {
+      const { 'feat/g5b': sha } = land(['feat/g5b'])
+      git('worktree', 'add', '-q', wt('g5b'), 'feat/g5b')
+      // Linked on the worktree's workspace, but run from elsewhere: not the worktree's to stop.
+      const s = await serve(path.join(tmp, 'elsewhere', 'server.js'), tmp)
+      const t = done('g5b', 'feat/g5b')
+      features.addWorkspace(
+        t.id,
+        { name: 'dev', branch: 'feat/g5b', path: wt('g5b'), previewUrl: `http://127.0.0.1:${s.port}` },
+        'claude',
+      )
+      const b = (await branchOf(t.id, 'feat/g5b'))!
+
+      const [r] = await del([
+        {
+          ticketId: t.id,
+          branch: 'feat/g5b',
+          kind: 'worktrees',
+          sha,
+          worktrees: b.worktrees.map((w) => w.path),
+        },
+      ])
+      expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
+      expect(fs.existsSync(wt('g5b'))).toBe(false)
+      expect(await answers(s.port)).toBe(true)
+      expect(s.child.exitCode).toBeNull()
+      expect(activity(t.id)).not.toContain('stopped the preview')
+    })
   })
 
   it('goes on with the next item when one is refused, and answers both', async () => {
