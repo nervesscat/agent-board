@@ -41,7 +41,8 @@ export type LaneCounts = {
 
 /**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
- * theirs), and how many lanes it has in each stage. One pass over the project keeps this cheap.
+ * theirs), how many of those tasks are blocked on the human, and how many lanes it has in each stage.
+ * One pass over the project keeps this cheap.
  */
 function projectTickets(projectId: number) {
   const stages = listStages(projectId)
@@ -56,10 +57,12 @@ function projectTickets(projectId: number) {
     ? db.select().from(schema.tasks).where(inArray(schema.tasks.ticketId, ids)).all()
     : []
   const own = new Map<number, Progress>(rows.map((t) => [t.id, { done: 0, total: 0 }]))
+  const ownBlocked = new Map<number, number>()
   for (const task of allTasks) {
     const p = own.get(task.ticketId)!
     p.total++
     if (task.done) p.done++
+    else if (task.blocked) ownBlocked.set(task.ticketId, (ownBlocked.get(task.ticketId) ?? 0) + 1)
   }
   const agentNames = new Set(listAgents(projectId).map((a) => a.name.toLowerCase()))
   // Decisions still waiting on the human, per ticket.
@@ -80,16 +83,19 @@ function projectTickets(projectId: number) {
   const children = new Map<number, schema.Ticket[]>()
   for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
   // A cancelled lane's tasks are no longer part of the work.
+  const workingLanes = (id: number) =>
+    (children.get(id) ?? []).filter((lane) => kindOf(stages, lane.status) !== 'cancelled')
   const rollup = (id: number): Progress =>
-    (children.get(id) ?? [])
-      .filter((lane) => kindOf(stages, lane.status) !== 'cancelled')
-      .reduce(
-        (acc, lane) => {
-          const p = rollup(lane.id)
-          return { done: acc.done + p.done, total: acc.total + p.total }
-        },
-        { ...own.get(id)! },
-      )
+    workingLanes(id).reduce(
+      (acc, lane) => {
+        const p = rollup(lane.id)
+        return { done: acc.done + p.done, total: acc.total + p.total }
+      },
+      { ...own.get(id)! },
+    )
+  // Its open tasks and subtasks tagged blocked, its lanes' with them: the same scope as the rollup.
+  const blockedTasks = (id: number): number =>
+    workingLanes(id).reduce((n, lane) => n + blockedTasks(lane.id), ownBlocked.get(id) ?? 0)
   return rows.map((t) => {
     const lanes: LaneCounts = { total: 0, approved: 0, disapproved: 0, byStage: {} }
     for (const lane of children.get(t.id) ?? []) {
@@ -101,7 +107,15 @@ function projectTickets(projectId: number) {
     // Assigned to one of the project's agents: only that agent works it.
     const reserved = agentNames.has(t.assignee.toLowerCase())
     const decisions = openDecisions.get(t.id) ?? 0
-    return { ...t, reserved, decisions, progress: own.get(t.id)!, rollup: rollup(t.id), lanes }
+    return {
+      ...t,
+      reserved,
+      decisions,
+      blockedTasks: blockedTasks(t.id),
+      progress: own.get(t.id)!,
+      rollup: rollup(t.id),
+      lanes,
+    }
   })
 }
 
@@ -243,6 +257,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     workspaces: workspaces.map((w) => ({ ...w, managedPreview: managedPreview(w.id) })),
     progress: self.progress,
     rollup: self.rollup,
+    blockedTasks: self.blockedTasks,
     ancestors,
     lanes: lanes.map((l) => {
       const u = lastUpdate.get(l.id)
@@ -690,8 +705,41 @@ export function restoreTicket(id: number, actor: string) {
 
 // --- tasks ---
 
-/** A task to add: its text, or a top-level task with the subtasks that go under it. */
-export type NewTask = string | { text: string; subtasks?: string[] }
+/**
+ * A task to add: its text, or a top-level task with the subtasks that go under it. `blocked` tags it
+ * as waiting on the human, `blockedReason` says what they must do.
+ */
+export type NewTask =
+  | string
+  | { text: string; subtasks?: string[]; blocked?: boolean; blockedReason?: string }
+
+/** How long a blocked task's reason can be, as long as a task's text. */
+export const MAX_BLOCKED_REASON = 500
+
+/** A task's tag as a write asks for it: whether it waits on the human, and what for. */
+type BlockedTag = { blocked?: boolean; blockedReason?: string }
+
+/**
+ * The tag a write leaves on a task (`current`, null for a new one), or null when it does not touch it.
+ * `blocked: false` clears the reason with the tag; a reason goes only on a task that is or becomes
+ * blocked, and replaces the one it had; `blocked: true` alone keeps the one it had.
+ */
+function blockedTag(
+  input: BlockedTag,
+  current: Pick<schema.Task, 'blocked' | 'blockedReason'> | null,
+): { blocked: boolean; blockedReason: string } | null {
+  const reason = input.blockedReason?.trim()
+  if (reason !== undefined && reason.length > MAX_BLOCKED_REASON)
+    throw new HttpError(400, `blockedReason is longer than ${MAX_BLOCKED_REASON} characters`)
+  if (input.blocked === false) return { blocked: false, blockedReason: '' }
+  const blocked = input.blocked ?? current?.blocked ?? false
+  if (reason && !blocked) throw new HttpError(400, 'blockedReason goes with blocked: true')
+  if (!blocked || (input.blocked === undefined && reason === undefined)) return null
+  return { blocked: true, blockedReason: reason ?? (current?.blocked ? current.blockedReason : '') }
+}
+
+/** What a tick writes besides `done`: a done task waits on nobody, so its tag goes. */
+const ticked = (done: boolean) => (done ? { done, blocked: false, blockedReason: '' } : { done })
 
 function getTask(id: number) {
   const task = db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).get()
@@ -711,7 +759,7 @@ function settleParent(parentId: number) {
     .all()
   if (subtasks.length)
     db.update(schema.tasks)
-      .set({ done: subtasks.every((s) => s.done) })
+      .set(ticked(subtasks.every((s) => s.done)))
       .where(eq(schema.tasks.id, parentId))
       .run()
 }
@@ -720,7 +768,8 @@ function settleParent(parentId: number) {
  * Append tasks to a ticket: top-level ones (each with its subtasks, given as `{ text, subtasks }`), or
  * with `parentTaskId` subtasks of that top-level task of the ticket. Tasks go two levels deep, so a
  * subtask takes no subtasks of its own; a refused call writes nothing. A done parent that gains an open
- * subtask is open again. Returns the new rows, each followed by its subtasks.
+ * subtask is open again. An item given as an object can come tagged blocked, with its reason. Returns
+ * the new rows, each followed by its subtasks.
  */
 export function addTasks(
   ticketId: number,
@@ -734,6 +783,7 @@ export function addTasks(
     throw new HttpError(400, `task ${parent.id} is not a task of ticket ${ticketId}`)
   if (parent && (parent.parentId || items.some((i) => typeof i !== 'string' && i.subtasks?.length)))
     throw new HttpError(400, 'a subtask cannot have subtasks: tasks go two levels deep')
+  const tags = items.map((i) => (typeof i === 'string' ? null : blockedTag(i, null)))
   const rows = db.transaction(() => {
     const last = db
       .select({ position: schema.tasks.position })
@@ -742,32 +792,34 @@ export function addTasks(
       .orderBy(desc(schema.tasks.position))
       .get()
     let position = (last?.position ?? -1) + 1
-    const insert = (texts: string[], parentId: number | null) =>
+    const insert = (texts: string[], parentId: number | null, tag: BlockedTag | null = null) =>
       texts.length
         ? db
             .insert(schema.tasks)
-            .values(texts.map((text) => ({ ticketId, parentId, text, position: position++ })))
+            .values(texts.map((text) => ({ ticketId, parentId, text, position: position++, ...tag })))
             .returning()
             .all()
         : []
     const out: schema.Task[] = []
-    for (const item of items) {
+    items.forEach((item, i) => {
       const { text, subtasks = [] } = typeof item === 'string' ? { text: item } : item
-      const [row] = insert([text], parent?.id ?? null)
+      const [row] = insert([text], parent?.id ?? null, tags[i])
       out.push(row!, ...insert(subtasks, row!.id))
-    }
+    })
     if (parent) settleParent(parent.id)
     return out
   })
   touch(ticketId)
+  const blocked = rows.filter((r) => r.blocked).length
+  const tagged = blocked ? ` (${blocked} blocked)` : ''
   if (!opts.quiet)
     logActivity({
       projectId: ticket.projectId,
       actor,
       kind: 'task',
       text: parent
-        ? `added ${plural(rows.length, 'subtask')} to "${parent.text}" on #${ticketId} ${ticket.title}`
-        : `added ${plural(rows.length, 'task')} to #${ticketId} ${ticket.title}`,
+        ? `added ${plural(rows.length, 'subtask')}${tagged} to "${parent.text}" on #${ticketId} ${ticket.title}`
+        : `added ${plural(rows.length, 'task')}${tagged} to #${ticketId} ${ticket.title}`,
       refType: 'ticket',
       refId: ticketId,
     })
@@ -775,16 +827,30 @@ export function addTasks(
 }
 
 /**
- * Reword a task, or tick or untick it. A tick keeps each parent equal to "all its subtasks done":
- * ticking or unticking a task does the same to its subtasks, and ticking a subtask settles its parent.
+ * Reword a task, tick or untick it, or tag it blocked on the human (with what they must do) or clear
+ * that. A tick keeps each parent equal to "all its subtasks done": ticking or unticking a task does the
+ * same to its subtasks, and ticking a subtask settles its parent. A done task waits on nobody: ticking
+ * clears the tag (on the subtasks it ticks, and on a parent its last subtask ticks, too), and tagging a
+ * done task reopens it as unticking would. A patch that both ticks and tags is refused.
  */
-export function updateTask(id: number, patch: { done?: boolean; text?: string }, actor: string) {
+export function updateTask(id: number, patch: { done?: boolean; text?: string } & BlockedTag, actor: string) {
   const task = getTask(id)
+  const tag = blockedTag(patch, task)
+  if (patch.done && tag?.blocked)
+    throw new HttpError(400, 'a done task cannot be blocked: tick it once the human has done their part')
+  const done = patch.done ?? (tag?.blocked && task.done ? false : undefined)
+  // Nothing to write (an empty reason on a task that is not blocked): the task as it is.
+  if (patch.text === undefined && !tag && done === undefined) return task
   const row = db.transaction(() => {
-    const r = db.update(schema.tasks).set(patch).where(eq(schema.tasks.id, id)).returning().get()!
-    if (patch.done !== undefined) {
+    const r = db
+      .update(schema.tasks)
+      .set({ text: patch.text, ...tag, ...(done === undefined ? {} : ticked(done)) })
+      .where(eq(schema.tasks.id, id))
+      .returning()
+      .get()!
+    if (done !== undefined) {
       if (task.parentId) settleParent(task.parentId)
-      else db.update(schema.tasks).set({ done: patch.done }).where(eq(schema.tasks.parentId, id)).run()
+      else db.update(schema.tasks).set(ticked(done)).where(eq(schema.tasks.parentId, id)).run()
     }
     return r
   })
@@ -799,10 +865,13 @@ export function updateTask(id: number, patch: { done?: boolean; text?: string },
       refType: 'ticket',
       refId: ticket.id,
     })
+  const on = `on #${ticket.id} ${ticket.title}`
   if (patch.text !== undefined && patch.text !== task.text)
-    log(`reworded "${task.text}" to "${row.text}" on #${ticket.id} ${ticket.title}`)
-  if (patch.done !== undefined && patch.done !== task.done)
-    log(`${patch.done ? 'completed' : 'reopened'} "${row.text}" on #${ticket.id} ${ticket.title}`)
+    log(`reworded "${task.text}" to "${row.text}" ${on}`)
+  if (done !== undefined && done !== task.done) log(`${done ? 'completed' : 'reopened'} "${row.text}" ${on}`)
+  if (tag?.blocked && (!task.blocked || tag.blockedReason !== task.blockedReason))
+    log(`flagged "${row.text}" as blocked ${on}${tag.blockedReason ? `: ${tag.blockedReason}` : ''}`)
+  if (tag && !tag.blocked && task.blocked) log(`cleared the blocked flag on "${row.text}" ${on}`)
   return row
 }
 

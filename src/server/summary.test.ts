@@ -404,6 +404,115 @@ describe('needs you', () => {
   })
 })
 
+describe('blocked tasks', () => {
+  /** Tasks on the ticket, the ones named in `blocked` tagged with a reason; the rows by text. */
+  function tasks(ticketId: number, items: import('./features').NewTask[], blocked: string[]) {
+    const rows = features.addTasks(ticketId, items, 'claude', { quiet: true })
+    const byText = new Map(rows.map((r) => [r.text, r]))
+    for (const text of blocked)
+      features.updateTask(byText.get(text)!.id, { blocked: true, blockedReason: `do ${text}` }, 'claude')
+    return byText
+  }
+
+  it('are listed under needs you, each with its ticket, and counted in the total', () => {
+    const pid = project('blocked tasks')
+    const t = ticket(pid, 'Payments', { status: 'in_progress', assignee: 'claude' })
+    const own = tasks(
+      t.id,
+      [{ text: 'Implementation', subtasks: ['keys', 'webhook'] }, 'deploy'],
+      ['keys', 'deploy'],
+    )
+    const lane = ticket(pid, 'Payments lane', { status: 'in_progress', parentId: t.id })
+    const laneTasks = tasks(lane.id, ['lane step'], ['lane step'])
+    // In review it still waits on the human.
+    const review = ticket(pid, 'In review', { status: 'review' })
+    const reviewTasks = tasks(review.id, ['sign off'], ['sign off'])
+    const base = take(pid)
+    // Newest ticket activity first; the order between tickets touched in the same moment is not fixed.
+    const byTask = (list: typeof base.needsYou.blockedTasks) => [...list].sort((a, b) => a.taskId - b.taskId)
+    expect(byTask(base.needsYou.blockedTasks)).toEqual([
+      {
+        taskId: own.get('keys')!.id,
+        text: 'keys',
+        reason: 'do keys',
+        parentTask: 'Implementation',
+        ticketId: t.id,
+        ticketTitle: 'Payments',
+        status: 'in_progress',
+        parent: null,
+      },
+      {
+        taskId: own.get('deploy')!.id,
+        text: 'deploy',
+        reason: 'do deploy',
+        parentTask: null,
+        ticketId: t.id,
+        ticketTitle: 'Payments',
+        status: 'in_progress',
+        parent: null,
+      },
+      expect.objectContaining({
+        taskId: laneTasks.get('lane step')!.id,
+        ticketId: lane.id,
+        parent: { id: t.id, title: 'Payments' },
+      }),
+      expect.objectContaining({
+        taskId: reviewTasks.get('sign off')!.id,
+        ticketId: review.id,
+        status: 'review',
+      }),
+    ])
+    // The ticket in review is there twice: once to review, once for its blocked task.
+    expect(base.needsYou.reviews.map((r) => r.id)).toEqual([review.id])
+    expect(base.needsYou.total).toBe(5)
+
+    // In progress carries the count of each ticket, its lanes' included.
+    const payments = base.inProgress.find((x) => x.id === t.id)!
+    expect(payments.blockedTasks).toBe(3)
+    expect(payments.blockedTasks).toBe(features.listTickets(pid).find((x) => x.id === t.id)!.blockedTasks)
+
+    // One more tagged: one more entry, and the total goes up by one.
+    features.updateTask(own.get('webhook')!.id, { blocked: true }, 'claude')
+    const more = take(pid)
+    expect(more.needsYou.blockedTasks).toHaveLength(5)
+    expect(more.needsYou.blockedTasks.find((x) => x.text === 'webhook')).toMatchObject({
+      parentTask: 'Implementation',
+      reason: '',
+    })
+    expect(more.needsYou.total).toBe(6)
+    // Ticked done: gone.
+    features.updateTask(own.get('webhook')!.id, { done: true }, 'claude')
+    expect(take(pid).needsYou.total).toBe(5)
+  })
+
+  it('leave out done tasks, and tickets that are done, cancelled, archived or under a cancelled lane', () => {
+    const pid = project('blocked closed')
+    const done = ticket(pid, 'Done', { status: 'done' })
+    tasks(done.id, ['a'], ['a'])
+    const cancelled = ticket(pid, 'Cancelled', { status: 'cancelled' })
+    tasks(cancelled.id, ['a'], ['a'])
+    const archived = ticket(pid, 'Archived', {
+      status: 'in_progress',
+      archivedAt: iso(at(7, 9)),
+      archivedBy: HUMAN,
+    })
+    tasks(archived.id, ['a'], ['a'])
+    const parent = ticket(pid, 'Parent', { status: 'in_progress' })
+    const dropped = ticket(pid, 'Dropped lane', { status: 'cancelled', parentId: parent.id })
+    tasks(dropped.id, ['a'], ['a'])
+    const under = ticket(pid, 'Under the dropped lane', { status: 'in_progress', parentId: dropped.id })
+    tasks(under.id, ['a'], ['a'])
+    const live = ticket(pid, 'Live', { status: 'in_progress' })
+    const rows = tasks(live.id, ['ticked', 'open'], ['ticked', 'open'])
+    features.updateTask(rows.get('ticked')!.id, { done: true }, 'claude')
+
+    const s = take(pid)
+    expect(s.needsYou.blockedTasks.map((x) => [x.ticketId, x.text])).toEqual([[live.id, 'open']])
+    expect(s.needsYou.total).toBe(1)
+    expect(s.inProgress.find((x) => x.id === parent.id)!.blockedTasks).toBe(0)
+  })
+})
+
 describe('threads waiting on the human', () => {
   it('treat every name the human signs in under as the same person', () => {
     const pid = project('devices')
