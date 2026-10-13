@@ -55,6 +55,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const status = parent ? undefined : stage || newTicketStage(project?.stages ?? [])?.key
   // A ticket waits for its stage, so that leaving it alone always means Backlog.
   const ready = Boolean(parent || status)
+  // A top-level ticket starts with the project's default phases, the tasks typed here under the first.
+  const phases = parent ? [] : (project?.defaultPhases ?? [])
   // Tags the server would refuse: the field says why, and Create waits until they are fixed.
   const over = overTagLimits(tags, tagText)
   const tagsOver = over.tooMany || over.tooLong
@@ -190,6 +192,12 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
               text={taskText}
               onTextChange={setTaskText}
             />
+            {phases.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                It starts with the project&apos;s phases: {phases.join(', ')}. The tasks typed here go under{' '}
+                {phases[0]}.
+              </p>
+            )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {status && (

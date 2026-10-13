@@ -36,6 +36,17 @@ const rows = (human: APIRequestContext, projectId: number) =>
 const tasksOf = async (human: APIRequestContext, id: number) =>
   (await ok<TicketFull>(human.get(`/api/tickets/${id}`))).tasks.map((t) => t.text)
 
+/** A top-level ticket's tasks in order: the project's default phases, the typed tasks under the first. */
+const phased = (...steps: string[]) => [
+  'Implementation',
+  ...steps,
+  'Pushed',
+  'PR',
+  'CI',
+  'Preview',
+  'Hand-off post',
+]
+
 /** The exact text of each listed task, without the whitespace `toHaveText` would forgive. */
 const texts = (items: Locator) => items.evaluateAll((all) => all.map((li) => li.textContent))
 
@@ -133,7 +144,7 @@ test('a task of the New ticket dialog is removed alone, and repeats stay separat
   await expect(dialog).toBeHidden()
   expect(sent).toEqual([['A', 'C', 'Check', 'Check']])
   const [row] = await rows(human, project.id)
-  expect(await tasksOf(human, row!.id)).toEqual(['A', 'C', 'Check', 'Check'])
+  expect(await tasksOf(human, row!.id)).toEqual(phased('A', 'C', 'Check', 'Check'))
 })
 
 test('Create in the New ticket dialog sends the text still typed as the last task, and resets the field', async ({
@@ -150,7 +161,7 @@ test('Create in the New ticket dialog sends the text still typed as the last tas
   await first.create.click()
   await expect(first.dialog).toBeHidden()
   const [one] = await rows(human, project.id)
-  expect(await tasksOf(human, one!.id)).toEqual(['A', 'B'])
+  expect(await tasksOf(human, one!.id)).toEqual(phased('A', 'B'))
 
   // Opened again, the field is empty.
   const second = await openDialog(page)
@@ -165,10 +176,15 @@ test('Create in the New ticket dialog sends the text still typed as the last tas
   await second.create.click()
   await expect(second.dialog).toBeHidden()
   const two = (await rows(human, project.id)).find((t) => t.title === 'Blank left over')
-  expect(await tasksOf(human, two!.id)).toEqual(['A'])
+  expect(await tasksOf(human, two!.id)).toEqual(phased('A'))
 })
 
-test('a ticket made with no tasks in the New ticket dialog has none', async ({ page, project, human }) => {
+test('a ticket made with no tasks in the New ticket dialog, in a project without default phases, has none', async ({
+  page,
+  project,
+  human,
+}) => {
+  await ok(human.patch(`/api/projects/${project.id}`, { data: { defaultPhases: [] } }))
   await page.goto(`/projects/${project.id}/features`)
   const { dialog, create } = await openDialog(page)
   await dialog.getByLabel('Title').fill('Nothing to do yet')
@@ -212,7 +228,7 @@ test('a Create the server refuses keeps the tasks and the text typed, to fix and
   await create.click()
   await expect(dialog).toBeHidden()
   const [row] = await rows(human, project.id)
-  expect(await tasksOf(human, row!.id)).toEqual(['Short', 'Still typed'])
+  expect(await tasksOf(human, row!.id)).toEqual(phased('Short', 'Still typed'))
 })
 
 test('Enter that ends an IME composition in the tasks input adds no task', async ({ page, project }) => {
@@ -408,3 +424,77 @@ for (const width of [375, 1280]) {
     ).toBe(true)
   })
 }
+
+test('a ticket from the New ticket dialog starts with the project phases, the typed tasks under Implementation', async ({
+  page,
+  project,
+  human,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, create } = await openDialog(page)
+  // The dialog says so, by name, next to the field.
+  const hint =
+    "It starts with the project's phases: Implementation, Pushed, PR, CI, Preview, Hand-off post. The tasks typed here go under Implementation."
+  await expect(dialog).toContainText(hint)
+  await dialog.getByLabel('Title').fill('Seeded from the dialog')
+  for (const t of ['Reproduce it', 'Fix it']) {
+    await input.fill(t)
+    await input.press('Enter')
+  }
+  await dialog.screenshot({ path: test.info().outputPath('new-ticket-phases-hint.png') })
+  await create.click()
+  await expect(dialog).toBeHidden()
+  const [row] = await rows(human, project.id)
+  expect(await tasksOf(human, row!.id)).toEqual(phased('Reproduce it', 'Fix it'))
+
+  // On its page: Implementation with the typed tasks nested, then the hand-off's phases; 0 of 8.
+  await page.goto(`/projects/${project.id}/features/${row!.id}`)
+  const card = page.getByRole('region', { name: 'Tasks' })
+  await expect(card).toContainText('0/8 · 0%')
+  await expect(
+    card.getByRole('list', { name: 'Subtasks of Implementation' }).getByRole('listitem'),
+  ).toHaveText(['Reproduce it', 'Fix it'])
+  // Only a top-level task takes subtasks: those buttons list the top level, in order.
+  const top = card.getByRole('button', { name: /^Add a subtask to / })
+  expect(await top.evaluateAll((all) => all.map((b) => b.getAttribute('aria-label')))).toEqual(
+    ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Hand-off post'].map((x) => `Add a subtask to ${x}`),
+  )
+  for (const name of ['Implementation', 'Reproduce it', 'Fix it', 'Hand-off post'])
+    await expect(card.getByRole('checkbox', { name, exact: true })).not.toBeChecked()
+  await card.screenshot({ path: test.info().outputPath('new-ticket-phases-card.png') })
+})
+
+test('the New ticket dialog names the phases only where a ticket gets them', async ({
+  page,
+  project,
+  api,
+  human,
+}) => {
+  // A lane starts without phases: its dialog does not claim any.
+  const parent = await api.ticket({ title: 'The parent' })
+  await page.goto(`/projects/${project.id}/features/${parent.id}`)
+  const lane = await openDialog(page, 'New lane')
+  await expect(lane.dialog.getByLabel('Initial tasks')).toBeVisible()
+  await expect(lane.dialog).not.toContainText('phases')
+  await lane.dialog.getByLabel('Title').fill('A lane')
+  await lane.input.fill('Part')
+  await lane.input.press('Enter')
+  await lane.create.click()
+  await expect(lane.dialog).toBeHidden()
+  const made = (await rows(human, project.id)).find((t) => t.title === 'A lane')
+  expect(await tasksOf(human, made!.id)).toEqual(['Part'])
+
+  // A project's own list is the one named; an empty one names none.
+  await ok(human.patch(`/api/projects/${project.id}`, { data: { defaultPhases: ['Design', 'Build'] } }))
+  await page.goto(`/projects/${project.id}/features`)
+  const custom = await openDialog(page)
+  await expect(custom.dialog).toContainText(
+    "It starts with the project's phases: Design, Build. The tasks typed here go under Design.",
+  )
+  await page.keyboard.press('Escape')
+  await ok(human.patch(`/api/projects/${project.id}`, { data: { defaultPhases: [] } }))
+  await page.reload()
+  const none = await openDialog(page)
+  await expect(none.dialog.getByLabel('Initial tasks')).toBeVisible()
+  await expect(none.dialog).not.toContainText('phases')
+})

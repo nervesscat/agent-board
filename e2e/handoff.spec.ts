@@ -48,7 +48,7 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   git('branch', branch, commitFile('main', 'handoff.txt', 'work\n', 'work'))
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Hand it off', status: 'in_progress', branch },
+      data: { defaultPhases: false, title: 'Hand it off', status: 'in_progress', branch },
     }),
   )
   const read = () => ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
@@ -77,7 +77,7 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   await expect(rows.nth(1)).toHaveAttribute('data-code', 'tasks_open')
   await expect(item('tasks_open')).toContainText('Implementation')
   await expect(item('tasks_open')).toContainText('No tasks')
-  await expect(item('tasks_open')).toContainText('high-level phases (plan, code, tests…)')
+  await expect(item('tasks_open')).toContainText('add the default phases (Implementation, then Pushed, PR')
   await card.screenshot({ path: test.info().outputPath('handoff-missing.png') })
 
   // An agent moving it there hears the same, by code.
@@ -148,7 +148,7 @@ test('Merged comes first and waits on the human; once the branch is in its base 
   git('push', '-q', 'origin', branch)
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Merge it', status: 'in_progress', branch, baseBranch: base },
+      data: { defaultPhases: false, title: 'Merge it', status: 'in_progress', branch, baseBranch: base },
     }),
   )
   const read = () => ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
@@ -255,7 +255,13 @@ test('a local branch left behind its PR’s pushed commits is not taken as merge
   git('push', '-q', 'origin', `${work}:refs/heads/${branch}`)
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Pushed from elsewhere', status: 'in_progress', branch, baseBranch: base },
+      data: {
+        defaultPhases: false,
+        title: 'Pushed from elsewhere',
+        status: 'in_progress',
+        branch,
+        baseBranch: base,
+      },
     }),
   )
   const gitState = async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info
@@ -321,7 +327,7 @@ test('a branch with no work of its own and no PR is not taken as merged', async 
   git('push', '-q', 'origin', branch)
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Nothing yet', status: 'in_progress', branch },
+      data: { defaultPhases: false, title: 'Nothing yet', status: 'in_progress', branch },
     }),
   )
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
@@ -351,7 +357,7 @@ test('a branch with a PR whose copy on origin is gone is not taken as merged', a
   git('branch', branch, 'main')
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Closed, not merged', status: 'in_progress', branch },
+      data: { defaultPhases: false, title: 'Closed, not merged', status: 'in_progress', branch },
     }),
   )
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review', prNumber: 4545 } }))
@@ -391,7 +397,7 @@ test('work that reached another base of the chain, not the ticket’s own, is no
   git('push', '-q', 'origin', branch)
   const parent = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Fix it', status: 'in_progress', baseBranch: upstream },
+      data: { defaultPhases: false, title: 'Fix it', status: 'in_progress', baseBranch: upstream },
     }),
   )
   const t = await ok<TicketFull>(

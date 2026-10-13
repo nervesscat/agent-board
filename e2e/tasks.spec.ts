@@ -9,7 +9,11 @@ test('tasks nest one level: subtasks under their task, counted with it, ticked i
   // A step with two parts, one of them done, and a plain step.
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Nested plan', tasks: [{ text: 'a', subtasks: ['a1', 'a2'] }, 'b'] },
+      data: {
+        title: 'Nested plan',
+        tasks: [{ text: 'a', subtasks: ['a1', 'a2'] }, 'b'],
+        defaultPhases: false,
+      },
     }),
   )
   const read = () => ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
@@ -73,33 +77,39 @@ test('tasks nest one level: subtasks under their task, counted with it, ticked i
   await expect(page.getByRole('link', { name: /Nested plan/ })).toContainText('2/2')
 })
 
-test('the Tasks card tells the human the top level holds high-level phases, in every stage', async ({
+test('an empty Tasks card points the human to the default phases, in every stage', async ({
   page,
   project,
   human,
 }) => {
+  // Opted out of the default phases: it starts with no tasks.
   const t = await ok<TicketFull>(
-    human.post(`/api/projects/${project.id}/tickets`, { data: { title: 'Plan in phases' } }),
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Plan in phases', defaultPhases: false },
+    }),
   )
-  // No phases are made for it: the plan is the agent's.
   const created = await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
   expect(created.tasks).toEqual([])
   expect(created.progress).toEqual({ done: 0, total: 0 })
 
-  const hint = 'No tasks yet. Plan a few high-level phases, like the hand-off (plan, code, tests…)'
+  const hint =
+    "No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off's (Pushed, PR, CI, Preview, Hand-off post)."
   for (const status of ['todo', 'in_progress', 'review', 'done']) {
     await ok(human.patch(`/api/tickets/${t.id}`, { data: { status } }))
     await page.goto(`/projects/${project.id}/features/${t.id}`)
     const card = page.getByRole('region', { name: 'Tasks' })
     await expect(card).toContainText(hint)
-    await expect(card).toContainText('the concrete steps under each as subtasks')
-    await expect(card.getByRole('textbox', { name: 'Add a phase: plan, code, tests…' })).toBeVisible()
+    await expect(card).toContainText('The concrete steps go under Implementation as subtasks.')
+    await expect(card).not.toContainText('plan, code, tests')
+    await expect(
+      card.getByRole('textbox', { name: 'Add a phase: Implementation, Pushed, PR…' }),
+    ).toBeVisible()
   }
 
   // The field still adds a top-level task, and the empty state goes once there is one.
   const card = page.getByRole('region', { name: 'Tasks' })
   await card.screenshot({ path: test.info().outputPath('tasks-empty.png') })
-  const field = card.getByRole('textbox', { name: 'Add a phase: plan, code, tests…' })
+  const field = card.getByRole('textbox', { name: 'Add a phase: Implementation, Pushed, PR…' })
   const sent = page.waitForRequest(
     (r) => r.method() === 'POST' && r.url().endsWith(`/api/tickets/${t.id}/tasks`),
   )

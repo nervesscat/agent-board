@@ -981,8 +981,8 @@ function Details({
 /**
  * The ticket's tasks, two levels: each top-level task with its subtasks indented under it, and a way
  * to add subtasks to a top-level task. The counter takes in tasks and subtasks alike. The top level
- * holds a few high-level phases and the concrete steps go under them, as the empty state and the
- * add field say.
+ * holds the phases (a new ticket starts with its project's: Implementation, then the hand-off's) and
+ * the concrete steps go under Implementation, as the empty state and the add field say.
  */
 function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const [text, setText] = useState('')
@@ -1059,8 +1059,8 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       </div>
       {t.tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
-          No tasks yet. Plan a few high-level phases, like the hand-off (plan, code, tests…), and put the
-          concrete steps under each as subtasks.
+          No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off&apos;s
+          (Pushed, PR, CI, Preview, Hand-off post). The concrete steps go under Implementation as subtasks.
         </p>
       )}
       <ul className="space-y-1.5">
@@ -1125,7 +1125,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
         <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Add a phase: plan, code, tests…"
+          placeholder="Add a phase: Implementation, Pushed, PR…"
           className="h-8"
         />
         <Button type="submit" size="sm" variant="outline" disabled={!text.trim()}>
