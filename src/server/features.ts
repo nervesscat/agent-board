@@ -11,7 +11,7 @@ import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
 import { previewState, previewUrl, type PreviewState } from './preview'
-import { prForTicket } from './prs'
+import { prForTicket, refreshPrsInBackground, withMergeCheck } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
 import { reportDueFor } from './reportDue'
@@ -278,7 +278,9 @@ export function placement(
 /**
  * `getTicketFull` with whether each branch is on origin: `push` on the ticket (its branch) and on each
  * of its workspaces, from one batch of git in the ticket's checkout. A branch gone from origin counts
- * as merged once it is in the ticket's base.
+ * as merged once it is in the ticket's base. Its PR's merge state is checked in the checkout against
+ * origin's base as just read, and the project's PRs are refreshed in the background when they are as
+ * stale as the queue would refresh them.
  */
 export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
   const t = getTicketFull(id, opts)
@@ -287,8 +289,10 @@ export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolea
   const push = repo
     ? await pushStates(repo.repoPath, branches, new Map(branches.map((b) => [b, t.baseBranch])))
     : null
+  if (t.prNumber || t.branch) refreshPrsInBackground(t.projectId)
   return {
     ...t,
+    pr: await withMergeCheck(t.pr),
     push: push?.get(t.branch) ?? NO_PUSH,
     workspaces: t.workspaces.map((w) => ({ ...w, push: push?.get(w.branch) ?? NO_PUSH })),
   }

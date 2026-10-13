@@ -238,7 +238,9 @@ routine.
   (approved: by the human on others' PRs, by every reviewer on theirs), `on_hold` (review comments
   or requested changes not yet addressed by a push or a new review request, or a board-side hold)
   or `done` (merged). Each also has where it stands on GitHub (`merge`, `ci` with its `checks`,
-  `reviewDecision`), the latest review verdict and the tickets it came from. `set_pr_hold` parks
+  `reviewDecision`), the latest review verdict and the tickets it came from. An open PR's `merge` is
+  checked in the repo's checkout against origin's base first, so a base that moved shows at the next
+  fetch; `mergeCheck` says whether it is that (`local`) or GitHub's word, and as of when. `set_pr_hold` parks
   an open one with a note (board-only). `list_review_results` (by `prNumber`, `sha`) tells whether
   a head SHA was already reviewed; `get_review_result` has the findings.
 - `list_actors` gives the names to use for `assignee`.

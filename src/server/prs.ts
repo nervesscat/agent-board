@@ -4,10 +4,11 @@ import { db, schema } from '#/db'
 import type { PrCheck } from '#/lib/constants'
 import { isClosed } from '#/lib/stages'
 import { logActivity } from './activity'
-import { currentGithubLogin, listMyPrs, prMerged, type GhCheck, type GhPr } from './git'
+import { currentGithubLogin, listMyPrs, mergeConflicts, prMerged, type GhCheck, type GhPr } from './git'
 import { notFound } from './http'
 import { hasPreviews, stopPreviewsFor } from './managedPreview'
 import { getProject } from './projects'
+import { fetchStatus } from './push'
 import { listRepos, ticketRepo } from './repos'
 import { kindOf, listStages } from './stages'
 
@@ -131,12 +132,116 @@ export function ciState(checks: PrCheck[]): CiState {
   return checks.some((c) => c.state === 'pass') ? 'passing' : 'none'
 }
 
-/** What the queue and a ticket's PR show of a stored PR's state on GitHub. */
-const prState = (pr: schema.Pr) => ({
+/** Where a PR's merge state came from, so a reader can tell how much to trust it. */
+export interface MergeCheck {
+  /**
+   * `local`: merged here, the PR's head into origin's base as the board last saw it, in the repo's
+   * checkout (no GitHub call); `github`: GitHub's word as of the last refresh.
+   */
+  source: 'local' | 'github'
+  /** `local`: when origin was last fetched into the checkout; `github`: the refresh that brought it. */
+  at: string | null
+  /** The base branch, on origin. */
+  base: string
+  /** GitHub's word was given before the board saw origin's base where it is now: `checking` until asked again. */
+  outdated: boolean
+}
+
+export interface Merge {
+  merge: MergeState
+  mergeCheck: MergeCheck
+}
+
+type MergeRow = Pick<
+  schema.Pr,
+  'repoId' | 'open' | 'baseRef' | 'headSha' | 'mergeable' | 'mergeStateStatus' | 'fetchedAt'
+>
+
+/** Origin's branch as the board last saw it: its sha, and when the board first saw it there. */
+const originRef = (repoId: number | null, ref: string) =>
+  repoId === null
+    ? undefined
+    : db
+        .select()
+        .from(schema.originRefs)
+        .where(and(eq(schema.originRefs.repoId, repoId), eq(schema.originRefs.ref, ref)))
+        .get()
+
+/**
+ * GitHub's word on an open PR, unless the board saw origin's base move after it was given: that word
+ * is about an older base, so the PR is `checking` until a refresh brings a new one.
+ */
+function githubMerge(pr: MergeRow, base: schema.OriginRef | undefined): Merge {
+  const outdated = pr.open && !!base && pr.fetchedAt < base.seenAt
+  return {
+    merge: outdated ? 'checking' : mergeState(pr),
+    mergeCheck: { source: 'github', at: pr.fetchedAt, base: pr.baseRef, outdated },
+  }
+}
+
+/**
+ * Local merges per checkout, base sha and head sha: shas never change, so neither does a verdict. One
+ * git could not give (a commit missing here) is tried again once origin was fetched again.
+ */
+const localChecks = new Map<
+  string,
+  { fetchedAt: string | null; known: boolean; conflicts: Promise<boolean | null> }
+>()
+
+function localConflicts(repoPath: string, base: string, head: string, fetchedAt: string | null) {
+  const key = `${repoPath}\n${base}\n${head}`
+  const kept = localChecks.get(key)
+  if (kept && (kept.known || kept.fetchedAt === fetchedAt)) return kept.conflicts
+  // Keep the memo from growing without end, as push's are.
+  if (localChecks.size > 5000) localChecks.clear()
+  const entry = {
+    fetchedAt,
+    known: false,
+    conflicts: mergeConflicts(repoPath, base, head).then((c) => {
+      entry.known = c !== null
+      return c
+    }),
+  }
+  localChecks.set(key, entry)
+  return entry.conflicts
+}
+
+/**
+ * The merge state the queue and a ticket show of a PR. An open one is first merged here, its head into
+ * origin's base as the board last saw it, in the repo's checkout (no GitHub call), so a base that moved
+ * on origin since GitHub was asked shows at the next fetch:
+ * - conflicts here are conflicts, whatever GitHub said;
+ * - a clean merge here is clean, unless GitHub, asked since the board saw the base there, says it
+ *   conflicts, is behind or is blocked (branch protection is GitHub's call);
+ * - without a verdict here (a fork's head is not in the checkout, git failed), GitHub's word, as
+ *   `githubMerge` reads it.
+ */
+async function prMerge(pr: MergeRow, repo: schema.Repo | undefined): Promise<Merge> {
+  const base = pr.open && repo ? originRef(repo.id, pr.baseRef) : undefined
+  const github = githubMerge(pr, base)
+  if (!repo || !base) return github
+  const { checkedAt } = fetchStatus(repo.repoPath)
+  const conflicts = await localConflicts(repo.repoPath, base.sha, pr.headSha, checkedAt)
+  if (conflicts === null) return github
+  const local: MergeCheck = {
+    source: 'local',
+    at: checkedAt ?? base.seenAt,
+    base: pr.baseRef,
+    outdated: false,
+  }
+  if (conflicts) return { merge: 'conflicts', mergeCheck: local }
+  const said = mergeState(pr)
+  if (!github.mergeCheck.outdated && (said === 'conflicts' || said === 'behind' || said === 'blocked'))
+    return github
+  return { merge: 'clean', mergeCheck: local }
+}
+
+/** What the queue and a ticket's PR show of a stored PR's state on GitHub, with its merge state. */
+const prState = (pr: schema.Pr, merge: Merge) => ({
   waitingOn: pr.waitingOn,
   isDraft: pr.isDraft,
   reviewDecision: pr.reviewDecision,
-  merge: mergeState(pr),
+  ...merge,
   ci: ciState(pr.checks),
   checks: pr.checks,
 })
@@ -158,6 +263,111 @@ export async function refreshPrs(projectId: number) {
   for (const f of failed) console.error(`PR refresh failed for ${f.repo.name}:`, f.err)
   if (repos.length && failed.length === repos.length) throw failed[0]!.err
   lastRefresh.set(projectId, Date.now())
+  followUnknowns(projectId)
+}
+
+const backgroundRefresh = (projectId: number) =>
+  refreshPrs(projectId).catch((err) => console.error(`PR refresh failed for project ${projectId}:`, err))
+
+/** A move of origin's branches has a project's PRs refreshed at most this often. */
+const MOVE_EVERY = 60_000
+/** While GitHub has not worked out whether an open PR merges, it is asked again after each of these. */
+const UNKNOWN_FOLLOW_UPS = [30_000, 60_000, 120_000, 240_000]
+
+/** Per project: when a move last had its PRs refreshed, and the refresh due when that window ends. */
+const moveRefresh = new Map<number, { at: number; due: NodeJS.Timeout | null }>()
+/** Per project: how many follow-ups GitHub's unknowns had since the last move, and the one due. */
+const followUps = new Map<number, { step: number; due: NodeJS.Timeout | null }>()
+
+/**
+ * Called with the moves of origin's branches the board just recorded: a project with an open PR on a
+ * branch that moved (its base or its head) has its PRs refreshed in the background, however recent its
+ * last refresh, since GitHub's merge state of them may have changed. At most one such refresh per
+ * project every `MOVE_EVERY`: a move within it gets one when it ends. A failure is logged, never thrown
+ * at the read that saw the move.
+ */
+export function recheckMovedPrs(moves: { repoId: number; ref: string }[]) {
+  if (!moves.length) return
+  try {
+    const open = db
+      .select()
+      .from(schema.prs)
+      .where(
+        and(inArray(schema.prs.repoId, [...new Set(moves.map((m) => m.repoId))]), eq(schema.prs.open, true)),
+      )
+      .all()
+    const projects = new Set(
+      open
+        .filter((pr) =>
+          moves.some((m) => m.repoId === pr.repoId && (m.ref === pr.baseRef || m.ref === pr.headRef)),
+        )
+        .map((pr) => pr.projectId),
+    )
+    for (const projectId of projects) refreshOnMove(projectId)
+  } catch (err) {
+    console.error('refreshing the PRs of branches that moved on origin failed:', err)
+  }
+}
+
+function refreshOnMove(projectId: number) {
+  const s = moveRefresh.get(projectId) ?? { at: 0, due: null }
+  moveRefresh.set(projectId, s)
+  if (s.due) return
+  const run = () => {
+    s.due = null
+    s.at = Date.now()
+    // A move starts the follow-ups on GitHub's unknowns over.
+    stopFollowUps(projectId)
+    void backgroundRefresh(projectId)
+  }
+  const wait = s.at + MOVE_EVERY - Date.now()
+  if (wait <= 0) return run()
+  s.due = setTimeout(run, wait)
+  s.due.unref()
+}
+
+/**
+ * After a refresh: while an open PR's mergeability is still unknown to GitHub (it works it out after a
+ * push or a move of the base), GitHub is asked again a little later, each time later still, at most
+ * `UNKNOWN_FOLLOW_UPS.length` times until the next move. Stops once no open PR is unknown.
+ */
+function followUnknowns(projectId: number) {
+  const unknown = db
+    .select({ id: schema.prs.id })
+    .from(schema.prs)
+    .where(
+      and(
+        eq(schema.prs.projectId, projectId),
+        eq(schema.prs.open, true),
+        eq(schema.prs.mergeable, 'UNKNOWN'),
+      ),
+    )
+    .get()
+  if (!unknown) return stopFollowUps(projectId)
+  const f = followUps.get(projectId) ?? { step: 0, due: null }
+  followUps.set(projectId, f)
+  if (f.due || f.step >= UNKNOWN_FOLLOW_UPS.length) return
+  f.due = setTimeout(() => {
+    f.due = null
+    void backgroundRefresh(projectId)
+  }, UNKNOWN_FOLLOW_UPS[f.step++])
+  f.due.unref()
+}
+
+function stopFollowUps(projectId: number) {
+  const f = followUps.get(projectId)
+  if (f?.due) clearTimeout(f.due)
+  followUps.delete(projectId)
+}
+
+/** Drops every refresh due and what each throttle remembers, as a board that just started has none. */
+export function resetPrRefreshes() {
+  for (const s of moveRefresh.values()) if (s.due) clearTimeout(s.due)
+  for (const f of followUps.values()) if (f.due) clearTimeout(f.due)
+  moveRefresh.clear()
+  followUps.clear()
+  lastRefresh.clear()
+  lastTry.clear()
 }
 
 const lastTry = new Map<number, number>()
@@ -172,7 +382,7 @@ export function refreshPrsInBackground(projectId: number) {
   const since = Math.max(lastRefresh.get(projectId) ?? 0, lastTry.get(projectId) ?? 0)
   if (now - since <= REFRESH_MS) return
   lastTry.set(projectId, now)
-  refreshPrs(projectId).catch((err) => console.error(`PR refresh failed for project ${projectId}:`, err))
+  void backgroundRefresh(projectId)
 }
 
 /** How long a merged PR stays in the queue, under Done. */
@@ -311,12 +521,20 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
   const repos = listRepos(projectId)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
   const mergeAfter = mergeOrder(projectId, tickets, repos)
-  return rows.map((pr) => {
+  const merges = await Promise.all(
+    rows.map((pr) =>
+      prMerge(
+        pr,
+        repos.find((x) => x.id === pr.repoId),
+      ),
+    ),
+  )
+  return rows.map((pr, i) => {
     const r = latestResult(results, pr.number, pr.repoId)
     const from = prTickets(tickets, repos, pr)
     return {
       ...pr,
-      ...prState(pr),
+      ...prState(pr, merges[i]!),
       repo: repos.find((x) => x.id === pr.repoId)?.name ?? null,
       status: prStatus(pr),
       latestReview: r
@@ -434,7 +652,8 @@ export function prForTicket(ticket: schema.Ticket) {
     linkedBy: ticket.prNumber ? ('prNumber' as const) : ('branch' as const),
     url: row?.url ?? (repo.githubRepo ? `https://github.com/${repo.githubRepo}/pull/${number}` : null),
     // Set when the PR is in the review queue: its board id (for threads and holds), title, stage, and
-    // where it stands on GitHub (which side of the queue, merge state, CI) as of the last refresh.
+    // where it stands on GitHub (which side of the queue, merge state, CI) as of the last refresh. The
+    // merge state is GitHub's word here; `withMergeCheck` checks it in the checkout as the queue does.
     queue: row
       ? {
           id: row.id,
@@ -442,7 +661,7 @@ export function prForTicket(ticket: schema.Ticket) {
           open: row.open,
           status: prStatus(row),
           headSha: row.headSha,
-          ...prState(row),
+          ...prState(row, githubMerge(row, row.open ? originRef(repo.id, row.baseRef) : undefined)),
         }
       : null,
     latestReview: r
@@ -455,6 +674,17 @@ export function prForTicket(ticket: schema.Ticket) {
         }
       : null,
   }
+}
+
+export type TicketPr = ReturnType<typeof prForTicket>
+
+/** A ticket's PR (`prForTicket`) with its merge state checked in the repo's checkout, as the queue's is. */
+export async function withMergeCheck(pr: TicketPr): Promise<TicketPr> {
+  if (!pr?.queue?.open) return pr
+  const row = db.select().from(schema.prs).where(eq(schema.prs.id, pr.queue.id)).get()
+  if (!row) return pr
+  const repo = row.repoId === null ? undefined : listRepos(row.projectId).find((r) => r.id === row.repoId)
+  return { ...pr, queue: { ...pr.queue, ...(await prMerge(row, repo)) } }
 }
 
 export type PrRow = Awaited<ReturnType<typeof listPrs>>[number]
