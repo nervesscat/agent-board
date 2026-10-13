@@ -521,6 +521,81 @@ describe('deleting a worked branch with its worktrees', () => {
     expect(hasRef(repo, 'refs/heads/feat/b5m')).toBe(false)
   })
 
+  /**
+   * A landed branch whose worktree has `caf\xE9.local` and `na\xEFve.local` committed: names in
+   * Latin-1 bytes, not UTF-8. Linux takes any bytes for a name; Windows and macOS keep names in
+   * Unicode, so no name there is anything but UTF-8, and these tests run on Linux alone. (In a folder
+   * so named, the worktree is refused anyway: its links cannot be searched there.)
+   */
+  const bytesBranch = (branch: string) => {
+    land([branch], { unique: true })
+    const tree = wt(branch.replace(/\W/g, '-'))
+    git('worktree', 'add', '-q', tree, branch)
+    const at = (name: Buffer) => Buffer.concat([Buffer.from(`${tree}/`), name])
+    const file = Buffer.from('caf\xe9.local', 'latin1')
+    const other = Buffer.from('na\xefve.local', 'latin1')
+    const index = (args: string[], ...names: Buffer[]) =>
+      execFileSync('git', ['update-index', ...args, '-z', '--stdin'], {
+        cwd: tree,
+        input: Buffer.concat(names.flatMap((n) => [n, Buffer.from([0])])),
+      })
+    fs.writeFileSync(at(file), 'committed\n')
+    fs.writeFileSync(at(other), 'committed\n')
+    index(['--add'], file, other)
+    gitIn(tree)('commit', '-q', '-m', 'names in Latin-1')
+    const sha = gitIn(tree)('rev-parse', 'HEAD')
+    // Main takes the branch as is.
+    git(
+      'update-ref',
+      'refs/heads/main',
+      git('commit-tree', 'main^{tree}', '-p', 'main', '-p', sha, '-m', 'merge'),
+    )
+    return { tree, sha, at, file, other, index }
+  }
+
+  it.runIf(process.platform === 'linux')(
+    'sees edits to marked files whose name is not UTF-8, and keeps them',
+    async () => {
+      const { tree, sha, at, file, other, index } = bytesBranch('feat/b5-bytes')
+      index(['--skip-worktree'], file)
+      index(['--assume-unchanged'], other)
+      fs.writeFileSync(at(file), 'my settings\n')
+      fs.writeFileSync(at(other), 'mine too\n')
+      expect(gitIn(tree)('status', '--porcelain')).toBe('')
+      const t = done('b5 bytes', 'feat/b5-bytes')
+
+      const r = await trees(t.id, 'feat/b5-bytes', sha)
+      expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [] })
+      expect(r.reason).toContain('"caf\\351.local" (skip-worktree)')
+      expect(r.reason).toContain('"na\\357ve.local" (assume-unchanged)')
+      expect(fs.readFileSync(at(file), 'utf8')).toBe('my settings\n')
+      expect(fs.readFileSync(at(other), 'utf8')).toBe('mine too\n')
+      expect(git('rev-parse', 'refs/heads/feat/b5-bytes')).toBe(sha)
+    },
+  )
+
+  it.runIf(process.platform === 'linux')(
+    'refuses one with a changed or an untracked file whose name is not UTF-8',
+    async () => {
+      const { tree, sha, at, file } = bytesBranch('feat/b5-bytes2')
+      fs.writeFileSync(at(file), 'edited\n')
+      const t = done('b5 bytes 2', 'feat/b5-bytes2')
+      const changed = await trees(t.id, 'feat/b5-bytes2', sha)
+      expect(changed).toMatchObject({ ok: false, outcome: 'refused', removed: [] })
+      expect(changed.reason).toContain('caf')
+      expect(fs.readFileSync(at(file), 'utf8')).toBe('edited\n')
+
+      gitIn(tree)('checkout', '--', '.')
+      const untracked = Buffer.from('notes-\xe9.txt', 'latin1')
+      fs.writeFileSync(at(untracked), 'mine\n')
+      const r = await trees(t.id, 'feat/b5-bytes2', sha)
+      expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [] })
+      expect(r.reason).toContain('notes-')
+      expect(fs.readFileSync(at(untracked), 'utf8')).toBe('mine\n')
+      expect(git('rev-parse', 'refs/heads/feat/b5-bytes2')).toBe(sha)
+    },
+  )
+
   it('never removes a locked worktree', async () => {
     const { 'feat/b5l': sha } = land(['feat/b5l'])
     git('worktree', 'add', '-q', wt('b5l'), 'feat/b5l')

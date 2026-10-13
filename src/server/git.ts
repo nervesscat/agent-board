@@ -388,7 +388,8 @@ const MARKED_LIMIT = 1000
  * Edits `git status` never lists: to a tracked file marked skip-worktree (`S`) or assume-unchanged (a
  * lowercase tag), each as `<path> (<mark>)`. A marked file that is not there, as in a sparse checkout,
  * loses nothing. One that is there is compared with its index entry as git hashes it, with its
- * attributes' filters. More of them than `MARKED_LIMIT` are not checked: that answers as a change.
+ * attributes' filters. More of them than `MARKED_LIMIT` are not checked: that answers as a change, and
+ * so does one there whose name is not UTF-8.
  */
 async function markedChanges(worktreePath: string): Promise<string[]> {
   // Each folder's names, read once: the marked files of a sparse checkout are many, their folders few.
@@ -412,17 +413,26 @@ async function markedChanges(worktreePath: string): Promise<string[]> {
     return listing.names.has(name) || fs.existsSync(`${worktreePath}/${file}`)
   }
   const marked: { file: string; mode: string; sha: string; mark: string }[] = []
+  // Marked files whose name is not UTF-8 (Linux takes any bytes): text cannot name them, so they are
+  // not compared. One that is there counts as changed, named as git quotes it.
+  const unnamed: string[] = []
   let count = 0
   await gitEntries(worktreePath, ['ls-files', '-v', '-s', '-z'], (entry) => {
     // `<tag> <mode> <sha> <stage>\t<path>`
-    const tag = entry[0]!
+    const tag = String.fromCharCode(entry[0]!)
     if (tag !== 'S' && tag === tag.toUpperCase()) return
-    const tab = entry.indexOf('\t')
-    const file = entry.slice(tab + 1)
-    if (!there(file) || ++count > MARKED_LIMIT) return
-    const [, mode = '', sha = ''] = entry.slice(0, tab).split(' ')
+    const tab = entry.indexOf(0x09)
+    const name = entry.subarray(tab + 1)
+    const file = name.toString('utf8')
     const mark =
       tag === 'S' ? 'skip-worktree' : tag === 's' ? 'skip-worktree, assume-unchanged' : 'assume-unchanged'
+    if (!Buffer.from(file, 'utf8').equals(name)) {
+      const at = Buffer.concat([Buffer.from(`${worktreePath}/`), name])
+      if (!fs.lstatSync(at, { throwIfNoEntry: false }) || ++count > MARKED_LIMIT) return
+      return void unnamed.push(`${quoted(name)} (${mark})`)
+    }
+    if (!there(file) || ++count > MARKED_LIMIT) return
+    const [, mode = '', sha = ''] = entry.subarray(0, tab).toString('utf8').split(' ')
     marked.push({ file, mode, sha, mark })
   })
   if (count > MARKED_LIMIT)
@@ -461,8 +471,20 @@ async function markedChanges(worktreePath: string): Promise<string[]> {
     const shas = out.trim().split('\n')
     hashed.forEach((m, i) => shas[i] !== m.sha && changed.push(m))
   }
-  return changed.map((m) => `${m.file} (${m.mark})`)
+  return [...unnamed, ...changed.map((m) => `${m.file} (${m.mark})`)]
 }
+
+/** A file name as git quotes one (`core.quotePath`): a byte that is not plain ASCII as `\ooo`. */
+const quoted = (name: Buffer) =>
+  `"${[...name]
+    .map((b) =>
+      b === 0x22 || b === 0x5c
+        ? `\\${String.fromCharCode(b)}`
+        : b >= 0x20 && b < 0x7f
+          ? String.fromCharCode(b)
+          : `\\${b.toString(8).padStart(3, '0')}`,
+    )
+    .join('')}"`
 
 /**
  * The files git tracks at these paths of the worktree (relative to it, with `/`), or under them, each
@@ -481,7 +503,9 @@ export async function eachTrackedFile(
     let n = 0
     while (n < pathspecs.length && (n === 0 || length + pathspecs[n]!.length < 16_000))
       length += pathspecs[n++]!.length + 1
-    await gitEntries(worktreePath, ['ls-files', '-z', '--', ...pathspecs.splice(0, n)], each)
+    await gitEntries(worktreePath, ['ls-files', '-z', '--', ...pathspecs.splice(0, n)], (entry) =>
+      each(entry.toString('utf8')),
+    )
   }
 }
 
@@ -489,25 +513,31 @@ export async function eachTrackedFile(
  * A git command's `-z` output, entry by entry as git writes it: no buffer to outgrow. Fails as `git`
  * does, with git's error lines for `gitSaid`, and when `each` throws.
  */
-function gitEntries(cwd: string, args: string[], each: (entry: string) => void): Promise<void> {
+function gitEntries(cwd: string, args: string[], each: (entry: Buffer) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn('git', args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
-    let rest = ''
+    // Bytes, as git wrote them: a name need not be UTF-8.
+    let rest: Buffer = Buffer.alloc(0)
     let stderr = ''
     let thrown: { err: unknown } | null = null
-    const take = (entries: string[]) => {
+    const take = (entries: Buffer[]) => {
       try {
-        for (const entry of entries) if (entry) each(entry)
+        for (const entry of entries) if (entry.length) each(entry)
       } catch (err) {
         thrown = { err }
         child.kill()
       }
     }
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (chunk: string) => {
+    child.stdout.on('data', (chunk: Buffer) => {
       if (thrown) return
-      const entries = (rest + chunk).split('\0')
-      rest = entries.pop()!
+      const data = rest.length ? Buffer.concat([rest, chunk]) : chunk
+      const entries: Buffer[] = []
+      let start = 0
+      for (let end = data.indexOf(0); end >= 0; end = data.indexOf(0, start)) {
+        entries.push(data.subarray(start, end))
+        start = end + 1
+      }
+      rest = data.subarray(start)
       take(entries)
     })
     child.stderr.setEncoding('utf8')
