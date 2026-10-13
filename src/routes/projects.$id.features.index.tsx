@@ -103,8 +103,10 @@ function Features() {
   const found = useQuery({
     ...ticketsQuery(id, scope, searching),
     enabled: searching !== '',
-    // While the next query loads, the rows of the last one stay, if they are of the same list.
-    placeholderData: (rows, last) => (last?.queryKey[2] === scope ? rows : undefined),
+    // While the next search loads, the rows of the last one stay, if it searched the same list. The
+    // unsearched list (the same key without a query) is not a search: its rows do not stay.
+    placeholderData: (rows, last) =>
+      last?.queryKey[2] === scope && last.queryKey[3] !== undefined ? rows : undefined,
     refetchInterval: view === 'archived' ? 30_000 : 10_000,
   })
   const search = (next: string) =>
@@ -115,8 +117,9 @@ function Features() {
   const [onlyUnpushed, setOnlyUnpushed] = useState(false)
   const unpushed = (data ?? []).filter((t) => isUnpushed(push.get(t.id)))
   const shown = onlyUnpushed ? unpushed : (data ?? [])
+  // The line narrows the List alone, searched or not; the archive shows every ticket it finds.
   const listed = searching
-    ? (found.data ?? []).filter((t) => !onlyUnpushed || isUnpushed(push.get(t.id)))
+    ? (found.data ?? []).filter((t) => view !== 'list' || !onlyUnpushed || isUnpushed(push.get(t.id)))
     : shown
   return (
     <div className="space-y-4">

@@ -103,7 +103,12 @@ test('the List and the Archived tickets search by name first, then the thread, w
   expect(found[0]).not.toHaveProperty('updates')
 })
 
-test('the search keeps to the branches not pushed when that line is on', async ({ page, project, human }) => {
+test('the search keeps to the branches not pushed when that line is on, in the List alone', async ({
+  page,
+  api,
+  project,
+  human,
+}) => {
   const name = (what: string) => `e2e-${project.id}-${what}`
   git('branch', name('local'), 'main')
   git('branch', name('other'), 'main')
@@ -132,4 +137,74 @@ test('the search keeps to the branches not pushed when that line is on', async (
   await expect(rows).toHaveText([/Kiwi/, /Kiwi/])
   await page.getByRole('button', { name: /^2 branches not pushed/ }).click()
   await expect(rows).toHaveText([/Kiwi here/])
+
+  // The line is the List's: left on, the archive still shows every ticket its search finds, though
+  // none of them has a branch to push.
+  const gone = await api.ticket({ title: 'Kiwi gone', status: 'done' })
+  await ok(human.post(`/api/tickets/${gone.id}/archive`))
+  const field = page.getByRole('searchbox', { name: 'Search tickets' })
+  await page.getByRole('tab', { name: /Archived/ }).click()
+  await expect(page).toHaveURL(/view=archived/)
+  await expect(rows).toHaveText([/Kiwi gone/])
+  await field.fill('gone')
+  await expect(page).toHaveURL(/[?&]q=gone(&|$)/)
+  await expect(rows).toHaveText([/Kiwi gone/])
+
+  // Back in the List, the line still narrows the search.
+  await page.getByRole('tab', { name: /List/ }).click()
+  await field.fill('kiwi')
+  await expect(page).toHaveURL(/[?&]q=kiwi(&|$)/)
+  await expect(rows).toHaveText([/Kiwi here/])
+})
+
+test('the first search shows a skeleton, not the whole list, and the next keeps the last results dimmed', async ({
+  page,
+  api,
+  project,
+}) => {
+  await api.ticket({ title: 'Kiwi one', status: 'todo' })
+  await api.ticket({ title: 'Kiwi two', status: 'todo' })
+  await api.ticket({ title: 'Lemon', status: 'todo' })
+  await api.ticket({ title: 'Unrelated', status: 'todo' })
+  const rows = page
+    .getByRole('main')
+    .getByRole('listitem')
+    .filter({ has: page.locator('a[href*="/features/"]') })
+  const skeleton = page.getByRole('main').locator('[data-slot="skeleton"]')
+  const field = page.getByRole('searchbox', { name: 'Search tickets' })
+  await page.goto(`/projects/${project.id}/features?view=list`)
+  await expect(rows).toHaveCount(4)
+
+  // Each search waits until released, to see the page while it is on its way.
+  const isSearch = (url: URL) =>
+    url.pathname === `/api/projects/${project.id}/tickets` && url.searchParams.has('q')
+  let release = () => {}
+  let held = Promise.resolve()
+  const hold = () => (held = new Promise<void>((r) => (release = r)))
+  await page.route(isSearch, async (route) => {
+    await held
+    await route.continue()
+  })
+
+  // The first search: no rows until it answers, the unsearched ones neither.
+  hold()
+  let sent = page.waitForRequest((r) => isSearch(new URL(r.url())))
+  await field.fill('kiwi')
+  await sent
+  await expect(skeleton).toBeVisible()
+  await expect(rows).toHaveCount(0)
+  release()
+  await expect(rows).toHaveText([/Kiwi/, /Kiwi/])
+  await expect(skeleton).toHaveCount(0)
+
+  // The next search keeps the last one's rows, dimmed, until it answers.
+  hold()
+  sent = page.waitForRequest((r) => isSearch(new URL(r.url())) && r.url().includes('two'))
+  await field.fill('kiwi two')
+  await sent
+  await expect(page.getByRole('main').locator('.opacity-60').getByRole('listitem')).toHaveCount(2)
+  await expect(skeleton).toHaveCount(0)
+  release()
+  await expect(rows).toHaveText([/Kiwi two/])
+  await expect(page.getByRole('main').locator('.opacity-60')).toHaveCount(0)
 })
