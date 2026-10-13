@@ -104,11 +104,19 @@ class FakeRunner implements PreviewRunner {
   /** Each kill, with whether the worktree was still there when it came. */
   killed: { pid: number; worktreeThere: boolean }[] = []
   watch = ''
+  /** Whether an install or a build goes on until `release` (a long build), instead of ending at once. */
+  hold = false
+  private held: (() => void)[] = []
   private pid = 5000
   spawn(_command: string, _args: string[], opts: { log: string; shell?: boolean }): Proc {
     fs.appendFileSync(opts.log, 'ok\n')
+    if (opts.shell && this.hold)
+      return { pid: ++this.pid, exited: new Promise((r) => this.held.push(() => r(0))) }
     // Install and build finish at once; the server runs until it is killed.
     return { pid: ++this.pid, exited: opts.shell ? Promise.resolve(0) : new Promise(() => {}) }
+  }
+  release() {
+    for (const end of this.held.splice(0)) end()
   }
   async killTree(pid: number) {
     this.killed.push({ pid, worktreeThere: fs.existsSync(this.watch) })
@@ -133,6 +141,9 @@ const branchOf = async (ticketId: number, name: string) =>
   (await cleanupReport(projectId)).tickets
     .find((t) => t.id === ticketId)
     ?.branches.find((b) => b.name === name)
+/** What `promise` answers within `ms`, else 'still waiting'. */
+const within = <T>(promise: Promise<T>, ms: number) =>
+  Promise.race([promise, new Promise<'still waiting'>((r) => setTimeout(() => r('still waiting'), ms))])
 const activity = (ticketId: number) =>
   dbm.db
     .select()
@@ -1457,6 +1468,147 @@ describe('protects the same repository and origin, however a project reaches the
     )
     expect(r).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/also at the work of/) })
     expect(fs.existsSync(wt('f4c'))).toBe(true)
+  })
+})
+
+describe('a repository moved, with a link left at its old path', () => {
+  // Git lists a worktree made before the move by its old path, through the link; the board knows it
+  // by the real one: a workspace registered there, a preview the board runs from there.
+  const before = path.join(tmp, 'moved-from')
+  const after = path.join(tmp, 'moved-to')
+  const main = path.join(after, 'agent-board')
+  const old = (name: string) => path.join(before, `agent-board-${name}`)
+  const now = (name: string) => path.join(after, `agent-board-${name}`)
+  const there = gitIn(main)
+  let pid: number
+  let rid: number
+
+  beforeAll(() => {
+    const first = path.join(before, 'agent-board')
+    fs.mkdirSync(first, { recursive: true })
+    const g = gitIn(first)
+    g('init', '-q', '-b', 'main')
+    g('config', 'user.email', 't@t')
+    g('config', 'user.name', 't')
+    fs.writeFileSync(path.join(first, 'package.json'), JSON.stringify({ name: 'agent-board' }))
+    fs.writeFileSync(path.join(first, 'pnpm-lock.yaml'), LOCK)
+    fs.writeFileSync(path.join(first, '.gitignore'), 'node_modules\ndata\n')
+    g('add', '.')
+    g('commit', '-q', '-m', 'base')
+    // Each at main's commit: their work landed.
+    for (const name of ['s1', 's2', 's4']) {
+      g('branch', `feat/${name}`)
+      g('worktree', 'add', '-q', old(name), `feat/${name}`)
+    }
+    fs.renameSync(before, after)
+    fs.symlinkSync(after, before, process.platform === 'win32' ? 'junction' : 'dir')
+    pid = dbm.db.insert(dbm.schema.projects).values({ name: 'moved' }).returning().get().id
+    rid = dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId: pid, name: 'moved', repoPath: main, baseBranch: 'main' })
+      .returning()
+      .get().id
+  })
+
+  const ticket = (title: string, branch: string, status: string) =>
+    features.createTicket(pid, { title, branch, status, repoId: rid }, 'claude')
+  const branchIn = async (ticketId: number, name: string) =>
+    (await cleanupReport(pid)).tickets.find((t) => t.id === ticketId)?.branches.find((b) => b.name === name)
+  const listed = () =>
+    there('worktree', 'list', '--porcelain')
+      .split('\n')
+      .filter((l) => l.startsWith('worktree '))
+      .map((l) => path.resolve(l.slice(9)))
+  const removeAt = (ticketId: number, name: string, worktrees: string[]) =>
+    deleteLeftovers(
+      pid,
+      [
+        {
+          ticketId,
+          branch: `feat/${name}`,
+          kind: 'worktrees',
+          sha: there('rev-parse', `feat/${name}`),
+          worktrees,
+        },
+      ],
+      'enrique',
+    )
+
+  it('lists the worktrees made before the move by their old path', () => {
+    expect(listed()).toEqual(expect.arrayContaining([old('s1'), old('s2'), old('s4')]))
+  })
+
+  it('never removes a worktree a ticket in work registered by its real path', async () => {
+    const t = ticket('s1', 'feat/s1', 'done')
+    const open = ticket('s1 other', 'feat/s1-other', 'in_progress')
+    features.addWorkspace(open.id, { name: 'theirs', path: now('s1') }, 'claude')
+    const b = (await branchIn(t.id, 'feat/s1'))!
+    expect(b.worktrees.map((w) => [path.resolve(w.path), w.protected])).toEqual([
+      [old('s1'), `registered on #${open.id}`],
+    ])
+    expect(b.can.worktrees.ok).toBe(false)
+
+    const [r] = await removeAt(
+      t.id,
+      's1',
+      b.worktrees.map((w) => w.path),
+    )
+    expect(r).toMatchObject({ outcome: 'refused', removed: [] })
+    expect(r!.reason).toContain(`registered on #${open.id}`)
+    expect(fs.existsSync(path.join(now('s1'), 'package.json'))).toBe(true)
+    expect(hasRef(main, 'refs/heads/feat/s1')).toBe(true)
+  })
+
+  it('refuses at once, without waiting, while a preview of such a workspace builds there', async () => {
+    const mp = await import('./managedPreview')
+    const runner = new FakeRunner()
+    runner.hold = true
+    mp.setPreviewRunner(runner)
+    const t = ticket('s2', 'feat/s2', 'done')
+    const open = ticket('s2 other', 'feat/s2-other', 'in_progress')
+    const ws = features.addWorkspace(open.id, { name: 'theirs', path: now('s2') }, 'claude')
+    mp.startPreview(ws.id, 'claude')
+    await expect.poll(() => mp.managedPreview(ws.id)?.step, { timeout: 10_000 }).toBe('install')
+    try {
+      const b = (await branchIn(t.id, 'feat/s2'))!
+      expect(b.worktrees[0]!.previews.map((p) => p.workspaceId)).toEqual([ws.id])
+      expect(b.worktrees[0]!.protected).toBe(`registered on #${open.id}`)
+
+      const answer = await within(
+        removeAt(
+          t.id,
+          's2',
+          b.worktrees.map((w) => w.path),
+        ),
+        5000,
+      )
+      expect(answer).toEqual([expect.objectContaining({ outcome: 'refused', removed: [] })])
+      expect(mp.managedPreview(ws.id)).toMatchObject({ status: 'building', step: 'install' })
+      expect(fs.existsSync(path.join(now('s2'), 'package.json'))).toBe(true)
+      expect(hasRef(main, 'refs/heads/feat/s2')).toBe(true)
+    } finally {
+      await mp.stopPreview(ws.id, 'test over', 'enrique')
+      runner.release()
+      await mp.previewsSettled(now('s2'))
+    }
+  })
+
+  it('forgets the closed ticket’s own workspace registered by the real path once it removes it', async () => {
+    const t = ticket('s4', 'feat/s4', 'done')
+    features.addWorkspace(t.id, { name: 'mine', branch: 'feat/s4', path: now('s4') }, 'claude')
+    const b = (await branchIn(t.id, 'feat/s4'))!
+    expect(b.can.worktrees).toEqual({ ok: true, reason: null })
+
+    const [r] = await removeAt(
+      t.id,
+      's4',
+      b.worktrees.map((w) => w.path),
+    )
+    expect(r).toMatchObject({ outcome: 'deleted' })
+    expect(fs.existsSync(now('s4'))).toBe(false)
+    expect(
+      dbm.db.select().from(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.ticketId, t.id)).all(),
+    ).toEqual([])
   })
 })
 

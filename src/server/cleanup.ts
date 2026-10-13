@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import path from 'node:path'
 
 import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 
@@ -268,6 +269,41 @@ export const samePath = (a: string, b: string, platform: NodeJS.Platform = proce
   pathKey(a, platform) === pathKey(b, platform)
 
 /**
+ * A folder's key by where it really is: `pathKey` of its real path, every link or junction on the way
+ * resolved. A repository moved with a link left at its old path has git list a worktree made before
+ * the move by that old path, while a workspace or a preview names it by the new one. A folder that is
+ * not there (removed, or never made) goes by its nearest parent that is, the rest as written.
+ */
+export function folderKey(p: string): string {
+  const abs = path.resolve(p)
+  let rest = ''
+  for (let dir = abs; ; ) {
+    try {
+      return pathKey(path.join(fs.realpathSync.native(dir), rest))
+    } catch {
+      // Not there: its parent is asked.
+    }
+    const up = path.dirname(dir)
+    if (up === dir) return pathKey(abs)
+    rest = path.join(path.basename(dir), rest)
+    dir = up
+  }
+}
+
+/** Whether two paths are the same folder, wherever links lead (`folderKey`). */
+export const sameFolder = (a: string, b: string) => folderKey(a) === folderKey(b)
+
+/** `folderKey`, each path resolved once: for a read that compares many paths many times. */
+function folderKeys() {
+  const keys = new Map<string, string>()
+  return (p: string) => {
+    let key = keys.get(p)
+    if (key === undefined) keys.set(p, (key = folderKey(p)))
+    return key
+  }
+}
+
+/**
  * A word for a command the human pastes into a shell: as it is when it is plain, else in single quotes
  * (a branch name may hold `;`, `$` or a backtick).
  */
@@ -304,13 +340,16 @@ export interface LinkedPreview {
 export function linkedPreviews(): (worktreePath: string) => LinkedPreview[] {
   const links = db.select().from(schema.workspaces).where(isNotNull(schema.workspaces.previewUrl)).all()
   const previews = activePreviews()
-  return (worktreePath) =>
-    links.flatMap((w) => {
-      if (!w.path || !samePath(w.path, worktreePath)) return []
-      const ownStopped = previews.some((p) => p.workspaceId === w.id && samePath(p.path, worktreePath))
+  const key = folderKeys()
+  return (worktreePath) => {
+    const here = key(worktreePath)
+    return links.flatMap((w) => {
+      if (!w.path || key(w.path) !== here) return []
+      const ownStopped = previews.some((p) => p.workspaceId === w.id && key(p.path) === here)
       const port = stoppableLinkPort(w, { ownStopped })
       return port ? [{ workspaceId: w.id, ticketId: w.ticketId, url: w.previewUrl!, port }] : []
     })
+  }
 }
 
 export interface LeftoverWorktree {
@@ -461,7 +500,7 @@ export function remoteKey(url: string) {
     .toLowerCase()
 }
 
-async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
+async function guardOf(repoPath: string, git: RepoGit, key: (p: string) => string): Promise<Guard> {
   const branches = new Map<string, string>()
   const origin = new Map<string, string>()
   const inUse = new Map<string, number>()
@@ -470,7 +509,7 @@ async function guardOf(repoPath: string, git: RepoGit): Promise<Guard> {
   const everyRepo = listRepos()
   // Every checkout of this repository shares its branches: its own path and each worktree git lists.
   const trees = [repoPath, ...git.worktrees.map((w) => w.path)]
-  const rows = everyRepo.filter((r) => trees.some((p) => samePath(p, r.repoPath)))
+  const rows = everyRepo.filter((r) => trees.some((p) => key(p) === key(r.repoPath)))
   const url = await originOf(repoPath)
   const clones = url
     ? (
@@ -619,12 +658,15 @@ export async function cleanupReport(
         .all()
     : []
   const git = gitCache()
+  // Paths are compared by where they really lead: git may list a worktree by a link's path.
+  const key = folderKeys()
+  const same = (a: string, b: string) => key(a) === key(b)
   const guards = new Map<string, Promise<Guard>>()
   const guard = (repoPath: string) => {
     if (!guards.has(repoPath))
       guards.set(
         repoPath,
-        git(repoPath).then((g) => guardOf(repoPath, g)),
+        git(repoPath).then((g) => guardOf(repoPath, g, key)),
       )
     return guards.get(repoPath)!
   }
@@ -636,7 +678,7 @@ export async function cleanupReport(
       [t.branch, ...workspaces.filter((w) => w.ticketId === t.id).map((w) => w.branch)].filter(Boolean),
     ),
   ]
-  const registered = (tree: Worktree) => workspaces.some((w) => w.path && samePath(w.path, tree.path))
+  const registered = (tree: Worktree) => workspaces.some((w) => w.path && same(w.path, tree.path))
 
   // A detached worktree has no branch to go by: it belongs to the tickets of its repo whose branch
   // commit it is checked out at. Repo rows sharing a path share its worktrees, so their claims add up.
@@ -728,9 +770,7 @@ export async function cleanupReport(
               .map((tree, i) => ({ tree, main: i === 0 }))
               .filter(
                 ({ tree }) =>
-                  tree.branch === name ||
-                  paths.some((p) => samePath(p, tree.path)) ||
-                  claimedBy(tree) === name,
+                  tree.branch === name || paths.some((p) => same(p, tree.path)) || claimedBy(tree) === name,
               )
               .map(
                 async ({ tree, main }): Promise<LeftoverWorktree> => ({
@@ -738,7 +778,7 @@ export async function cleanupReport(
                   main,
                   branch: tree.branch,
                   head: tree.head,
-                  previews: previews.filter((p) => samePath(p.path, tree.path)),
+                  previews: previews.filter((p) => same(p.path, tree.path)),
                   linkedPreviews: linkedAt(tree.path),
                   protected: await treeGuard(tree, main),
                 }),
@@ -789,11 +829,11 @@ export async function cleanupReport(
           /** Why a worktree listed under this branch may not be removed with it; null when it may. */
           async function treeGuard(tree: Worktree, main: boolean): Promise<string | null> {
             if (main) return "the repo's main checkout"
-            if (samePath(tree.path, process.cwd())) return 'the board runs from it'
-            if (kept?.checkouts.some((p) => samePath(p, tree.path))) return "a repo's checkout on the board"
+            if (same(tree.path, process.cwd())) return 'the board runs from it'
+            if (kept?.checkouts.some((p) => same(p, tree.path))) return "a repo's checkout on the board"
             if (tree.locked) return 'locked'
             if (tree.branch && tree.branch !== name) return `has ${tree.branch} checked out`
-            const registeredOn = kept?.paths.find((p) => samePath(p.path, tree.path))
+            const registeredOn = kept?.paths.find((p) => same(p.path, tree.path))
             if (registeredOn) return `registered on #${registeredOn.ticketId}`
             if (tree.branch || !tree.head) return tree.branch ? null : 'its commit is unknown'
             const head = tree.head

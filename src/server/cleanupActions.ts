@@ -10,7 +10,7 @@ import {
   type LeftoverBranch,
   type LinkedPreview,
   pathKey,
-  samePath,
+  sameFolder,
   shellArg,
 } from './cleanup'
 import { deleteWorkspace } from './features'
@@ -205,7 +205,7 @@ async function deleteOne(
 
   // The worktrees, then the local branch.
   const sent = item.worktrees ?? []
-  if (sent.some((p) => samePath(p, repoPath) || b.worktrees.some((w) => w.main && samePath(w.path, p))))
+  if (sent.some((p) => sameFolder(p, repoPath) || b.worktrees.some((w) => w.main && sameFolder(w.path, p))))
     return result(item, 'refused', 'the main checkout is never removed')
   const trees = b.worktrees.filter((w) => !w.main)
   if (!trees.length) {
@@ -214,7 +214,7 @@ async function deleteOne(
   }
   if (b.local && b.local !== item.sha)
     return result(item, 'refused', `${b.name} moved since: now at ${short(b.local)}`)
-  const unseen = trees.filter((w) => !sent.some((p) => samePath(p, w.path)))
+  const unseen = trees.filter((w) => !sent.some((p) => sameFolder(p, w.path)))
   if (unseen.length)
     return result(
       item,
@@ -357,7 +357,7 @@ async function deleteLocal(
  * could not delete a folder still filling.
  */
 async function stopPreviews(worktreePath: string, actor: string) {
-  for (const p of activePreviews().filter((p) => samePath(p.path, worktreePath)))
+  for (const p of activePreviews().filter((p) => sameFolder(p.path, worktreePath)))
     await stopPreview(p.workspaceId, 'its worktree was removed', actor)
   await previewsSettled(worktreePath)
 }
@@ -388,6 +388,6 @@ function forgetWorkspaces(projectId: number, worktreePath: string, actor: string
     .from(schema.workspaces)
     .where(inArray(schema.workspaces.ticketId, ids))
     .all()
-    .filter((w) => w.path && samePath(w.path, worktreePath))
+    .filter((w) => w.path && sameFolder(w.path, worktreePath))
   for (const w of at) deleteWorkspace(w.id, actor)
 }
