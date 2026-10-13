@@ -178,7 +178,7 @@ test("lists the project's previews, the running ones apart, each with its ticket
       'Link that is down',
     ])
 
-    await page.goto(`/projects/${project.id}/previews`)
+    await page.goto(`/projects/${project.id}/previews?stage=_all`)
     // The rows sit in the Running and Not running sections.
     const rows = previewRows(page)
     const row = (title: string) => rows.filter({ hasText: title })
@@ -218,7 +218,7 @@ test("lists the project's previews, the running ones apart, each with its ticket
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Link that is down')
 
     // The other project's page has its own.
-    await page.goto(`/projects/${other.id}/previews`)
+    await page.goto(`/projects/${other.id}/previews?stage=_all`)
     await expect(rows).toHaveCount(1)
     await expect(row('Another project preview')).toBeVisible()
   } finally {
@@ -262,7 +262,7 @@ test.describe('board-run previews and the preview limit', () => {
       (await ok<{ managed: ManagedPreview | null }>(human.get(`/api/workspaces/${ws.id}/preview`))).managed
 
     try {
-      await page.goto(`/projects/${project.id}/previews`)
+      await page.goto(`/projects/${project.id}/previews?stage=_all`)
       const running = page.getByRole('region', { name: 'Running', exact: true })
       const stopped = page.getByRole('region', { name: 'Not running' })
       const row = stopped.getByRole('listitem').filter({ hasText: 'Run it from here' })
@@ -327,7 +327,7 @@ test.describe('board-run previews and the preview limit', () => {
     )
     const ws = await register(human, t, { branch, path: worktree, previewUrl: 'https://example.com/limit' })
     try {
-      await page.goto(`/projects/${project.id}/previews`)
+      await page.goto(`/projects/${project.id}/previews?stage=_all`)
       await expect(inUse(page)).toHaveText('Board-run previews: 0 of 8 in use (board-wide)')
       const limit = page.getByLabel('Preview limit')
       await expect(limit).toHaveValue('8')
@@ -388,7 +388,7 @@ test.describe('board-run previews and the preview limit', () => {
     try {
       await ok(human.patch('/api/settings', { data: { previewLimit: 1 } }))
       expect((await human.post(`/api/workspaces/${a.id}/preview/start`)).status()).toBe(202)
-      await page.goto(`/projects/${project.id}/previews`)
+      await page.goto(`/projects/${project.id}/previews?stage=_all`)
       await expect(inUse(page)).toHaveText('Board-run previews: 1 of 1 in use (board-wide)')
       const row = page
         .getByRole('region', { name: 'Not running' })
@@ -470,7 +470,7 @@ test.describe('board-run previews and the preview limit', () => {
       expect((await agent.post(`/api/projects/${project.id}/previews/stop`)).status()).toBe(403)
       expect(server.running()).toBe(true)
 
-      await page.goto(`/projects/${project.id}/previews`)
+      await page.goto(`/projects/${project.id}/previews?stage=_all`)
       const running = page.getByRole('region', { name: 'Running', exact: true })
       const stopped = page.getByRole('region', { name: 'Not running' })
       await expect(running.getByRole('listitem')).toHaveCount(3)
@@ -538,7 +538,7 @@ test("Stop on a link row stops the agent's server when it runs from the workspac
     expect(refused.status()).toBe(403)
     expect(server.running()).toBe(true)
 
-    await page.goto(`/projects/${project.id}/previews`)
+    await page.goto(`/projects/${project.id}/previews?stage=_all`)
     const row = page
       .getByRole('region', { name: 'Running', exact: true })
       .getByRole('listitem')
@@ -579,7 +579,7 @@ test('a running link the board cannot tell runs from the worktree has no Stop, a
       }),
     )
     await register(human, t, { branch, path: worktree, previewUrl: stranger.url })
-    await page.goto(`/projects/${project.id}/previews`)
+    await page.goto(`/projects/${project.id}/previews?stage=_all`)
     const row = page
       .getByRole('region', { name: 'Running', exact: true })
       .getByRole('listitem')
@@ -613,7 +613,7 @@ test('Refresh, and the page asking again on its own, pick up a preview registere
   // The page's timers run on a clock the test moves.
   await page.clock.install()
   await register('Registered first')
-  await page.goto(`/projects/${project.id}/previews`)
+  await page.goto(`/projects/${project.id}/previews?stage=_all`)
   const rows = previewRows(page)
   await expect(rows).toHaveCount(1)
 
@@ -632,4 +632,257 @@ test('Refresh, and the page asking again on its own, pick up a preview registere
   await page.clock.fastForward('00:16')
   await expect(rows.filter({ hasText: 'Registered later still' })).toBeVisible()
   await expect(rows).toHaveCount(3)
+})
+
+// --- the Stage filter ---
+
+const stageFilter = (page: Page) => page.getByRole('combobox', { name: 'Stage' })
+/** What the Stage filter shows picked: the stage's name and its count. */
+const shownStage = (page: Page) => stageFilter(page).locator('[data-slot="select-value"]')
+/** An option of the open Stage filter, by its stage's name (its count follows the name). */
+const stageOption = (page: Page, name: string) =>
+  page.getByRole('option', { name: new RegExp(`^${name} \\d+$`) })
+async function pickStage(page: Page, name: string) {
+  await stageFilter(page).click()
+  await stageOption(page, name).click()
+  await expect(page.getByRole('listbox')).toHaveCount(0)
+}
+const group = (page: Page, title: 'Running' | 'Not running') =>
+  page.getByRole('region', { name: title, exact: true })
+
+/** A ticket in the stage with a hosted link: a preview that is not running (never checked). */
+async function hosted(human: APIRequestContext, projectId: number, title: string, status: string) {
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${projectId}/tickets`, { data: { title, status } }),
+  )
+  await register(human, t, { previewUrl: `https://example.com/${t.id}` })
+  return t
+}
+
+test('the Stage filter starts on In review, offers every stage in board order with its count, and filters the groups', async ({
+  page,
+  human,
+  project,
+}) => {
+  const live = await answering()
+  try {
+    const working = await ok<TicketFull>(
+      human.post(`/api/projects/${project.id}/tickets`, {
+        data: { title: 'Running in progress', status: 'in_progress' },
+      }),
+    )
+    await register(human, working, { previewUrl: live.url })
+    const waiting = await hosted(human, project.id, 'Waiting for review', 'review')
+    await hosted(human, project.id, 'Shipped one', 'done')
+    await hosted(human, project.id, 'Shipped two', 'done')
+
+    await page.goto(`/projects/${project.id}/previews`)
+    // In review, without saying so in the URL.
+    await expect(shownStage(page)).toHaveText(/^In review\s*1$/)
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews$`))
+    await expect(previewRows(page)).toHaveCount(1)
+    await expect(group(page, 'Not running').getByRole('listitem')).toContainText('Waiting for review')
+    await expect(group(page, 'Not running').getByRole('heading')).toHaveText('Not running · 1')
+    await expect(group(page, 'Running')).toHaveCount(0)
+    // The usage bar and Stop all are the project's: a preview runs, if not in this stage.
+    await expect(page.getByRole('button', { name: 'Stop all' })).toBeVisible()
+
+    // Every stage of the project, in board order, each with its previews; All stages with all of them.
+    await stageFilter(page).click()
+    const names = ['All stages', ...project.stages.map((s) => s.name)]
+    const counts: Record<string, number> = { 'All stages': 4, 'In progress': 1, 'In review': 1, Done: 2 }
+    await expect(page.getByRole('option')).toHaveText(
+      names.map((n) => new RegExp(`^${n}\\s*${counts[n] ?? 0}$`)),
+    )
+    await expect(stageOption(page, 'In review')).toHaveAttribute('aria-selected', 'true')
+    await stageOption(page, 'Done').click()
+
+    // One stage at a time, in the URL.
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=done$`))
+    await expect(shownStage(page)).toHaveText(/^Done\s*2$/)
+    await expect(previewRows(page)).toHaveCount(2)
+    await expect(previewRows(page).filter({ hasText: 'Waiting for review' })).toHaveCount(0)
+    await expect(group(page, 'Not running').getByRole('heading')).toHaveText('Not running · 2')
+    await stageFilter(page).click()
+    await expect(page.getByRole('option', { selected: true })).toHaveCount(1)
+    await expect(stageOption(page, 'Done')).toHaveAttribute('aria-selected', 'true')
+    await page.keyboard.press('Escape')
+
+    await pickStage(page, 'All stages')
+    await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=_all$`))
+    await expect(group(page, 'Running').getByRole('heading')).toHaveText('Running · 1')
+    await expect(group(page, 'Not running').getByRole('heading')).toHaveText('Not running · 3')
+    // A reload keeps it.
+    await page.reload()
+    await expect(shownStage(page)).toHaveText(/^All stages\s*4$/)
+    await expect(previewRows(page)).toHaveCount(4)
+
+    // A link to a stage shows that stage.
+    await page.goto(`/projects/${project.id}/previews?stage=in_progress`)
+    await expect(shownStage(page)).toHaveText(/^In progress\s*1$/)
+    await expect(group(page, 'Running').getByRole('listitem')).toHaveCount(1)
+    await expect(group(page, 'Running').getByRole('listitem')).toContainText('Running in progress')
+    await expect(group(page, 'Not running')).toHaveCount(0)
+
+    // A ticket that moves on leaves the stage at the next fetch; the stage stays picked.
+    await page.goto(`/projects/${project.id}/previews?stage=review`)
+    await expect(previewRows(page)).toHaveCount(1)
+    await ok(human.patch(`/api/tickets/${waiting.id}`, { data: { status: 'done' } }))
+    await page.getByRole('button', { name: 'Refresh' }).click()
+    await expect(page.getByText('No previews in In review.')).toBeVisible()
+    await expect(previewRows(page)).toHaveCount(0)
+    await expect(shownStage(page)).toHaveText(/^In review\s*0$/)
+    await stageFilter(page).click()
+    await expect(stageOption(page, 'Done')).toHaveText(/^Done\s*3$/)
+  } finally {
+    await live.close()
+  }
+})
+
+test('the Stage filter starts on the review stage by its kind, renamed or not, and on All stages when the project has none', async ({
+  page,
+  human,
+  project,
+}) => {
+  await hosted(human, project.id, 'Waiting for review', 'review')
+  await hosted(human, project.id, 'Being built', 'in_progress')
+  const review = project.stages.find((s) => s.key === 'review')!
+  await ok(
+    human.patch(`/api/projects/${project.id}/stages/${review.id}`, { data: { name: 'Waiting for me' } }),
+  )
+
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(shownStage(page)).toHaveText(/^Waiting for me\s*1$/)
+  await expect(previewRows(page)).toHaveCount(1)
+  await expect(previewRows(page)).toContainText('Waiting for review')
+  await stageFilter(page).click()
+  await expect(stageOption(page, 'Waiting for me')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('option', { name: /^In review/ })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  // No stage of kind review any more: every preview shows.
+  await ok(human.patch(`/api/projects/${project.id}/stages/${review.id}`, { data: { kind: 'active' } }))
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(shownStage(page)).toHaveText(/^All stages\s*2$/)
+  await expect(previewRows(page)).toHaveCount(2)
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews$`))
+})
+
+test('the last stage picked is remembered per project and restored on a visit without one; a stage gone or unknown is ignored', async ({
+  page,
+  human,
+  project,
+}) => {
+  const hydration: string[] = []
+  page.on('console', (m) => {
+    if (/hydrat|did not match/i.test(m.text())) hydration.push(m.text())
+  })
+  await hosted(human, project.id, 'Waiting for review', 'review')
+  await hosted(human, project.id, 'Shipped', 'done')
+  const qa = await ok<{ id: number; key: string }>(
+    human.post(`/api/projects/${project.id}/stages`, { data: { name: 'QA', kind: 'active' } }),
+  )
+  await hosted(human, project.id, 'Under QA', qa.key)
+  const other = await seedProject(human, `Other stage filter (${project.id})`)
+  await hosted(human, other.id, 'Elsewhere in review', 'review')
+
+  // Nothing remembered: an unknown stage in the URL is none, so the default shows and the URL drops it.
+  await page.goto(`/projects/${project.id}/previews?stage=nope`)
+  await expect(shownStage(page)).toHaveText(/^In review\s*1$/)
+  await expect(previewRows(page)).toHaveCount(1)
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews$`))
+
+  await pickStage(page, 'Done')
+  await expect(page).toHaveURL(/\?stage=done$/)
+  // A visit without a stage, a cold load: Done again, put in the URL.
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(shownStage(page)).toHaveText(/^Done\s*1$/)
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=done$`))
+  await expect(previewRows(page)).toHaveCount(1)
+  await expect(previewRows(page)).toContainText('Shipped')
+  // A stage the project does not have, in the URL: the remembered one.
+  await page.goto(`/projects/${project.id}/previews?stage=nope`)
+  await expect(shownStage(page)).toHaveText(/^Done\s*1$/)
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=done$`))
+  // From the sidebar too.
+  await page.goto(`/projects/${project.id}`)
+  await page.getByRole('navigation').getByRole('link', { name: 'Previews', exact: true }).click()
+  await expect(shownStage(page)).toHaveText(/^Done\s*1$/)
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews\\?stage=done$`))
+
+  // Another project keeps its own: its review stage.
+  await page.goto(`/projects/${other.id}/previews`)
+  await expect(shownStage(page)).toHaveText(/^In review\s*1$/)
+  await expect(previewRows(page)).toContainText('Elsewhere in review')
+  await expect(page).toHaveURL(new RegExp(`/projects/${other.id}/previews$`))
+
+  // All stages is remembered as well.
+  await page.goto(`/projects/${project.id}/previews`)
+  await pickStage(page, 'All stages')
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(shownStage(page)).toHaveText(/^All stages\s*3$/)
+  await expect(page).toHaveURL(/\?stage=_all$/)
+
+  // A remembered stage since removed is ignored: the default shows.
+  await pickStage(page, 'QA')
+  await expect(previewRows(page)).toHaveCount(1)
+  await ok(human.delete(`/api/projects/${project.id}/stages/${qa.id}?moveTo=todo`))
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(shownStage(page)).toHaveText(/^In review\s*1$/)
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/previews$`))
+  await page.goto(`/projects/${project.id}/previews?stage=${qa.key}`)
+  await expect(shownStage(page)).toHaveText(/^In review\s*1$/)
+  await expect(previewRows(page)).toContainText('Waiting for review')
+
+  expect(hydration).toEqual([])
+})
+
+test('a stage without previews says so, and Show all stages shows them all', async ({
+  page,
+  human,
+  project,
+}) => {
+  await hosted(human, project.id, 'Being built', 'in_progress')
+  await hosted(human, project.id, 'Being built too', 'in_progress')
+  await page.goto(`/projects/${project.id}/previews`)
+  await expect(page.getByText('No previews in In review.')).toBeVisible()
+  await expect(page.getByText(/^No previews yet\./)).toHaveCount(0)
+  await expect(page.getByRole('region', { name: /^(Running|Not running)$/ })).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Show all stages' }).click()
+  await expect(shownStage(page)).toHaveText(/^All stages\s*2$/)
+  await expect(page).toHaveURL(/\?stage=_all$/)
+  await expect(group(page, 'Not running').getByRole('listitem')).toHaveCount(2)
+  await expect(page.getByText('No previews in In review.')).toHaveCount(0)
+})
+
+test('Stop all shows while a preview of the project runs outside the stage picked, and stops it', async ({
+  page,
+  human,
+  project,
+}) => {
+  const { worktree, branch } = worktreeOf(`${project.id}-stop-all-filtered`)
+  const server = await serveFrom(worktree)
+  try {
+    const t = await ok<TicketFull>(
+      human.post(`/api/projects/${project.id}/tickets`, {
+        data: { title: 'Started by an agent', status: 'in_progress' },
+      }),
+    )
+    await register(human, t, { branch, path: worktree, previewUrl: server.url })
+    await hosted(human, project.id, 'Waiting for review', 'review')
+    await page.goto(`/projects/${project.id}/previews`)
+    await expect(shownStage(page)).toHaveText(/^In review\s*1$/)
+    await expect(group(page, 'Running')).toHaveCount(0)
+    await expect(group(page, 'Not running').getByRole('listitem')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Stop all' }).click()
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Stop all' }).click()
+    await expect(toast(page, /^Stopped 1$/)).toBeVisible()
+    await server.exited
+    expect(await listens(server.port)).toBe(false)
+    await expect(page.getByRole('button', { name: 'Stop all' })).toHaveCount(0)
+    await expect(shownStage(page)).toHaveText(/^In review\s*1$/)
+  } finally {
+    server.stop()
+  }
 })

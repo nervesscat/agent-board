@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net'
 
 import type { Page } from '@playwright/test'
 
+import type { TicketFull } from '#/lib/api'
 import { named, pushedPill, reminder, seedDailyPage, today, yesterday } from './dailyPage'
 import { expect, ok, seededProject, test } from './fixtures'
 
@@ -119,11 +120,27 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Previe
         },
       }),
     )
-    await page.goto(`/projects/${project.id}/previews`)
+    await page.goto(`/projects/${project.id}/previews?stage=_all`)
     await expect(page.getByRole('link', { name: 'Open preview' })).toHaveCount(2)
     await expect(page.getByText(/^The board will not stop it: a-very-long-relative/)).toBeVisible()
     await expect(page.getByLabel('Preview limit')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Stop all' })).toBeVisible()
+    expect(await scrollsSideways(page)).toBe(false)
+    // The Stage filter, opened: All stages and every stage, each reachable, and still no sideways scroll.
+    await page.getByRole('combobox', { name: 'Stage' }).tap()
+    const options = page.getByRole('option')
+    await expect(options).toHaveCount(8)
+    for (const option of await options.all()) {
+      await option.scrollIntoViewIfNeeded()
+      await expect(option).toBeInViewport()
+    }
+    expect(await scrollsSideways(page)).toBe(false)
+    // The ticket's stage (the decision asked on it may have moved it): both its previews again.
+    const { status } = await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
+    const stage = project.stages.find((s) => s.key === status)!
+    await page.getByRole('option', { name: new RegExp(`^${stage.name} 2$`) }).tap()
+    await expect(page).toHaveURL(new RegExp(`\\?stage=${status}$`))
+    await expect(page.getByRole('link', { name: 'Open preview' })).toHaveCount(2)
     expect(await scrollsSideways(page)).toBe(false)
   } finally {
     await new Promise((resolve) => live.close(resolve))

@@ -1,8 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { GitBranch, Layers, RefreshCw, Square } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
 import { Empty } from '#/components/Empty'
 import {
@@ -25,12 +26,24 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
+import { Label } from '#/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, post, type ProjectPreview, type ProjectPreviews, type StopAll } from '#/lib/api'
-import { useStages } from '#/lib/project'
+import { useProject } from '#/lib/project'
+import { recall, remember } from '#/lib/remembered'
+import { ALL_STAGES, countByStage, inStageFilter, isStageFilter, resolveStageFilter } from '#/lib/stageFilter'
 import { type StageLike, stageBadge, stageOf } from '#/lib/stages'
 
-export const Route = createFileRoute('/projects/$id/previews')({ component: Previews })
+// ?stage= is the stage whose previews show, `_all` for every stage (none, or a stage the project no
+// longer has: the one this browser remembers for the project, else its first review stage).
+export const Route = createFileRoute('/projects/$id/previews')({
+  component: Previews,
+  validateSearch: z.object({ stage: z.string().optional().catch(undefined) }),
+})
+
+// The last stage picked is remembered in this browser, per project, for a visit whose URL names none.
+const stageKey = (projectId: string) => `previews.stage.${projectId}`
 
 const GROUPS = [
   {
@@ -47,7 +60,10 @@ const GROUPS = [
 
 function Previews() {
   const { id } = Route.useParams()
-  const stages = useStages(id)
+  const { stage: inUrl } = Route.useSearch()
+  const navigate = Route.useNavigate()
+  const project = useProject(id)
+  const stages = project.data?.stages ?? []
   // Polled only while the page is in view, faster while the board builds or starts one, as on a ticket.
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ['previews', id],
@@ -59,9 +75,42 @@ function Previews() {
   })
   const previews = data?.previews ?? []
 
+  // The stages come with the project, after mount (no loader), and storage is read only after mount
+  // (src/lib/remembered.ts): the filter is known once the stages are and, unless the URL names one of
+  // them, once the remembered stage is read. Until then a skeleton shows, on the server as in the
+  // browser, rather than a list the filter would then change.
+  const stagesKnown = !project.isPending
+  const storageKey = stageKey(id)
+  const stageKeys = [ALL_STAGES, ...stages.map((s) => s.key)]
+  // The stage remembered for the project read (undefined for none), null until read.
+  const [remembered, setRemembered] = useState<{ key: string; value: string | undefined } | null>(null)
+  useEffect(() => {
+    if (stagesKnown) setRemembered({ key: storageKey, value: recall(storageKey, stageKeys) })
+    // Read again for another project, or once its stages have changed.
+  }, [storageKey, stagesKnown, stageKeys.join()])
+  const recalled = remembered?.key === storageKey ? remembered.value : null
+  const known = stagesKnown && (isStageFilter(stages, inUrl) || recalled !== null)
+  const filter = resolveStageFilter(stages, inUrl, recalled)
+  // The remembered stage goes in the URL, and a stage the project does not have leaves it; the default
+  // stays out of it.
+  useEffect(() => {
+    if (!known || isStageFilter(stages, inUrl)) return
+    const restored = isStageFilter(stages, recalled) ? recalled : undefined
+    if (restored !== inUrl) navigate({ search: (s) => ({ ...s, stage: restored }), replace: true })
+  }, [known, inUrl, recalled, stageKeys.join()])
+  const pickStage = (key: string) => {
+    navigate({ search: (s) => ({ ...s, stage: key }), replace: true })
+    remember(storageKey, key)
+  }
+
+  // None until the previews have loaded, rather than a 0 for every stage.
+  const counts = data && countByStage(previews.map((p) => p.ticket.status))
+  const shown = previews.filter((p) => inStageFilter(filter, p.ticket.status))
+  const filterName = filter === ALL_STAGES ? 'All stages' : stageOf(stages, filter).name
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Previews</h1>
           <p className="text-sm text-muted-foreground">
@@ -69,9 +118,16 @@ function Previews() {
             previews the board builds and runs from their worktrees. Archived tickets are left out.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} /> Refresh
-        </Button>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0">
+          {known ? (
+            <StageFilter stages={stages} value={filter} counts={counts} onChange={pickStage} />
+          ) : (
+            <Skeleton className="h-7 w-48" />
+          )}
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} /> Refresh
+          </Button>
+        </div>
       </div>
       {data && (
         <PreviewsBar
@@ -83,7 +139,7 @@ function Previews() {
         />
       )}
       {error && <p className="text-sm text-destructive">{errorMessage(error)}</p>}
-      {isLoading ? (
+      {isLoading || !known ? (
         <Skeleton className="h-64" />
       ) : !previews.length ? (
         !error && (
@@ -92,9 +148,16 @@ function Previews() {
             or the board runs one from its worktree.
           </Empty>
         )
+      ) : !shown.length ? (
+        <Empty>
+          <p>No previews in {filterName}.</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => pickStage(ALL_STAGES)}>
+            Show all stages
+          </Button>
+        </Empty>
       ) : (
         GROUPS.map((g) => {
-          const items = previews.filter((p) => p.running === (g.key === 'running'))
+          const items = shown.filter((p) => p.running === (g.key === 'running'))
           if (!items.length) return null
           return (
             <section key={g.key} aria-label={g.title} className="space-y-1.5">
@@ -117,6 +180,67 @@ function Previews() {
           )
         })
       )}
+    </div>
+  )
+}
+
+/**
+ * Picks the stage whose previews show, or every stage: the project's stages in board order, each with
+ * how many previews it holds. A dropdown, as a project's stages do not fit a phone's width as tabs.
+ */
+function StageFilter({
+  stages,
+  value,
+  counts,
+  onChange,
+}: {
+  stages: StageLike[]
+  value: string
+  counts: Record<string, number> | undefined
+  onChange: (key: string) => void
+}) {
+  const options = [{ key: ALL_STAGES, name: 'All stages' }, ...stages]
+  const items = Object.fromEntries(options.map((o) => [o.key, o.name]))
+  // After a space, so the option reads "Done 2" to a screen reader; the flex layout drops the space.
+  const count = (key: string) =>
+    counts && (
+      <>
+        {' '}
+        <span className="ml-auto rounded-full bg-muted px-1.5 text-xs text-muted-foreground tabular-nums">
+          {counts[key] ?? 0}
+        </span>
+      </>
+    )
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <Label htmlFor="previews-stage">Stage</Label>
+      <Select value={value} onValueChange={(v) => v && onChange(v)} items={items}>
+        <SelectTrigger
+          id="previews-stage"
+          size="sm"
+          className="max-w-60 min-w-36"
+          title="Shows the previews of the tickets in this stage"
+        >
+          <SelectValue>
+            {(v: string) => (
+              <>
+                <span className="truncate">{items[v] ?? v}</span>
+                {count(v)}
+              </>
+            )}
+          </SelectValue>
+        </SelectTrigger>
+        {/* Below the trigger, from the top of the list: laid over it, near the top of the page, the
+            list would open scrolled to the stage picked. */}
+        <SelectContent alignItemWithTrigger={false} align="start">
+          {options.map((o) => (
+            <SelectItem key={o.key} value={o.key}>
+              <span className="truncate">{o.name}</span>
+              {count(o.key)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }
