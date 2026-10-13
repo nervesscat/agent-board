@@ -10,10 +10,10 @@ import { deleteWorkspace } from './features'
 import {
   deleteLocalBranch,
   deleteOriginBranch,
+  eachTrackedFile,
   gitSaid,
   listWorktrees,
   removeWorktree,
-  trackedFiles,
   worktreeChanges,
 } from './git'
 import { stopLinkPreview } from './linkPreview'
@@ -304,15 +304,20 @@ async function linksOut(worktreePath: string): Promise<WorktreeLink[] | string> 
     return `${worktreePath} could not be searched for links out of it: ${fsSaid(err)}`
   }
   const relative = links.map((l) => path.relative(worktreePath, l.path).split(path.sep).join('/'))
-  // What git tracks in the top folders the links are in (one git call for all of node_modules'), and
-  // every folder on the way to it: a link git tracks, or one over a folder of tracked files.
+  // What git tracks in the top folders the links are in (one git call for all of node_modules'), each
+  // file looked at as it comes for a link on its way: a link git tracks, or one over a folder of
+  // tracked files. Not a call per link: matching in any case, git takes seconds for a few hundred
+  // links over a big index.
+  const keys = new Set(relative.map((r) => pathKey(r)))
   const held = new Set<string>()
   try {
     const tops = [...new Set(relative.map((r) => r.split('/')[0]!))]
-    for (const file of await trackedFiles(worktreePath, tops)) {
-      const parts = pathKey(file).split('/')
-      parts.forEach((_, i) => held.add(parts.slice(0, i + 1).join('/')))
-    }
+    await eachTrackedFile(worktreePath, tops, (file) => {
+      const key = pathKey(file)
+      for (let i = key.indexOf('/'); i >= 0; i = key.indexOf('/', i + 1))
+        if (keys.has(key.slice(0, i))) held.add(key.slice(0, i))
+      if (keys.has(key)) held.add(key)
+    })
   } catch (err) {
     return `${worktreePath}: ${gitSaid(err)}`
   }

@@ -839,6 +839,66 @@ describe('links in a worktree that lead out of it', () => {
     expect(worktreePaths()).toEqual(expect.arrayContaining([wt('l5a'), wt('l5b')]))
     expect(git('rev-parse', 'refs/heads/feat/l5')).toBe(sha)
   })
+
+  it(
+    'removes one whose linked folder sits among more tracked files than one call can take',
+    { timeout: 300_000 },
+    async () => {
+      // 130 000 files git tracks under p/, made from one blob in a scratch index: too many to spread
+      // into one push, and a listing of them longer than any fixed buffer would take.
+      const index = path.join(tmp, 'big-index')
+      const scratch = { ...process.env, GIT_INDEX_FILE: index }
+      const inScratch = (args: string[], input?: string) =>
+        execFileSync('git', args, {
+          cwd: repo,
+          env: scratch,
+          input,
+          encoding: 'utf8',
+          maxBuffer: 1 << 30,
+        }).trim()
+      inScratch(['read-tree', 'main'])
+      const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], {
+        cwd: repo,
+        input: 'x\n',
+        encoding: 'utf8',
+      }).trim()
+      const deep = 'a-folder-name-long-enough-to-make-the-listing-big/'.repeat(3)
+      let entries = ''
+      for (let i = 0; i < 130_000; i++) entries += `100644 ${blob}\tp/${deep}d${i % 500}/file-${i}.txt\n`
+      inScratch(['update-index', '--index-info'], entries)
+      const sha = git('commit-tree', inScratch(['write-tree']), '-p', 'main', '-m', 'big')
+      fs.rmSync(index)
+      git('update-ref', 'refs/heads/feat/big', sha)
+      // main merges it keeping its own files: the branch landed, and later worktrees stay small.
+      git(
+        'update-ref',
+        'refs/heads/main',
+        git('commit-tree', 'main^{tree}', '-p', 'main', '-p', sha, '-m', 'merge big'),
+      )
+      // Its files are tracked but never written, each marked skip-worktree: the worktree reads clean.
+      git('worktree', 'add', '-q', '--no-checkout', wt('big'), 'feat/big')
+      const inTree = (args: string[], input?: string) =>
+        execFileSync('git', args, { cwd: wt('big'), input, encoding: 'utf8', maxBuffer: 1 << 30 }).trim()
+      inTree(['read-tree', 'HEAD'])
+      inTree(['update-index', '-z', '--skip-worktree', '--stdin'], inTree(['ls-files', '-z', '--', 'p']))
+      inTree(['checkout-index', '-a'])
+      expect(inTree(['ls-files', '--', 'p']).split('\n')).toHaveLength(130_000)
+      // An ignored node_modules linked out of it, in that same top folder.
+      const target = outside('big')
+      const link = path.join(wt('big'), 'p', 'node_modules')
+      fs.mkdirSync(path.dirname(link), { recursive: true })
+      linkDir(target, link)
+      expect(inTree(['status', '--porcelain'])).toBe('')
+      const t = done('big', 'feat/big')
+
+      const r = await delTrees(t.id, 'feat/big', sha)
+      expect(r).toMatchObject({ ok: true, outcome: 'deleted', reason: null })
+      expect(r.unlinked.map((l) => path.resolve(l.path))).toEqual([link])
+      expect(fs.existsSync(wt('big'))).toBe(false)
+      expect(kept(target)).toBe('big')
+      expect(hasRef(repo, 'refs/heads/feat/big')).toBe(false)
+    },
+  )
 })
 
 describe('never deletes what is protected', () => {

@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
 
@@ -308,11 +308,15 @@ export async function worktreeChanges(worktreePath: string): Promise<string[]> {
 }
 
 /**
- * The files git tracks at these paths of the worktree (relative to it, with `/`), or under them; each
- * path is taken literally, never as a pattern, in any case.
+ * The files git tracks at these paths of the worktree (relative to it, with `/`), or under them, each
+ * handed to `each` as git lists it; each path is taken literally, never as a pattern, in any case.
+ * The listing is read as it comes, never held whole: a folder of any number of files answers.
  */
-export async function trackedFiles(worktreePath: string, paths: string[]): Promise<string[]> {
-  const files: string[] = []
+export async function eachTrackedFile(
+  worktreePath: string,
+  paths: string[],
+  each: (file: string) => void,
+): Promise<void> {
   const pathspecs = paths.map((p) => `:(literal,icase)${p}`)
   // Some at a time: a command line has a length limit (32k characters on Windows).
   while (pathspecs.length) {
@@ -320,10 +324,46 @@ export async function trackedFiles(worktreePath: string, paths: string[]): Promi
     let n = 0
     while (n < pathspecs.length && (n === 0 || length + pathspecs[n]!.length < 16_000))
       length += pathspecs[n++]!.length + 1
-    const out = await git(worktreePath, ['ls-files', '-z', '--', ...pathspecs.splice(0, n)])
-    files.push(...out.split('\0').filter(Boolean))
+    await gitEntries(worktreePath, ['ls-files', '-z', '--', ...pathspecs.splice(0, n)], each)
   }
-  return files
+}
+
+/**
+ * A git command's `-z` output, entry by entry as git writes it: no buffer to outgrow. Fails as `git`
+ * does, with git's error lines for `gitSaid`, and when `each` throws.
+ */
+function gitEntries(cwd: string, args: string[], each: (entry: string) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    let rest = ''
+    let stderr = ''
+    let thrown: { err: unknown } | null = null
+    const take = (entries: string[]) => {
+      try {
+        for (const entry of entries) if (entry) each(entry)
+      } catch (err) {
+        thrown = { err }
+        child.kill()
+      }
+    }
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      if (thrown) return
+      const entries = (rest + chunk).split('\0')
+      rest = entries.pop()!
+      take(entries)
+    })
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => (stderr += chunk))
+    child.once('error', reject)
+    child.once('close', (code) => {
+      if (!thrown && code === 0) take([rest])
+      if (thrown) return reject(thrown.err)
+      if (code !== 0)
+        return reject(Object.assign(new Error(`git ${args[0]} exited with ${code}`), { stderr }))
+      resolve()
+    })
+  })
 }
 
 /** git's own last word on why a command failed: its error lines, else the message. */
