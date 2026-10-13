@@ -36,6 +36,21 @@ export const DEFAULT_STAGES: { key: string; name: string; kind: StageKind; color
   { key: 'cancelled', name: 'Cancelled', kind: 'cancelled', color: 'slate' },
 ]
 
+/**
+ * How many previews the board builds or runs at once, board-wide: the human's setting (`previewLimit`),
+ * within these. Each is a whole board with its own copy of the data, on a port from 47101 to 47199.
+ */
+export const PREVIEW_LIMIT = { default: 8, min: 1, max: 32 } as const
+
+/** A stored preview limit, or the default for anything that is not a whole number within the range. */
+export const readPreviewLimit = (value: unknown): number =>
+  typeof value === 'number' &&
+  Number.isInteger(value) &&
+  value >= PREVIEW_LIMIT.min &&
+  value <= PREVIEW_LIMIT.max
+    ? value
+    : PREVIEW_LIMIT.default
+
 /** The agent CLIs the Connect agents page has setup for; the first is the default until one is picked. */
 export const AGENT_CLIENTS = ['claude', 'codex', 'opencode'] as const
 export type AgentClient = (typeof AGENT_CLIENTS)[number]

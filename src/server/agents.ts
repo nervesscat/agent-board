@@ -3,7 +3,14 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { db, schema } from '#/db'
-import { AGENT_CLIENTS, type AgentClient, SKILLS_TRACKING, type SkillsTracking } from '#/lib/constants'
+import {
+  AGENT_CLIENTS,
+  type AgentClient,
+  PREVIEW_LIMIT,
+  readPreviewLimit,
+  SKILLS_TRACKING,
+  type SkillsTracking,
+} from '#/lib/constants'
 import { type DiffHunk, diffLines } from '#/lib/hunks'
 import { config } from './config'
 import { HttpError, notFound } from './http'
@@ -19,11 +26,17 @@ const template = rawTemplate.replace(/\r\n/g, '\n')
 export interface Settings {
   /** The agent CLI the Connect agents page opens on. */
   defaultAgent: AgentClient
+  /** How many previews the board builds or runs at once, board-wide (`PREVIEW_LIMIT`). */
+  previewLimit: number
   /** The copy of the review skills the Agents pages show: `~/.claude` (global) or each repo's own. */
   skillsTracking: SkillsTracking
 }
 
-const DEFAULTS: Settings = { defaultAgent: 'claude', skillsTracking: 'global' }
+const DEFAULTS: Settings = {
+  defaultAgent: 'claude',
+  previewLimit: PREVIEW_LIMIT.default,
+  skillsTracking: 'global',
+}
 
 export function getSettings(): Settings {
   const rows = db.select().from(schema.settings).all()
@@ -34,6 +47,7 @@ export function getSettings(): Settings {
     defaultAgent: AGENT_CLIENTS.includes(agent as AgentClient)
       ? (agent as AgentClient)
       : DEFAULTS.defaultAgent,
+    previewLimit: readPreviewLimit(stored.previewLimit),
     skillsTracking: SKILLS_TRACKING.includes(tracking as SkillsTracking)
       ? (tracking as SkillsTracking)
       : DEFAULTS.skillsTracking,

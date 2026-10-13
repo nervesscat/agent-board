@@ -335,7 +335,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'start_preview',
-    "Have the board build and run a branch of the board itself as a preview, from the workspace's worktree (its registered path: a git worktree next to the repo's main checkout, never the main checkout). In the background: pnpm install when the lockfile changed, pnpm build, a fresh copy of the live data, then the built server on a free port from 47101 without the passkey gate; once it answers the workspace's previewUrl is set. Returns at once with status building; get_ticket (the workspace's managedPreview) follows it to running, or failed with the last log lines. One per workspace, at most 8 at once. restart: true stops a running one first and builds again.",
+    "Have the board build and run a branch of the board itself as a preview, from the workspace's worktree (its registered path: a git worktree next to the repo's main checkout, never the main checkout). In the background: pnpm install when the lockfile changed, pnpm build, a fresh copy of the live data, then the built server on a free port from 47101 without the passkey gate; once it answers the workspace's previewUrl is set. Returns at once with status building; get_ticket (the workspace's managedPreview) follows it to running, or failed with the last log lines. One per workspace; at most as many at once, board-wide, as the human's preview limit allows (8 by default): a start beyond it is refused with the limit, a restart of a running one is not. restart: true stops a running one first and builds again.",
     {
       workspaceId: z.number().int(),
       restart: z.boolean().default(false).describe('stop the running preview first and build again'),

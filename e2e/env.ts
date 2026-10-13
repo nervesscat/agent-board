@@ -26,6 +26,12 @@ export function e2eEnv() {
   }
 }
 
+/**
+ * The file that ends a never-ending build of a test's worktree (`buildingWorktree` in previews.spec.ts)
+ * once it is written there; the teardown writes it in every worktree of the run.
+ */
+export const END_BUILD = 'end-build'
+
 /** The human the browser is (no X-Test-Actor header) and the API calls name. */
 export const HUMAN = 'enrique'
 export const AGENT = 'claude'

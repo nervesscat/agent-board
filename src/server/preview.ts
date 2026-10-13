@@ -63,3 +63,8 @@ export function previewState(url: string): Promise<PreviewState> {
   cache.set(url, { at: Date.now(), state })
   return state
 }
+
+/** Forget what the check said about `url`: its server was just stopped, the next look asks again. */
+export function forgetPreviewState(url: string) {
+  cache.delete(url)
+}

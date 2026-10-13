@@ -1,7 +1,14 @@
 import { Readable } from 'node:stream'
 import { z } from 'zod'
 
-import { AGENT_CLIENTS, COMMENT_PARENTS, SKILLS_TRACKING, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
+import {
+  AGENT_CLIENTS,
+  COMMENT_PARENTS,
+  PREVIEW_LIMIT,
+  SKILLS_TRACKING,
+  STAGE_COLORS,
+  STAGE_KINDS,
+} from '#/lib/constants'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
 import { addDefaultAgents } from './defaultAgents'
@@ -28,6 +35,8 @@ import * as needs from './needs'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
+import { stopLinkPreview, stopProjectLinksAndPreviews } from './linkPreview'
+import { projectPreviewsPage } from './projectPreviews'
 import { pushedToday } from './pushedToday'
 import * as projects from './projects'
 import { reportsDue } from './reportDue'
@@ -126,6 +135,7 @@ api.patch('/api/settings', async ({ request }) => {
     request,
     z.object({
       defaultAgent: z.enum(AGENT_CLIENTS).optional(),
+      previewLimit: z.number().int().min(PREVIEW_LIMIT.min).max(PREVIEW_LIMIT.max).optional(),
       skillsTracking: z.enum(SKILLS_TRACKING).optional(),
     }),
   )
@@ -423,6 +433,14 @@ api.post('/api/projects/:id/push/refresh', async ({ params }) => json(await refr
 api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
   json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),
 )
+// Every preview of the project's tickets, running or not, running first, and the board-wide use of the
+// preview limit; reads only.
+api.get('/api/projects/:id/previews', async ({ params }) => json(await projectPreviewsPage(id(params))))
+// Stop all: the previews the board runs for the project, and the links it may stop (linkPreview.ts).
+api.post('/api/projects/:id/previews/stop', async ({ request, params, actor }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human stops all the previews of a project')
+  return json(await stopProjectLinksAndPreviews(id(params), actor))
+})
 
 api.post('/api/tickets/:id/tasks', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ tasks: z.array(z.string().min(1).max(500)).min(1) }))
@@ -471,6 +489,12 @@ api.post('/api/workspaces/:id/preview/stop', async ({ params, actor }) => {
   if (!isActive(managedPreview(id(params))))
     throw new HttpError(409, 'the board runs no preview of this workspace')
   return json(await stopPreview(id(params), `stopped by ${actor}`, actor))
+})
+// The server an agent started behind the workspace's link, when the board can tell it runs from the
+// workspace's worktree (linkPreview.ts). The board did not start it: the human's call only.
+api.post('/api/workspaces/:id/preview/stop-link', async ({ request, params, actor }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human stops a preview the board did not start')
+  return json(await stopLinkPreview(id(params), actor))
 })
 api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
   json(await restartPreview(id(params), actor), 202),

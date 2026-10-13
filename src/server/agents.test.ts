@@ -50,14 +50,20 @@ describe('the board skill', () => {
 
 describe('settings', () => {
   it('default to Claude Code and the global copy of the review skills, and keep what is picked', () => {
-    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude', skillsTracking: 'global' })
+    expect(agents.getSettings()).toEqual({
+      defaultAgent: 'claude',
+      previewLimit: 8,
+      skillsTracking: 'global',
+    })
     expect(agents.updateSettings({ defaultAgent: 'codex' })).toEqual({
       defaultAgent: 'codex',
+      previewLimit: 8,
       skillsTracking: 'global',
     })
     expect(agents.updateSettings({ defaultAgent: 'opencode' }).defaultAgent).toBe('opencode')
     expect(agents.updateSettings({ skillsTracking: 'repo' })).toEqual({
       defaultAgent: 'opencode',
+      previewLimit: 8,
       skillsTracking: 'repo',
     })
     expect(agents.updateSettings({ skillsTracking: 'global' }).skillsTracking).toBe('global')
@@ -73,9 +79,17 @@ describe('settings', () => {
         .run()
     store('skillsTracking', 'bogus')
     store('defaultAgent', 'bogus')
-    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude', skillsTracking: 'global' })
+    expect(agents.getSettings()).toEqual({
+      defaultAgent: 'claude',
+      previewLimit: 8,
+      skillsTracking: 'global',
+    })
     db.delete(schema.settings).run()
-    expect(agents.getSettings()).toEqual({ defaultAgent: 'claude', skillsTracking: 'global' })
+    expect(agents.getSettings()).toEqual({
+      defaultAgent: 'claude',
+      previewLimit: 8,
+      skillsTracking: 'global',
+    })
   })
 
   it('are read by anyone, changed by the human only, one key at a time, and checked', async () => {
@@ -95,12 +109,13 @@ describe('settings', () => {
     const read = async (headers: Record<string, string> = {}) =>
       (await api.handle(new Request(route, { headers }), 'enrique')).json()
 
-    expect(await read()).toEqual({ defaultAgent: 'claude', skillsTracking: 'global' })
+    expect(await read()).toEqual({ defaultAgent: 'claude', previewLimit: 8, skillsTracking: 'global' })
     const set = await send({ skillsTracking: 'repo' })
     expect(set.status).toBe(200)
-    expect(await set.json()).toEqual({ defaultAgent: 'claude', skillsTracking: 'repo' })
+    expect(await set.json()).toEqual({ defaultAgent: 'claude', previewLimit: 8, skillsTracking: 'repo' })
     expect(await (await send({ defaultAgent: 'codex' })).json()).toEqual({
       defaultAgent: 'codex',
+      previewLimit: 8,
       skillsTracking: 'repo',
     })
     for (const bad of [{ skillsTracking: 'bogus' }, { skillsTracking: '' }, { skillsTracking: 1 }])
@@ -108,12 +123,12 @@ describe('settings', () => {
 
     // An agent reads the choice, and cannot change it.
     const agent = { authorization: 'Bearer gate_agent' }
-    expect(await read(agent)).toEqual({ defaultAgent: 'codex', skillsTracking: 'repo' })
+    expect(await read(agent)).toEqual({ defaultAgent: 'codex', previewLimit: 8, skillsTracking: 'repo' })
     await expect(send({ skillsTracking: 'global' }, agent)).rejects.toMatchObject({
       status: 403,
       message: 'only the human changes the settings',
     })
-    expect(agents.getSettings()).toEqual({ defaultAgent: 'codex', skillsTracking: 'repo' })
+    expect(agents.getSettings()).toEqual({ defaultAgent: 'codex', previewLimit: 8, skillsTracking: 'repo' })
     db.delete(schema.settings).run()
   })
 })

@@ -180,6 +180,16 @@ const STATUS_WEIGHTS = [
 export const GENERATED_HUMAN = 'bench-human'
 const AGENTS = ['claude', 'codex', 'opencode-agent']
 const PROJECT_AGENTS = ['spec', 'builder', 'verify']
+// The report schedule of project p is REPORT_CADENCE[p % 4]: half keep a daily report, a quarter a
+// weekly one (due on Fridays), the rest none. Each with a shift of its own, its report due at its end.
+const REPORT_CADENCE = ['daily', 'weekly', 'daily', 'off']
+const SHIFTS = [
+  ['08:00', '16:00'],
+  ['09:00', '17:00'],
+  ['09:30', '18:00'],
+  ['10:00', '19:00'],
+]
+const REPORT_TEMPLATE = '## Done\n\n## In progress\n\n## Blocked\n\n## Next'
 const TAGS = ['API', 'UI', 'Performance', 'Bug', 'Refactor', 'High', 'Medium', 'Low', 'Docs', 'Forms']
 
 /** How much a scale of 1 generates; every count is multiplied by the scale. */
@@ -229,6 +239,14 @@ export const SLOT_MS = 60_000
 export function localDay(ms) {
   const d = new Date(ms)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** The Monday of the week a local day (YYYY-MM-DD) is in: a weekly report's period. */
+function mondayOf(day) {
+  const [y, m, d] = day.split('-').map(Number)
+  const noon = new Date(y, m - 1, d, 12)
+  noon.setDate(d - ((noon.getDay() + 6) % 7))
+  return localDay(noon.getTime())
 }
 
 /** The local midnight that starts the day of `ms`. */
@@ -439,12 +457,16 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
       'createdAt',
     ]),
     activity: ins('activity', ['project_id', 'actor', 'kind', 'ref_type', 'ref_id', 'text', 'createdAt']),
-    daily: ins('daily_summaries', ['project_id', 'date', 'author', 'body', 'createdAt']),
     reportSettings: ins('report_settings', [
       'project_id',
       'prompt',
+      'template',
       'cadence',
       'weekday',
+      'shift_start',
+      'shift_end',
+      'workdays',
+      'alert_minutes',
       'format',
       'since',
       'updated_by',
@@ -507,22 +529,41 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
           iso(created),
         )
       const repoId = q.repo.run(projectId, 'app', repoDir, null, 'main', iso(created)).lastInsertRowid
-      if (p % 2 === 0)
+      const cadence = REPORT_CADENCE[p % REPORT_CADENCE.length]
+      if (cadence !== 'off') {
+        const [shiftStart, shiftEnd] = r.pick(SHIFTS)
         q.reportSettings.run(
           projectId,
           markdown(r, 2),
-          'daily',
+          r.chance(0.5) ? '' : REPORT_TEMPLATE,
+          cadence,
           5,
+          shiftStart,
+          shiftEnd,
+          // The busy project's agents report every day: a day without its report is missing whatever
+          // the weekday, so its report periods read the same on any day of the week (`listReports`).
+          JSON.stringify(p === 0 ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5]),
+          r.pick([15, 30, 60]),
           'text',
-          dayOf(created),
+          cadence === 'daily' ? dayOf(created) : mondayOf(dayOf(created)),
           GENERATED_HUMAN,
           iso(created),
         )
-      for (let d = 0; d < 10; d++) {
-        const day = dayOf(now - d * DAY)
-        if (p % 2 === 0 && r.chance(0.7))
-          q.report.run(projectId, 'daily', day, markdown(r, 3), r.pick(AGENTS), iso(now - d * DAY))
-        if (r.chance(0.5)) q.daily.run(projectId, day, r.pick(AGENTS), sentence(r), iso(now - d * DAY))
+      }
+      // The reports, in the periods the Daily page shows by default: two weeks of days, eight weeks. A
+      // period can have several versions (posted again later; the latest is its report). The current
+      // period always has its report: one still to write would be due or missing depending on the hour
+      // (`reportDue`), and the dataset reads the same at any hour; earlier periods are done or missing.
+      const periods = cadence === 'daily' ? 14 : cadence === 'weekly' ? 8 : 0
+      const step = cadence === 'daily' ? DAY : 7 * DAY
+      for (let k = 0; k < periods; k++) {
+        if (k > 0 && !r.chance(cadence === 'daily' ? 0.7 : 0.8)) continue
+        const versions = r.chance(0.25) ? 2 : 1
+        for (let v = versions - 1; v >= 0; v--) {
+          const at = now - k * step - v * 3_600_000
+          const period = cadence === 'daily' ? dayOf(at) : mondayOf(dayOf(at))
+          q.report.run(projectId, cadence, period, markdown(r, r.int(2, 5)), r.pick(AGENTS), iso(at))
+        }
       }
 
       const ticketIds = []
@@ -585,9 +626,13 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
           iso(createdAt),
         )
 
+        // The busy ticket is being worked right now: its feed runs up to now and ends in a progress
+        // post, so the board has work going on (not stalled) whatever the seed.
         const posts = big ? plan.bigTicketPosts : r.int(0, 16)
         for (let i = 0; i < posts; i++) {
-          const at = Math.min(now, createdAt + Math.floor(((i + 1) / (posts + 1)) * (now - createdAt)))
+          const share = big ? (i + 1) / posts : (i + 1) / (posts + 1)
+          const at = Math.min(now, createdAt + Math.floor(share * (now - createdAt)))
+          const latest = big && i === posts - 1
           const author = r.pick(people)
           const decision = r.chance(0.03)
           const decided = decision && r.chance(0.5)
@@ -596,7 +641,7 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
             author,
             author === GENERATED_HUMAN ? '' : r.pick(['', AGENTS[0]]),
             markdown(r, r.int(1, 7)),
-            r.chance(0.7) ? 1 : 0,
+            r.chance(0.7) || latest ? 1 : 0,
             r.chance(0.05) ? 1 : 0,
             decision
               ? JSON.stringify([
