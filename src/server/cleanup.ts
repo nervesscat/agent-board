@@ -272,10 +272,11 @@ export const samePath = (a: string, b: string, platform: NodeJS.Platform = proce
  * A folder's key by where it really is: `pathKey` of its real path, every link or junction on the way
  * resolved. A repository moved with a link left at its old path has git list a worktree made before
  * the move by that old path, while a workspace or a preview names it by the new one. A folder that is
- * not there (removed, or never made) goes by its nearest parent that is, the rest as written.
+ * not there (removed, or never made) goes by its nearest parent that is, the rest as written. Slashes
+ * go either way, as for `pathKey`.
  */
 export function folderKey(p: string): string {
-  const abs = path.resolve(p)
+  const abs = path.resolve(p.replace(/\\/g, '/'))
   let rest = ''
   for (let dir = abs; ; ) {
     try {
