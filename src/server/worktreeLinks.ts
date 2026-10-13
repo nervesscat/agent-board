@@ -55,18 +55,19 @@ async function findLinks(dir: string): Promise<string[]> {
       if (!pending.length && !reading) return resolve()
       while (pending.length && reading < WIDTH) {
         reading++
-        readFolder(pending.pop()!).then(
-          (found) => {
-            links.push(...found.links)
-            pending.push(...found.folders)
+        readFolder(pending.pop()!)
+          .then((found) => {
+            // One at a time: spread, a folder of some 125 000 entries is too many arguments.
+            for (const link of found.links) links.push(link)
+            for (const folder of found.folders) pending.push(folder)
             reading--
             next()
-          },
-          (err: unknown) => {
+          })
+          // Whatever throws, here or in the reading, ends the walk: it must never be left unsettled.
+          .catch((err: unknown) => {
             failed = true
             reject(err)
-          },
-        )
+          })
       }
     }
     next()
