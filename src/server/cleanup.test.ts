@@ -183,6 +183,40 @@ describe('cleanupReport', () => {
     expect(g.info.reach?.state).toBe('unique')
     expect(g.workspaces[0]!.info.reach?.state).toBe('unique')
   })
+
+  it('names the servers linked on this machine at a worktree, which its removal stops', async () => {
+    const { db, schema } = await import('#/db')
+    const features = await import('./features')
+    const { cleanupReport } = await import('./cleanup')
+    const dir = path.join(tmp, 'linked')
+    fs.mkdirSync(dir)
+    const git = gitIn(dir)
+    git('init', '-q', '-b', 'main')
+    commitsIn(dir)([
+      { ref: 'refs/heads/main', file: 'base.txt', text: 'base\n', msg: 'base' },
+      { ref: 'refs/heads/feat/dev', from: 'refs/heads/main', file: 'dev.txt', text: 'dev\n', msg: 'dev' },
+    ])
+    const tree = path.join(tmp, 'linked-wt')
+    git('worktree', 'add', '-q', tree, 'feat/dev')
+    const projectId = db.insert(schema.projects).values({ name: 'linked' }).returning().get().id
+    db.insert(schema.repos).values({ projectId, name: 'linked', repoPath: dir, baseBranch: 'main' }).run()
+    const t = features.createTicket(projectId, { title: 'dev', branch: 'feat/dev', status: 'done' }, 'claude')
+    const space = (name: string, at: string, previewUrl: string) =>
+      features.addWorkspace(t.id, { name, branch: 'feat/dev', path: at, previewUrl }, 'claude')
+    const dev = space('dev', tree, 'http://127.0.0.1:8360')
+    // Off this machine: nothing the board could stop.
+    space('deployed', tree, 'https://feat-dev.example.com')
+    // On this machine, but registered at another folder: not this worktree's.
+    space('elsewhere', path.join(tmp, 'elsewhere'), 'http://localhost:8361')
+
+    const b = (await cleanupReport(projectId)).tickets[0]!.branches[0]!
+    expect(b.worktrees.map((w) => ({ main: w.main, linked: w.linkedPreviews }))).toEqual([
+      {
+        main: false,
+        linked: [{ workspaceId: dev.id, ticketId: t.id, url: 'http://127.0.0.1:8360', port: 8360 }],
+      },
+    ])
+  })
 })
 
 describe('cleanupReport on detached worktrees', () => {

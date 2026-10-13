@@ -5,7 +5,7 @@ import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
-import { type AuthMode, authMode } from './config'
+import { type AuthMode, authMode, config } from './config'
 import {
   aheadBehind,
   type BranchInfo,
@@ -23,7 +23,9 @@ import {
   type Refs,
   type Worktree,
 } from './git'
+import { linkPort } from './linkPreview'
 import { activePreviews, type ManagedPreview } from './managedPreview'
+import { isLocalUrl } from './preview'
 import { getProject } from './projects'
 import { readRefs, readWorktrees } from './push'
 import { listRepos } from './repos'
@@ -279,6 +281,40 @@ export interface Verdict {
   reason: string | null
 }
 
+/**
+ * A server an agent started itself and linked on a workspace (`set_preview`), on this machine: the
+ * Previews page's Stop can stop it when it runs from the workspace's worktree (`linkPreview.ts`).
+ */
+export interface LinkedPreview {
+  workspaceId: number
+  ticketId: number
+  url: string
+  port: number
+}
+
+/**
+ * The servers linked on workspaces registered at a worktree, of any ticket on the board, by the
+ * worktree: what its removal stops, each one only when the Previews page's rule tells it runs from
+ * there. A link that rule never stops is left out: off this machine, on the board's own port, or on a
+ * port a preview the board runs holds (one from this worktree is listed and stopped as that preview).
+ */
+export function linkedPreviews(): (worktreePath: string) => LinkedPreview[] {
+  const held = new Set(activePreviews().map((p) => p.port))
+  const linked = db
+    .select()
+    .from(schema.workspaces)
+    .where(isNotNull(schema.workspaces.previewUrl))
+    .all()
+    .flatMap((w) => {
+      const port = w.path && w.previewUrl && isLocalUrl(w.previewUrl) ? linkPort(w.previewUrl) : null
+      return port && port !== config.port && !held.has(port) ? [{ w, port }] : []
+    })
+  return (worktreePath) =>
+    linked
+      .filter(({ w }) => samePath(w.path, worktreePath))
+      .map(({ w, port }) => ({ workspaceId: w.id, ticketId: w.ticketId, url: w.previewUrl!, port }))
+}
+
 export interface LeftoverWorktree {
   path: string
   /** The repo's own checkout, not a worktree: never removed. */
@@ -288,6 +324,8 @@ export interface LeftoverWorktree {
   head: string | null
   /** Previews the board builds or runs from it: removing it stops them first. */
   previews: ManagedPreview[]
+  /** Servers agents linked on workspaces registered at it: removing it stops each that runs from it. */
+  linkedPreviews: LinkedPreview[]
   /** Why it may not be removed with its branch; null when it may. */
   protected: string | null
 }
@@ -593,6 +631,7 @@ export async function cleanupReport(
     return guards.get(repoPath)!
   }
   const previews = activePreviews()
+  const linkedAt = linkedPreviews()
   const isOpen = (t: schema.Ticket) => !t.archivedAt && !isClosed(kindOf(stages, t.status))
   const namesOf = (t: schema.Ticket) => [
     ...new Set(
@@ -702,6 +741,7 @@ export async function cleanupReport(
                   branch: tree.branch,
                   head: tree.head,
                   previews: previews.filter((p) => samePath(p.path, tree.path)),
+                  linkedPreviews: linkedAt(tree.path),
                   protected: await treeGuard(tree, main),
                 }),
               ),

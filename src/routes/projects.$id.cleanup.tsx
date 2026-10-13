@@ -604,6 +604,12 @@ function ConfirmDelete({
                   · stops its preview ({p.status === 'running' ? `running on :${p.port}` : p.status})
                 </span>
               ))}
+              {w.linkedPreviews.map((l) => (
+                <span key={`link-${l.workspaceId}`} className="font-sans text-amber-700 dark:text-amber-400">
+                  {' '}
+                  · stops the server on :{l.port} if it runs from this worktree
+                </span>
+              ))}
             </div>
           ))}
       </li>

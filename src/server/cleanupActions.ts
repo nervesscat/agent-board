@@ -1,11 +1,11 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { eq, inArray, isNotNull } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
-import { cleanupReport, type LeftoverBranch, pathKey, samePath, shellArg } from './cleanup'
+import { cleanupReport, type LeftoverBranch, linkedPreviews, pathKey, samePath, shellArg } from './cleanup'
 import { deleteWorkspace } from './features'
 import {
   deleteLocalBranch,
@@ -18,7 +18,6 @@ import {
 } from './git'
 import { stopLinkPreview } from './linkPreview'
 import { activePreviews, stopPreview } from './managedPreview'
-import { isLocalUrl } from './preview'
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
 import { listRepos } from './repos'
@@ -353,17 +352,13 @@ async function stopPreviews(worktreePath: string, actor: string) {
 
 /**
  * A server an agent started from the worktree and linked on a workspace registered at it stops too,
- * when the rule of `linkPreview.ts` tells it is that worktree's (that stop logs it). One the rule
- * leaves alone, or a link nothing listens on, changes nothing: the removal stays within the worktree.
+ * when the rule of `linkPreview.ts` tells it is that worktree's (that stop logs it): the ones the
+ * report lists for it (`linkedPreviews`), looked up again now. One the rule leaves alone, or a link
+ * nothing listens on, changes nothing: the removal stays within the worktree.
  */
 async function stopLinkPreviews(worktreePath: string, actor: string) {
-  const linked = db
-    .select()
-    .from(schema.workspaces)
-    .where(isNotNull(schema.workspaces.previewUrl))
-    .all()
-    .filter((w) => w.path && w.previewUrl && isLocalUrl(w.previewUrl) && samePath(w.path, worktreePath))
-  for (const w of linked) await stopLinkPreview(w.id, actor).catch(() => null)
+  for (const l of linkedPreviews()(worktreePath))
+    await stopLinkPreview(l.workspaceId, actor).catch(() => null)
 }
 
 /** The project's workspaces registered at a removed worktree go too. */

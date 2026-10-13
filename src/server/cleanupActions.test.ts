@@ -492,6 +492,12 @@ describe('deleting a worked branch with its worktrees', () => {
     dbm.db.update(dbm.schema.tickets).set({ status: 'done' }).where(eq(dbm.schema.tickets.id, t.id)).run()
     const b = (await branchOf(t.id, 'feat/b9'))!
     expect(b.worktrees[0]!.previews.map((p) => p.workspaceId)).toEqual([ws.id])
+    // Its link is that preview's: listed as the preview, not as a server of its own.
+    expect(
+      dbm.db.select().from(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.id, ws.id)).get()!
+        .previewUrl,
+    ).toBe(mp.managedPreview(ws.id)!.url)
+    expect(b.worktrees[0]!.linkedPreviews).toEqual([])
 
     const [r] = await del([
       {

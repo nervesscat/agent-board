@@ -115,6 +115,44 @@ test('the human removes a worked branch with its worktree, after a dialog listin
   expect(hasRef(`refs/heads/${name('kept')}`)).toBe(true)
 })
 
+test('the dialog names a server linked on this machine at the worktree, which its removal stops', async ({
+  page,
+  project,
+  human,
+}) => {
+  const branch = `e2e-${project.id}-linked`
+  const sha = commitFile('main', 'linked.txt', 'linked\n', 'linked work')
+  git('update-ref', `refs/heads/${branch}`, sha)
+  git('update-ref', `refs/heads/${branch}-base`, sha)
+  const tree = path.join(e2eEnv().root, `wt-linked-${project.id}`)
+  git('worktree', 'add', '-q', tree, branch)
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Done, served from its worktree', status: 'done', branch, baseBranch: `${branch}-base` },
+    }),
+  )
+  const space = (name: string, previewUrl: string) =>
+    ok(human.post(`/api/tickets/${t.id}/workspaces`, { data: { name, branch, path: tree, previewUrl } }))
+  await space('dev', 'http://127.0.0.1:8360')
+  // Off this machine: nothing the board could stop.
+  await space('deployed', 'https://linked.example.com')
+
+  await page.goto(`/projects/${project.id}/cleanup`)
+  await page
+    .locator(`tr[data-branch="${branch}"]`)
+    .getByRole('button', { name: 'Remove worktree + branch' })
+    .click()
+  const dialog = page.getByRole('alertdialog')
+  // git lists worktree paths with forward slashes, also on Windows.
+  await expect(dialog).toContainText(`worktree ${tree.replace(/\\/g, '/')}`)
+  await expect(dialog).toContainText('stops the server on :8360 if it runs from this worktree')
+  await expect(dialog.getByText(/stops the server/)).toHaveCount(1)
+  await expect(dialog).not.toContainText('linked.example.com')
+  await dialog.getByRole('button', { name: 'Keep' }).click()
+  await expect(dialog).toBeHidden()
+  expect(fs.existsSync(tree)).toBe(true)
+})
+
 test('deleting branches is the human’s: an agent gets 403 and nothing changes', async ({
   agent,
   human,
