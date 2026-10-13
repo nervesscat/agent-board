@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
 
@@ -303,7 +304,8 @@ export function isAncestor(repoPath: string, a: string, b: string): Promise<bool
 
 /**
  * What removing a worktree would lose: its changed and untracked files as `git status` lists them, not
- * the ignored ones, whatever the repository's or the user's config says `git status` shows.
+ * the ignored ones, whatever the repository's or the user's config says `git status` shows; else the
+ * edits it never lists, to files marked skip-worktree or assume-unchanged (`markedChanges`).
  */
 export async function worktreeChanges(worktreePath: string): Promise<string[]> {
   const out = await git(worktreePath, [
@@ -324,7 +326,90 @@ export async function worktreeChanges(worktreePath: string): Promise<string[]> {
     // Submodules whatever diff.ignoreSubmodules or submodule.<name>.ignore says.
     '--ignore-submodules=none',
   ])
-  return out ? out.split('\n') : []
+  return out ? out.split('\n') : markedChanges(worktreePath)
+}
+
+/** How many files marked skip-worktree or assume-unchanged that are there a removal checks, at most. */
+const MARKED_LIMIT = 1000
+
+/**
+ * Edits `git status` never lists: to a tracked file marked skip-worktree (`S`) or assume-unchanged (a
+ * lowercase tag), each as `<path> (<mark>)`. A marked file that is not there, as in a sparse checkout,
+ * loses nothing. One that is there is compared with its index entry as git hashes it, with its
+ * attributes' filters. More of them than `MARKED_LIMIT` are not checked: that answers as a change.
+ */
+async function markedChanges(worktreePath: string): Promise<string[]> {
+  // Each folder's names, read once: the marked files of a sparse checkout are many, their folders few.
+  const listings = new Map<string, { names: Set<string>; lower: Set<string> } | null>()
+  const there = (file: string) => {
+    const slash = file.lastIndexOf('/')
+    const dir = file.slice(0, slash + 1)
+    let listing = listings.get(dir)
+    if (listing === undefined) {
+      try {
+        const names = fs.readdirSync(`${worktreePath}/${dir}`)
+        listing = { names: new Set(names), lower: new Set(names.map((n) => n.toLowerCase())) }
+      } catch {
+        listing = null
+      }
+      listings.set(dir, listing)
+    }
+    const name = file.slice(slash + 1)
+    if (!listing?.lower.has(name.toLowerCase())) return false
+    // Named in another case: there only where names ignore case.
+    return listing.names.has(name) || fs.existsSync(`${worktreePath}/${file}`)
+  }
+  const marked: { file: string; mode: string; sha: string; mark: string }[] = []
+  let count = 0
+  await gitEntries(worktreePath, ['ls-files', '-v', '-s', '-z'], (entry) => {
+    // `<tag> <mode> <sha> <stage>\t<path>`
+    const tag = entry[0]!
+    if (tag !== 'S' && tag === tag.toUpperCase()) return
+    const tab = entry.indexOf('\t')
+    const file = entry.slice(tab + 1)
+    if (!there(file) || ++count > MARKED_LIMIT) return
+    const [, mode = '', sha = ''] = entry.slice(0, tab).split(' ')
+    const mark =
+      tag === 'S' ? 'skip-worktree' : tag === 's' ? 'skip-worktree, assume-unchanged' : 'assume-unchanged'
+    marked.push({ file, mode, sha, mark })
+  })
+  if (count > MARKED_LIMIT)
+    return [`${count} files marked skip-worktree or assume-unchanged, too many to check for edits`]
+  const changed: typeof marked = []
+  const hashed: typeof marked = []
+  for (const m of marked) {
+    const file = `${worktreePath}/${m.file}`
+    const stat = fs.lstatSync(file, { throwIfNoEntry: false })
+    if (!stat) continue
+    if (stat.isFile() && m.mode !== '160000') hashed.push(m)
+    else if (stat.isSymbolicLink() && m.mode === '120000') {
+      // A link's blob is its target.
+      const target = Buffer.from(fs.readlinkSync(file))
+      const hash = createHash(m.sha.length === 64 ? 'sha256' : 'sha1')
+      if (hash.update(`blob ${target.length}\0`).update(target).digest('hex') !== m.sha) changed.push(m)
+    }
+    // A folder or a link where a file was, a submodule: not what the index holds.
+    else changed.push(m)
+  }
+  if (hashed.length) {
+    // `--stdin-paths` reads a path a line, and unquotes one that starts with a quote.
+    const line = (p: string) =>
+      p.startsWith('"') || /[\n\r]/.test(p)
+        ? `"${p.replace(/[\\"]/g, '\\$&').replace(/\n/g, '\\n').replace(/\r/g, '\\r')}"`
+        : p
+    const out = await new Promise<string>((resolve, reject) => {
+      const child = execFile(
+        'git',
+        ['hash-object', '--stdin-paths'],
+        { cwd: worktreePath, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+        (err, stdout) => (err ? reject(err) : resolve(String(stdout))),
+      )
+      child.stdin?.end(hashed.map((m) => line(m.file)).join('\n') + '\n')
+    })
+    const shas = out.trim().split('\n')
+    hashed.forEach((m, i) => shas[i] !== m.sha && changed.push(m))
+  }
+  return changed.map((m) => `${m.file} (${m.mark})`)
 }
 
 /**

@@ -461,6 +461,66 @@ describe('deleting a worked branch with its worktrees', () => {
     expect(git('rev-parse', 'refs/heads/feat/b5u')).toBe(sha)
   })
 
+  it.each(['skip-worktree', 'assume-unchanged'])(
+    'sees edits to a file marked %s, which git status hides',
+    async (mark) => {
+      const branch = `feat/b5-${mark}`
+      const { [branch]: sha } = land([branch], { files: [{ path: 'config.local', data: 'committed\n' }] })
+      const tree = wt(`b5-${mark}`)
+      git('worktree', 'add', '-q', tree, branch)
+      gitIn(tree)('update-index', `--${mark}`, 'config.local')
+      fs.writeFileSync(path.join(tree, 'config.local'), 'my settings\n')
+      expect(gitIn(tree)('status', '--porcelain')).toBe('')
+      const t = done(`b5 ${mark}`, branch)
+
+      const r = await trees(t.id, branch, sha!)
+      expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [] })
+      expect(r.reason).toContain(`config.local (${mark})`)
+      expect(fs.readFileSync(path.join(tree, 'config.local'), 'utf8')).toBe('my settings\n')
+      expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+    },
+  )
+
+  it('refuses one with more marked files there than it checks, rather than hashing them all', async () => {
+    const files = Array.from({ length: 1001 }, (_, i) => ({ path: `m/${i}.txt`, data: `${i}\n` }))
+    const { 'feat/b5many': sha } = land(['feat/b5many'], { files })
+    git('worktree', 'add', '-q', wt('b5many'), 'feat/b5many')
+    const inTree = gitIn(wt('b5many'))
+    execFileSync('git', ['update-index', '--assume-unchanged', '-z', '--stdin'], {
+      cwd: wt('b5many'),
+      input: files.map((f) => `${f.path}\0`).join(''),
+    })
+    expect(inTree('status', '--porcelain')).toBe('')
+    const t = done('b5 many marked', 'feat/b5many')
+
+    const r = await trees(t.id, 'feat/b5many', sha)
+    expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [] })
+    expect(r.reason).toMatch(/1001 files marked skip-worktree or assume-unchanged, too many/)
+    expect(fs.existsSync(wt('b5many'))).toBe(true)
+  })
+
+  it('removes one whose marked files are as committed, or not there', async () => {
+    const files = [
+      { path: 'kept.local', data: 'committed\n' },
+      { path: 'sparse/gone.txt', data: 'committed\n' },
+      { path: 'gone.local', data: 'committed\n' },
+    ]
+    const { 'feat/b5m': sha } = land(['feat/b5m'], { files })
+    git('worktree', 'add', '-q', wt('b5m'), 'feat/b5m')
+    const inTree = gitIn(wt('b5m'))
+    inTree('update-index', '--skip-worktree', 'kept.local', 'sparse/gone.txt')
+    inTree('update-index', '--assume-unchanged', 'gone.local')
+    fs.rmSync(path.join(wt('b5m'), 'sparse'), { recursive: true })
+    fs.rmSync(path.join(wt('b5m'), 'gone.local'))
+    expect(inTree('status', '--porcelain')).toBe('')
+    const t = done('b5 marked', 'feat/b5m')
+
+    const r = await trees(t.id, 'feat/b5m', sha)
+    expect(r).toMatchObject({ ok: true, outcome: 'deleted', reason: null })
+    expect(fs.existsSync(wt('b5m'))).toBe(false)
+    expect(hasRef(repo, 'refs/heads/feat/b5m')).toBe(false)
+  })
+
   it('never removes a locked worktree', async () => {
     const { 'feat/b5l': sha } = land(['feat/b5l'])
     git('worktree', 'add', '-q', wt('b5l'), 'feat/b5l')
