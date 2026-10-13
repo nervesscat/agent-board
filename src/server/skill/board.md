@@ -106,6 +106,13 @@ Lanes of a ticket you are working are yours to create (next section).
   or unticking a phase does the same to its steps, ticking its last open step ticks it, unticking a
   step unticks it. When the plan changes, `update_task` rewords a task and `remove_task` drops one
   that no longer applies (a phase goes with its steps), so the progress bar stays honest.
+- A step that needs the human (a credential, a manual action, a call only they can make): tag
+  that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
+  they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
+  rest. It shows on the task, on the ticket's card (`blockedTasks`) and in the human's Needs you
+  (`get_summary` → `needsYou.blockedTasks`). It still counts as open and does not move the ticket.
+  Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole
+  ticket to `blocked` (or `ask_decision`) only when nothing else can go on.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
   brief as `body` ([Delegating](#delegating)), its own `branch`, `assignee` and `tasks`. Its repo
@@ -166,7 +173,7 @@ Lanes of a ticket you are working are yours to create (next section).
   the context, 2 to 5 options (a label, what it means, at most one `recommended`). The ticket
   blocks until the human picks one; the answer comes as a reply under the card. If you cannot go on
   without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
-  is answered. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
+  is answered. When only one step waits on the human, tag that task blocked instead and go on. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.

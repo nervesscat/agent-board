@@ -321,6 +321,11 @@ obstacle you hit, try what applies, and keep a list of what you tried:
 | The ticket is too big for one branch | Split it into the ticket's lanes on the board (`create_ticket` with `parentId`), by disjoint files, deliver the first one, say so on the ticket. One spec per ticket: each lane gets its part of `WORKDIR/01-spec.md` in its body (the Intent and Classification, and its own criteria and Surfaces), not a new spec run. |
 | The next step is outward or irreversible (production data, real users, payments, emails, a force-push, a migration that drops data) | Never do it: `destructive`, with the exact step for the human. |
 
+One step only the human can do, while the rest can go on (a credential, a manual action, a call
+only they make): tag that task blocked (`update_task` with `blocked: true` and `blockedReason`: what
+they must do) and keep going. It shows in the human's Needs you; ticking the task clears it. Block
+the ticket only when nothing else can go on.
+
 When you do block: move the ticket to `blocked` (an `ask_decision` card does it for you), and post
 the ask: what is needed, why, what you tried (at least two things), and what you will do once it is
 given. Then `set_resume_note` with the state, the next steps and how to resume (branch, worktree,
