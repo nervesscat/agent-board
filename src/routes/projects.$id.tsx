@@ -7,9 +7,11 @@ import {
   GitPullRequest,
   Home,
   KanbanSquare,
+  MonitorPlay,
   Settings,
 } from 'lucide-react'
 
+import { PushedTodayBadge } from '#/components/daily/PushedToday'
 import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
@@ -18,6 +20,7 @@ const MODULES = [
   { to: '/projects/$id', label: 'Overview', icon: Home, exact: true },
   { to: '/projects/$id/prs', label: 'PR queue', icon: GitPullRequest },
   { to: '/projects/$id/features', label: 'Ongoing features', icon: KanbanSquare },
+  { to: '/projects/$id/previews', label: 'Previews', icon: MonitorPlay },
   { to: '/projects/$id/agents', label: 'Agents', icon: Bot },
   { to: '/projects/$id/daily', label: 'Daily', icon: CalendarDays },
   { to: '/projects/$id/cleanup', label: 'Cleanup', icon: BrushCleaning },
@@ -32,6 +35,7 @@ function ProjectLayout() {
       <aside className="md:w-52 md:shrink-0">
         <div className="mb-3 px-2">
           <div className="truncate font-semibold">{project?.name ?? '…'}</div>
+          <PushedTodayBadge projectId={Number(id)} compact />
           <ul className="mt-1 space-y-0.5">
             {project?.repos.map((r) => (
               <li

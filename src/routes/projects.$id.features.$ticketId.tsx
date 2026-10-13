@@ -15,21 +15,17 @@ import {
   GitCommitHorizontal,
   Layers,
   ListTodo,
-  Loader2,
   Lock,
   MessageSquare,
   Paperclip,
   Pencil,
-  Play,
   Plus,
-  RotateCw,
   Scale,
-  Square,
   Trash2,
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
@@ -45,6 +41,7 @@ import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
+import { ManagedLine, PreviewActions, PreviewBadge, previewActive } from '#/components/Preview'
 import { PrState } from '#/components/PrState'
 import { RESUME_TEMPLATE } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
@@ -66,7 +63,7 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Badge } from '#/components/ui/badge'
-import { Button, buttonVariants } from '#/components/ui/button'
+import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { Switch } from '#/components/ui/switch'
 import { Input } from '#/components/ui/input'
@@ -80,7 +77,6 @@ import {
   post,
   put,
   upload,
-  type ManagedPreview,
   type TicketFull,
   type TicketGit,
   type TicketRow,
@@ -109,6 +105,7 @@ import {
   validateLaneSearch,
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
+import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { type StepList, columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
@@ -214,6 +211,24 @@ function TicketPage() {
     enabled: Boolean(t) && !t?.parentId,
     refetchInterval: 10_000,
   })
+  // A link's #anchor (a post, a reply, the hand-off, the resume note) is brought into view once this
+  // ticket is drawn: not while the previous ticket stays on screen until it loads. Stepping to another
+  // ticket, the location (and its anchor) is the next one's before this route's params are.
+  const anchor = useAnchor()
+  const linkedTo = useLocation({ select: (l) => l.pathname.split('/').at(-1) })
+  const drawn = t !== undefined && String(t.id) === ticketId && ticketId === linkedTo
+  useReveal(anchor, { page: ticketId, ready: drawn })
+  // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
+  // once per anchor, so turning it off again stays off.
+  const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
+  const foldedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!drawn || !anchor || anchoredPost === null || laneFeed || foldedFor.current === anchor.hash) return
+    if (t.lanes.length && !t.updates.some((u) => u.id === anchoredPost)) {
+      foldedFor.current = anchor.hash
+      setLaneFeed(true)
+    }
+  }, [drawn, anchor, anchoredPost, laneFeed, t])
 
   if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
   if (!t) return null
@@ -387,11 +402,17 @@ function TicketPage() {
         {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
               widen the page */}
         <div className="min-w-0 space-y-6">
-          <ResumeNote key={t.id} t={t} onChange={invalidate} />
-          <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+          {/* Keyed by ticket, so an open editor and its draft do not follow to the next one; one key for
+                both, as siblings sharing a key would leave one of them behind on screen. */}
+          <Fragment key={t.id}>
+            <ResumeNote t={t} onChange={invalidate} />
+            <Instructions t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+          </Fragment>
           <Tasks t={t} onChange={invalidate} />
           <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
-          <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+          <ShownAnchor value={drawn ? anchor : null}>
+            <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+          </ShownAnchor>
         </div>
         <aside className="min-w-0 space-y-4">
           {t.handoff && <HandoffCard handoff={t.handoff} git={git} pr={t.pr} />}
@@ -403,6 +424,9 @@ function TicketPage() {
     </div>
   )
 }
+
+/** The anchor of the URL to the feed's posts, once the ticket it is on is the one shown. */
+const ShownAnchor = createContext<Anchor | null>(null)
 
 /**
  * How far down the stuck header reaches (the top bar and itself), as --ticket-header on the page: what
@@ -682,10 +706,6 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  // Linked to as #resume (from the summary's Carrying over): brought into view once it is there.
-  const reveal = useCallback((el: HTMLElement | null) => {
-    if (el && window.location.hash === '#resume') el.scrollIntoView({ block: 'start' })
-  }, [])
   if (t.archivedAt || isClosed(stageOf(stages, t.status).kind)) return null
   const open = () => {
     setNote(r.note || RESUME_TEMPLATE)
@@ -717,9 +737,9 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const chip = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5'
   const warn = `${chip} bg-amber-500/10 text-amber-700 dark:text-amber-400`
   return (
+    // Linked to as #resume (from the summary's Carrying over), and brought into view as any anchor is.
     <section
       id="resume"
-      ref={reveal}
       className={cn(
         // Below the stuck header, as far as it is at rest; until that is measured, below the top bar.
         'scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-4',
@@ -1435,9 +1455,10 @@ function Lanes({
 }
 
 /**
- * The ticket's feed: one kind of post, newest first, with one box to write one. A post marked
- * progress is a step of the work (what agents post as they go); one written here is not, until its
- * mark progress action makes it one. Any post can have replies.
+ * The ticket's feed: one kind of post, newest first, with one box to write one. A decision still
+ * waiting on the human comes first, however old, until it is decided. A post marked progress is a
+ * step of the work (what agents post as they go); one written here is not, until its mark progress
+ * action makes it one. Any post can have replies.
  */
 function Activity({
   t,
@@ -1469,6 +1490,9 @@ function Activity({
     onError: (err) => toast.error(errorMessage(err)),
   })
   const submit = () => body.trim() && !send.isPending && send.mutate()
+  // Open decisions on top, newest first among them; the rest keep their place.
+  const open = (u: UpdateRow) => u.decision && !u.decidedAt
+  const feed = [...t.updates.filter(open), ...t.updates.filter((u) => !open(u))]
 
   return (
     <section>
@@ -1519,7 +1543,7 @@ function Activity({
         <Empty>No posts yet.</Empty>
       ) : (
         <Timeline>
-          {t.updates.map((u) => (
+          {feed.map((u) => (
             <TimelineRow key={u.id} at={u.createdAt} dot={u.progress ? undefined : 'bg-sky-500/70'}>
               <PostCard u={u} projectId={String(t.projectId)} onChange={onChange} />
             </TimelineRow>
@@ -1619,12 +1643,20 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
     onError,
   })
   const remove = useMutation({ mutationFn: () => del(`/api/updates/${u.id}`), onSuccess: onChange, onError })
+  // A link to one of its replies (#post-<id>-reply-<id>) opens the thread, once per link.
+  const anchor = useContext(ShownAnchor)
+  const opensFor = anchor?.holder === `post-${u.id}` ? anchor.hash : null
+  useEffect(() => {
+    if (opensFor) setThread(true)
+  }, [opensFor])
   const replies = u.thread.count
   const count = `${replies} ${replies === 1 ? 'reply' : 'replies'}`
   return (
+    // A link lands on it as #post-<id>, below the stuck header.
     <article
+      id={`post-${u.id}`}
       className={cn(
-        'rounded-lg border',
+        'scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border',
         !u.progress && 'bg-muted/30',
         u.decision && !u.decidedAt && 'border-amber-500/60 bg-amber-500/5',
       )}
@@ -1808,17 +1840,6 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   )
 }
 
-/** A preview the board is building or running (and so can stop). */
-const previewActive = (m: ManagedPreview | null | undefined) =>
-  !!m && (m.status === 'building' || m.status === 'starting' || m.status === 'running')
-
-const STEP_LABEL: Record<NonNullable<ManagedPreview['step']>, string> = {
-  install: 'installing dependencies',
-  build: 'building',
-  copy: 'copying the live data',
-  server: 'starting the server',
-}
-
 /**
  * Where the ticket's work runs for the human to try: a row per workspace with a preview link, or one
  * the board can build and run a preview of (its own worktree on this machine).
@@ -1880,92 +1901,31 @@ function PreviewRow({
   projectId: number
   onChange: () => void
 }) {
-  const action = useMutation({
-    mutationFn: (what: 'start' | 'stop' | 'restart') => post(`/api/workspaces/${w.id}/preview/${what}`),
-    onSuccess: onChange,
-    onError: (err) => toast.error(errorMessage(err)),
-  })
   const url = data?.url ?? w.previewUrl
   const m = data?.managed ?? null
-  const active = previewActive(m)
-  const state = !url
-    ? null
-    : data
-      ? data.running
-        ? {
-            label: 'Running',
-            title: `Answered with HTTP ${data.status} at ${clock(data.checkedAt)}`,
-            className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-          }
-        : {
-            label: 'Not running',
-            title: `No answer at ${clock(data.checkedAt)}`,
-            className: 'bg-muted text-muted-foreground',
-          }
-      : error
-        ? { label: 'Not checked', title: errorMessage(error), className: 'bg-muted text-muted-foreground' }
-        : { label: 'Checking…', title: 'Checking whether it answers', className: 'text-muted-foreground' }
-  const logUrl = (name: 'build' | 'server') => `/api/workspaces/${w.id}/preview/log?name=${name}`
   return (
     <li className="space-y-1.5 text-sm">
       <div className="flex flex-wrap items-center gap-2">
-        {url && (
-          <a href={url} target="_blank" rel="noreferrer" className={buttonVariants({ size: 'sm' })}>
-            Open preview <ExternalLink />
-          </a>
-        )}
-        {!active && data?.cannotStart === null && (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={action.isPending}
-            onClick={() => action.mutate('start')}
-            title="Build this worktree and run it on a free port, with a fresh copy of the live data"
-          >
-            <Play /> Start
-          </Button>
-        )}
-        {active && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={action.isPending}
-              onClick={() => action.mutate('stop')}
-              title="Stop the preview and free its port"
-            >
-              <Square /> Stop
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={action.isPending}
-              onClick={() => action.mutate('restart')}
-              title="Stop it, build again and start it with a fresh copy of the data"
-            >
-              <RotateCw /> Restart
-            </Button>
-          </>
-        )}
-        {state && (
-          <span
-            className={cn(
-              'ml-auto inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
-              state.className,
-            )}
-            title={state.title}
-          >
-            {data && <span className="size-1.5 rounded-full bg-current" />}
-            {state.label}
-          </span>
-        )}
+        <PreviewActions
+          workspaceId={w.id}
+          url={url}
+          managed={m}
+          cannotStart={data?.cannotStart}
+          onChange={onChange}
+        />
+        <PreviewBadge
+          url={url}
+          check={data}
+          unchecked={error ? errorMessage(error) : null}
+          className="ml-auto"
+        />
       </div>
       {url && (
         <div className="truncate font-mono text-xs text-muted-foreground" title={url}>
           {url}
         </div>
       )}
-      {m && <ManagedLine m={m} logUrl={logUrl} />}
+      {m && <ManagedLine m={m} workspaceId={w.id} />}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <span
           className="inline-flex min-w-0 items-center gap-1 font-mono"
@@ -1985,52 +1945,6 @@ function PreviewRow({
         </Link>
       )}
     </li>
-  )
-}
-
-/** What the board's own preview of the workspace is doing, and why it failed or stopped. */
-function ManagedLine({ m, logUrl }: { m: ManagedPreview; logUrl: (name: 'build' | 'server') => string }) {
-  const log = (name: 'build' | 'server', label = 'full log') => (
-    <a href={logUrl(name)} target="_blank" rel="noreferrer" className="underline hover:text-foreground">
-      {label}
-    </a>
-  )
-  if (m.status === 'building' || m.status === 'starting')
-    return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Loader2 className="size-3 animate-spin" />
-        {m.status === 'starting' && m.port ? `Starting on :${m.port}…` : 'Building…'}
-        {m.step && ` ${STEP_LABEL[m.step]}`} · {log(m.step === 'server' ? 'server' : 'build', 'log')}
-      </div>
-    )
-  if (m.status === 'running')
-    return (
-      <div className="text-xs text-muted-foreground">
-        Run by the board on :{m.port}
-        {m.runningAt && `, since ${clock(m.runningAt)}`} · {log('server', 'server log')}
-      </div>
-    )
-  if (m.status === 'failed')
-    return (
-      <div className="space-y-1 text-xs">
-        <div className="text-destructive">
-          Failed: {m.reason}
-          {m.tailLog && <> · {log(m.tailLog)}</>}
-        </div>
-        {m.tail.length > 0 && (
-          <pre className="max-h-40 overflow-auto rounded bg-muted p-2 font-mono text-[11px] whitespace-pre-wrap">
-            {m.tail.join('\n')}
-          </pre>
-        )}
-      </div>
-    )
-  return (
-    <div className="text-xs text-muted-foreground">
-      {m.reason?.startsWith('stopped')
-        ? m.reason.charAt(0).toUpperCase() + m.reason.slice(1)
-        : `Stopped${m.reason ? `: ${m.reason}` : ''}`}
-      {m.stoppedAt && ` (${clock(m.stoppedAt)})`}
-    </div>
   )
 }
 

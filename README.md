@@ -4,9 +4,10 @@ A local job board shared by one developer and their AI agents (claude, codex, op
 Per project (one or more repos): the PR queue of what you review and what you opened, the features
 in flight (tickets → lanes for parallel work → tasks → branches and workspaces → updates with
 screenshots and recordings → threads), the PR reviews your agents record, and a day-by-day log with
-a one-glance summary and the report each project asks for (daily or weekly, as its prompt says),
-tracked period by period. GitHub is **read-only**, and so is git, but for the finished branches and
-worktrees the human deletes from the Cleanup page.
+the report each project asks for: one per period (each workday or each week, due at the end of the
+project's shift), written by hand, by an agent or by claude from the project's prompt and template,
+tracked period by period. GitHub is **read-only**, and so is git, but for the finished branches
+and worktrees the human deletes from the Cleanup page.
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
@@ -127,12 +128,34 @@ A preview stops by itself when the ticket's PR is merged (the PR queue's refresh
 ticket moves to a done or cancelled stage or is archived, its workspace or ticket is deleted, and
 when the board stops; it exits on its own within seconds of the board even when the board is killed.
 Nothing is started again when the board starts; the ticket page says it was stopped when the board
-restarted. The cleanup report lists previews still running for closed tickets.
+restarted. The cleanup report lists previews still running for closed tickets; the project's
+Previews page (`GET /api/projects/:id/previews`) lists every preview of its tickets, running or not.
 
 Only a git worktree of the ticket's repo that sits next to its main checkout
 (`../agent-board-<branch>`) and is a checkout of the board is run, never the main checkout or the
-board's own folder; one preview per workspace and per worktree, at most 8 at once. A preview board
-(development) does not start previews of its own.
+board's own folder; one preview per workspace and per worktree. A preview board (development) does
+not start previews of its own.
+
+**The preview limit.** The board builds or runs at most as many previews at once, across every
+project, as the human's preview limit (`previewLimit` in `/api/settings`, 1 to 32, 8 by default; set on
+the Previews page or on Settings). A start beyond it, from the page, REST or `start_preview`, is
+refused with a 409 that names the limit. Lowering it stops nothing; restarting a preview that runs is
+allowed at or over it (it adds none), restarting one that does not is a start.
+
+**Stopping a link.** A link an agent registered for a server it started itself (`pnpm dev` in its
+worktree) can be stopped from the Previews page (human only), when the board can tell the server is
+that worktree's: the link is on loopback, on a port that is neither the board's nor a preview the
+board runs; the workspace's path is a git worktree of the ticket's repo next to its main checkout
+(not the main checkout or the board's folder); and every process listening on the port (`netstat -ano`
+on Windows, `ss -ltnp` or `lsof` elsewhere) runs from inside that worktree: its executable, an
+argument that is a path (Windows, Linux), or its working directory (Linux, macOS) is the worktree or
+under it, `..` resolved, case aside on Windows. The board then kills each with its process tree (`taskkill /T /F`, or
+its descendants elsewhere), answers once the port is free (`freed`), keeps the link (the row moves to
+Not running) and logs it on the ticket. Otherwise the row says why it is not stopped, and the stop
+looks again when asked. **Stop all** stops the project's previews the board runs and the links it may
+stop; links off this machine or that nothing listens on are left out, the rest are skipped with why.
+A preview board (development) stops no link: it runs on a copy of the live data, so its links point at
+servers that really run. Its Stop is refused, its rows say why, and Stop all skips them.
 
 ## Storing files in MinIO
 
@@ -221,7 +244,7 @@ the gate device or token name.
 | GET          | `/api/me`                                                                                                     | who you are `{actor, agent, boardEnv, authOff}`; `authOff` outside production only (see Test mode)                                                                                                                                                                                                        |
 | GET          | `/api/agent-setup` · `/api/agent-setup/skill?client=claude\|codex\|opencode`                                  | board and gate URLs for the Connect agents page · the board skill as a SKILL.md with today's projects and repos                                                                                                                                                                                           |
 | GET          | `/api/agent-setup/review-skills` · `?list`                                                                    | the feature-review, review-queue and todo-review skills with their agents, as a tar to extract into `~/.claude` · the paths it holds                                                                                                                                                                      |
-| GET/PATCH    | `/api/settings` `{defaultAgent}`                                                                              | board-wide preferences (PATCH is the human's only)                                                                                                                                                                                                                                                        |
+| GET/PATCH    | `/api/settings` `{defaultAgent, previewLimit}`                                                                | board-wide preferences (PATCH is the human's only); `previewLimit`: how many previews the board runs at once, 1 to 32, 8 by default                                                                                                                                                                       |
 | GET/POST     | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                                                        | projects with their `repos[]`, `stages[]` and `agents[]`; `instructions` is the agents' briefing                                                                                                                                                                                                          |
 | GET/POST     | `/api/projects/:id/agents` · PATCH/DELETE `/api/agents/:id`                                                   | the project's agents `{name, instructions, delegation, avatarId}` (writes are the human's); a ticket assigned to one is reserved                                                                                                                                                                          |
 | POST         | `/api/projects/:id/agents/defaults`                                                                           | adds the default agents the project lacks (spec, builder, runner, env, verify, hunt, refute, merge), each with instructions and delegation notes; the human's                                                                                                                                             |
@@ -244,11 +267,14 @@ the gate device or token name.
 | GET/POST     | `/api/projects/:id/push` · `/api/projects/:id/push/refresh`                                                   | whether each ticket in work has its branch on origin (`push`: below), one batch of git per repo · fetch origin now, then the same                                                                                                                                                                         |
 | GET          | `/api/projects/:id/cleanup?reach=0`                                                                           | closed tickets still holding workspaces, branches, worktrees or running previews, each branch with `reach`, `remoteReach`, `protected` and `can` (what the human may delete); `reach=0` skips the merge checks; `repos` says which git could not read; `uploads` counts the unattached ones               |
 | POST         | `/api/projects/:id/cleanup/delete` `{items: [{ticketId, branch, kind, sha, worktrees?}]}`                     | the human's (403 for agents): delete closed tickets' worked branches, `kind` `local`, `remote` (on origin) or `worktrees` (its worktrees, then the local branch), `sha` the commit seen; each is checked again first; answers each item's `{ok, outcome, reason, removed, unlinked, restore}`             |
+| GET          | `/api/projects/:id/previews`                                                                                  | its tickets' previews (archived aside), running first: `{previews: [{workspace, ticket, url, check, managed, cannotStart, linkStop, running}], inUse, limit}`; `check`: the link answers (null off this machine); `linkStop`: why its server is not stoppable, null if it is; reads only                  |
+| POST         | `/api/projects/:id/previews/stop`                                                                             | Stop all, humans only: the previews the board runs and the links it may stop (see Previews): `{stopped: [{workspaceId, ticketId, kind, port, pids?, freed?}], skipped: [{workspaceId, ticketId, reason}]}`                                                                                                |
 | DELETE       | `/api/uploads/unattached`                                                                                     | delete the unattached uploads older than a day now `{deleted, bytes, failed}` (the human's)                                                                                                                                                                                                               |
 | POST         | `/api/tickets/:id/tasks` `{tasks[]}` · PATCH/DELETE `/api/tasks/:id`                                          | todo list                                                                                                                                                                                                                                                                                                 |
 | POST         | `/api/tickets/:id/workspaces` `{name, branch?, path?, agent?, previewUrl?}` · DELETE `/api/workspaces/:id`    | worktrees / sub-branches / subagents                                                                                                                                                                                                                                                                      |
 | PATCH/GET    | `/api/workspaces/:id` `{previewUrl}` · `/api/workspaces/:id/preview`                                          | set or clear (`null`, `""`) where the branch runs for the human to try (http/https) · whether it answers: `{running, status?, checkedAt, url}`, localhost only; `managed` (the board's own preview of it) and `cannotStart` (why it would not start one, null when it would)                              |
 | POST/GET     | `/api/workspaces/:id/preview/start` · `/stop` · `/restart` · GET `/preview/log?name=build\|server`            | the board builds and runs the workspace's worktree as a preview (see Previews) · stop it · stop and build again · its logs                                                                                                                                                                                |
+| POST         | `/api/workspaces/:id/preview/stop-link`                                                                       | stop the server behind the link, humans only, when it runs from the workspace's worktree (see Previews): `{workspaceId, ticketId, kind: 'link', port, pids, freed}`; 400 or 409 with why otherwise                                                                                                        |
 | POST         | `/api/tickets/:id/updates` `{body, attachmentIds[], as?, progress?}`                                          | a post on the ticket's feed (`progress` default true); `as` posts under one of the project's agents (agents only)                                                                                                                                                                                         |
 | POST/DELETE  | `/api/tickets/:id/attachments` `{attachmentIds}` · `/api/tickets/:id/attachments/:attachmentId`               | files that go with the ticket's instructions (uploads first); `GET /api/tickets/:id` lists them as `attachments`                                                                                                                                                                                          |
 | POST/PUT     | `/api/tickets/:id/decisions` `{body, options[], as?, block?}` · `/api/updates/:id/decision` `{option, note?}` | ask the human to decide (2–5 options; blocks the ticket) · the human's answer (humans only; unblocks once none is open)                                                                                                                                                                                   |
@@ -256,16 +282,20 @@ the gate device or token name.
 | POST         | `/api/uploads`                                                                                                | multipart `file`, or JSON `{path}` (local file) or `{name, base64}` → `{id, url}`                                                                                                                                                                                                                         |
 | GET          | `/api/uploads/:id` · `/api/uploads/:id/info`                                                                  | the file · its metadata with the local `path` (and `windowsPath` under WSL)                                                                                                                                                                                                                               |
 | GET/POST     | `/api/comments?parentType=ticket\|update\|pr\|review&parentId=`                                               | on a ticket: its posts (POST adds one, not progress); else replies (`replyTo` nests; `as`, `@name` as before)                                                                                                                                                                                             |
-| GET          | `/api/projects/:id/threads?since=` · `/api/projects/:id/inbox?since=`                                         | `{cursor, threads}` where someone spoke after the caller (with `since`, only newer) · `{count, cursor, threads}` without bodies                                                                                                                                                                           |
+| GET          | `/api/projects/:id/threads?since=` · `/api/projects/:id/inbox?since=`                                         | `{cursor, threads}` where someone spoke after the caller (with `since`, only newer) · `{count, cursor, threads, reportDue}` without bodies                                                                                                                                                                |
 | GET          | `/api/projects/:id/reviews`                                                                                   | results                                                                                                                                                                                                                                                                                                   |
 | GET          | `/api/projects/:id/reviews/results?pr=&sha=&repoId=` · `/api/reviews/results/:id`                             | results without summaries · one in full                                                                                                                                                                                                                                                                   |
 | POST         | `/api/projects/:id/reviews/results`                                                                           | post a result                                                                                                                                                                                                                                                                                             |
-| GET          | `/api/summary?projectId=`                                                                                     | the Home and Overview summary: what waits on the human, in progress, done today, next, carrying over (every project without `projectId`)                                                                                                                                                                  |
-| GET          | `/api/daily?date=YYYY-MM-DD&projectId=`                                                                       | activity by the hour + summaries                                                                                                                                                                                                                                                                          |
-| POST         | `/api/daily/summaries` `{date, projectId, body}` · `/generate`                                                | post / ask claude for the day's summary                                                                                                                                                                                                                                                                   |
-| GET/PATCH    | `/api/projects/:id/report-settings` `{prompt, cadence, weekday, dueTime, format}`                             | what the project's report must contain (markdown prompt) and when it is due: `off` · `daily` · `weekly` on `weekday` 1–7, by `dueTime` (HH:MM), `text`/`file`                                                                                                                                             |
-| GET/POST     | `/api/projects/:id/reports?from=&to=` · `{period?, body?, attachmentIds[]}`                                   | periods newest first with `status` done/missing/upcoming and the latest report · post one (replaces the period's report, the old one kept)                                                                                                                                                                |
+| GET          | `/api/summary?projectId=`                                                                                     | the Home and Overview summary: what waits on the human, in progress, done today, next, carrying over, `reportDue` (every project without `projectId`)                                                                                                                                                     |
+| GET          | `/api/daily?date=YYYY-MM-DD&projectId=`                                                                       | the day's activity, every write in order (one project's with `projectId`)                                                                                                                                                                                                                                 |
+| GET/PATCH    | `/api/projects/:id/report-settings`                                                                           | how the project's report is made: `prompt`, `template` (headings in order; `""` is the default), `cadence` `off` · `daily` (on `workdays`, ISO 1–7) · `weekly` (on `weekday` 1–7), `shiftStart`–`shiftEnd` (HH:MM; due at the end), `alertMinutes`, `format` `text`/`file`; `pending` agent changes       |
+| GET          | `/api/projects/:id/report-settings/changes?field=` · `/api/report-settings/changes/:id`                       | every change of the prompt or template, newest first, with the old and new value and who · one                                                                                                                                                                                                            |
+| POST         | `/api/report-settings/changes/:id/accept` · `/revert`                                                         | keep an agent's change · put the field back as it was (humans only)                                                                                                                                                                                                                                       |
+| GET/POST     | `/api/projects/:id/reports?from=&to=` · `{period?, body?, attachmentIds[]}`                                   | periods newest first with `status` done/missing/upcoming/off, the latest report, `generating` and `generateError` · post one (a newer version; the old ones are kept)                                                                                                                                     |
+| POST         | `/api/projects/:id/reports/generate` `{period?}`                                                              | claude writes the period's report (the current one by default) from the prompt, the template and the activity; 409 while it runs                                                                                                                                                                          |
 | GET          | `/api/projects/:id/reports/:period`                                                                           | every version posted for a period, newest first                                                                                                                                                                                                                                                           |
+| GET          | `/api/reports/overview?date=` · `/api/report-due`                                                             | every project's report for the period holding `date` · `{items}`: the reports due soon or missing now                                                                                                                                                                                                     |
+| GET          | `/api/projects/:id/pushed-today`                                                                              | commits and lines that reached origin today, by repo and branch (and ticket)                                                                                                                                                                                                                              |
 | \*           | `/api/mcp`                                                                                                    | MCP streamable HTTP; tools mirror the rows above                                                                                                                                                                                                                                                          |
 
 ## Development
@@ -279,6 +309,7 @@ pnpm format          # prettier
 pnpm test            # vitest (path mapping, actors, PR status, …)
 pnpm test:e2e        # Playwright against a built board in test mode (Testing, below)
 pnpm check:migrations # the drizzle folder and its journal agree
+pnpm bench           # in a worktree: the benchmark (Benchmark, below)
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
 ```
 
@@ -309,6 +340,61 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
   Playwright report and traces are uploaded as the `playwright-report` artifact.
 
+## Benchmark
+
+`pnpm bench` measures a checkout so a change can be compared before and after on the same machine.
+Run it in a worktree: it refuses the main checkout (the live board), as target and as where it runs.
+
+```
+pnpm bench                                   # everything, both datasets, 3 runs (about 25 minutes)
+pnpm bench --quick                           # one short pass, to see that it works
+pnpm bench --sections server,mcp --runs 5    # only what a change touches
+pnpm bench --server dev                      # vite dev, as the live board runs, instead of the build
+pnpm bench --target ../agent-board-main --label main   # another checkout, e.g. a worktree of main
+pnpm bench compare <before.json> <after.json>          # every metric, before and after
+pnpm bench --help                            # every flag
+```
+
+It builds the target into `.bench/build/<folder>` (never `.output`) and starts the build in test mode
+on `127.0.0.1`, on a free port from 47200 (never 47100), with a data folder of its own in
+`.bench/work`, once per run so the runs are independent. A server counts as its own only when the
+preload in its process reports the health check; when another process holds the port (another bench
+run took it between the probe and the start), it starts again on the next free port. Two datasets:
+`live-copy`, a backup of the main checkout's `data/board.db` and its uploads (skipped where there is
+none; its repos are the real checkouts, so the PR queue calls `gh` and the push state fetches origin,
+as the board does), and `generated`, a large board written from a seed (`--scale`, `--seed`: 20
+projects, about 2,700 tickets with lanes, 22,000 posts, 20,000 replies, 2,000 attachments and 45,000
+activity rows at scale 1) with a git repo and a bare origin for its projects.
+
+The generated dataset gives the same answers at any hour: the board counts by the server's local day
+(today's activity, work carried over, reports due) and by whole days of elapsed time (stalled work,
+PRs merged in the last 14 days), so its rows are laid out on the local day it is written on, each
+day's rows in that day's first minute, with half a day of work today. Within the first minute after
+midnight it waits for that minute to pass. Days of a daylight saving change are not 24 h long, so to
+keep every row on its calendar day and as many whole days old until midnight, the rows of the days up
+to the day the clocks went back go an hour after their midnight, and on the day the clocks go back and
+for the 60 days after they go forward it waits until 1:01 to write the dataset. When the day changes during a run, the dataset is
+written again for the new day before the next server starts, and a run that went past midnight is run
+again (the summary says so). What it cannot keep the
+same is a date written out in words, such as a report period's label (`Sun, Oct 4`), and how long ago
+today's rows were, so compare runs of different days with that in mind.
+
+Sections (`--sections`): `server` (p50/p95 of the hot endpoints after a warm-up, the first request
+apart, SQL statements and child processes per request), `mcp` (size and latency of the main tools'
+results, as an agent), `bundle` (JS and CSS each route downloads on a cold load, raw and gzip, sized
+from the build), `load` (cold first loads in Chromium: TTFB, DOMContentLoaded, load, hydration, data
+shown, requests and bytes), `nav` (client-side navigations until the destination shows), `idle`
+(requests per minute of pages left open, per API path) and `memory` (RSS and heap under a steady
+request load, once per dataset). The counts per request come from `scripts/bench/preload.mjs`, which
+the harness loads into the server it starts (`node --import`); the board has no switch for it. Under
+`--server dev` the server code runs in a worker thread out of its reach, so those counts are n/a there,
+and there is no bundle section.
+
+Results go to `.bench/results/<time>-<sha>[-label].json` (every run's value of every metric, its
+median and range) and `.md` (the summary, also printed), with the machine, the commit and the settings.
+`compare` flags a change as beyond noise when the ranges over the runs do not overlap. The server and
+browser it started stop when it ends, fails or is interrupted.
+
 ## Pushed or not
 
 A branch's `push` (on `GET /api/tickets/:id` for the ticket and its workspaces, on
@@ -322,3 +408,19 @@ read from the checkout's `origin/*` refs, so the board fetches each repo in the 
 every 5 minutes (never prompting, never holding up a request); `checkedAt` is the last fetch, and
 the refresh action fetches at once. The board pushes nothing but the origin deletions the human
 confirms on the Cleanup page.
+
+**Pushed today** (`GET /api/projects/:id/pushed-today`) counts what reached origin on the local day:
+each time the board reads a checkout's copy of origin's branches it records which of them moved
+(old sha to new sha; the first look at a repo only notes where they are, and one that finds origin
+empty after the board's own fetch is a look too, so a new repo's first push counts; a listing where
+every branch the board knew is gone at once records nothing, so their coming back is no move). Each of
+the day's moves brings the commits that no tip origin had since local midnight reaches: where its
+branches stood when the day began and every tip a move set before this one, branches deleted or gone
+since included, so a branch deleted and pushed again as it was brings nothing. They count once each,
+under the first branch that brought them, whenever they were written. Merge commits do not count.
+Lines added and removed are their `git diff --shortstat`. The answer is
+`{date, commits, added, removed, checkedAt, repos}`, each repo with its `branches` (and a branch's
+`ticket` when it is one's); the Daily page shows it green,
+or grey when nothing was pushed, and the project's sidebar on a day something was. What the
+commits are is kept by their shas, so reading it again asks git nothing new; pushes made while the
+board was not reading the repo count on the day it next does.

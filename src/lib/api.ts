@@ -3,9 +3,8 @@
 import type {
   Attachment,
   Comment,
-  DailySummary,
   Repo,
-  ReportSettings,
+  ReportSettingsChange,
   ReviewResult,
   Task,
   Ticket,
@@ -13,7 +12,11 @@ import type {
   Workspace,
   Activity,
 } from '#/db/schema'
-import type { ReportList, ReportPeriod, ReportView } from '#/server/reports'
+import type { ReportStatus } from '#/lib/reports'
+import type { PushedToday } from '#/server/pushedToday'
+import type { ReportDue } from '#/server/reportDue'
+import type { ReportList, ReportPeriod, ReportSettingsView, ReportView } from '#/server/reports'
+import type { ReportsOverview } from '#/server/reportsOverview'
 import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
 import type { WorkspacePreview } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
@@ -23,6 +26,8 @@ import type { DirListing } from '#/server/fs'
 import type { Handoff } from '#/server/handoff'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { PreviewState } from '#/server/preview'
+import type { LinkStopped, StopAll } from '#/server/linkPreview'
+import type { ProjectPreview, ProjectPreviews } from '#/server/projectPreviews'
 import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
 import type { ProjectPush, Push } from '#/server/push'
@@ -41,16 +46,29 @@ export type {
   ManagedPreview,
   PreviewState,
   ProjectAgent,
+  LinkStopped,
+  ProjectPreview,
+  ProjectPreviews,
   ProjectSummary,
+  StopAll,
   Summary,
   WorkspacePreview,
 }
-export type { ReportList, ReportPeriod, ReportSettings, ReportView }
+export type {
+  PushedToday,
+  ReportDue,
+  ReportList,
+  ReportPeriod,
+  ReportSettingsChange,
+  ReportSettingsView,
+  ReportStatus,
+  ReportsOverview,
+  ReportView,
+}
 
 export type {
   Attachment,
   Comment,
-  DailySummary,
   Repo,
   ReviewResult,
   Task,
@@ -164,10 +182,20 @@ export interface TicketGit {
   includes: number[]
 }
 
+/** `/api/daily`: a day's activity, every write in order, with its project's name. */
 export interface DailyPayload {
   date: string
   projects: { id: number; name: string }[]
   activity: (Activity & { project: string | null })[]
-  summaries: DailySummary[]
-  generating: boolean
+}
+
+/** `/api/report-due`: the projects whose report the board is reminding about right now. */
+export interface ReportDueList {
+  items: ReportDue[]
+}
+
+/** `POST /api/report-settings/changes/:id/revert`: the change, now reverted, and the settings after it. */
+export interface RevertedChange {
+  change: ReportSettingsChange
+  settings: ReportSettingsView
 }

@@ -70,6 +70,14 @@ http_headers = { Authorization = "Bearer gate_…" }
    sibling lanes and never in the title. Register where code runs
    (worktree, sub-branch, sandbox) with `add_workspace`, every worktree as soon as you open it:
    the registered workspaces are the cleanup list. `remove_workspace` when it is gone.
+   Split lanes by files: one owning lane per file (a file two lanes need goes to one, or the other
+   waits on it with `needs`). Before starting or delegating, check what is done or in flight
+   (`get_ticket`: lanes, their status, posts; `get_ticket_git`: workspaces; `list_review_results`
+   for the head SHA) and do not redo it. A lookup of one or two calls (a grep, a file read, one
+   board call) you do yourself. Every brief you hand another agent (a subagent's prompt, a lane's
+   `body`, a project agent's run) has five parts: **Goal**; **Focus** (files to read first, what to
+   leave alone); **Known** (facts already established, not to re-derive: commands, ports, paths,
+   earlier results); **Done when**; **Return** (the exact shape of the answer).
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
    the board copies them). One update per meaningful step, not per keystroke. A ticket has one
@@ -86,7 +94,9 @@ http_headers = { Authorization = "Bearer gate_…" }
      port from 47101 without the passkey gate, then sets the workspace's `previewUrl`. It returns
      at once; `get_ticket` shows the workspace's `managedPreview` going `building` → `starting` →
      `running`, or `failed` with the last log lines (`logs` has the paths). `start_preview` with
-     `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board stops it
+     `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board runs as
+     many at once as the human's preview limit (8 by default); a start beyond it is refused with
+     the limit, so stop the ones you no longer need. The board stops it
      by itself when the PR is merged, the ticket moves to done or cancelled or is archived, or the
      workspace is removed, and when the board itself stops (it does not start them again). Do not
      run `pnpm dev` in your session for the human: it dies with your session and the dev server
@@ -95,7 +105,9 @@ http_headers = { Authorization = "Bearer gate_…" }
      data rather than the real one (the project's instructions say how), and register its link on
      the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it as
      a Preview card with an Open button and whether it is running. Stop it once the ticket is
-     merged or dropped, and clear it (`set_preview` with `previewUrl: ""`).
+     merged or dropped, and clear it (`set_preview` with `previewUrl: ""`). The human can stop it
+     from the project's Previews page when it listens on loopback and runs from the workspace's
+     worktree; the link stays, as not running.
 
    To exercise the board yourself without the passkey gate, run your own copy: `AUTH=off pnpm dev`,
    or `BOARD_ENV=test` with an `X-Test-Actor` header (README: "Test mode"); never on port 47100,
@@ -179,17 +191,23 @@ http_headers = { Authorization = "Bearer gate_…" }
    blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that
    another agent can continue without asking. It is the ticket's one current "Where we left off"
    note, shown at the top of its page; each version is also posted to its feed as a handoff. Then
-   `post_daily_summary` — at most three short lines at the highest level: what got done, what is
-   open. `daily_report` shows what everyone else did that day.
-10. **Reports**: a project can ask for a report every day or once a week (`get_report_settings`:
-    `cadence`, the `weekday` and `dueTime` it is due by, `format` text or file, and the `prompt`
-    saying what it must contain and how: by the hour, sections, audience, a short text or a PDF).
-    At the end of a session, `list_reports` shows each recent period as `done`, `missing` (due,
-    nothing posted) or `upcoming`; write the current or missing one exactly as the prompt says and
-    `post_report` it (`body`, and `files` as absolute paths: the board does not make PDFs; a `file`
-    project needs one). Posting again for a period replaces its report and keeps the old one as
-    history. For a daily text project the day's summary counts as its report until one is posted.
-    `set_report_settings` changes the prompt or schedule; do that only when the human asks.
+   the project's report, if it keeps one (step 10); `daily_report` shows what everyone else did that
+   day.
+10. **Reports**: a project can ask for one report per period, every workday or once a week
+    (`get_report_settings`: `cadence`, the `weekday` of a weekly one, the shift `shiftStart`–`shiftEnd`
+    whose end it is due at, the `workdays`, `format` text or file, the `prompt` saying what it must
+    say and how, and the `template`, the markdown skeleton whose headings, in order, are its
+    sections). `list_reports` shows each period as `done`, `missing` (due, nothing posted),
+    `upcoming` or `off` (not asked for); write the current or a missing one as the prompt says, in
+    the shape of the template, from `daily_report` for the days it covers, and `post_report` it
+    (`body`, and `files` as absolute paths: the board does not make PDFs; a `file` project needs
+    one). Posting again for a period adds a newer version and keeps the old one as history.
+    `reportDue` on `get_summary` and `check_inbox` says when the human expects it (`due` soon, or
+    `missing` after the shift's end): offer to write it then, with their go-ahead.
+    `set_report_settings` changes the schedule, and the prompt or the template only when the human
+    asked for that change in this conversation: each such change is kept with the old version and
+    stays flagged for the human until they accept or revert it. (`post_daily_summary` is an old name
+    for `post_report` on the current period.)
 
 ## The project's agents
 
@@ -207,8 +225,9 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 **Orchestrating.** Each agent also carries **delegation notes** (`agents[].delegation`): when to
 call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
 orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
-agent's instructions, the project's and the ticket's, and the hand-off checklist (step 7); its result
-is posted on the ticket as that agent; the notes pick the next agent. Before moving the ticket to
+agent's instructions, the project's, and a five-part brief (step 4) holding the ticket's step and
+the hand-off checklist (step 7); its result is posted on the ticket as that agent; the notes pick
+the next agent. Before moving the ticket to
 `review`, check every item of that checklist yourself. The Agents page adds a default set (spec, builder, runner, and
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
 → build again with the confirmed findings (at most three rounds) → hand off. The `/review-queue`

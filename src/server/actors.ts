@@ -4,7 +4,7 @@ import { db, schema } from '#/db'
 
 export type ActorKind = 'agent' | 'human'
 
-// The name the board writes as itself: claude's generated daily summaries.
+// The name the board writes as itself: claude, the author of the reports it generates.
 const BUILT_IN: Record<string, ActorKind> = { claude: 'agent' }
 
 const known = new Map<string, ActorKind>()

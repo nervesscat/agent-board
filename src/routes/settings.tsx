@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
 import { AgentPicker } from '#/components/AgentPicker'
+import { PreviewLimitEditor } from '#/components/Preview'
 import { errorMessage, get, patch } from '#/lib/api'
 import type { Settings } from '#/server/agents'
 
@@ -35,6 +36,15 @@ function BoardSettings() {
           opens on, showing only its commands.
         </p>
         <AgentPicker value={data.defaultAgent} onChange={(defaultAgent) => save.mutate({ defaultAgent })} />
+      </section>
+      <section className="space-y-2">
+        <h2 className="text-sm font-medium">Previews</h2>
+        <p className="text-sm text-muted-foreground">
+          How many previews the board builds and runs at once, in every project (1 to 32). Each is a whole
+          board with its own copy of the data; a start beyond the limit is refused. A project's Previews page
+          shows how many are in use.
+        </p>
+        <PreviewLimitEditor key={data.previewLimit} id="settings-preview-limit" limit={data.previewLimit} />
       </section>
     </div>
   )

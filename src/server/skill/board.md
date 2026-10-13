@@ -1,6 +1,6 @@
 ---
 name: board
-description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, leave resume notes, post the daily summary and the project's report. Use when the user says "pick up a ticket", "next ticket", "where did we leave off", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "daily report", "weekly report", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
+description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, leave resume notes, and write the project's report. Use when the user says "pick up a ticket", "next ticket", "where did we leave off", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "daily report", "weekly report", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
 ---
 
 # Working through the agent board
@@ -94,11 +94,13 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
   `remove_task` drops one that no longer applies, so the progress bar stays honest.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
-  brief as `body`, its own `branch`, `assignee` and `tasks`. Its repo and base branch default to
-  the parent's repo and branch, so the lane's PR goes into the parent's branch, not `main`. Hand
-  each subagent its lane's `ticketId`: it works the lane like any ticket (tasks, updates, thread,
-  review) and may split it into lanes of its own. One-step helpers that finish inside your own
-  turn need no lane.
+  brief as `body` ([Delegating](#delegating)), its own `branch`, `assignee` and `tasks`. Its repo
+  and base branch default to the parent's repo and branch, so the lane's PR goes into the parent's
+  branch, not `main`. Hand each subagent its lane's `ticketId`: it works the lane like any ticket
+  (tasks, updates, thread, review) and may split it into lanes of its own. One-step helpers that
+  finish inside your own turn need no lane. Split lanes by files: each file has one owning lane,
+  and two lanes never edit the same file (a file both need goes to one of them, or the other waits
+  on it with `needs`).
 - Tag every lane with `tags` so the human can filter the list: a severity (`Critical`, `High`,
   `Medium`, `Low`, `Cosmetic`), an area or a kind, one or two words in Title Case. Reuse the words
   sibling lanes already carry, and keep them out of the title (no `[High] …`). `update_ticket`
@@ -134,14 +136,16 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
     log lines and the log paths). Do not run `pnpm dev` in your session for it: that dies with
     your session. `start_preview` with `restart: true` rebuilds after more commits;
     `stop_preview` stops it, and the board stops it by itself once the PR is merged or the
-    ticket is done, cancelled, archived or its workspace removed.
+    ticket is done, cancelled, archived or its workspace removed. The human's preview limit (8 by
+    default) caps how many the board runs at once; a start beyond it is refused with the limit.
   - Anything else: start your branch from your worktree on a free port, with a copy of the data
     rather than the real one (the project's `instructions` say how), then `set_preview` with the
     `workspaceId` and `previewUrl` once it answers (or `previewUrl` on `add_workspace` when it
     already runs). The ticket page then shows a Preview card with an Open button and whether it
     is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
     `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port
-    the human uses day to day.
+    the human uses day to day. The human may stop it from the Previews page when it listens on
+    loopback and runs from the workspace's worktree; its link stays, as not running.
 - Questions are posts too: `comment` on the ticket; the human answers with a post or a reply
   under yours (`comment` on the post, `parentType: update`, replies there). A choice between clear
   options (an approach, a trade-off, a scope call) is an `ask_decision` instead: the question with
@@ -152,6 +156,24 @@ Creating a top-level ticket (only when the human asks): `create_ticket` with you
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.
+
+### Delegating
+
+Every spawned agent and lane costs time: hand out only what is new, and only what is worth it.
+
+- Before starting or delegating anything, check what is already done or in flight: the ticket's
+  lanes with their status, and its posts (`get_ticket`), its workspaces (`get_ticket_git`), and
+  `list_review_results` for the branch's head SHA. Do not start or hand out what is already there.
+- A lookup of one or two calls (a grep, a file read, one board call) you do yourself; do not spawn
+  an agent for it.
+- Every brief you hand another agent (a subagent's prompt, a lane's `create_ticket` `body`, a
+  project agent's run under [Orchestrating](#orchestrating-the-projects-agents)) has five parts:
+  1. Goal: what to achieve.
+  2. Focus: the files or dirs to read first, and what to leave alone.
+  3. Known: facts already established that it must not re-derive: commands, ports, paths,
+     earlier results.
+  4. Done when: the condition to stop at.
+  5. Return: the exact shape of the answer.
 
 ### Watch for feedback
 
@@ -249,28 +271,32 @@ After that:
    stay readable. The ticket page shows it at the top as "Resume here"; a ticket that carries over
    to the next day without one shows "no handoff".
 
-2. `post_daily_summary` with your `projectId`: at most three short lines, highest level: what got
-   done, what is open. `daily_report` with your `projectId` shows what else happened in the project
-   today.
+2. `daily_report` with your `projectId` shows what else happened in the project today.
 
-Then the project's report, if it keeps one:
+Then the project's report, if it keeps one: one report per period, due at the end of the project's
+shift.
 
-1. `get_report_settings`: `cadence` `off` means no reports; stop here. Otherwise it is `daily` or
-   `weekly` (due on `weekday`, 1 Monday to 7 Sunday), by `dueTime` (local; null is the end of the
-   day), as `format` `text` or `file`, and `prompt` says what the report must contain and how (by
-   the hour, sections, who reads it, tone, a two-line text or a PDF).
-2. `list_reports`: each recent period with `status` `done`, `missing` (due, nothing posted) or
-   `upcoming` (not due yet), newest first, and `current`, the period you are in.
-3. For the current period, and any `missing` one the activity lets you write: write the report
-   exactly as the prompt says (`daily_report` for the days it covers) and `post_report` with
-   `period` (any day of it), `body`, and `files` as absolute paths. The board does not make PDFs:
-   when the prompt or `format: file` asks for one, make it yourself and attach it. Posting again
-   for a period replaces its report; the old one stays as history.
-4. On a daily text project the day's `post_daily_summary` already counts as its report until one
-   is posted; post a report anyway when the prompt asks for more than the summary.
+1. `get_report_settings`: `cadence` `off` means no reports; stop here. Otherwise it is `daily` (on
+   the `workdays`, ISO 1 Monday to 7 Sunday) or `weekly` (due on `weekday`), at `shiftEnd` (local), as
+   `format` `text` or `file`. `prompt` says what the report must say and how (who reads it, tone,
+   what to stress, a short text or a PDF); `template` is its shape: a markdown skeleton whose
+   headings, in order, are the report's sections.
+2. `list_reports`: each recent period with `status` `done`, `missing` (due, nothing posted),
+   `upcoming` (not due yet) or `off` (not asked for), newest first, and `current`, the period you
+   are in. `reportDue` on `get_summary` and `check_inbox` says when the human expects it (`due` soon,
+   or `missing` after the shift's end): offer to write it then.
+3. For the current period, and any `missing` one the activity lets you write, with the human's
+   go-ahead: write the report as the prompt says, filling the template's headings in order
+   (`daily_report` for the days it covers), and `post_report` with `period` (any day of it), `body`,
+   and `files` as absolute paths. The board does not make PDFs: when the prompt or `format: file`
+   asks for one, make it yourself and attach it. Posting again for a period adds a newer version;
+   the old one stays as history.
 
-`set_report_settings` changes the prompt or the schedule, and the change shows in the project's
-activity: only when the human asks for it.
+`set_report_settings` changes the schedule (cadence, weekday, shift, workdays, alert minutes,
+format), and the prompt or the template only when the human asked for that change in this
+conversation: each such change is kept with the previous version, shows in the project's activity
+and stays flagged for the human until they accept or revert it. `post_daily_summary` is an old name
+for `post_report` on the current period: use `post_report`.
 
 ## 6. Clean up
 
@@ -359,11 +385,12 @@ Without those skills, or for one ticket, orchestrate by hand:
 1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its
    brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
 2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
-   prompt is its `instructions`, the project's `instructions`, the ticket (`get_ticket`), the
-   worktree and branch, what the previous step returned (subagents share nothing else) and the
-   checklist from [Hand off](#4-hand-off), as it stands; post
-   what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`, its
-   evidence in `files`); tick the tasks it finished; go where its notes say next.
+   prompt is its `instructions`, the project's `instructions` and a brief in the five parts of
+   [Delegating](#delegating): the step's goal from the ticket (`get_ticket`), its focus, what is
+   known (the worktree and branch, what earlier steps returned: subagents share nothing else),
+   done when (with the checklist from [Hand off](#4-hand-off), as it stands) and what to return;
+   post what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`,
+   its evidence in `files`); tick the tasks it finished; go where its notes say next.
 3. A call that is the human's (two valid behaviours, a finding that keeps coming back, ship as is
    or not) → `ask_decision`, and work on something else until it is decided.
 4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests. Check

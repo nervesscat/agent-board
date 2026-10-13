@@ -338,6 +338,58 @@ export function gitSaid(err: unknown): string {
   return (errors.length ? errors : lines).join(' ') || 'git failed'
 }
 
+export interface CommitLines {
+  sha: string
+  added: number
+  removed: number
+}
+
+/**
+ * The commits reachable from `tip` that none of `before` reaches, merge commits left out, each with
+ * the lines it adds and removes against its parent, in one git process. The lines are its `--numstat`
+ * summed, which is what `git diff --shortstat` says (a binary file adds none) without its wording,
+ * which git translates. The revisions go through stdin, so any number of `before` fits; one this
+ * checkout lacks is skipped.
+ */
+export async function commitsBrought(
+  repoPath: string,
+  tip: string,
+  before: string[],
+): Promise<CommitLines[]> {
+  const out = await new Promise<string>((resolve, reject) => {
+    const child = execFile(
+      'git',
+      [
+        'log',
+        '--no-merges',
+        '--no-show-signature',
+        '--format=%x1e%H',
+        '--numstat',
+        '--ignore-missing',
+        '--stdin',
+      ],
+      { cwd: repoPath, windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
+      (err, stdout) => (err ? reject(err) : resolve(String(stdout))),
+    )
+    child.stdin?.end([tip, ...before.map((sha) => `^${sha}`)].join('\n') + '\n')
+  })
+  return out
+    .split('\x1e')
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk) => {
+      const [sha = '', ...files] = chunk.split('\n')
+      const lines = { sha: sha.trim(), added: 0, removed: 0 }
+      for (const file of files) {
+        // `<added>\t<removed>\t<path>`; a binary file is `-\t-`: no lines.
+        const [added = '', removed = ''] = file.split('\t')
+        lines.added += Number(added) || 0
+        lines.removed += Number(removed) || 0
+      }
+      return lines
+    })
+}
+
 // --- writes: the human's Cleanup actions, nothing else ---
 
 /**

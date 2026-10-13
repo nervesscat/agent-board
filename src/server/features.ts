@@ -14,6 +14,7 @@ import { previewState, previewUrl, type PreviewState } from './preview'
 import { prForTicket } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
+import { reportDueFor } from './reportDue'
 import { type WithResume, type WithResumeBrief, resumeState, withoutResume } from './resume'
 import {
   firstOfKind,
@@ -1266,6 +1267,8 @@ export function checkInbox(projectId: number, actor: string, since?: string | nu
   return {
     count: threads.length,
     cursor,
+    // The project's report, while the board is reminding about it: write it with the human's go-ahead.
+    reportDue: reportDueFor(projectId),
     threads: threads.map((t) => ({
       ticketId: t.ticketId,
       title: t.title,

@@ -122,10 +122,19 @@ beforeAll(async () => {
 })
 
 afterEach(async () => {
-  // Nothing outlives a test: stop whatever it left running.
+  // Nothing outlives a test: stop whatever it left running, and the limit goes back to its default.
   for (const p of mp.activePreviews()) await mp.stopPreview(p.workspaceId, 'test over', 'test')
   mp.setPreviewRunner(null)
+  dbm.db.delete(dbm.schema.settings).where(eq(dbm.schema.settings.key, 'previewLimit')).run()
 })
+
+/** The human's preview limit, as PATCH /api/settings stores it. */
+const setLimit = (n: number) =>
+  dbm.db
+    .insert(dbm.schema.settings)
+    .values({ key: 'previewLimit', value: n })
+    .onConflictDoUpdate({ target: dbm.schema.settings.key, set: { value: n } })
+    .run()
 
 function useFake() {
   runner = new FakeRunner()
@@ -349,17 +358,99 @@ describe('a preview the board runs', () => {
     expect(mp.managedPreview(ws.id)!.reason).toMatch(/no free port between 47101 and 47199/)
   })
 
-  it('runs at most 8 at once, and one per worktree', async () => {
+  it('runs at most the preview limit at once (8 by default), and one per worktree', async () => {
     useFake()
-    const running = Array.from({ length: mp.MAX_RUNNING }, () => ticketWithWorktree())
+    expect(mp.previewLimit()).toBe(8)
+    const running = Array.from({ length: 8 }, () => ticketWithWorktree())
     for (const { ws } of running) mp.startPreview(ws.id, 'claude')
     const ninth = ticketWithWorktree()
-    expect(() => mp.startPreview(ninth.ws.id, 'claude')).toThrow(/at most 8/)
+    expect(() => mp.startPreview(ninth.ws.id, 'claude')).toThrow(/8 previews already run, at most 8/)
     await mp.stopPreview(running[0]!.ws.id, 'make room', 'enrique')
     expect(mp.startPreview(ninth.ws.id, 'claude').status).toBe('building')
 
     const twin = features.addWorkspace(ninth.t.id, { name: 'twin', path: ninth.dir }, 'claude')
     expect(mp.cannotStart(twin.id)).toMatch(/already runs a preview from/)
+  })
+
+  it('counts every project against the limit, building ones too, and a higher limit lets the start through', async () => {
+    const fake = useFake()
+    fake.codes['pnpm build'] = 'hang'
+    setLimit(2)
+    const other = dbm.db.insert(dbm.schema.projects).values({ name: 'other' }).returning().get().id
+    dbm.db.insert(dbm.schema.repos).values({ projectId: other, name: 'agent-board', repoPath: main }).run()
+    const a = ticketWithWorktree()
+    const t = features.createTicket(other, { title: 'elsewhere', status: 'in_progress' }, 'claude')
+    const b = features.addWorkspace(t.id, { name: 'wt', path: freshWorktree() }, 'claude')
+    mp.startPreview(a.ws.id, 'claude')
+    mp.startPreview(b.id, 'claude')
+    expect([status(a.ws.id), status(b.id)]).toEqual(['building', 'building'])
+    const third = ticketWithWorktree()
+    let refused: unknown
+    try {
+      mp.startPreview(third.ws.id, 'claude')
+    } catch (err) {
+      refused = err
+    }
+    expect(refused).toMatchObject({
+      status: 409,
+      message: expect.stringMatching(/2 previews already run, at most 2/),
+    })
+    expect(status(third.ws.id)).toBeUndefined()
+    setLimit(3)
+    expect(mp.startPreview(third.ws.id, 'claude').status).toBe('building')
+    expect(mp.previewsInUse()).toBe(3)
+  })
+
+  it('lowering the limit stops nothing; a restart of one that runs is allowed over it, of one that does not is refused', async () => {
+    const fake = useFake()
+    const three = Array.from({ length: 3 }, () => ticketWithWorktree())
+    for (const { ws } of three) await startRunning(ws.id)
+    setLimit(1)
+    expect(three.map(({ ws }) => status(ws.id))).toEqual(['running', 'running', 'running'])
+    const fourth = ticketWithWorktree()
+    expect(() => mp.startPreview(fourth.ws.id, 'claude')).toThrow(/3 previews already run, at most 1/)
+
+    // A restart puts back the one it stops: it ends building, the other two untouched.
+    fake.codes['pnpm build'] = 'hang'
+    const restarted = await mp.restartPreview(three[0]!.ws.id, 'enrique')
+    expect(restarted.status).toBe('building')
+    expect(three.map(({ ws }) => status(ws.id))).toEqual(['building', 'running', 'running'])
+
+    // With one running at a limit of 1, restarting a stopped one is a start: refused, nothing stopped.
+    for (const { ws } of three.slice(1)) await mp.stopPreview(ws.id, 'make room', 'enrique')
+    const stopped = three[1]!.ws.id
+    const killed = fake.killed.length
+    await expect(mp.restartPreview(stopped, 'enrique')).rejects.toThrow(/1 previews already run, at most 1/)
+    expect(status(stopped)).toBe('stopped')
+    expect(status(three[0]!.ws.id)).toBe('building')
+    expect(fake.killed).toHaveLength(killed)
+  })
+
+  it('a start while a restart is still stopping its preview cannot take its slot', async () => {
+    const fake = useFake()
+    const [a, b, c] = Array.from({ length: 3 }, () => ticketWithWorktree())
+    for (const { ws } of [a!, b!]) await startRunning(ws.id)
+    setLimit(2)
+    // Killing takes a moment, as taskkill does.
+    const kill = fake.killTree.bind(fake)
+    fake.killTree = async (pid) => {
+      await new Promise((r) => setTimeout(r, 200))
+      await kill(pid)
+    }
+    fake.codes['pnpm build'] = 'hang'
+
+    const restart = mp.restartPreview(a!.ws.id, 'enrique')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(status(a!.ws.id)).toBe('stopped')
+    expect(mp.previewsInUse()).toBe(2)
+    expect(() => mp.startPreview(c!.ws.id, 'claude')).toThrow(/2 previews already run, at most 2/)
+    expect((await restart).status).toBe('building')
+    expect(status(c!.ws.id)).toBeUndefined()
+    expect(mp.previewsInUse()).toBe(2)
+    // Once it is back, its slot is its own again, counted once.
+    await mp.stopPreview(b!.ws.id, 'make room', 'enrique')
+    expect(mp.previewsInUse()).toBe(1)
+    expect(mp.startPreview(c!.ws.id, 'claude').status).toBe('building')
   })
 
   it('refuses closed and archived tickets, and workspaces without a usable path', () => {
@@ -505,7 +596,7 @@ describe('cleanup report', () => {
 })
 
 describe('over MCP and REST', () => {
-  async function call(method: string, pathname: string, body?: unknown) {
+  async function call(method: string, pathname: string, body?: unknown, as: 'human' | 'agent' = 'human') {
     const { api } = await import('./api')
     const { api: guard } = await import('./http')
     const handle = guard(({ request, actor }: { request: Request; actor: string }) =>
@@ -516,6 +607,8 @@ describe('over MCP and REST', () => {
       headers: {
         accept: 'application/json, text/event-stream',
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        // A gate token: an agent, as opposed to the human's passkey session.
+        ...(as === 'agent' ? { authorization: 'Bearer gate_test' } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
@@ -554,6 +647,59 @@ describe('over MCP and REST', () => {
       error: true,
       text: expect.stringMatching(/runs no preview/),
     })
+  })
+
+  it('the preview limit is a board-wide setting the human changes, 1 to 32', async () => {
+    const limit = async () =>
+      ((await (await call('GET', '/api/settings')).json()) as { previewLimit: number }).previewLimit
+    expect(await limit()).toBe(8)
+    const set = await call('PATCH', '/api/settings', { previewLimit: 3 })
+    expect(set.status).toBe(200)
+    expect(await set.json()).toMatchObject({ previewLimit: 3 })
+    expect(await limit()).toBe(3)
+    expect(mp.previewLimit()).toBe(3)
+    for (const bad of [0, 33, 2.5, '8', -1, null]) {
+      const res = await call('PATCH', '/api/settings', { previewLimit: bad })
+      expect(res.status, String(bad)).toBe(400)
+    }
+    expect(await limit()).toBe(3)
+    const agent = await call('PATCH', '/api/settings', { previewLimit: 5 }, 'agent')
+    expect(agent.status).toBe(403)
+    expect(await limit()).toBe(3)
+    // The other setting keeps its own value.
+    expect((await call('PATCH', '/api/settings', { previewLimit: 32 })).status).toBe(200)
+    expect(await (await call('GET', '/api/settings')).json()).toEqual({
+      defaultAgent: 'claude',
+      previewLimit: 32,
+    })
+  })
+
+  it('a start beyond the limit is refused over REST and MCP with the limit, and the tool says so', async () => {
+    const fake = useFake()
+    fake.codes['pnpm build'] = 'hang'
+    expect((await call('PATCH', '/api/settings', { previewLimit: 1 })).status).toBe(200)
+    const first = ticketWithWorktree()
+    expect((await call('POST', `/api/workspaces/${first.ws.id}/preview/start`)).status).toBe(202)
+    const second = ticketWithWorktree()
+    const rest = await call('POST', `/api/workspaces/${second.ws.id}/preview/start`)
+    expect(rest.status).toBe(409)
+    expect(await rest.json()).toEqual({
+      error: '1 previews already run, at most 1 (the preview limit): stop one first',
+    })
+    expect(await tool('start_preview', { workspaceId: second.ws.id })).toMatchObject({
+      error: true,
+      text: expect.stringMatching(/at most 1 \(the preview limit\)/),
+    })
+    expect(status(second.ws.id)).toBeUndefined()
+    // Restarting the one that builds is not a new one.
+    expect((await call('POST', `/api/workspaces/${first.ws.id}/preview/restart`)).status).toBe(202)
+    expect(status(first.ws.id)).toBe('building')
+
+    const res = await call('POST', '/api/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
+    const { result } = (await res.json()) as { result: { tools: { name: string; description: string }[] } }
+    const description = result.tools.find((t) => t.name === 'start_preview')!.description
+    expect(description).toMatch(/the human's preview limit allows \(8 by default\)/)
+    expect(description).not.toMatch(/at most 8/)
   })
 
   it('the REST routes', async () => {
