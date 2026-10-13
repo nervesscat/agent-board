@@ -48,6 +48,8 @@ function worktree(dir: string, opts: { of?: string; name?: string; lock?: string
 
 let wtCount = 0
 const freshWorktree = () => worktree(path.join(repos, `agent-board-wt${++wtCount}`))
+/** The previews of a worktree, as `previewsSettled` takes them: by its real path. */
+const at = (dir: string) => (p: string) => p === fs.realpathSync.native(dir)
 
 // --- the fake runner: every process is a promise the test controls ---
 
@@ -342,9 +344,9 @@ describe('a preview the board runs', () => {
     expect(await mp.stopPreview(ws.id, 'stopped by enrique', 'enrique')).toMatchObject({ status: 'stopped' })
 
     let settled = false
-    const settling = mp.previewsSettled(dir).then(() => (settled = true))
+    const settling = mp.previewsSettled(at(dir)).then(() => (settled = true))
     // Another worktree's are not waited for.
-    await mp.previewsSettled(freshWorktree())
+    await mp.previewsSettled(at(freshWorktree()))
     await new Promise((r) => setTimeout(r, 20))
     expect(settled).toBe(false)
     release()
@@ -360,7 +362,7 @@ describe('a preview the board runs', () => {
     const { ws, dir } = ticketWithWorktree()
     mp.startPreview(ws.id, 'claude')
     await mp.stopPreview(ws.id, 'stopped by enrique', 'enrique')
-    await mp.previewsSettled(dir)
+    await mp.previewsSettled(at(dir))
     expect(fake.calls).toEqual([])
     expect(status(ws.id)).toBe('stopped')
   })

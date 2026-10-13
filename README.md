@@ -214,9 +214,10 @@ those that git tracks, or a folder that cannot be read, keeps the worktree. A pr
 from it is stopped first, and so is a server an agent started from it and linked on a workspace
 registered at it, when the rule of the Previews page's Stop tells it runs from there (one it does
 not stays running, and the worktree goes all the same); the workspaces registered at it are
-unregistered. A worktree is matched with workspaces and previews by the folder it really is, links
-resolved: once a repository is moved with a link left at its old path, git still lists a worktree
-made before the move by that path. Each
+unregistered. A preview started from it while the board stops its own keeps it. A worktree is
+matched with workspaces and previews by the folder it really is, links resolved: once a repository
+is moved with a link left at its old path, git still lists a worktree made before the move by that
+path. Each
 deletion is logged on its ticket as `branch @ sha`, and the page keeps the commands that restore it.
 Agents never get these actions (403, and no MCP tool deletes); they delete local branches and
 worktrees themselves with the human's go-ahead, and never origin's. A board on a copy of the live

@@ -456,13 +456,14 @@ export function startPreview(
 }
 
 /**
- * Settles once nothing the board started from this worktree still runs there, stopped previews
- * included: a stop returns at once, while the step it caught may still be writing into the worktree
- * (the copy of the live data, which no process holds). What removes the worktree waits for this.
+ * Settles once the runs the board started from a folder `at` takes (a preview's real path) settle,
+ * stopped previews included: a stop returns at once, while the step it caught may still be writing
+ * into the worktree (the copy of the live data, which no process holds). The runs are those there as
+ * it is called: one started after that is not waited for. What removes the worktree waits for this.
  */
-export async function previewsSettled(worktreePath: string) {
-  const dir = norm(real(worktreePath) ?? worktreePath)
-  await Promise.all([...runs].filter(([e]) => norm(e.path) === dir).map(([, settled]) => settled))
+export function previewsSettled(at: (path: string) => boolean): Promise<void> {
+  const settling = [...runs].filter(([e]) => at(e.path)).map(([, settled]) => settled)
+  return Promise.all(settling).then(() => {})
 }
 
 /** Still the preview being started: not stopped, restarted or forgotten meanwhile. */

@@ -7,6 +7,7 @@ import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import {
   cleanupReport,
+  folderKey,
   type LeftoverBranch,
   type LinkedPreview,
   pathKey,
@@ -24,7 +25,7 @@ import {
   worktreeChanges,
 } from './git'
 import { stopLinkPreview } from './linkPreview'
-import { activePreviews, previewsSettled, stopPreview } from './managedPreview'
+import { activePreviews, type ManagedPreview, previewsSettled, stopPreview } from './managedPreview'
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
 import { listRepos } from './repos'
@@ -243,7 +244,13 @@ async function deleteOne(
   // A worktree on the branch can only be added back once the branch is.
   const restore: string[] = []
   for (const w of trees) {
-    await stopPreviews(w.path, actor)
+    const late = await stopPreviews(w.path, actor)
+    if (late) {
+      const why = `a preview started from ${w.path} meanwhile, on #${late.ticketId}`
+      return removed.length
+        ? result(item, 'failed', `${why}; ${w.path} and ${b.name} are kept`, { removed, unlinked, restore })
+        : result(item, 'refused', why)
+    }
     await stopLinkPreviews(w.linkedPreviews, actor)
     // Looked for again: a link made since the check goes as a link too.
     const links = await linksOut(w.path)
@@ -354,12 +361,18 @@ async function deleteLocal(
 /**
  * A preview the board builds or runs from the worktree stops first, and is waited for until its run
  * settles: one stopped while it copies the live data into the worktree goes on writing there, and git
- * could not delete a folder still filling.
+ * could not delete a folder still filling. The runs waited for are those there before the first stop:
+ * one started from the worktree while a stop waits (taskkill, on Windows) is not waited for, and is
+ * answered instead, so the worktree stays. Null when no preview runs from it any more.
  */
-async function stopPreviews(worktreePath: string, actor: string) {
-  for (const p of activePreviews().filter((p) => sameFolder(p.path, worktreePath)))
+async function stopPreviews(worktreePath: string, actor: string): Promise<ManagedPreview | null> {
+  const here = folderKey(worktreePath)
+  const at = (p: string) => folderKey(p) === here
+  const settled = previewsSettled(at)
+  for (const p of activePreviews().filter((p) => at(p.path)))
     await stopPreview(p.workspaceId, 'its worktree was removed', actor)
-  await previewsSettled(worktreePath)
+  await settled
+  return activePreviews().find((p) => at(p.path)) ?? null
 }
 
 /**

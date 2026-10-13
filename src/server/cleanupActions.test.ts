@@ -590,6 +590,76 @@ describe('deleting a worked branch with its worktrees', () => {
     expect(hasRef(repo, 'refs/heads/feat/b9c')).toBe(false)
   })
 
+  it('removes nothing when a preview starts from the worktree while its own is being stopped, nor waits for it', async () => {
+    const mp = await import('./managedPreview')
+    const runner = new FakeRunner()
+    mp.setPreviewRunner(runner)
+    const { 'feat/b9l': sha } = land(['feat/b9l'])
+    git('worktree', 'add', '-q', wt('b9l'), 'feat/b9l')
+    fs.mkdirSync(path.join(wt('b9l'), 'node_modules', '.pnpm'), { recursive: true })
+    fs.writeFileSync(path.join(wt('b9l'), 'node_modules', '.pnpm', 'lock.yaml'), LOCK)
+    const t = features.createTicket(
+      projectId,
+      { title: 'b9l', branch: 'feat/b9l', status: 'in_progress' },
+      'claude',
+    )
+    const ws = features.addWorkspace(t.id, { name: 'wt', branch: 'feat/b9l', path: wt('b9l') }, 'claude')
+    mp.startPreview(ws.id, 'enrique')
+    await expect.poll(() => mp.managedPreview(ws.id)?.status, { timeout: 10_000 }).toBe('running')
+    dbm.db.update(dbm.schema.tickets).set({ status: 'done' }).where(eq(dbm.schema.tickets.id, t.id)).run()
+    const b = (await branchOf(t.id, 'feat/b9l'))!
+    // Killing its process tree takes a while (taskkill, on Windows), and the next build longer still.
+    let kill!: () => void
+    const killed = new Promise<void>((r) => (kill = r))
+    let killing = false
+    runner.killTree = async () => {
+      killing = true
+      await killed
+    }
+    runner.hold = true
+
+    const deleting = del([
+      {
+        ticketId: t.id,
+        branch: 'feat/b9l',
+        kind: 'worktrees',
+        sha,
+        worktrees: b.worktrees.map((w) => w.path),
+      },
+    ])
+    await expect.poll(() => killing, { timeout: 10_000 }).toBe(true)
+    // Meanwhile an agent of a ticket in work registers the worktree and starts its preview there.
+    const other = features.createTicket(
+      projectId,
+      { title: 'b9l late', branch: 'feat/b9l-late', status: 'in_progress' },
+      'claude',
+    )
+    const late = features.addWorkspace(other.id, { name: 'late', path: wt('b9l') }, 'claude')
+    expect(mp.startPreview(late.id, 'claude').status).toBe('building')
+    kill()
+    try {
+      expect(await within(deleting, 5000)).toEqual([
+        expect.objectContaining({
+          outcome: 'refused',
+          reason: `a preview started from ${b.worktrees[0]!.path} meanwhile, on #${other.id}`,
+          removed: [],
+        }),
+      ])
+      expect(mp.managedPreview(ws.id)!.status).toBe('stopped')
+      expect(mp.managedPreview(late.id)!.status).toBe('building')
+      expect(fs.existsSync(wt('b9l'))).toBe(true)
+      expect(worktreePaths()).toContain(wt('b9l'))
+      expect(hasRef(repo, 'refs/heads/feat/b9l')).toBe(true)
+      expect(
+        dbm.db.select().from(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.id, late.id)).get(),
+      ).toBeDefined()
+    } finally {
+      await mp.stopPreview(late.id, 'test over', 'enrique')
+      runner.release()
+      await deleting
+    }
+  })
+
   describe('a server an agent started from the worktree', { timeout: 60_000 }, () => {
     // Listens on 127.0.0.1 and prints its port, as `pnpm dev` would serve a preview.
     const SERVER = `const s = require('node:http').createServer((_q, r) => r.end('dev'))
@@ -1589,7 +1659,7 @@ describe('a repository moved, with a link left at its old path', () => {
     } finally {
       await mp.stopPreview(ws.id, 'test over', 'enrique')
       runner.release()
-      await mp.previewsSettled(now('s2'))
+      await mp.previewsSettled(() => true)
     }
   })
 
