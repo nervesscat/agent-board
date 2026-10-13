@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -153,6 +154,72 @@ describe('the blocked tag on a task', () => {
     })
     expect(add.status).toBe(400)
     expect(tasks(t.id)).toHaveLength(2)
+  })
+
+  it('creating a ticket with a bad tag on a task is refused and leaves no ticket, with phases or without', async () => {
+    const { db, schema } = dbm
+    const uploads = await import('./uploads')
+    const parent = ticket('parent of lanes')
+    db.update(schema.tickets)
+      .set({ updatedAt: '2000-01-01T00:00:00.000Z' })
+      .where(eq(schema.tickets.id, parent.id))
+      .run()
+    const file = await uploads.saveBase64('key.txt', Buffer.from('k').toString('base64'), 'enrique')
+    const count = () => ({
+      tickets: db.select().from(schema.tickets).all().length,
+      tasks: db.select().from(schema.tasks).all().length,
+      activity: db.select().from(schema.activity).all().length,
+    })
+    const before = count()
+    const untagged = [{ text: 'Deploy', blockedReason: 'Paste the key' }]
+    const long = [{ text: 'Deploy', blocked: true, blockedReason: 'x'.repeat(501) }]
+
+    // REST: a top-level ticket (default phases), opted out of them, and a lane (none).
+    for (const extra of [{ attachmentIds: [file.id] }, { defaultPhases: false }, { parentId: parent.id }]) {
+      const res = await call('POST', `/api/projects/${projectId}/tickets`, {
+        title: 'Ship it',
+        tasks: untagged,
+        ...extra,
+      })
+      expect(res.status).toBe(400)
+      expect(await res.text()).toMatch(/blockedReason goes with blocked: true/)
+    }
+    // A reason too long never gets past the schema; createTicket refuses it as well, before the ticket.
+    expect(
+      (await call('POST', `/api/projects/${projectId}/tickets`, { title: 'Ship it', tasks: long })).status,
+    ).toBe(400)
+    expect(() => features.createTicket(projectId, { title: 'Ship it', tasks: long }, 'claude')).toThrow(
+      expect.objectContaining({ status: 400 }),
+    )
+
+    // MCP: the same, as tool errors.
+    for (const extra of [{}, { defaultPhases: false }, { parentId: parent.id }]) {
+      const res = await tool('create_ticket', { projectId, title: 'Ship it', tasks: untagged, ...extra })
+      expect(res).toMatchObject({
+        error: true,
+        text: expect.stringMatching(/blockedReason goes with blocked: true/),
+      })
+    }
+    expect((await tool('create_ticket', { projectId, title: 'Ship it', tasks: long })).error).toBe(true)
+
+    expect(count()).toEqual(before)
+    expect(features.getTicket(parent.id).updatedAt).toBe('2000-01-01T00:00:00.000Z')
+    // The file is still free, so the retry with the tag right creates the ticket once, with it.
+    const retry = await call('POST', `/api/projects/${projectId}/tickets`, {
+      title: 'Ship it',
+      tasks: [{ text: 'Deploy', blocked: true, blockedReason: 'Paste the key' }],
+      attachmentIds: [file.id],
+    })
+    expect(retry.status).toBe(201)
+    const created = (await retry.json()) as { id: number }
+    expect(
+      features
+        .listTickets(projectId)
+        .filter((x) => x.title === 'Ship it')
+        .map((x) => x.id),
+    ).toEqual([created.id])
+    expect(state(created.id).Deploy).toEqual({ done: false, blocked: true, reason: 'Paste the key' })
+    expect(features.getTicketFull(created.id).attachments.map((x) => x.name)).toEqual(['key.txt'])
   })
 
   it('POST /api/tickets/:id/tasks takes tagged items, as phases or under one; plain texts come untagged', async () => {

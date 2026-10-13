@@ -338,6 +338,8 @@ export function createTicket(
   // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
   const attachmentIds = input.attachmentIds ?? []
   assertUnattached(attachmentIds)
+  // So is each task's tag: a bad one would otherwise leave the ticket behind without its tasks.
+  if (input.tasks) newTaskTags(input.tasks)
   const stages = listStages(projectId)
   const status = (input.status ? resolveStage(stages, input.status) : startStage(stages)).key
   const row = db
@@ -741,6 +743,11 @@ function blockedTag(
 /** What a tick writes besides `done`: a done task waits on nobody, so its tag goes. */
 const ticked = (done: boolean) => (done ? { done, blocked: false, blockedReason: '' } : { done })
 
+/** Each new task's tag, null for a plain text; one bad tag refuses them all. */
+function newTaskTags(items: NewTask[]) {
+  return items.map((i) => (typeof i === 'string' ? null : blockedTag(i, null)))
+}
+
 function getTask(id: number) {
   const task = db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).get()
   if (!task) throw notFound('task')
@@ -783,7 +790,7 @@ export function addTasks(
     throw new HttpError(400, `task ${parent.id} is not a task of ticket ${ticketId}`)
   if (parent && (parent.parentId || items.some((i) => typeof i !== 'string' && i.subtasks?.length)))
     throw new HttpError(400, 'a subtask cannot have subtasks: tasks go two levels deep')
-  const tags = items.map((i) => (typeof i === 'string' ? null : blockedTag(i, null)))
+  const tags = newTaskTags(items)
   const rows = db.transaction(() => {
     const last = db
       .select({ position: schema.tasks.position })
