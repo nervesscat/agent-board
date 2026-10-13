@@ -374,6 +374,15 @@ function linkTarget(ws: schema.Workspace): Target | Refusal {
 }
 
 /**
+ * The port of a workspace's link when the rule could stop the server behind it, as far as that can be
+ * told without looking at the processes (`linkTarget`); null when the rule refuses it before that.
+ */
+export function stoppableLinkPort(ws: schema.Workspace): number | null {
+  const t = linkTarget(ws)
+  return t.ok ? t.port : null
+}
+
+/**
  * What a process may name the worktree by: its real path (the one `worktreeTarget` checked), and the
  * path as registered only when that path, read as the rule reads it (`..` resolved first), is the same
  * folder, such as a symlink to the worktree. On Linux and macOS `<symlink>/..` is the parent of the

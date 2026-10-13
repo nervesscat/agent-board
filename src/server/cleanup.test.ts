@@ -217,6 +217,59 @@ describe('cleanupReport', () => {
       },
     ])
   })
+
+  it('leaves out a link at a worktree the Stop may not act on for its workspace’s ticket', async () => {
+    const { db, schema } = await import('#/db')
+    const features = await import('./features')
+    const { cleanupReport } = await import('./cleanup')
+    const dir = path.join(tmp, 'apart')
+    fs.mkdirSync(dir)
+    const git = gitIn(dir)
+    git('init', '-q', '-b', 'main')
+    commitsIn(dir)([
+      { ref: 'refs/heads/main', file: 'base.txt', text: 'base\n', msg: 'base' },
+      { ref: 'refs/heads/feat/near', from: 'refs/heads/main', file: 'near.txt', text: 'near\n', msg: 'near' },
+      { ref: 'refs/heads/feat/far', from: 'refs/heads/main', file: 'far.txt', text: 'far\n', msg: 'far' },
+    ])
+    const near = path.join(tmp, 'apart-near')
+    git('worktree', 'add', '-q', near, 'feat/near')
+    // A worktree of the repo, but not next to its main checkout: the Stop never acts on it.
+    fs.mkdirSync(path.join(tmp, 'apart-away'))
+    const far = path.join(tmp, 'apart-away', 'apart-far')
+    git('worktree', 'add', '-q', far, 'feat/far')
+    const project = (name: string, repoPath: string) => {
+      const id = db.insert(schema.projects).values({ name }).returning().get().id
+      db.insert(schema.repos).values({ projectId: id, name, repoPath, baseBranch: 'main' }).run()
+      return id
+    }
+    const projectId = project('apart', dir)
+    const ticket = (projectId: number, branch: string) =>
+      features.createTicket(projectId, { title: branch, branch, status: 'done' }, 'claude')
+    const space = (ticketId: number, at: string, previewUrl: string) =>
+      features.addWorkspace(ticketId, { name: 'dev', path: at, previewUrl }, 'claude')
+    const nearT = ticket(projectId, 'feat/near')
+    const farT = ticket(projectId, 'feat/far')
+    const listed = space(nearT.id, near, 'http://127.0.0.1:8370')
+    space(farT.id, far, 'http://127.0.0.1:8371')
+    // Another project on the same checkout: its workspace at the worktree is listed too.
+    const same = space(ticket(project('apart same', dir), 'feat/same').id, near, 'http://127.0.0.1:8372')
+    // Another project on a different checkout, next to the worktree: the worktree is not its repo's.
+    const other = path.join(tmp, 'apart-other')
+    fs.mkdirSync(other)
+    gitIn(other)('init', '-q', '-b', 'main')
+    space(ticket(project('apart other', other), 'feat/other').id, near, 'http://127.0.0.1:8373')
+
+    const report = await cleanupReport(projectId)
+    const linkedOf = (ticketId: number) =>
+      report.tickets.find((t) => t.id === ticketId)!.branches[0]!.worktrees.map((w) => w.linkedPreviews)
+    expect(linkedOf(farT.id)).toEqual([[]])
+    expect(linkedOf(nearT.id)).toEqual([
+      [
+        { workspaceId: listed.id, ticketId: nearT.id, url: 'http://127.0.0.1:8370', port: 8370 },
+        { workspaceId: same.id, ticketId: same.ticketId, url: 'http://127.0.0.1:8372', port: 8372 },
+      ],
+    ])
+  })
 })
 
 describe('cleanupReport on detached worktrees', () => {

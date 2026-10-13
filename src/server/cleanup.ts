@@ -5,7 +5,7 @@ import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
-import { type AuthMode, authMode, config } from './config'
+import { type AuthMode, authMode } from './config'
 import {
   aheadBehind,
   type BranchInfo,
@@ -23,9 +23,8 @@ import {
   type Refs,
   type Worktree,
 } from './git'
-import { linkPort } from './linkPreview'
+import { stoppableLinkPort } from './linkPreview'
 import { activePreviews, type ManagedPreview } from './managedPreview'
-import { isLocalUrl } from './preview'
 import { getProject } from './projects'
 import { readRefs, readWorktrees } from './push'
 import { listRepos } from './repos'
@@ -295,24 +294,19 @@ export interface LinkedPreview {
 /**
  * The servers linked on workspaces registered at a worktree, of any ticket on the board, by the
  * worktree: what its removal stops, each one only when the Previews page's rule tells it runs from
- * there. A link that rule never stops is left out: off this machine, on the board's own port, or on a
- * port a preview the board runs holds (one from this worktree is listed and stopped as that preview).
+ * there. A link that rule refuses before it looks at any process is left out (`stoppableLinkPort`): off
+ * this machine, on the board's own port, on a port a preview the board runs holds (one from this
+ * worktree is listed and stopped as that preview), or at a folder the board may not act on for the
+ * workspace's ticket (one not next to its repo's main checkout, or not a worktree of that repo).
  */
 export function linkedPreviews(): (worktreePath: string) => LinkedPreview[] {
-  const held = new Set(activePreviews().map((p) => p.port))
-  const linked = db
-    .select()
-    .from(schema.workspaces)
-    .where(isNotNull(schema.workspaces.previewUrl))
-    .all()
-    .flatMap((w) => {
-      const port = w.path && w.previewUrl && isLocalUrl(w.previewUrl) ? linkPort(w.previewUrl) : null
-      return port && port !== config.port && !held.has(port) ? [{ w, port }] : []
-    })
+  const links = db.select().from(schema.workspaces).where(isNotNull(schema.workspaces.previewUrl)).all()
   return (worktreePath) =>
-    linked
-      .filter(({ w }) => samePath(w.path, worktreePath))
-      .map(({ w, port }) => ({ workspaceId: w.id, ticketId: w.ticketId, url: w.previewUrl!, port }))
+    links.flatMap((w) => {
+      if (!w.path || !samePath(w.path, worktreePath)) return []
+      const port = stoppableLinkPort(w)
+      return port ? [{ workspaceId: w.id, ticketId: w.ticketId, url: w.previewUrl!, port }] : []
+    })
 }
 
 export interface LeftoverWorktree {

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { eq } from 'drizzle-orm'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { DeleteItem } from './cleanupActions'
 import type { PreviewRunner, Proc } from './managedPreview'
@@ -549,13 +549,17 @@ s.listen(0, '127.0.0.1', () => console.log(s.address().port))`
       // In an ignored folder, as a dev server's files are: the worktree stays clean.
       const s = await serve(path.join(wt('g5'), 'data', 'server.js'), wt('g5'))
       const t = done('g5', 'feat/g5')
-      features.addWorkspace(
+      const url = `http://127.0.0.1:${s.port}`
+      const ws = features.addWorkspace(
         t.id,
-        { name: 'dev', branch: 'feat/g5', path: wt('g5'), previewUrl: `http://127.0.0.1:${s.port}` },
+        { name: 'dev', branch: 'feat/g5', path: wt('g5'), previewUrl: url },
         'claude',
       )
       expect(await answers(s.port)).toBe(true)
       const b = (await branchOf(t.id, 'feat/g5'))!
+      expect(b.worktrees.map((w) => w.linkedPreviews)).toEqual([
+        [{ workspaceId: ws.id, ticketId: t.id, url, port: s.port }],
+      ])
 
       const [r] = await del([
         {
@@ -601,6 +605,44 @@ s.listen(0, '127.0.0.1', () => console.log(s.address().port))`
       expect(await answers(s.port)).toBe(true)
       expect(s.child.exitCode).toBeNull()
       expect(activity(t.id)).not.toContain('stopped the preview')
+    })
+
+    it('asks nothing for one linked at a worktree that is not next to the main checkout', async () => {
+      const lp = await import('./linkPreview')
+      const asks = vi.spyOn(lp, 'stopLinkPreview')
+      try {
+        const { 'feat/g5c': sha } = land(['feat/g5c'])
+        // A worktree of the repo, somewhere else: the Previews page's Stop never acts on it.
+        const far = path.join(tmp, 'away', 'agent-board-g5c')
+        git('worktree', 'add', '-q', far, 'feat/g5c')
+        // It runs from there (its script is), from a folder that does not hold the worktree.
+        const s = await serve(path.join(far, 'data', 'server.js'), tmp)
+        const t = done('g5c', 'feat/g5c')
+        features.addWorkspace(
+          t.id,
+          { name: 'dev', branch: 'feat/g5c', path: far, previewUrl: `http://127.0.0.1:${s.port}` },
+          'claude',
+        )
+        const b = (await branchOf(t.id, 'feat/g5c'))!
+        expect(b.worktrees.map((w) => w.linkedPreviews)).toEqual([[]])
+
+        const [r] = await del([
+          {
+            ticketId: t.id,
+            branch: 'feat/g5c',
+            kind: 'worktrees',
+            sha,
+            worktrees: b.worktrees.map((w) => w.path),
+          },
+        ])
+        expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
+        expect(asks).not.toHaveBeenCalled()
+        expect(await answers(s.port)).toBe(true)
+        expect(s.child.exitCode).toBeNull()
+        expect(fs.existsSync(far)).toBe(false)
+      } finally {
+        asks.mockRestore()
+      }
     })
   })
 
