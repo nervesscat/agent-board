@@ -150,7 +150,8 @@ beforeAll(async () => {
   git('remote', 'add', 'origin', origin)
   fs.writeFileSync(path.join(repo, 'package.json'), JSON.stringify({ name: 'agent-board' }))
   fs.writeFileSync(path.join(repo, 'pnpm-lock.yaml'), LOCK)
-  fs.writeFileSync(path.join(repo, '.gitignore'), 'node_modules/\ndata/\n')
+  // No trailing slash: with one git ignores only a folder, and a linked node_modules is a link.
+  fs.writeFileSync(path.join(repo, '.gitignore'), 'node_modules\ndata\n')
   git('add', '.')
   git('commit', '-q', '-m', 'base')
   git('push', '-q', 'origin', 'main')

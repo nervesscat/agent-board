@@ -247,8 +247,12 @@ describe('cleanupReport on detached worktrees', () => {
 
     beforeAll(async () => {
       const features = await import('./features')
-      // The way a workspace may be registered: other slashes, other case, a trailing separator.
-      const odd = (p: string) => `${p.replace(/\//g, '\\').toUpperCase()}\\`
+      // The way a workspace may be registered: other slashes, a trailing separator, and other case
+      // where the file system ignores it (Windows; elsewhere it names another folder).
+      const odd = (p: string) => {
+        const s = `${p.replace(/\//g, '\\')}\\`
+        return process.platform === 'win32' ? s.toUpperCase() : s
+      }
       const main = 'refs/heads/main'
       fixture = await detachedRepo(
         'detached',
