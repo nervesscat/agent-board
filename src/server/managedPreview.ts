@@ -289,6 +289,8 @@ interface Kept {
    * of the live data has none and goes on writing into the worktree until it ends.
    */
   runs: Map<Entry, Promise<void>> | undefined
+  /** The folders of worktrees being removed, each removal's as its match: no preview starts there. */
+  removing: Set<(path: string) => boolean> | undefined
 }
 export const KEPT = Symbol.for('agent-board.managedPreviews')
 const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
@@ -297,10 +299,12 @@ const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
   hooked: false,
   restarting: undefined,
   runs: undefined,
+  removing: undefined,
 })
 // A module loaded before these fields existed kept its object: give it them.
 const restarting = (kept.restarting ??= new Set<number>())
 const runs = (kept.runs ??= new Map<Entry, Promise<void>>())
+const removing = (kept.removing ??= new Set<(path: string) => boolean>())
 const stateFile = () => path.join(config.dataDir, 'previews.json')
 
 function save() {
@@ -397,6 +401,7 @@ export function cannotStart(workspaceId: number): string | null {
   if (kind === 'done' || kind === 'cancelled') return `the ticket is ${kind}`
   const target = previewTarget(ws, ticketRepo(ticket))
   if (!target.ok) return target.reason
+  if ([...removing].some((at) => at(target.path))) return 'its worktree is being removed'
   const other = [...all().values()].find(
     (e) => e.workspaceId !== workspaceId && isActive(e) && norm(e.path) === norm(target.path),
   )
@@ -464,6 +469,18 @@ export function startPreview(
 export function previewsSettled(at: (path: string) => boolean): Promise<void> {
   const settling = [...runs].filter(([e]) => at(e.path)).map(([, settled]) => settled)
   return Promise.all(settling).then(() => {})
+}
+
+/**
+ * No preview starts from a folder `at` takes (a preview's real path) until the returned release is
+ * called: what removes a worktree holds its folder from before it stops the previews there until it
+ * is done, so none starts from a folder going away.
+ */
+export function holdPreviews(at: (path: string) => boolean): () => void {
+  // Its own: the same match held twice is released once each.
+  const hold = (p: string) => at(p)
+  removing.add(hold)
+  return () => void removing.delete(hold)
 }
 
 /** Still the preview being started: not stopped, restarted or forgotten meanwhile. */

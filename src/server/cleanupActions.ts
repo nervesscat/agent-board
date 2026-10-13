@@ -25,7 +25,13 @@ import {
   worktreeChanges,
 } from './git'
 import { stopLinkPreview } from './linkPreview'
-import { activePreviews, type ManagedPreview, previewsSettled, stopPreview } from './managedPreview'
+import {
+  activePreviews,
+  holdPreviews,
+  type ManagedPreview,
+  previewsSettled,
+  stopPreview,
+} from './managedPreview'
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
 import { listRepos } from './repos'
@@ -223,86 +229,93 @@ async function deleteOne(
       `${unseen.map((w) => w.path).join(', ')} came up since: refresh and confirm again`,
     )
   if (!b.can.worktrees.ok) return result(item, 'refused', b.can.worktrees.reason)
-  // All of them are checked before any is removed: git refuses one with changes, and a refusal
-  // half-way would leave the rest removed for nothing.
-  for (const w of trees) {
-    // A folder deleted by hand leaves git a worktree to prune (`git worktree prune`), not one to remove.
-    if (!fs.existsSync(w.path))
-      return result(item, 'refused', `${w.path} is gone: git worktree prune drops it`)
-    const changes = await worktreeChanges(w.path).catch((err: unknown) => [gitSaid(err)])
-    if (changes.length)
-      return result(
-        item,
-        'refused',
-        `${w.path} has changes or untracked files: ${changes.slice(0, 3).join(', ')}${changes.length > 3 ? ', …' : ''}`,
-      )
-    const links = await linksOut(w.path)
-    if (typeof links === 'string') return result(item, 'refused', links)
-  }
-  const removed: string[] = []
-  const unlinked: DeleteResult['unlinked'] = []
-  // A worktree on the branch can only be added back once the branch is.
-  const restore: string[] = []
-  for (const w of trees) {
-    const late = await stopPreviews(w.path, actor)
-    if (late) {
-      const why = `a preview started from ${w.path} meanwhile, on #${late.ticketId}`
-      return removed.length
-        ? result(item, 'failed', `${why}; ${w.path} and ${b.name} are kept`, { removed, unlinked, restore })
-        : result(item, 'refused', why)
+  // No preview starts from them until the item is done: one would build in a folder going away.
+  const keys = new Set(trees.map((w) => folderKey(w.path)))
+  const release = holdPreviews((p) => keys.has(folderKey(p)))
+  try {
+    // All of them are checked before any is removed: git refuses one with changes, and a refusal
+    // half-way would leave the rest removed for nothing.
+    for (const w of trees) {
+      // A folder deleted by hand leaves git a worktree to prune (`git worktree prune`), not one to remove.
+      if (!fs.existsSync(w.path))
+        return result(item, 'refused', `${w.path} is gone: git worktree prune drops it`)
+      const changes = await worktreeChanges(w.path).catch((err: unknown) => [gitSaid(err)])
+      if (changes.length)
+        return result(
+          item,
+          'refused',
+          `${w.path} has changes or untracked files: ${changes.slice(0, 3).join(', ')}${changes.length > 3 ? ', …' : ''}`,
+        )
+      const links = await linksOut(w.path)
+      if (typeof links === 'string') return result(item, 'refused', links)
     }
-    await stopLinkPreviews(w.linkedPreviews, actor)
-    // Looked for again: a link made since the check goes as a link too.
-    const links = await linksOut(w.path)
-    if (typeof links === 'string')
-      return result(item, 'failed', `${links}; ${b.name} is kept`, { removed, unlinked, restore })
-    const stuck: string[] = []
-    await inBatches(links, async (l) => {
-      try {
-        await removeLink(l)
-      } catch (err) {
-        return stuck.push(fsSaid(err))
+    const removed: string[] = []
+    const unlinked: DeleteResult['unlinked'] = []
+    // A worktree on the branch can only be added back once the branch is.
+    const restore: string[] = []
+    for (const w of trees) {
+      const late = await stopPreviews(w.path, actor)
+      if (late) {
+        const why = `a preview started from ${w.path} meanwhile, on #${late.ticketId}`
+        return removed.length
+          ? result(item, 'failed', `${why}; ${w.path} and ${b.name} are kept`, { removed, unlinked, restore })
+          : result(item, 'refused', why)
       }
-      // The ones within go with the worktree anyway.
-      if (!l.outward) return
-      unlinked.push({ path: l.path, target: l.target })
-      log(`removed the link ${l.path} to ${l.target} (the link alone; ${l.target} stays)`)
-    })
-    if (stuck.length)
-      return result(
-        item,
-        'failed',
-        `${stuck.slice(0, 3).join(', ')}${stuck.length > 3 ? ', …' : ''}; ${w.path} and ${b.name} are kept`,
-        { removed, unlinked, restore },
-      )
-    try {
-      await removeWorktree(repoPath, w.path)
-    } catch (err) {
-      return result(item, 'failed', `${w.path}: ${gitSaid(err)}; ${b.name} is kept`, {
-        removed,
-        unlinked,
-        restore,
+      await stopLinkPreviews(w.linkedPreviews, actor)
+      // Looked for again: a link made since the check goes as a link too.
+      const links = await linksOut(w.path)
+      if (typeof links === 'string')
+        return result(item, 'failed', `${links}; ${b.name} is kept`, { removed, unlinked, restore })
+      const stuck: string[] = []
+      await inBatches(links, async (l) => {
+        try {
+          await removeLink(l)
+        } catch (err) {
+          return stuck.push(fsSaid(err))
+        }
+        // The ones within go with the worktree anyway.
+        if (!l.outward) return
+        unlinked.push({ path: l.path, target: l.target })
+        log(`removed the link ${l.path} to ${l.target} (the link alone; ${l.target} stays)`)
       })
+      if (stuck.length)
+        return result(
+          item,
+          'failed',
+          `${stuck.slice(0, 3).join(', ')}${stuck.length > 3 ? ', …' : ''}; ${w.path} and ${b.name} are kept`,
+          { removed, unlinked, restore },
+        )
+      try {
+        await removeWorktree(repoPath, w.path)
+      } catch (err) {
+        return result(item, 'failed', `${w.path}: ${gitSaid(err)}; ${b.name} is kept`, {
+          removed,
+          unlinked,
+          restore,
+        })
+      }
+      removed.push(w.path)
+      restore.push(
+        w.branch
+          ? `git worktree add ${shellArg(w.path)} ${shellArg(w.branch)}`
+          : `git worktree add --detach ${shellArg(w.path)} ${w.head}`,
+      )
+      log(`removed the worktree ${w.path} (${w.branch ?? `detached at ${w.head}`})`)
+      forgetWorkspaces(projectId, w.path, actor)
     }
-    removed.push(w.path)
-    restore.push(
-      w.branch
-        ? `git worktree add ${shellArg(w.path)} ${shellArg(w.branch)}`
-        : `git worktree add --detach ${shellArg(w.path)} ${w.head}`,
-    )
-    log(`removed the worktree ${w.path} (${w.branch ?? `detached at ${w.head}`})`)
-    forgetWorkspaces(projectId, w.path, actor)
-  }
-  if (b.local) {
-    try {
-      await deleteLocalBranch(repoPath, b.name, b.local)
-    } catch (err) {
-      return result(item, 'failed', `${b.name}: ${gitSaid(err)}`, { removed, unlinked, restore })
+    if (b.local) {
+      try {
+        await deleteLocalBranch(repoPath, b.name, b.local)
+      } catch (err) {
+        return result(item, 'failed', `${b.name}: ${gitSaid(err)}`, { removed, unlinked, restore })
+      }
+      log(`deleted the branch ${b.name} @ ${b.local}`)
+      restore.unshift(b.restore!)
     }
-    log(`deleted the branch ${b.name} @ ${b.local}`)
-    restore.unshift(b.restore!)
+    return result(item, 'deleted', null, { removed, unlinked, restore })
+  } finally {
+    release()
   }
-  return result(item, 'deleted', null, { removed, unlinked, restore })
 }
 
 /**
@@ -361,9 +374,10 @@ async function deleteLocal(
 /**
  * A preview the board builds or runs from the worktree stops first, and is waited for until its run
  * settles: one stopped while it copies the live data into the worktree goes on writing there, and git
- * could not delete a folder still filling. The runs waited for are those there before the first stop:
- * one started from the worktree while a stop waits (taskkill, on Windows) is not waited for, and is
- * answered instead, so the worktree stays. Null when no preview runs from it any more.
+ * could not delete a folder still filling. The runs waited for are those there before the first stop.
+ * The delete holds the folder against new starts (`holdPreviews`); one that runs from it after the
+ * stops all the same (one started while a stop waited for taskkill, on Windows) is not waited for but
+ * answered, so the worktree stays. Null when no preview runs from it any more.
  */
 async function stopPreviews(worktreePath: string, actor: string): Promise<ManagedPreview | null> {
   const here = folderKey(worktreePath)

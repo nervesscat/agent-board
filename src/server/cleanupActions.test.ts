@@ -590,7 +590,7 @@ describe('deleting a worked branch with its worktrees', () => {
     expect(hasRef(repo, 'refs/heads/feat/b9c')).toBe(false)
   })
 
-  it('removes nothing when a preview starts from the worktree while its own is being stopped, nor waits for it', async () => {
+  it('removes nothing when a preview the hold missed starts from the worktree while its own is being stopped, nor waits for it', async () => {
     const mp = await import('./managedPreview')
     const runner = new FakeRunner()
     mp.setPreviewRunner(runner)
@@ -617,6 +617,14 @@ describe('deleting a worked branch with its worktrees', () => {
       await killed
     }
     runner.hold = true
+    // The hold refuses such a start (below); left out here, the check after the stops still keeps it.
+    const unheld = vi.spyOn(mp, 'holdPreviews').mockReturnValue(() => {})
+    const other = features.createTicket(
+      projectId,
+      { title: 'b9l late', branch: 'feat/b9l-late', status: 'in_progress' },
+      'claude',
+    )
+    let late: { id: number } | undefined
 
     const deleting = del([
       {
@@ -627,17 +635,12 @@ describe('deleting a worked branch with its worktrees', () => {
         worktrees: b.worktrees.map((w) => w.path),
       },
     ])
-    await expect.poll(() => killing, { timeout: 10_000 }).toBe(true)
-    // Meanwhile an agent of a ticket in work registers the worktree and starts its preview there.
-    const other = features.createTicket(
-      projectId,
-      { title: 'b9l late', branch: 'feat/b9l-late', status: 'in_progress' },
-      'claude',
-    )
-    const late = features.addWorkspace(other.id, { name: 'late', path: wt('b9l') }, 'claude')
-    expect(mp.startPreview(late.id, 'claude').status).toBe('building')
-    kill()
     try {
+      await expect.poll(() => killing, { timeout: 10_000 }).toBe(true)
+      // Meanwhile an agent of a ticket in work registers the worktree and starts its preview there.
+      late = features.addWorkspace(other.id, { name: 'late', path: wt('b9l') }, 'claude')
+      expect(mp.startPreview(late.id, 'claude').status).toBe('building')
+      kill()
       expect(await within(deleting, 5000)).toEqual([
         expect.objectContaining({
           outcome: 'refused',
@@ -654,10 +657,102 @@ describe('deleting a worked branch with its worktrees', () => {
         dbm.db.select().from(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.id, late.id)).get(),
       ).toBeDefined()
     } finally {
-      await mp.stopPreview(late.id, 'test over', 'enrique')
+      unheld.mockRestore()
+      if (late) await mp.stopPreview(late.id, 'test over', 'enrique')
+      kill()
       runner.release()
       await deleting
     }
+  })
+
+  it('starts no preview from a worktree while it is being removed, and one once it is', async () => {
+    const mp = await import('./managedPreview')
+    const g = await import('./git')
+    mp.setPreviewRunner(new FakeRunner())
+    const { 'feat/b9h': sha } = land(['feat/b9h'])
+    git('worktree', 'add', '-q', wt('b9h'), 'feat/b9h')
+    const t = done('b9h', 'feat/b9h')
+    const b = (await branchOf(t.id, 'feat/b9h'))!
+    const other = features.createTicket(
+      projectId,
+      { title: 'b9h other', branch: 'feat/b9h-other', status: 'in_progress' },
+      'claude',
+    )
+    // git takes a while to remove it.
+    const removeWorktree = g.removeWorktree
+    let go!: () => void
+    const gone = new Promise<void>((r) => (go = r))
+    let removing = false
+    const slow = vi.spyOn(g, 'removeWorktree').mockImplementation(async (...args) => {
+      removing = true
+      await gone
+      return removeWorktree(...args)
+    })
+    const deleting = del([
+      {
+        ticketId: t.id,
+        branch: 'feat/b9h',
+        kind: 'worktrees',
+        sha,
+        worktrees: b.worktrees.map((w) => w.path),
+      },
+    ])
+    try {
+      await expect.poll(() => removing, { timeout: 10_000 }).toBe(true)
+      // Meanwhile an agent of a ticket in work registers it and starts its preview there.
+      const late = features.addWorkspace(other.id, { name: 'late', path: wt('b9h') }, 'claude')
+      expect(mp.cannotStart(late.id)).toBe('its worktree is being removed')
+      expect(() => mp.startPreview(late.id, 'claude')).toThrow('its worktree is being removed')
+      expect(mp.managedPreview(late.id)).toBeNull()
+      go()
+      expect(await deleting).toEqual([expect.objectContaining({ outcome: 'deleted' })])
+    } finally {
+      slow.mockRestore()
+      go()
+      await deleting
+    }
+    expect(fs.existsSync(wt('b9h'))).toBe(false)
+
+    // Made again at the same path: a preview starts from it.
+    git('worktree', 'add', '-q', '-b', 'feat/b9h-again', wt('b9h'), 'main')
+    const again = features.addWorkspace(other.id, { name: 'again', path: wt('b9h') }, 'claude')
+    expect(mp.startPreview(again.id, 'claude').status).toBe('building')
+    await mp.stopPreview(again.id, 'test over', 'enrique')
+  })
+
+  it('lets a preview start from a worktree it failed to remove', async () => {
+    const mp = await import('./managedPreview')
+    const g = await import('./git')
+    mp.setPreviewRunner(new FakeRunner())
+    const { 'feat/b9f': sha } = land(['feat/b9f'])
+    git('worktree', 'add', '-q', wt('b9f'), 'feat/b9f')
+    const t = done('b9f', 'feat/b9f')
+    const b = (await branchOf(t.id, 'feat/b9f'))!
+    const failing = vi.spyOn(g, 'removeWorktree').mockRejectedValue(new Error('the folder is in use'))
+    try {
+      const [r] = await del([
+        {
+          ticketId: t.id,
+          branch: 'feat/b9f',
+          kind: 'worktrees',
+          sha,
+          worktrees: b.worktrees.map((w) => w.path),
+        },
+      ])
+      expect(r).toMatchObject({ outcome: 'failed', removed: [] })
+      expect(r!.reason).toContain('the folder is in use')
+    } finally {
+      failing.mockRestore()
+    }
+    expect(fs.existsSync(wt('b9f'))).toBe(true)
+    const other = features.createTicket(
+      projectId,
+      { title: 'b9f other', branch: 'feat/b9f-other', status: 'in_progress' },
+      'claude',
+    )
+    const ws = features.addWorkspace(other.id, { name: 'theirs', path: wt('b9f') }, 'claude')
+    expect(mp.startPreview(ws.id, 'claude').status).toBe('building')
+    await mp.stopPreview(ws.id, 'test over', 'enrique')
   })
 
   describe('a server an agent started from the worktree', { timeout: 60_000 }, () => {

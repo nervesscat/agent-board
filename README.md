@@ -214,7 +214,8 @@ those that git tracks, or a folder that cannot be read, keeps the worktree. A pr
 from it is stopped first, and so is a server an agent started from it and linked on a workspace
 registered at it, when the rule of the Previews page's Stop tells it runs from there (one it does
 not stays running, and the worktree goes all the same); the workspaces registered at it are
-unregistered. A preview started from it while the board stops its own keeps it. A worktree is
+unregistered. While it is being removed, a preview the board runs is not started from it ("its
+worktree is being removed"), and one found running from it after the stops keeps it. A worktree is
 matched with workspaces and previews by the folder it really is, links resolved: once a repository
 is moved with a link left at its old path, git still lists a worktree made before the move by that
 path. Each
