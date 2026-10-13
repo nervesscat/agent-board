@@ -5,7 +5,14 @@ import { eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
-import { cleanupReport, type LeftoverBranch, linkedPreviews, pathKey, samePath, shellArg } from './cleanup'
+import {
+  cleanupReport,
+  type LeftoverBranch,
+  type LinkedPreview,
+  pathKey,
+  samePath,
+  shellArg,
+} from './cleanup'
 import { deleteWorkspace } from './features'
 import {
   deleteLocalBranch,
@@ -237,7 +244,7 @@ async function deleteOne(
   const restore: string[] = []
   for (const w of trees) {
     await stopPreviews(w.path, actor)
-    await stopLinkPreviews(w.path, actor)
+    await stopLinkPreviews(w.linkedPreviews, actor)
     // Looked for again: a link made since the check goes as a link too.
     const links = await linksOut(w.path)
     if (typeof links === 'string')
@@ -353,12 +360,13 @@ async function stopPreviews(worktreePath: string, actor: string) {
 /**
  * A server an agent started from the worktree and linked on a workspace registered at it stops too,
  * when the rule of `linkPreview.ts` tells it is that worktree's (that stop logs it): the ones the
- * report lists for it (`linkedPreviews`), looked up again now. One the rule leaves alone, or a link
- * nothing listens on, changes nothing: the removal stays within the worktree.
+ * report read for this delete lists for it (`linkedPreviews`), as it listed them before the worktree's
+ * own preview stopped. A link to that preview's port was the preview's: once the port is free it is
+ * no server to ask about. One the rule leaves alone, or a link nothing listens on, changes nothing:
+ * the removal stays within the worktree.
  */
-async function stopLinkPreviews(worktreePath: string, actor: string) {
-  for (const l of linkedPreviews()(worktreePath))
-    await stopLinkPreview(l.workspaceId, actor).catch(() => null)
+async function stopLinkPreviews(linked: LinkedPreview[], actor: string) {
+  for (const l of linked) await stopLinkPreview(l.workspaceId, actor).catch(() => null)
 }
 
 /** The project's workspaces registered at a removed worktree go too. */

@@ -1,5 +1,6 @@
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import fs from 'node:fs'
+import net, { type AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -642,6 +643,82 @@ s.listen(0, '127.0.0.1', () => console.log(s.address().port))`
         expect(fs.existsSync(far)).toBe(false)
       } finally {
         asks.mockRestore()
+      }
+    })
+
+    it('asks only what the report lists, not a link to the port of the preview it stopped first', async () => {
+      const mp = await import('./managedPreview')
+      const lp = await import('./linkPreview')
+      mp.setPreviewRunner(new FakeRunner())
+      // A port free now and out of the range the live board's own previews use: the fake never binds it.
+      const free = (): Promise<number> =>
+        new Promise((resolve) => {
+          const s = net.createServer().listen(0, '127.0.0.1', () => {
+            const port = (s.address() as AddressInfo).port
+            s.close(() => resolve(port >= 47100 && port <= 47199 ? free() : port))
+          })
+        })
+      const held = await free()
+      const ports = { ...mp.PORTS }
+      const asks = vi.spyOn(lp, 'stopLinkPreview')
+      try {
+        const { 'feat/g5d': sha } = land(['feat/g5d'])
+        git('worktree', 'add', '-q', wt('g5d'), 'feat/g5d')
+        // Installed already: the preview goes straight to its build.
+        fs.mkdirSync(path.join(wt('g5d'), 'node_modules', '.pnpm'), { recursive: true })
+        fs.writeFileSync(path.join(wt('g5d'), 'node_modules', '.pnpm', 'lock.yaml'), LOCK)
+        const t = features.createTicket(
+          projectId,
+          { title: 'g5d', branch: 'feat/g5d', status: 'in_progress' },
+          'claude',
+        )
+        const managed = features.addWorkspace(
+          t.id,
+          { name: 'wt', branch: 'feat/g5d', path: wt('g5d') },
+          'claude',
+        )
+        Object.assign(mp.PORTS, { from: held, to: held })
+        mp.startPreview(managed.id, 'enrique')
+        await expect.poll(() => mp.managedPreview(managed.id)?.status, { timeout: 10_000 }).toBe('running')
+        expect(mp.managedPreview(managed.id)!.port).toBe(held)
+        // Another workspace at the worktree linking that preview, and one linking a server of its own.
+        features.addWorkspace(
+          t.id,
+          { name: 'copy', branch: 'feat/g5d', path: wt('g5d'), previewUrl: `http://127.0.0.1:${held}` },
+          'claude',
+        )
+        const s = await serve(path.join(wt('g5d'), 'data', 'server.js'), wt('g5d'))
+        const url = `http://127.0.0.1:${s.port}`
+        const own = features.addWorkspace(
+          t.id,
+          { name: 'dev', branch: 'feat/g5d', path: wt('g5d'), previewUrl: url },
+          'claude',
+        )
+        // Closed behind the board's back: its preview still runs.
+        dbm.db.update(dbm.schema.tickets).set({ status: 'done' }).where(eq(dbm.schema.tickets.id, t.id)).run()
+        const b = (await branchOf(t.id, 'feat/g5d'))!
+        expect(b.worktrees.map((w) => w.previews.map((p) => p.workspaceId))).toEqual([[managed.id]])
+        expect(b.worktrees.map((w) => w.linkedPreviews)).toEqual([
+          [{ workspaceId: own.id, ticketId: t.id, url, port: s.port }],
+        ])
+
+        const [r] = await del([
+          {
+            ticketId: t.id,
+            branch: 'feat/g5d',
+            kind: 'worktrees',
+            sha,
+            worktrees: b.worktrees.map((w) => w.path),
+          },
+        ])
+        expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
+        expect(asks.mock.calls.map(([workspaceId]) => workspaceId)).toEqual([own.id])
+        await s.exited
+        expect(activity(t.id)).toContain(`stopped the preview on :${s.port}`)
+        expect(fs.existsSync(wt('g5d'))).toBe(false)
+      } finally {
+        asks.mockRestore()
+        Object.assign(mp.PORTS, ports)
       }
     })
   })
