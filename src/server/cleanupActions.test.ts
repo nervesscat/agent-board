@@ -1878,3 +1878,21 @@ describe('the route', () => {
     )
   })
 })
+
+// Last: it loads the module afresh, as a hot reload of the board's server code does.
+describe('a hot reload of the server code', () => {
+  it('still takes the deletions in one repository one after the other', async () => {
+    const shas = land(['feat/hr1', 'feat/hr2', 'feat/hr3'])
+    const items = Object.entries(shas).map(([branch, sha]): DeleteItem => {
+      const t = done(branch, branch)
+      return { ticketId: t.id, branch, kind: 'local', sha }
+    })
+    vi.resetModules()
+    const reloaded = (await import('./cleanupActions')).deleteLeftovers
+    for (const item of items) {
+      const both = await Promise.all([del([item]), reloaded(projectId, [item], 'enrique')])
+      expect(both.map(([r]) => r!.outcome).sort()).toEqual(['deleted', 'gone'])
+      expect(hasRef(repo, `refs/heads/${item.branch}`)).toBe(false)
+    }
+  })
+})

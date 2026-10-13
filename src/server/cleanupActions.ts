@@ -85,9 +85,12 @@ const ORIGIN_TIMEOUT = 60_000
 
 /**
  * Each repository's deletions, one after the other, whichever of its worktrees they are asked
- * through: git's ref and worktree locks never collide.
+ * through: git's ref and worktree locks never collide. They outlive this module: the board hot-reloads
+ * its server code (`vite dev`), and a deletion asked after a reload waits for one asked before it.
  */
-const queues = new Map<string, Promise<unknown>>()
+type Queues = Map<string, Promise<unknown>>
+const QUEUES = Symbol.for('agent-board.cleanupQueues')
+const queues: Queues = ((globalThis as { [QUEUES]?: Queues })[QUEUES] ??= new Map())
 
 /** A repository by its main checkout, the first worktree git lists; a path git cannot read is its own. */
 const repositoryOf = (repoPath: string) =>
