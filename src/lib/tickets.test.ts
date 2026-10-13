@@ -1,8 +1,8 @@
-import { QueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryObserver } from '@tanstack/react-query'
 import { describe, expect, it } from 'vitest'
 
 import type { TicketRow } from '#/lib/api'
-import { type TicketsScope, nameFirst, ticketsKey, ticketsQuery, ticketsUrl } from './tickets'
+import { type TicketsScope, keepSearchRows, nameFirst, ticketsKey, ticketsQuery, ticketsUrl } from './tickets'
 
 const scopes: TicketsScope[] = ['root', 'archived', 'all']
 
@@ -70,5 +70,44 @@ describe('ticket list keys', () => {
       'reply',
       'body',
     ])
+  })
+
+  it("keep the last search's rows only for a search of the same list of the same project that found some", () => {
+    const rows = [{ id: 1 }] as TicketRow[]
+    const after = (queryKey: readonly unknown[], last = rows) =>
+      keepSearchRows('3', 'root')(last, { queryKey })
+    expect(after(ticketsKey('3', 'root', 'kiwi'))).toBe(rows)
+    expect(keepSearchRows(3, 'root')(rows, { queryKey: ticketsKey('3', 'root', 'kiwi') })).toBe(rows)
+    // Nothing found: no rows to keep, and no "no match" for a query not answered yet.
+    expect(after(ticketsKey('3', 'root', 'zzqq'), [])).toBeUndefined()
+    // The unsearched list is not a search.
+    expect(after(ticketsKey('3', 'root'))).toBeUndefined()
+    // Another list, another project.
+    expect(after(ticketsKey('3', 'archived', 'kiwi'))).toBeUndefined()
+    expect(after(ticketsKey('4', 'root', 'kiwi'))).toBeUndefined()
+    expect(after(ticketsKey('31', 'root', 'kiwi'))).toBeUndefined()
+    expect(keepSearchRows('3', 'root')(undefined, undefined)).toBeUndefined()
+  })
+
+  it("show no other project's search while a project's loads, though the page stays the same", () => {
+    const qc = new QueryClient()
+    const search = (projectId: string, q: string) => ({
+      ...ticketsQuery(projectId, 'root', q),
+      queryFn: () => new Promise<TicketRow[]>(() => {}),
+      placeholderData: keepSearchRows(projectId, 'root'),
+    })
+    qc.setQueryData(ticketsKey('2', 'root', 'orchid'), [{ id: 20 }])
+    const found = new QueryObserver<TicketRow[]>(qc, search('2', 'orchid'))
+    const stop = found.subscribe(() => {})
+    expect(found.getCurrentResult().data).toEqual([{ id: 20 }])
+    // Project 1's search while project 2's was the last: no rows until it answers.
+    found.setOptions(search('1', 'orchid'))
+    expect(found.getCurrentResult()).toMatchObject({ data: undefined, isPlaceholderData: false })
+    // In project 2 again, the next search keeps the last one's rows.
+    qc.setQueryData(ticketsKey('2', 'root', 'orch'), [{ id: 21 }])
+    found.setOptions(search('2', 'orch'))
+    found.setOptions(search('2', 'orchids'))
+    expect(found.getCurrentResult()).toMatchObject({ data: [{ id: 21 }], isPlaceholderData: true })
+    stop()
   })
 })

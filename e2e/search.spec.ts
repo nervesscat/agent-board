@@ -157,7 +157,7 @@ test('the search keeps to the branches not pushed when that line is on, in the L
   await expect(rows).toHaveText([/Kiwi here/])
 })
 
-test('the first search shows a skeleton, not the whole list, and the next keeps the last results dimmed', async ({
+test('the first search shows a skeleton, not the whole list, and the next keeps the last results dimmed, if it found any', async ({
   page,
   api,
   project,
@@ -207,4 +207,21 @@ test('the first search shows a skeleton, not the whole list, and the next keeps 
   release()
   await expect(rows).toHaveText([/Kiwi two/])
   await expect(page.getByRole('main').locator('.opacity-60')).toHaveCount(0)
+
+  // After a search that found nothing, the next one has no rows to keep: the skeleton shows until it
+  // answers, not a "no match" naming a query not answered yet.
+  const noMatch = page.getByText(/No tickets match/)
+  await field.fill('zzqq')
+  await expect(page.getByText('No tickets match “zzqq”.')).toBeVisible()
+  hold()
+  sent = page.waitForRequest((r) => isSearch(new URL(r.url())) && r.url().includes('lemon'))
+  await field.fill('lemon')
+  await sent
+  await expect(skeleton).toBeVisible()
+  await expect(noMatch).toHaveCount(0)
+  await expect(rows).toHaveCount(0)
+  release()
+  await expect(rows).toHaveText([/Lemon/])
+  await expect(skeleton).toHaveCount(0)
+  await expect(noMatch).toHaveCount(0)
 })

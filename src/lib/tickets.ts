@@ -52,6 +52,21 @@ export const ticketsQuery = (projectId: string | number, scope: TicketsScope, q 
   queryFn: () => get<TicketRow[]>(ticketsUrl(projectId, scope, q)),
 })
 
+/**
+ * `placeholderData` of a search of one of a project's lists: while the next search loads, the rows
+ * the last one found stay if it searched the same list of the same project. The unsearched list (the
+ * same key without a query) is not a search, another project's or another list's rows are not this
+ * list's, and a search that found nothing has no rows to keep: none of them stays, so the page waits
+ * for the answer instead of showing rows or a "no match" that are not the new query's.
+ */
+export const keepSearchRows =
+  (projectId: string | number, scope: TicketsScope) =>
+  (rows: TicketRow[] | undefined, last: { queryKey: readonly unknown[] } | undefined) => {
+    const [kind, project, list, q] = last?.queryKey ?? []
+    const sameList = kind === 'tickets' && project === String(projectId) && list === scope
+    return sameList && q !== undefined && rows?.length ? rows : undefined
+  }
+
 /** A search's rows in the order to show them: found by name, then found in the content. */
 export const nameFirst = (t: Pick<TicketRow, 'match'>) =>
   t.match === 'body' || t.match === 'post' || t.match === 'reply' ? 1 : 0

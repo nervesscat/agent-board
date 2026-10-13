@@ -15,7 +15,7 @@ import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, patch, post, type CleanupReport, type Push, type TicketRow } from '#/lib/api'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
-import { type TicketsScope, ticketsKey, ticketsQuery } from '#/lib/tickets'
+import { type TicketsScope, keepSearchRows, ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 const VIEWS = ['board', 'list', 'archived'] as const
 type View = (typeof VIEWS)[number]
@@ -103,10 +103,9 @@ function Features() {
   const found = useQuery({
     ...ticketsQuery(id, scope, searching),
     enabled: searching !== '',
-    // While the next search loads, the rows of the last one stay, if it searched the same list. The
-    // unsearched list (the same key without a query) is not a search: its rows do not stay.
-    placeholderData: (rows, last) =>
-      last?.queryKey[2] === scope && last.queryKey[3] !== undefined ? rows : undefined,
+    // While the next search loads, the rows the last one found stay, if it searched the same list of
+    // the same project (the page stays mounted from one project to the next).
+    placeholderData: keepSearchRows(id, scope),
     refetchInterval: view === 'archived' ? 30_000 : 10_000,
   })
   const search = (next: string) =>
@@ -165,7 +164,9 @@ function Features() {
       )}
       {view !== 'board' && <TicketSearch q={q} onSearch={search} />}
       {searching ? (
-        found.data === undefined ? (
+        // A search not answered yet says nothing about its query: the rows kept from the last one
+        // show, dimmed, or none narrowed by the line under the header, the skeleton.
+        found.data === undefined || (found.isPlaceholderData && listed.length === 0) ? (
           found.isError ? (
             <p className="text-sm text-destructive">{errorMessage(found.error)}</p>
           ) : (
