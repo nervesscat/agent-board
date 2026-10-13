@@ -301,9 +301,29 @@ export function isAncestor(repoPath: string, a: string, b: string): Promise<bool
   )
 }
 
-/** What `git status` lists in a worktree: changed and untracked files, not the ignored ones. */
+/**
+ * What removing a worktree would lose: its changed and untracked files as `git status` lists them, not
+ * the ignored ones, whatever the repository's or the user's config says `git status` shows.
+ */
 export async function worktreeChanges(worktreePath: string): Promise<string[]> {
-  const out = await git(worktreePath, ['status', '--porcelain'])
+  const out = await git(worktreePath, [
+    // A read: no refreshed index written back, so the overrides below never reach it.
+    '--no-optional-locks',
+    // Neither a cache nor a file monitor that missed a change answers for what is there.
+    '-c',
+    'core.untrackedCache=false',
+    '-c',
+    'core.fsmonitor=false',
+    '-c',
+    'core.ignoreStat=false',
+    'status',
+    '--porcelain',
+    // Untracked files whatever status.showUntrackedFiles says. `normal` lists an untracked folder as
+    // one line, not every file in it: one is enough to keep the worktree.
+    '--untracked-files=normal',
+    // Submodules whatever diff.ignoreSubmodules or submodule.<name>.ignore says.
+    '--ignore-submodules=none',
+  ])
   return out ? out.split('\n') : []
 }
 

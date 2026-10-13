@@ -434,6 +434,33 @@ describe('deleting a worked branch with its worktrees', () => {
     expect(git('rev-parse', 'refs/heads/feat/b5')).toBe(sha)
   })
 
+  const trees = async (ticketId: number, branch: string, sha: string) => {
+    const b = (await branchOf(ticketId, branch))!
+    expect(b.can.worktrees).toEqual({ ok: true, reason: null })
+    const [r] = await del([
+      { ticketId, branch, kind: 'worktrees', sha, worktrees: b.worktrees.map((w) => w.path) },
+    ])
+    return r!
+  }
+
+  it('sees untracked files that the repository’s config hides from git status', async () => {
+    const { 'feat/b5u': sha } = land(['feat/b5u'])
+    git('worktree', 'add', '-q', wt('b5u'), 'feat/b5u')
+    fs.writeFileSync(path.join(wt('b5u'), 'scratch.txt'), 'mine')
+    const t = done('b5 untracked hidden', 'feat/b5u')
+    git('config', 'status.showUntrackedFiles', 'no')
+    try {
+      expect(gitIn(wt('b5u'))('status', '--porcelain')).toBe('')
+      const r = await trees(t.id, 'feat/b5u', sha)
+      expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [] })
+      expect(r.reason).toContain('scratch.txt')
+    } finally {
+      git('config', '--unset', 'status.showUntrackedFiles')
+    }
+    expect(fs.readFileSync(path.join(wt('b5u'), 'scratch.txt'), 'utf8')).toBe('mine')
+    expect(git('rev-parse', 'refs/heads/feat/b5u')).toBe(sha)
+  })
+
   it('never removes a locked worktree', async () => {
     const { 'feat/b5l': sha } = land(['feat/b5l'])
     git('worktree', 'add', '-q', wt('b5l'), 'feat/b5l')
