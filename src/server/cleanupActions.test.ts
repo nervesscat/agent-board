@@ -1966,6 +1966,122 @@ describe('the route', () => {
   })
 })
 
+describe('a repository or another worktree inside the worktree', () => {
+  // Kept in an ignored folder of the worktree, as some agents keep their worktrees.
+  beforeAll(() => fs.appendFileSync(path.join(repo, '.git', 'info', 'exclude'), '.worktrees/\n'))
+  const item = (ticketId: number, branch: string, sha: string, worktrees: string[]): DeleteItem => ({
+    ticketId,
+    branch,
+    kind: 'worktrees',
+    sha,
+    worktrees,
+  })
+
+  it('keeps one holding a worktree registered on a ticket in work, and that worktree’s changes', async () => {
+    const { 'feat/n1': sha } = land(['feat/n1'])
+    git('branch', 'feat/n1-lane', 'main')
+    git('worktree', 'add', '-q', wt('n1'), 'feat/n1')
+    const lane = path.join(wt('n1'), '.worktrees', 'lane')
+    gitIn(wt('n1'))('worktree', 'add', '-q', lane, 'feat/n1-lane')
+    fs.writeFileSync(path.join(lane, 'lane-notes.txt'), 'uncommitted\n')
+    fs.appendFileSync(path.join(lane, 'package.json'), '\n')
+    expect(gitIn(wt('n1'))('status', '--porcelain')).toBe('')
+    const t = done('n1', 'feat/n1')
+    const open = features.createTicket(
+      projectId,
+      { title: 'n1 lane', branch: 'feat/n1-lane', status: 'in_progress' },
+      'claude',
+    )
+    features.addWorkspace(open.id, { name: 'lane', branch: 'feat/n1-lane', path: lane }, 'claude')
+
+    const b = (await branchOf(t.id, 'feat/n1'))!
+    expect(b.worktrees.map((w) => w.protected)).toEqual([
+      expect.stringContaining(`registered on #${open.id}, is in it`),
+    ])
+    expect(b.can.worktrees.ok).toBe(false)
+    const [r] = await del([item(t.id, 'feat/n1', sha, [wt('n1')])])
+    expect(r).toMatchObject({ outcome: 'refused', removed: [] })
+    expect(r!.reason).toContain(`registered on #${open.id}`)
+    expect(fs.readFileSync(path.join(lane, 'lane-notes.txt'), 'utf8')).toBe('uncommitted\n')
+    expect(gitIn(lane)('status', '--porcelain')).toContain('package.json')
+    expect(git('rev-parse', 'refs/heads/feat/n1')).toBe(sha)
+  })
+
+  it('keeps one holding another worktree of the repository, registered nowhere', async () => {
+    const { 'feat/n2': sha } = land(['feat/n2'])
+    git('worktree', 'add', '-q', wt('n2'), 'feat/n2')
+    const inner = path.join(wt('n2'), '.worktrees', 'review')
+    git('worktree', 'add', '-q', '--detach', inner, 'main')
+    const t = done('n2', 'feat/n2')
+
+    const b = (await branchOf(t.id, 'feat/n2'))!
+    expect(b.worktrees[0]!.protected).toMatch(/^the worktree .*review is in it$/)
+    const [r] = await del([item(t.id, 'feat/n2', sha, [wt('n2')])])
+    expect(r).toMatchObject({ outcome: 'refused', removed: [] })
+    expect(fs.existsSync(path.join(inner, 'package.json'))).toBe(true)
+  })
+
+  it('keeps one holding a repository of its own, and that repository', async () => {
+    const { 'feat/n3': sha } = land(['feat/n3'])
+    git('worktree', 'add', '-q', wt('n3'), 'feat/n3')
+    const inner = path.join(wt('n3'), '.worktrees', 'scratch')
+    fs.mkdirSync(inner, { recursive: true })
+    const g = gitIn(inner)
+    g('init', '-q')
+    fs.writeFileSync(path.join(inner, 'only-here.txt'), 'only here\n')
+    g('add', '.')
+    g('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'only here')
+    const head = g('rev-parse', 'HEAD')
+    const t = done('n3', 'feat/n3')
+
+    const b = (await branchOf(t.id, 'feat/n3'))!
+    const [r] = await del([
+      item(
+        t.id,
+        'feat/n3',
+        sha,
+        b.worktrees.map((w) => w.path),
+      ),
+    ])
+    expect(r).toMatchObject({ outcome: 'refused', removed: [], unlinked: [] })
+    expect(r!.reason).toContain(path.join('.worktrees', 'scratch'))
+    expect(r!.reason).toMatch(/a git repository or worktree .*\(a \.git of its own\)/)
+    expect(g('rev-parse', 'HEAD')).toBe(head)
+    expect(fs.readFileSync(path.join(inner, 'only-here.txt'), 'utf8')).toBe('only here\n')
+    expect(git('rev-parse', 'refs/heads/feat/n3')).toBe(sha)
+  })
+
+  it('keeps one holding a worktree of another repository', async () => {
+    const { 'feat/n4': sha } = land(['feat/n4'])
+    git('worktree', 'add', '-q', wt('n4'), 'feat/n4')
+    const elsewhere = path.join(tmp, 'n4-elsewhere')
+    fs.mkdirSync(elsewhere)
+    const e = gitIn(elsewhere)
+    e('init', '-q', '-b', 'main')
+    fs.writeFileSync(path.join(elsewhere, 'a.txt'), 'a\n')
+    e('add', '.')
+    e('-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'a')
+    const side = path.join(wt('n4'), '.worktrees', 'side')
+    e('worktree', 'add', '-q', '-b', 'side', side)
+    fs.writeFileSync(path.join(side, 'a.txt'), 'edited\n')
+    const t = done('n4', 'feat/n4')
+
+    const b = (await branchOf(t.id, 'feat/n4'))!
+    const [r] = await del([
+      item(
+        t.id,
+        'feat/n4',
+        sha,
+        b.worktrees.map((w) => w.path),
+      ),
+    ])
+    expect(r).toMatchObject({ outcome: 'refused', removed: [] })
+    expect(r!.reason).toContain(path.join('.worktrees', 'side'))
+    expect(fs.readFileSync(path.join(side, 'a.txt'), 'utf8')).toBe('edited\n')
+    expect(git('rev-parse', 'refs/heads/feat/n4')).toBe(sha)
+  })
+})
+
 // Last: it loads the module afresh, as a hot reload of the board's server code does.
 describe('a hot reload of the server code', () => {
   it('still takes the deletions in one repository one after the other', async () => {

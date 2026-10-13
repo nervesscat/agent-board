@@ -322,13 +322,18 @@ async function deleteOne(
 }
 
 /**
- * The worktree's links to remove before it; or why it may not go: a link out of it that git tracks
+ * The worktree's links to remove before it; or why it may not go: a repository or another worktree in
+ * it (git would delete it with the worktree, whatever it holds), a link out of it that git tracks
  * (removing it would change the worktree), or a folder or link that could not be read.
  */
 async function linksOut(worktreePath: string): Promise<WorktreeLink[] | string> {
   let links: WorktreeLink[]
   try {
-    links = await worktreeLinks(worktreePath)
+    const found = await worktreeLinks(worktreePath)
+    const n = found.repos.length
+    if (n)
+      return `${found.repos.slice(0, 3).join(', ')}${n > 3 ? ', …' : ''}: a git repository or worktree in ${worktreePath} (a .git of ${n === 1 ? 'its' : 'their'} own), which would go with it`
+    links = found.links
   } catch (err) {
     return `${worktreePath} could not be searched for links out of it: ${fsSaid(err)}`
   }

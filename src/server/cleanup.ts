@@ -662,6 +662,8 @@ export async function cleanupReport(
   // Paths are compared by where they really lead: git may list a worktree by a link's path.
   const key = folderKeys()
   const same = (a: string, b: string) => key(a) === key(b)
+  // Whether `p` lies in folder `dir`, below it.
+  const under = (p: string, dir: string) => key(p).startsWith(`${key(dir)}/`)
   const guards = new Map<string, Promise<Guard>>()
   const guard = (repoPath: string) => {
     if (!guards.has(repoPath))
@@ -833,6 +835,9 @@ export async function cleanupReport(
             if (same(tree.path, process.cwd())) return 'the board runs from it'
             if (kept?.checkouts.some((p) => same(p, tree.path))) return "a repo's checkout on the board"
             if (tree.locked) return 'locked'
+            // git deletes the folder with all it holds: what the board keeps in it would go too.
+            const inside = keptIn(tree.path)
+            if (inside) return inside
             if (tree.branch && tree.branch !== name) return `has ${tree.branch} checked out`
             const registeredOn = kept?.paths.find((p) => same(p.path, tree.path))
             if (registeredOn) return `registered on #${registeredOn.ticketId}`
@@ -851,6 +856,20 @@ export async function cleanupReport(
             if (claimedBy(tree) === name || head === tip) return null
             const held = repo && tip ? await isAncestor(repo.repoPath, head, tip) : false
             return held ? null : `detached at ${head.slice(0, 7)}, which ${name} does not hold`
+          }
+
+          /**
+           * What lies below `folder` that is never removed: the board's own folder, a repo's checkout,
+           * a workspace registered on a ticket in work, or another worktree git lists.
+           */
+          function keptIn(folder: string): string | null {
+            if (under(process.cwd(), folder)) return `the board runs from ${process.cwd()}, in it`
+            const checkout = kept?.checkouts.find((p) => under(p, folder))
+            if (checkout) return `${checkout}, a repo's checkout on the board, is in it`
+            const registeredIn = kept?.paths.find((p) => under(p.path, folder))
+            if (registeredIn) return `${registeredIn.path}, registered on #${registeredIn.ticketId}, is in it`
+            const other = state?.worktrees.find((w) => under(w.path, folder))
+            return other ? `the worktree ${other.path} is in it` : null
           }
         }),
       )

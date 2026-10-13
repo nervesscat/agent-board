@@ -56,6 +56,9 @@ describe('the links in a worktree', () => {
 
     expect(found).not.toBe('unsettled')
     expect(fs.promises.readdir).toHaveBeenCalledTimes(many + 3)
-    expect(found).toEqual([{ path: link, target: expect.any(String), resolved: outside, outward: true }])
+    expect(found).toEqual({
+      links: [{ path: link, target: expect.any(String), resolved: outside, outward: true }],
+      repos: [],
+    })
   }, 90_000)
 })

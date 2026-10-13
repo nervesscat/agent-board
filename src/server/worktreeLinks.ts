@@ -30,22 +30,32 @@ const BATCH = 64
 
 /**
  * Every link in the worktree, found without ever going through one: the folder a link within it
- * leads to is read where it is. Throws when a folder or a link cannot be read: what is not known is
- * not safe.
+ * leads to is read where it is. Also, in the same walk, every folder in it that holds a `.git` of its
+ * own (`repos`): a repository or another worktree, of this repository or any other, which git would
+ * delete with the worktree. Throws when a folder or a link cannot be read: what is not known is not
+ * safe.
  */
-export async function worktreeLinks(worktreePath: string): Promise<WorktreeLink[]> {
+export async function worktreeLinks(
+  worktreePath: string,
+): Promise<{ links: WorktreeLink[]; repos: string[] }> {
   const root = pathKey(await fs.promises.realpath(worktreePath))
   const within = (p: string) => pathKey(p) === root || pathKey(p).startsWith(`${root}/`)
-  return inBatches(await findLinks(worktreePath), async (link) => {
+  const found = await findLinks(worktreePath)
+  const links = await inBatches(found.links, async (link) => {
     const target = await fs.promises.readlink(link)
     const resolved = await fs.promises.realpath(link).catch(() => null)
     return { path: link, target, resolved, outward: !resolved || !within(resolved) }
   })
+  return { links, repos: found.repos }
 }
 
-/** Every link under `dir`, each folder read once and none read through a link. */
-async function findLinks(dir: string): Promise<string[]> {
+/**
+ * Every link under `dir`, each folder read once and none read through a link; and every folder below
+ * `dir` that holds a `.git`, whose own git folder is not read.
+ */
+async function findLinks(dir: string): Promise<{ links: string[]; repos: string[] }> {
   const links: string[] = []
+  const repos: string[] = []
   const pending = [dir]
   let reading = 0
   await new Promise<void>((resolve, reject) => {
@@ -55,11 +65,13 @@ async function findLinks(dir: string): Promise<string[]> {
       if (!pending.length && !reading) return resolve()
       while (pending.length && reading < WIDTH) {
         reading++
-        readFolder(pending.pop()!)
+        const folder = pending.pop()!
+        readFolder(folder, folder !== dir)
           .then((found) => {
+            if (found.repo) repos.push(folder)
             // One at a time: spread, a folder of some 125 000 entries is too many arguments.
             for (const link of found.links) links.push(link)
-            for (const folder of found.folders) pending.push(folder)
+            for (const sub of found.folders) pending.push(sub)
             reading--
             next()
           })
@@ -72,14 +84,21 @@ async function findLinks(dir: string): Promise<string[]> {
     }
     next()
   })
-  return links
+  return { links, repos }
 }
 
-async function readFolder(dir: string) {
+/** A folder's links and folders; `nested`, a folder below the worktree's, also whether it holds a `.git`. */
+async function readFolder(dir: string, nested: boolean) {
   const links: string[] = []
   const folders: string[] = []
+  let repo = false
   for (const e of await fs.promises.readdir(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name)
+    // A file, a folder or a link: a worktree's `.git` is a file, a repository's a folder.
+    if (nested && pathKey(e.name) === '.git') {
+      repo = true
+      continue
+    }
     // On Windows a junction reads as a link too, never as a folder.
     if (e.isSymbolicLink()) links.push(p)
     else if (e.isDirectory()) folders.push(p)
@@ -90,7 +109,7 @@ async function readFolder(dir: string) {
       else if (s.isDirectory()) folders.push(p)
     }
   }
-  return { links, folders }
+  return { links, folders, repo }
 }
 
 /** `work` on every item, a batch at a time; the first that throws throws. */

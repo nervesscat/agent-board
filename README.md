@@ -206,7 +206,10 @@ exactly what will go. Just before it acts, the board checks every item again on 
   through any of its worktrees; on origin, also what such work in another clone of the same origin uses.
 
 A worktree goes only when git lists no changes or untracked files in it (ignored files such as
-`node_modules` go with it): never with `--force`, never the main checkout or a locked one. Its links
+`node_modules` go with it): never with `--force`, never the main checkout or a locked one. Nor one
+that holds what git would delete with it: another worktree git lists, a folder the board keeps (its
+own, a repo's checkout, a workspace registered on a ticket in work), or any `.git` below its top (a
+repository, or a worktree of any repository). Its links
 (a `node_modules` or `data` linked to another checkout's, a junction on Windows) are removed first,
 each the link alone: on Windows git would delete what a junction leads to. A folder one leads to out
 of the worktree stays, and the result names each such link with where it led (`unlinked`); one of
