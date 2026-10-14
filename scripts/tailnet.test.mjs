@@ -6,7 +6,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { loadEnv } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+
+import { readPublicEntrance } from '../src/server/config.ts'
 
 const helper = path.join(path.dirname(fileURLToPath(import.meta.url)), 'tailnet.mjs')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-tailnet-'))
@@ -66,14 +69,17 @@ const freePort = () =>
   })
 
 let runs = 0
-/** Runs the helper in a checkout whose .env holds `dotenv`, with the fake answering from `state`. */
-function run(args, { dotenv = {}, state = tailnet(), bin = fake } = {}) {
+/**
+ * Runs the helper in a checkout (`dir`) whose .env holds `dotenv`, its lines ending in `eol`, with the fake
+ * answering from `state`.
+ */
+function run(args, { dotenv = {}, state = tailnet(), bin = fake, eol = '\n' } = {}) {
   const dir = path.join(tmp, `run-${++runs}`)
   fs.mkdirSync(dir)
   fs.writeFileSync(
     path.join(dir, '.env'),
     Object.entries(dotenv)
-      .map(([k, v]) => `${k}=${v}\n`)
+      .map(([k, v]) => `${k}=${v}${eol}`)
       .join(''),
   )
   const log = path.join(dir, 'tailscale.log')
@@ -96,10 +102,26 @@ function run(args, { dotenv = {}, state = tailnet(), bin = fake } = {}) {
               .filter(Boolean)
               .map((l) => JSON.parse(l))
           : []
-        resolve({ code: err ? err.code : 0, stdout, stderr, calls })
+        resolve({ code: err ? err.code : 0, stdout, stderr, calls, dir })
       },
     )
   })
+}
+
+/** The tailnet entrance the board takes from the .env in `dir`: read with Vite's loadEnv, then its own check. */
+const boardEntrance = (dir) => readPublicEntrance(loadEnv('development', dir, ''))
+
+/** Runs `fn` with these variables in this process's environment, which the helper inherits; then restores it. */
+async function withShell(vars, fn) {
+  const before = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
+  Object.assign(process.env, vars)
+  try {
+    return await fn()
+  } finally {
+    for (const [key, value] of Object.entries(before))
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+  }
 }
 
 /** The read-only subcommands, and nothing that changes what Tailscale serves. */
@@ -187,6 +209,149 @@ describe('pnpm tailnet', slow, () => {
       expect(res.stderr, what).toBe('')
       onlyReads(res.calls)
     }
+  })
+
+  it('expands ${NAME} and $NAME in .env as the board does, from a line above or below, LF or CRLF', async () => {
+    const port = portOf(gated)
+    for (const eol of ['\n', '\r\n'])
+      for (const [what, dotenv, gatePort] of [
+        [
+          'PUBLIC_GATE_AUTH_URL from ${PUBLIC_GATE_PORT} above it',
+          {
+            PORT: port,
+            PUBLIC_GATE_PORT: 47111,
+            ...entrance(),
+            PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:${PUBLIC_GATE_PORT}',
+          },
+          47111,
+        ],
+        [
+          'PUBLIC_GATE_AUTH_URL from $PUBLIC_GATE_PORT below it',
+          {
+            PORT: port,
+            ...entrance(),
+            PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:$PUBLIC_GATE_PORT',
+            PUBLIC_GATE_PORT: 47262,
+          },
+          47262,
+        ],
+        [
+          'PUBLIC_ORIGIN and PUBLIC_GATE_URL from ${TAILNET_HOST} below them',
+          {
+            PORT: port,
+            ...entrance(),
+            PUBLIC_ORIGIN: 'https://${TAILNET_HOST}',
+            PUBLIC_GATE_URL: 'https://${TAILNET_HOST}:8443',
+            TAILNET_HOST: NAME,
+          },
+          47111,
+        ],
+      ]) {
+        const label = `${what}, ${JSON.stringify(eol)}`
+        const res = await run([], { dotenv, eol })
+        // The board serves these as this machine's entrance...
+        expect(boardEntrance(res.dir), label).toEqual({
+          origin: `https://${NAME}`,
+          host: NAME,
+          gateUrl: `https://${NAME}:8443`,
+          gateAuthUrl: `http://127.0.0.1:${gatePort}`,
+        })
+        // ...and the helper reads them so: the serve commands, and nothing to set.
+        expect(res.code, `${label}: ${res.stderr}`).toBe(0)
+        expect(res.stdout, label).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
+        expect(res.stdout, label).toContain(
+          `tailscale serve --bg --https=8443 http://127.0.0.1:${gatePort}\n`,
+        )
+        expect(res.stderr, label).toBe('')
+        onlyReads(res.calls)
+      }
+  })
+
+  it("reads .env as Vite's loadEnv, the board's loader, does: references, quotes, comments, the shell", async () => {
+    const port = portOf(gated)
+    const shell = { TAILNET_TEST_SHELL_NAME: 'shell', PORT: String(await freePort()) }
+    await withShell(shell, async () => {
+      const res = await run([], {
+        dotenv: {
+          PORT: port,
+          // A braced reference to a key further down, and one to a name defined nowhere (empty).
+          PUBLIC_ORIGIN: 'https://${TAILNET_TEST_HOST}${TAILNET_TEST_UNDEFINED}',
+          // Single-quoted, with a bare reference.
+          PUBLIC_GATE_URL: "'https://$TAILNET_TEST_HOST:8443'",
+          // A comment after a quoted value.
+          PUBLIC_GATE_AUTH_URL: '"http://127.0.0.1:${TAILNET_TEST_GATE_PORT}" # the public gate',
+          // A name from the shell.
+          TAILNET_HOST: '$TAILNET_TEST_SHELL_NAME.example-tailnet.ts.net',
+          TAILNET_TEST_HOST: 'old.example-tailnet.ts.net',
+          TAILNET_TEST_GATE_PORT: 47262,
+        },
+      })
+      const vite = loadEnv('development', res.dir, '')
+      expect(vite).toMatchObject({
+        PUBLIC_ORIGIN: 'https://old.example-tailnet.ts.net',
+        PUBLIC_GATE_URL: 'https://old.example-tailnet.ts.net:8443',
+        PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47262',
+        TAILNET_HOST: 'shell.example-tailnet.ts.net',
+      })
+      expect(res.code, res.stderr).toBe(0)
+      // The values the helper read, as it prints them, are loadEnv's...
+      expect(res.stdout).toContain(`tailscale serve --bg --https=8443 ${vite.PUBLIC_GATE_AUTH_URL}\n`)
+      expect(res.stderr).toContain(`.env has PUBLIC_ORIGIN=${vite.PUBLIC_ORIGIN}: set`)
+      expect(res.stderr).toContain(`.env has PUBLIC_GATE_URL=${vite.PUBLIC_GATE_URL}: set`)
+      expect(res.stderr).toContain(`TAILNET_HOST=${vite.TAILNET_HOST} in .env is not this machine's name`)
+      // ...but a name .env defines keeps .env's value: loadEnv takes the shell's PORT, while pnpm start runs
+      // the board on .env's (scripts/start.mjs), and that is the one to serve.
+      expect(vite.PORT).toBe(shell.PORT)
+      expect(res.stdout).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
+      onlyReads(res.calls)
+    })
+  })
+
+  it('reads PUBLIC_ORIGIN and PUBLIC_GATE_URL as the board does: trimmed, any case, a trailing slash aside', async () => {
+    const port = portOf(gated)
+    for (const [what, over] of [
+      [
+        'an upper-case host',
+        {
+          PUBLIC_ORIGIN: 'https://DEVBOX.example-tailnet.ts.net',
+          PUBLIC_GATE_URL: 'https://DEVBOX.example-tailnet.ts.net:8443',
+        },
+      ],
+      [
+        'an upper-case scheme and host',
+        {
+          PUBLIC_ORIGIN: 'HTTPS://DevBox.Example-Tailnet.TS.NET',
+          PUBLIC_GATE_URL: 'HTTPS://DEVBOX.EXAMPLE-TAILNET.TS.NET:8443',
+        },
+      ],
+      [
+        'quoted, with spaces inside the quotes',
+        { PUBLIC_ORIGIN: `" https://${NAME} "`, PUBLIC_GATE_URL: `"  https://${NAME}:8443/  "` },
+      ],
+    ]) {
+      const res = await run([], { dotenv: { PORT: port, ...entrance(), ...over } })
+      // The board takes these as this machine's entrance...
+      expect(boardEntrance(res.dir), what).toEqual({
+        origin: `https://${NAME}`,
+        host: NAME,
+        gateUrl: `https://${NAME}:8443`,
+        gateAuthUrl: 'http://127.0.0.1:47111',
+      })
+      // ...so there is nothing to set.
+      expect(res.code, `${what}: ${res.stderr}`).toBe(0)
+      expect(res.stdout, what).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
+      expect(res.stdout, what).toContain('tailscale serve --bg --https=8443 http://127.0.0.1:47111\n')
+      expect(res.stderr, what).toBe('')
+      onlyReads(res.calls)
+    }
+    // Another host: the warning names it as the board reads it.
+    const other = await run([], {
+      dotenv: { PORT: port, ...entrance(), PUBLIC_ORIGIN: '" HTTPS://OLD.example-tailnet.ts.net/ "' },
+    })
+    expect(other.code).toBe(0)
+    expect(other.stderr).toContain(
+      `.env has PUBLIC_ORIGIN=https://old.example-tailnet.ts.net: set PUBLIC_ORIGIN=https://${NAME}, then pnpm start`,
+    )
   })
 
   it('warns when .env does not name this machine, and still prints', async () => {

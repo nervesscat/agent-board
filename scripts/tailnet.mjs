@@ -27,13 +27,53 @@ function fail(message) {
 }
 
 /**
- * The values in .env in the current folder (the board's checkout, as pnpm runs this), parsed as the board
- * parses them (node:util's parseEnv, as Nitro does): an inline `# comment` is not part of a value.
+ * The values in .env in the current folder (the board's checkout, as pnpm runs this), as the board reads
+ * them with Vite's loadEnv (vite.config.ts): parsed by node:util's parseEnv, so an inline `# comment` is not
+ * part of a value, then `${NAME}` and `$NAME` expanded with dotenv-expand's rules, from the file's other
+ * values (above or below) and from the environment; a name defined in neither is empty. Where the shell also
+ * sets a name .env defines, .env's value stands: `pnpm start` runs the board on .env's PORT, whatever the
+ * shell says.
  */
 function readDotenv(file = '.env') {
   if (!fs.existsSync(file)) return {}
-  return parseEnv(fs.readFileSync(file, 'utf8'))
+  const values = parseEnv(fs.readFileSync(file, 'utf8'))
+  const shell = Object.fromEntries(Object.entries(process.env).filter(([key]) => !Object.hasOwn(values, key)))
+  for (const key in values) values[key] = expandValue(values[key], shell, values).replace(/\\\$/g, '$')
+  return values
 }
+
+/**
+ * One value with its references expanded, step for step as dotenv-expand does in Vite's loadEnv, defaults
+ * (`${NAME:-default}` and its kin) included: `values` are the file's, those above this one already expanded.
+ * Names are looked up on an object of their own, so `${constructor}` is a name like any other.
+ */
+function expandValue(value, shell, values) {
+  const env = Object.assign(Object.create(null), values, shell)
+  const reference = /(?<!\\)\$\{([^{}]+)\}|(?<!\\)\$([A-Za-z_]\w*)/g
+  const seen = new Set()
+  let result = value
+  let match
+  while ((match = reference.exec(result)) !== null) {
+    seen.add(result)
+    const [template, braced, bare] = match
+    const expression = braced || bare
+    const operator = expression.match(/(:\+|\+|:-|-)/)?.[0] ?? null
+    const [key, ...rest] = expression.split(operator)
+    const alternate = operator === ':+' || operator === '+'
+    const fallback = alternate && !env[key] ? '' : rest.join(operator)
+    const found = alternate ? null : env[key]
+    result = result.replace(template, found && !seen.has(found) ? found : fallback)
+    if (result === values[key]) break
+    reference.lastIndex = 0
+  }
+  return result
+}
+
+/**
+ * PUBLIC_ORIGIN or PUBLIC_GATE_URL as the board takes it (readPublicEntrance in src/server/config.ts):
+ * trimmed, without a trailing slash, in lower case.
+ */
+const originOf = (raw) => raw?.trim().replace(/\/$/, '').toLowerCase()
 
 function readArgs(argv) {
   const args = {}
@@ -208,7 +248,7 @@ const want = {
   PUBLIC_GATE_AUTH_URL: `http://127.0.0.1:${gatePort}`,
 }
 for (const [key, value] of Object.entries(want)) {
-  const have = dotenv[key]?.replace(/\/$/, '')
+  const have = originOf(dotenv[key])
   if (key === 'PUBLIC_GATE_AUTH_URL' ? !have : have !== value)
     warnings.push(`.env has ${have ? `${key}=${have}` : `no ${key}`}: set ${key}=${value}, then pnpm start`)
 }
