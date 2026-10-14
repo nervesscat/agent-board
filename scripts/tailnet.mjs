@@ -14,6 +14,7 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
+import { parseEnv } from 'node:util'
 
 const USAGE = 'usage: pnpm tailnet [--port <the board port>] [--target http://127.0.0.1:<the board port>]'
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]'])
@@ -25,15 +26,13 @@ function fail(message) {
   process.exit(1)
 }
 
-/** KEY=value lines of .env in the current folder: the board's checkout, as pnpm runs this. */
+/**
+ * The values in .env in the current folder (the board's checkout, as pnpm runs this), parsed as the board
+ * parses them (node:util's parseEnv, as Nitro does): an inline `# comment` is not part of a value.
+ */
 function readDotenv(file = '.env') {
-  const env = {}
-  if (!fs.existsSync(file)) return env
-  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const m = /^\s*([A-Za-z_]\w*)\s*=\s*(.*?)\s*$/.exec(line)
-    if (m) env[m[1]] = m[2].replace(/^(["'])(.*)\1$/, '$2')
-  }
-  return env
+  if (!fs.existsSync(file)) return {}
+  return parseEnv(fs.readFileSync(file, 'utf8'))
 }
 
 function readArgs(argv) {

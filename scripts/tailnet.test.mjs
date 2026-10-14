@@ -163,6 +163,32 @@ describe('pnpm tailnet', slow, () => {
     }
   })
 
+  it('reads .env as the board does: an inline comment is not part of a value, quoted or not', async () => {
+    const port = portOf(gated)
+    for (const [what, over] of [
+      [
+        'PUBLIC_GATE_AUTH_URL with a comment',
+        { PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111 # the public gate' },
+      ],
+      [
+        'PUBLIC_GATE_AUTH_URL quoted, with a comment',
+        { PUBLIC_GATE_AUTH_URL: '"http://127.0.0.1:47111" # note' },
+      ],
+      [
+        'PUBLIC_ORIGIN and PUBLIC_GATE_URL with a comment',
+        { PUBLIC_ORIGIN: `https://${NAME} # the board`, PUBLIC_GATE_URL: `https://${NAME}:8443 # the gate` },
+      ],
+    ]) {
+      const res = await run([], { dotenv: { PORT: port, ...entrance(), ...over } })
+      expect(res.code, `${what}: ${res.stderr}`).toBe(0)
+      expect(res.stdout, what).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
+      expect(res.stdout, what).toContain('tailscale serve --bg --https=8443 http://127.0.0.1:47111\n')
+      // The board reads these values bare, so nothing is missing: no "set PUBLIC_…" warning, no other.
+      expect(res.stderr, what).toBe('')
+      onlyReads(res.calls)
+    }
+  })
+
   it('warns when .env does not name this machine, and still prints', async () => {
     const port = portOf(gated)
     const res = await run([], { dotenv: { PORT: port, TAILNET_HOST: 'other.example-tailnet.ts.net' } })
