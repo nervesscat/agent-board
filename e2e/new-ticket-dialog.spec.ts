@@ -239,6 +239,8 @@ test('the New ticket dialog with long content stays on screen, scrolls its field
   human,
 }) => {
   await page.goto(`/projects/${project.id}/features`)
+  // The page height is compared with the one the dialog leaves, so measure it once the data has loaded.
+  await page.waitForLoadState('networkidle')
   const before = await pageScroll(page)
   await page.getByRole('button', { name: 'New ticket' }).click()
   const dialog = page.getByRole('dialog')
@@ -396,6 +398,7 @@ test('the New lane dialog with long content stays on screen, scrolls its fields 
 }) => {
   const t = await api.ticket({ title: 'Parent', status: 'in_progress' })
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  await page.waitForLoadState('networkidle')
   const before = await pageScroll(page)
   await page.getByRole('button', { name: 'New lane' }).click()
   const dialog = page.getByRole('dialog')
@@ -508,6 +511,7 @@ test.describe('on a phone', () => {
     human,
   }) => {
     await page.goto(`/projects/${project.id}/features`)
+    await page.waitForLoadState('networkidle')
     const before = await pageScroll(page)
     await page.getByRole('button', { name: 'New ticket' }).click()
     const dialog = page.getByRole('dialog')
