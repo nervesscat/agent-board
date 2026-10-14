@@ -104,7 +104,8 @@ afterEach(() => {
 
 /** The git commands since the last `quiet()`: the two listings apart from the rest. */
 const ran = () => {
-  const listing = (a: string[]) => a[0] === 'for-each-ref' && a.includes('--format=%(refname) %(objectname)')
+  const listing = (a: string[]) =>
+    a[0] === 'for-each-ref' && a.some((x) => x.startsWith('--format=%(refname) %(objectname)'))
   const worktrees = (a: string[]) => a[0] === 'worktree' && a[1] === 'list'
   return {
     refs: spawned.filter(listing).length,

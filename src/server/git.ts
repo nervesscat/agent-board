@@ -1,13 +1,18 @@
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
+import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { HttpError } from './http'
 
 /**
- * The board never writes to git or GitHub. Every command here is a read, but for `fetchOrigin`, which
- * only refreshes the checkout's copy of origin's branches: the allowlist below is the whole
- * vocabulary, and nothing else in the codebase spawns `git` or `gh`.
+ * The board never writes to GitHub, and writes to git only for the human's Cleanup actions:
+ * `removeWorktree`, `deleteLocalBranch` and `deleteOriginBranch`, each run once the human confirmed it
+ * on the Cleanup page and the server checked again that the work landed (`cleanupActions.ts`). Every
+ * other command here is a read, but for `fetchOrigin`, which only refreshes the checkout's copy of
+ * origin's branches: the allowlist below is the whole vocabulary, and nothing else in the codebase
+ * spawns `git` or `gh`.
  */
 
 const run = promisify(execFile)
@@ -194,6 +199,18 @@ export interface Worktree {
   path: string
   branch: string | null
   head: string | null
+  /** Set when it is locked (`git worktree lock`): git keeps it until it is unlocked. */
+  locked?: true
+  /**
+   * What it is in the middle of on `branch` (`rebase in progress`, `bisect in progress`): git lists it
+   * detached meanwhile, yet holds the branch as checked out there.
+   */
+  busy?: string
+  /**
+   * The branches a stopped `git rebase --update-refs` here will move. Git holds each as checked out in
+   * this worktree too, though the worktree is on none of them.
+   */
+  updates?: string[]
 }
 
 export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
@@ -206,8 +223,62 @@ export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
       trees.push(current)
     } else if (current && line.startsWith('HEAD ')) current.head = line.slice(5)
     else if (current && line.startsWith('branch ')) current.branch = line.slice(7).replace('refs/heads/', '')
+    else if (current && (line === 'locked' || line.startsWith('locked '))) current.locked = true
   }
+  await Promise.all(
+    trees
+      .filter((tree) => !tree.branch)
+      .map(async (tree) => {
+        const busy = await busyWith(tree.path)
+        if (busy) Object.assign(tree, busy)
+      }),
+  )
   return trees
+}
+
+/**
+ * What a worktree git lists detached is busy with, and the branches it holds checked out there
+ * (`branch_checked_out`): a rebase (`git rebase`, or `git am` that names a branch), a bisect started on
+ * a branch, or a rebase with `--update-refs`, which will move the branches it lists. Deleting one of
+ * them would break `git rebase --continue` or `git bisect reset`. Read from the worktree's own git
+ * folder; null when it is busy with none, or that cannot be read.
+ */
+async function busyWith(worktreePath: string): Promise<Pick<Worktree, 'branch' | 'busy' | 'updates'> | null> {
+  const dir = await gitDirOf(worktreePath)
+  if (!dir) return null
+  const read = (file: string) =>
+    fs.promises.readFile(path.join(dir, file), 'utf8').then(
+      (text) => text.trim(),
+      () => '',
+    )
+  // Three lines per branch: its refname, then its sha before the rebase and its sha after it.
+  const updates = (await read('rebase-merge/update-refs'))
+    .split('\n')
+    .filter((_, i) => i % 3 === 0)
+    .filter((ref) => ref.startsWith('refs/heads/'))
+    .map((ref) => ref.slice(11))
+  for (const file of ['rebase-merge/head-name', 'rebase-apply/head-name']) {
+    const name = await read(file)
+    if (name.startsWith('refs/heads/')) return { branch: name.slice(11), busy: 'rebase in progress', updates }
+  }
+  // The branch bisect started on, as git wrote it: its name with `refs/heads/` removed, or a commit's
+  // sha when it started detached.
+  const start = await read('BISECT_START')
+  if (start && !/^([0-9a-f]{40}|[0-9a-f]{64})$/.test(start))
+    return { branch: start, busy: 'bisect in progress', updates }
+  return updates.length ? { branch: null, busy: 'rebase in progress', updates } : null
+}
+
+/** A worktree's own git folder: its `.git` folder, or where its `.git` file points; null when neither. */
+async function gitDirOf(worktreePath: string): Promise<string | null> {
+  const dotGit = path.join(worktreePath, '.git')
+  const stat = await fs.promises.stat(dotGit).catch(() => null)
+  if (!stat) return null
+  if (stat.isDirectory()) return dotGit
+  const text = await fs.promises.readFile(dotGit, 'utf8').catch(() => '')
+  const to = /^gitdir: (.+)$/m.exec(text)?.[1]?.trim()
+  // A relative one is relative to the worktree (`worktree.useRelativePaths`).
+  return to ? path.resolve(worktreePath, to) : null
 }
 
 export async function listBranches(repoPath: string): Promise<string[]> {
@@ -220,27 +291,33 @@ export interface Refs {
   local: Map<string, string>
   /** Branch on origin → sha, as of the last fetch. */
   remote: Map<string, string>
+  /** Local branch that is a symbolic ref (an alias, such as `trunk` for `main`) → the branch it points at. */
+  symrefs: Map<string, string>
 }
 
 export async function listRefs(repoPath: string): Promise<Refs> {
   const out = await git(repoPath, [
     'for-each-ref',
-    '--format=%(refname) %(objectname)',
+    // The last field is what a symbolic ref points at: empty for any other ref.
+    '--format=%(refname) %(objectname) %(symref)',
     'refs/heads',
     'refs/remotes/origin',
   ])
-  const refs: Refs = { local: new Map(), remote: new Map() }
+  const refs: Refs = { local: new Map(), remote: new Map(), symrefs: new Map() }
   for (const line of out ? out.split('\n') : []) {
-    const [name, sha] = line.split(' ')
-    if (name!.startsWith('refs/heads/')) refs.local.set(name!.slice(11), sha!)
-    else if (name !== 'refs/remotes/origin/HEAD') refs.remote.set(name!.slice(20), sha!)
+    const [name, sha, target] = line.split(' ')
+    if (name!.startsWith('refs/heads/')) {
+      refs.local.set(name!.slice(11), sha!)
+      if (target) refs.symrefs.set(name!.slice(11), target.replace(/^refs\/heads\//, ''))
+    } else if (name !== 'refs/remotes/origin/HEAD') refs.remote.set(name!.slice(20), sha!)
   }
   return refs
 }
 
 /**
  * The branches whose history holds commit `sha`, named as `baseRefs` names them: a local branch by its
- * name, origin's as `origin/<name>`. Throws when `sha` is no commit here.
+ * name (its full refname when that starts with `origin/` or `refs/`), origin's as `origin/<name>`.
+ * Throws when `sha` is no commit here.
  */
 export async function refsContaining(repoPath: string, sha: string): Promise<Set<string>> {
   const out = await git(repoPath, [
@@ -253,7 +330,9 @@ export async function refsContaining(repoPath: string, sha: string): Promise<Set
   ])
   const names = new Set<string>()
   for (const name of out ? out.split('\n') : []) {
-    if (name.startsWith('refs/heads/')) names.add(name.slice(11))
+    // A local branch called `origin/<x>` or `refs/<x>` keeps its full refname, as `localRef` names it.
+    if (name.startsWith('refs/heads/origin/') || name.startsWith('refs/heads/refs/')) names.add(name)
+    else if (name.startsWith('refs/heads/')) names.add(name.slice(11))
     else if (name !== 'refs/remotes/origin/HEAD') names.add(`origin/${name.slice(20)}`)
   }
   return names
@@ -271,6 +350,236 @@ export async function fetchOrigin(repoPath: string, timeoutMs: number): Promise<
     timeout: timeoutMs,
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
   })
+}
+
+/** Origin's default branch (`refs/remotes/origin/HEAD`); null when the checkout does not know it. */
+export async function originHead(repoPath: string): Promise<string | null> {
+  const ref = await git(repoPath, ['symbolic-ref', '--quiet', 'refs/remotes/origin/HEAD']).catch(() => '')
+  return ref.startsWith('refs/remotes/origin/') ? ref.slice(20) : null
+}
+
+/** Where origin is (`git remote get-url origin`); null when the checkout has no origin. */
+export async function originUrl(repoPath: string): Promise<string | null> {
+  return (await git(repoPath, ['remote', 'get-url', 'origin']).catch(() => '')) || null
+}
+
+/** Whether commit `a` is in `b`'s history (`a` itself included). */
+export function isAncestor(repoPath: string, a: string, b: string): Promise<boolean> {
+  return git(repoPath, ['merge-base', '--is-ancestor', a, b]).then(
+    () => true,
+    () => false,
+  )
+}
+
+/**
+ * What removing a worktree would lose: its changed and untracked files as `git status` lists them, not
+ * the ignored ones, whatever the repository's or the user's config says `git status` shows; else the
+ * edits it never lists, to files marked skip-worktree or assume-unchanged (`markedChanges`).
+ */
+export async function worktreeChanges(worktreePath: string): Promise<string[]> {
+  const out = await git(worktreePath, [
+    // A read: no refreshed index written back, so the overrides below never reach it.
+    '--no-optional-locks',
+    // Neither a cache nor a file monitor that missed a change answers for what is there.
+    '-c',
+    'core.untrackedCache=false',
+    '-c',
+    'core.fsmonitor=false',
+    '-c',
+    'core.ignoreStat=false',
+    'status',
+    '--porcelain',
+    // Untracked files whatever status.showUntrackedFiles says. `normal` lists an untracked folder as
+    // one line, not every file in it: one is enough to keep the worktree.
+    '--untracked-files=normal',
+    // Submodules whatever diff.ignoreSubmodules or submodule.<name>.ignore says.
+    '--ignore-submodules=none',
+  ])
+  return out ? out.split('\n') : markedChanges(worktreePath)
+}
+
+/** How many files marked skip-worktree or assume-unchanged that are there a removal checks, at most. */
+const MARKED_LIMIT = 1000
+
+/**
+ * Edits `git status` never lists: to a tracked file marked skip-worktree (`S`) or assume-unchanged (a
+ * lowercase tag), each as `<path> (<mark>)`. A marked file that is not there, as in a sparse checkout,
+ * loses nothing. One that is there is compared with its index entry as git hashes it, with its
+ * attributes' filters. More of them than `MARKED_LIMIT` are not checked: that answers as a change, and
+ * so does one there whose name is not UTF-8.
+ */
+async function markedChanges(worktreePath: string): Promise<string[]> {
+  // Each folder's names, read once: the marked files of a sparse checkout are many, their folders few.
+  const listings = new Map<string, { names: Set<string>; lower: Set<string> } | null>()
+  const there = (file: string) => {
+    const slash = file.lastIndexOf('/')
+    const dir = file.slice(0, slash + 1)
+    let listing = listings.get(dir)
+    if (listing === undefined) {
+      try {
+        const names = fs.readdirSync(`${worktreePath}/${dir}`)
+        listing = { names: new Set(names), lower: new Set(names.map((n) => n.toLowerCase())) }
+      } catch {
+        listing = null
+      }
+      listings.set(dir, listing)
+    }
+    const name = file.slice(slash + 1)
+    if (!listing?.lower.has(name.toLowerCase())) return false
+    // Named in another case: there only where names ignore case.
+    return listing.names.has(name) || fs.existsSync(`${worktreePath}/${file}`)
+  }
+  const marked: { file: string; mode: string; sha: string; mark: string }[] = []
+  // Marked files whose name is not UTF-8 (Linux takes any bytes): text cannot name them, so they are
+  // not compared. One that is there counts as changed, named as git quotes it.
+  const unnamed: string[] = []
+  let count = 0
+  await gitEntries(worktreePath, ['ls-files', '-v', '-s', '-z'], (entry) => {
+    // `<tag> <mode> <sha> <stage>\t<path>`
+    const tag = String.fromCharCode(entry[0]!)
+    if (tag !== 'S' && tag === tag.toUpperCase()) return
+    const tab = entry.indexOf(0x09)
+    const name = entry.subarray(tab + 1)
+    const file = name.toString('utf8')
+    const mark =
+      tag === 'S' ? 'skip-worktree' : tag === 's' ? 'skip-worktree, assume-unchanged' : 'assume-unchanged'
+    if (!Buffer.from(file, 'utf8').equals(name)) {
+      const at = Buffer.concat([Buffer.from(`${worktreePath}/`), name])
+      if (!fs.lstatSync(at, { throwIfNoEntry: false }) || ++count > MARKED_LIMIT) return
+      return void unnamed.push(`${quoted(name)} (${mark})`)
+    }
+    if (!there(file) || ++count > MARKED_LIMIT) return
+    const [, mode = '', sha = ''] = entry.subarray(0, tab).toString('utf8').split(' ')
+    marked.push({ file, mode, sha, mark })
+  })
+  if (count > MARKED_LIMIT)
+    return [`${count} files marked skip-worktree or assume-unchanged, too many to check for edits`]
+  const changed: typeof marked = []
+  const hashed: typeof marked = []
+  for (const m of marked) {
+    const file = `${worktreePath}/${m.file}`
+    const stat = fs.lstatSync(file, { throwIfNoEntry: false })
+    if (!stat) continue
+    if (stat.isFile() && m.mode !== '160000') hashed.push(m)
+    else if (stat.isSymbolicLink() && m.mode === '120000') {
+      // A link's blob is its target.
+      const target = Buffer.from(fs.readlinkSync(file))
+      const hash = createHash(m.sha.length === 64 ? 'sha256' : 'sha1')
+      if (hash.update(`blob ${target.length}\0`).update(target).digest('hex') !== m.sha) changed.push(m)
+    }
+    // A folder or a link where a file was, a submodule: not what the index holds.
+    else changed.push(m)
+  }
+  if (hashed.length) {
+    // `--stdin-paths` reads a path a line, and unquotes one that starts with a quote.
+    const line = (p: string) =>
+      p.startsWith('"') || /[\n\r]/.test(p)
+        ? `"${p.replace(/[\\"]/g, '\\$&').replace(/\n/g, '\\n').replace(/\r/g, '\\r')}"`
+        : p
+    const out = await new Promise<string>((resolve, reject) => {
+      const child = execFile(
+        'git',
+        ['hash-object', '--stdin-paths'],
+        { cwd: worktreePath, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+        (err, stdout) => (err ? reject(err) : resolve(String(stdout))),
+      )
+      child.stdin?.end(hashed.map((m) => line(m.file)).join('\n') + '\n')
+    })
+    const shas = out.trim().split('\n')
+    hashed.forEach((m, i) => shas[i] !== m.sha && changed.push(m))
+  }
+  return [...unnamed, ...changed.map((m) => `${m.file} (${m.mark})`)]
+}
+
+/** A file name as git quotes one (`core.quotePath`): a byte that is not plain ASCII as `\ooo`. */
+const quoted = (name: Buffer) =>
+  `"${[...name]
+    .map((b) =>
+      b === 0x22 || b === 0x5c
+        ? `\\${String.fromCharCode(b)}`
+        : b >= 0x20 && b < 0x7f
+          ? String.fromCharCode(b)
+          : `\\${b.toString(8).padStart(3, '0')}`,
+    )
+    .join('')}"`
+
+/**
+ * The files git tracks at these paths of the worktree (relative to it, with `/`), or under them, each
+ * handed to `each` as git lists it; each path is taken literally, never as a pattern, in any case.
+ * The listing is read as it comes, never held whole: a folder of any number of files answers.
+ */
+export async function eachTrackedFile(
+  worktreePath: string,
+  paths: string[],
+  each: (file: string) => void,
+): Promise<void> {
+  const pathspecs = paths.map((p) => `:(literal,icase)${p}`)
+  // Some at a time: a command line has a length limit (32k characters on Windows).
+  while (pathspecs.length) {
+    let length = 0
+    let n = 0
+    while (n < pathspecs.length && (n === 0 || length + pathspecs[n]!.length < 16_000))
+      length += pathspecs[n++]!.length + 1
+    await gitEntries(worktreePath, ['ls-files', '-z', '--', ...pathspecs.splice(0, n)], (entry) =>
+      each(entry.toString('utf8')),
+    )
+  }
+}
+
+/**
+ * A git command's `-z` output, entry by entry as git writes it: no buffer to outgrow. Fails as `git`
+ * does, with git's error lines for `gitSaid`, and when `each` throws.
+ */
+function gitEntries(cwd: string, args: string[], each: (entry: Buffer) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    // Bytes, as git wrote them: a name need not be UTF-8.
+    let rest: Buffer = Buffer.alloc(0)
+    let stderr = ''
+    let thrown: { err: unknown } | null = null
+    const take = (entries: Buffer[]) => {
+      try {
+        for (const entry of entries) if (entry.length) each(entry)
+      } catch (err) {
+        thrown = { err }
+        child.kill()
+      }
+    }
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (thrown) return
+      const data = rest.length ? Buffer.concat([rest, chunk]) : chunk
+      const entries: Buffer[] = []
+      let start = 0
+      for (let end = data.indexOf(0); end >= 0; end = data.indexOf(0, start)) {
+        entries.push(data.subarray(start, end))
+        start = end + 1
+      }
+      rest = data.subarray(start)
+      take(entries)
+    })
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => (stderr += chunk))
+    child.once('error', reject)
+    child.once('close', (code) => {
+      if (!thrown && code === 0) take([rest])
+      if (thrown) return reject(thrown.err)
+      if (code !== 0)
+        return reject(Object.assign(new Error(`git ${args[0]} exited with ${code}`), { stderr }))
+      resolve()
+    })
+  })
+}
+
+/** git's own last word on why a command failed: its error lines, else the message. */
+export function gitSaid(err: unknown): string {
+  const e = err as { killed?: boolean; stderr?: string; message?: string }
+  if (e.killed) return 'git gave up waiting'
+  const lines = (e.stderr || e.message || String(err))
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('Command failed:'))
+  const errors = lines.filter((l) => /^(fatal|error):/.test(l))
+  return (errors.length ? errors : lines).join(' ') || 'git failed'
 }
 
 export interface CommitLines {
@@ -323,6 +632,84 @@ export async function commitsBrought(
       }
       return lines
     })
+}
+
+// --- writes: the human's Cleanup actions, nothing else ---
+
+/**
+ * Removes a worktree and its folder, never with `--force`: git refuses one with changed or untracked
+ * files (ignored ones, such as node_modules, go with it), a locked one and the main checkout. On
+ * Windows git deletes through a directory junction in it, as through a folder: the caller removes its
+ * links first, each the link alone (`worktreeLinks.ts`).
+ */
+export async function removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
+  await git(repoPath, ['worktree', 'remove', '--', worktreePath])
+}
+
+/**
+ * Deletes the local branch, only while it is still at `sha`: one that moved since is left alone. By
+ * its full refname, so no branch name is ever read as an option. `--no-deref`: a branch that is a
+ * symbolic ref to another goes alone, never the branch it points at.
+ */
+export async function deleteLocalBranch(repoPath: string, branch: string, sha: string): Promise<void> {
+  await git(repoPath, ['update-ref', '--no-deref', '-d', '--end-of-options', `refs/heads/${branch}`, sha])
+}
+
+/**
+ * The branch origin holds `branch` as a symbolic ref to, by its short name (`main` for an alias of
+ * it), as origin holds it now; null when it holds it as a branch of its own, or not at all. Deleting
+ * such a ref on origin deletes the branch it points at, so the caller refuses it. Never prompts for
+ * credentials, gives up after `timeoutMs`.
+ */
+export async function originSymref(
+  repoPath: string,
+  branch: string,
+  timeoutMs: number,
+): Promise<string | null> {
+  const ref = `refs/heads/${branch}`
+  const { stdout } = await run('git', ['ls-remote', '--symref', 'origin', ref], {
+    cwd: repoPath,
+    windowsHide: true,
+    timeout: timeoutMs,
+    maxBuffer: 8 * 1024 * 1024,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+  })
+  // `ref: <target>` and then the ref's own line, tab-separated, where origin holds it as a symbolic ref.
+  for (const line of stdout.split('\n')) {
+    const m = /^ref: (\S+)\t(\S+)\r?$/.exec(line)
+    if (m && m[2] === ref) return m[1]!.replace(/^refs\/heads\//, '')
+  }
+  return null
+}
+
+/**
+ * Deletes the branch on origin, only while origin still has it at `sha` (`--force-with-lease`): one
+ * someone pushed to since is left alone. A symbolic ref on origin is not deleted here: the caller
+ * refuses it first (`originSymref`). Never prompts for credentials, gives up after `timeoutMs`.
+ * The checkout's copy (`origin/<branch>`) goes with it.
+ */
+export async function deleteOriginBranch(
+  repoPath: string,
+  branch: string,
+  sha: string,
+  timeoutMs: number,
+): Promise<void> {
+  const ref = `refs/heads/${branch}`
+  await run(
+    'git',
+    ['push', '--porcelain', `--force-with-lease=${ref}:${sha}`, 'origin', '--end-of-options', `:${ref}`],
+    {
+      cwd: repoPath,
+      windowsHide: true,
+      timeout: timeoutMs,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+    },
+  ).catch((err: { stdout?: string }) => {
+    // --porcelain says why on stdout; a lease that no longer holds reads "stale info".
+    if (err.stdout?.includes('(stale info)'))
+      throw new Error(`origin's ${branch} is no longer at ${sha.slice(0, 7)}`)
+    throw err
+  })
 }
 
 /** How many commits `a` has that `b` lacks, and the other way round. */
@@ -431,13 +818,20 @@ async function reachInto(repoPath: string, ref: string, base: string): Promise<R
       return { sha: sha!, subject: subject.join(' ') }
     })
   if (!unique.length) return { state: 'rebased', into: base, unique }
+  return { state: (await addsNothing(repoPath, base, ref)) ? 'edited' : 'unique', into: base, unique }
+}
+
+/**
+ * Whether merging `ref` into `base` would change nothing: the merge's tree is the base's own. Written
+ * by `merge-tree`, which touches no ref and no checkout.
+ */
+export async function addsNothing(repoPath: string, base: string, ref: string): Promise<boolean> {
   // A conflicting merge exits non-zero: that branch surely still has something of its own.
   const [merged, baseTree] = await Promise.all([
     git(repoPath, ['merge-tree', '--write-tree', base, ref]).catch(() => ''),
     git(repoPath, ['rev-parse', `${base}^{tree}`]),
   ])
-  const tree = merged.split('\n')[0]
-  return { state: tree === baseTree ? 'edited' : 'unique', into: base, unique }
+  return merged.split('\n')[0] === baseTree
 }
 
 /**
@@ -454,17 +848,12 @@ export async function holdsWorkOf(
   others: string[],
 ) {
   if (!bases.length) return false
-  const isAncestor = (a: string, b: string) =>
-    git(repoPath, ['merge-base', '--is-ancestor', a, b]).then(
-      () => true,
-      () => false,
-    )
-  if (await isAncestor(ref, other)) return false
+  if (await isAncestor(repoPath, ref, other)) return false
   // Quick way out: nothing the two share lies outside the bases.
   const shared = await git(repoPath, ['merge-base', '--all', ref, other]).catch(() => '')
   let outside = false
   for (const sha of shared ? shared.split('\n') : []) {
-    const landed = await Promise.all(bases.map((b) => isAncestor(sha, b)))
+    const landed = await Promise.all(bases.map((b) => isAncestor(repoPath, sha, b)))
     if (!landed.some(Boolean)) outside = true
   }
   if (!outside) return false

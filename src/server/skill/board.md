@@ -8,7 +8,8 @@ description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - 
 The board is where the human and every agent coordinate. Its tools come from the `board` MCP
 server. If they are missing, say so and stop: the human connects it with a gate token from the
 board's Connect agents page ({{BOARD_URL}}/agents). {{MCP_HINT}} Git and GitHub stay read-only
-through the board: never push, merge, approve or comment on GitHub on its behalf.
+through the board for you (only the human deletes finished branches, from its Cleanup page): never
+push, merge, approve or comment on GitHub on its behalf.
 
 ## Keep the board out of the repo
 
@@ -334,9 +335,13 @@ worked:
 - Deleting: `git worktree remove <path>`, then `git branch -d|-D <name>`, then `remove_workspace`
   for each workspace, then **one** `post_update` on the ticket listing every deleted branch with
   its commit hash, as `branch @ sha` (e.g. `lane/47 @ 9ec12e8b`). That line is the only way back:
-  `git branch lane/47 9ec12e8b` restores it.
+  `git branch lane/47 9ec12e8b` restores it. Before `git worktree remove`, remove each link in the
+  worktree to a folder out of it (a `node_modules` or `data` linked to another checkout's), the link
+  alone: on Windows git deletes what a junction leads to.
 - Branches on origin: never delete them (git and GitHub stay read-only for you). List the ones
-  left for closed tickets in the update, so the human deletes them.
+  left for closed tickets in the update, so the human deletes them from the board's Cleanup page.
+- A branch `cleanup_report` marks `protected` (a base, the main checkout's branch, origin's default
+  branch, in use by a ticket in work or an open PR) stays, whatever its reach.
 
 ### `/board cleanup`
 
@@ -345,16 +350,18 @@ When the human asks to clean up (`/board cleanup`, "clean up branches", "clean u
 1. `git fetch --prune` in each repo of the project, so origin's branches are current.
 2. `cleanup_report` with your `projectId`: every ticket in a done or cancelled stage (or archived)
    that still has workspaces, local or origin branches, or worktrees, each branch with its sha, worktrees,
-   `reach` and `restore` command, plus `untracked` worktrees no ticket accounts for, and
-   `previews` the board still runs for it (`stop_preview` each one).
+   `reach` (origin's own as `remoteReach`), `protected` and `restore` command, plus `untracked`
+   worktrees no ticket accounts for, and `previews` the board still runs for it (`stop_preview` each
+   one).
 3. For each `unique` branch, check it yourself before calling it: `git cherry -v <base> <branch>`
    and `git range-diff` or `git diff <base>...<branch>` show whether the listed commits' changes
    landed in another shape (split, squashed with others, moved to another branch). If they did,
    call it `edited` and say where.
 4. Show the human one table, grouped as **safe to delete** (merged, rebased), **edited but
    present** and **still has unique work**, with columns: ticket, branch, sha, reach and base,
-   worktree path, on origin. Below it, the `untracked` worktrees and the origin branches left for
-   the human to delete (`git push origin --delete …` is theirs to run).
+   worktree path, on origin; `protected` branches go in a **kept** group with the reason. Below
+   it, the `untracked` worktrees and the origin branches left for the human, who deletes those from
+   the board's Cleanup page.
 5. Wait for the human's approval (all, a group, or named rows). Then, per ticket: remove the
    worktrees, delete the branches, `remove_workspace` each registered workspace, and `post_update`
    on the ticket with the deleted `branch @ sha` lines. Finish with a short summary: what was

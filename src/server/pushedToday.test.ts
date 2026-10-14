@@ -284,7 +284,11 @@ describe('noteOriginRefs', slow, () => {
   it('records nothing for a checkout no repo of the board is on', async () => {
     const { noteOriginRefs } = await counting()
     expect(() =>
-      noteOriginRefs(path.join(tmp, 'nowhere'), { local: new Map(), remote: new Map([['main', 'abc']]) }),
+      noteOriginRefs(path.join(tmp, 'nowhere'), {
+        local: new Map(),
+        remote: new Map([['main', 'abc']]),
+        symrefs: new Map(),
+      }),
     ).not.toThrow()
   })
 })
