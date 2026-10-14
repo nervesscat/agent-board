@@ -187,7 +187,12 @@ function buildServer(actor: string) {
         .optional()
         .describe('only tickets in these stages: keys, names, or kinds (a kind takes in every stage of it)'),
       assignee: z.string().optional().describe('only tickets assigned to this name; "" for unassigned'),
-      q: z.string().optional().describe('text to find in the title or instructions (any casing)'),
+      q: z
+        .string()
+        .optional()
+        .describe(
+          "text to find (any casing) in the ticket's #id (#12 or 12), title, instructions or thread (its posts and the replies under them). Tickets found by name (#id, title) come first, then the rest; each row says where in match (id, title, body, post, reply) with snippet: the words around a hit in the content",
+        ),
       archived: z
         .enum(['include', 'only'])
         .optional()

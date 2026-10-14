@@ -31,6 +31,7 @@ import type { Push, TicketRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 import { type StageLike, isClosed, stageBadge, stageColumn, stageOf } from '#/lib/stages'
+import { nameFirst } from '#/lib/tickets'
 
 /**
  * Tickets in the project's stage columns. Drag a card onto another column to change its stage;
@@ -446,7 +447,21 @@ export function Progress({ rollup, className = '' }: { rollup: TicketRow['rollup
   )
 }
 
-/** The same tickets as rows, in column order (newest first within a status), like the lanes list. */
+/** Where a search found a ticket in its content, and the words around it. */
+function SearchHit({ ticket }: { ticket: TicketRow }) {
+  if (!ticket.snippet || !ticket.match) return null
+  const where = { id: '', title: '', body: 'Instructions', post: 'Post', reply: 'Reply' }[ticket.match]
+  return (
+    <div className="mt-1 line-clamp-2 text-xs break-words text-muted-foreground" data-testid="search-hit">
+      <span className="font-medium">{where}:</span> {ticket.snippet}
+    </div>
+  )
+}
+
+/**
+ * The same tickets as rows, in column order (newest first within a status), like the lanes list. The
+ * rows of a search put the tickets found by name first.
+ */
 export function TicketList({
   projectId,
   items,
@@ -464,7 +479,10 @@ export function TicketList({
     return i < 0 ? stages.length : i
   }
   const rows = [...items].sort(
-    (a, b) => rank(a.status) - rank(b.status) || b.updatedAt.localeCompare(a.updatedAt),
+    (a, b) =>
+      nameFirst(a) - nameFirst(b) ||
+      rank(a.status) - rank(b.status) ||
+      b.updatedAt.localeCompare(a.updatedAt),
   )
   if (!rows.length) return <p className="text-sm text-muted-foreground">No tickets.</p>
   return (
@@ -522,6 +540,7 @@ export function TicketList({
                     </span>
                   )}
                 </div>
+                <SearchHit ticket={t} />
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums text-muted-foreground">
                 {t.rollup.total > 0 && (
@@ -539,7 +558,10 @@ export function TicketList({
   )
 }
 
-/** Archived tickets, last archived first, each with who put it away and when, and Restore. */
+/**
+ * Archived tickets, last archived first (the ones a search found by name before the others), each with
+ * who put it away and when, and Restore.
+ */
 export function ArchivedList({
   projectId,
   items,
@@ -554,7 +576,9 @@ export function ArchivedList({
 }) {
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
-  const rows = [...items].sort((a, b) => (b.archivedAt ?? '').localeCompare(a.archivedAt ?? ''))
+  const rows = [...items].sort(
+    (a, b) => nameFirst(a) - nameFirst(b) || (b.archivedAt ?? '').localeCompare(a.archivedAt ?? ''),
+  )
   if (!rows.length) return <p className="text-sm text-muted-foreground">Nothing archived.</p>
   return (
     <ul className="divide-y rounded-md border">
@@ -592,6 +616,7 @@ export function ArchivedList({
                   </span>
                 )}
               </div>
+              <SearchHit ticket={t} />
             </div>
             <Button variant="outline" size="sm" disabled={restoring === t.id} onClick={() => onRestore(t.id)}>
               <ArchiveRestore /> Restore
