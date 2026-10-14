@@ -203,8 +203,9 @@ test('hovering shows what the title said, and each element stays what it was, wi
   // Icon buttons whose only name was their title keep it as their name.
   const sectionOf = (heading: string) =>
     page.getByRole('heading', { name: heading, exact: true }).locator('xpath=ancestor::section[1]')
-  const removeTask = sectionOf('Tasks').getByRole('button', { name: 'remove', exact: true })
-  await expect(removeTask).toHaveAccessibleName('remove')
+  // A task's remove button is named by its task (the tooltip says what it removes).
+  const removeTask = sectionOf('Tasks').getByRole('button', { name: 'Remove One task', exact: true })
+  await expect(removeTask).toHaveAccessibleName('Remove One task')
   await expectTooltip(removeTask, 'remove')
   const removeWorkspace = sectionOf('Workspaces').getByRole('button', { name: 'remove', exact: true })
   await expect(removeWorkspace).toHaveAccessibleName('remove')

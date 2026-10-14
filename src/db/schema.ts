@@ -34,6 +34,9 @@ export const projects = sqliteTable('projects', {
   name: text().notNull(),
   instructions: text().notNull().default(''),
   createdAt: now(),
+  // The top-level phases a new ticket starts with, in order. Null is the built-in list, so a later
+  // change to it reaches the project; [] seeds nothing.
+  defaultPhases: text('default_phases', { mode: 'json' }).$type<string[]>(),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
@@ -203,15 +206,21 @@ export const ticketNeeds = sqliteTable(
   (t) => [primaryKey({ columns: [t.ticketId, t.needsId] }), index('ticket_needs_needs').on(t.needsId)],
 )
 
-export const tasks = sqliteTable('tasks', {
-  id: id(),
-  ticketId: integer('ticket_id')
-    .notNull()
-    .references(() => tickets.id, { onDelete: 'cascade' }),
-  text: text().notNull(),
-  done: integer({ mode: 'boolean' }).notNull().default(false),
-  position: integer().notNull().default(0),
-})
+export const tasks = sqliteTable(
+  'tasks',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    // The task this one is a subtask of, on the same ticket and itself top-level (two levels only).
+    parentId: integer('parent_id').references((): AnySQLiteColumn => tasks.id, { onDelete: 'cascade' }),
+    text: text().notNull(),
+    done: integer({ mode: 'boolean' }).notNull().default(false),
+    position: integer().notNull().default(0),
+  },
+  (t) => [index('tasks_parent').on(t.parentId)],
+)
 
 export const workspaces = sqliteTable('workspaces', {
   id: id(),

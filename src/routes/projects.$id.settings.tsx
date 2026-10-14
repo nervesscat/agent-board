@@ -19,6 +19,7 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Label } from '#/components/ui/label'
+import { Textarea } from '#/components/ui/textarea'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch } from '#/lib/api'
 import { useProject } from '#/lib/project'
@@ -61,12 +62,85 @@ function Settings() {
           </p>
         </div>
       </div>
+      <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <StagesEditor projectId={id} />
     </div>
   )
 }
 
 const always = () => true
+
+/** The lines of a list typed one per line, trimmed, blank ones left out. */
+const lines = (text: string) =>
+  text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+/**
+ * The top-level phases every new ticket of the project starts with, one per line: the list in effect
+ * (the built-in one until it is changed). Emptying it seeds nothing; the built-in list can be had back.
+ * Agents read it in `get_project` and change the phases per ticket.
+ */
+function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[] }) {
+  const qc = useQueryClient()
+  const [text, setText] = useState(saved.join('\n'))
+  const dirty = lines(text).join('\n') !== saved.join('\n')
+  const save = useMutation({
+    mutationFn: (defaultPhases: string[] | null) =>
+      patch<{ defaultPhases: string[] }>(`/api/projects/${projectId}`, { defaultPhases }),
+    onSuccess: async (row) => {
+      setText(row.defaultPhases.join('\n'))
+      await qc.invalidateQueries({ queryKey: ['project', projectId] })
+      toast.success('Saved')
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    <section aria-label="Default phases" className="max-w-3xl space-y-3">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">Default phases</h2>
+        <p className="text-sm text-muted-foreground">
+          The top-level tasks every new ticket starts with, in order, one per line. The tasks given when it is
+          created go under the first; a lane starts without them. Agents tick each as they finish it, and
+          remove or reword the ones that do not fit. Leave it empty to start tickets with no tasks.
+        </p>
+      </div>
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (dirty && !save.isPending) save.mutate(lines(text))
+        }}
+      >
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          aria-label="Default phases, one per line"
+          placeholder="No phases: new tickets start with no tasks."
+          className="font-mono"
+        />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
+            {dirty ? 'Unsaved changes.' : 'No changes.'}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={save.isPending}
+            onClick={() => save.mutate(null)}
+          >
+            Use the built-in list
+          </Button>
+          <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </form>
+    </section>
+  )
+}
 
 /**
  * The project's instructions, edited in place like a ticket's: they read as rendered markdown, and

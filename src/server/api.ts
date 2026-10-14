@@ -66,6 +66,9 @@ const forAgent = <T>(request: Request, value: T) =>
 const AgentName = z.string().min(1).max(40)
 // Checked for http(s) where it is stored; null or '' clears it.
 const PreviewUrl = z.string().max(500).nullable()
+const TaskText = z.string().min(1).max(500)
+// A task, or a top-level task with the subtasks that go under it.
+const NewTask = z.union([TaskText, z.object({ text: TaskText, subtasks: z.array(TaskText).optional() })])
 // Speaking as one of the project's agents is how a connected agent delegates; the human speaks as themself.
 const agentOnly = (request: Request) => {
   if (!isAgent(request)) throw new HttpError(403, 'only a connected agent posts as one of the project agents')
@@ -152,11 +155,20 @@ api.post('/api/projects', async ({ request, actor }) => {
   return json(projects.createProject(body, actor), 201)
 })
 api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
+// The phases every new ticket of the project starts with; null goes back to the built-in list.
+const DefaultPhases = z.array(z.string().trim().min(1).max(500)).max(20).nullable()
 api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({ name: z.string().min(1).max(100).optional(), instructions: Instructions.optional() }),
+    z.object({
+      name: z.string().min(1).max(100).optional(),
+      instructions: Instructions.optional(),
+      defaultPhases: DefaultPhases.optional(),
+    }),
   )
+  // They shape every new ticket of the project: agents change the phases of a ticket instead.
+  if (body.defaultPhases !== undefined && isAgent(request))
+    throw new HttpError(403, "only the human sets the project's default phases")
   return json(projects.updateProject(id(params), body, actor))
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
@@ -330,9 +342,11 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
     request,
     TicketPatch.extend({
       title: z.string().min(1).max(200),
-      tasks: z.array(z.string().min(1).max(500)).optional(),
+      tasks: z.array(NewTask).optional(),
       parentId: z.number().int().optional(),
       attachmentIds: z.array(z.number().int()).optional(),
+      // Start with the project's default phases: a top-level ticket does unless false, a lane only if true.
+      defaultPhases: z.boolean().optional(),
     }),
   )
   return json(await needs.newTicket(id(params), body, actor, { agent: isAgent(request) }), 201)
@@ -444,9 +458,13 @@ api.post('/api/projects/:id/previews/stop', async ({ request, params, actor }) =
   return json(await stopProjectLinksAndPreviews(id(params), actor))
 })
 
+// parentTaskId adds them as subtasks of that top-level task.
 api.post('/api/tickets/:id/tasks', async ({ request, params, actor }) => {
-  const body = await readJson(request, z.object({ tasks: z.array(z.string().min(1).max(500)).min(1) }))
-  return json(features.addTasks(id(params), body.tasks, actor), 201)
+  const body = await readJson(
+    request,
+    z.object({ tasks: z.array(NewTask).min(1), parentTaskId: z.number().int().positive().optional() }),
+  )
+  return json(features.addTasks(id(params), body.tasks, actor, { parentTaskId: body.parentTaskId }), 201)
 })
 api.patch('/api/tasks/:id', async ({ request, params, actor }) => {
   const body = await readJson(

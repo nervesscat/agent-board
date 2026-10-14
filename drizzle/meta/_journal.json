@@ -169,6 +169,20 @@
       "when": 1791729844221,
       "tag": "0023_daily_reports_and_shifts",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791769955698,
+      "tag": "0024_task_subtasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1791871803321,
+      "tag": "0025_project_default_phases",
+      "breakpoints": true
     }
   ]
 }

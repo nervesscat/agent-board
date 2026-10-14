@@ -89,14 +89,24 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
   const card = page.locator('[data-column="backlog"]').getByRole('link', { name: /Fix the login form/ })
   await expect(card).toBeVisible()
   await expect(card).toContainText('High')
-  await expect(card).toContainText('0/2')
+  // The two tasks typed, under Implementation, and the default phases: 8 in all.
+  await expect(card).toContainText('0/8')
 
   const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
   expect(row).toMatchObject({ title: 'Fix the login form', status: 'backlog', createdBy: 'enrique' })
   expect(row!.tags.sort()).toEqual(['Forms', 'High'])
   const full = await ok<{ body: string; tasks: { text: string }[] }>(human.get(`/api/tickets/${row!.id}`))
   expect(full.body).toBe('The submit button does nothing on Safari.')
-  expect(full.tasks.map((t) => t.text)).toEqual(['Reproduce it', 'Fix it'])
+  expect(full.tasks.map((t) => t.text)).toEqual([
+    'Implementation',
+    'Reproduce it',
+    'Fix it',
+    'Pushed',
+    'PR',
+    'CI',
+    'Preview',
+    'Hand-off post',
+  ])
 
   await card.click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${row!.id}$`))

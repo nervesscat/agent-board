@@ -82,15 +82,30 @@ Then:
   to resume), with `by` and `at`. `commitsSince` counts commits on the branch since it was written
   and `stale` says the work moved on (new commits or a newer progress post): check the branch and
   the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
-- No tasks yet → `add_tasks` with the concrete steps. The human's progress bar is these tasks.
+- A new ticket starts with its project's default phases as its top-level tasks (`get_project` →
+  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Hand-off
+  post). Tasks go two levels and no more: put the concrete steps of the work under Implementation
+  as its subtasks (`add_tasks` with `parentTaskId` = its id; a subtask takes no subtasks). Remove
+  or reword a phase that does not fit (`remove_task`, `update_task`); `add_tasks` adds one at the
+  end. A lane starts without phases, since its parent carries the hand-off (`defaultPhases: true`
+  on `create_ticket` seeds it anyway), and `defaultPhases: false` opts a ticket out.
+- No tasks yet (an older ticket, a lane, one opted out) → the phases the same way: `add_tasks` with
+  the names from `defaultPhases`, then the steps under the first. The human's progress bar is these
+  tasks and subtasks, all counted, and together they are the hand-off's Implementation item.
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
-`repoId`. Lanes of a ticket you are working are yours to create (next section).
+`repoId`; it starts with the default phases, the `tasks` you give as plain texts under the first.
+Lanes of a ticket you are working are yours to create (next section).
 
 ## 3. While working
 
-- `set_task_done` as each step finishes. When the plan changes, `update_task` rewords a step and
-  `remove_task` drops one that no longer applies, so the progress bar stays honest.
+- `set_task_done` as each step finishes, and each hand-off phase as you finish it (Pushed after
+  the push, PR once it is open, CI once it is green, Preview once it runs, Hand-off post once it is
+  posted); the board ticks none itself. On a rework, untick the phases the new work redoes and tick
+  them again as you redo each. A phase with steps is done exactly when all its steps are: ticking
+  or unticking a phase does the same to its steps, ticking its last open step ticks it, unticking a
+  step unticks it. When the plan changes, `update_task` rewords a task and `remove_task` drops one
+  that no longer applies (a phase goes with its steps), so the progress bar stays honest.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
   brief as `body` ([Delegating](#delegating)), its own `branch`, `assignee` and `tasks`. Its repo
@@ -193,9 +208,10 @@ The human should not have to tell you to check comments. While this session has 
 
 ## 4. Hand off
 
-Before `update_ticket` → `status: review`, every item, in order:
+Before `update_ticket` → `status: review`, every item, in order, ticking each hand-off phase of
+the ticket as its item is done:
 
-1. Worktree registered (`add_workspace`), tasks ticked.
+1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
 2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
    project instructions say how, e.g. `pnpm test:e2e`).
 3. Branch pushed: `get_ticket` → `push.state` is `pushed` (a green dot on the board). `ahead`
@@ -221,14 +237,17 @@ Before `update_ticket` → `status: review`, every item, in order:
    (docs only, a script), say why in the hand-off post.
 7. Hand-off post (`post_update`): the PR link, **the preview link and what to try there**, how it
    was tested, the e2e result (its summary, or its report when something failed) and, for a UI
-   change, screenshots of what changed, in `files`.
+   change, screenshots of what changed, in `files`. Then tick Hand-off post: a tick is not a
+   commit, so the post still counts.
 8. Resume note if the ticket stays open past the session (`set_resume_note`, see
    [End of session](#5-end-of-session)).
 
 `update_ticket` → `review` then answers with `handoff.missing`: what the board still sees missing,
-each a `code` with a `text`: `no_pr`, `not_pushed`, `no_preview`, `no_handoff_post` (no progress
-post of yours since the branch's last commit), `checks_unknown` (the PR's CI is failing or still
-running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
+each a `code` with a `text`: `tasks_open` (Implementation, the ticket's tasks and subtasks, its
+phases and their steps, the hand-off phases included: missing while it has none, or while some of
+them, its lanes' included, are open; the other checks still verify each fact themselves), `no_pr`, `not_pushed`, `no_preview`,
+`no_handoff_post` (no progress post of yours since the branch's last commit), `checks_unknown` (the
+PR's CI is failing or still running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
 the ticket is in review, and its page shows it as a Hand-off card.
 
 After that:

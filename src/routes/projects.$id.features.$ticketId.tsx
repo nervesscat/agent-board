@@ -14,6 +14,7 @@ import {
   GitBranch,
   GitCommitHorizontal,
   Layers,
+  ListPlus,
   ListTodo,
   Lock,
   MessageSquare,
@@ -983,13 +984,24 @@ function Details({
   )
 }
 
+/**
+ * The ticket's tasks, two levels: each top-level task with its subtasks indented under it, and a way
+ * to add subtasks to a top-level task. The counter takes in tasks and subtasks alike. The top level
+ * holds the phases (a new ticket starts with its project's: Implementation, then the hand-off's) and
+ * the concrete steps go under Implementation, as the empty state and the add field say.
+ */
 function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const [text, setText] = useState('')
+  // The task whose "add a subtask" field is open, and what is typed in it.
+  const [subtaskOf, setSubtaskOf] = useState<number | null>(null)
+  const [subtext, setSubtext] = useState('')
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const add = useMutation({
-    mutationFn: () => post(`/api/tickets/${t.id}/tasks`, { tasks: [text] }),
-    onSuccess: () => {
-      setText('')
+    mutationFn: (v: { text: string; parentTaskId?: number }) =>
+      post(`/api/tickets/${t.id}/tasks`, { tasks: [v.text], parentTaskId: v.parentTaskId }),
+    onSuccess: (_data, v) => {
+      if (v.parentTaskId) setSubtext('')
+      else setText('')
       onChange()
     },
     onError,
@@ -1005,8 +1017,43 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     onError,
   })
   const pct = t.progress.total ? Math.round((100 * t.progress.done) / t.progress.total) : 0
+  const row = (task: TicketFull['tasks'][number], subtask: boolean) => (
+    <div className="group flex items-center gap-2">
+      <Checkbox
+        checked={task.done}
+        onCheckedChange={(v) => toggle.mutate({ id: task.id, done: Boolean(v) })}
+        aria-label={task.text}
+      />
+      <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
+      <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+        {!subtask && (
+          <Tip content="Add a subtask">
+            <button
+              type="button"
+              onClick={() => {
+                setSubtaskOf(task.id)
+                setSubtext('')
+              }}
+              aria-label={`Add a subtask to ${task.text}`}
+            >
+              <ListPlus className="size-3.5 text-muted-foreground" />
+            </button>
+          </Tip>
+        )}
+        <Tip
+          content={
+            subtask || !t.tasks.some((s) => s.parentId === task.id) ? 'remove' : 'remove, with its subtasks'
+          }
+        >
+          <button type="button" onClick={() => remove.mutate(task.id)} aria-label={`Remove ${task.text}`}>
+            <X className="size-3.5 text-muted-foreground" />
+          </button>
+        </Tip>
+      </span>
+    </div>
+  )
   return (
-    <section className="rounded-lg border p-4">
+    <section className="rounded-lg border p-4" aria-label="Tasks">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-medium">Tasks</h2>
         <span className="text-xs tabular-nums text-muted-foreground">
@@ -1016,38 +1063,75 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-muted">
         <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
       </div>
+      {t.tasks.length === 0 && (
+        <p className="text-sm text-muted-foreground">
+          No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off&apos;s
+          (Pushed, PR, CI, Preview, Hand-off post). The concrete steps go under Implementation as subtasks.
+        </p>
+      )}
       <ul className="space-y-1.5">
-        {t.tasks.map((task) => (
-          <li key={task.id} className="group flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={task.done}
-              onCheckedChange={(v) => toggle.mutate({ id: task.id, done: Boolean(v) })}
-            />
-            <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
-            <Tip content="remove">
-              <button
-                type="button"
-                className="ml-auto opacity-0 group-hover:opacity-100"
-                onClick={() => remove.mutate(task.id)}
-                aria-label="remove"
-              >
-                <X className="size-3.5 text-muted-foreground" />
-              </button>
-            </Tip>
-          </li>
-        ))}
+        {t.tasks
+          .filter((task) => !task.parentId)
+          .map((task) => {
+            const subtasks = t.tasks.filter((s) => s.parentId === task.id)
+            return (
+              <li key={task.id} className="text-sm">
+                {row(task, false)}
+                {subtasks.length > 0 && (
+                  <ul className="mt-1.5 ml-6 space-y-1.5" aria-label={`Subtasks of ${task.text}`}>
+                    {subtasks.map((s) => (
+                      <li key={s.id}>{row(s, true)}</li>
+                    ))}
+                  </ul>
+                )}
+                {subtaskOf === task.id && (
+                  <form
+                    className="mt-1.5 ml-6 flex gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      if (subtext.trim()) add.mutate({ text: subtext, parentTaskId: task.id })
+                    }}
+                  >
+                    <Input
+                      autoFocus
+                      value={subtext}
+                      onChange={(e) => setSubtext(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setSubtaskOf(null)
+                      }}
+                      placeholder="Add a subtask"
+                      aria-label={`New subtask of ${task.text}`}
+                      className="h-7"
+                    />
+                    <Button type="submit" size="sm" variant="outline" disabled={!subtext.trim()}>
+                      <Plus data-icon="inline-start" /> Add
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSubtaskOf(null)}
+                      aria-label="Close"
+                    >
+                      <X />
+                    </Button>
+                  </form>
+                )}
+              </li>
+            )
+          })}
       </ul>
       <form
         className="mt-3 flex gap-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (text.trim()) add.mutate()
+          if (text.trim()) add.mutate({ text })
         }}
       >
         <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Add a task"
+          placeholder="Add a phase: Implementation, Pushed, PR…"
           className="h-8"
         />
         <Button type="submit" size="sm" variant="outline" disabled={!text.trim()}>
