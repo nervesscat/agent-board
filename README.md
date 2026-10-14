@@ -204,17 +204,21 @@ exactly what will go. Just before it acts, the board checks every item again on 
   very commit; a rebased branch also needs its content in the base, as an edited one does (patches
   match without a merge commit's own change, or one in whitespace alone);
 - for the local branch alone, no worktree has it checked out, also not one git lists detached while
-  a rebase or a bisect of it is in progress there;
+  a rebase or a bisect of it is in progress there, nor one a rebase with `--update-refs` will move;
 - the branch is still at the commit the human saw, and no worktree came up that they were not shown;
 - it is not protected: the repo's base branch, the main checkout's branch, origin's default branch, or
   anything a ticket in work or an open PR uses or stands on, in any project that reads the repository
-  through any of its worktrees; on origin, also what such work in another clone of the same origin uses.
+  through any of its worktrees; on origin, also what such work in another clone of the same origin uses;
+- it is not a symbolic ref, an alias of another branch: a local one is kept, with the branch it points
+  at named in the reason, and one origin holds that way is refused before the push, since deleting it
+  would delete the branch it points at.
 
 A worktree goes only when git lists no changes or untracked files in it (ignored files such as
 `node_modules` go with it): never with `--force`, never the main checkout or a locked one, nor one
 in the middle of a rebase or a bisect. Nor one that holds what git would delete with it: another
 worktree git lists, a folder the board keeps (its own, a repo's checkout, a workspace registered on a
-ticket in work), or any `.git` below its top (a repository, or a worktree of any repository). Its links
+ticket in work), any `.git` below its top (a repository, or a worktree of any repository), or a bare
+repository below its top (HEAD, objects and refs, with no `.git`). Its links
 (a `node_modules` or `data` linked to another checkout's, a junction on Windows) are removed first,
 each the link alone: on Windows git would delete what a junction leads to. A folder one leads to out
 of the worktree stays, and the result names each such link with where it led (`unlinked`); one of
