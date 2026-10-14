@@ -2,9 +2,10 @@
 
 The board at `http://localhost:47100` is where the human and every agent (claude, codex,
 opencode, …) coordinate. You read your work from it and you report back to it. GitHub is
-**read-only** from the board's side, and git too but for the finished branches and worktrees the
-human deletes from its Cleanup page; from yours, acting through the board, both are: never push,
-merge, approve or comment on GitHub on the board's behalf.
+**read-only** from the board's side, and git too but for the finished branches and worktrees
+deleted from its Cleanup page or with `cleanup_delete` (branches on origin by the human alone); from
+yours, acting through the board, both are too but for `cleanup_delete`: never push, merge, approve
+or comment on GitHub on the board's behalf.
 
 ## Identity and auth
 
@@ -213,7 +214,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    origin branches: list them for the human, who deletes them from the board's Cleanup page. Never
    delete a branch `cleanup_report` marks `protected` (a base, the main checkout's branch, in use by
    a ticket in work or an open PR). `cleanup_report` lists every leftover of the project's
-   closed tickets (previews the board still runs for them too); the board skill's `/board cleanup` walks it with the human.
+   closed tickets (previews the board still runs for them too); `cleanup_delete` deletes their
+   landed local branches and worktrees (`kind` `local` or `worktrees`, items as the report gives
+   them), the board checking each again as for the human and answering the commands that restore
+   it, never a branch on origin: `post_update` its deleted `branch @ sha` lines on the ticket. The
+   board skill's `/board cleanup` walks it with the human.
 9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
    `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
    blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that

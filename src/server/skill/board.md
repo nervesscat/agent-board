@@ -8,8 +8,9 @@ description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - 
 The board is where the human and every agent coordinate. Its tools come from the `board` MCP
 server. If they are missing, say so and stop: the human connects it with a gate token from the
 board's Connect agents page ({{BOARD_URL}}/agents). {{MCP_HINT}} Git and GitHub stay read-only
-through the board for you (only the human deletes finished branches, from its Cleanup page): never
-push, merge, approve or comment on GitHub on its behalf.
+through the board for you, but for closed tickets' landed local branches and worktrees, which
+`cleanup_delete` deletes (origin's branches are the human's, from its Cleanup page): never push,
+merge, approve or comment on GitHub on its behalf.
 
 ## Keep the board out of the repo
 
@@ -345,6 +346,12 @@ worked:
   `git branch lane/47 9ec12e8b` restores it. Before `git worktree remove`, remove each link in the
   worktree to a folder out of it (a `node_modules` or `data` linked to another checkout's), the link
   alone: on Windows git deletes what a junction leads to.
+- A closed ticket's (done, cancelled or archived) leftovers: `cleanup_delete` deletes its landed
+  local branches and their worktrees, items as `cleanup_report` gives them (`kind` `local` or
+  `worktrees`, the `sha` and worktree paths it shows). The board checks each one again first, as for
+  the human (landed, not protected, not moved since, no changes in the worktree; links out of it
+  removed as links, a preview from it stopped, the workspaces at it unregistered) and answers each
+  with its `restore` commands; post those `branch @ sha` lines as above.
 - Branches on origin: never delete them (git and GitHub stay read-only for you). List the ones
   left for closed tickets in the update, so the human deletes them from the board's Cleanup page.
 - A branch `cleanup_report` marks `protected` (a base, the main checkout's branch, origin's default
@@ -369,10 +376,12 @@ When the human asks to clean up (`/board cleanup`, "clean up branches", "clean u
    worktree path, on origin; `protected` branches go in a **kept** group with the reason. Below
    it, the `untracked` worktrees and the origin branches left for the human, who deletes those from
    the board's Cleanup page.
-5. Wait for the human's approval (all, a group, or named rows). Then, per ticket: remove the
-   worktrees, delete the branches, `remove_workspace` each registered workspace, and `post_update`
-   on the ticket with the deleted `branch @ sha` lines. Finish with a short summary: what was
-   removed, what is left and why.
+5. Wait for the human's approval (all, a group, or named rows). Then, per ticket: `cleanup_delete`
+   the approved local branches and worktrees (a branch with worktrees as `kind` `worktrees`, one
+   without as `local`); the board checks each again and unregisters the workspaces at a removed
+   worktree (`remove_workspace` the rest), and what it refuses stays, with its reason. Then
+   `post_update` on the ticket with the deleted `branch @ sha` lines. Finish with a short summary:
+   what was removed, what is left and why.
 
 Nothing here touches a ticket in any other stage, even when its branch looks merged.
 

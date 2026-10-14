@@ -188,6 +188,7 @@ test('the dialog names a server linked on this machine at the worktree, which it
 test('an agent deletes landed local branches and worktrees, never on origin: a request with one is 403 whole', async ({
   agent,
   human,
+  page,
 }) => {
   // A project on a repository of its own (ownRepo), with its branches' work landed in their bases.
   const { id } = await ok<{ id: number }>(
@@ -286,4 +287,10 @@ test('an agent deletes landed local branches and worktrees, never on origin: a r
     ],
     [AGENT, `deleted the branch ${withTree} @ ${treeSha} of #${tt.id}`],
   ])
+
+  // The Cleanup page says as much to the human.
+  await page.goto(`/projects/${id}/cleanup`)
+  const intro = page.locator('p', { hasText: 'Agents may delete local branches and worktrees' })
+  await expect(intro).toContainText('cleanup_delete')
+  await expect(intro).toContainText('deleting branches on origin stays yours')
 })
