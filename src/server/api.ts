@@ -1,7 +1,14 @@
 import { Readable } from 'node:stream'
 import { z } from 'zod'
 
-import { AGENT_CLIENTS, COMMENT_PARENTS, PREVIEW_LIMIT, STAGE_COLORS, STAGE_KINDS } from '#/lib/constants'
+import {
+  AGENT_CLIENTS,
+  COMMENT_PARENTS,
+  PREVIEW_LIMIT,
+  SKILLS_TRACKING,
+  STAGE_COLORS,
+  STAGE_KINDS,
+} from '#/lib/constants'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
 import { addDefaultAgents } from './defaultAgents'
@@ -107,6 +114,20 @@ api.get('/api/agent-setup/review-skills', ({ url }) => {
     },
   })
 })
+// Whether ~/.claude and each repo's own .claude have that bundle as it is now: every repo, or ?projectId's.
+api.get('/api/agent-setup/review-skills/status', async ({ url }) => {
+  const pid = url.searchParams.get('projectId')
+  const status = await agents.reviewSkillsStatus(pid === null ? undefined : intParam(pid, 'projectId'))
+  return Response.json(status, { headers: { 'cache-control': 'no-store' } })
+})
+// One of those files as installed in ~/.claude, or in ?repoId's .claude, against as served: a git-style diff.
+api.get('/api/agent-setup/review-skills/diff', async ({ url }) => {
+  const file = url.searchParams.get('path')
+  if (!file) throw new HttpError(400, 'path is required: one of the review skills files')
+  const repo = url.searchParams.get('repoId')
+  const diff = await agents.reviewSkillDiff(file, repo === null ? undefined : intParam(repo, 'repoId'))
+  return Response.json(diff, { headers: { 'cache-control': 'no-store' } })
+})
 api.get('/api/settings', () => json(agents.getSettings()))
 api.patch('/api/settings', async ({ request }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human changes the settings')
@@ -115,6 +136,7 @@ api.patch('/api/settings', async ({ request }) => {
     z.object({
       defaultAgent: z.enum(AGENT_CLIENTS).optional(),
       previewLimit: z.number().int().min(PREVIEW_LIMIT.min).max(PREVIEW_LIMIT.max).optional(),
+      skillsTracking: z.enum(SKILLS_TRACKING).optional(),
     }),
   )
   return json(agents.updateSettings(body))

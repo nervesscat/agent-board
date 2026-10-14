@@ -128,7 +128,14 @@ function DefaultAgents({ projectId, agents }: { projectId: string; agents: Proje
           <span className="shrink-0 text-xs text-muted-foreground">All added</span>
         )}
       </div>
-      {setup && <ReviewSkills boardUrl={setup.boardUrl} shell={shell} onShellChange={pickShell} />}
+      {setup && (
+        <ReviewSkills
+          boardUrl={setup.boardUrl}
+          shell={shell}
+          onShellChange={pickShell}
+          projectId={projectId}
+        />
+      )}
     </section>
   )
 }
