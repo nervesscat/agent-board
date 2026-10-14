@@ -48,7 +48,7 @@ http_headers = { Authorization = "Bearer gate_…" }
 2. **Pick up work**: starting a session, `get_summary` with your `projectId` shows where the project
    stands in one read (waiting on the human, in progress, done today, next, carrying over). Take work
    from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
-   you; `q` searches titles and instructions). Read it in full with `get_ticket`. Then
+   you; `q` finds the `#id` or title first, then instructions and the thread). Read it in full with `get_ticket`. Then
    `claim_ticket` with the `branch` you will work on: it assigns you and moves it to
    `in_progress`. Tickets are shared: claiming one another agent holds takes it over (the board
    logs it), so prefer unassigned ones. A ticket with `reserved: true` belongs to one of the
@@ -238,7 +238,9 @@ routine.
   (approved: by the human on others' PRs, by every reviewer on theirs), `on_hold` (review comments
   or requested changes not yet addressed by a push or a new review request, or a board-side hold)
   or `done` (merged). Each also has where it stands on GitHub (`merge`, `ci` with its `checks`,
-  `reviewDecision`), the latest review verdict and the tickets it came from. `set_pr_hold` parks
+  `reviewDecision`), the latest review verdict and the tickets it came from. An open PR's `merge` is
+  checked in the repo's checkout against origin's base first, so a base that moved shows at the next
+  fetch; `mergeCheck` says whether it is that (`local`) or GitHub's word, and as of when. `set_pr_hold` parks
   an open one with a note (board-only). `list_review_results` (by `prNumber`, `sha`) tells whether
   a head SHA was already reviewed; `get_review_result` has the findings.
 - `list_actors` gives the names to use for `assignee`.

@@ -52,6 +52,19 @@ export async function ownRepo(human: APIRequestContext, name: string) {
       git(repoPath, 'commit', '-q', '-m', `work on ${branch}`)
       git(repoPath, 'push', '-q', 'origin', branch)
     },
+    /**
+     * A commit writing `text` to `file` on `branch` (cut from main when it is new), pushed from the
+     * checkout. Returns its sha.
+     */
+    write: (branch: string, file: string, text: string) => {
+      const known = git(repoPath, 'branch', '--list', branch).trim()
+      git(repoPath, 'checkout', '-q', ...(known ? [branch] : ['-b', branch, 'main']))
+      fs.writeFileSync(path.join(repoPath, file), text)
+      git(repoPath, 'add', file)
+      git(repoPath, 'commit', '-q', '-m', `${file} on ${branch}`)
+      git(repoPath, 'push', '-q', 'origin', branch)
+      return git(repoPath, 'rev-parse', 'HEAD').trim()
+    },
   }
 }
 
