@@ -68,8 +68,16 @@ const AgentName = z.string().min(1).max(40)
 // Checked for http(s) where it is stored; null or '' clears it.
 const PreviewUrl = z.string().max(500).nullable()
 const TaskText = z.string().min(1).max(500)
-// A task, or a top-level task with the subtasks that go under it.
-const NewTask = z.union([TaskText, z.object({ text: TaskText, subtasks: z.array(TaskText).optional() })])
+// A task blocked on the human, and what they must do (a reason only with blocked: true).
+const TaskBlocked = {
+  blocked: z.boolean().optional(),
+  blockedReason: z.string().max(features.MAX_BLOCKED_REASON).optional(),
+}
+// A task, or a top-level task with the subtasks that go under it, either one maybe tagged blocked.
+const NewTask = z.union([
+  TaskText,
+  z.object({ text: TaskText, subtasks: z.array(TaskText).optional(), ...TaskBlocked }),
+])
 // Speaking as one of the project's agents is how a connected agent delegates; the human speaks as themself.
 const agentOnly = (request: Request) => {
   if (!isAgent(request)) throw new HttpError(403, 'only a connected agent posts as one of the project agents')
@@ -492,10 +500,12 @@ api.post('/api/tickets/:id/tasks', async ({ request, params, actor }) => {
   )
   return json(features.addTasks(id(params), body.tasks, actor, { parentTaskId: body.parentTaskId }), 201)
 })
+// Agents and the human alike: a tick, new text, or the blocked tag (blocked, blockedReason). Ticking
+// clears the tag, tagging a done task reopens it, and both at once is a 400.
 api.patch('/api/tasks/:id', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({ done: z.boolean().optional(), text: z.string().min(1).max(500).optional() }),
+    z.object({ done: z.boolean().optional(), text: TaskText.optional(), ...TaskBlocked }),
   )
   return json(features.updateTask(id(params), body, actor))
 })

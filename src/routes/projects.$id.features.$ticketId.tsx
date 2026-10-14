@@ -13,6 +13,7 @@ import {
   FlagOff,
   GitBranch,
   GitCommitHorizontal,
+  Hand,
   Layers,
   ListPlus,
   ListTodo,
@@ -988,13 +989,17 @@ function Details({
  * The ticket's tasks, two levels: each top-level task with its subtasks indented under it, and a way
  * to add subtasks to a top-level task. The counter takes in tasks and subtasks alike. The top level
  * holds the phases (a new ticket starts with its project's: Implementation, then the hand-off's) and
- * the concrete steps go under Implementation, as the empty state and the add field say.
+ * the concrete steps go under Implementation, as the empty state and the add field say. Any task can
+ * be tagged blocked on the human, with what they must do; a task shows how many of its subtasks are.
  */
 function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const [text, setText] = useState('')
   // The task whose "add a subtask" field is open, and what is typed in it.
   const [subtaskOf, setSubtaskOf] = useState<number | null>(null)
   const [subtext, setSubtext] = useState('')
+  // The task being marked blocked, and the reason typed for it.
+  const [blocking, setBlocking] = useState<number | null>(null)
+  const [reason, setReason] = useState('')
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const add = useMutation({
     mutationFn: (v: { text: string; parentTaskId?: number }) =>
@@ -1016,42 +1021,124 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     onSuccess: onChange,
     onError,
   })
+  // Tagging a done task reopens it, and ticking a blocked one clears the tag: the server keeps both.
+  const tag = useMutation({
+    mutationFn: (v: { id: number; blocked: boolean; reason?: string }) =>
+      patch(
+        `/api/tasks/${v.id}`,
+        v.blocked && v.reason ? { blocked: true, blockedReason: v.reason } : { blocked: v.blocked },
+      ),
+    onSuccess: (_data, v) => {
+      if (v.blocked) setBlocking(null)
+      onChange()
+    },
+    onError,
+  })
   const pct = t.progress.total ? Math.round((100 * t.progress.done) / t.progress.total) : 0
-  const row = (task: TicketFull['tasks'][number], subtask: boolean) => (
-    <div className="group flex items-center gap-2">
-      <Checkbox
-        checked={task.done}
-        onCheckedChange={(v) => toggle.mutate({ id: task.id, done: Boolean(v) })}
-        aria-label={task.text}
-      />
-      <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
-      <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
-        {!subtask && (
-          <Tip content="Add a subtask">
+  const row = (task: TicketFull['tasks'][number], subtask: boolean) => {
+    const blockedSubtasks = subtask ? 0 : t.tasks.filter((s) => s.parentId === task.id && s.blocked).length
+    return (
+      // A summary's blocked task lands here as #task-<id> (src/lib/reveal.ts).
+      <div id={`task-${task.id}`} className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
+        <div className="group flex items-center gap-2">
+          <Checkbox
+            checked={task.done}
+            onCheckedChange={(v) => toggle.mutate({ id: task.id, done: Boolean(v) })}
+            aria-label={task.text}
+          />
+          <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
+          {task.blocked && <span className={BLOCKED_CHIP}>blocked</span>}
+          {blockedSubtasks > 0 && (
+            <span className={BLOCKED_CHIP}>
+              {blockedSubtasks === 1 ? '1 subtask blocked' : `${blockedSubtasks} subtasks blocked`}
+            </span>
+          )}
+          <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
             <button
               type="button"
               onClick={() => {
-                setSubtaskOf(task.id)
-                setSubtext('')
+                if (task.blocked) tag.mutate({ id: task.id, blocked: false })
+                else {
+                  setBlocking(task.id)
+                  setReason('')
+                }
               }}
-              aria-label={`Add a subtask to ${task.text}`}
+              aria-label={task.blocked ? `Unblock ${task.text}` : `Mark ${task.text} blocked`}
             >
-              <ListPlus className="size-3.5 text-muted-foreground" />
+              <Hand
+                className={cn(
+                  'size-3.5',
+                  task.blocked ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+                )}
+              />
             </button>
-          </Tip>
+            {!subtask && (
+              <Tip content="Add a subtask">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubtaskOf(task.id)
+                    setSubtext('')
+                  }}
+                  aria-label={`Add a subtask to ${task.text}`}
+                >
+                  <ListPlus className="size-3.5 text-muted-foreground" />
+                </button>
+              </Tip>
+            )}
+            <Tip
+              content={
+                subtask || !t.tasks.some((s) => s.parentId === task.id)
+                  ? 'remove'
+                  : 'remove, with its subtasks'
+              }
+            >
+              <button type="button" onClick={() => remove.mutate(task.id)} aria-label={`Remove ${task.text}`}>
+                <X className="size-3.5 text-muted-foreground" />
+              </button>
+            </Tip>
+          </span>
+        </div>
+        {task.blocked && task.blockedReason && (
+          <p className="mt-0.5 ml-6 text-xs text-amber-700 dark:text-amber-400">{task.blockedReason}</p>
         )}
-        <Tip
-          content={
-            subtask || !t.tasks.some((s) => s.parentId === task.id) ? 'remove' : 'remove, with its subtasks'
-          }
-        >
-          <button type="button" onClick={() => remove.mutate(task.id)} aria-label={`Remove ${task.text}`}>
-            <X className="size-3.5 text-muted-foreground" />
-          </button>
-        </Tip>
-      </span>
-    </div>
-  )
+        {blocking === task.id && (
+          <form
+            className="mt-1.5 ml-6 flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              tag.mutate({ id: task.id, blocked: true, reason: reason.trim() })
+            }}
+          >
+            <Input
+              autoFocus
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setBlocking(null)
+              }}
+              maxLength={500}
+              placeholder="What the human must do (optional)"
+              aria-label={`Why ${task.text} is blocked`}
+              className="h-7"
+            />
+            <Button type="submit" size="sm" variant="outline" disabled={tag.isPending}>
+              <Hand data-icon="inline-start" /> Mark blocked
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setBlocking(null)}
+              aria-label="Close"
+            >
+              <X />
+            </Button>
+          </form>
+        )}
+      </div>
+    )
+  }
   return (
     <section className="rounded-lg border p-4" aria-label="Tasks">
       <div className="mb-3 flex items-center justify-between">
@@ -1141,6 +1228,9 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     </section>
   )
 }
+
+const BLOCKED_CHIP =
+  'shrink-0 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400'
 
 const VERDICT_LABEL: Record<LaneVerdict, string> = {
   approved: 'Approved',

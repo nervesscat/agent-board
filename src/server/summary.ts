@@ -181,6 +181,42 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         .filter((th) => th.ticketId === null || byId.has(th.ticketId))
         .map(({ as: _as, ...th }) => th)
     : []
+  // Tasks and subtasks tagged blocked on the human, on work still going: not on a done or cancelled
+  // ticket, nor under one (a cancelled lane's tasks are out of the work, as in the rollup).
+  const closed = (t: Row | undefined): boolean =>
+    !!t &&
+    (kind(t.status) === 'done' ||
+      kind(t.status) === 'cancelled' ||
+      closed(t.parentId ? byId.get(t.parentId) : undefined))
+  const live = tickets.filter((t) => t.blockedTasks > 0 && !closed(t)).map((t) => t.id)
+  const taskRows = live.length
+    ? db
+        .select()
+        .from(schema.tasks)
+        .where(inArray(schema.tasks.ticketId, live))
+        .orderBy(asc(schema.tasks.position), asc(schema.tasks.id))
+        .all()
+    : []
+  const taskText = new Map(taskRows.map((task) => [task.id, task.text]))
+  const order = new Map(live.map((id, i) => [id, i]))
+  const blockedTasks = taskRows
+    .filter((task) => task.blocked && !task.done)
+    .sort((a, b) => order.get(a.ticketId)! - order.get(b.ticketId)!)
+    .map((task) => {
+      const t = byId.get(task.ticketId)!
+      return {
+        taskId: task.id,
+        text: task.text,
+        reason: task.blockedReason,
+        // The task it is a step of, when it is a subtask.
+        parentTask: task.parentId ? (taskText.get(task.parentId) ?? null) : null,
+        ticketId: t.id,
+        ticketTitle: t.title,
+        status: t.status,
+        // The ticket it is a lane of.
+        parent: parentOf(t),
+      }
+    })
   const reviews = tickets
     .filter((t) => kind(t.status) === 'review' && !t.approvedAt)
     .map((t) => ({
@@ -244,6 +280,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         assignee: t.assignee,
         reserved: t.reserved,
         decisions: t.decisions,
+        blockedTasks: t.blockedTasks,
         rollup: t.rollup,
         lanes: t.lanes.total,
         lastPost: post,
@@ -343,7 +380,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       prs: prsToReview,
       threads,
       reviews,
-      total: decisions.length + prsToReview.length + threads.length + reviews.length,
+      blockedTasks,
+      total: decisions.length + prsToReview.length + threads.length + reviews.length + blockedTasks.length,
     },
     inProgress: progress.filter((t) => t.kind !== 'review'),
     doneToday: { tickets: doneTickets, prs: closedPrs, activity },

@@ -218,6 +218,10 @@ export const tasks = sqliteTable(
     text: text().notNull(),
     done: integer({ mode: 'boolean' }).notNull().default(false),
     position: integer().notNull().default(0),
+    // Waiting on the human (a credential, a manual step, a call only they make), with what they must do.
+    // Only an open task is blocked: ticking it done clears both.
+    blocked: integer({ mode: 'boolean' }).notNull().default(false),
+    blockedReason: text('blocked_reason').notNull().default(''),
   },
   (t) => [index('tasks_parent').on(t.parentId)],
 )
