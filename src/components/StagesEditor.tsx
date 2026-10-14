@@ -18,6 +18,7 @@ import { toastRefusal } from '#/components/Needs'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
+import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, get, patch, post, put } from '#/lib/api'
 import { STAGE_COLORS, STAGE_KINDS, type StageColor, type StageKind } from '#/lib/constants'
 import { STAGE_DOT, STAGE_KIND_LABEL } from '#/lib/stages'
@@ -131,9 +132,11 @@ export function StagesEditor({ projectId }: { projectId: string }) {
               onValueChange={(k) => k && change.mutate({ id: s.id, kind: k as StageKind })}
               items={kindItems}
             >
-              <SelectTrigger size="sm" className="w-32" title={KIND_HINT[s.kind]}>
-                <SelectValue />
-              </SelectTrigger>
+              <Tip content={KIND_HINT[s.kind]}>
+                <SelectTrigger size="sm" className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+              </Tip>
               <SelectContent>
                 {STAGE_KINDS.map((k) => (
                   <SelectItem key={k} value={k}>
@@ -172,9 +175,11 @@ export function StagesEditor({ projectId }: { projectId: string }) {
           className="h-8 w-56"
         />
         <Select value={kind} onValueChange={(k) => k && setKind(k as StageKind)} items={kindItems}>
-          <SelectTrigger size="sm" className="w-32" title={KIND_HINT[kind]}>
-            <SelectValue />
-          </SelectTrigger>
+          <Tip content={KIND_HINT[kind]}>
+            <SelectTrigger size="sm" className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+          </Tip>
           <SelectContent>
             {STAGE_KINDS.map((k) => (
               <SelectItem key={k} value={k}>

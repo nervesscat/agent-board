@@ -64,7 +64,7 @@ Then:
   spoke after you. Answer those before starting anything new, and keep its `cursor` for
   [Watch for feedback](#watch-for-feedback).
 - `list_tickets` with `status: ["todo"]` and `assignee: ""` (unassigned), or `assignee: <you>`, for
-  candidates; `q` finds text in titles and instructions. If the human named a ticket, use that one.
+  candidates; `q` finds the `#id` or title first, then text in the instructions and the thread (posts, replies). If the human named a ticket, use that one.
   The list includes lanes (`parentId` set); `parentId: null` narrows it to top-level tickets,
   `parentId: <id>` to one ticket's lanes.
 - `get_ticket` and read it in full. Its `updates` are the ticket's feed of posts (`progress`

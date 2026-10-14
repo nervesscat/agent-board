@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { Tip } from '#/components/ui/tooltip'
 import {
   errorMessage,
   patch,
@@ -85,47 +86,46 @@ export function PreviewActions({
         </a>
       )}
       {!active && url && linkStop === null && (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={stopLink.isPending}
-          onClick={() => stopLink.mutate()}
-          title="Stop the server behind this link (it runs from the workspace's worktree) and free its port"
-        >
-          <Square /> Stop
-        </Button>
+        <Tip content="Stop the server behind this link (it runs from the workspace's worktree) and free its port">
+          <Button variant="outline" size="sm" disabled={stopLink.isPending} onClick={() => stopLink.mutate()}>
+            <Square /> Stop
+          </Button>
+        </Tip>
       )}
       {!active && cannotStart === null && (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={action.isPending}
-          onClick={() => action.mutate('start')}
-          title="Build this worktree and run it on a free port, with a fresh copy of the live data"
-        >
-          <Play /> Start
-        </Button>
+        <Tip content="Build this worktree and run it on a free port, with a fresh copy of the live data">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={action.isPending}
+            onClick={() => action.mutate('start')}
+          >
+            <Play /> Start
+          </Button>
+        </Tip>
       )}
       {active && (
         <>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={action.isPending}
-            onClick={() => action.mutate('stop')}
-            title="Stop the preview and free its port"
-          >
-            <Square /> Stop
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={action.isPending}
-            onClick={() => action.mutate('restart')}
-            title="Stop it, build again and start it with a fresh copy of the data"
-          >
-            <RotateCw /> Restart
-          </Button>
+          <Tip content="Stop the preview and free its port">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={action.isPending}
+              onClick={() => action.mutate('stop')}
+            >
+              <Square /> Stop
+            </Button>
+          </Tip>
+          <Tip content="Stop it, build again and start it with a fresh copy of the data">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={action.isPending}
+              onClick={() => action.mutate('restart')}
+            >
+              <RotateCw /> Restart
+            </Button>
+          </Tip>
         </>
       )}
     </>
@@ -165,17 +165,18 @@ export function PreviewBadge({
       ? { label: 'Not checked', title: unchecked, className: 'bg-muted text-muted-foreground' }
       : { label: 'Checking…', title: 'Checking whether it answers', className: 'text-muted-foreground' }
   return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
-        state.className,
-        className,
-      )}
-      title={state.title}
-    >
-      {check && <span className="size-1.5 rounded-full bg-current" />}
-      {state.label}
-    </span>
+    <Tip content={state.title}>
+      <span
+        className={cn(
+          'inline-flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]',
+          state.className,
+          className,
+        )}
+      >
+        {check && <span className="size-1.5 rounded-full bg-current" />}
+        {state.label}
+      </span>
+    </Tip>
   )
 }
 

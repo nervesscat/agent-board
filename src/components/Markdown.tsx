@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { galleryItem } from '#/components/Gallery'
+import { Tip } from '#/components/ui/tooltip'
 import type { ProjectAgent } from '#/lib/api'
 import { useProjectAgents } from '#/lib/project'
 
@@ -44,12 +45,11 @@ export function Markdown({ children, className = '' }: { children: string; class
               agents.find((a) => a.name === props.href!.slice(MENTION.length))
             if (agent)
               return (
-                <span
-                  className="inline-flex items-center gap-1 rounded bg-muted px-1 align-baseline font-medium not-prose"
-                  title={`${agent.name}, one of the project's agents`}
-                >
-                  <AgentAvatar agent={agent} className="size-3.5" />@{agent.name}
-                </span>
+                <Tip content={`${agent.name}, one of the project's agents`}>
+                  <span className="inline-flex items-center gap-1 rounded bg-muted px-1 align-baseline font-medium not-prose">
+                    <AgentAvatar agent={agent} className="size-3.5" />@{agent.name}
+                  </span>
+                </Tip>
               )
             // A #link is to something on the same page (a post, a reply): it lands there, in this tab,
             // as a step of the router's history, so Back and Forward return to where the reader was.

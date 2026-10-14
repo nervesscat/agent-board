@@ -3,7 +3,9 @@ import { cn } from 'cn'
 import type { ReactNode } from 'react'
 
 import { Badge } from '#/components/ui/badge'
+import { Tip } from '#/components/ui/tooltip'
 import type { PrRow } from '#/lib/api'
+import { stamp } from '#/lib/format'
 
 type Tone = 'good' | 'wait' | 'bad' | 'muted'
 
@@ -51,15 +53,27 @@ const REVIEW: Record<string, { label: string; tone: Tone }> = {
   REVIEW_REQUIRED: { label: 'review required', tone: 'wait' },
 }
 
-function Pill({ tone, title, children }: { tone: Tone; title?: string; children: ReactNode }) {
+/** One state as a badge, with `tip` as its tooltip if it has one. */
+function Pill({ tone, tip, children }: { tone: Tone; tip?: string; children: ReactNode }) {
   return (
-    <Badge variant={TONE[tone].variant} className={TONE[tone].className} title={title}>
-      {children}
-    </Badge>
+    <Tip content={tip}>
+      <Badge variant={TONE[tone].variant} className={TONE[tone].className}>
+        {children}
+      </Badge>
+    </Tip>
   )
 }
 
-type State = Pick<PrRow, 'merge' | 'ci' | 'checks' | 'reviewDecision' | 'isDraft'>
+type State = Pick<PrRow, 'merge' | 'mergeCheck' | 'ci' | 'checks' | 'reviewDecision' | 'isDraft'>
+
+/** The merge chip's hover: what the state means, and where it came from and when. */
+function mergeTitle({ merge, mergeCheck: c }: Pick<State, 'merge' | 'mergeCheck'>) {
+  const when = c.at ? `, ${stamp(c.at)}` : ''
+  if (c.source === 'local') return `${MERGE[merge].title} Checked here against origin/${c.base}${when}.`
+  if (c.outdated)
+    return `origin/${c.base} moved after GitHub's word${c.at ? ` of ${stamp(c.at)}` : ''}: waiting for GitHub to look again.`
+  return `${MERGE[merge].title} GitHub's word as of ${c.at ? stamp(c.at) : 'the last refresh'}.`
+}
 
 /**
  * Where a PR stands on GitHub as of the last refresh: draft, merge state, CI, and the review
@@ -77,11 +91,11 @@ export function PrState({ pr, className }: { pr: State; className?: string }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-1.5 text-xs', className)}>
       {pr.isDraft && <Pill tone="muted">draft</Pill>}
-      <Pill tone={merge.tone} title={merge.title}>
+      <Pill tone={merge.tone} tip={mergeTitle(pr)}>
         <GitMerge data-icon="inline-start" />
         {merge.label}
       </Pill>
-      <Pill tone={ci.tone} title={ciTitle}>
+      <Pill tone={ci.tone} tip={ciTitle}>
         {ci.icon}
         {ci.label}
         {pr.ci === 'pending' && ` · ${count('pending')}`}
@@ -121,8 +135,10 @@ export function PrAlert({ pr }: { pr: Pick<PrRow, 'merge' | 'ci'> }) {
   ].filter(Boolean)
   if (!problems.length) return null
   return (
-    <span className="inline-flex shrink-0 text-destructive" title={problems.join(' · ')}>
-      <CircleAlert className="size-3.5" aria-label={problems.join(', ')} />
-    </span>
+    <Tip content={problems.join(' · ')}>
+      <span className="inline-flex shrink-0 text-destructive">
+        <CircleAlert className="size-3.5" aria-label={problems.join(', ')} />
+      </span>
+    </Tip>
   )
 }

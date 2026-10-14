@@ -16,6 +16,7 @@ import {
   type Worktree,
 } from './git'
 import { getProject } from './projects'
+import { recheckMovedPrs } from './prs'
 import { noteOriginRefs } from './pushedToday'
 import { listRepos } from './repos'
 import { kindOf, listStages } from './stages'
@@ -105,7 +106,8 @@ function repoState(repoPath: string): RepoState {
         fetchedAt: null,
         fetching: null,
         error: null,
-        // Each fresh listing also records how origin's branches moved since the last (pushed today); a
+        // Each fresh listing also records how origin's branches moved since the last (pushed today), and
+        // has the PRs on a branch that moved asked about again (their merge state may have changed); a
         // failure there is logged and never costs the push states. Whether the board's fetch had
         // succeeded before the listing began says whether a listing without origin's branches is
         // origin's (noteOriginRefs).
@@ -113,7 +115,7 @@ function repoState(repoPath: string): RepoState {
           const fetched = repos.get(repoPath)?.fetchedAt != null
           return listRefs(repoPath).then((refs) => {
             try {
-              noteOriginRefs(repoPath, refs, new Date(), { fetched })
+              recheckMovedPrs(noteOriginRefs(repoPath, refs, new Date(), { fetched }))
             } catch (err) {
               console.error(`recording origin's branches of ${repoPath} failed:`, err)
             }

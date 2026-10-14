@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type DirListing } from '#/lib/api'
 
 /**
@@ -66,19 +67,32 @@ export function FolderPicker({
             setDir(typed)
           }}
         >
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            title="Up one folder"
-            disabled={!data?.parent}
-            onClick={() => data?.parent && setDir(data.parent)}
-          >
-            <ArrowUp />
-          </Button>
-          <Button type="button" variant="outline" size="icon-sm" title="Home" onClick={() => setDir('')}>
-            <Home />
-          </Button>
+          {/* On a wrapper: at the top folder the button is disabled, and a disabled button gets no hover. */}
+          <Tip content="Up one folder">
+            <span className="inline-flex">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                aria-label="Up one folder"
+                disabled={!data?.parent}
+                onClick={() => data?.parent && setDir(data.parent)}
+              >
+                <ArrowUp />
+              </Button>
+            </span>
+          </Tip>
+          <Tip content="Home">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label="Home"
+              onClick={() => setDir('')}
+            >
+              <Home />
+            </Button>
+          </Tip>
           <Input
             value={typed}
             onChange={(e) => setTyped(e.target.value)}

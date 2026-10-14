@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 
 import type { PrRow, Project } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
-import { expect, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, test } from './fixtures'
 
 test('the PR queue renders with its filter (no GitHub: empty)', async ({ page, project }) => {
   await page.goto(`/projects/${project.id}/prs`)
@@ -25,12 +25,12 @@ test('the PR queue renders with its filter (no GitHub: empty)', async ({ page, p
   await expect(filter('Waiting on others')).toHaveAttribute('aria-selected', 'false')
   await expect(page.getByText('Nothing pending to review.')).toBeVisible()
   await expect(page.getByText('Nothing pending.', { exact: true })).toHaveCount(0)
-  await expect(filter('To review')).toHaveAttribute(
-    'title',
+  await expectTooltip(
+    filter('To review'),
     'PRs by others you review: pending your approval, approved by you, or on hold on your comments',
   )
-  await expect(filter('Waiting on others')).toHaveAttribute(
-    'title',
+  await expectTooltip(
+    filter('Waiting on others'),
     "Your PRs (agents' too): pending approvals, approved by every reviewer, or on hold on their comments",
   )
 
@@ -149,6 +149,7 @@ function prRow(projectId: number, n: number, waitingOn: PrRow['waitingOn'], stat
     mergeStateStatus: 'CLEAN',
     checks: [],
     merge: 'clean',
+    mergeCheck: { source: 'github', at, base: 'main', outdated: false },
     ci: 'none',
     updatedAt: at,
     fetchedAt: at,

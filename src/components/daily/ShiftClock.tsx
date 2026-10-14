@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 
 import { formatTime, useHour12 } from '#/components/AnalogClock'
+import { Tip } from '#/components/ui/tooltip'
 import { get, type ReportSettingsView } from '#/lib/api'
 import { localDate } from '#/lib/format'
 import { isWorkday } from '#/lib/reports'
@@ -35,36 +36,39 @@ export function ShiftClock({ projectId }: { projectId: number }) {
   const [nx, ny] = at(current, 15)
 
   return (
-    <div
-      role="img"
-      aria-label={`Shift ${span}, now ${formatTime(current, hour12)}: ${where}`}
-      title={`Today's shift ${span}; now ${formatTime(current, hour12)}, ${where}. The report is due at its end.`}
-      className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
+    <Tip
+      content={`Today's shift ${span}; now ${formatTime(current, hour12)}, ${where}. The report is due at its end.`}
     >
-      <svg viewBox="0 0 40 40" className="size-7 shrink-0" aria-hidden>
-        <circle cx={20} cy={20} r={15} fill="none" strokeWidth={4} className="stroke-muted" />
-        <path
-          data-part="shift"
-          d={arc(start, end, 15)}
-          fill="none"
-          strokeWidth={4}
-          strokeLinecap="round"
-          className={working ? 'stroke-emerald-500' : 'stroke-muted-foreground/40'}
-        />
-        <line
-          data-part="now"
-          x1={20}
-          y1={20}
-          x2={nx}
-          y2={ny}
-          strokeWidth={2}
-          strokeLinecap="round"
-          className="stroke-foreground"
-        />
-        <circle cx={20} cy={20} r={2} className="fill-foreground" />
-      </svg>
-      <span className={cn('tabular-nums', where === 'on shift' && 'text-foreground')}>{span}</span>
-    </div>
+      <div
+        role="img"
+        aria-label={`Shift ${span}, now ${formatTime(current, hour12)}: ${where}`}
+        className="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs text-muted-foreground"
+      >
+        <svg viewBox="0 0 40 40" className="size-7 shrink-0" aria-hidden>
+          <circle cx={20} cy={20} r={15} fill="none" strokeWidth={4} className="stroke-muted" />
+          <path
+            data-part="shift"
+            d={arc(start, end, 15)}
+            fill="none"
+            strokeWidth={4}
+            strokeLinecap="round"
+            className={working ? 'stroke-emerald-500' : 'stroke-muted-foreground/40'}
+          />
+          <line
+            data-part="now"
+            x1={20}
+            y1={20}
+            x2={nx}
+            y2={ny}
+            strokeWidth={2}
+            strokeLinecap="round"
+            className="stroke-foreground"
+          />
+          <circle cx={20} cy={20} r={2} className="fill-foreground" />
+        </svg>
+        <span className={cn('tabular-nums', where === 'on shift' && 'text-foreground')}>{span}</span>
+      </div>
+    </Tip>
   )
 }
 

@@ -64,18 +64,50 @@ export function mcpSetup(client: AgentClient, boardUrl: string, token: string) {
   }
 }
 
+/** A Windows path (drive letter or UNC share), which the bash line writes with forward slashes. */
+const windowsPath = /^[A-Za-z]:[\\/]|^\\\\/
+
+/**
+ * A repo's own `.claude` folder, the one the board reads its copy from. A Windows path joins with the
+ * separator it uses; any other path with `/`, since a backslash there is part of a folder's name.
+ */
+export function repoClaudeDir(repoPath: string) {
+  if (!windowsPath.test(repoPath)) return `${repoPath.replace(/\/+$/, '')}/.claude`
+  const sep = repoPath.includes('\\') ? '\\' : '/'
+  return `${repoPath.replace(/[\\/]+$/, '')}${sep}.claude`
+}
+
+/** `dir` as one bash argument, taken literally. */
+const bashArg = (dir: string) =>
+  `'${(windowsPath.test(dir) ? dir.replace(/\\/g, '/') : dir).replace(/'/g, `'\\''`)}'`
+
+/**
+ * `dir` as one PowerShell argument, taken literally. PowerShell ends a single-quoted string at the
+ * typographic quotes too (‘ ’ ‚ ‛), and escapes any of them by doubling it.
+ */
+const powershellArg = (dir: string) => `'${dir.replace(/['‘’‚‛]/g, '$&$&')}'`
+
 /**
  * One line that installs feature-review, review-queue and their agents into ~/.claude (Claude Code's
- * skills and agents; OpenCode reads ~/.claude/skills too), replacing the files of the same name.
+ * skills and agents; OpenCode reads ~/.claude/skills too), or into `dir` (a repo's own `.claude`, see
+ * `repoClaudeDir`, or the folder CLAUDE_HOME names), replacing the files of the same name.
  */
-export function reviewSkillsInstall(shell: Shell, boardUrl: string, token: string) {
+export function reviewSkillsInstall(shell: Shell, boardUrl: string, token: string, dir?: string) {
   const src = `${boardUrl}/api/agent-setup/review-skills`
   const auth = `Bearer ${token || TOKEN_PLACEHOLDER}`
-  return shell === 'bash'
-    ? `mkdir -p ~/.claude && curl -fsS -H "Authorization: ${auth}" "${src}" | tar -x -C ~/.claude`
-    : `$t = Join-Path $env:TEMP 'review-skills.tar'; New-Item -ItemType Directory -Force "$HOME\\.claude" | Out-Null; ` +
-        `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = '${auth}' } '${src}' -OutFile $t; ` +
-        `tar -xf $t -C "$HOME\\.claude"; Remove-Item $t`
+  if (shell === 'bash') {
+    const get = `curl -fsS -H "Authorization: ${auth}" "${src}"`
+    if (dir === undefined) return `mkdir -p ~/.claude && ${get} | tar -x -C ~/.claude`
+    // GNU tar reads escapes in -C's folder (a\b, a\101z), so tar extracts where cd has taken it.
+    const to = bashArg(dir)
+    return `mkdir -p ${to} && (cd ${to} && ${get} | tar -x)`
+  }
+  const to = dir === undefined ? '"$HOME\\.claude"' : powershellArg(dir)
+  return (
+    `$t = Join-Path $env:TEMP 'review-skills.tar'; New-Item -ItemType Directory -Force ${to} | Out-Null; ` +
+    `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = '${auth}' } '${src}' -OutFile $t; ` +
+    `tar -xf $t -C ${to}; Remove-Item $t`
+  )
 }
 
 /** One line that downloads the board's current skill into the CLI's skills folder. */

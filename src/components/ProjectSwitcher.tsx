@@ -26,6 +26,7 @@ import {
 } from '#/components/ui/dialog'
 import { Input } from '#/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
+import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
 import { useProjects } from '#/lib/project'
 
@@ -265,11 +266,13 @@ function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => vo
           Rename
         </Button>
         <AlertDialog>
-          <AlertDialogTrigger
-            render={<Button type="button" variant="ghost" size="icon-sm" title={`Delete ${p.name}`} />}
-          >
-            <Trash2 className="text-destructive" />
-          </AlertDialogTrigger>
+          <Tip content={`Delete ${p.name}`}>
+            <AlertDialogTrigger
+              render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${p.name}`} />}
+            >
+              <Trash2 className="text-destructive" />
+            </AlertDialogTrigger>
+          </Tip>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete {p.name}?</AlertDialogTitle>
@@ -288,9 +291,11 @@ function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => vo
       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
         {p.repos.length ? (
           p.repos.map((r) => (
-            <span key={r.id} className="inline-flex items-center gap-1 font-mono" title={r.repoPath}>
-              <FolderGit2 className="size-3" /> {r.name}
-            </span>
+            <Tip key={r.id} content={r.repoPath}>
+              <span className="inline-flex items-center gap-1 font-mono">
+                <FolderGit2 className="size-3" /> {r.name}
+              </span>
+            </Tip>
           ))
         ) : (
           <span>no repos</span>

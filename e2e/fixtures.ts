@@ -50,6 +50,27 @@ export const section = (scope: Page | Locator, title: string) => {
   })
 }
 
+/** The tooltip showing now: the app's shared tooltip, open (one shows at a time). */
+export const tooltip = (page: Page) => page.locator('[data-slot="tooltip-content"][data-open]')
+
+/**
+ * Rests the pointer on `target`, coming from outside it as a person's would (a tooltip opens as the
+ * pointer enters), and expects its tooltip to say exactly `text`, line breaks and all, or to match it.
+ * The pointer enters again if the page moved the target from under it before the tooltip opened (a
+ * picture loading above it).
+ */
+export async function expectTooltip(target: Locator, text: string | RegExp) {
+  const tip = tooltip(target.page())
+  await expect(async () => {
+    await target.page().mouse.move(0, 0)
+    await target.hover()
+    await expect(tip).toBeVisible({ timeout: 2000 })
+    const shown = await tip.innerText()
+    if (typeof text === 'string') expect(shown).toBe(text)
+    else expect(shown).toMatch(text)
+  }).toPass({ timeout: 10_000 })
+}
+
 export interface Api {
   ticket(input: { title: string; status?: string; body?: string; tags?: string[] }): Promise<TicketFull>
   getTicket(id: number): Promise<TicketFull>

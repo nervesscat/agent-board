@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { AgentIcon } from '#/components/AgentIcon'
 import { Button } from '#/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
+import { Tip } from '#/components/ui/tooltip'
 import { AGENTS } from '#/lib/agents'
 import { AGENT_CLIENTS, type AgentClient } from '#/lib/constants'
 
@@ -14,9 +15,11 @@ export function AgentPicker({ value, onChange }: { value: AgentClient; onChange:
     <Tabs value={value} onValueChange={(v) => onChange(v as AgentClient)}>
       <TabsList>
         {AGENT_CLIENTS.map((c) => (
-          <TabsTrigger key={c} value={c} aria-label={AGENTS[c].label} title={AGENTS[c].label}>
-            <AgentIcon client={c} /> {AGENTS[c].label}
-          </TabsTrigger>
+          <Tip key={c} content={AGENTS[c].label}>
+            <TabsTrigger value={c} aria-label={AGENTS[c].label}>
+              <AgentIcon client={c} /> {AGENTS[c].label}
+            </TabsTrigger>
+          </Tip>
         ))}
       </TabsList>
     </Tabs>
