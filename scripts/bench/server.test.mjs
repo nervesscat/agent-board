@@ -28,19 +28,48 @@ server.on('error', () => process.exit(0))
 server.listen(Number(process.env.PORT), process.env.HOST)
 `,
 )
+// A build whose server, on its bind error, exits only once the go-file named by GO exists: a test can let
+// the port go between the child's failed bind and its exit.
+const waitingBuildDir = path.join(root, 'waiting-build')
+fs.mkdirSync(path.join(waitingBuildDir, 'server'), { recursive: true })
+fs.writeFileSync(
+  path.join(waitingBuildDir, 'server', 'index.mjs'),
+  `import fs from 'node:fs'
+import http from 'node:http'
+const server = http.createServer((req, res) => res.end(String(process.pid)))
+server.on('error', () => {
+  const timer = setInterval(() => {
+    if (fs.existsSync(process.env.GO)) { clearInterval(timer); process.exit(0) }
+  }, 20)
+})
+server.listen(Number(process.env.PORT), process.env.HOST)
+`,
+)
 const log = path.join(root, 'server.log')
 const start = (port) =>
   startServer({ target: process.cwd(), buildDir, dataDir: path.join(root, 'data'), port, human: 'h', log })
 
 const others = []
 afterEach(async () => {
-  killAll()
+  await killAll()
   await Promise.all(others.splice(0).map((s) => new Promise((r) => s.close(r))))
 })
 afterAll(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 }))
 
 /** Who answers: the pid in the body of a request to the server the harness talks to. */
 const answeredBy = async (server) => (await server.request('/who')).text
+
+/** Resolves once `check` holds (polled every 20 ms); rejects when it still does not after `ms`. */
+async function until(check, what, ms = 30_000) {
+  const end = Date.now() + ms
+  while (!check()) {
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`)
+    await new Promise((r) => setTimeout(r, 20))
+  }
+}
+
+/** Whether the file holds `text` (false while it does not exist yet). */
+const logged = (file, text) => fs.existsSync(file) && fs.readFileSync(file, 'utf8').includes(text)
 
 describe('startServer', () => {
   it('two starts on the same free port each end on a server of their own', async () => {
@@ -57,9 +86,11 @@ describe('startServer', () => {
   it('a second start on a port the first one holds moves to the next free port', async () => {
     const port = await freePort(47380)
     const a = await start(port)
-    const b = await start(port)
-    expect(a.port).toBe(port)
-    expect(b.port).toBeGreaterThan(port)
+    // The first start may land on a later port: another socket can take the probed one before the bind.
+    // What the test is about is the second start, which must not share the first one's port.
+    const b = await start(a.port)
+    expect(a.port).toBeGreaterThanOrEqual(port)
+    expect(b.port).toBeGreaterThan(a.port)
     expect(await answeredBy(a)).toBe(String(a.pid))
     expect(await answeredBy(b)).toBe(String(b.pid))
   }, 60_000)
@@ -84,6 +115,41 @@ describe('startServer', () => {
     expect(s.port).not.toBe(port)
     expect(await answeredBy(s)).toBe(String(s.pid))
     expect(fs.readFileSync(log, 'utf8')).toMatch(/exited \(0\) with the port in use/)
+  }, 60_000)
+
+  it('moves on when its bind fails and the port is free again by the time its server exits', async () => {
+    const port = await freePort(47380)
+    // Holds the port until the child's bind has failed and been logged, then lets it go before the child
+    // exits: the port is free when its exit is seen.
+    const holder = net.createServer((socket) => socket.destroy())
+    others.push(holder)
+    await new Promise((r) => holder.listen(port, '127.0.0.1', r))
+    const go = path.join(root, 'go')
+    const waitingLog = path.join(root, 'waiting.log')
+    const before = process.env.GO
+    process.env.GO = go
+    try {
+      const starting = startServer({
+        target: process.cwd(),
+        buildDir: waitingBuildDir,
+        dataDir: path.join(root, 'data'),
+        port,
+        human: 'h',
+        log: waitingLog,
+      })
+      await Promise.race([
+        until(() => logged(waitingLog, 'bind failed'), 'the bind failure in the log'),
+        starting,
+      ])
+      await new Promise((r) => holder.close(r))
+      fs.writeFileSync(go, '')
+      const s = await starting
+      expect(s.port).not.toBe(port)
+      expect(await answeredBy(s)).toBe(String(s.pid))
+    } finally {
+      if (before === undefined) delete process.env.GO
+      else process.env.GO = before
+    }
   }, 60_000)
 
   it('in a process of its own, moves on when a 200 comes from another server while its own exits', async () => {

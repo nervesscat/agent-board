@@ -32,8 +32,15 @@ export function killTree(proc) {
   }
 }
 
-export function killAll() {
-  for (const proc of [...running]) killTree(proc)
+/** Stops every process the harness started; resolves once each of them has exited. */
+export async function killAll() {
+  const procs = [...running]
+  for (const proc of procs) killTree(proc)
+  await Promise.all(
+    procs
+      .filter((proc) => proc.pid && proc.exitCode === null && proc.signalCode === null)
+      .map((proc) => new Promise((resolve) => proc.once('exit', resolve))),
+  )
 }
 
 function track(proc) {
@@ -151,6 +158,15 @@ export async function startServer({ port, log, attempts = 5, ...opts }) {
   }
 }
 
+/** Whether this process's own bind failed, as its preload wrote it to the log before it exited. */
+function bindFailedBy(log, pid) {
+  try {
+    return fs.readFileSync(log, 'utf8').includes(`bind failed: EADDRINUSE pid=${pid}\n`)
+  } catch {
+    return false
+  }
+}
+
 /** One start on `port`: `{ server }`, or `{ taken }` when another process holds the port. */
 async function launch({ mode = 'build', target, buildDir, dataDir, port, human, log }) {
   if (port === LIVE_PORT) throw new Error(`${LIVE_PORT} is the live board's port`)
@@ -245,8 +261,10 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
   }
   for (;;) {
     if (exited !== null) {
-      // It stopped before it answered: when another process holds the port, it could not bind it.
-      if (!(await isFree(port))) return giveUp(`its own server exited (${exited}) with the port in use`)
+      // It stopped before it answered. Its bind failing (the preload logged it) means another process held
+      // the port when it tried, even if that process has let go since; otherwise, a port in use now says so.
+      if (bindFailedBy(log, proc.pid) || !(await isFree(port)))
+        return giveUp(`its own server exited (${exited}) with the port in use`)
       throw new Error(`the bench server exited (${exited}) before it answered; see ${log}`)
     }
     if (Date.now() - started > 120_000) {
