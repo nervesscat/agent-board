@@ -168,6 +168,9 @@ beforeAll(async () => {
   git('commit', '-q', '-m', 'base')
   git('push', '-q', 'origin', 'main')
   execFileSync('git', ['clone', '-q', origin, other], { stdio: 'ignore' })
+  // The other clone commits as well: it needs an identity where none is configured (CI).
+  gitIn(other)('config', 'user.email', 't@t')
+  gitIn(other)('config', 'user.name', 't')
 
   dbm = await import('#/db')
   features = await import('./features')
