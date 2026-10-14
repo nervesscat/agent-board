@@ -283,8 +283,10 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 // --- ongoing features ---
 // ?parent=root for the top level, ?parent=<ticketId> for one ticket's lanes; all tickets otherwise.
 // ?tag= keeps the ones carrying that tag, ?status=todo,blocked those stages, ?assignee= one name (empty for
-// unassigned), ?q= a text match in the title or instructions. Archived tickets are left out; ?archived=include
-// adds them, ?archived=only lists just those.
+// unassigned), ?q= text found (any casing) in the ticket's #id, title, instructions or thread (its posts and the
+// replies under them): those found by name (#id, title) first, then the rest, each row with `match` (where) and
+// `snippet` (the words around a content hit). Archived tickets are left out; ?archived=include adds them,
+// ?archived=only lists just those.
 api.get('/api/projects/:id/tickets', async ({ params, url }) => {
   const q = url.searchParams
   const parent = q.get('parent')

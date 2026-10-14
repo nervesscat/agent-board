@@ -11,7 +11,7 @@ import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
 import { previewState, previewUrl, type PreviewState } from './preview'
-import { prForTicket } from './prs'
+import { prForTicket, refreshPrsInBackground, withMergeCheck } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
 import { reportDueFor } from './reportDue'
@@ -129,30 +129,135 @@ export interface TicketFilter {
   /** Stage keys, names or kinds (`review` takes in every stage of that kind). */
   status?: string[]
   assignee?: string
+  /** Text found in the ticket's number, title, instructions or thread (`searchTickets`). */
   q?: string
   /** Archived tickets are left out unless `include` (with the rest) or `only` (just those). */
   archived?: 'include' | 'only'
 }
 
 /**
+ * Where a search found a ticket, best first: its number (`#12` or `12`) or its title, which make up its
+ * name, then its instructions, one of its posts, or a reply under one of them, which are its content.
+ */
+export type TicketMatch = 'id' | 'title' | 'body' | 'post' | 'reply'
+/** A row found by a search: where, and for a content match the words around the first hit. */
+export type TicketHit = { match: TicketMatch; snippet: string | null }
+
+type ListedTicket = ReturnType<typeof projectTickets>[number] & Partial<TicketHit>
+
+/**
  * A project's tickets; `parentId` narrows to the lanes of one ticket (`null` to the top level), `tag`
  * to those carrying it (any casing), `status` to those stages, `assignee` to one name (`''` for
- * unassigned), `q` to a text match in the title or instructions. Archived tickets only with `archived`.
+ * unassigned). Archived tickets only with `archived`. `q` keeps the tickets it is found in, those found
+ * by name first, each row saying where (`searchTickets`).
  */
-export function listTickets(projectId: number, filter: TicketFilter = {}) {
+export function listTickets(projectId: number, filter: TicketFilter = {}): ListedTicket[] {
   getProject(projectId)
   const tag = filter.tag?.trim().toLowerCase()
-  const q = filter.q?.trim().toLowerCase()
+  const q = filter.q?.trim()
   const stages = filter.status?.length ? matchStages(listStages(projectId), filter.status) : null
-  return projectTickets(projectId).filter(
+  const rows = projectTickets(projectId).filter(
     (t) =>
       (filter.parentId === undefined || t.parentId === filter.parentId) &&
       (!tag || t.tags.some((x) => x.toLowerCase() === tag)) &&
       (!stages || stages.has(t.status)) &&
       (filter.assignee === undefined || t.assignee === filter.assignee) &&
-      (filter.archived === 'include' || (filter.archived === 'only') === Boolean(t.archivedAt)) &&
-      (!q || t.title.toLowerCase().includes(q) || t.body.toLowerCase().includes(q)),
+      (filter.archived === 'include' || (filter.archived === 'only') === Boolean(t.archivedAt)),
   )
+  return q ? searchTickets(rows, q) : rows
+}
+
+/**
+ * The tickets among `rows` that `q` is found in, as a literal piece of text in any casing: by name (its
+ * number, `#12` or `12`, or in its title) first, then by content (its instructions, or the current text
+ * of one of its own posts or of a reply under one), each group in the order `rows` had. A lane's
+ * thread is its own: it does not bring up its parent. Only the words around a hit leave the server.
+ */
+function searchTickets<T extends schema.Ticket>(rows: T[], q: string): (T & TicketHit)[] {
+  const needle = q.toLowerCase()
+  const number = /^#?(\d+)$/.exec(q)?.[1]
+  const hits = new Map<number, TicketHit>()
+  for (const t of rows) {
+    if (number !== undefined && t.id === Number(number)) hits.set(t.id, { match: 'id', snippet: null })
+    else if (t.title.toLowerCase().includes(needle)) hits.set(t.id, { match: 'title', snippet: null })
+    else {
+      const snippet = snippetOf(t.body, needle)
+      if (snippet !== null) hits.set(t.id, { match: 'body', snippet })
+    }
+  }
+  // The thread, newest first, read only for the tickets not found yet.
+  const unfound = () => rows.filter((t) => !hits.has(t.id)).map((t) => t.id)
+  let ids = unfound()
+  if (ids.length)
+    for (const p of db
+      .select({ ticketId: schema.updates.ticketId, body: schema.updates.body })
+      .from(schema.updates)
+      .where(inArray(schema.updates.ticketId, ids))
+      .orderBy(desc(schema.updates.createdAt), desc(schema.updates.id))
+      .all()) {
+      if (hits.has(p.ticketId)) continue
+      const snippet = snippetOf(p.body, needle)
+      if (snippet !== null) hits.set(p.ticketId, { match: 'post', snippet })
+    }
+  ids = unfound()
+  if (ids.length)
+    for (const r of db
+      .select({ ticketId: schema.updates.ticketId, body: schema.comments.body })
+      .from(schema.comments)
+      .innerJoin(
+        schema.updates,
+        and(eq(schema.comments.parentType, 'update'), eq(schema.comments.parentId, schema.updates.id)),
+      )
+      .where(inArray(schema.updates.ticketId, ids))
+      .orderBy(desc(schema.comments.createdAt), desc(schema.comments.id))
+      .all()) {
+      if (hits.has(r.ticketId)) continue
+      const snippet = snippetOf(r.body, needle)
+      if (snippet !== null) hits.set(r.ticketId, { match: 'reply', snippet })
+    }
+  const found = rows.flatMap((t) => {
+    const hit = hits.get(t.id)
+    return hit ? [{ ...t, ...hit }] : []
+  })
+  const byName = (t: TicketHit) => t.match === 'id' || t.match === 'title'
+  return [...found.filter(byName), ...found.filter((t) => !byName(t))]
+}
+
+const SNIPPET = 120
+
+/**
+ * The words around the first place `needle` (lowercased) is in `text`, in any casing: one line of at
+ * most 120 characters, `…` where it was cut. Null when it is not there.
+ */
+export function snippetOf(text: string, needle: string): string | null {
+  const lower = text.toLowerCase()
+  const at = lower.indexOf(needle)
+  if (at < 0) return null
+  let start = at
+  let end = at + needle.length
+  // Lowercasing makes a few characters longer (İ): find where the hit sits in the text itself.
+  if (lower.length !== text.length) {
+    let pos = 0
+    let i = 0
+    for (const ch of text) {
+      if (pos <= at) start = i
+      pos += ch.toLowerCase().length
+      i += ch.length
+      if (pos >= at + needle.length) {
+        end = i
+        break
+      }
+    }
+  }
+  let from = Math.max(0, Math.min(start - 40, text.length - SNIPPET))
+  if (end - start >= SNIPPET) from = start
+  else if (end > from + SNIPPET) from = end - SNIPPET
+  let to = Math.min(text.length, from + SNIPPET)
+  // Never half of a character written as two.
+  if (from > 0 && /[\uDC00-\uDFFF]/.test(text[from]!)) from++
+  if (to < text.length && /[\uD800-\uDBFF]/.test(text[to - 1]!)) to--
+  const words = text.slice(from, to).replace(/\s+/g, ' ').trim()
+  return `${from > 0 ? '…' : ''}${words}${to < text.length ? '…' : ''}`
 }
 
 export function getTicket(id: number) {
@@ -278,7 +383,9 @@ export function placement(
 /**
  * `getTicketFull` with whether each branch is on origin: `push` on the ticket (its branch) and on each
  * of its workspaces, from one batch of git in the ticket's checkout. A branch gone from origin counts
- * as merged once it is in the ticket's base.
+ * as merged once it is in the ticket's base. Its PR's merge state is checked in the checkout against
+ * origin's base as just read, and the project's PRs are refreshed in the background when they are as
+ * stale as the queue would refresh them.
  */
 export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
   const t = getTicketFull(id, opts)
@@ -287,8 +394,10 @@ export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolea
   const push = repo
     ? await pushStates(repo.repoPath, branches, new Map(branches.map((b) => [b, t.baseBranch])))
     : null
+  if (t.prNumber || t.branch) refreshPrsInBackground(t.projectId)
   return {
     ...t,
+    pr: await withMergeCheck(t.pr),
     push: push?.get(t.branch) ?? NO_PUSH,
     workspaces: t.workspaces.map((w) => ({ ...w, push: push?.get(w.branch) ?? NO_PUSH })),
   }
