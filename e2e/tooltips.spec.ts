@@ -125,6 +125,7 @@ function prRow(projectId: number, n: number, extra: Partial<PrRow> = {}): PrRow 
     mergeStateStatus: 'CLEAN',
     checks: [],
     merge: 'clean',
+    mergeCheck: { source: 'github', at, base: 'main', outdated: false },
     ci: 'none',
     updatedAt: at,
     fetchedAt: at,
@@ -421,7 +422,7 @@ test('a tooltip with nothing to say shows no bubble', async ({ page, project }) 
   await expectNoTooltip(page.locator('[data-slot="tooltip-trigger"]').filter({ hasText: /^draft$/ }))
   await expectTooltip(
     page.locator('[data-slot="tooltip-trigger"]').filter({ hasText: /^mergeable$/ }),
-    'No conflicts with the base.',
+    /^No conflicts with the base\. GitHub's word as of .+\.$/,
   )
 })
 
@@ -858,6 +859,11 @@ test("the Previews page's hints are tooltips: the limit's use, a row's state, li
     }),
   )
   await page.goto(`/projects/${project.id}/previews`)
+  await expectTooltip(page.locator('#previews-stage'), 'Shows the previews of the tickets in this stage')
+  // The stage filter starts on the review stage, where this ticket (in progress) is not: All stages lists it.
+  await page.getByRole('combobox', { name: 'Stage' }).click()
+  await page.getByRole('option', { name: /^All stages \d+$/ }).click()
+  await expect(page.getByRole('listbox')).toHaveCount(0)
   await expectTooltip(
     page.getByText(/^Board-run previews: \d+ of \d+ in use \(board-wide\)$/),
     'Previews the board builds or runs, in every project, and how many it runs at most at once',

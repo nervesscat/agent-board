@@ -149,6 +149,7 @@ function prRow(projectId: number, n: number, waitingOn: PrRow['waitingOn'], stat
     mergeStateStatus: 'CLEAN',
     checks: [],
     merge: 'clean',
+    mergeCheck: { source: 'github', at, base: 'main', outdated: false },
     ci: 'none',
     updatedAt: at,
     fetchedAt: at,
