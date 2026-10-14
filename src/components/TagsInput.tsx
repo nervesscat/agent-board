@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
 
 import { Tag } from '#/components/Tag'
+import { Tip } from '#/components/ui/tooltip'
 import { addTags, MAX_TAG_LENGTH, MAX_TAGS, overTagLimits, tagTooLong } from '#/lib/tags'
 import { cn } from '#/lib/utils'
 
@@ -85,27 +86,28 @@ export function TagsInput({
         {value.map((tag) => {
           const tooLong = tagTooLong(tag)
           return (
-            <Tag
-              key={tag}
-              tag={tag}
-              data-invalid={tooLong || undefined}
-              title={tooLong ? `More than ${MAX_TAG_LENGTH} characters` : undefined}
-              className="max-w-full cursor-default items-center gap-0.5 pr-0.5 break-all data-invalid:ring-1 data-invalid:ring-destructive"
-            >
-              <button
-                type="button"
-                // Out of the Tab order, so Tab reaches the text as in any field; Backspace removes
-                // from the keyboard. Pressing it keeps the focus where it is.
-                tabIndex={-1}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => onChange(value.filter((t) => t !== tag))}
-                className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-60 hover:bg-foreground/10 hover:opacity-100"
-                aria-label={`Remove ${tag}`}
-                title="Remove"
+            <Tip key={tag} content={tooLong ? `More than ${MAX_TAG_LENGTH} characters` : undefined}>
+              <Tag
+                tag={tag}
+                data-invalid={tooLong || undefined}
+                className="max-w-full cursor-default items-center gap-0.5 pr-0.5 break-all data-invalid:ring-1 data-invalid:ring-destructive"
               >
-                <X className="size-3" />
-              </button>
-            </Tag>
+                <Tip content="Remove">
+                  <button
+                    type="button"
+                    // Out of the Tab order, so Tab reaches the text as in any field; Backspace removes
+                    // from the keyboard. Pressing it keeps the focus where it is.
+                    tabIndex={-1}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onChange(value.filter((t) => t !== tag))}
+                    className="inline-flex size-3.5 shrink-0 items-center justify-center rounded-sm opacity-60 hover:bg-foreground/10 hover:opacity-100"
+                    aria-label={`Remove ${tag}`}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Tip>
+              </Tag>
+            </Tip>
           )
         })}
         <input

@@ -11,6 +11,7 @@ import { Button } from '#/components/ui/button'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Textarea } from '#/components/ui/textarea'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch, type ReportSettingsView } from '#/lib/api'
 import type { ReportFormat } from '#/lib/constants'
 import { DEFAULT_REPORT_TEMPLATE, templateHeadings } from '#/lib/reportTemplate'
@@ -62,20 +63,21 @@ function PromptSettings({ projectId, settings }: { projectId: number; settings: 
         <PromptForm projectId={projectId} settings={settings} onDone={() => setEditing(false)} />
       ) : settings.prompt ? (
         // Clicking the prompt edits it; a link inside still opens.
-        <div
-          role="button"
-          tabIndex={0}
-          title="Click to edit"
-          className="cursor-text rounded-md hover:bg-muted/30"
-          onClick={(e) => {
-            if (!(e.target as HTMLElement).closest('a, img')) setEditing(true)
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') setEditing(true)
-          }}
-        >
-          <Markdown>{settings.prompt}</Markdown>
-        </div>
+        <Tip content="Click to edit">
+          <div
+            role="button"
+            tabIndex={0}
+            className="cursor-text rounded-md hover:bg-muted/30"
+            onClick={(e) => {
+              if (!(e.target as HTMLElement).closest('a, img')) setEditing(true)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') setEditing(true)
+            }}
+          >
+            <Markdown>{settings.prompt}</Markdown>
+          </div>
+        </Tip>
       ) : (
         <button
           type="button"

@@ -2,7 +2,7 @@ import type { APIRequestContext, Page } from '@playwright/test'
 
 import type { Project, TicketFull } from '#/lib/api'
 import { inDatabase } from './db'
-import { expect, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, test } from './fixtures'
 import { look, ownRepo } from './repos'
 
 const ticket = (human: APIRequestContext, project: Project, title: string, branch: string) =>
@@ -66,16 +66,13 @@ test("shows conflicts with origin's moved base on the ticket and in the queue, t
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const chip = branchCard(page).getByText('conflicts', { exact: true })
   await expect(chip).toBeVisible()
-  await expect(chip).toHaveAttribute('title', /Checked here against origin\/main, .*\d/)
+  await expectTooltip(chip, /Checked here against origin\/main, .*\d/)
   await expect(branchCard(page).getByText('mergeable', { exact: true })).toHaveCount(0)
 
   await page.goto(`/projects/${project.id}/prs?filter=others`)
   const card = page.locator(`#pr-${id}`)
   await expect(card.getByText('conflicts', { exact: true })).toBeVisible()
-  await expect(card.getByText('conflicts', { exact: true })).toHaveAttribute(
-    'title',
-    /Checked here against origin\/main/,
-  )
+  await expectTooltip(card.getByText('conflicts', { exact: true }), /Checked here against origin\/main/)
 })
 
 test("shows checking for a head not in the checkout until GitHub's word is newer than the base's move", async ({
@@ -96,8 +93,8 @@ test("shows checking for a head not in the checkout until GitHub's word is newer
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   await expect(branchCard(page).getByText('checking', { exact: true })).toBeVisible()
-  await expect(branchCard(page).getByText('checking', { exact: true })).toHaveAttribute(
-    'title',
+  await expectTooltip(
+    branchCard(page).getByText('checking', { exact: true }),
     /origin\/main moved after GitHub's word/,
   )
 
@@ -108,5 +105,5 @@ test("shows checking for a head not in the checkout until GitHub's word is newer
   await page.reload()
   const chip = branchCard(page).getByText('mergeable', { exact: true })
   await expect(chip).toBeVisible()
-  await expect(chip).toHaveAttribute('title', /GitHub's word as of .*\d/)
+  await expectTooltip(chip, /GitHub's word as of .*\d/)
 })

@@ -20,6 +20,7 @@ import {
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table'
+import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, get, type CleanupReport } from '#/lib/api'
 import { shortSha } from '#/lib/format'
 import { useStages } from '#/lib/project'
@@ -190,14 +191,12 @@ function Cleanup() {
                           </TableCell>
                           <TableCell className="max-w-64">
                             {b?.worktrees.map((w) => (
-                              <div
-                                key={w.path}
-                                className="flex items-center gap-1 truncate font-mono text-[11px]"
-                                title={w.path}
-                              >
-                                <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />
-                                <span className="truncate">{w.main ? 'main checkout' : w.path}</span>
-                              </div>
+                              <Tip key={w.path} content={w.path}>
+                                <div className="flex items-center gap-1 truncate font-mono text-[11px]">
+                                  <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{w.main ? 'main checkout' : w.path}</span>
+                                </div>
+                              </Tip>
                             ))}
                           </TableCell>
                           <TableCell className="font-mono text-[11px] text-muted-foreground">
@@ -205,14 +204,16 @@ function Cleanup() {
                           </TableCell>
                           <TableCell>
                             {b?.restore && (
-                              <button
-                                type="button"
-                                title={`Copy the restore command: ${b.restore}`}
-                                onClick={() => copy(b.restore!)}
-                                className="text-muted-foreground hover:text-foreground"
-                              >
-                                <Copy className="size-3.5" />
-                              </button>
+                              <Tip content={`Copy the restore command: ${b.restore}`}>
+                                <button
+                                  type="button"
+                                  aria-label={`Copy the restore command: ${b.restore}`}
+                                  onClick={() => copy(b.restore!)}
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  <Copy className="size-3.5" />
+                                </button>
+                              </Tip>
                             )}
                           </TableCell>
                         </TableRow>
@@ -235,16 +236,18 @@ function Cleanup() {
                 <pre className="flex-1 overflow-x-auto font-mono text-xs">
                   {`git push origin --delete ${remote.map((r) => r.branch!.name).join(' ')}`}
                 </pre>
-                <button
-                  type="button"
-                  title="Copy"
-                  onClick={() =>
-                    copy(`git push origin --delete ${remote.map((r) => r.branch!.name).join(' ')}`)
-                  }
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Copy className="size-3.5" />
-                </button>
+                <Tip content="Copy">
+                  <button
+                    type="button"
+                    aria-label="Copy"
+                    onClick={() =>
+                      copy(`git push origin --delete ${remote.map((r) => r.branch!.name).join(' ')}`)
+                    }
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <Copy className="size-3.5" />
+                  </button>
+                </Tip>
               </div>
               <p className="text-xs text-muted-foreground">
                 Check the reach first: a branch with unique work may still be needed.
@@ -263,9 +266,9 @@ function Cleanup() {
                 {data.untracked.map((w) => (
                   <li key={w.path} className="flex flex-wrap items-center gap-2 font-mono text-xs">
                     <span className="text-muted-foreground">{w.repo}</span>
-                    <span className="truncate" title={w.path}>
-                      {w.path}
-                    </span>
+                    <Tip content={w.path}>
+                      <span className="truncate">{w.path}</span>
+                    </Tip>
                     <span className="text-muted-foreground">
                       {w.branch ?? (w.head ? `detached ${shortSha(w.head)}` : '')}
                     </span>

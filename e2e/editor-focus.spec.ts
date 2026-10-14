@@ -2,7 +2,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { CommentRow, TicketFull, TicketRow } from '#/lib/api'
 import { png, sendFile } from './files'
-import { expect, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, test } from './fixtures'
 
 const FORMATS = [
   'Bold',
@@ -179,7 +179,7 @@ test('the toolbar attach is a paperclip with no text, named and titled like the 
   const d = await newTicket(page, project.id, 'Just the icon')
   const attach = d.toolbar.getByRole('button').first()
   await expect(attach).toHaveAccessibleName('Attach files')
-  await expect(attach).toHaveAttribute('title', 'Attach files')
+  await expectTooltip(attach, 'Attach files')
   await expect(attach).toHaveAttribute('aria-busy', 'false')
   await expect(attach).toHaveText('')
   expect(await attach.evaluate((b) => (b as HTMLElement).innerText.trim())).toBe('')
@@ -217,7 +217,7 @@ test('the toolbar attach spins while its files upload, with no text, and is a pa
   await (await chooser).setFiles({ name: 'slow.png', mimeType: 'image/png', buffer: png() })
   await expect(attach).toHaveAttribute('aria-busy', 'true')
   await expect(attach).toHaveAccessibleName('Attaching files…')
-  await expect(attach).toHaveAttribute('title', 'Attaching files…')
+  await expectTooltip(attach, 'Attaching files…')
   await expect(attach).toBeEnabled()
   await expect(attach).toHaveText('')
   await expect(attach.locator('svg')).toHaveCount(1)
@@ -226,7 +226,7 @@ test('the toolbar attach spins while its files upload, with no text, and is a pa
   release()
   await expect(attach).toHaveAttribute('aria-busy', 'false')
   await expect(attach).toHaveAccessibleName('Attach files')
-  await expect(attach).toHaveAttribute('title', 'Attach files')
+  await expectTooltip(attach, 'Attach files')
   await expect(attach).toHaveText('')
   await expect(attach.locator('svg')).toHaveCount(1)
   await expect(attach.locator('svg.lucide-paperclip')).toBeVisible()
@@ -547,7 +547,7 @@ async function expectPaperclip(text: Locator) {
   const bar = toolbarOf(text)
   const attach = bar.getByRole('button').first()
   await expect(attach).toHaveAccessibleName('Attach files')
-  await expect(attach).toHaveAttribute('title', 'Attach files')
+  await expectTooltip(attach, 'Attach files')
   await expect(attach).toHaveAttribute('aria-busy', 'false')
   expect(await attach.evaluate((b) => (b as HTMLElement).innerText.trim())).toBe('')
   await expect(attach.locator('svg')).toHaveCount(1)

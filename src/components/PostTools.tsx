@@ -13,6 +13,7 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
+import { Tip } from '#/components/ui/tooltip'
 import { RichEditor } from '#/components/RichEditor'
 import { stamp } from '#/lib/format'
 import { cn } from '#/lib/utils'
@@ -57,9 +58,9 @@ export function EditBox({
 export function Edited({ at }: { at: string | null }) {
   if (!at) return null
   return (
-    <span title={`edited ${stamp(at)}`} className="italic">
-      edited
-    </span>
+    <Tip content={`edited ${stamp(at)}`}>
+      <span className="italic">edited</span>
+    </Tip>
   )
 }
 
@@ -74,15 +75,16 @@ export function ActionButton({
   ...props
 }: React.ComponentProps<typeof Button> & { label: string; tip: string }) {
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-xs"
-      aria-label={label}
-      title={tip}
-      className={cn('text-muted-foreground [&_svg]:size-3.5', className)}
-      {...props}
-    />
+    <Tip content={tip}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label={label}
+        className={cn('text-muted-foreground [&_svg]:size-3.5', className)}
+        {...props}
+      />
+    </Tip>
   )
 }
 

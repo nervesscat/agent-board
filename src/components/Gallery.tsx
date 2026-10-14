@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { type PointerEvent, type RefObject, useEffect, useRef, useState } from 'react'
 
+import { Tip } from '#/components/ui/tooltip'
+
 /**
  * Anything on the page marked with `data-gallery-src` opens in a full-screen viewer on click, and the
  * arrows step through every such item on the page in reading order. Items with a
@@ -92,6 +94,7 @@ export function Gallery() {
 
   // Set by the image viewer while it is shown: handles the zoom keys, true when it used the key.
   const zoomKeys = useRef<ZoomKeys | null>(null)
+  const popup = useRef<HTMLDivElement>(null)
 
   const item = open ? items[index] : undefined
 
@@ -103,6 +106,10 @@ export function Gallery() {
           // Keys are handled here rather than on the document: the dialog keeps focus inside, so the
           // popup always sees them first. Focusable itself, so clicking the image keeps focus inside.
           tabIndex={-1}
+          // It opens with the focus on itself, not on its first button: opened from the keyboard, that
+          // button's tooltip would open too, and the first Escape would close only the tooltip.
+          ref={popup}
+          initialFocus={popup}
           onKeyDown={(e) => {
             // The video's own seek keys win while it has focus.
             if (e.ctrlKey || e.metaKey || e.altKey || (e.target as HTMLElement).closest('video')) return
@@ -125,21 +132,27 @@ export function Gallery() {
                   </span>
                 )}
                 <div className="ml-auto flex shrink-0 items-center gap-1">
-                  <a
-                    href={item.src}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Open in new tab"
-                    className={chrome}
-                  >
-                    <ExternalLinkIcon className="size-4" />
-                  </a>
-                  <a href={item.src} download={item.name} title="Download" className={chrome}>
-                    <DownloadIcon className="size-4" />
-                  </a>
-                  <DialogPrimitive.Close title="Close (Esc)" className={chrome}>
-                    <XIcon className="size-5" />
-                  </DialogPrimitive.Close>
+                  <Tip content="Open in new tab">
+                    <a
+                      href={item.src}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Open in new tab"
+                      className={chrome}
+                    >
+                      <ExternalLinkIcon className="size-4" />
+                    </a>
+                  </Tip>
+                  <Tip content="Download">
+                    <a href={item.src} download={item.name} aria-label="Download" className={chrome}>
+                      <DownloadIcon className="size-4" />
+                    </a>
+                  </Tip>
+                  <Tip content="Close (Esc)">
+                    <DialogPrimitive.Close aria-label="Close (Esc)" className={chrome}>
+                      <XIcon className="size-5" />
+                    </DialogPrimitive.Close>
+                  </Tip>
                 </div>
               </header>
               <div
@@ -374,32 +387,42 @@ function ZoomableImage({
         } ${dragging ? 'cursor-grabbing' : zoomed ? 'cursor-grab' : 'cursor-zoom-in'}`}
       />
       <div className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full bg-black/60 p-1 text-sm ring-1 ring-white/15 backdrop-blur">
-        <button
-          type="button"
-          title="Zoom out (-)"
-          disabled={!zoomed}
-          onClick={() => zoomTo(view.s / STEP, null, true)}
-          className={`${chrome} rounded-full disabled:opacity-40`}
-        >
-          <MinusIcon className="size-4" />
-        </button>
-        <button
-          type="button"
-          title="Fit (0)"
-          onClick={() => apply({ s: 1, x: 0, y: 0 }, true)}
-          className="min-w-14 rounded-full px-2 py-1 text-white/80 tabular-nums outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50"
-        >
-          {Math.round(view.s * 100)}%
-        </button>
-        <button
-          type="button"
-          title="Zoom in (+)"
-          disabled={view.s >= MAX_ZOOM}
-          onClick={() => zoomTo(view.s * STEP, null, true)}
-          className={`${chrome} rounded-full disabled:opacity-40`}
-        >
-          <PlusIcon className="size-4" />
-        </button>
+        {/* Zoom out and in are on wrappers: at the end of the range they are disabled, and say so on hover. */}
+        <Tip content="Zoom out (-)">
+          <span className="inline-flex">
+            <button
+              type="button"
+              aria-label="Zoom out (-)"
+              disabled={!zoomed}
+              onClick={() => zoomTo(view.s / STEP, null, true)}
+              className={`${chrome} rounded-full disabled:pointer-events-none disabled:opacity-40`}
+            >
+              <MinusIcon className="size-4" />
+            </button>
+          </span>
+        </Tip>
+        <Tip content="Fit (0)">
+          <button
+            type="button"
+            onClick={() => apply({ s: 1, x: 0, y: 0 }, true)}
+            className="min-w-14 rounded-full px-2 py-1 text-white/80 tabular-nums outline-none hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-white/50"
+          >
+            {Math.round(view.s * 100)}%
+          </button>
+        </Tip>
+        <Tip content="Zoom in (+)">
+          <span className="inline-flex">
+            <button
+              type="button"
+              aria-label="Zoom in (+)"
+              disabled={view.s >= MAX_ZOOM}
+              onClick={() => zoomTo(view.s * STEP, null, true)}
+              className={`${chrome} rounded-full disabled:pointer-events-none disabled:opacity-40`}
+            >
+              <PlusIcon className="size-4" />
+            </button>
+          </span>
+        </Tip>
       </div>
     </>
   )

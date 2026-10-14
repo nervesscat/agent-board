@@ -3,7 +3,7 @@ import type { Locator, Page } from '@playwright/test'
 import type { Attachment, CommentRow } from '#/lib/api'
 import { AGENT } from './env'
 import { png } from './files'
-import { expect, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, test } from './fixtures'
 
 /** How much of it shows: its opacity times every ancestor's, where hover and focus reveal it. */
 const shown = (l: Locator) =>
@@ -13,8 +13,11 @@ const shown = (l: Locator) =>
     return o
   })
 
-/** The row of a post card or of a reply that says who wrote it, and when: the one that holds `Actor`. */
-const authorRow = (card: Locator) => card.locator('div:has(> span[title])').first()
+/**
+ * The row of a post card or of a reply that says who wrote it, and when: the one that holds `Actor`, a
+ * span with a tooltip.
+ */
+const authorRow = (card: Locator) => card.locator('div:has(> span[data-slot="tooltip-trigger"])').first()
 
 /** Where it is on the page. */
 const box = async (l: Locator) => (await l.boundingBox())!
@@ -30,11 +33,15 @@ const themeColor = (page: Page, variable: string) =>
     return color
   }, variable)
 
-/** An action that shows only its icon (and `text`, a count), named for screen readers, `tip` its tooltip. */
+/**
+ * An action that shows only its icon (and `text`, a count), named for screen readers, `tip` its tooltip.
+ * The pointer leaves it after, so what shows on hover is as it was.
+ */
 async function expectIcon(button: Locator, tip: string, text = '') {
   await expect(button).toHaveCount(1)
   await expect(button.locator('svg')).toHaveCount(1)
-  await expect(button).toHaveAttribute('title', tip)
+  await expectTooltip(button, tip)
+  await button.page().mouse.move(0, 0)
   expect(await button.evaluate((el) => (el as HTMLElement).innerText.trim())).toBe(text)
 }
 

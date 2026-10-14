@@ -2,7 +2,7 @@ import fs from 'node:fs'
 
 import type { Locator, Page } from '@playwright/test'
 
-import { expect, seededProject, test } from './fixtures'
+import { expect, expectTooltip, seededProject, test } from './fixtures'
 
 /** The top bar's home link: the CrossBoard mark and wordmark. */
 const homeLink = (page: Page) =>
@@ -42,7 +42,7 @@ test('the top bar links home with the CrossBoard lockup', async ({ page }) => {
   const home = homeLink(page)
   await expect(home).toHaveCount(1)
   await expect(home).toHaveAttribute('href', '/')
-  await expect(home).toHaveAttribute('title', 'Home')
+  await expectTooltip(home, 'Home')
   await expect(page.getByRole('banner')).not.toContainText('Agent Board')
   await home.click()
   await expect(page).toHaveURL(/\/$/)

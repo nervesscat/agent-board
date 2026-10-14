@@ -19,6 +19,7 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Label } from '#/components/ui/label'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch } from '#/lib/api'
 import { useProject } from '#/lib/project'
 
@@ -43,14 +44,12 @@ function Settings() {
         <div className="space-y-1 text-right text-sm">
           <ul className="space-y-0.5">
             {p.repos.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center justify-end gap-1.5 text-muted-foreground"
-                title={r.repoPath}
-              >
-                <FolderGit2 className="size-3.5 shrink-0" />
-                <span className="font-mono text-xs">{r.githubRepo ?? r.repoPath}</span>
-              </li>
+              <Tip key={r.id} content={r.repoPath}>
+                <li className="flex items-center justify-end gap-1.5 text-muted-foreground">
+                  <FolderGit2 className="size-3.5 shrink-0" />
+                  <span className="font-mono text-xs">{r.githubRepo ?? r.repoPath}</span>
+                </li>
+              </Tip>
             ))}
           </ul>
           <p className="text-xs text-muted-foreground">
@@ -155,20 +154,21 @@ function Instructions({ projectId, saved }: { projectId: string; saved: string }
         </div>
       ) : saved ? (
         // Clicking the text edits it; a link inside still opens.
-        <div
-          role="button"
-          tabIndex={0}
-          title="Click to edit"
-          className="cursor-text rounded-md border p-4 hover:bg-muted/30"
-          onClick={(e) => {
-            if (!(e.target as HTMLElement).closest('a, img')) open()
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') open()
-          }}
-        >
-          <Markdown>{saved}</Markdown>
-        </div>
+        <Tip content="Click to edit">
+          <div
+            role="button"
+            tabIndex={0}
+            className="cursor-text rounded-md border p-4 hover:bg-muted/30"
+            onClick={(e) => {
+              if (!(e.target as HTMLElement).closest('a, img')) open()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') open()
+            }}
+          >
+            <Markdown>{saved}</Markdown>
+          </div>
+        </Tip>
       ) : (
         <button
           type="button"

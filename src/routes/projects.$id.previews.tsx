@@ -29,6 +29,7 @@ import { Button } from '#/components/ui/button'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Skeleton } from '#/components/ui/skeleton'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type ProjectPreview, type ProjectPreviews, type StopAll } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { recall, remember } from '#/lib/remembered'
@@ -230,21 +231,18 @@ function StageFilter({
     <div className="flex min-w-0 items-center gap-2">
       <Label htmlFor="previews-stage">Stage</Label>
       <Select value={value} onValueChange={(v) => v && onChange(v)} items={items}>
-        <SelectTrigger
-          id="previews-stage"
-          size="sm"
-          className="max-w-60 min-w-36"
-          title="Shows the previews of the tickets in this stage"
-        >
-          <SelectValue>
-            {(v: string) => (
-              <>
-                <span className="truncate">{options.find((o) => o.key === v)?.name ?? v}</span>
-                {count(v)}
-              </>
-            )}
-          </SelectValue>
-        </SelectTrigger>
+        <Tip content="Shows the previews of the tickets in this stage">
+          <SelectTrigger id="previews-stage" size="sm" className="max-w-60 min-w-36">
+            <SelectValue>
+              {(v: string) => (
+                <>
+                  <span className="truncate">{options.find((o) => o.key === v)?.name ?? v}</span>
+                  {count(v)}
+                </>
+              )}
+            </SelectValue>
+          </SelectTrigger>
+        </Tip>
         {/* Below the trigger, from the top of the list: laid over it, near the top of the page, the
             list would open scrolled to the stage picked. */}
         <SelectContent alignItemWithTrigger={false} align="start">
@@ -298,13 +296,15 @@ function PreviewsBar({
   })
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border px-3 py-2 text-sm">
-      <span title="Previews the board builds or runs, in every project, and how many it runs at most at once">
-        Board-run previews:{' '}
-        <span className="font-medium">
-          {inUse} of {limit} in use
-        </span>{' '}
-        <span className="text-muted-foreground">(board-wide)</span>
-      </span>
+      <Tip content="Previews the board builds or runs, in every project, and how many it runs at most at once">
+        <span>
+          Board-run previews:{' '}
+          <span className="font-medium">
+            {inUse} of {limit} in use
+          </span>{' '}
+          <span className="text-muted-foreground">(board-wide)</span>
+        </span>
+      </Tip>
       <PreviewLimitEditor key={limit} id="previews-limit" limit={limit} />
       {anyRunning && (
         <AlertDialog open={confirm} onOpenChange={setConfirm}>
@@ -381,18 +381,17 @@ function PreviewItem({
         />
       </div>
       {p.url && (
-        <div className="truncate font-mono text-xs text-muted-foreground" title={p.url}>
-          {p.url}
-        </div>
+        <Tip content={p.url}>
+          <div className="truncate font-mono text-xs text-muted-foreground">{p.url}</div>
+        </Tip>
       )}
       {p.managed && <ManagedLine m={p.managed} workspaceId={w.id} />}
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <span
-          className="inline-flex min-w-0 items-center gap-1 font-mono"
-          title={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}
-        >
-          <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
-        </span>
+        <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
+          <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+            <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
+          </span>
+        </Tip>
         {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
       </div>
       {link && p.linkStop && (

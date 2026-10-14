@@ -9,7 +9,7 @@ import type { APIRequestContext, Page } from '@playwright/test'
 
 import type { ManagedPreview, ProjectPreview, ProjectPreviews, TicketFull, Workspace } from '#/lib/api'
 import { END_BUILD as END, e2eEnv, git } from './env'
-import { expect, ok, seedProject, test } from './fixtures'
+import { expect, expectTooltip, ok, seedProject, test } from './fixtures'
 
 /** A server on this machine that answers, as a branch an agent runs would; closed when the test ends. */
 async function answering() {
@@ -270,6 +270,10 @@ test.describe('board-run previews and the preview limit', () => {
       await expect(row.getByRole('button', { name: 'Stop' })).toHaveCount(0)
 
       // Start: the board builds it, and the row says so once the page asked again.
+      await expectTooltip(
+        row.getByRole('button', { name: 'Start', exact: true }),
+        'Build this worktree and run it on a free port, with a fresh copy of the live data',
+      )
       await row.getByRole('button', { name: 'Start', exact: true }).click()
       const building = running.getByRole('listitem').filter({ hasText: 'Run it from here' })
       await expect(building).toContainText('Building…')
@@ -279,6 +283,15 @@ test.describe('board-run previews and the preview limit', () => {
       await expect.poll(async () => (await managed())?.step).toBe('build')
       const first = (await managed())!
       expect(first).toMatchObject({ status: 'building', path: worktree })
+
+      await expectTooltip(
+        building.getByRole('button', { name: 'Stop' }),
+        'Stop the preview and free its port',
+      )
+      await expectTooltip(
+        building.getByRole('button', { name: 'Restart' }),
+        'Stop it, build again and start it with a fresh copy of the data',
+      )
 
       // Restart: stopped and started again, still building.
       await building.getByRole('button', { name: 'Restart' }).click()
@@ -545,6 +558,10 @@ test("Stop on a link row stops the agent's server when it runs from the workspac
       .filter({ hasText: 'Started by an agent' })
     await expect(row).toContainText('Running')
     await expect(row.getByRole('link', { name: 'Open preview' })).toBeVisible()
+    await expectTooltip(
+      row.getByRole('button', { name: 'Stop', exact: true }),
+      "Stop the server behind this link (it runs from the workspace's worktree) and free its port",
+    )
     await row.getByRole('button', { name: 'Stop', exact: true }).click()
 
     // The process is gone and the port free; the row moves to Not running on its own, link and all.

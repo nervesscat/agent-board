@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
+import { Tip } from '#/components/ui/tooltip'
 import { cn } from '#/lib/utils'
 
 /**
@@ -245,35 +246,36 @@ function Toolbar({
   return (
     <div role="toolbar" aria-label="Formatting" className="flex flex-wrap gap-0.5 border-b px-1.5 py-1">
       {onAttach && (
-        <button
-          type="button"
-          title={attachLabel}
-          aria-label={attachLabel}
-          aria-busy={attaching}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onAttach}
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
-        </button>
+        <Tip content={attachLabel}>
+          <button
+            type="button"
+            aria-label={attachLabel}
+            aria-busy={attaching}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onAttach}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {attaching ? <Loader2 className="size-3.5 animate-spin" /> : <Paperclip className="size-3.5" />}
+          </button>
+        </Tip>
       )}
       {buttons.map((b) => (
-        <button
-          key={b.label}
-          type="button"
-          title={b.label}
-          aria-label={b.label}
-          aria-pressed={b.on}
-          // Keep the selection in the text while clicking a button.
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={b.run}
-          className={cn(
-            'rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground',
-            b.on && 'bg-muted text-foreground',
-          )}
-        >
-          <b.icon className="size-3.5" />
-        </button>
+        <Tip key={b.label} content={b.label}>
+          <button
+            type="button"
+            aria-label={b.label}
+            aria-pressed={b.on}
+            // Keep the selection in the text while clicking a button.
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={b.run}
+            className={cn(
+              'rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground',
+              b.on && 'bg-muted text-foreground',
+            )}
+          >
+            <b.icon className="size-3.5" />
+          </button>
+        </Tip>
       ))}
     </div>
   )

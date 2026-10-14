@@ -1,5 +1,6 @@
 import { cn } from 'cn'
 
+import { Tip } from '#/components/ui/tooltip'
 import type { Reach } from '#/lib/api'
 
 const REACH: Record<Reach['state'], { label: string; title: string; className: string }> = {
@@ -30,16 +31,19 @@ export function ReachBadge({ reach, className }: { reach: Reach; className?: str
   const r = REACH[reach.state]
   const count = reach.state === 'unique' ? ` · ${reach.unique.length}` : ''
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px]',
-        r.className,
-        className,
-      )}
-      title={`${r.title}${reach.unique.length ? `\n\n${reach.unique.map((c) => `${c.sha.slice(0, 7)} ${c.subject}`).join('\n')}` : ''}`}
+    <Tip
+      content={`${r.title}${reach.unique.length ? `\n\n${reach.unique.map((c) => `${c.sha.slice(0, 7)} ${c.subject}`).join('\n')}` : ''}`}
     >
-      {r.label}
-      {count} <span className="font-mono opacity-80">→ {reach.into}</span>
-    </span>
+      <span
+        className={cn(
+          'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px]',
+          r.className,
+          className,
+        )}
+      >
+        {r.label}
+        {count} <span className="font-mono opacity-80">→ {reach.into}</span>
+      </span>
+    </Tip>
   )
 }

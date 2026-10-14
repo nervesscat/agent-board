@@ -12,6 +12,7 @@ import { GenerateReportButton } from '#/components/daily/GenerateReportButton'
 import { refreshReports } from '#/components/daily/refresh'
 import { REPORT_STATUS } from '#/components/daily/status'
 import { Button } from '#/components/ui/button'
+import { Tip } from '#/components/ui/tooltip'
 import {
   errorMessage,
   get,
@@ -239,14 +240,14 @@ function PostReport({
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            size="sm"
-            disabled={!ready || send.isPending}
-            title={format === 'file' && !files.length ? 'Attach the report file first' : undefined}
-          >
-            {send.isPending ? 'Posting…' : period.report ? 'Replace' : 'Post'}
-          </Button>
+          {/* On a wrapper: without the file the button is disabled, and its tooltip says why. */}
+          <Tip content={format === 'file' && !files.length ? 'Attach the report file first' : undefined}>
+            <span className="inline-flex">
+              <Button type="submit" size="sm" disabled={!ready || send.isPending}>
+                {send.isPending ? 'Posting…' : period.report ? 'Replace' : 'Post'}
+              </Button>
+            </span>
+          </Tip>
         </div>
       </div>
     </form>
