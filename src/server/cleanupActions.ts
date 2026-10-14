@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { eq, inArray } from 'drizzle-orm'
+import { z } from 'zod'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
@@ -25,6 +26,7 @@ import {
   removeWorktree,
   worktreeChanges,
 } from './git'
+import { HttpError } from './http'
 import { stopLinkPreview } from './linkPreview'
 import {
   activePreviews,
@@ -39,16 +41,41 @@ import { listRepos } from './repos'
 import { inBatches, removeLink, type WorktreeLink, type WorktreeRepo, worktreeLinks } from './worktreeLinks'
 
 /**
- * The Cleanup page's delete actions, the human's alone: a closed ticket's worked branch deleted here,
- * on origin, or with its worktrees. Each item is checked again just before it is acted on, on git's
- * state as it is then (origin fetched first) and against the commit the human saw; the deletions in
- * one checkout run one at a time. Nothing is forced: a worktree with changes, a branch that moved and
- * an origin branch someone pushed to are all left alone. A worktree's links are removed as links
- * before it, so git never deletes through one what lies out of it (`worktreeLinks.ts`).
+ * The Cleanup page's delete actions: a closed ticket's worked branch deleted here, on origin, or with
+ * its worktrees. The human may do all three; an agent (the `cleanup_delete` tool, or the same route)
+ * the local branch and the worktrees only, never origin's: a request of theirs with a branch on origin
+ * in it is refused whole. Each item is checked again just before it is acted on, on git's state as it
+ * is then (origin fetched first) and against the commit the caller saw, the same checks for both; the
+ * deletions in one checkout run one at a time. Nothing is forced: a worktree with changes, a branch
+ * that moved and an origin branch someone pushed to are all left alone. A worktree's links are removed
+ * as links before it, so git never deletes through one what lies out of it (`worktreeLinks.ts`).
  */
 
 export const DELETE_KINDS = ['local', 'remote', 'worktrees'] as const
 export type DeleteKind = (typeof DELETE_KINDS)[number]
+/** What an agent may delete: never a branch on origin. */
+export const AGENT_DELETE_KINDS = ['local', 'worktrees'] as const satisfies readonly DeleteKind[]
+const agentMay: ReadonlySet<DeleteKind> = new Set(AGENT_DELETE_KINDS)
+/** A full commit sha, as the report gives it (SHA-1 or SHA-256). */
+export const FULL_SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/
+
+/**
+ * One request's items as the route and the `cleanup_delete` tool take them, of the kinds the caller
+ * may ask for: the same limits for both.
+ */
+export const deleteItems = (kinds: readonly [DeleteKind, ...DeleteKind[]]) =>
+  z
+    .array(
+      z.object({
+        ticketId: z.number().int(),
+        branch: z.string().min(1).max(250),
+        kind: z.enum(kinds),
+        sha: z.string().regex(FULL_SHA, 'a full commit sha').nullable(),
+        worktrees: z.array(z.string().min(1).max(1000)).max(50).optional(),
+      }),
+    )
+    .min(1)
+    .max(200)
 
 export interface DeleteItem {
   ticketId: number
@@ -56,11 +83,11 @@ export interface DeleteItem {
   /** The local branch, origin's, or the branch's worktrees and then the local branch. */
   kind: DeleteKind
   /**
-   * The commit the human saw: origin's for `remote`, the local branch's otherwise (null when there
+   * The commit the caller saw: origin's for `remote`, the local branch's otherwise (null when there
    * was none). One that moved since is not deleted.
    */
   sha: string | null
-  /** The worktrees the human saw listed (`worktrees`): one that is not among them is never removed. */
+  /** The worktrees the caller saw listed (`worktrees`): one that is not among them is never removed. */
   worktrees?: string[]
 }
 
@@ -129,14 +156,18 @@ const result = (
 const short = (sha: string) => sha.slice(0, 7)
 
 /**
- * Deletes what the human confirmed, item by item: one refused or failing does not stop the rest.
- * Answers each item's outcome, in the order asked.
+ * Deletes what the caller confirmed, item by item: one refused or failing does not stop the rest.
+ * Answers each item's outcome, in the order asked. An agent's request with a branch on origin in it is
+ * refused whole (403), before anything is looked at.
  */
 export async function deleteLeftovers(
   projectId: number,
   items: DeleteItem[],
   actor: string,
+  opts: { agent?: boolean } = {},
 ): Promise<DeleteResult[]> {
+  if (opts.agent && items.some((item) => !agentMay.has(item.kind)))
+    throw new HttpError(403, 'only the human deletes branches on origin, from the Cleanup page')
   getProject(projectId)
   const repos = listRepos(projectId)
   const results: DeleteResult[] = []
