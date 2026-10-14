@@ -7,10 +7,14 @@ import {
   authOffBanner,
   builtServerBind,
   checkBind,
+  entranceIgnored,
   LIVE_PORT,
   readAuthMode,
   readClaudeArgs,
   readClaudeTimeout,
+  readPort,
+  readPublicEntrance,
+  readServedEntrance,
   StartupError,
 } from './config'
 
@@ -115,6 +119,193 @@ describe('authOffBanner', () => {
     expect(authOffBanner(readAuthMode({ BOARD_ENV: 'test' }), 'human')).toMatch(
       /^AUTH OFF: test, signed in as human, do not expose this .*X-Test-Actor/,
     )
+  })
+})
+
+describe('readPort', () => {
+  it('is PORT, else 47100', () => {
+    expect(readPort({ PORT: '47264' })).toBe(47264)
+    expect(readPort({ PORT: '' })).toBe(47100)
+    expect(readPort({})).toBe(47100)
+  })
+})
+
+describe('the tailnet entrance', () => {
+  const keys = {
+    PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net',
+    PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443',
+    PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111',
+  }
+  const entrance = {
+    origin: 'https://devbox.example-tailnet.ts.net',
+    host: 'devbox.example-tailnet.ts.net',
+    gateUrl: 'https://devbox.example-tailnet.ts.net:8443',
+    gateAuthUrl: 'http://127.0.0.1:47111',
+  }
+
+  it('is off when none of its keys is set', () => {
+    expect(readPublicEntrance({})).toBeNull()
+    expect(
+      readPublicEntrance({ PUBLIC_ORIGIN: '', PUBLIC_GATE_URL: ' ', PUBLIC_GATE_AUTH_URL: undefined }),
+    ).toBeNull()
+    expect(readServedEntrance({})).toBeNull()
+  })
+
+  it('reads all three, as origins', () => {
+    expect(readPublicEntrance(keys)).toEqual(entrance)
+    expect(
+      readPublicEntrance({
+        PUBLIC_ORIGIN: ' https://DevBox.Example-Tailnet.ts.net/ ',
+        PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443/',
+        PUBLIC_GATE_AUTH_URL: 'http://[::1]:47111/',
+      }),
+    ).toEqual({ ...entrance, gateAuthUrl: 'http://[::1]:47111' })
+    expect(readPublicEntrance({ ...keys, PUBLIC_GATE_AUTH_URL: 'http://localhost:47111' })).toEqual({
+      ...entrance,
+      gateAuthUrl: 'http://localhost:47111',
+    })
+  })
+
+  it('takes all three or none: a half configuration stops the start', () => {
+    const names = Object.keys(keys) as (keyof typeof keys)[]
+    for (const left of names) {
+      const one = { [left]: keys[left] }
+      expect(() => readPublicEntrance(one)).toThrow(StartupError)
+      const two = { ...keys, [left]: '' }
+      expect(() => readPublicEntrance(two)).toThrow(/together, or none of them/)
+    }
+    expect(() => readPublicEntrance({ PUBLIC_ORIGIN: keys.PUBLIC_ORIGIN })).toThrow(
+      'PUBLIC_ORIGIN is set, PUBLIC_GATE_URL and PUBLIC_GATE_AUTH_URL not',
+    )
+    expect(() => readPublicEntrance({ ...keys, PUBLIC_GATE_URL: '' })).toThrow(
+      'PUBLIC_ORIGIN and PUBLIC_GATE_AUTH_URL are set, PUBLIC_GATE_URL not',
+    )
+  })
+
+  it('refuses a board origin that is not https://<host>: no port, no path, no wildcard, no IP', () => {
+    for (const origin of [
+      'http://devbox.example-tailnet.ts.net',
+      'https://devbox.example-tailnet.ts.net:443',
+      'https://devbox.example-tailnet.ts.net:8080',
+      'https://devbox.example-tailnet.ts.net/board',
+      'https://devbox.example-tailnet.ts.net/?x=1',
+      'https://devbox.example-tailnet.ts.net#top',
+      'https://me@devbox.example-tailnet.ts.net',
+      'https://*.example-tailnet.ts.net',
+      'https://*.ts.net',
+      'https://*',
+      'https://ts.net.',
+      'https://100.101.102.103',
+      'https://[fd7a:115c:a1e0::1]',
+      'https://localhost',
+      'https://<machine>.<tailnet>.ts.net',
+      'devbox.example-tailnet.ts.net',
+    ])
+      expect(() => readPublicEntrance({ ...keys, PUBLIC_ORIGIN: origin }), origin).toThrow(
+        /^PUBLIC_ORIGIN must be https:\/\/<machine>\.<tailnet>\.ts\.net/,
+      )
+  })
+
+  it("refuses a public gate on another host, on the board's own origin, over http or with a path", () => {
+    for (const gate of [
+      'https://other.example-tailnet.ts.net:8443',
+      'https://example-tailnet.ts.net:8443',
+      'https://devbox.example-tailnet.ts.net',
+      'https://devbox.example-tailnet.ts.net:443',
+      'http://devbox.example-tailnet.ts.net:8443',
+      'https://devbox.example-tailnet.ts.net:8443/login',
+      'https://*.example-tailnet.ts.net:8443',
+      'https://127.0.0.1:8443',
+    ])
+      expect(() => readPublicEntrance({ ...keys, PUBLIC_GATE_URL: gate }), gate).toThrow(
+        /^PUBLIC_GATE_URL must be https:\/\/devbox\.example-tailnet\.ts\.net:<port>/,
+      )
+  })
+
+  it('asks the public gate over loopback http only', () => {
+    for (const auth of [
+      'http://192.168.1.20:47111',
+      'http://100.101.102.103:47111',
+      'http://devbox.example-tailnet.ts.net:47111',
+      'https://127.0.0.1:47111',
+      'http://127.0.0.2:47111',
+      'http://0.0.0.0:47111',
+      'http://[::]:47111',
+      'http://127.0.0.1:47111/auth',
+      'http://user:secret@127.0.0.1:47111',
+      '127.0.0.1:47111',
+    ])
+      expect(() => readPublicEntrance({ ...keys, PUBLIC_GATE_AUTH_URL: auth }), auth).toThrow(
+        /^PUBLIC_GATE_AUTH_URL must be http:\/\/127\.0\.0\.1:<port>/,
+      )
+  })
+
+  it('refuses the localhost gate for the public one: each origin has a gate of its own', () => {
+    for (const auth of ['http://127.0.0.1:47110', 'http://localhost:47110', 'http://[::1]:47110'])
+      expect(() => readPublicEntrance({ ...keys, PUBLIC_GATE_AUTH_URL: auth }), auth).toThrow(
+        /is the localhost gate of GATE_URL/,
+      )
+    const gate = { GATE_URL: 'http://localhost:47263' }
+    expect(() =>
+      readPublicEntrance({ ...keys, ...gate, PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47263' }),
+    ).toThrow(/localhost gate/)
+    expect(readPublicEntrance({ ...keys, ...gate, PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47262' })).toEqual({
+      ...entrance,
+      gateAuthUrl: 'http://127.0.0.1:47262',
+    })
+  })
+
+  it('is served with the gate on, in production and in development', () => {
+    expect(readServedEntrance(keys)).toEqual(entrance)
+    expect(readServedEntrance({ ...keys, BOARD_ENV: 'production', AUTH: 'on' })).toEqual(entrance)
+    expect(readServedEntrance({ ...keys, BOARD_ENV: 'development' })).toEqual(entrance)
+  })
+
+  it('is ignored with the gate off (test, development with AUTH=off), and says so', () => {
+    for (const env of [{ BOARD_ENV: 'test' }, { BOARD_ENV: 'development', AUTH: 'off' }]) {
+      expect(readServedEntrance({ ...keys, ...env })).toBeNull()
+      expect(entranceIgnored(readAuthMode(env))).toMatch(
+        new RegExp(
+          `^the gate is off \\(${env.BOARD_ENV}\\), so PUBLIC_ORIGIN.* are ignored: .*loopback only`,
+        ),
+      )
+    }
+    // Ignored, but still checked: a half configuration stops a gate-off board too.
+    expect(() => readServedEntrance({ BOARD_ENV: 'test', PUBLIC_ORIGIN: keys.PUBLIC_ORIGIN })).toThrow(
+      StartupError,
+    )
+  })
+
+  it('does not change who answers, or where a gate-off board may listen', () => {
+    expect(readAuthMode({ ...keys })).toEqual({ boardEnv: 'production', off: false, human: null })
+    expect(() => readAuthMode({ ...keys, AUTH: 'off' })).toThrow(/AUTH=off is refused/)
+    const test = readAuthMode({ ...keys, BOARD_ENV: 'test' })
+    expect(() => checkBind(test, { host: '0.0.0.0', port: 47131 })).toThrow(/only listens on loopback/)
+    expect(() => checkBind(test, { host: '127.0.0.1', port: 47100 })).toThrow(/live board's port/)
+  })
+})
+
+describe('servedEntrance', () => {
+  // Read once, as the module loads its environment: each case loads a fresh copy.
+  const load = async (env: Record<string, string>) => {
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value)
+    vi.resetModules()
+    return (await import('./config')).servedEntrance()
+  }
+  afterEach(() => vi.unstubAllEnvs())
+
+  it("is the process's entrance, read from its environment", async () => {
+    const keys = {
+      PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net',
+      PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443',
+      PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111',
+    }
+    expect(await load({ ...keys, BOARD_ENV: 'production', AUTH: '' })).toMatchObject({
+      host: 'devbox.example-tailnet.ts.net',
+    })
+    expect(await load({ ...keys, BOARD_ENV: 'test' })).toBeNull()
+    const none = { PUBLIC_ORIGIN: '', PUBLIC_GATE_URL: '', PUBLIC_GATE_AUTH_URL: '' }
+    expect(await load({ ...none, BOARD_ENV: 'production' })).toBeNull()
   })
 })
 
