@@ -6,6 +6,7 @@ import { Markdown } from '#/components/Markdown'
 import { Thread } from '#/components/Thread'
 import { Badge } from '#/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '#/components/ui/dialog'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type ReviewResult } from '#/lib/api'
 import { ago, shortSha, stamp } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
@@ -30,16 +31,18 @@ export function ReviewResultView({ r }: { r: ReviewResult }) {
         <span className="font-medium">
           {repo && <span className="text-muted-foreground">{repo} </span>}PR #{r.prNumber}
         </span>
-        <span className="font-mono text-xs text-muted-foreground" title={r.sha}>
-          {shortSha(r.sha)}
-        </span>
+        <Tip content={r.sha}>
+          <span className="font-mono text-xs text-muted-foreground">{shortSha(r.sha)}</span>
+        </Tip>
         <span className="text-xs text-muted-foreground">
           {counts.confirmed ?? 0} confirmed · {counts.plausible ?? 0} plausible · {counts.unverified ?? 0}{' '}
           unverified
         </span>
-        <span className="ml-auto text-xs text-muted-foreground" title={stamp(r.createdAt)}>
-          <Actor name={r.author} /> · {ago(r.createdAt)}
-        </span>
+        <Tip content={stamp(r.createdAt)}>
+          <span className="ml-auto text-xs text-muted-foreground">
+            <Actor name={r.author} /> · {ago(r.createdAt)}
+          </span>
+        </Tip>
       </div>
       {Object.keys(checks).length > 0 && (
         <div className="flex flex-wrap gap-2 text-xs">
@@ -94,25 +97,23 @@ export function ReviewResultDialog({ resultId, onClose }: { resultId: number | n
 export function ReviewResultButton({
   resultId,
   className,
-  title,
+  tip,
   children,
 }: {
   resultId: number
   className?: string
-  title?: string
+  /** Its tooltip, if any. */
+  tip?: string
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button
-        type="button"
-        className={cn('cursor-pointer', className)}
-        title={title}
-        onClick={() => setOpen(true)}
-      >
-        {children}
-      </button>
+      <Tip content={tip}>
+        <button type="button" className={cn('cursor-pointer', className)} onClick={() => setOpen(true)}>
+          {children}
+        </button>
+      </Tip>
       <ReviewResultDialog resultId={open ? resultId : null} onClose={() => setOpen(false)} />
     </>
   )

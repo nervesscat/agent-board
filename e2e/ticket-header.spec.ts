@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
 import { startedAt, yesterdayNoon } from './db'
-import { expect, ok, section, test } from './fixtures'
+import { expect, expectTooltip, ok, section, test } from './fixtures'
 import { box, coveredAt, feedDrawn, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
 
 const title = (page: Page) => page.getByRole('heading', { level: 1 })
@@ -183,7 +183,9 @@ test.describe('on a phone', () => {
     await ok(agent.put(`/api/tickets/${t.id}/resume`, { data: { note: 'Halfway through the parser' } }))
 
     await page.goto(`/projects/${project.id}`)
-    await section(page, 'Carrying over').getByTitle('Its resume note: open it on the ticket').click()
+    const note = section(page, 'Carrying over').getByRole('link', { name: /Halfway through the parser/ })
+    await expectTooltip(note, 'Its resume note: open it on the ticket')
+    await note.click()
     await expect(page).toHaveURL(new RegExp(`/features/${t.id}#resume$`))
     await feedDrawn(page)
     await expectResumeInView(page)

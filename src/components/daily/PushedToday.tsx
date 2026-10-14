@@ -4,6 +4,7 @@ import { cn } from 'cn'
 import { GitCommitHorizontal } from 'lucide-react'
 
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
+import { Tip } from '#/components/ui/tooltip'
 import { get, type PushedToday } from '#/lib/api'
 import { ago } from '#/lib/format'
 
@@ -80,9 +81,9 @@ export function PushedTodayBadge({ projectId, compact = false }: { projectId: nu
                             className="size-3 shrink-0 text-muted-foreground"
                             aria-hidden
                           />
-                          <span className="truncate" title={b.branch}>
-                            {b.branch}
-                          </span>
+                          <Tip content={b.branch}>
+                            <span className="truncate">{b.branch}</span>
+                          </Tip>
                         </span>
                         <Totals t={b} />
                       </div>

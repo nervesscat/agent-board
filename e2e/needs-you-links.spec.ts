@@ -1133,7 +1133,10 @@ for (const cached of [true, false])
     await expectMarkGone(page)
     // The reader scrolls away from it, then steps to the other ticket in the column by its key.
     const left = await scrollTo(page, 1200)
-    const step = page.locator(`a[title^="#${a.id} "]`)
+    // The step link to it: its name is only Previous or Next, its target says which ticket.
+    const step = page.locator(
+      `a[aria-keyshortcuts][href$="/features/${a.id}"], a[aria-keyshortcuts][href*="/features/${a.id}?"]`,
+    )
     await page.keyboard.press((await step.getAttribute('aria-keyshortcuts'))!)
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Stepped to')
     await feedDrawn(page)

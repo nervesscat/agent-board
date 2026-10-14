@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { ChangeDiff } from '#/components/daily/SettingsChangeDiff'
 import { refreshReports } from '#/components/daily/refresh'
 import { Button } from '#/components/ui/button'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type ReportSettingsView } from '#/lib/api'
 import { ago, stamp } from '#/lib/format'
 
@@ -58,9 +59,9 @@ function Notice({ projectId, change }: { projectId: number; change: ReportSettin
         <p className="min-w-0 flex-1 basis-48">
           The report {change.field} was changed by <span className="font-medium">{change.changedBy}</span>,
           revert?{' '}
-          <span className="text-xs text-muted-foreground" title={stamp(change.createdAt)}>
-            {ago(change.createdAt)}
-          </span>
+          <Tip content={stamp(change.createdAt)}>
+            <span className="text-xs text-muted-foreground">{ago(change.createdAt)}</span>
+          </Tip>
         </p>
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="ghost" size="sm" aria-expanded={open} onClick={() => setOpen(!open)}>
@@ -75,19 +76,21 @@ function Notice({ projectId, change }: { projectId: number; change: ReportSettin
           >
             Accept
           </Button>
-          <span
-            title={later ? `The ${change.field} changed again since: revert that change first` : undefined}
+          <Tip
+            content={later ? `The ${change.field} changed again since: revert that change first` : undefined}
           >
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              disabled={settle.isPending || later}
-              onClick={() => settle.mutate('revert')}
-            >
-              Revert
-            </Button>
-          </span>
+            <span className="inline-flex">
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={settle.isPending || later}
+                onClick={() => settle.mutate('revert')}
+              >
+                Revert
+              </Button>
+            </span>
+          </Tip>
         </div>
       </div>
       {open && <ChangeDiff change={change} className="mt-3 bg-background" />}

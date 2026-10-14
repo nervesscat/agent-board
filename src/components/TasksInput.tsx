@@ -3,6 +3,7 @@ import { useRef } from 'react'
 
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
+import { Tip } from '#/components/ui/tooltip'
 import { addTasks } from '#/lib/tasks'
 
 /**
@@ -40,15 +41,16 @@ export function TasksInput({
             <li key={i} className="flex items-start gap-2 text-sm">
               <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
               <span className="min-w-0 flex-1 wrap-anywhere">{task}</span>
-              <button
-                type="button"
-                className="mt-0.5 shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
-                onClick={() => onChange(value.filter((_, j) => j !== i))}
-                aria-label={`Remove ${task}`}
-                title="Remove"
-              >
-                <X className="size-3.5" />
-              </button>
+              <Tip content="Remove">
+                <button
+                  type="button"
+                  className="mt-0.5 shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
+                  onClick={() => onChange(value.filter((_, j) => j !== i))}
+                  aria-label={`Remove ${task}`}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </Tip>
             </li>
           ))}
         </ul>
@@ -81,25 +83,26 @@ export function TasksInput({
           }}
           placeholder="Add a task"
         />
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          // Off only to the eye and to assistive tech while there is no text: a disabled button drops
-          // the focus out of the dialog, both when it turns off under the focus and when it is pressed
-          // (the second click of a double-click). A press on it adds what there is, which may be
-          // nothing, and puts the focus back in the text, where the next task is typed.
-          aria-disabled={!text.trim() || undefined}
-          className="aria-disabled:opacity-50 aria-disabled:hover:bg-background dark:aria-disabled:hover:bg-input/30"
-          onClick={() => {
-            add()
-            input.current?.focus()
-          }}
-          aria-label="Add task"
-          title="Add task"
-        >
-          <Plus />
-        </Button>
+        <Tip content="Add task">
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            // Off only to the eye and to assistive tech while there is no text: a disabled button drops
+            // the focus out of the dialog, both when it turns off under the focus and when it is pressed
+            // (the second click of a double-click). A press on it adds what there is, which may be
+            // nothing, and puts the focus back in the text, where the next task is typed.
+            aria-disabled={!text.trim() || undefined}
+            className="aria-disabled:opacity-50 aria-disabled:hover:bg-background dark:aria-disabled:hover:bg-input/30"
+            onClick={() => {
+              add()
+              input.current?.focus()
+            }}
+            aria-label="Add task"
+          >
+            <Plus />
+          </Button>
+        </Tip>
       </div>
     </div>
   )

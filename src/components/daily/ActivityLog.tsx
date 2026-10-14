@@ -129,7 +129,7 @@ function ActivityLine({ line: a, withProject }: { line: Line; withProject: boole
         <ReviewResultButton
           resultId={a.refId}
           className="min-w-0 text-left wrap-anywhere hover:underline"
-          title="Open the review result"
+          tip="Open the review result"
         >
           {a.text}
         </ReviewResultButton>

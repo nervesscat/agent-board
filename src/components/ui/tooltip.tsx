@@ -1,3 +1,5 @@
+import * as React from 'react'
+import type { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip'
 import { cn } from 'cn'
 
@@ -48,4 +50,69 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+/**
+ * The app's tooltip on one element, where a `title` would go: it shows `content` on hover and on
+ * keyboard focus. The element stays what it is (a span stays a span, a link a link, a button is not
+ * wrapped in another): it becomes the trigger through `render`, so it must take a ref and spread the
+ * props it is given. With no `content` the tooltip is off and nothing shows. Like a native title it
+ * closes as the pointer leaves the element, and never catches the pointer itself. Line breaks in the
+ * text are kept, and a long path or URL wraps inside the bubble.
+ */
+function Tip({ content, children }: { content: React.ReactNode; children: React.ReactElement }) {
+  const off = content === undefined || content === null || content === false || content === ''
+  // The trigger takes the element's own id if it has one: base-ui tells its triggers apart by it.
+  const { id } = children.props as { id?: string }
+  return (
+    <Tooltip disabled={off} disableHoverablePopup>
+      <TooltipTrigger id={id} data-tip={off ? undefined : ''} render={children} />
+      {!off && <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>}
+    </Tooltip>
+  )
+}
+
+// What the browser would stop at on Tab, before the checks on each element below.
+const TABBABLE =
+  'a[href], button, input, select, textarea, summary, audio[controls], video[controls], [contenteditable]:not([contenteditable="false"]), [tabindex]'
+
+type InitialFocus = DialogPrimitive.Popup.Props['initialFocus']
+type OpenType = Parameters<Extract<InitialFocus, (...args: never[]) => unknown>>[0]
+
+/**
+ * Keeps a dialog or popover from opening onto a `Tip`. base-ui focuses the popup's first tabbable
+ * control as it opens; opened from the keyboard that focus is focus-visible, so the control's tooltip
+ * would open with it, unasked, and the first Escape would close only that tooltip, not the popup.
+ * When that control is a `Tip`, focus goes to the popup itself, as base-ui does on touch: not to a
+ * control further down, which could scroll the popup away from its top or raise a phone's keyboard.
+ * Tab from there reaches the first control. Returns the `ref` and `initialFocus` to give the popup;
+ * an `initialFocus` of the caller's wins.
+ */
+function useFocusPastTips<T extends HTMLElement>(ref: React.Ref<T> | undefined, initialFocus?: InitialFocus) {
+  const popup = React.useRef<T | null>(null)
+  const setRef = React.useCallback(
+    (el: T | null) => {
+      popup.current = el
+      if (typeof ref === 'function') ref(el)
+      else if (ref) ref.current = el
+    },
+    [ref],
+  )
+  const pastTips = React.useCallback((openType: OpenType) => {
+    const el = popup.current
+    // base-ui's own choice on touch, kept: the popup itself (and nothing is focus-visible on touch).
+    if (openType === 'touch') return el
+    if (!el) return true
+    const tabbable = [...el.querySelectorAll<HTMLElement>(TABBABLE)].filter(
+      (c) =>
+        Number(c.getAttribute('tabindex') ?? 0) >= 0 &&
+        !c.matches(':disabled') &&
+        !c.closest('[inert]') &&
+        c.checkVisibility({ visibilityProperty: true }),
+    )
+    const isTip = (c: HTMLElement) => c.closest('[data-tip]') !== null
+    if (!tabbable[0] || !isTip(tabbable[0])) return true
+    return el
+  }, [])
+  return { ref: setRef, initialFocus: initialFocus ?? pastTips }
+}
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, Tip, useFocusPastTips }

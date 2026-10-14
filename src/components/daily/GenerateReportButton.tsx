@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { refreshReports } from '#/components/daily/refresh'
 import { Button } from '#/components/ui/button'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, post, type ReportList, type ReportView } from '#/lib/api'
 
 /**
@@ -54,27 +55,29 @@ export function GenerateReportButton({
 
   return (
     <div className="flex min-w-0 flex-col items-end gap-1">
-      {/* The reason is on the wrapper: a disabled button takes no pointer, so shows no title. */}
-      <span title={why ?? 'claude writes the report from the prompt, the template and the activity'}>
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          disabled={busy || Boolean(why)}
-          aria-description={why ?? undefined}
-          onClick={() => generate.mutate()}
-        >
-          {busy ? (
-            <>
-              <LoaderCircle data-icon="inline-start" className="animate-spin" /> claude is writing…
-            </>
-          ) : (
-            <>
-              <Sparkles data-icon="inline-start" /> Generate with claude
-            </>
-          )}
-        </Button>
-      </span>
+      {/* The reason is on the wrapper: a disabled button takes no pointer, so shows no tooltip. */}
+      <Tip content={why ?? 'claude writes the report from the prompt, the template and the activity'}>
+        <span className="inline-flex">
+          <Button
+            type="button"
+            variant="outline"
+            size="xs"
+            disabled={busy || Boolean(why)}
+            aria-description={why ?? undefined}
+            onClick={() => generate.mutate()}
+          >
+            {busy ? (
+              <>
+                <LoaderCircle data-icon="inline-start" className="animate-spin" /> claude is writing…
+              </>
+            ) : (
+              <>
+                <Sparkles data-icon="inline-start" /> Generate with claude
+              </>
+            )}
+          </Button>
+        </span>
+      </Tip>
       {failed && (
         <p role="alert" className="max-w-full text-right sm:max-w-80 text-xs wrap-anywhere text-destructive">
           claude could not write it: {failed.message}

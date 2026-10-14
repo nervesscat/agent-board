@@ -55,15 +55,18 @@ const KEEP_MOVES_DAYS = 30
  * apart (a failed fetch leaves an empty one too). So a listing without one is a look only when
  * `fetched`: the board's own fetch of the checkout had succeeded before the listing began. Taking
  * the other for a look would count all of origin's history as pushed on the day it is first fetched.
+ *
+ * Returns the moves it recorded.
  */
 export function noteOriginRefs(
   repoPath: string,
   refs: Refs,
   now = new Date(),
   opts: { fetched?: boolean } = {},
-) {
+): { repoId: number; ref: string }[] {
   const repos = db.select().from(schema.repos).where(eq(schema.repos.repoPath, repoPath)).all()
   const seenAt = now.toISOString()
+  const recorded: { repoId: number; ref: string }[] = []
   for (const repo of repos) {
     db.transaction((tx) => {
       const firstLook = !tx
@@ -114,8 +117,10 @@ export function noteOriginRefs(
       tx.delete(schema.originRefMoves)
         .where(and(eq(schema.originRefMoves.repoId, repo.id), lt(schema.originRefMoves.seenAt, old)))
         .run()
+      recorded.push(...moves.map((m) => ({ repoId: m.repoId, ref: m.ref })))
     })
   }
+  return recorded
 }
 
 /**

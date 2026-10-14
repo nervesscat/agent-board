@@ -1,7 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 
 import { inDatabase } from './db'
-import { type Api, expect, ok, test } from './fixtures'
+import { type Api, expect, expectTooltip, ok, test } from './fixtures'
 
 /**
  * A ticket whose feed has a tall post from now, then two one-line posts from weeks back: the longest
@@ -64,7 +64,6 @@ const rows = (page: Page) =>
         viewport: document.documentElement.clientWidth,
         text: time.textContent ?? '',
         dateTime: time.getAttribute('datetime'),
-        title: time.getAttribute('title'),
         writingMode: style.writingMode,
         fontSizes: [parseFloat(style.fontSize), parseFloat(getComputedStyle(span).fontSize)],
         clipped: time.scrollWidth > time.clientWidth + 1 || time.scrollHeight > time.clientHeight + 1,
@@ -85,7 +84,6 @@ async function checkFeed(page: Page) {
     expect(r.writingMode, at).toMatch(/^(vertical|sideways)-/)
     expect(legend.bottom - legend.top, at).toBeGreaterThan(legend.right - legend.left)
     expect(r.dateTime, at).toMatch(/^\d{4}-\d{2}-\d{2}T/)
-    expect(r.title, at).toBeTruthy()
     expect(r.fontSizes[0], at).toBeGreaterThanOrEqual(12)
     expect(r.fontSizes[1], at).toBeGreaterThanOrEqual(11)
     expect(r.clipped, at).toBe(false)
@@ -100,6 +98,10 @@ async function checkFeed(page: Page) {
     // One rail: every row's legend column is as wide.
     expect(Math.abs(r.post.left - measured[0]!.post.left), at).toBeLessThanOrEqual(1)
   })
+  // Each legend tells the exact time on hover.
+  const times = page.locator('ol > li > time')
+  for (let i = 0; i < measured.length; i++) await expectTooltip(times.nth(i), /\d{1,2}:\d{2}/)
+  await page.mouse.move(0, 0)
   const [now, old] = measured
   expect(now!.text).toMatch(/(minutes? ago|just now).*\d{1,2}:\d{2}/)
   expect(old!.text).toMatch(/3 weeks ago.*\d/)

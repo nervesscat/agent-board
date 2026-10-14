@@ -5,7 +5,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import type { ReportList, ReportView } from '#/lib/api'
 import { localDate } from '#/lib/format'
 import { periodLabel } from '#/lib/reports'
-import { expect, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, test } from './fixtures'
 
 // claude is e2e/fake-claude.mjs here (playwright.config.ts): a marker in the project's prompt tells it
 // how to answer, and where to log what it was run with.
@@ -126,13 +126,16 @@ test('the button says why it is off: no cadence, or a project whose reports are 
 }) => {
   await page.goto(`/projects/${project.id}/daily`)
   const card = page.getByRole('region', { name: 'Report', exact: true })
-  await expect(card.getByRole('button', { name: 'Generate with claude' })).toBeDisabled()
-  await expect(card.locator('span[title^="Reports are off"]')).toHaveCount(1)
+  const generate = card.getByRole('button', { name: 'Generate with claude' })
+  // The reason is on the disabled button's wrapper, in the shared tooltip.
+  const why = generate.locator('..')
+  await expect(generate).toBeDisabled()
+  await expectTooltip(why, /^Reports are off/)
 
   await daily(human, project.id, 'A PDF.', { format: 'file' })
   await page.reload()
-  await expect(card.getByRole('button', { name: 'Generate with claude' })).toBeDisabled()
-  await expect(card.locator(`span[title^="This project's reports are files"]`)).toHaveCount(1)
+  await expect(generate).toBeDisabled()
+  await expectTooltip(why, /^This project's reports are files/)
   const refused = await human.post(`/api/projects/${project.id}/reports/generate`, { data: {} })
   expect(refused.status()).toBe(400)
 })

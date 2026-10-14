@@ -666,11 +666,12 @@ describe('over MCP and REST', () => {
     const agent = await call('PATCH', '/api/settings', { previewLimit: 5 }, 'agent')
     expect(agent.status).toBe(403)
     expect(await limit()).toBe(3)
-    // The other setting keeps its own value.
+    // The other settings keep their own values.
     expect((await call('PATCH', '/api/settings', { previewLimit: 32 })).status).toBe(200)
     expect(await (await call('GET', '/api/settings')).json()).toEqual({
       defaultAgent: 'claude',
       previewLimit: 32,
+      skillsTracking: 'global',
     })
   })
 

@@ -356,6 +356,22 @@ export async function mergedInto(repoPath: string, sha: string, base: string): P
   return firstParent !== sha
 }
 
+/**
+ * Whether merging commit `head` into commit `base` conflicts, as `merge-tree` works it out without a
+ * checkout: true or false, or null when git cannot tell (a commit missing here, as a fork's head is,
+ * or no common history). Like `branchReach`, it writes no ref and touches no worktree.
+ */
+export async function mergeConflicts(repoPath: string, base: string, head: string): Promise<boolean | null> {
+  try {
+    await git(repoPath, ['merge-tree', '--write-tree', base, head])
+    return false
+  } catch (err) {
+    // A conflicted merge exits 1 and still prints the tree it wrote first; anything else is git failing.
+    const e = err as { code?: unknown; stdout?: string }
+    return e.code === 1 && /^[0-9a-f]{40,64}$/.test(e.stdout?.split('\n')[0] ?? '') ? true : null
+  }
+}
+
 /** When the branch's last commit was made (committer date): the local branch, else origin's. */
 export async function lastCommitAt(repoPath: string, branch: string): Promise<string | null> {
   if (!branch) return null
