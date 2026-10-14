@@ -74,6 +74,8 @@ console.log(`Preview: http://localhost:${port} (a copy of the board's data, in $
 // PORT has to be set here: the PORT in .env would otherwise win over --port. BOARD_ENV is always
 // development, whatever the shell says; AUTH (off turns the gate off) comes through as it is.
 // BOARD_DATA_COPY keeps the copy from deleting files in an S3 bucket it shares with the live board.
+// The tailnet entrance is the board's alone: set empty here, a copy of the board's .env cannot turn it
+// on (the environment wins over .env), so the copy answers on loopback only.
 const child = spawn(`pnpm exec vite dev --port ${port} --strictPort`, {
   stdio: 'inherit',
   shell: true,
@@ -84,6 +86,9 @@ const child = spawn(`pnpm exec vite dev --port ${port} --strictPort`, {
     BOARD_URL: `http://localhost:${port}`,
     DATA_DIR: `./${dev}`,
     BOARD_DATA_COPY: '1',
+    PUBLIC_ORIGIN: '',
+    PUBLIC_GATE_URL: '',
+    PUBLIC_GATE_AUTH_URL: '',
   },
 })
 child.on('exit', (code) => process.exit(code ?? 0))

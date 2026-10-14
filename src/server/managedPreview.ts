@@ -462,6 +462,9 @@ export function needsInstall(dir: string) {
   return installed === null || installed !== read('pnpm-lock.yaml')
 }
 
+// The live board's tailnet entrance: a preview stays on this machine (README: "Using it from other devices").
+const ENTRANCE_KEYS = /^(PUBLIC_ORIGIN|PUBLIC_GATE_URL|PUBLIC_GATE_AUTH_URL|TAILNET_HOST)$/
+
 /** The environment of what runs in the worktree: none of the live board's own settings. */
 function worktreeEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env }
@@ -469,7 +472,8 @@ function worktreeEnv(): NodeJS.ProcessEnv {
     if (
       /^(NODE_ENV|PORT|HOST|NITRO_\w+|DATA_DIR|BOARD_URL|BOARD_ENV|AUTH|DEV_HUMAN|TEST_HUMAN|STORAGE|S3_\w+)$/.test(
         key,
-      )
+      ) ||
+      ENTRANCE_KEYS.test(key)
     )
       delete env[key]
   return env
