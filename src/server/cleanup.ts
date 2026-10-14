@@ -1,22 +1,31 @@
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 
-import { eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
+import { type AuthMode, authMode } from './config'
 import {
+  addsNothing,
   aheadBehind,
   type BranchInfo,
   branchReach,
   commitSummary,
+  gitSaid,
+  isAncestor,
   listRefs,
   listWorktrees,
   NO_BRANCH,
+  originHead,
+  originUrl,
   refsContaining,
   type Reach,
   type Refs,
   type Worktree,
 } from './git'
+import { stoppableLinkPort } from './linkPreview'
 import { activePreviews, type ManagedPreview } from './managedPreview'
 import { getProject } from './projects'
 import { readRefs, readWorktrees } from './push'
@@ -26,35 +35,51 @@ import { unattachedUploads, type UnattachedUploads } from './unattached'
 
 /**
  * What is left behind by finished work: branches, worktrees and registered workspaces of tickets in
- * a done or cancelled stage or archived, and whether each branch's work reached where it was meant to
- * land. The board only reads git; deleting is the agents' and the human's job.
+ * a done or cancelled stage or archived, whether each branch's work reached where it was meant to
+ * land, and whether the human may delete it from the Cleanup page (`cleanupActions.ts` does, after
+ * checking it all again). Agents delete local branches and worktrees themselves, with the human's
+ * go-ahead, and never origin's.
  */
 
 type Chainable = Pick<schema.Ticket, 'id' | 'parentId' | 'repoId' | 'baseBranch'>
 type RepoRow = schema.Repo
+
+/** A checkout's branches and worktrees, as one listing. */
+export interface RepoGit {
+  refs: Refs
+  worktrees: Worktree[]
+  /** Why git could not list the checkout: the empty listings then say nothing about it. */
+  error: string | null
+}
 
 /**
  * One `for-each-ref` and one `worktree list` per repo, however many tickets ask. `recent` takes them
  * from the listings every read shares for a few seconds (`readRefs`), instead of listing afresh.
  */
 export function gitCache(opts: { recent?: boolean } = {}) {
-  const cache = new Map<string, Promise<{ refs: Refs; worktrees: Worktree[] }>>()
-  const refsOf = opts.recent ? readRefs : (p: string) => listRefs(p).catch(() => null)
-  const worktreesOf = opts.recent ? readWorktrees : (p: string) => listWorktrees(p).catch(() => null)
+  const cache = new Map<string, Promise<RepoGit>>()
   return (repoPath: string) => {
-    if (!cache.has(repoPath))
-      cache.set(
-        repoPath,
-        Promise.all([refsOf(repoPath), worktreesOf(repoPath)]).then(([refs, worktrees]) => ({
-          refs: refs ?? { local: new Map(), remote: new Map() },
-          worktrees: worktrees ?? [],
-        })),
-      )
+    if (!cache.has(repoPath)) cache.set(repoPath, listing(repoPath, opts.recent ?? false))
     return cache.get(repoPath)!
   }
 }
 
 export type GitCache = ReturnType<typeof gitCache>
+
+async function listing(repoPath: string, recent: boolean): Promise<RepoGit> {
+  const none = { refs: { local: new Map(), remote: new Map(), symrefs: new Map() }, worktrees: [] }
+  if (!fs.existsSync(repoPath)) return { ...none, error: `${repoPath} does not exist` }
+  // The shared listings keep no error: a failure there reads as null.
+  const or = <T>(p: Promise<T | null>) => p.then((v) => v ?? Promise.reject(new Error('git failed')))
+  const [refs, worktrees] = await Promise.allSettled([
+    recent ? or(readRefs(repoPath)) : listRefs(repoPath),
+    recent ? or(readWorktrees(repoPath)) : listWorktrees(repoPath),
+  ])
+  if (refs.status === 'fulfilled' && worktrees.status === 'fulfilled')
+    return { refs: refs.value, worktrees: worktrees.value, error: null }
+  const failed = [refs, worktrees].find((r) => r.status === 'rejected') as PromiseRejectedResult
+  return { ...none, error: `git cannot read ${repoPath}: ${gitSaid(failed.reason)}` }
+}
 
 /**
  * Where a ticket's work should end up, nearest first: its base (for a lane, the parent's branch),
@@ -72,21 +97,35 @@ export function baseChain(ticket: Chainable, byId: Map<number, Chainable>, repo:
   return [...new Set(chain.filter(Boolean))]
 }
 
+/**
+ * How a local branch is named among refs: by its name, but by its full refname when the name starts
+ * with `origin/` or `refs/`, so a local branch called `origin/main` is never taken for origin's main,
+ * nor one called `refs/heads/foo` for `foo`. `refSha` undoes exactly this.
+ */
+const wrapped = (branch: string) => branch.startsWith('origin/') || branch.startsWith('refs/')
+export const localRef = (branch: string) => (wrapped(branch) ? `refs/heads/${branch}` : branch)
+
 /** The refs a base name stands for: the local branch, then origin's copy; either may be ahead. */
 export function baseRefs(chain: string[], refs: Refs): string[] {
   return chain.flatMap((b) => [
-    ...(refs.local.has(b) ? [b] : []),
+    ...(refs.local.has(b) ? [localRef(b)] : []),
     ...(refs.remote.has(b) ? [`origin/${b}`] : []),
   ])
 }
 
 /** The ref a branch is read from: the local branch, else origin's. */
 export const branchRef = (branch: string, refs: Refs) =>
-  refs.local.has(branch) ? branch : refs.remote.has(branch) ? `origin/${branch}` : null
+  refs.local.has(branch) ? localRef(branch) : refs.remote.has(branch) ? `origin/${branch}` : null
 
-/** The commit a ref from `branchRef` or `baseRefs` points at. */
-export const refSha = (ref: string, refs: Refs) =>
-  refs.local.get(ref) ?? (ref.startsWith('origin/') ? refs.remote.get(ref.slice(7)) : undefined)
+/**
+ * The commit a ref from `branchRef` or `baseRefs` points at: `origin/<name>` is origin's branch only,
+ * anything else a local branch, named as `localRef` names it.
+ */
+export const refSha = (ref: string, refs: Refs) => {
+  if (ref.startsWith('origin/')) return refs.remote.get(ref.slice(7))
+  const name = ref.slice(11)
+  return refs.local.get(ref.startsWith('refs/heads/') && wrapped(name) ? name : ref)
+}
 
 /**
  * Answers already worked out, by the commits they were worked out for: a verdict on the same commits
@@ -112,9 +151,13 @@ export async function reachOf(repoPath: string, branch: string, chain: string[],
   if (!ref) return null
   // A branch is not its own destination (a workspace on the ticket's own branch).
   const bases = baseRefs(chain, refs).filter((b) => b !== ref && b !== branch)
-  const sha = refSha(ref, refs)!
+  return reachAt(repoPath, refSha(ref, refs)!, bases, refs)
+}
+
+/** How far commit `sha` (one copy of a branch) got into `bases`, refs as `baseRefs` names them. */
+export function reachAt(repoPath: string, sha: string, bases: string[], refs: Refs) {
   const shas = bases.map((b) => refSha(b, refs)!)
-  const key = [repoPath, `${ref}@${sha}`, ...bases.map((b, i) => `${b}@${shas[i]}`)]
+  const key = [repoPath, sha, ...bases.map((b, i) => `${b}@${shas[i]}`)]
   // Worked out on the listed commits, not on the names: git reads a name as it is now, and the answer
   // would be kept for commits it is not about.
   return memo(reachMemo, REACH_MEMO_MAX, key.join('\0'), async () => {
@@ -122,6 +165,22 @@ export async function reachOf(repoPath: string, branch: string, chain: string[],
     // Bases at the same commit answer alike and the first of them is kept: so is its name.
     return reach && { ...reach, into: bases[shas.indexOf(reach.into)]! }
   })
+}
+
+/**
+ * Whether merging a commit into a base would change nothing, by both commits: what a `rebased` verdict
+ * needs before its branch may go. `git cherry` matches patches only, and passes a merge commit's own
+ * change (a merge commit has no patch) or one that differs in whitespace alone.
+ */
+const contentMemo = new Map<string, Promise<boolean>>()
+
+/** `addsNothing` for commit `sha` and a base ref as `baseRefs` names it; false when git cannot tell. */
+function contentIn(repoPath: string, sha: string, base: string, refs: Refs): Promise<boolean> {
+  const baseSha = refSha(base, refs)
+  if (!baseSha) return Promise.resolve(false)
+  return memo(contentMemo, REACH_MEMO_MAX, [repoPath, baseSha, sha].join('\0'), () =>
+    addsNothing(repoPath, baseSha, sha),
+  ).catch(() => false)
 }
 
 /** A commit's subject and date, and how far apart two commits are: by their shas, so never stale. */
@@ -167,8 +226,8 @@ const containsMemo = new Map<string, Promise<Set<string>>>()
 
 const refsKey = (refs: Refs) => {
   const hash = crypto.createHash('sha1')
-  for (const [name, sha] of refs.local) hash.update(`${name} ${sha}\n`)
-  for (const [name, sha] of refs.remote) hash.update(`origin/${name} ${sha}\n`)
+  for (const [name, sha] of refs.local) hash.update(`refs/heads/${name} ${sha}\n`)
+  for (const [name, sha] of refs.remote) hash.update(`refs/remotes/origin/${name} ${sha}\n`)
   return hash.digest('hex')
 }
 
@@ -180,9 +239,9 @@ interface Claim {
 
 /**
  * The tickets a worktree checked out detached at `head` (a review of a commit) works for: those with a
- * branch at that commit, else those whose branch holds it while none of their bases does (the branch
- * moved on since; a commit the bases have, such as dev's tip, is no ticket's own work). Empty when git
- * cannot tell, so the worktree stays untracked.
+ * branch at that commit, else those whose branch holds it; never one whose bases hold it too (a commit
+ * the bases have, such as dev's tip, is no ticket's own work, even where a branch merged as is still
+ * points at it). Empty when git cannot tell, so the worktree stays untracked.
  */
 async function detachedClaims(
   repoPath: string,
@@ -192,11 +251,7 @@ async function detachedClaims(
 ): Promise<Claim[]> {
   const claims = (t: (typeof tickets)[number], holds: (name: string) => boolean) =>
     t.names.filter(holds).map((branch) => ({ ticketId: t.id, branch }))
-  const tips = tickets.flatMap((t) =>
-    claims(t, (n) => refs.local.get(n) === head || refs.remote.get(n) === head),
-  )
-  if (tips.length) return tips
-  // Only now the costlier question, and only when some ticket has a branch here to ask it of.
+  // Only tickets with a branch here are asked about, and only then is git asked.
   const present = tickets.filter((t) => t.names.some((n) => refs.local.has(n) || refs.remote.has(n)))
   if (!present.length) return []
   const key = [repoPath, head, refsKey(refs)].join('\0')
@@ -204,20 +259,131 @@ async function detachedClaims(
     refsContaining(repoPath, head),
   ).catch(() => null)
   if (!holding) return []
-  return present.flatMap((t) => {
-    // The ticket's own branches are not its bases (a workspace on the ticket's own branch).
-    const bases = baseRefs(
-      t.chain.filter((b) => !t.names.includes(b)),
-      refs,
-    )
-    if (bases.some((b) => holding.has(b))) return []
-    return claims(t, (n) => holding.has(n) || holding.has(`origin/${n}`))
-  })
+  // The ticket's own branches are not its bases (a workspace on the ticket's own branch).
+  const own = present.filter(
+    (t) =>
+      !baseRefs(
+        t.chain.filter((b) => !t.names.includes(b)),
+        refs,
+      ).some((b) => holding.has(b)),
+  )
+  const tips = own.flatMap((t) => claims(t, (n) => refs.local.get(n) === head || refs.remote.get(n) === head))
+  if (tips.length) return tips
+  return own.flatMap((t) => claims(t, (n) => holding.has(localRef(n)) || holding.has(`origin/${n}`)))
 }
 
-const samePath = (a: string, b: string) =>
-  a.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() ===
-  b.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+/**
+ * A folder's path as a key: slashes either way and a trailing one aside, and the case only where the
+ * file system ignores it (Windows).
+ */
+export function pathKey(p: string, platform: NodeJS.Platform = process.platform) {
+  const s = p.replace(/\\/g, '/').replace(/\/+$/, '')
+  return platform === 'win32' ? s.toLowerCase() : s
+}
+
+/** Whether two paths name the same folder (`pathKey`). */
+export const samePath = (a: string, b: string, platform: NodeJS.Platform = process.platform) =>
+  pathKey(a, platform) === pathKey(b, platform)
+
+/**
+ * A folder's key by where it really is: `pathKey` of its real path, every link or junction on the way
+ * resolved. A repository moved with a link left at its old path has git list a worktree made before
+ * the move by that old path, while a workspace or a preview names it by the new one. A folder that is
+ * not there (removed, or never made) goes by its nearest parent that is, the rest as written. Slashes
+ * go either way, as for `pathKey`.
+ */
+export function folderKey(p: string): string {
+  const abs = path.resolve(p.replace(/\\/g, '/'))
+  let rest = ''
+  for (let dir = abs; ; ) {
+    try {
+      return pathKey(path.join(fs.realpathSync.native(dir), rest))
+    } catch {
+      // Not there: its parent is asked.
+    }
+    const up = path.dirname(dir)
+    if (up === dir) return pathKey(abs)
+    rest = path.join(path.basename(dir), rest)
+    dir = up
+  }
+}
+
+/** Whether two paths are the same folder, wherever links lead (`folderKey`). */
+export const sameFolder = (a: string, b: string) => folderKey(a) === folderKey(b)
+
+/** `folderKey`, each path resolved once: for a read that compares many paths many times. */
+function folderKeys() {
+  const keys = new Map<string, string>()
+  return (p: string) => {
+    let key = keys.get(p)
+    if (key === undefined) keys.set(p, (key = folderKey(p)))
+    return key
+  }
+}
+
+/**
+ * A word for a command the human pastes into a shell: as it is when it is plain, else in single quotes
+ * (a branch name may hold `;`, `$` or a backtick).
+ */
+export const shellArg = (word: string) =>
+  /^[\w./@+:-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`
+
+/** Whether the human may delete it from the Cleanup page; `reason` says why not. */
+export interface Verdict {
+  ok: boolean
+  reason: string | null
+}
+
+/**
+ * A server an agent started itself and linked on a workspace (`set_preview`), on this machine: the
+ * Previews page's Stop can stop it when it runs from the workspace's worktree (`linkPreview.ts`).
+ */
+export interface LinkedPreview {
+  workspaceId: number
+  ticketId: number
+  url: string
+  port: number
+}
+
+/**
+ * The servers linked on workspaces registered at a worktree, of any ticket on the board, by the
+ * worktree: what its removal stops, each one only when the Previews page's rule tells it runs from
+ * there. A link that rule refuses before it looks at any process is left out (`stoppableLinkPort`): off
+ * this machine, on the board's own port, on a port a preview the board runs holds (one from this
+ * worktree is listed and stopped as that preview), or at a folder the board may not act on for the
+ * workspace's ticket (one not next to its repo's main checkout, or not a worktree of that repo). The
+ * removal stops a preview the board runs from the worktree first, so a workspace's link is judged as
+ * once its own such preview stopped: an agent's own server it links is listed, its preview's url not.
+ */
+export function linkedPreviews(): (worktreePath: string) => LinkedPreview[] {
+  const links = db.select().from(schema.workspaces).where(isNotNull(schema.workspaces.previewUrl)).all()
+  const previews = activePreviews()
+  const key = folderKeys()
+  return (worktreePath) => {
+    const here = key(worktreePath)
+    return links.flatMap((w) => {
+      if (!w.path || key(w.path) !== here) return []
+      const ownStopped = previews.some((p) => p.workspaceId === w.id && key(p.path) === here)
+      const port = stoppableLinkPort(w, { ownStopped })
+      return port ? [{ workspaceId: w.id, ticketId: w.ticketId, url: w.previewUrl!, port }] : []
+    })
+  }
+}
+
+export interface LeftoverWorktree {
+  path: string
+  /** The repo's own checkout, not a worktree: never removed. */
+  main: boolean
+  /** The branch it has checked out; null when it is detached at `head`. */
+  branch: string | null
+  head: string | null
+  /** Previews the board builds or runs from it: removing it stops them first. */
+  previews: ManagedPreview[]
+  /** Servers agents linked on workspaces registered at it: removing it stops each that runs from it. */
+  linkedPreviews: LinkedPreview[]
+  /** Why it may not be removed with its branch; null when it may. */
+  protected: string | null
+}
 
 export interface LeftoverBranch {
   name: string
@@ -225,14 +391,28 @@ export interface LeftoverBranch {
   local: string | null
   /** Sha of origin's branch as of the last fetch; null when origin has none. */
   remote: string | null
-  /**
-   * Worktrees with this branch checked out, or checked out detached at one of its commits. `main` is
-   * the repo's own checkout, not a worktree.
-   */
-  worktrees: { path: string; main: boolean }[]
+  /** Worktrees with this branch checked out, or checked out detached at one of its commits. */
+  worktrees: LeftoverWorktree[]
+  /** How far its work got: the local branch's, else origin's when only origin has it. */
   reach: Reach | null
-  /** Recreates the branch after it was deleted. */
+  /**
+   * How far origin's copy got into origin's copies of the bases, judged by its own commits; null when
+   * origin has none.
+   */
+  remoteReach: Reach | null
+  /** A merged PR whose head is origin's very commit: that copy landed through it, whatever its reach. */
+  mergedPr: { number: number; url: string } | null
+  /** Recreates the branch here after it was deleted. */
   restore: string | null
+  /** Puts origin's copy back after it was deleted there. */
+  restoreRemote: string | null
+  /** Why it may never be deleted, here or on origin; null when it is not protected. */
+  protected: string | null
+  /**
+   * What the Cleanup page may do with it: delete the local branch, delete origin's, or remove its
+   * worktrees and then the local branch.
+   */
+  can: { local: Verdict; remote: Verdict; worktrees: Verdict }
 }
 
 export interface LeftoverTicket {
@@ -247,17 +427,24 @@ export interface LeftoverTicket {
   /** Previews the board still builds or runs from its workspaces. */
   previews: ManagedPreview[]
   branches: LeftoverBranch[]
-  /** True when nothing on it holds work its bases lack (every branch merged, rebased or edited in). */
+  /**
+   * True when every branch's work landed (merged, rebased or edited in), here and on origin, and none
+   * of it is protected or in use elsewhere. False when any is unique, unknown or kept.
+   */
   safe: boolean
 }
 
 export interface CleanupReport {
   tickets: LeftoverTicket[]
   /**
-   * Worktrees no ticket or workspace on the board accounts for (by branch, registered path, or the
-   * ticket's branch commit a detached one is at): register them or remove them.
+   * Worktrees no ticket or workspace accounts for (by branch, registered path, or the ticket's branch
+   * commit a detached one is at): register them or remove them.
    */
   untracked: { repo: string; path: string; branch: string | null; head: string | null }[]
+  /** The project's repos, each with why git could not read it (its leftovers are then unknown). */
+  repos: { id: number; name: string; path: string; error: string | null }[]
+  /** Why this board deletes nothing; null when the human may delete from the Cleanup page. */
+  deleteOff: string | null
   counts: {
     tickets: number
     workspaces: number
@@ -271,16 +458,209 @@ export interface CleanupReport {
 }
 
 /**
+ * Why a board deletes nothing: a preview runs on a copy of the live data, whose repos are the real
+ * ones, so a delete there would land on them all the same.
+ */
+export function deleteOff(auth: AuthMode = authMode()): string | null {
+  return auth.boardEnv === 'development'
+    ? 'this board is a preview on a copy of the live data: delete from the live board'
+    : null
+}
+
+/**
+ * What may never be deleted in one repository, whichever project points at it and through whichever
+ * of its worktrees: the repo's base branch, the main checkout's branch, origin's default branch, the
+ * branches, workspace branches and bases of every ticket still in work, and the head and base of
+ * every open PR. Also the worktree paths registered on tickets in work, the branches those tickets
+ * use (for a worktree at their tip), and the detached worktrees they claim. Another clone of the same origin has branches of its
+ * own, but shares origin's: what its work uses is kept on origin (`origin`).
+ */
+interface Guard {
+  branches: Map<string, string>
+  /** Kept on origin only: what the work of another clone of the same origin uses. */
+  origin: Map<string, string>
+  inUse: Map<string, number>
+  paths: { path: string; ticketId: number }[]
+  /** A detached worktree (by `pathKey`) a ticket in work claims, and which. */
+  claims: Map<string, number>
+  /** Every checkout a repo of the board points at: a worktree may be one. */
+  checkouts: string[]
+}
+
+/** Origin's URL per checkout, read again after a minute; a checkout without one has none. */
+const ORIGIN_TTL = 60_000
+const origins = new Map<string, { at: number; url: Promise<string | null> }>()
+
+function originOf(repoPath: string): Promise<string | null> {
+  const key = pathKey(repoPath)
+  const hit = origins.get(key)
+  if (hit && Date.now() - hit.at < ORIGIN_TTL) return hit.url
+  const url = fs.existsSync(repoPath)
+    ? originUrl(repoPath).then((u) => u && remoteKey(u))
+    : Promise.resolve(null)
+  origins.set(key, { at: Date.now(), url })
+  return url
+}
+
+/**
+ * A remote URL as a key: the same repository however it is written (https or ssh, a user, a trailing
+ * `.git` or slash aside).
+ */
+export function remoteKey(url: string) {
+  let u = url.trim().replace(/\\/g, '/')
+  u = u.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/^[^@/]+@/, '')
+  // `host:owner/repo`, the scp-like form; a drive letter is one character.
+  if (/^[^/:]{2,}:/.test(u)) u = u.replace(':', '/')
+  return u
+    .replace(/\/+$/, '')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '')
+    .toLowerCase()
+}
+
+async function guardOf(repoPath: string, git: RepoGit, key: (p: string) => string): Promise<Guard> {
+  const branches = new Map<string, string>()
+  const origin = new Map<string, string>()
+  const inUse = new Map<string, number>()
+  const paths: Guard['paths'] = []
+  const working: { id: number; names: string[]; chain: string[] }[] = []
+  const everyRepo = listRepos()
+  // Every checkout of this repository shares its branches: its own path and each worktree git lists.
+  const trees = [repoPath, ...git.worktrees.map((w) => w.path)]
+  const rows = everyRepo.filter((r) => trees.some((p) => key(p) === key(r.repoPath)))
+  const url = await originOf(repoPath)
+  const clones = url
+    ? (
+        await Promise.all(
+          everyRepo
+            .filter((r) => !rows.includes(r))
+            .map(async (r) => ((await originOf(r.repoPath)) === url ? r : null)),
+        )
+      ).filter((r) => r !== null)
+    : []
+
+  const keep = (name: string, why: string) => {
+    if (name && !branches.has(name)) branches.set(name, why)
+  }
+  const keepOnOrigin = (name: string, why: string) => {
+    if (name && !origin.has(name)) origin.set(name, `${why} (another clone of origin)`)
+  }
+  for (const r of rows) keep(r.baseBranch, "the repo's base branch")
+  for (const r of clones) keepOnOrigin(r.baseBranch, "the repo's base branch")
+  // The main checkout's branch, with the operation it is in the middle of there (a rebase, a bisect).
+  const main = git.worktrees[0]
+  if (main?.branch) keep(main.branch, `checked out in the main checkout${main.busy ? ` (${main.busy})` : ''}`)
+  const head = await originHead(repoPath)
+  if (head) keep(head, "origin's default branch")
+  workOf(
+    rows,
+    keep,
+    (name, id) => {
+      if (!inUse.has(name)) inUse.set(name, id)
+    },
+    (path, ticketId) => paths.push({ path, ticketId }),
+    (t) => working.push(t),
+  )
+  workOf(clones, keepOnOrigin)
+  // A detached worktree at a commit of their work belongs to them, whichever project they are in.
+  const claims = new Map<string, number>()
+  const detached = git.worktrees.slice(1).filter((tree) => !tree.branch && tree.head)
+  if (working.length)
+    for (const tree of detached) {
+      const [claim] = await detachedClaims(repoPath, tree.head!, git.refs, working)
+      if (claim) claims.set(pathKey(tree.path), claim.ticketId)
+    }
+  return { branches, origin, inUse, paths, claims, checkouts: everyRepo.map((r) => r.repoPath) }
+}
+
+/**
+ * What the tickets in work and the open PRs of these repo rows use: each branch name to `keep` with
+ * why, and to `using` with the ticket; each workspace path registered on one to `registered`; each
+ * ticket, with its branch names and base chain, to `ticket`.
+ */
+function workOf(
+  rows: RepoRow[],
+  keep: (name: string, why: string) => void,
+  using: (name: string, ticketId: number) => void = () => {},
+  registered: (path: string, ticketId: number) => void = () => {},
+  ticket: (t: { id: number; names: string[]; chain: string[] }) => void = () => {},
+) {
+  const rowIds = new Set(rows.map((r) => r.id))
+  for (const projectId of new Set(rows.map((r) => r.projectId))) {
+    const stages = listStages(projectId)
+    const projectRepos = listRepos(projectId)
+    const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
+    const byId = new Map(all.map((t) => [t.id, t]))
+    const repoOf = (t: schema.Ticket) =>
+      (t.repoId ? projectRepos.find((r) => r.id === t.repoId) : projectRepos[0]) ?? null
+    const working = all.filter(
+      (t) => rowIds.has(repoOf(t)?.id ?? -1) && !t.archivedAt && !isClosed(kindOf(stages, t.status)),
+    )
+    const spaces = working.length
+      ? db
+          .select()
+          .from(schema.workspaces)
+          .where(
+            inArray(
+              schema.workspaces.ticketId,
+              working.map((t) => t.id),
+            ),
+          )
+          .all()
+      : []
+    for (const t of working) {
+      const own = spaces.filter((w) => w.ticketId === t.id)
+      const names = [...new Set([t.branch, ...own.map((w) => w.branch)].filter(Boolean))]
+      for (const name of names) {
+        keep(name, `in use by #${t.id}`)
+        using(name, t.id)
+      }
+      const chain = baseChain(t, byId, repoOf(t))
+      for (const name of chain) keep(name, `the base of #${t.id}`)
+      for (const w of own) if (w.path) registered(w.path, t.id)
+      ticket({ id: t.id, names, chain })
+    }
+    const open = db
+      .select()
+      .from(schema.prs)
+      .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true)))
+      .all()
+      .filter((pr) => (pr.repoId ? rowIds.has(pr.repoId) : true))
+    for (const pr of open) {
+      keep(pr.headRef, `the head of open PR #${pr.number}`)
+      keep(pr.baseRef, `the base of open PR #${pr.number}`)
+    }
+  }
+}
+
+/**
+ * Why a copy whose work did not land may not go: its own commits, its content when only its patches
+ * are in the base (`held`: whether merging it would change nothing), or nothing to tell by.
+ */
+function unlanded(reach: Reach | null, chain: string[], held: boolean): string | null {
+  if (!reach) return `nothing to compare it against (${chain.join(', ') || 'no base'})`
+  if (reach.state === 'rebased' && !held)
+    return `its patches match ${reach.into} but its content does not: merging it would change ${reach.into}`
+  if (reach.state !== 'unique') return null
+  const n = reach.unique.length
+  return `${n} commit${n === 1 ? '' : 's'} of its own not in ${reach.into}`
+}
+
+const verdict = (reason: string | null): Verdict => ({ ok: !reason, reason })
+
+/**
  * The project's closed tickets that still have a registered workspace, a local or origin branch, or a
  * worktree, each branch checked against the ticket's base chain (skip that with `reach: false` for a
- * quick count).
+ * quick count). `only` looks at those tickets alone, every branch of theirs kept, even one gone
+ * everywhere: what a delete checks again before it acts.
  */
 export async function cleanupReport(
   projectId: number,
-  opts: { reach?: boolean } = {},
+  opts: { reach?: boolean; only?: number[] } = {},
 ): Promise<CleanupReport> {
   getProject(projectId)
   const reach = opts.reach ?? true
+  const off = deleteOff()
   const stages = listStages(projectId)
   const repos = listRepos(projectId)
   const repoById = new Map(repos.map((r) => [r.id, r]))
@@ -300,13 +680,29 @@ export async function cleanupReport(
         .all()
     : []
   const git = gitCache()
+  // Paths are compared by where they really lead: git may list a worktree by a link's path.
+  const key = folderKeys()
+  const same = (a: string, b: string) => key(a) === key(b)
+  // Whether `p` lies in folder `dir`, below it.
+  const under = (p: string, dir: string) => key(p).startsWith(`${key(dir)}/`)
+  const guards = new Map<string, Promise<Guard>>()
+  const guard = (repoPath: string) => {
+    if (!guards.has(repoPath))
+      guards.set(
+        repoPath,
+        git(repoPath).then((g) => guardOf(repoPath, g, key)),
+      )
+    return guards.get(repoPath)!
+  }
   const previews = activePreviews()
+  const linkedAt = linkedPreviews()
+  const isOpen = (t: schema.Ticket) => !t.archivedAt && !isClosed(kindOf(stages, t.status))
   const namesOf = (t: schema.Ticket) => [
     ...new Set(
       [t.branch, ...workspaces.filter((w) => w.ticketId === t.id).map((w) => w.branch)].filter(Boolean),
     ),
   ]
-  const registered = (tree: Worktree) => workspaces.some((w) => w.path && samePath(w.path, tree.path))
+  const registered = (tree: Worktree) => workspaces.some((w) => w.path && same(w.path, tree.path))
 
   // A detached worktree has no branch to go by: it belongs to the tickets of its repo whose branch
   // commit it is checked out at. Repo rows sharing a path share its worktrees, so their claims add up.
@@ -329,7 +725,9 @@ export async function cleanupReport(
   )
 
   // An archived ticket is finished work too, whatever stage it was left in.
-  const closed = all.filter((t) => t.archivedAt || isClosed(kindOf(stages, t.status)))
+  const closed = all.filter(
+    (t) => (!opts.only || opts.only.includes(t.id)) && (t.archivedAt || isClosed(kindOf(stages, t.status))),
+  )
   const tickets = await Promise.all(
     closed.map(async (t): Promise<LeftoverTicket> => {
       const repo = repoOf(t)
@@ -337,33 +735,194 @@ export async function cleanupReport(
       const chain = baseChain(t, byId, repo)
       const names = namesOf(t)
       const state = repo ? await git(repo.repoPath) : null
+      const kept = repo ? await guard(repo.repoPath) : null
+      // A ticket that names no repo goes by the project's first: with several, that is a guess.
+      const unsure =
+        !t.repoId && repos.length > 1 ? 'the ticket names no repo and the project has several' : null
+      const common = off ?? state?.error ?? unsure
       // A detached worktree several of the ticket's branches hold is one worktree: it goes with the
       // first of them, the ticket's own branch when that is one (claims follow `names`).
       const claimedBy = (tree: Worktree) => claimed.get(tree)?.find((c) => c.ticketId === t.id)?.branch
+      // Why each branch's local and origin copies may not go for where their work got; null when they may.
+      const unlandedOf = new Map<string, { local: string | null; remote: string | null }>()
       const branches = await Promise.all(
         names.map(async (name): Promise<LeftoverBranch> => {
           const local = state?.refs.local.get(name) ?? null
           const remote = state?.refs.remote.get(name) ?? null
-          const paths = own.filter((w) => w.branch === name && w.path).map((w) => w.path)
-          const worktrees = (state?.worktrees ?? [])
-            .map((tree, i) => ({ tree, main: i === 0 }))
-            .filter(
-              ({ tree }) =>
-                tree.branch === name || paths.some((p) => samePath(p, tree.path)) || claimedBy(tree) === name,
-            )
-            .map(({ tree, main }) => ({ path: tree.path, main }))
           // A workspace on its own sub-branch should land in the ticket's branch first.
           const into = name === t.branch || !t.branch ? chain : [t.branch, ...chain]
+          // A symbolic ref is an alias of another branch: deleting it deletes that branch too, so it is kept.
+          const alias = state?.refs.symrefs.get(name)
+          const guarded =
+            kept?.branches.get(name) ??
+            (alias ? `a symbolic ref to ${alias}` : null) ??
+            (into.includes(name) ? 'a base of this ticket’s own work' : null)
+          // Its own copy on origin is no destination of the branch: each copy is judged on its own.
+          const bases = state
+            ? baseRefs(into, state.refs).filter((b) => b !== localRef(name) && b !== `origin/${name}`)
+            : []
+          // A branch that is its own destination has nothing to be judged against.
+          const judge = (sha: string | null, against: string[]) =>
+            reach && repo && state && sha && !into.includes(name)
+              ? reachAt(repo.repoPath, sha, against, state.refs)
+              : Promise.resolve(null)
+          // Origin's copy landed only once origin's bases have it: a base merged here and not pushed
+          // would lose it with the copy.
+          const [localReach, originReach] = await Promise.all([
+            judge(local, bases),
+            remote
+              ? judge(
+                  remote,
+                  bases.filter((b) => b.startsWith('origin/')),
+                )
+              : null,
+          ])
+          // A `rebased` copy goes only once merging it would change nothing, as an `edited` one.
+          const content = (r: Reach | null, sha: string | null) =>
+            r?.state === 'rebased' && repo && state && sha
+              ? contentIn(repo.repoPath, sha, r.into, state.refs)
+              : Promise.resolve(true)
+          const [localHeld, originHeld] = await Promise.all([
+            content(localReach, local),
+            content(originReach, remote),
+          ])
+          const pr =
+            repo && remote
+              ? db
+                  .select()
+                  .from(schema.prs)
+                  .where(
+                    and(
+                      eq(schema.prs.projectId, projectId),
+                      eq(schema.prs.headRef, name),
+                      eq(schema.prs.headSha, remote),
+                      isNotNull(schema.prs.mergedAt),
+                    ),
+                  )
+                  .all()
+                  .find((p) => !p.repoId || p.repoId === repo.id)
+              : undefined
+          const paths = own.filter((w) => w.branch === name && w.path).map((w) => w.path)
+          const tip = local ?? remote
+          const worktrees = await Promise.all(
+            (state?.worktrees ?? [])
+              .map((tree, i) => ({ tree, main: i === 0 }))
+              .filter(
+                ({ tree }) =>
+                  tree.branch === name ||
+                  !!tree.updates?.includes(name) ||
+                  paths.some((p) => same(p, tree.path)) ||
+                  claimedBy(tree) === name,
+              )
+              .map(
+                async ({ tree, main }): Promise<LeftoverWorktree> => ({
+                  path: tree.path,
+                  main,
+                  branch: tree.branch,
+                  head: tree.head,
+                  previews: previews.filter((p) => same(p.path, tree.path)),
+                  linkedPreviews: linkedAt(tree.path),
+                  protected: await treeGuard(tree, main),
+                }),
+              ),
+          )
+          // The worktree holding the branch: on it, or a rebase in it will move it. Its operation, when it
+          // is in one (git lists it detached meanwhile), says why.
+          const holder = state?.worktrees.find(
+            (tree) => tree.branch === name || !!tree.updates?.includes(name),
+          )
+          const checkedOut = holder && worktrees.find((w) => w.path === holder.path)
+          const busy = holder?.busy
+          const removable = worktrees.filter((w) => !w.main)
+          const blocked = removable.find((w) => w.protected)
+          const reachOfBranch = local ? localReach : originReach
+          const shared = common ?? guarded
+          const notLanded = {
+            local: unlanded(localReach, into, localHeld),
+            remote: unlanded(originReach, into, originHeld),
+          }
+          unlandedOf.set(name, notLanded)
           return {
             name,
             local,
             remote,
             worktrees,
-            reach: reach && repo && state ? await reachOf(repo.repoPath, name, into, state.refs) : null,
-            restore: local || remote ? `git branch ${name} ${local ?? remote}` : null,
+            reach: reachOfBranch,
+            remoteReach: originReach,
+            mergedPr: pr ? { number: pr.number, url: pr.url } : null,
+            restore: tip ? `git branch ${shellArg(name)} ${tip}` : null,
+            restoreRemote: remote ? `git push origin ${shellArg(`${remote}:refs/heads/${name}`)}` : null,
+            protected: guarded ?? unsure,
+            can: {
+              local: verdict(
+                shared ??
+                  (!local
+                    ? 'no local branch'
+                    : checkedOut
+                      ? `checked out in ${checkedOut.main ? 'the main checkout' : checkedOut.path}${busy ? ` (${busy})` : ''}`
+                      : notLanded.local),
+              ),
+              remote: verdict(
+                shared ??
+                  (!remote ? 'not on origin' : (kept?.origin.get(name) ?? (pr ? null : notLanded.remote))),
+              ),
+              worktrees: verdict(
+                shared ??
+                  (!removable.length
+                    ? 'no worktree to remove'
+                    : blocked
+                      ? `${blocked.path}: ${blocked.protected}`
+                      : notLanded[local ? 'local' : 'remote']),
+              ),
+            },
+          }
+
+          /** Why a worktree listed under this branch may not be removed with it; null when it may. */
+          async function treeGuard(tree: Worktree, main: boolean): Promise<string | null> {
+            if (main) return "the repo's main checkout"
+            if (same(tree.path, process.cwd())) return 'the board runs from it'
+            if (kept?.checkouts.some((p) => same(p, tree.path))) return "a repo's checkout on the board"
+            if (tree.locked) return 'locked'
+            // git deletes the folder with all it holds: what the board keeps in it would go too.
+            const inside = keptIn(tree.path)
+            if (inside) return inside
+            if (tree.busy) return tree.busy
+            if (tree.branch && tree.branch !== name) return `has ${tree.branch} checked out`
+            const registeredOn = kept?.paths.find((p) => same(p.path, tree.path))
+            if (registeredOn) return `registered on #${registeredOn.ticketId}`
+            if (tree.branch || !tree.head) return tree.branch ? null : 'its commit is unknown'
+            const head = tree.head
+            const openClaim = (claimed.get(tree) ?? []).find(
+              (c) => c.ticketId !== t.id && isOpen(byId.get(c.ticketId)!),
+            )
+            if (openClaim) return `also at the work of #${openClaim.ticketId}`
+            const theirs = kept?.claims.get(pathKey(tree.path))
+            if (theirs) return `also at the work of #${theirs}`
+            const at = (n: string) => state?.refs.local.get(n) === head || state?.refs.remote.get(n) === head
+            const tipOf = [...(kept?.inUse ?? [])].find(([n]) => at(n))
+            if (tipOf) return `at the tip of ${tipOf[0]}, in use by #${tipOf[1]}`
+            // Deleting the branch with it loses nothing only when the branch holds its commit.
+            if (claimedBy(tree) === name || head === tip) return null
+            const held = repo && tip ? await isAncestor(repo.repoPath, head, tip) : false
+            return held ? null : `detached at ${head.slice(0, 7)}, which ${name} does not hold`
+          }
+
+          /**
+           * What lies below `folder` that is never removed: the board's own folder, a repo's checkout,
+           * a workspace registered on a ticket in work, or another worktree git lists.
+           */
+          function keptIn(folder: string): string | null {
+            if (under(process.cwd(), folder)) return `the board runs from ${process.cwd()}, in it`
+            const checkout = kept?.checkouts.find((p) => under(p, folder))
+            if (checkout) return `${checkout}, a repo's checkout on the board, is in it`
+            const registeredIn = kept?.paths.find((p) => under(p.path, folder))
+            if (registeredIn) return `${registeredIn.path}, registered on #${registeredIn.ticketId}, is in it`
+            const other = state?.worktrees.find((w) => under(w.path, folder))
+            return other ? `the worktree ${other.path} is in it` : null
           }
         }),
       )
+      const listed = opts.only ? branches : branches.filter((b) => b.local || b.remote || b.worktrees.length)
       return {
         id: t.id,
         title: t.title,
@@ -373,34 +932,45 @@ export async function cleanupReport(
         chain,
         workspaces: own,
         previews: previews.filter((p) => p.ticketId === t.id),
-        branches: branches.filter((b) => b.local || b.remote || b.worktrees.length),
-        safe: branches.every((b) => !b.reach || b.reach.state !== 'unique'),
+        branches: listed,
+        safe:
+          !state?.error &&
+          (!!repo || !names.length) &&
+          !unsure &&
+          branches.every(
+            (b) =>
+              !b.protected &&
+              (!b.local || !unlandedOf.get(b.name)!.local) &&
+              (!b.remote ||
+                ((!unlandedOf.get(b.name)!.remote || !!b.mergedPr) && !kept?.origin.has(b.name))) &&
+              b.worktrees.every((w) => w.main || !w.protected),
+          ),
       }
     }),
   )
-  const leftovers = tickets.filter((t) => t.workspaces.length || t.previews.length || t.branches.length)
+  const leftovers = opts.only
+    ? tickets
+    : tickets.filter((t) => t.workspaces.length || t.previews.length || t.branches.length)
 
   const known = new Set(
     all.flatMap((t) => [t.branch, ...workspaces.filter((w) => w.ticketId === t.id).map((w) => w.branch)]),
   )
-  const untracked = (
-    await Promise.all(
-      repos.map(async (r) =>
-        (await git(r.repoPath)).worktrees
-          .slice(1)
-          .filter(
-            (tree) =>
-              !(tree.branch && known.has(tree.branch)) && !registered(tree) && !claimed.get(tree)?.length,
-          )
-          .map((tree) => ({ repo: r.name, ...tree })),
-      ),
-    )
-  ).flat()
+  const listings = await Promise.all(repos.map(async (r) => ({ r, ...(await git(r.repoPath)) })))
+  const untracked = listings.flatMap(({ r, worktrees }) =>
+    worktrees
+      .slice(1)
+      .filter(
+        (tree) => !(tree.branch && known.has(tree.branch)) && !registered(tree) && !claimed.get(tree)?.length,
+      )
+      .map((tree) => ({ repo: r.name, path: tree.path, branch: tree.branch, head: tree.head })),
+  )
 
   const branches = leftovers.flatMap((t) => t.branches)
   return {
     tickets: leftovers,
     untracked,
+    repos: listings.map(({ r, error }) => ({ id: r.id, name: r.name, path: r.repoPath, error })),
+    deleteOff: off,
     counts: {
       tickets: leftovers.length,
       workspaces: leftovers.reduce((n, t) => n + t.workspaces.length, 0),

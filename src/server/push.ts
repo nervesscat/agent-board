@@ -24,7 +24,8 @@ import { kindOf, listStages } from './stages'
 /**
  * Whether a branch is on origin, read from the checkout's copy of origin's branches. That copy is only
  * as fresh as its last fetch, so each repo is fetched in the background at most every few minutes
- * (never while a request waits on it), and on demand. The board never pushes.
+ * (never while a request waits on it), and on demand. The board pushes nothing but the origin
+ * deletions the human confirms on the Cleanup page (`cleanupActions.ts`).
  *
  * - `pushed`: origin has the branch and every commit of it (origin may be ahead: `behind`);
  * - `ahead`: the local branch has `ahead` commits origin's lacks;
@@ -213,6 +214,13 @@ export const readRefs = (repoPath: string) => repoState(repoPath).refs.read()
 /** The checkout's worktrees, kept as long as its refs are. */
 export const readWorktrees = (repoPath: string) => repoState(repoPath).worktrees.read()
 
+/** The board changed the checkout itself (a Cleanup action): the next read lists it afresh. */
+export function dropListings(repoPath: string) {
+  const s = repoState(repoPath)
+  s.refs.drop()
+  s.worktrees.drop()
+}
+
 function memo<T>(cache: Map<string, Promise<T>>, key: string, work: () => Promise<T>) {
   if (!cache.has(key)) {
     // Shas are forever, but branches move: keep the memo from growing without end.
@@ -279,7 +287,7 @@ async function pushOf(
       const onBase = base && base !== branch ? refs.remote.get(base) : undefined
       if (!ahead && onBase) {
         const merged = await memo(merges, `${local}>${onBase}`, () =>
-          mergedInto(repoPath, local, `origin/${base}`),
+          mergedInto(repoPath, local, `refs/remotes/origin/${base}`),
         )
         if (merged) return { state: 'merged', ahead: 0, behind: 0, into: base, ...at }
       }

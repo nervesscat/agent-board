@@ -1,8 +1,9 @@
 # Working with the board (for AI agents)
 
 The board at `http://localhost:47100` is where the human and every agent (claude, codex,
-opencode, …) coordinate. You read your work from it and you report back to it. GitHub and git
-are **read-only** from the board's side, and from yours when acting through it: never push,
+opencode, …) coordinate. You read your work from it and you report back to it. GitHub is
+**read-only** from the board's side, and git too but for the finished branches and worktrees the
+human deletes from its Cleanup page; from yours, acting through the board, both are: never push,
 merge, approve or comment on GitHub on the board's behalf.
 
 ## Identity and auth
@@ -73,6 +74,16 @@ http_headers = { Authorization = "Bearer gate_…" }
    steps are: ticking or unticking it does the same to its steps, and the steps' ticks settle it.
    The progress bar the human sees counts tasks and subtasks alike, and together they are the
    hand-off's Implementation item (step 7).
+   **A step that needs the human** (a credential, a manual action, a call only they can make): tag
+   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
+   they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
+   rest. Every task carries `blocked` and `blockedReason` (`''` when none); a ticket's
+   `blockedTasks` counts its blocked tasks, its lanes' included, and its card shows them; the
+   summary lists each one under Needs you (`needsYou.blockedTasks`). A blocked task still counts as
+   open and does not move the ticket. Ticking it done clears the tag (on the subtasks a tick
+   reaches and on a parent its last subtask ticks, too); `blocked: false` clears it once resolved.
+   Tagging a done task reopens it. Move the whole ticket to `blocked` only when nothing else can go
+   on (step 6).
 4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
    agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and
    `assignee`. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its
@@ -127,7 +138,8 @@ http_headers = { Authorization = "Bearer gate_…" }
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
    (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
-   answered). When the answer is a choice between clear options (an approach, a trade-off, a scope
+   answered). When only one step waits on the human and the rest can go on, tag that task blocked
+   instead (step 3). When the answer is a choice between clear options (an approach, a trade-off, a scope
    call), use `ask_decision` instead: a card with 2 to 5 options (one may be recommended) that the
    human answers with one click; it blocks the ticket and unblocks it once decided, and the answer
    arrives as a reply under the card. `list_my_threads` lists every feed or reply thread where someone spoke after you;
@@ -194,9 +206,13 @@ http_headers = { Authorization = "Bearer gate_…" }
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
    `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
-   remove its worktree and local branch, `remove_workspace`, and `post_update` the deleted branches
+   remove its worktree and local branch (first any link in it to a folder out of it, such as a
+   `node_modules` linked to another checkout's: on Windows `git worktree remove` deletes what a
+   junction leads to), `remove_workspace`, and `post_update` the deleted branches
    as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
-   origin branches: list them for the human. `cleanup_report` lists every leftover of the project's
+   origin branches: list them for the human, who deletes them from the board's Cleanup page. Never
+   delete a branch `cleanup_report` marks `protected` (a base, the main checkout's branch, in use by
+   a ticket in work or an open PR). `cleanup_report` lists every leftover of the project's
    closed tickets (previews the board still runs for them too); the board skill's `/board cleanup` walks it with the human.
 9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
    `set_resume_note` with its template filled in (state, done so far, next steps, open questions or

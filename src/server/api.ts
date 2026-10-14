@@ -15,6 +15,7 @@ import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
+import { DELETE_KINDS, deleteLeftovers } from './cleanupActions'
 import { authMode } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
@@ -67,8 +68,16 @@ const AgentName = z.string().min(1).max(40)
 // Checked for http(s) where it is stored; null or '' clears it.
 const PreviewUrl = z.string().max(500).nullable()
 const TaskText = z.string().min(1).max(500)
-// A task, or a top-level task with the subtasks that go under it.
-const NewTask = z.union([TaskText, z.object({ text: TaskText, subtasks: z.array(TaskText).optional() })])
+// A task blocked on the human, and what they must do (a reason only with blocked: true).
+const TaskBlocked = {
+  blocked: z.boolean().optional(),
+  blockedReason: z.string().max(features.MAX_BLOCKED_REASON).optional(),
+}
+// A task, or a top-level task with the subtasks that go under it, either one maybe tagged blocked.
+const NewTask = z.union([
+  TaskText,
+  z.object({ text: TaskText, subtasks: z.array(TaskText).optional(), ...TaskBlocked }),
+])
 // Speaking as one of the project's agents is how a connected agent delegates; the human speaks as themself.
 const agentOnly = (request: Request) => {
   if (!isAgent(request)) throw new HttpError(403, 'only a connected agent posts as one of the project agents')
@@ -449,6 +458,31 @@ api.post('/api/projects/:id/push/refresh', async ({ params }) => json(await refr
 api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
   json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),
 )
+// The human deletes closed tickets' worked branches, here or on origin, or with their worktrees, once
+// confirmed on the Cleanup page; each is checked again first. Never an agent: they get 403.
+const Sha = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/, 'a full commit sha')
+api.post('/api/projects/:id/cleanup/delete', async ({ request, params, actor }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human deletes branches and worktrees')
+  const body = await readJson(
+    request,
+    z.object({
+      items: z
+        .array(
+          z.object({
+            ticketId: z.number().int(),
+            branch: z.string().min(1).max(250),
+            kind: z.enum(DELETE_KINDS),
+            sha: Sha.nullable(),
+            worktrees: z.array(z.string().min(1).max(1000)).max(50).optional(),
+          }),
+        )
+        .min(1)
+        .max(200),
+    }),
+  )
+  return json(await deleteLeftovers(id(params), body.items, actor))
+})
+
 // Every preview of the project's tickets, running or not, running first, and the board-wide use of the
 // preview limit; reads only.
 api.get('/api/projects/:id/previews', async ({ params }) => json(await projectPreviewsPage(id(params))))
@@ -466,10 +500,12 @@ api.post('/api/tickets/:id/tasks', async ({ request, params, actor }) => {
   )
   return json(features.addTasks(id(params), body.tasks, actor, { parentTaskId: body.parentTaskId }), 201)
 })
+// Agents and the human alike: a tick, new text, or the blocked tag (blocked, blockedReason). Ticking
+// clears the tag, tagging a done task reopens it, and both at once is a 400.
 api.patch('/api/tasks/:id', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({ done: z.boolean().optional(), text: z.string().min(1).max(500).optional() }),
+    z.object({ done: z.boolean().optional(), text: TaskText.optional(), ...TaskBlocked }),
   )
   return json(features.updateTask(id(params), body, actor))
 })

@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   GitBranch,
+  Hand,
   Layers,
   Scale,
 } from 'lucide-react'
@@ -157,9 +158,13 @@ export function TicketBoard({
                       <div className="line-clamp-2 font-medium leading-snug">
                         <span className="text-muted-foreground">#{t.id}</span> {t.title}
                       </div>
-                      {(t.decisions > 0 || t.needs.some((n) => !n.merged) || hasResumeBadge(t.resume)) && (
+                      {(t.decisions > 0 ||
+                        t.blockedTasks > 0 ||
+                        t.needs.some((n) => !n.merged) ||
+                        hasResumeBadge(t.resume)) && (
                         <div className="mt-1.5 flex flex-wrap gap-1">
                           {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                          {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
                           <NeedsBadge needs={t.needs} />
                           <ResumeBadges resume={t.resume} />
                         </div>
@@ -256,6 +261,17 @@ export function DecisionBadge({ n, className = '' }: { n: number; className?: st
       className={`inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 ${className}`}
     >
       <Scale className="size-3" /> {n === 1 ? 'decision needed' : `${n} decisions needed`}
+    </span>
+  )
+}
+
+/** Tasks and subtasks (its lanes' with them) tagged blocked: each waits on the human. */
+export function BlockedTasksBadge({ n, className = '' }: { n: number; className?: string }) {
+  return (
+    <span
+      className={`inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400 ${className}`}
+    >
+      <Hand className="size-3" /> {n === 1 ? '1 task blocked' : `${n} tasks blocked`}
     </span>
   )
 }
@@ -510,6 +526,9 @@ export function TicketList({
                     {t.title}
                   </span>
                   {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
+                  {t.blockedTasks > 0 && (
+                    <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />
+                  )}
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
                   {hasResumeBadge(t.resume) && (
                     <span className="ml-2 inline-flex gap-1 align-[1px]">

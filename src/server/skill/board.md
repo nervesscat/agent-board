@@ -8,7 +8,8 @@ description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - 
 The board is where the human and every agent coordinate. Its tools come from the `board` MCP
 server. If they are missing, say so and stop: the human connects it with a gate token from the
 board's Connect agents page ({{BOARD_URL}}/agents). {{MCP_HINT}} Git and GitHub stay read-only
-through the board: never push, merge, approve or comment on GitHub on its behalf.
+through the board for you (only the human deletes finished branches, from its Cleanup page): never
+push, merge, approve or comment on GitHub on its behalf.
 
 ## Keep the board out of the repo
 
@@ -106,6 +107,13 @@ Lanes of a ticket you are working are yours to create (next section).
   or unticking a phase does the same to its steps, ticking its last open step ticks it, unticking a
   step unticks it. When the plan changes, `update_task` rewords a task and `remove_task` drops one
   that no longer applies (a phase goes with its steps), so the progress bar stays honest.
+- A step that needs the human (a credential, a manual action, a call only they can make): tag
+  that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
+  they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
+  rest. It shows on the task, on the ticket's card (`blockedTasks`) and in the human's Needs you
+  (`get_summary` → `needsYou.blockedTasks`). It still counts as open and does not move the ticket.
+  Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole
+  ticket to `blocked` (or `ask_decision`) only when nothing else can go on.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another
   agent), `create_ticket` for each part with `parentId` = the ticket, a short title, the part's
   brief as `body` ([Delegating](#delegating)), its own `branch`, `assignee` and `tasks`. Its repo
@@ -166,7 +174,7 @@ Lanes of a ticket you are working are yours to create (next section).
   the context, 2 to 5 options (a label, what it means, at most one `recommended`). The ticket
   blocks until the human picks one; the answer comes as a reply under the card. If you cannot go on
   without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
-  is answered. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
+  is answered. When only one step waits on the human, tag that task blocked instead and go on. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id.
@@ -334,9 +342,13 @@ worked:
 - Deleting: `git worktree remove <path>`, then `git branch -d|-D <name>`, then `remove_workspace`
   for each workspace, then **one** `post_update` on the ticket listing every deleted branch with
   its commit hash, as `branch @ sha` (e.g. `lane/47 @ 9ec12e8b`). That line is the only way back:
-  `git branch lane/47 9ec12e8b` restores it.
+  `git branch lane/47 9ec12e8b` restores it. Before `git worktree remove`, remove each link in the
+  worktree to a folder out of it (a `node_modules` or `data` linked to another checkout's), the link
+  alone: on Windows git deletes what a junction leads to.
 - Branches on origin: never delete them (git and GitHub stay read-only for you). List the ones
-  left for closed tickets in the update, so the human deletes them.
+  left for closed tickets in the update, so the human deletes them from the board's Cleanup page.
+- A branch `cleanup_report` marks `protected` (a base, the main checkout's branch, origin's default
+  branch, in use by a ticket in work or an open PR) stays, whatever its reach.
 
 ### `/board cleanup`
 
@@ -345,16 +357,18 @@ When the human asks to clean up (`/board cleanup`, "clean up branches", "clean u
 1. `git fetch --prune` in each repo of the project, so origin's branches are current.
 2. `cleanup_report` with your `projectId`: every ticket in a done or cancelled stage (or archived)
    that still has workspaces, local or origin branches, or worktrees, each branch with its sha, worktrees,
-   `reach` and `restore` command, plus `untracked` worktrees no ticket accounts for, and
-   `previews` the board still runs for it (`stop_preview` each one).
+   `reach` (origin's own as `remoteReach`), `protected` and `restore` command, plus `untracked`
+   worktrees no ticket accounts for, and `previews` the board still runs for it (`stop_preview` each
+   one).
 3. For each `unique` branch, check it yourself before calling it: `git cherry -v <base> <branch>`
    and `git range-diff` or `git diff <base>...<branch>` show whether the listed commits' changes
    landed in another shape (split, squashed with others, moved to another branch). If they did,
    call it `edited` and say where.
 4. Show the human one table, grouped as **safe to delete** (merged, rebased), **edited but
    present** and **still has unique work**, with columns: ticket, branch, sha, reach and base,
-   worktree path, on origin. Below it, the `untracked` worktrees and the origin branches left for
-   the human to delete (`git push origin --delete …` is theirs to run).
+   worktree path, on origin; `protected` branches go in a **kept** group with the reason. Below
+   it, the `untracked` worktrees and the origin branches left for the human, who deletes those from
+   the board's Cleanup page.
 5. Wait for the human's approval (all, a group, or named rows). Then, per ticket: remove the
    worktrees, delete the branches, `remove_workspace` each registered workspace, and `post_update`
    on the ticket with the deleted `branch @ sha` lines. Finish with a short summary: what was

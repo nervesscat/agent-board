@@ -284,6 +284,13 @@ interface Kept {
   hooked: boolean
   /** Workspaces whose running preview a restart is replacing: their slot stays taken meanwhile. */
   restarting: Set<number> | undefined
+  /**
+   * Each start's run until it settles, stopped ones too: a stop kills the run's process, but the copy
+   * of the live data has none and goes on writing into the worktree until it ends.
+   */
+  runs: Map<Entry, Promise<void>> | undefined
+  /** The folders of worktrees being removed, each removal's as its match: no preview starts there. */
+  removing: Set<(path: string) => boolean> | undefined
 }
 export const KEPT = Symbol.for('agent-board.managedPreviews')
 const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
@@ -291,9 +298,13 @@ const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
   portQueue: Promise.resolve(),
   hooked: false,
   restarting: undefined,
+  runs: undefined,
+  removing: undefined,
 })
-// A module loaded before this field existed kept its object: give it one.
+// A module loaded before these fields existed kept its object: give it them.
 const restarting = (kept.restarting ??= new Set<number>())
+const runs = (kept.runs ??= new Map<Entry, Promise<void>>())
+const removing = (kept.removing ??= new Set<(path: string) => boolean>())
 const stateFile = () => path.join(config.dataDir, 'previews.json')
 
 function save() {
@@ -390,6 +401,7 @@ export function cannotStart(workspaceId: number): string | null {
   if (kind === 'done' || kind === 'cancelled') return `the ticket is ${kind}`
   const target = previewTarget(ws, ticketRepo(ticket))
   if (!target.ok) return target.reason
+  if ([...removing].some((at) => at(target.path))) return 'its worktree is being removed'
   const other = [...all().values()].find(
     (e) => e.workspaceId !== workspaceId && isActive(e) && norm(e.path) === norm(target.path),
   )
@@ -441,8 +453,34 @@ export function startPreview(
   all().set(workspaceId, e)
   save()
   log(e, actor, 'started a preview')
-  void run(e).catch((err: unknown) => fail(e, `could not start: ${(err as Error).message ?? err}`, null))
+  const running = run(e)
+    .catch((err: unknown) => fail(e, `could not start: ${(err as Error).message ?? err}`, null))
+    .finally(() => runs.delete(e))
+  runs.set(e, running)
   return view(e)
+}
+
+/**
+ * Settles once the runs the board started from a folder `at` takes (a preview's real path) settle,
+ * stopped previews included: a stop returns at once, while the step it caught may still be writing
+ * into the worktree (the copy of the live data, which no process holds). The runs are those there as
+ * it is called: one started after that is not waited for. What removes the worktree waits for this.
+ */
+export function previewsSettled(at: (path: string) => boolean): Promise<void> {
+  const settling = [...runs].filter(([e]) => at(e.path)).map(([, settled]) => settled)
+  return Promise.all(settling).then(() => {})
+}
+
+/**
+ * No preview starts from a folder `at` takes (a preview's real path) until the returned release is
+ * called: what removes a worktree holds its folder from before it stops the previews there until it
+ * is done, so none starts from a folder going away.
+ */
+export function holdPreviews(at: (path: string) => boolean): () => void {
+  // Its own: the same match held twice is released once each.
+  const hold = (p: string) => at(p)
+  removing.add(hold)
+  return () => void removing.delete(hold)
 }
 
 /** Still the preview being started: not stopped, restarted or forgotten meanwhile. */
@@ -501,6 +539,8 @@ async function run(e: Entry) {
   await fs.promises.mkdir(path.dirname(e.logs.build), { recursive: true })
   const env = worktreeEnv()
   const step = async (name: ManagedStep, command: string) => {
+    // Stopped while it cleared the last run's data: nothing more starts.
+    if (!current(e)) return false
     e.step = name
     fs.appendFileSync(e.logs.build, `> ${command}\n`)
     const proc = runner.spawn(command, [], { cwd: e.path, env, log: e.logs.build, shell: true })
