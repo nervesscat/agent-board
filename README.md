@@ -128,7 +128,9 @@ ticket moves to a done or cancelled stage or is archived, its workspace or ticke
 when the board stops; it exits on its own within seconds of the board even when the board is killed.
 Nothing is started again when the board starts; the ticket page says it was stopped when the board
 restarted. The cleanup report lists previews still running for closed tickets; the project's
-Previews page (`GET /api/projects/:id/previews`) lists every preview of its tickets, running or not.
+Previews page (`GET /api/projects/:id/previews`) lists every preview of its tickets, running or not,
+one stage at a time: the stage picked is in the URL (`?stage=<key>`, `?stage=_all` for every stage)
+and remembered in the browser for the project; none picked, the project's first review stage.
 
 Only a git worktree of the ticket's repo that sits next to its main checkout
 (`../agent-board-<branch>`) and is a checkout of the board is run, never the main checkout or the
