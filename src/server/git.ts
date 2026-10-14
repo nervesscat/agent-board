@@ -206,6 +206,11 @@ export interface Worktree {
    * detached meanwhile, yet holds the branch as checked out there.
    */
   busy?: string
+  /**
+   * The branches a stopped `git rebase --update-refs` here will move. Git holds each as checked out in
+   * this worktree too, though the worktree is on none of them.
+   */
+  updates?: string[]
 }
 
 export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
@@ -232,12 +237,13 @@ export async function listWorktrees(repoPath: string): Promise<Worktree[]> {
 }
 
 /**
- * The branch a worktree git lists detached is busy with: a rebase (`git rebase`, or `git am` that
- * names a branch) or a bisect started on it. Git holds such a branch as checked out there
- * (`branch_checked_out`), and deleting it would break `git rebase --continue` or `git bisect reset`.
- * Read from the worktree's own git folder; null when it is busy with none, or that cannot be read.
+ * What a worktree git lists detached is busy with, and the branches it holds checked out there
+ * (`branch_checked_out`): a rebase (`git rebase`, or `git am` that names a branch), a bisect started on
+ * a branch, or a rebase with `--update-refs`, which will move the branches it lists. Deleting one of
+ * them would break `git rebase --continue` or `git bisect reset`. Read from the worktree's own git
+ * folder; null when it is busy with none, or that cannot be read.
  */
-async function busyWith(worktreePath: string): Promise<{ branch: string; busy: string } | null> {
+async function busyWith(worktreePath: string): Promise<Pick<Worktree, 'branch' | 'busy' | 'updates'> | null> {
   const dir = await gitDirOf(worktreePath)
   if (!dir) return null
   const read = (file: string) =>
@@ -245,16 +251,22 @@ async function busyWith(worktreePath: string): Promise<{ branch: string; busy: s
       (text) => text.trim(),
       () => '',
     )
+  // Three lines per branch: its refname, then its sha before the rebase and its sha after it.
+  const updates = (await read('rebase-merge/update-refs'))
+    .split('\n')
+    .filter((_, i) => i % 3 === 0)
+    .filter((ref) => ref.startsWith('refs/heads/'))
+    .map((ref) => ref.slice(11))
   for (const file of ['rebase-merge/head-name', 'rebase-apply/head-name']) {
     const name = await read(file)
-    if (name.startsWith('refs/heads/')) return { branch: name.slice(11), busy: 'rebase in progress' }
+    if (name.startsWith('refs/heads/')) return { branch: name.slice(11), busy: 'rebase in progress', updates }
   }
-  // The branch bisect started on, by its short name; a commit's sha when it started detached.
+  // The branch bisect started on, as git wrote it: its name with `refs/heads/` removed, or a commit's
+  // sha when it started detached.
   const start = await read('BISECT_START')
-  const name = start.startsWith('refs/heads/') ? start.slice(11) : start
-  if (name && !name.startsWith('refs/') && !/^([0-9a-f]{40}|[0-9a-f]{64})$/.test(name))
-    return { branch: name, busy: 'bisect in progress' }
-  return null
+  if (start && !/^([0-9a-f]{40}|[0-9a-f]{64})$/.test(start))
+    return { branch: start, busy: 'bisect in progress', updates }
+  return updates.length ? { branch: null, busy: 'rebase in progress', updates } : null
 }
 
 /** A worktree's own git folder: its `.git` folder, or where its `.git` file points; null when neither. */
@@ -279,20 +291,25 @@ export interface Refs {
   local: Map<string, string>
   /** Branch on origin → sha, as of the last fetch. */
   remote: Map<string, string>
+  /** Local branch that is a symbolic ref (an alias, such as `trunk` for `main`) → the branch it points at. */
+  symrefs: Map<string, string>
 }
 
 export async function listRefs(repoPath: string): Promise<Refs> {
   const out = await git(repoPath, [
     'for-each-ref',
-    '--format=%(refname) %(objectname)',
+    // The last field is what a symbolic ref points at: empty for any other ref.
+    '--format=%(refname) %(objectname) %(symref)',
     'refs/heads',
     'refs/remotes/origin',
   ])
-  const refs: Refs = { local: new Map(), remote: new Map() }
+  const refs: Refs = { local: new Map(), remote: new Map(), symrefs: new Map() }
   for (const line of out ? out.split('\n') : []) {
-    const [name, sha] = line.split(' ')
-    if (name!.startsWith('refs/heads/')) refs.local.set(name!.slice(11), sha!)
-    else if (name !== 'refs/remotes/origin/HEAD') refs.remote.set(name!.slice(20), sha!)
+    const [name, sha, target] = line.split(' ')
+    if (name!.startsWith('refs/heads/')) {
+      refs.local.set(name!.slice(11), sha!)
+      if (target) refs.symrefs.set(name!.slice(11), target.replace(/^refs\/heads\//, ''))
+    } else if (name !== 'refs/remotes/origin/HEAD') refs.remote.set(name!.slice(20), sha!)
   }
   return refs
 }
@@ -631,15 +648,44 @@ export async function removeWorktree(repoPath: string, worktreePath: string): Pr
 
 /**
  * Deletes the local branch, only while it is still at `sha`: one that moved since is left alone. By
- * its full refname, so no branch name is ever read as an option.
+ * its full refname, so no branch name is ever read as an option. `--no-deref`: a branch that is a
+ * symbolic ref to another goes alone, never the branch it points at.
  */
 export async function deleteLocalBranch(repoPath: string, branch: string, sha: string): Promise<void> {
-  await git(repoPath, ['update-ref', '-d', '--end-of-options', `refs/heads/${branch}`, sha])
+  await git(repoPath, ['update-ref', '--no-deref', '-d', '--end-of-options', `refs/heads/${branch}`, sha])
+}
+
+/**
+ * The branch origin holds `branch` as a symbolic ref to, by its short name (`main` for an alias of
+ * it), as origin holds it now; null when it holds it as a branch of its own, or not at all. Deleting
+ * such a ref on origin deletes the branch it points at, so the caller refuses it. Never prompts for
+ * credentials, gives up after `timeoutMs`.
+ */
+export async function originSymref(
+  repoPath: string,
+  branch: string,
+  timeoutMs: number,
+): Promise<string | null> {
+  const ref = `refs/heads/${branch}`
+  const { stdout } = await run('git', ['ls-remote', '--symref', 'origin', ref], {
+    cwd: repoPath,
+    windowsHide: true,
+    timeout: timeoutMs,
+    maxBuffer: 8 * 1024 * 1024,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
+  })
+  // `ref: <target>` and then the ref's own line, tab-separated, where origin holds it as a symbolic ref.
+  for (const line of stdout.split('\n')) {
+    const m = /^ref: (\S+)\t(\S+)\r?$/.exec(line)
+    if (m && m[2] === ref) return m[1]!.replace(/^refs\/heads\//, '')
+  }
+  return null
 }
 
 /**
  * Deletes the branch on origin, only while origin still has it at `sha` (`--force-with-lease`): one
- * someone pushed to since is left alone. Never prompts for credentials, gives up after `timeoutMs`.
+ * someone pushed to since is left alone. A symbolic ref on origin is not deleted here: the caller
+ * refuses it first (`originSymref`). Never prompts for credentials, gives up after `timeoutMs`.
  * The checkout's copy (`origin/<branch>`) goes with it.
  */
 export async function deleteOriginBranch(

@@ -1600,6 +1600,28 @@ describe('never deletes what is protected', () => {
     expect(hasRef(repo, 'refs/heads/feat/b4-free')).toBe(true)
   })
 
+  it('the main checkout in the middle of a rebase says so, and keeps its branch', async () => {
+    // Another commit beside it adding the same file: the rebase onto it stops on the conflict.
+    land(['rb-onto'], { unique: true, files: [{ path: 'feat-rb.txt', data: 'other\n' }] })
+    land(['feat/rb'], { unique: true })
+    git('checkout', '-q', 'feat/rb')
+    try {
+      expect(() => git('rebase', 'rb-onto')).toThrow()
+      const t = done('rb', 'feat/rb')
+      const why = /^checked out in the main checkout \(rebase in progress\)$/
+      await refused(t.id, 'feat/rb', 'local', why)
+      await refused(t.id, 'feat/rb', 'worktrees', why)
+    } finally {
+      try {
+        git('rebase', '--abort')
+      } catch {
+        // No rebase was left in progress.
+      }
+      git('checkout', '-q', 'main')
+    }
+    expect(hasRef(repo, 'refs/heads/feat/rb')).toBe(true)
+  })
+
   it('a worktree another project reads as its repo', async () => {
     const { 'feat/b4wt': sha } = land(['feat/b4wt'])
     git('worktree', 'add', '-q', wt('b4wt'), 'feat/b4wt')
@@ -2155,6 +2177,31 @@ describe('a repository or another worktree inside the worktree', () => {
     expect(fs.readFileSync(path.join(side, 'a.txt'), 'utf8')).toBe('edited\n')
     expect(git('rev-parse', 'refs/heads/feat/n4')).toBe(sha)
   })
+
+  it('keeps one holding a bare clone of its own, and the clone', async () => {
+    const { 'feat/n5': sha } = land(['feat/n5'])
+    git('worktree', 'add', '-q', wt('n5'), 'feat/n5')
+    const inner = path.join(wt('n5'), '.worktrees', 'mirror.git')
+    execFileSync('git', ['clone', '-q', '--bare', repo, inner], { stdio: 'ignore' })
+    const t = done('n5', 'feat/n5')
+
+    const b = (await branchOf(t.id, 'feat/n5'))!
+    const [r] = await del([
+      item(
+        t.id,
+        'feat/n5',
+        sha,
+        b.worktrees.map((w) => w.path),
+      ),
+    ])
+    expect(r).toMatchObject({ outcome: 'refused', removed: [], unlinked: [] })
+    expect(r!.reason).toContain(path.join('.worktrees', 'mirror.git'))
+    expect(r!.reason).toMatch(
+      /a git repository or worktree .*\(a bare repository, with no \.git of its own\)/,
+    )
+    expect(fs.existsSync(path.join(inner, 'HEAD'))).toBe(true)
+    expect(git('rev-parse', 'refs/heads/feat/n5')).toBe(sha)
+  })
 })
 
 describe('a branch whose patches are in the base but its content is not', () => {
@@ -2339,6 +2386,76 @@ describe('a branch a rebase or a bisect in its worktree is on', () => {
     await refusedWhile('feat/q3', wt('q3'), 'bisect in progress')
     run(wt('q3'), 'bisect', 'reset')
     expect(run(wt('q3'), 'symbolic-ref', 'HEAD')).toBe('refs/heads/feat/q3')
+  })
+
+  it('keeps one named refs/… that a bisect started on, as git names it', async () => {
+    for (const n of [1, 2, 3]) land([`feat/q5-${n}`])
+    const { 'refs/q5': sha } = land(['refs/q5'])
+    // Named without `heads/`: a full refname would make git add the worktree detached.
+    git('worktree', 'add', '-q', wt('q5'), 'refs/q5')
+    expect(run(wt('q5'), 'symbolic-ref', 'HEAD')).toBe('refs/heads/refs/q5')
+    run(wt('q5'), 'bisect', 'start', sha, `${sha}~4`)
+    expect(git('worktree', 'list', '--porcelain')).toMatch(/agent-board-q5\nHEAD \w+\ndetached/)
+
+    await refusedWhile('refs/q5', wt('q5'), 'bisect in progress')
+    run(wt('q5'), 'bisect', 'reset')
+    expect(run(wt('q5'), 'symbolic-ref', 'HEAD')).toBe('refs/heads/refs/q5')
+  })
+
+  it('keeps one a rebase with --update-refs will move, and the rebase goes on afterwards', async () => {
+    // feat/q4-base changes a file another commit beside it changes too, so the rebase stops on it. It
+    // is not the branch the rebase is on: feat/q4, stacked on it, is, and the rebase moves both.
+    land(['q4-onto'], { unique: true, files: [{ path: 'feat-q4-base.txt', data: 'other\n' }] })
+    land(['feat/q4-base'], { unique: true })
+    land(['feat/q4'], { unique: true, from: 'refs/heads/feat/q4-base' })
+    git('worktree', 'add', '-q', wt('q4'), 'feat/q4')
+    expect(() => run(wt('q4'), 'rebase', '--update-refs', 'q4-onto')).toThrow()
+
+    await refusedWhile('feat/q4-base', wt('q4'), 'rebase in progress')
+    fs.writeFileSync(path.join(wt('q4'), 'feat-q4-base.txt'), 'resolved\n')
+    run(wt('q4'), 'add', 'feat-q4-base.txt')
+    run(wt('q4'), 'rebase', '--continue')
+    expect(run(wt('q4'), 'symbolic-ref', 'HEAD')).toBe('refs/heads/feat/q4')
+  })
+})
+
+describe('a symbolic ref, a branch that is an alias of another', () => {
+  it('is kept, and deleting it never deletes the branch it points at', async () => {
+    const sha = git('rev-parse', 'refs/heads/main')
+    git('symbolic-ref', 'refs/heads/alias-main', 'refs/heads/main')
+    try {
+      const t = done('alias', 'alias-main')
+      const b = (await branchOf(t.id, 'alias-main'))!
+      expect(b.protected).toBe('a symbolic ref to main')
+      expect(b.can.local).toEqual({ ok: false, reason: 'a symbolic ref to main' })
+      const [r] = await del([{ ticketId: t.id, branch: 'alias-main', kind: 'local', sha }])
+      expect(r).toMatchObject({ outcome: 'refused', reason: 'a symbolic ref to main' })
+      expect(git('rev-parse', 'refs/heads/main')).toBe(sha)
+      expect(hasRef(repo, 'refs/heads/alias-main')).toBe(true)
+    } finally {
+      git('update-ref', '--no-deref', '-d', 'refs/heads/alias-main')
+    }
+  })
+
+  it('on origin is refused before the push, and the branch it points at stays', async () => {
+    const { 'feat/y2': sha } = land(['feat/y2'])
+    git('push', '-q', 'origin', 'main', 'feat/y2:refs/heads/y2-target')
+    gitIn(origin)('symbolic-ref', 'refs/heads/alias-y2', 'refs/heads/y2-target')
+    git('fetch', '-q', 'origin')
+    try {
+      const t = done('alias on origin', 'alias-y2')
+      const b = (await branchOf(t.id, 'alias-y2'))!
+      expect(b.remote).toBe(sha)
+      const [r] = await del([{ ticketId: t.id, branch: 'alias-y2', kind: 'remote', sha }])
+      expect(r).toMatchObject({ outcome: 'refused', removed: [] })
+      expect(r!.reason).toContain('a symbolic ref to y2-target')
+      expect(gitIn(origin)('rev-parse', 'refs/heads/y2-target')).toBe(sha)
+      expect(gitIn(origin)('symbolic-ref', 'refs/heads/alias-y2')).toBe('refs/heads/y2-target')
+    } finally {
+      gitIn(origin)('update-ref', '--no-deref', '-d', 'refs/heads/alias-y2')
+      gitIn(origin)('update-ref', '-d', 'refs/heads/y2-target')
+      git('update-ref', '-d', 'refs/remotes/origin/alias-y2')
+    }
   })
 })
 

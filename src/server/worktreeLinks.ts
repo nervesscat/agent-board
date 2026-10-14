@@ -24,20 +24,29 @@ export interface WorktreeLink {
   outward: boolean
 }
 
+/** A repository, or another worktree, in the worktree: git would delete it with the worktree. */
+export interface WorktreeRepo {
+  /** Its folder, in the worktree. */
+  path: string
+  /** Bare: no `.git` of its own, its folder being the repository (HEAD, objects and refs). */
+  bare: boolean
+}
+
 /** How many folders are read, or links handled, at once. */
 const WIDTH = 8
 const BATCH = 64
+/** The entries a bare repository's folder holds, as git tells one by its listing (`is_git_directory`). */
+const BARE = ['HEAD', 'objects', 'refs']
 
 /**
  * Every link in the worktree, found without ever going through one: the folder a link within it
- * leads to is read where it is. Also, in the same walk, every folder in it that holds a `.git` of its
- * own (`repos`): a repository or another worktree, of this repository or any other, which git would
- * delete with the worktree. Throws when a folder or a link cannot be read: what is not known is not
- * safe.
+ * leads to is read where it is. Also, in the same walk, every folder in it that is a repository
+ * (`repos`), of this repository or any other: one with a `.git` of its own, or a bare one. Throws when
+ * a folder or a link cannot be read: what is not known is not safe.
  */
 export async function worktreeLinks(
   worktreePath: string,
-): Promise<{ links: WorktreeLink[]; repos: string[] }> {
+): Promise<{ links: WorktreeLink[]; repos: WorktreeRepo[] }> {
   const root = pathKey(await fs.promises.realpath(worktreePath))
   const within = (p: string) => pathKey(p) === root || pathKey(p).startsWith(`${root}/`)
   const found = await findLinks(worktreePath)
@@ -51,11 +60,11 @@ export async function worktreeLinks(
 
 /**
  * Every link under `dir`, each folder read once and none read through a link; and every folder below
- * `dir` that holds a `.git`, whose own git folder is not read.
+ * `dir` that is a repository. A `.git` in one is not walked, and a bare repository is not read at all.
  */
-async function findLinks(dir: string): Promise<{ links: string[]; repos: string[] }> {
+async function findLinks(dir: string): Promise<{ links: string[]; repos: WorktreeRepo[] }> {
   const links: string[] = []
-  const repos: string[] = []
+  const repos: WorktreeRepo[] = []
   const pending = [dir]
   let reading = 0
   await new Promise<void>((resolve, reject) => {
@@ -68,7 +77,7 @@ async function findLinks(dir: string): Promise<{ links: string[]; repos: string[
         const folder = pending.pop()!
         readFolder(folder, folder !== dir)
           .then((found) => {
-            if (found.repo) repos.push(folder)
+            if (found.repo) repos.push({ path: folder, bare: found.repo === 'bare' })
             // One at a time: spread, a folder of some 125 000 entries is too many arguments.
             for (const link of found.links) links.push(link)
             for (const sub of found.folders) pending.push(sub)
@@ -87,18 +96,27 @@ async function findLinks(dir: string): Promise<{ links: string[]; repos: string[
   return { links, repos }
 }
 
-/** A folder's links and folders; `nested`, a folder below the worktree's, also whether it holds a `.git`. */
-async function readFolder(dir: string, nested: boolean) {
+/**
+ * A folder's links and folders, and whether it is a repository. Below the worktree (`nested`), a folder
+ * holding a `.git` is one, and so is a bare repository: a folder holding HEAD, objects and refs, as git
+ * tells one by its listing. A bare one's folder is not read beyond that: git would delete it whole.
+ */
+async function readFolder(
+  dir: string,
+  nested: boolean,
+): Promise<{ links: string[]; folders: string[]; repo: 'git' | 'bare' | null }> {
   const links: string[] = []
   const folders: string[] = []
-  let repo = false
-  for (const e of await fs.promises.readdir(dir, { withFileTypes: true })) {
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true })
+  const names = new Set(entries.map((e) => pathKey(e.name)))
+  let repo: 'git' | 'bare' | null = null
+  if (nested && names.has(pathKey('.git'))) repo = 'git'
+  else if (nested && BARE.every((name) => names.has(pathKey(name)))) repo = 'bare'
+  if (repo === 'bare') return { links, folders, repo }
+  for (const e of entries) {
     const p = path.join(dir, e.name)
     // A file, a folder or a link: a worktree's `.git` is a file, a repository's a folder.
-    if (nested && pathKey(e.name) === '.git') {
-      repo = true
-      continue
-    }
+    if (repo === 'git' && pathKey(e.name) === pathKey('.git')) continue
     // On Windows a junction reads as a link too, never as a folder.
     if (e.isSymbolicLink()) links.push(p)
     else if (e.isDirectory()) folders.push(p)

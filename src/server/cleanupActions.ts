@@ -21,6 +21,7 @@ import {
   eachTrackedFile,
   gitSaid,
   listWorktrees,
+  originSymref,
   removeWorktree,
   worktreeChanges,
 } from './git'
@@ -35,7 +36,7 @@ import {
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
 import { listRepos } from './repos'
-import { inBatches, removeLink, type WorktreeLink, worktreeLinks } from './worktreeLinks'
+import { inBatches, removeLink, type WorktreeLink, type WorktreeRepo, worktreeLinks } from './worktreeLinks'
 
 /**
  * The Cleanup page's delete actions, the human's alone: a closed ticket's worked branch deleted here,
@@ -206,6 +207,15 @@ async function deleteOne(
     if (b.remote !== item.sha)
       return result(item, 'refused', `origin's ${b.name} moved since: now at ${short(b.remote)}`)
     if (!b.can.remote.ok) return result(item, 'refused', b.can.remote.reason)
+    // Looked at on origin just before the push: a symbolic ref there is an alias, and the push would
+    // delete the branch it points at too.
+    const alias = await originSymref(repoPath, b.name, ORIGIN_TIMEOUT)
+    if (alias)
+      return result(
+        item,
+        'refused',
+        `origin's ${b.name} is a symbolic ref to ${alias}: deleting it would delete ${alias} too`,
+      )
     await deleteOriginBranch(repoPath, b.name, b.remote, ORIGIN_TIMEOUT)
     log(`deleted origin's branch ${b.name} @ ${b.remote}`)
     return result(item, 'deleted', null, { restore: [b.restoreRemote!] })
@@ -330,9 +340,7 @@ async function linksOut(worktreePath: string): Promise<WorktreeLink[] | string> 
   let links: WorktreeLink[]
   try {
     const found = await worktreeLinks(worktreePath)
-    const n = found.repos.length
-    if (n)
-      return `${found.repos.slice(0, 3).join(', ')}${n > 3 ? ', …' : ''}: a git repository or worktree in ${worktreePath} (a .git of ${n === 1 ? 'its' : 'their'} own), which would go with it`
+    if (found.repos.length) return reposSaid(worktreePath, found.repos)
     links = found.links
   } catch (err) {
     return `${worktreePath} could not be searched for links out of it: ${fsSaid(err)}`
@@ -361,6 +369,24 @@ async function linksOut(worktreePath: string): Promise<WorktreeLink[] | string> 
     return `${tracked.map((l) => `${l.path} (to ${l.target})`).join(', ')} leads out of the worktree and git tracks it: removing the link would change the worktree`
   // One within that git tracks is a link git checked out: git deletes it as one.
   return links.filter((l, i) => l.outward || !isTracked[i])
+}
+
+/**
+ * Why a worktree holding these repositories may not go: git would delete them with it, whatever they
+ * hold. A bare one has no `.git` of its own: its folder is the repository.
+ */
+function reposSaid(worktreePath: string, repos: WorktreeRepo[]): string {
+  const n = repos.length
+  const bare = repos.filter((r) => r.bare).length
+  const plural = n === 1 ? 'its' : 'their'
+  let what = `a .git of ${plural} own`
+  if (bare === n) what = `a bare repository, with no .git of ${plural} own`
+  else if (bare) what = `a .git of ${plural} own, or a bare repository`
+  const list = repos
+    .slice(0, 3)
+    .map((r) => r.path)
+    .join(', ')
+  return `${list}${n > 3 ? ', …' : ''}: a git repository or worktree in ${worktreePath} (${what}), which would go with it`
 }
 
 const fsSaid = (err: unknown) => (err instanceof Error ? err.message : String(err))

@@ -67,7 +67,7 @@ export function gitCache(opts: { recent?: boolean } = {}) {
 export type GitCache = ReturnType<typeof gitCache>
 
 async function listing(repoPath: string, recent: boolean): Promise<RepoGit> {
-  const none = { refs: { local: new Map(), remote: new Map() }, worktrees: [] }
+  const none = { refs: { local: new Map(), remote: new Map(), symrefs: new Map() }, worktrees: [] }
   if (!fs.existsSync(repoPath)) return { ...none, error: `${repoPath} does not exist` }
   // The shared listings keep no error: a failure there reads as null.
   const or = <T>(p: Promise<T | null>) => p.then((v) => v ?? Promise.reject(new Error('git failed')))
@@ -547,8 +547,9 @@ async function guardOf(repoPath: string, git: RepoGit, key: (p: string) => strin
   }
   for (const r of rows) keep(r.baseBranch, "the repo's base branch")
   for (const r of clones) keepOnOrigin(r.baseBranch, "the repo's base branch")
-  const mainBranch = git.worktrees[0]?.branch
-  if (mainBranch) keep(mainBranch, 'checked out in the main checkout')
+  // The main checkout's branch, with the operation it is in the middle of there (a rebase, a bisect).
+  const main = git.worktrees[0]
+  if (main?.branch) keep(main.branch, `checked out in the main checkout${main.busy ? ` (${main.busy})` : ''}`)
   const head = await originHead(repoPath)
   if (head) keep(head, "origin's default branch")
   workOf(
@@ -750,8 +751,12 @@ export async function cleanupReport(
           const remote = state?.refs.remote.get(name) ?? null
           // A workspace on its own sub-branch should land in the ticket's branch first.
           const into = name === t.branch || !t.branch ? chain : [t.branch, ...chain]
+          // A symbolic ref is an alias of another branch: deleting it deletes that branch too, so it is kept.
+          const alias = state?.refs.symrefs.get(name)
           const guarded =
-            kept?.branches.get(name) ?? (into.includes(name) ? 'a base of this ticket’s own work' : null)
+            kept?.branches.get(name) ??
+            (alias ? `a symbolic ref to ${alias}` : null) ??
+            (into.includes(name) ? 'a base of this ticket’s own work' : null)
           // Its own copy on origin is no destination of the branch: each copy is judged on its own.
           const bases = state
             ? baseRefs(into, state.refs).filter((b) => b !== localRef(name) && b !== `origin/${name}`)
@@ -804,7 +809,10 @@ export async function cleanupReport(
               .map((tree, i) => ({ tree, main: i === 0 }))
               .filter(
                 ({ tree }) =>
-                  tree.branch === name || paths.some((p) => same(p, tree.path)) || claimedBy(tree) === name,
+                  tree.branch === name ||
+                  !!tree.updates?.includes(name) ||
+                  paths.some((p) => same(p, tree.path)) ||
+                  claimedBy(tree) === name,
               )
               .map(
                 async ({ tree, main }): Promise<LeftoverWorktree> => ({
@@ -818,9 +826,13 @@ export async function cleanupReport(
                 }),
               ),
           )
-          const checkedOut = worktrees.find((w) => w.branch === name)
-          // A rebase or a bisect of the branch in progress there (git lists it detached meanwhile).
-          const busy = checkedOut && state?.worktrees.find((w) => w.path === checkedOut.path)?.busy
+          // The worktree holding the branch: on it, or a rebase in it will move it. Its operation, when it
+          // is in one (git lists it detached meanwhile), says why.
+          const holder = state?.worktrees.find(
+            (tree) => tree.branch === name || !!tree.updates?.includes(name),
+          )
+          const checkedOut = holder && worktrees.find((w) => w.path === holder.path)
+          const busy = holder?.busy
           const removable = worktrees.filter((w) => !w.main)
           const blocked = removable.find((w) => w.protected)
           const reachOfBranch = local ? localReach : originReach

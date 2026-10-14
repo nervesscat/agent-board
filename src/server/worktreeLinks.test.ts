@@ -62,3 +62,51 @@ describe('the links in a worktree', () => {
     })
   }, 90_000)
 })
+
+describe('the repositories in a worktree', () => {
+  it('are a folder with a .git of its own, and a bare one: HEAD, objects and refs, with no .git', async () => {
+    const dir = path.join(tmp, 'repos-1')
+    const bare = path.join(dir, 'bare.git')
+    fs.mkdirSync(path.join(dir, 'with-git', '.git'), { recursive: true })
+    fs.mkdirSync(path.join(bare, 'objects', 'pack'), { recursive: true })
+    fs.mkdirSync(path.join(bare, 'refs', 'heads'), { recursive: true })
+    fs.writeFileSync(path.join(bare, 'HEAD'), 'ref: refs/heads/main\n')
+    // Not one: no HEAD, and no refs.
+    fs.mkdirSync(path.join(dir, 'no-head', 'objects'), { recursive: true })
+    fs.mkdirSync(path.join(dir, 'no-head', 'refs'))
+    fs.mkdirSync(path.join(dir, 'no-refs', 'objects'), { recursive: true })
+    fs.writeFileSync(path.join(dir, 'no-refs', 'HEAD'), 'ref: refs/heads/main\n')
+    try {
+      const { repos } = await worktreeLinks(dir)
+      expect(repos).toHaveLength(2)
+      expect(repos).toEqual(
+        expect.arrayContaining([
+          { path: path.join(dir, 'with-git'), bare: false },
+          { path: bare, bare: true },
+        ]),
+      )
+    } finally {
+      fs.rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('is not read beyond its listing: a link inside a bare one is no link of the worktree', async () => {
+    const dir = path.join(tmp, 'repos-2')
+    const bare = path.join(dir, 'bare.git')
+    const outside = path.join(tmp, 'repos-2-outside')
+    fs.mkdirSync(path.join(bare, 'objects'), { recursive: true })
+    fs.mkdirSync(path.join(bare, 'refs'))
+    fs.writeFileSync(path.join(bare, 'HEAD'), 'ref: refs/heads/main\n')
+    fs.mkdirSync(outside)
+    const inside = path.join(bare, 'refs', 'linked')
+    fs.symlinkSync(outside, inside, process.platform === 'win32' ? 'junction' : 'dir')
+    try {
+      expect(await worktreeLinks(dir)).toEqual({ links: [], repos: [{ path: bare, bare: true }] })
+    } finally {
+      // The link first, never through it.
+      fs.unlinkSync(inside)
+      fs.rmSync(dir, { recursive: true })
+      fs.rmSync(outside, { recursive: true })
+    }
+  })
+})
