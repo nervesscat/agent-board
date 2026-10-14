@@ -158,10 +158,11 @@ export async function startServer({ port, log, attempts = 5, ...opts }) {
   }
 }
 
-/** Whether this process's own bind failed, as its preload wrote it to the log before it exited. */
-function bindFailedBy(log, pid) {
+/** Whether this process's own bind failed, as its preload wrote it to the log after offset `from`. */
+function bindFailedBy(log, pid, from) {
   try {
-    return fs.readFileSync(log, 'utf8').includes(`bind failed: EADDRINUSE pid=${pid}\n`)
+    const written = fs.readFileSync(log).subarray(from).toString('utf8')
+    return written.includes(`bind failed: EADDRINUSE pid=${pid}\n`)
   } catch {
     return false
   }
@@ -186,6 +187,8 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
     // Like every copy of the board's data: never delete what a shared store holds.
     BOARD_DATA_COPY: '1',
   }
+  // Where this child's own lines begin in the log: a pid can be reused, so earlier lines do not count.
+  const from = fs.existsSync(log) ? fs.statSync(log).size : 0
   const out = fs.openSync(log, 'a')
   const started = Date.now()
   const args =
@@ -263,7 +266,7 @@ async function launch({ mode = 'build', target, buildDir, dataDir, port, human, 
     if (exited !== null) {
       // It stopped before it answered. Its bind failing (the preload logged it) means another process held
       // the port when it tried, even if that process has let go since; otherwise, a port in use now says so.
-      if (bindFailedBy(log, proc.pid) || !(await isFree(port)))
+      if (bindFailedBy(log, proc.pid, from) || !(await isFree(port)))
         return giveUp(`its own server exited (${exited}) with the port in use`)
       throw new Error(`the bench server exited (${exited}) before it answered; see ${log}`)
     }

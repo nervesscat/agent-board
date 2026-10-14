@@ -28,8 +28,8 @@ server.on('error', () => process.exit(0))
 server.listen(Number(process.env.PORT), process.env.HOST)
 `,
 )
-// A build whose server, on its bind error, exits only once the go-file named by GO exists: a test can let
-// the port go between the child's failed bind and its exit.
+// A build whose server logs its bind error and exits only once the go-file named by GO exists: a test can
+// let the port go between the child's failed bind and its exit.
 const waitingBuildDir = path.join(root, 'waiting-build')
 fs.mkdirSync(path.join(waitingBuildDir, 'server'), { recursive: true })
 fs.writeFileSync(
@@ -38,6 +38,7 @@ fs.writeFileSync(
 import http from 'node:http'
 const server = http.createServer((req, res) => res.end(String(process.pid)))
 server.on('error', () => {
+  process.stderr.write('bind failed\\n')
   const timer = setInterval(() => {
     if (fs.existsSync(process.env.GO)) { clearInterval(timer); process.exit(0) }
   }, 20)
