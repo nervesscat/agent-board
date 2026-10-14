@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `default_phases` text;

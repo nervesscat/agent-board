@@ -285,12 +285,16 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
   const lanes = all.filter((t) => t.parentId === id)
   const descendants = laneTree(all, id).map((t) => t.id)
 
-  const tasks = db
+  const taskRows = db
     .select()
     .from(schema.tasks)
     .where(eq(schema.tasks.ticketId, id))
     .orderBy(asc(schema.tasks.position), asc(schema.tasks.id))
     .all()
+  // One flat list in tree order: each top-level task, then its subtasks.
+  const tasks = taskRows
+    .filter((task) => !task.parentId)
+    .flatMap((task) => [task, ...taskRows.filter((sub) => sub.parentId === task.id)])
   const workspaces = db.select().from(schema.workspaces).where(eq(schema.workspaces.ticketId, id)).all()
   const updates = db
     .select()
@@ -416,7 +420,8 @@ export function createTicket(
     repoId?: number | null
     parentId?: number | null
     tags?: string[]
-    tasks?: string[]
+    /** Top-level tasks, each with its subtasks when given as `{ text, subtasks }`. */
+    tasks?: NewTask[]
     prNumber?: number | null
     /** Uploads (POST /api/uploads) that go with the instructions. */
     attachmentIds?: number[]
@@ -794,37 +799,104 @@ export function restoreTicket(id: number, actor: string) {
 
 // --- tasks ---
 
-export function addTasks(ticketId: number, texts: string[], actor: string, opts: { quiet?: boolean } = {}) {
-  const ticket = getTicket(ticketId)
-  const last = db
-    .select({ position: schema.tasks.position })
+/** A task to add: its text, or a top-level task with the subtasks that go under it. */
+export type NewTask = string | { text: string; subtasks?: string[] }
+
+function getTask(id: number) {
+  const task = db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).get()
+  if (!task) throw notFound('task')
+  return task
+}
+
+/**
+ * A task with subtasks is done exactly when all of them are; one whose last subtask went keeps its
+ * own tick. Run inside the transaction that changed the subtasks.
+ */
+function settleParent(parentId: number) {
+  const subtasks = db
+    .select({ done: schema.tasks.done })
     .from(schema.tasks)
-    .where(eq(schema.tasks.ticketId, ticketId))
-    .orderBy(desc(schema.tasks.position))
-    .get()
-  let position = (last?.position ?? -1) + 1
-  const rows = db
-    .insert(schema.tasks)
-    .values(texts.map((text) => ({ ticketId, text, position: position++ })))
-    .returning()
+    .where(eq(schema.tasks.parentId, parentId))
     .all()
+  if (subtasks.length)
+    db.update(schema.tasks)
+      .set({ done: subtasks.every((s) => s.done) })
+      .where(eq(schema.tasks.id, parentId))
+      .run()
+}
+
+/**
+ * Append tasks to a ticket: top-level ones (each with its subtasks, given as `{ text, subtasks }`), or
+ * with `parentTaskId` subtasks of that top-level task of the ticket. Tasks go two levels deep, so a
+ * subtask takes no subtasks of its own; a refused call writes nothing. A done parent that gains an open
+ * subtask is open again. Returns the new rows, each followed by its subtasks.
+ */
+export function addTasks(
+  ticketId: number,
+  items: NewTask[],
+  actor: string,
+  opts: { quiet?: boolean; parentTaskId?: number | null } = {},
+) {
+  const ticket = getTicket(ticketId)
+  const parent = opts.parentTaskId ? getTask(opts.parentTaskId) : null
+  if (parent && parent.ticketId !== ticketId)
+    throw new HttpError(400, `task ${parent.id} is not a task of ticket ${ticketId}`)
+  if (parent && (parent.parentId || items.some((i) => typeof i !== 'string' && i.subtasks?.length)))
+    throw new HttpError(400, 'a subtask cannot have subtasks: tasks go two levels deep')
+  const rows = db.transaction(() => {
+    const last = db
+      .select({ position: schema.tasks.position })
+      .from(schema.tasks)
+      .where(eq(schema.tasks.ticketId, ticketId))
+      .orderBy(desc(schema.tasks.position))
+      .get()
+    let position = (last?.position ?? -1) + 1
+    const insert = (texts: string[], parentId: number | null) =>
+      texts.length
+        ? db
+            .insert(schema.tasks)
+            .values(texts.map((text) => ({ ticketId, parentId, text, position: position++ })))
+            .returning()
+            .all()
+        : []
+    const out: schema.Task[] = []
+    for (const item of items) {
+      const { text, subtasks = [] } = typeof item === 'string' ? { text: item } : item
+      const [row] = insert([text], parent?.id ?? null)
+      out.push(row!, ...insert(subtasks, row!.id))
+    }
+    if (parent) settleParent(parent.id)
+    return out
+  })
   touch(ticketId)
   if (!opts.quiet)
     logActivity({
       projectId: ticket.projectId,
       actor,
       kind: 'task',
-      text: `added ${rows.length} task${rows.length === 1 ? '' : 's'} to #${ticketId} ${ticket.title}`,
+      text: parent
+        ? `added ${plural(rows.length, 'subtask')} to "${parent.text}" on #${ticketId} ${ticket.title}`
+        : `added ${plural(rows.length, 'task')} to #${ticketId} ${ticket.title}`,
       refType: 'ticket',
       refId: ticketId,
     })
   return rows
 }
 
+/**
+ * Reword a task, or tick or untick it. A tick keeps each parent equal to "all its subtasks done":
+ * ticking or unticking a task does the same to its subtasks, and ticking a subtask settles its parent.
+ */
 export function updateTask(id: number, patch: { done?: boolean; text?: string }, actor: string) {
-  const task = db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).get()
-  if (!task) throw notFound('task')
-  const row = db.update(schema.tasks).set(patch).where(eq(schema.tasks.id, id)).returning().get()!
+  const task = getTask(id)
+  const row = db.transaction(() => {
+    const r = db.update(schema.tasks).set(patch).where(eq(schema.tasks.id, id)).returning().get()!
+    if (patch.done !== undefined) {
+      if (task.parentId) settleParent(task.parentId)
+      else db.update(schema.tasks).set({ done: patch.done }).where(eq(schema.tasks.parentId, id)).run()
+    }
+    return r
+  })
   const ticket = getTicket(task.ticketId)
   touch(ticket.id)
   const log = (text: string) =>
@@ -843,10 +915,13 @@ export function updateTask(id: number, patch: { done?: boolean; text?: string },
   return row
 }
 
+/** Remove a task, its subtasks with it; a parent left with only done subtasks is done. */
 export function deleteTask(id: number, actor: string) {
-  const task = db.select().from(schema.tasks).where(eq(schema.tasks.id, id)).get()
-  if (!task) throw notFound('task')
-  db.delete(schema.tasks).where(eq(schema.tasks.id, id)).run()
+  const task = getTask(id)
+  db.transaction(() => {
+    db.delete(schema.tasks).where(eq(schema.tasks.id, id)).run()
+    if (task.parentId) settleParent(task.parentId)
+  })
   touch(task.ticketId)
   const ticket = getTicket(task.ticketId)
   logActivity({

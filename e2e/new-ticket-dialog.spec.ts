@@ -6,6 +6,8 @@ import { type Api, expect, ok, test } from './fixtures'
 
 const LINES = 60
 const TASKS = Array.from({ length: 40 }, (_, i) => `Task number ${i + 1}`)
+// A new ticket starts with the project's default phases, the typed tasks under the first.
+const PHASES = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Hand-off post']
 // As many as a ticket takes.
 const TAGS = Array.from({ length: 20 }, (_, i) => `Longer-tag-name-${i + 1}`)
 const FILES = 4
@@ -261,7 +263,7 @@ test('the New ticket dialog with long content stays on screen, scrolls its field
   const ticket = await ok<TicketFull>(human.get(`/api/tickets/${row!.id}`))
   expect(ticket.title).toBe('A long one')
   expect(ticket.body).toContain(`Line ${LINES} of the instructions`)
-  expect(ticket.tasks.map((t) => t.text)).toEqual(TASKS)
+  expect(ticket.tasks.map((t) => t.text)).toEqual([PHASES[0], ...TASKS, ...PHASES.slice(1)])
   expect([...ticket.tags].sort()).toEqual([...TAGS].sort())
   expect(ticket.attachments).toHaveLength(FILES)
 })
@@ -531,7 +533,7 @@ test.describe('on a phone', () => {
     await expect(dialog).toBeHidden()
     const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
     const ticket = await ok<TicketFull>(human.get(`/api/tickets/${row!.id}`))
-    expect(ticket.tasks).toHaveLength(TASKS.length)
+    expect(ticket.tasks).toHaveLength(TASKS.length + PHASES.length)
     expect(ticket.tags).toHaveLength(TAGS.length)
     expect(ticket.attachments).toHaveLength(FILES)
   })

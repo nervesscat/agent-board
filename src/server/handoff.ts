@@ -8,14 +8,16 @@ import { ticketRepo } from './repos'
 
 /**
  * What a ticket handed to review still lacks: the parts of the hand-off the board can see for itself
- * (a PR, the branch on origin, a preview that runs, a hand-off post after the last commit, CI that is
- * not red). Warnings only: moving to review is never refused for them. Above them, whether the branch
- * is merged yet: merging is the human's step, so it is listed but never missing.
+ * (the implementation's tasks all done, a PR, the branch on origin, a preview that runs, a hand-off post
+ * after the last commit, CI that is not red). Warnings only: moving to review is never refused for them.
+ * Above them, whether the branch is merged yet: merging is the human's step, so it is listed but never
+ * missing.
  */
 
 /** Stable codes, for agents to act on; the text is for people. */
 export type HandoffCode =
   | 'not_merged'
+  | 'tasks_open'
   | 'no_pr'
   | 'not_pushed'
   | 'no_preview'
@@ -41,6 +43,8 @@ export interface Handoff {
 /** What the checks go by, gathered from the ticket, git, the previews and the PR queue. */
 export interface HandoffFacts {
   branch: string
+  /** The implementation's tasks and subtasks, with those of its lanes that are not cancelled: its rollup. */
+  tasks: { done: number; total: number }
   /**
    * The PR it was opened as (by prNumber or its branch), with CI from the PR queue when it is there,
    * and whether the queue saw it merged on GitHub.
@@ -78,6 +82,16 @@ export function handoffOf(f: HandoffFacts): Handoff {
       : p.state === 'merged'
         ? `Merged into ${p.into ?? 'its base'}`
         : 'Not merged yet',
+  )
+
+  const { done, total } = f.tasks
+  check(
+    'tasks_open',
+    'Implementation',
+    total > 0 && done === total,
+    total
+      ? `${done} of ${plural(total, 'task')} done`
+      : 'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Hand-off post), put the steps under Implementation, and tick each as you finish it',
   )
 
   check(
@@ -170,6 +184,7 @@ export async function ticketHandoff(t: TicketWithPush): Promise<Handoff> {
   ])
   return handoffOf({
     branch: t.branch,
+    tasks: t.rollup,
     pr: t.pr
       ? { number: t.pr.number, ci: t.pr.queue?.ci ?? null, merged: t.pr.queue?.status === 'done' }
       : null,

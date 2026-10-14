@@ -1,10 +1,18 @@
-import type { Locator, Page } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { Handoff, TicketFull, TicketGit } from '#/lib/api'
 import { commitFile, e2eEnv, git } from './env'
 import { expect, ok, test } from './fixtures'
 
-const ALL = ['no_pr', 'not_pushed', 'no_preview', 'no_handoff_post']
+const ALL = ['tasks_open', 'no_pr', 'not_pushed', 'no_preview', 'no_handoff_post']
+
+/** The implementation's one step, added and ticked: the hand-off's Implementation item is met. */
+async function implemented(agent: APIRequestContext, ticketId: number) {
+  const [step] = await ok<{ id: number }[]>(
+    agent.post(`/api/tickets/${ticketId}/tasks`, { data: { tasks: ['Build it'] } }),
+  )
+  await ok(agent.patch(`/api/tasks/${step!.id}`, { data: { done: true } }))
+}
 
 /** A CSS colour as the sRGB pixel it paints, whatever notation the browser computes it in. */
 const rgb = (page: Page, color: string) =>
@@ -40,7 +48,7 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   git('branch', branch, commitFile('main', 'handoff.txt', 'work\n', 'work'))
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Hand it off', status: 'in_progress', branch },
+      data: { defaultPhases: false, title: 'Hand it off', status: 'in_progress', branch },
     }),
   )
   const read = () => ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
@@ -59,10 +67,17 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   await page.getByRole('option', { name: 'In review', exact: true }).click()
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'the hand-off lacks' })).toBeVisible()
   await expect(page.getByRole('combobox').filter({ hasText: 'In review' })).toBeVisible()
-  await expect(card).toContainText('4 missing')
+  await expect(card).toContainText('5 missing')
   const item = (code: string) => card.locator(`[data-code="${code}"]`)
   for (const code of ALL) await expect(item(code)).toHaveAttribute('data-ok', 'false')
   await expect(item('not_pushed')).toContainText('Branch not on origin')
+  // Implementation, right after Merged: the ticket has no tasks yet.
+  const rows = card.locator('[data-code]')
+  await expect(rows.nth(0)).toHaveAttribute('data-code', 'not_merged')
+  await expect(rows.nth(1)).toHaveAttribute('data-code', 'tasks_open')
+  await expect(item('tasks_open')).toContainText('Implementation')
+  await expect(item('tasks_open')).toContainText('No tasks')
+  await expect(item('tasks_open')).toContainText('add the default phases (Implementation, then Pushed, PR')
   await card.screenshot({ path: test.info().outputPath('handoff-missing.png') })
 
   // An agent moving it there hears the same, by code.
@@ -82,6 +97,16 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
     }),
   )
   await ok(human.post(`/api/tickets/${t.id}/updates`, { data: { body: 'How do I try it?' } }))
+  await expect.poll(missing).toEqual(['tasks_open', 'no_handoff_post'])
+
+  // The implementation's steps, all ticked: one tick on a step ticks its parts.
+  const [step] = await ok<{ id: number }[]>(
+    agent.post(`/api/tickets/${t.id}/tasks`, {
+      data: { tasks: [{ text: 'Build', subtasks: ['Code', 'Test'] }] },
+    }),
+  )
+  await expect.poll(async () => (await read()).handoff?.missing[0]?.text).toBe('0 of 3 tasks done')
+  await ok(agent.patch(`/api/tasks/${step!.id}`, { data: { done: true } }))
   await expect.poll(missing).toEqual(['no_handoff_post'])
 
   // Then the hand-off post: nothing is missing.
@@ -98,6 +123,7 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   await reachShown(page, 'main')
   await expect(item('not_merged')).toHaveAttribute('data-ok', 'false')
   for (const code of ALL) await expect(item(code)).toHaveAttribute('data-ok', 'true')
+  await expect(item('tasks_open')).toContainText('3 of 3 tasks done')
   await expect(item('no_pr')).toContainText('PR #4242')
   await expect(item('not_pushed')).toContainText('Branch pushed')
   await expect(item('no_preview')).toContainText(`Running at ${e2eEnv().baseURL}`)
@@ -122,12 +148,13 @@ test('Merged comes first and waits on the human; once the branch is in its base 
   git('push', '-q', 'origin', branch)
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Merge it', status: 'in_progress', branch, baseBranch: base },
+      data: { defaultPhases: false, title: 'Merge it', status: 'in_progress', branch, baseBranch: base },
     }),
   )
   const read = () => ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
   const reach = async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info.reach?.state
-  // Everything the hand-off asks for: a PR, a preview that answers, the hand-off post.
+  // Everything the hand-off asks for: its tasks done, a PR, a preview that answers, the hand-off post.
+  await implemented(agent, t.id)
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { prNumber: 4343 } }))
   await ok(
     agent.post(`/api/tickets/${t.id}/workspaces`, {
@@ -153,7 +180,8 @@ test('Merged comes first and waits on the human; once the branch is in its base 
   await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'the hand-off lacks' })).toHaveCount(0)
   const rows = card.locator('li')
   await expect(rows.nth(0)).toHaveAttribute('data-code', 'not_merged')
-  await expect(rows.nth(1)).toHaveAttribute('data-code', 'no_pr')
+  await expect(rows.nth(1)).toHaveAttribute('data-code', 'tasks_open')
+  await expect(rows.nth(2)).toHaveAttribute('data-code', 'no_pr')
   const merged = item('not_merged')
   await reachShown(page, base)
   await expect(merged).toHaveAttribute('data-ok', 'false')
@@ -227,10 +255,17 @@ test('a local branch left behind its PR’s pushed commits is not taken as merge
   git('push', '-q', 'origin', `${work}:refs/heads/${branch}`)
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Pushed from elsewhere', status: 'in_progress', branch, baseBranch: base },
+      data: {
+        defaultPhases: false,
+        title: 'Pushed from elsewhere',
+        status: 'in_progress',
+        branch,
+        baseBranch: base,
+      },
     }),
   )
   const gitState = async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info
+  await implemented(agent, t.id)
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { prNumber: 4444 } }))
   await ok(
     agent.post(`/api/tickets/${t.id}/workspaces`, {
@@ -292,7 +327,7 @@ test('a branch with no work of its own and no PR is not taken as merged', async 
   git('push', '-q', 'origin', branch)
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Nothing yet', status: 'in_progress', branch },
+      data: { defaultPhases: false, title: 'Nothing yet', status: 'in_progress', branch },
     }),
   )
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review' } }))
@@ -322,7 +357,7 @@ test('a branch with a PR whose copy on origin is gone is not taken as merged', a
   git('branch', branch, 'main')
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Closed, not merged', status: 'in_progress', branch },
+      data: { defaultPhases: false, title: 'Closed, not merged', status: 'in_progress', branch },
     }),
   )
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { status: 'review', prNumber: 4545 } }))
@@ -362,7 +397,7 @@ test('work that reached another base of the chain, not the ticket’s own, is no
   git('push', '-q', 'origin', branch)
   const parent = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Fix it', status: 'in_progress', baseBranch: upstream },
+      data: { defaultPhases: false, title: 'Fix it', status: 'in_progress', baseBranch: upstream },
     }),
   )
   const t = await ok<TicketFull>(
@@ -371,6 +406,7 @@ test('work that reached another base of the chain, not the ticket’s own, is no
     }),
   )
   const gitState = async () => (await ok<TicketGit>(human.get(`/api/tickets/${t.id}/git`))).info
+  await implemented(agent, t.id)
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { prNumber: 4646 } }))
   await ok(
     agent.post(`/api/tickets/${t.id}/workspaces`, {
