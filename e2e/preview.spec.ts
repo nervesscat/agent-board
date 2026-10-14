@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import type { TicketFull } from '#/lib/api'
 import { e2eEnv, git } from './env'
-import { expect, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, test } from './fixtures'
 
 interface WorkspacePreview {
   running: boolean
@@ -56,7 +56,11 @@ test('the Preview card offers Start for a worktree of the repo, and the board re
   const card = page.getByRole('region', { name: 'Preview' })
   await expect(card.getByRole('listitem')).toHaveCount(1)
   await expect(card.getByRole('button', { name: 'Start' })).toBeEnabled()
-  await expect(card.getByTitle(`workspace worktree in ${worktree}`)).toBeVisible()
+  const branch = card.locator('span[data-slot="tooltip-trigger"]', {
+    has: page.locator('svg.lucide-git-branch'),
+  })
+  await expect(branch).toBeVisible()
+  await expectTooltip(branch, `workspace worktree in ${worktree}`)
 
   // Nothing is offered on a finished ticket.
   await ok(human.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))

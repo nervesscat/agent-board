@@ -3,6 +3,7 @@ import { type ClipboardEvent, type DragEvent, useEffect, useId, useRef, useState
 import { toast } from 'sonner'
 
 import { galleryItem } from '#/components/Gallery'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, upload } from '#/lib/api'
 import { cn } from '#/lib/utils'
 
@@ -40,79 +41,80 @@ export function PendingFiles({
     <>
       {files.map((f, i) =>
         thumbnails && f.type.startsWith('image/') ? (
-          <span
-            key={`${f.name}-${f.size}-${f.lastModified}-${i}`}
-            className="relative inline-block"
-            title={f.name}
-          >
-            <button
-              type="button"
-              className="block cursor-zoom-in"
-              aria-label={`Preview ${f.name}`}
-              {...galleryItem({ src: urls.get(f) ?? '', name: f.name, mime: f.type }, group)}
-            >
-              <img
-                src={urls.get(f)}
-                alt={f.name}
-                className={cn('h-28 max-w-56 rounded-md border object-cover', uploading?.(f) && 'opacity-60')}
-              />
-            </button>
-            {uploading?.(f) && (
-              <Loader2
-                className="pointer-events-none absolute top-1/2 left-1/2 size-5 -translate-1/2 animate-spin text-foreground"
-                aria-label="uploading"
-              />
-            )}
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              className="absolute -top-2 -right-2 inline-flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground hover:text-foreground"
-              aria-label={`Remove ${f.name}`}
-              title="Remove"
-            >
-              <X className="size-3" />
-            </button>
-          </span>
-        ) : (
-          <span
-            key={`${f.name}-${f.size}-${f.lastModified}-${i}`}
-            className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-muted/60 py-0.5 pr-0.5 pl-1 text-xs"
-            title={f.name}
-          >
-            <button
-              type="button"
-              className="inline-flex min-w-0 cursor-zoom-in items-center gap-1.5 rounded-sm hover:underline"
-              aria-label={`Preview ${f.name}`}
-              {...galleryItem(
-                { src: urls.get(f) ?? '', name: f.name, mime: f.type || 'application/octet-stream' },
-                group,
-              )}
-            >
-              {f.type.startsWith('image/') ? (
-                <img src={urls.get(f)} alt="" className="size-5 shrink-0 rounded-sm object-cover" />
-              ) : (
-                <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <span className="truncate">{f.name}</span>
-              {uploading?.(f) ? (
+          <Tip key={`${f.name}-${f.size}-${f.lastModified}-${i}`} content={f.name}>
+            <span className="relative inline-block">
+              <button
+                type="button"
+                className="block cursor-zoom-in"
+                aria-label={`Preview ${f.name}`}
+                {...galleryItem({ src: urls.get(f) ?? '', name: f.name, mime: f.type }, group)}
+              >
+                <img
+                  src={urls.get(f)}
+                  alt={f.name}
+                  className={cn(
+                    'h-28 max-w-56 rounded-md border object-cover',
+                    uploading?.(f) && 'opacity-60',
+                  )}
+                />
+              </button>
+              {uploading?.(f) && (
                 <Loader2
-                  className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                  className="pointer-events-none absolute top-1/2 left-1/2 size-5 -translate-1/2 animate-spin text-foreground"
                   aria-label="uploading"
                 />
-              ) : (
-                <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
               )}
-            </button>
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
-              aria-label={`Remove ${f.name}`}
-              title="Remove"
-            >
-              <X className="size-3.5" />
-            </button>
-          </span>
+              <Tip content="Remove">
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  className="absolute -top-2 -right-2 inline-flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground hover:text-foreground"
+                  aria-label={`Remove ${f.name}`}
+                >
+                  <X className="size-3" />
+                </button>
+              </Tip>
+            </span>
+          </Tip>
+        ) : (
+          <Tip key={`${f.name}-${f.size}-${f.lastModified}-${i}`} content={f.name}>
+            <span className="inline-flex max-w-56 items-center gap-1.5 rounded-md border bg-muted/60 py-0.5 pr-0.5 pl-1 text-xs">
+              <button
+                type="button"
+                className="inline-flex min-w-0 cursor-zoom-in items-center gap-1.5 rounded-sm hover:underline"
+                aria-label={`Preview ${f.name}`}
+                {...galleryItem(
+                  { src: urls.get(f) ?? '', name: f.name, mime: f.type || 'application/octet-stream' },
+                  group,
+                )}
+              >
+                {f.type.startsWith('image/') ? (
+                  <img src={urls.get(f)} alt="" className="size-5 shrink-0 rounded-sm object-cover" />
+                ) : (
+                  <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                )}
+                <span className="truncate">{f.name}</span>
+                {uploading?.(f) ? (
+                  <Loader2
+                    className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+                    aria-label="uploading"
+                  />
+                ) : (
+                  <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
+                )}
+              </button>
+              <Tip content="Remove">
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-background hover:text-foreground"
+                  aria-label={`Remove ${f.name}`}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </Tip>
+            </span>
+          </Tip>
         ),
       )}
     </>

@@ -21,6 +21,8 @@ export function e2eEnv() {
     /** The repo's origin: a bare repo, so branches can be pushed or not. */
     originPath: path.join(root, 'origin.git'),
     seedFile: path.join(root, 'seed.json'),
+    /** The board's user-wide .claude folder (CLAUDE_HOME): never the real ~/.claude. Not there at first. */
+    claudeHome: path.join(root, 'home', '.claude'),
   }
 }
 

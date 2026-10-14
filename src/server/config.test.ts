@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import os from 'node:os'
+import path from 'node:path'
+
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   authOffBanner,
@@ -112,6 +115,22 @@ describe('authOffBanner', () => {
     expect(authOffBanner(readAuthMode({ BOARD_ENV: 'test' }), 'human')).toMatch(
       /^AUTH OFF: test, signed in as human, do not expose this .*X-Test-Actor/,
     )
+  })
+})
+
+describe('claudeHome', () => {
+  // The value is read once, as the module loads: each case loads a fresh copy under its own environment.
+  const load = async (value: string) => {
+    vi.stubEnv('CLAUDE_HOME', value)
+    vi.resetModules()
+    return (await import('./config')).config.claudeHome
+  }
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('is ~/.claude of the user the board runs as, unless CLAUDE_HOME names another folder', async () => {
+    expect(await load('')).toBe(path.join(os.homedir(), '.claude'))
+    expect(await load('~/elsewhere/.claude')).toBe(path.join(os.homedir(), 'elsewhere', '.claude'))
+    expect(await load('rel/.claude')).toBe(path.resolve('rel', '.claude'))
   })
 })
 

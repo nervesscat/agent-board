@@ -47,6 +47,9 @@ export const config = {
   claudeBin: env('CLAUDE_BIN', 'claude'),
   claudeArgs: readClaudeArgs(process.env.CLAUDE_ARGS),
   claudeTimeoutMs: readClaudeTimeout(process.env.CLAUDE_TIMEOUT_MS),
+  // The user-wide .claude folder on this machine the review skills are checked in, and installed into by
+  // its line on the Agents pages.
+  claudeHome: expandPath(env('CLAUDE_HOME', '~/.claude')),
   // Where attachment files live: 'local' (data/uploads) or 's3' (MinIO or any S3-compatible store).
   storage: env('STORAGE', 'local') === 's3' ? ('s3' as const) : ('local' as const),
   s3: {

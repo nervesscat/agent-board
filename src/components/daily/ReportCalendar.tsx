@@ -6,6 +6,7 @@ import type { DayButton } from 'react-day-picker'
 import { REPORT_STATUS } from '#/components/daily/status'
 import { Button } from '#/components/ui/button'
 import { Calendar, CalendarDayButton } from '#/components/ui/calendar'
+import { Tip } from '#/components/ui/tooltip'
 import { get, type ReportList, type ReportSettingsView, type ReportStatus } from '#/lib/api'
 import { localDate } from '#/lib/format'
 import { periodOf } from '#/lib/reports'
@@ -106,16 +107,20 @@ export function ReportCalendar({
         <p className="text-xs text-muted-foreground" aria-live="polite">
           {list ? `${counts.done} done · ${counts.missing} missing` : '…'}
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!nextMissing}
-          onClick={() => nextMissing && onDate(nextMissing)}
-          title={nextMissing ? `Open ${nextMissing}, the nearest missing report` : 'Nothing is missing'}
-        >
-          <SkipForward data-icon="inline-start" /> Next missing
-        </Button>
+        {/* On a wrapper: with nothing missing the button is disabled, and its tooltip says why. */}
+        <Tip content={nextMissing ? `Open ${nextMissing}, the nearest missing report` : 'Nothing is missing'}>
+          <span className="inline-flex">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!nextMissing}
+              onClick={() => nextMissing && onDate(nextMissing)}
+            >
+              <SkipForward data-icon="inline-start" /> Next missing
+            </Button>
+          </span>
+        </Tip>
       </div>
       <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground" aria-hidden>
         {STATUSES.map((s) => (

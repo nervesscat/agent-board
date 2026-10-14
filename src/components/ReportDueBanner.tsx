@@ -4,6 +4,7 @@ import { AlarmClock, Bell, BellOff, TriangleAlert } from 'lucide-react'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import { Button } from '#/components/ui/button'
+import { Tip } from '#/components/ui/tooltip'
 import { get, type ReportDueList } from '#/lib/api'
 import { cn } from '#/lib/utils'
 
@@ -107,25 +108,26 @@ export function NotifyMe({ className }: { className?: string }) {
       </span>
     )
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className={className}
-      disabled={asking}
-      title="A browser notification when a report is due (while a board tab is open)"
-      onClick={async () => {
-        setAsking(true)
-        try {
-          await Notification.requestPermission()
-        } finally {
-          setAsking(false)
-          for (const l of listeners) l()
-        }
-      }}
-    >
-      <Bell data-icon="inline-start" /> Notify me
-    </Button>
+    <Tip content="A browser notification when a report is due (while a board tab is open)">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className={className}
+        disabled={asking}
+        onClick={async () => {
+          setAsking(true)
+          try {
+            await Notification.requestPermission()
+          } finally {
+            setAsking(false)
+            for (const l of listeners) l()
+          }
+        }}
+      >
+        <Bell data-icon="inline-start" /> Notify me
+      </Button>
+    </Tip>
   )
 }
 

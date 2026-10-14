@@ -11,6 +11,7 @@ import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Toaster } from '#/components/ui/sonner'
+import { Tip, TooltipProvider } from '#/components/ui/tooltip'
 import { get, type Me } from '#/lib/api'
 import { followSystemTheme } from '#/lib/theme'
 import appCss from '#/styles.css?url'
@@ -64,18 +65,26 @@ const PAGES = [
   { to: '/settings', label: 'Settings' },
 ] as const
 
+/**
+ * How long the pointer rests on an element before its tooltip shows. Once one shows, the next ones open
+ * at once while the pointer moves between them.
+ */
+const TOOLTIP_DELAY = 300
+
 function App() {
   useEffect(followSystemTheme, [])
   return (
-    <>
+    <TooltipProvider delay={TOOLTIP_DELAY}>
       <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
         <nav className="mx-auto flex h-12 max-w-7xl items-center gap-3 px-4 text-sm sm:gap-5">
-          <Link to="/" className="flex shrink-0 items-center gap-2" title="Home">
-            <CrossBoardMark className="size-[22px] shrink-0" />
-            <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap">
-              CrossBoard
-            </span>
-          </Link>
+          <Tip content="Home">
+            <Link to="/" className="flex shrink-0 items-center gap-2">
+              <CrossBoardMark className="size-[22px] shrink-0" />
+              <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap">
+                CrossBoard
+              </span>
+            </Link>
+          </Tip>
           <AuthOffBadge />
           <ProjectSwitcher />
           <div className="ml-auto hidden items-center gap-5 md:flex">
@@ -98,7 +107,7 @@ function App() {
       </main>
       <Gallery />
       <Toaster />
-    </>
+    </TooltipProvider>
   )
 }
 
@@ -107,13 +116,11 @@ function AuthOffBadge() {
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
   if (!me?.authOff) return null
   return (
-    <Badge
-      variant="destructive"
-      className="shrink-0 uppercase"
-      title={`BOARD_ENV=${me.boardEnv}, no passkey gate: signed in as ${me.actor}. Not the live board.`}
-    >
-      {me.boardEnv === 'test' ? 'test mode' : 'auth off'}
-    </Badge>
+    <Tip content={`BOARD_ENV=${me.boardEnv}, no passkey gate: signed in as ${me.actor}. Not the live board.`}>
+      <Badge variant="destructive" className="shrink-0 uppercase">
+        {me.boardEnv === 'test' ? 'test mode' : 'auth off'}
+      </Badge>
+    </Tip>
   )
 }
 

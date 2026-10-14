@@ -2,7 +2,7 @@ import type { Locator } from '@playwright/test'
 
 import type { TicketFull, TicketRow } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
-import { expect, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, test } from './fixtures'
 
 /** Top, bottom and middle of a box on the page, in px. */
 type Box = { top: number; bottom: number; mid: number }
@@ -24,7 +24,8 @@ const measure = (row: Locator) =>
       const first = range.getClientRects()[0]
       return first && box(first)
     }
-    const actor = el.querySelector('span[title]')!
+    // The author: the first span in the row with a tooltip.
+    const actor = el.querySelector('span[data-slot="tooltip-trigger"]')!
     const name = [...actor.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim())!
     // The bot or person glyph, the avatar's picture or the avatar's initial on its colour.
     const icon = actor.querySelector('svg, img, span[aria-hidden]')!
@@ -50,8 +51,11 @@ const aligned = (what: string, a: number, b: number) =>
 /** What the Stage control of a New ticket dialog shows: the picked stage's name, without its chevron. */
 const stageValue = (dialog: Locator) => dialog.getByLabel('Stage').locator('[data-slot="select-value"]')
 
-/** The row of a post card or of a reply that says who wrote it, and when: the one that holds `Actor`. */
-const authorRow = (card: Locator) => card.locator('div:has(> span[title])').first()
+/**
+ * The row of a post card or of a reply that says who wrote it, and when: the one that holds `Actor`, a
+ * span with a tooltip.
+ */
+const authorRow = (card: Locator) => card.locator('div:has(> span[data-slot="tooltip-trigger"])').first()
 
 test('creates a ticket from the New ticket dialog', async ({ page, project, human }) => {
   await page.goto(`/projects/${project.id}/features`)
@@ -188,7 +192,9 @@ test('edits the title, tags and instructions in place', async ({ page, api }) =>
   await page.getByRole('button', { name: '+ tags' }).click()
   await page.getByRole('textbox', { name: 'Tags, comma separated' }).fill('Cosmetic, Forms')
   await page.getByRole('textbox', { name: 'Tags, comma separated' }).press('Enter')
-  await expect(page.getByTitle('Click to edit the tags')).toContainText('Cosmetic')
+  const tags = page.getByRole('button', { name: /Cosmetic/ })
+  await expectTooltip(tags, 'Click to edit the tags')
+  await expect(tags).toContainText('Cosmetic')
 
   // Instructions: the rich editor, with a toolbar button, saved with Ctrl+Enter.
   const instructions = page.getByRole('region', { name: 'Instructions' })
@@ -442,9 +448,9 @@ test('the author sits on the line of the text around it: "opened by", the "by" o
   ]) {
     await page.goto(`/projects/${project.id}/features/${ticket.id}`)
     const line = page.locator('span').filter({ hasText: /^opened by / })
-    const actor = line.locator('span[title]')
+    const actor = line.locator('span[data-slot="tooltip-trigger"]')
     await expect(actor).toContainText(name)
-    await expect(actor).toHaveAttribute('title', title)
+    await expectTooltip(actor, title)
 
     // The row: "opened by <author> <time>", "updated <time>", the tags.
     const { texts, ...author } = await measure(line.locator('..'))
@@ -460,7 +466,7 @@ test('the author sits on the line of the text around it: "opened by", the "by" o
 
   // One of the project's agents wrote the resume note: its avatar, the agent's initial on a colour.
   const line = page.getByRole('region', { name: 'Resume here' }).getByText(/^by /)
-  await expect(line.locator('span[title]')).toHaveAttribute('title', /one of the project's agents/)
+  await expectTooltip(line.locator('span[data-slot="tooltip-trigger"]'), /one of the project's agents/)
   const { texts, ...author } = await measure(line)
   const [by, ago] = texts
   expect(by!.text).toBe('by')
@@ -512,8 +518,8 @@ test('an author in the header of a post or a reply stays centred on it, on a pho
         /one of the project's agents, posted via claude/,
       ],
     ] as const) {
-      const actor = header.locator('span[title]').first()
-      await expect(actor).toHaveAttribute('title', title)
+      const actor = header.locator('span[data-slot="tooltip-trigger"]').first()
+      await expectTooltip(actor, title)
       const author = await measure(header)
       const label = `${width}px, ${what}`
       aligned(`${label}: the icon centred on the name`, author.icon.mid, author.name.mid)

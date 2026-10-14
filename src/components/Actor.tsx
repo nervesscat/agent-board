@@ -3,6 +3,7 @@ import { Bot, User } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
+import { Tip } from '#/components/ui/tooltip'
 import { get } from '#/lib/api'
 import { useProjectAgent } from '#/lib/project'
 
@@ -42,32 +43,32 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
   const agent = useProjectAgent(name)
   if (agent)
     return (
-      <span
-        className={`inline-flex items-baseline gap-1 font-medium ${className}`}
-        title={`${agent.name} (one of the project's agents${via ? `, posted via ${via}` : ''})`}
-      >
-        <Picture>
-          <AgentAvatar agent={agent} />
-        </Picture>
-        {agent.name}
-        {via && <span className="font-normal text-muted-foreground">via {via}</span>}
-      </span>
+      <Tip content={`${agent.name} (one of the project's agents${via ? `, posted via ${via}` : ''})`}>
+        <span className={`inline-flex items-baseline gap-1 font-medium ${className}`}>
+          <Picture>
+            <AgentAvatar agent={agent} />
+          </Picture>
+          {agent.name}
+          {via && <span className="font-normal text-muted-foreground">via {via}</span>}
+        </span>
+      </Tip>
     )
   const Icon = kind === 'agent' ? Bot : User
   return (
-    <span
-      className={`inline-flex items-baseline gap-1 font-medium ${className}`}
-      title={kind === 'agent' ? `${name} (agent, gate token)` : `${name} (you, signed in with a passkey)`}
+    <Tip
+      content={kind === 'agent' ? `${name} (agent, gate token)` : `${name} (you, signed in with a passkey)`}
     >
-      <Picture>
-        <Icon className="size-3.5 text-muted-foreground" />
-      </Picture>
-      {name}
-      {kind === 'human' && (
-        <span className="self-center rounded bg-primary px-1 text-[10px] leading-4 font-medium text-primary-foreground">
-          admin
-        </span>
-      )}
-    </span>
+      <span className={`inline-flex items-baseline gap-1 font-medium ${className}`}>
+        <Picture>
+          <Icon className="size-3.5 text-muted-foreground" />
+        </Picture>
+        {name}
+        {kind === 'human' && (
+          <span className="self-center rounded bg-primary px-1 text-[10px] leading-4 font-medium text-primary-foreground">
+            admin
+          </span>
+        )}
+      </span>
+    </Tip>
   )
 }

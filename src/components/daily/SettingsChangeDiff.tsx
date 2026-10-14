@@ -3,6 +3,7 @@ import { type ReactNode, useState } from 'react'
 
 import { Badge } from '#/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '#/components/ui/dialog'
+import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type ReportSettingsChange } from '#/lib/api'
 import { lineDiff } from '#/lib/diff'
 import { stamp } from '#/lib/format'
@@ -115,14 +116,15 @@ export function SettingsChangeDiff({ changeId, children }: { changeId: number; c
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button
-        type="button"
-        className="min-w-0 cursor-pointer text-left wrap-anywhere hover:underline"
-        title="Show what changed"
-        onClick={() => setOpen(true)}
-      >
-        {children}
-      </button>
+      <Tip content="Show what changed">
+        <button
+          type="button"
+          className="min-w-0 cursor-pointer text-left wrap-anywhere hover:underline"
+          onClick={() => setOpen(true)}
+        >
+          {children}
+        </button>
+      </Tip>
       <ChangeDialog changeId={open ? changeId : null} onClose={() => setOpen(false)} />
     </>
   )

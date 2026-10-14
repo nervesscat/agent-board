@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 
 import { PushedTodayBadge } from '#/components/daily/PushedToday'
+import { Tip } from '#/components/ui/tooltip'
 import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
@@ -38,13 +39,11 @@ function ProjectLayout() {
           <PushedTodayBadge projectId={Number(id)} compact />
           <ul className="mt-1 space-y-0.5">
             {project?.repos.map((r) => (
-              <li
-                key={r.id}
-                className="flex items-center gap-1.5 truncate font-mono text-xs text-muted-foreground"
-                title={r.repoPath}
-              >
-                <FolderGit2 className="size-3 shrink-0" /> {r.githubRepo ?? r.name}
-              </li>
+              <Tip key={r.id} content={r.repoPath}>
+                <li className="flex items-center gap-1.5 truncate font-mono text-xs text-muted-foreground">
+                  <FolderGit2 className="size-3 shrink-0" /> {r.githubRepo ?? r.name}
+                </li>
+              </Tip>
             ))}
             {project && !project.repos.length && (
               <li className="text-xs text-muted-foreground">

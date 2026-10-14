@@ -20,6 +20,7 @@ import {
 import { Button } from '#/components/ui/button'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table'
+import { Tip } from '#/components/ui/tooltip'
 import {
   del,
   errorMessage,
@@ -300,14 +301,15 @@ function Cleanup() {
                           </TableCell>
                           <TableCell className="max-w-64">
                             {b?.worktrees.map((w) => (
-                              <div
+                              <Tip
                                 key={w.path}
-                                className="flex items-center gap-1 truncate font-mono text-[11px]"
-                                title={w.protected ? `${w.path}: kept, ${w.protected}` : w.path}
+                                content={w.protected ? `${w.path}: kept, ${w.protected}` : w.path}
                               >
-                                <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />
-                                <span className="truncate">{w.main ? 'main checkout' : w.path}</span>
-                              </div>
+                                <div className="flex items-center gap-1 truncate font-mono text-[11px]">
+                                  <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />
+                                  <span className="truncate">{w.main ? 'main checkout' : w.path}</span>
+                                </div>
+                              </Tip>
                             ))}
                           </TableCell>
                           <TableCell className="font-mono text-[11px] text-muted-foreground">
@@ -315,14 +317,16 @@ function Cleanup() {
                           </TableCell>
                           <TableCell>
                             {b?.restore && (
-                              <button
-                                type="button"
-                                title={`Copy the restore command: ${b.restore}`}
-                                onClick={() => copy(b.restore!)}
-                                className="text-muted-foreground hover:text-foreground"
-                              >
-                                <Copy className="size-3.5" />
-                              </button>
+                              <Tip content={`Copy the restore command: ${b.restore}`}>
+                                <button
+                                  type="button"
+                                  aria-label={`Copy the restore command: ${b.restore}`}
+                                  onClick={() => copy(b.restore!)}
+                                  className="text-muted-foreground hover:text-foreground"
+                                >
+                                  <Copy className="size-3.5" />
+                                </button>
+                              </Tip>
                             )}
                           </TableCell>
                           <TableCell className="max-w-64">
@@ -398,14 +402,16 @@ function Cleanup() {
                         </TableCell>
                         <TableCell>
                           {b.restoreRemote && (
-                            <button
-                              type="button"
-                              title={`Copy the restore command: ${b.restoreRemote}`}
-                              onClick={() => copy(b.restoreRemote!)}
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              <Copy className="size-3.5" />
-                            </button>
+                            <Tip content={`Copy the restore command: ${b.restoreRemote}`}>
+                              <button
+                                type="button"
+                                aria-label={`Copy the restore command: ${b.restoreRemote}`}
+                                onClick={() => copy(b.restoreRemote!)}
+                                className="text-muted-foreground hover:text-foreground"
+                              >
+                                <Copy className="size-3.5" />
+                              </button>
+                            </Tip>
                           )}
                         </TableCell>
                         <TableCell className="max-w-64">
@@ -442,9 +448,9 @@ function Cleanup() {
                 {data.untracked.map((w) => (
                   <li key={w.path} className="flex flex-wrap items-center gap-2 font-mono text-xs">
                     <span className="text-muted-foreground">{w.repo}</span>
-                    <span className="truncate" title={w.path}>
-                      {w.path}
-                    </span>
+                    <Tip content={w.path}>
+                      <span className="truncate">{w.path}</span>
+                    </Tip>
                     <span className="text-muted-foreground">
                       {w.branch ?? (w.head ? `detached ${shortSha(w.head)}` : '')}
                     </span>
@@ -668,9 +674,11 @@ function Results({ results, onClose }: { results: DeleteResult[]; onClose: () =>
         <h2 className="text-sm font-medium">
           Last deletion <span className="text-muted-foreground">· {results.length}</span>
         </h2>
-        <Button variant="ghost" size="icon-sm" title="Dismiss" onClick={onClose}>
-          <X />
-        </Button>
+        <Tip content="Dismiss">
+          <Button variant="ghost" size="icon-sm" aria-label="Dismiss" onClick={onClose}>
+            <X />
+          </Button>
+        </Tip>
       </div>
       <ul className="space-y-1.5 rounded-lg border p-3 text-xs">
         {results.map((r, i) => (
@@ -699,14 +707,16 @@ function Results({ results, onClose }: { results: DeleteResult[]; onClose: () =>
             {r.restore.map((cmd) => (
               <div key={cmd} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1">
                 <code className="flex-1 overflow-x-auto font-mono">{cmd}</code>
-                <button
-                  type="button"
-                  title={`Copy: ${cmd}`}
-                  onClick={() => copy(cmd)}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <Copy className="size-3.5" />
-                </button>
+                <Tip content={`Copy: ${cmd}`}>
+                  <button
+                    type="button"
+                    aria-label={`Copy: ${cmd}`}
+                    onClick={() => copy(cmd)}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <Copy className="size-3.5" />
+                  </button>
+                </Tip>
               </div>
             ))}
           </li>
