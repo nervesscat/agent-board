@@ -275,6 +275,12 @@ describe('the review texts the board ships', () => {
     )
   })
 
+  it('todo-review-ticket ends the cycle at a round that survives, and asks the human after the last round that does not', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('A surviving round ends the cycle')
+    expect(text).toContain('(ship as is, keep going, drop) and stop: `BLOCKER: decision`')
+  })
+
   it('todo-review-ticket runs a low ticket with no spec agent and no review, and the builder verifies it itself', () => {
     const text = flat(ticketAgent)
     expect(text).toContain('A low ticket has no spec and no spec agent')

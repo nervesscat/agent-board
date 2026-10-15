@@ -250,9 +250,10 @@ returns, however it ended, release `LOCK`.
 The change **survives** when the verdict is `SHIP`, the "works" check is `YES`, the base check is
 `NO` (no issue with the latest base), and every acceptance criterion is `PASS` by execution or
 `UNVERIFIED` only because a service is unavailable for a reason in **Escalation** that you could
-not get past. Otherwise the confirmed and plausible findings, the failed criteria, and the merge
-check's conflicts or new failures go back to the builder (step 3), then your gate, then the review
-again, as the next round, while the budget below allows one.
+not get past. A surviving round ends the cycle: go on to step 6. Otherwise the confirmed and plausible
+findings, the failed criteria, and the merge check's conflicts or new failures go back to the builder
+(step 3), then your gate, then the review again, as the next round, while the budget below
+allows one.
 
 **The budget** is set by the complexity: low none, mid one round, high three. A round is one build or
 fix pass, your gate and one review. Round 1 is the first build with its gate and its review; rounds 2
