@@ -333,10 +333,12 @@ whose `branch` is the target branch. No ticket: run as usual and skip this secti
    hunt notes; the refute phase's verdict table is the findings' record.
 3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket (the
    interpretations as options, the spec's assumption marked recommended). If Phase 1 already asked
-   the human this question in the chat and they answered, do not ask again: this session records
-   that answer on the card with `answer_decision`, with the option they picked and their words as
-   they gave them. Otherwise, in an interactive session, also ask the human in the chat with
-   AskUserQuestion, with the same options; once they answer there, record the answer on the card the
+   the human this question in the chat, step 3 never asks it again, whatever the human did. If they
+   answered with one of the options, this session records that answer on the card with
+   `answer_decision`, with the option they picked and their words as they gave them. If they did not
+   answer, or their answer matches none of the options, the card stays open for the human on the
+   board. Only when Phase 1 did not ask the question, and the session is interactive, ask the human
+   in the chat with AskUserQuestion, with the same options, and record their answer on the card the
    same way. The AskUserQuestion step applies only in an interactive session. An unattended run (the
    runner, a todo-review run, or any run with no human to ask) never asks in the chat and never
    relays a decision: it leaves the card open for the human. A phase never answers a decision
