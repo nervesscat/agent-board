@@ -23,7 +23,6 @@ import {
   gitSaid,
   listWorktrees,
   originSymref,
-  type RemovalHooks,
   removeWorktree,
   worktreeChanges,
 } from './git'
@@ -49,8 +48,7 @@ import { inBatches, removeLink, type WorktreeLink, type WorktreeRepo, worktreeLi
  * is then (origin fetched first) and against the commit the caller saw, the same checks for both; the
  * deletions in one checkout run one at a time. Nothing is forced: a worktree with changes, a branch
  * that moved and an origin branch someone pushed to are all left alone. A worktree's links are removed
- * as links before it (`worktreeLinks.ts`), and its removal never goes through a link either, one made
- * again meanwhile included (`removeWorktree`): nothing out of it is deleted with it.
+ * as links before it, so git never deletes through one what lies out of it (`worktreeLinks.ts`).
  */
 
 export const DELETE_KINDS = ['local', 'remote', 'worktrees'] as const
@@ -160,14 +158,13 @@ const short = (sha: string) => sha.slice(0, 7)
 /**
  * Deletes what the caller confirmed, item by item: one refused or failing does not stop the rest.
  * Answers each item's outcome, in the order asked. An agent's request with a branch on origin in it is
- * refused whole (403), before anything is looked at. `removal` is for tests: what they do while a
- * worktree is being removed (`removeWorktree`).
+ * refused whole (403), before anything is looked at.
  */
 export async function deleteLeftovers(
   projectId: number,
   items: DeleteItem[],
   actor: string,
-  opts: { agent?: boolean; removal?: RemovalHooks } = {},
+  opts: { agent?: boolean } = {},
 ): Promise<DeleteResult[]> {
   if (opts.agent && items.some((item) => !agentMay.has(item.kind)))
     throw new HttpError(403, 'only the human deletes branches on origin, from the Cleanup page')
@@ -194,7 +191,7 @@ export async function deleteLeftovers(
         for (const i of at) {
           const item = items[i]!
           try {
-            results[i] = await deleteOne(projectId, item, actor, fetchError, opts.removal)
+            results[i] = await deleteOne(projectId, item, actor, fetchError)
           } catch (err) {
             results[i] = result(item, 'failed', gitSaid(err))
           } finally {
@@ -213,7 +210,6 @@ async function deleteOne(
   item: DeleteItem,
   actor: string,
   fetchError: string | null,
-  removal: RemovalHooks = {},
 ): Promise<DeleteResult> {
   const report = await cleanupReport(projectId, { only: [item.ticketId] })
   const t = report.tickets[0]
@@ -284,8 +280,6 @@ async function deleteOne(
     // All of them are checked before any is removed: git refuses one with changes, and a refusal
     // half-way would leave the rest removed for nothing.
     for (const w of trees) {
-      // A folder that is a link leads to another one: nothing there is read or touched, its links neither.
-      if (await isLink(w.path)) return result(item, 'refused', linkedFolder(w.path))
       // A folder deleted by hand leaves git a worktree to prune (`git worktree prune`), not one to remove.
       if (!fs.existsSync(w.path))
         return result(item, 'refused', `${w.path} is gone: git worktree prune drops it`)
@@ -312,15 +306,6 @@ async function deleteOne(
           : result(item, 'refused', why)
       }
       await stopLinkPreviews(w.linkedPreviews, actor)
-      // A folder turned into a link since the check is not read through for links either.
-      if (await isLink(w.path))
-        return removed.length
-          ? result(item, 'failed', `${linkedFolder(w.path)}; ${b.name} is kept`, {
-              removed,
-              unlinked,
-              restore,
-            })
-          : result(item, 'refused', linkedFolder(w.path))
       // Looked for again: a link made since the check goes as a link too.
       const links = await linksOut(w.path)
       if (typeof links === 'string')
@@ -345,7 +330,7 @@ async function deleteOne(
           { removed, unlinked, restore },
         )
       try {
-        await removeWorktree(repoPath, w.path, removal)
+        await removeWorktree(repoPath, w.path)
       } catch (err) {
         return result(item, 'failed', `${w.path}: ${gitSaid(err)}; ${b.name} is kept`, {
           removed,
@@ -436,16 +421,6 @@ function reposSaid(worktreePath: string, repos: WorktreeRepo[]): string {
 }
 
 const fsSaid = (err: unknown) => (err instanceof Error ? err.message : String(err))
-
-/** Whether the path is a link itself, on Windows a junction too: looked at without following it. */
-const isLink = (p: string) =>
-  fs.promises.lstat(p).then(
-    (stat) => stat.isSymbolicLink(),
-    () => false,
-  )
-/** Why a worktree whose folder is a link is not removed, as `removeWorktree` says it. */
-const linkedFolder = (worktreePath: string) =>
-  `${worktreePath}: its folder is a link: no worktree is removed through one`
 
 async function deleteLocal(
   item: DeleteItem,
