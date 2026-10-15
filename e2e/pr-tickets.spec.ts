@@ -16,9 +16,10 @@ let prNumbers = 5000
 
 /**
  * An open PR row as a refresh from GitHub would leave it (the e2e repos have no GitHub slug, so none
- * comes). Its author owns its ticket's threads, so a test that waits on the human names the human.
+ * comes), or a merged one when `merged`. Its author owns its ticket's threads, so a test that waits on
+ * the human names the human.
  */
-function seedPr(project: Project, title: string, author = 'someone') {
+function seedPr(project: Project, title: string, author = 'someone', merged = false) {
   const number = ++prNumbers
   const now = new Date().toISOString()
   const id = inDatabase(
@@ -27,8 +28,8 @@ function seedPr(project: Project, title: string, author = 'someone') {
         db
           .prepare(
             `insert into prs (project_id, repo_id, number, title, url, author, head_ref, base_ref, head_sha,
-               waiting_on, review_stage, updated_at, fetched_at)
-             values (?, ?, ?, ?, ?, ?, ?, 'main', 'abcdef1234567', ?, 'pending', ?, ?) returning id`,
+               waiting_on, review_stage, updated_at, fetched_at, open, merged_at)
+             values (?, ?, ?, ?, ?, ?, ?, 'main', 'abcdef1234567', ?, 'pending', ?, ?, ?, ?) returning id`,
           )
           .get(
             project.id,
@@ -41,6 +42,8 @@ function seedPr(project: Project, title: string, author = 'someone') {
             author === HUMAN ? 'others' : 'me',
             now,
             now,
+            merged ? 0 : 1,
+            merged ? now : null,
           ) as Row
       ).id,
   )
@@ -180,4 +183,18 @@ test("a reply on a PR's ticket that waits on the human is a PR row in Needs you,
     'href',
     `/projects/${project.id}/features/${ticket!.id}#post-${question.id}-reply-${reply.id}`,
   )
+})
+
+test('a PR that was merged before it was seen has no ticket, so its card has no Open ticket link', async ({
+  page,
+  project,
+  human,
+}) => {
+  const pr = seedPr(project, 'Merged before it was seen', 'someone', true)
+  expect((await refreshedRow(human, project, pr)).ticket).toBeNull()
+
+  await page.goto(`/projects/${project.id}/prs#pr-${pr.id}`)
+  const card = page.locator(`#pr-${pr.id}`)
+  await expect(card).toBeVisible()
+  await expect(card.getByRole('link', { name: 'Open ticket' })).toHaveCount(0)
 })
