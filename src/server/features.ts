@@ -1698,8 +1698,9 @@ export function decide(postId: number, option: number, note: string, actor: stri
  * The orchestrator's record of the human's answer to a decision, given in the chat: the card is decided
  * with the human's pick, `relayedBy` the connected agent `actor` and `relayedText` the words as the
  * human gave them. The board cannot see the chat, so it trusts the connected agent's account of it. The
- * relay is refused to a human, to any call with `as` (a project's agent, or a delegated subagent that
- * holds the orchestrator's token, never answers), and to a card already decided. The check and the
+ * relay is refused to a human, to any call with `as` (one of the project's agents), and to a card
+ * already decided. A delegated subagent that calls without `as`, with the orchestrator's token, looks
+ * the same as the orchestrator here: only the instructions keep it from relaying. The check and the
  * write are one statement, so two relays cannot both land.
  */
 export function relayDecision(
