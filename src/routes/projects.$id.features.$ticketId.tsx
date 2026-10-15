@@ -373,7 +373,7 @@ function TicketPage() {
               </Button>
             </Tip>
           )}
-          {/* A PR's ticket is kept while its PR is in the queue: the board refuses its delete. */}
+          {/* A PR's ticket cannot be deleted: it is archived instead. */}
           {!t.prId && (
             <AlertDialog>
               <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
