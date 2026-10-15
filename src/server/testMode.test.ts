@@ -148,4 +148,56 @@ describe('a decision the orchestrator relays, through the router', () => {
     })
     expect(features.getPost(postId)).toMatchObject({ decidedOption: 1, relayedText: 'MinIO' })
   })
+
+  /** An MCP call as a client sends it (streamable HTTP, answered as JSON), as the header's caller. */
+  async function mcp(testActor: string, method: string, params: Record<string, unknown> = {}) {
+    const request = new Request('http://localhost/api/mcp', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        'x-test-actor': testActor,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    })
+    const caller = await callerOf(request)
+    const res = await handle({ request, actor: caller!.name })
+    return ((await res.json()) as { result: any }).result
+  }
+
+  it('offers answer_decision to a connected agent, which records the answer and refuses a persona or a human', async () => {
+    const features = await import('./features')
+    const listed = await mcp('agent:claude', 'tools/list')
+    const tool = listed.tools.find((t: { name: string }) => t.name === 'answer_decision')
+    expect(tool.description).toContain('AskUserQuestion')
+    expect(tool.description).toContain('subagent')
+    expect(Object.keys(tool.inputSchema.properties).sort()).toEqual(['as', 'option', 'postId', 'words'])
+
+    const { postId } = await askCard()
+    const answer = (testActor: string, args: Record<string, unknown>) =>
+      mcp(testActor, 'tools/call', {
+        name: 'answer_decision',
+        arguments: { postId, option: 1, words: 'MinIO', ...args },
+      })
+    // A persona's call (as, even an empty one) and a human's are refused in the tool's own result.
+    const persona = await answer('agent:claude', { as: 'builder' })
+    expect(persona).toMatchObject({ isError: true })
+    expect(persona.content[0].text).toBe(AS)
+    expect((await answer('agent:claude', { as: '' })).isError).toBe(true)
+    const human = await answer('human:enrique', {})
+    expect(human).toMatchObject({ isError: true })
+    expect(human.content[0].text).toBe(NOT_AGENT)
+    expect(features.getPost(postId)).toMatchObject({ decidedAt: null, relayedBy: '' })
+
+    // The orchestrator's own call records the answer: the result is the updated post.
+    const recorded = await answer('agent:claude', {})
+    expect(recorded.isError).toBeFalsy()
+    expect(JSON.parse(recorded.content[0].text)).toMatchObject({
+      id: postId,
+      decidedOption: 1,
+      decidedBy: '',
+      relayedBy: 'claude',
+      relayedText: 'MinIO',
+    })
+  })
 })

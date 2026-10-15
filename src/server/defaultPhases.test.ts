@@ -382,9 +382,16 @@ describe('what agents are told', () => {
     expect(instructions).toContain('tick each hand-off phase as you finish it')
     expect(instructions).toContain('defaultPhases: false opts a ticket out')
     expect(instructions).toContain('then tick Hand-off post')
+    // A decision is answered by the human on its card, or relayed by the orchestrator from the chat.
+    expect(instructions).toContain('answer_decision')
+    expect(instructions).toContain('never a delegated subagent')
+    expect(instructions).toContain('a persona never answers a decision')
 
     const tools = (await rpc('tools/list')).tools as { name: string; description: string; inputSchema: any }[]
     const byName = (name: string) => tools.find((t) => t.name === name)!
+    expect(byName('answer_decision').description).toContain('AskUserQuestion')
+    expect(byName('ask_decision').description).toContain('the orchestrator records it with answer_decision')
+    expect(byName('get_ticket').description).toContain('relayedBy and relayedText')
     expect(byName('get_project').description).toContain(
       'defaultPhases (the top-level phases every new ticket',
     )
