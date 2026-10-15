@@ -81,7 +81,7 @@ with \`parentTaskId\` = its id). A ticket with no tasks gets the project's defau
     instructions: BUILDER,
     delegation: `**When:** after **spec** on a new build (a low ticket has none; the builder then
 takes its instructions as the spec), and after every review (**runner**) whose verdict
-is not SHIP. Never two builders on one branch.
+is not SHIP, while the ticket has a round left. Never two builders on one branch.
 
 **Give it:** the ticket, the spec's acceptance criteria, the project's instructions, the worktree and
 branch, and on a fix round the confirmed and plausible findings and the failed criteria, each
@@ -171,8 +171,8 @@ Never the hunt's reasoning.
 
 **Returns:** a verdict per candidate: CONFIRMED, PLAUSIBLE, REFUTED or DEPENDS ON INTENT.
 
-**Next:** CONFIRMED and PLAUSIBLE are the findings (back to **builder** in a build). DEPENDS ON
-INTENT → \`ask_decision\` with both readings. Then **merge**.`,
+**Next:** CONFIRMED and PLAUSIBLE are the findings (back to **builder** in a build while the ticket
+has a round left). DEPENDS ON INTENT → \`ask_decision\` with both readings. Then **merge**.`,
   },
   {
     name: 'merge',
@@ -185,7 +185,7 @@ moment).
 **Returns:** NO ISSUE, CONFLICTS, TESTS FAIL AFTER MERGE or UNVERIFIED, and the worktree restored.
 
 **Next:** the report. CONFLICTS or new failures in a build → **builder** merges the base in and
-fixes them.`,
+fixes them while the ticket has a round left.`,
   },
 ]
 

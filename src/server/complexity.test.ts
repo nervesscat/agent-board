@@ -388,6 +388,9 @@ describe('the review texts the board ships', () => {
     expect(byName.builder).toContain('Mid has one: a review that does not survive then goes to the human')
     expect(byName.builder).toContain('High has three: two fix passes follow the first build')
     expect(byName.builder).toContain('Low has no review: its checks return the build at most twice')
+    expect(byName.builder).toContain(
+      'after every review (**runner**) whose verdict is not SHIP, while the ticket has a round left.',
+    )
     expect(byName.spec).toContain('Not on a low ticket')
   })
 
