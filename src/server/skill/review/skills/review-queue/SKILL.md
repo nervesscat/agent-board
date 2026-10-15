@@ -167,7 +167,7 @@ have renamed, rewritten or added some, so route by the notes, not by these names
 a result in `list_review_results` (with `sha`), or a ledger entry for that SHA from any target (a
 review of its branch before the PR, such as `/todo-review`'s, included), counts as reviewed and is
 skipped, unless `force`. Each
-runner gets `ticket=<id>` (the PR's first ticket) so the review reports on the board (the
+runner gets `ticket=<id>` (the PR's `ticket`, as `list_prs` names it) so the review reports on the board (the
 feature-review skill's **On the board** section); after Step 5, check that a result for that SHA
 is in `list_review_results`, and record it yourself with `post_review_result` from the runner's
 summary if not.
