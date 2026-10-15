@@ -241,8 +241,12 @@ describe('0027_ticket_pr_link', () => {
     sqlite
       .prepare('INSERT INTO tasks (ticket_id, parent_id, text, position) VALUES (?, ?, ?, ?)')
       .run(feature, step, 'subtask', 0)
-    sqlite.prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)').run(feature, 'enrique', 'a post')
-    sqlite.prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)').run(lane, 'claude', 'a lane post')
+    sqlite
+      .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+      .run(feature, 'enrique', 'a post')
+    sqlite
+      .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+      .run(lane, 'claude', 'a lane post')
 
     const rows = () => ({
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
@@ -261,10 +265,13 @@ describe('0027_ticket_pr_link', () => {
     // The same tickets, tasks and posts, row for row; the new column is empty on every ticket.
     expect(after.tickets.map((t) => t.id)).toEqual([feature, lane, daily])
     expect(after.tickets.map((t) => t.pr_id)).toEqual([null, null, null])
-    expect(after.tickets.map(({ pr_id: _, ...t }) => t)).toEqual(before.tickets)
+    // Every other column is what it was (toEqual leaves an undefined column out of the comparison).
+    expect(after.tickets.map((t) => ({ ...t, pr_id: undefined }))).toEqual(before.tickets)
     expect(after.tasks).toEqual(before.tasks)
     expect(after.updates).toEqual(before.updates)
-    expect(sqlite.prepare('SELECT parent_id FROM tickets WHERE id = ?').get(lane)).toEqual({ parent_id: feature })
+    expect(sqlite.prepare('SELECT parent_id FROM tickets WHERE id = ?').get(lane)).toEqual({
+      parent_id: feature,
+    })
     sqlite.close()
   })
 })
