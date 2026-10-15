@@ -282,13 +282,27 @@ const prState = (pr: schema.Pr, merge: Merge) => ({
 
 const REFRESH_MS = 5 * 60_000
 const lastRefresh = new Map<number, number>()
+/** Per project: the last refresh queued, which never rejects, so the next one can wait on it. */
+const refreshing = new Map<number, Promise<void>>()
+
+/**
+ * Refreshes the project's queue once its previous refresh has finished, whether that succeeded or threw. Two
+ * refreshes of one project never overlap, so one's reads and writes are all done before the next one starts:
+ * the tickets it moves follow its own reads, and an older read cannot be written after a newer one.
+ */
+export function refreshPrs(projectId: number): Promise<void> {
+  const run = (refreshing.get(projectId) ?? Promise.resolve()).then(() => runRefresh(projectId))
+  const settled = run.catch(() => undefined)
+  refreshing.set(projectId, settled)
+  return run
+}
 
 /**
  * Every repo of the project, refreshed side by side; the queue is their union. A repo gh cannot see
  * (no GitHub remote) is skipped, and one failing repo does not hide the others' PRs. Then the PRs' own
  * tickets follow, for every project, one without a GitHub repo included.
  */
-export async function refreshPrs(projectId: number) {
+async function runRefresh(projectId: number) {
   getProject(projectId)
   const repos = listRepos(projectId).filter((r) => r.githubRepo)
   const results = await Promise.allSettled(repos.map((r) => refreshRepoPrs(r)))
@@ -442,6 +456,7 @@ export function resetPrRefreshes() {
   moveRefresh.clear()
   followUps.clear()
   lastRefresh.clear()
+  refreshing.clear()
   lastTry.clear()
 }
 

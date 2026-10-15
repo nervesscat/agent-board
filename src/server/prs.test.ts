@@ -18,9 +18,14 @@ let found: MyGhPr[] = []
 let foundIn: Record<string, MyGhPr[]> = {}
 let failing = new Set<string>()
 let states: Record<number, 'OPEN' | 'CLOSED' | 'MERGED'> = {}
+// A checkout whose next search waits for its promise, once: a test holds one refresh's read while another runs.
+let holdNext = new Map<string, Promise<void>>()
 vi.mock('./git', async (original) => ({
   ...(await original<typeof import('./git')>()),
   listMyPrs: async (repoPath: string) => {
+    const hold = holdNext.get(repoPath)
+    holdNext.delete(repoPath)
+    if (hold) await hold
     if (failing.has(repoPath)) throw new Error(`gh pr list failed in ${repoPath}`)
     return foundIn[repoPath] ?? found
   },
@@ -33,6 +38,7 @@ afterEach(() => {
   found = []
   foundIn = {}
   failing = new Set()
+  holdNext = new Map()
   states = {}
   vi.useRealTimers()
 })
@@ -561,6 +567,9 @@ async function queueProject(name: string) {
   return { projectId, repoId }
 }
 
+/** Lets every refresh that can run without a held search run to its end: the searches here answer at once. */
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve))
+
 /** PR `number` as stored, with the PR ticket its row holds (undefined when it has none). */
 async function storedPr(projectId: number, number: number) {
   const { db, schema } = await import('#/db')
@@ -807,6 +816,58 @@ describe('PR tickets', () => {
         .all()
         .some((u) => u.body.includes('Not in the queue.')),
     ).toBe(false)
+  })
+
+  it('runs overlapping refreshes of a project one after the other, so an older read cannot move a ticket last', async () => {
+    const { db, schema } = await import('#/db')
+    const projectId = db.insert(schema.projects).values({ name: 'pr-refresh-overlap' }).returning().get().id
+    const [one, two] = ['one', 'two'].map((name) =>
+      db
+        .insert(schema.repos)
+        .values({
+          projectId,
+          name,
+          repoPath: `/r/overlap-${name}`,
+          baseBranch: 'main',
+          githubRepo: `acme/${name}`,
+        })
+        .returning()
+        .get(),
+    )
+    // Someone else's PR in repo one, waiting on my review: pending, with its ticket in To do.
+    foundIn = { [one.repoPath]: [theirs(40)], [two.repoPath]: [] }
+    await prs.refreshPrs(projectId)
+    expect((await storedPr(projectId, 40)).ticket).toMatchObject({ status: 'todo' })
+
+    // Refresh A reads repo one with my approval, then waits on repo two's search.
+    foundIn[one.repoPath] = [theirs(40, { reviews: [review('enrique', HEAD, undefined, 'APPROVED')] })]
+    let release = () => {}
+    holdNext.set(two.repoPath, new Promise<void>((resolve) => (release = () => resolve())))
+    const a = prs.refreshPrs(projectId)
+    await settle()
+    // Then I request changes, and refresh B reads that while A still waits.
+    foundIn[one.repoPath] = [
+      theirs(40, { reviews: [review('enrique', HEAD, undefined, 'CHANGES_REQUESTED')] }),
+    ]
+    const b = prs.refreshPrs(projectId)
+    await settle()
+    release()
+    await Promise.all([a, b])
+
+    // The row and its ticket agree: on hold, in Blocked. A's older read must not put the ticket back in review.
+    const stored = await storedPr(projectId, 40)
+    expect(stored.row.reviewStage).toBe('on_hold')
+    expect(stored.ticket).toMatchObject({ status: 'blocked' })
+  })
+
+  it('runs the next refresh of a project after one that failed', async () => {
+    const { projectId } = await queueProject('pr-refresh-after-failure')
+    failing = new Set(['/r/pr-refresh-after-failure'])
+    await expect(prs.refreshPrs(projectId)).rejects.toThrow('gh pr list failed')
+    failing = new Set()
+    found = [theirs(41)]
+    await prs.refreshPrs(projectId)
+    expect((await storedPr(projectId, 41)).ticket).toMatchObject({ status: 'todo' })
   })
 })
 
