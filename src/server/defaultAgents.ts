@@ -90,17 +90,23 @@ with its scenario.
 **Returns:** its commits, what changed per criterion or finding, the tests and checks it ran, and
 anything left open.
 
-**Next:** **runner** on the branch. A question it returns → \`ask_decision\`. After the rounds its ticket's
-complexity allows are used up (none for low, one for mid, three for high), stop and ask the human
-(ship as is, keep going, or drop).`,
+**Next:** **runner** on the branch, except for a low ticket: its build goes to hand-off on the project's
+checks and the builder's evidence, with no runner. A question it returns → \`ask_decision\`. The review
+rounds its ticket's complexity allows are none for low, one for mid, three for high, round 1 being the
+first build and its review. Mid has one: a review that does not survive then goes to the human (ship as
+is, keep going, or drop). High has three: two fix passes follow the first build, each with the checks and
+a new review, and a round that does not survive after the third goes to the human the same way. Low has
+no review: its checks return the build at most twice, and when they still fail after the second return,
+the human decides (keep going or drop).`,
   },
   {
     name: 'runner',
     instructions: brief('runner'),
     delegation: `**When:** to review a change: each PR waiting in the PR queue (\`list_prs\`, pending,
 whose head SHA has no result in \`list_review_results\`), and each branch the **builder** just
-finished. One runner per PR or branch; two at once only when they share no repo, fixed port or
-browser.
+finished, except a low ticket's build, which goes to hand-off on the project's checks and the builder's
+evidence, with no runner. One runner per PR or branch; two at once only when they share no repo, fixed
+port or browser.
 
 **Give it:** \`REPO\` (the main checkout), \`TARGET\` (the PR number or the branch), \`ticket=<id>\`,
 its port range and whether it may use the browser.
@@ -109,7 +115,8 @@ its port range and whether it may use the browser.
 \`review.md\` and \`summary.md\`. Its phases post on the ticket themselves.
 
 **Next:** a PR → the result is recorded (\`post_review_result\`; record it from the summary if it
-is missing). A build → SHIP hands off; anything else goes back to **builder** with the findings.
+is missing). A build → SHIP hands off; anything else goes back to **builder** with the findings while
+the ticket has a round left, and with none left the human decides (ship as is, keep going, or drop).
 Error or STALE → run it again once, alone.`,
   },
   {

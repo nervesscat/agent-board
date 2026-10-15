@@ -403,9 +403,13 @@ delegated to.
 The project's Agents page adds a default set, the build and review cycle of the
 `/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
 criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
-**env**, **verify**, **hunt**, **refute** and **merge** try to break it) → back to **builder** with
-the confirmed findings, the rounds its ticket's complexity sets (none for low, one for mid, three for
-high) → hand off. `/todo-review` is that orchestrator for
+**env**, **verify**, **hunt**, **refute** and **merge** try to break it) → (a fix pass by the
+**builder** on the confirmed findings, each with the project's checks and a new review, for as many
+review rounds as the ticket's complexity allows: none for low, one for mid, three for high; round 1 is
+the first build and its review, so a mid ticket stops after its review, and a review that does not
+survive after the last round goes to a human decision; a high ticket gets two fix passes; a low ticket
+has no review, and its checks return the build at most twice) → hand off. `/todo-review` is that
+orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
 working, no weakened tests, screenshots) and blocks only for what only the human can give.
 `/review-queue` reviews the board's PR queue (with `build`, it runs `/todo-review` after).

@@ -329,13 +329,15 @@ describe('the review texts the board ships', () => {
     expect(text).toContain('Only when a review ran (mid and high)')
   })
 
-  it('the default builder note drops "three fix rounds" and names the complexity; the spec note names the low exception', async () => {
+  it('the default builder note names the review rounds each level gets; the spec note names the low exception', async () => {
     const { DEFAULT_AGENTS } = await import('./defaultAgents')
     const byName = Object.fromEntries(DEFAULT_AGENTS.map((a) => [a.name, flat(a.delegation)]))
-    expect(byName.builder).not.toContain('three fix rounds')
     expect(byName.builder).toContain(
-      "the rounds its ticket's complexity allows are used up (none for low, one for mid, three for high)",
+      "The review rounds its ticket's complexity allows are none for low, one for mid, three for high, round 1 being the first build and its review.",
     )
+    expect(byName.builder).toContain('Mid has one: a review that does not survive then goes to the human')
+    expect(byName.builder).toContain('High has three: two fix passes follow the first build')
+    expect(byName.builder).toContain('Low has no review: its checks return the build at most twice')
     expect(byName.spec).toContain('Not on a low ticket')
   })
 
