@@ -150,10 +150,13 @@ Spawn `feature-review-spec` with paths to `00-diff.patch`, `00-context.md`, `00-
 the output path `01-spec.md`. Wait for it.
 
 Read `01-spec.md`. If its **Open questions** section contains a question whose answer
-changes what counts as *correct* (not merely nice to know), ask the user that one
-question with AskUserQuestion, offering the interpretations as options. If the user is
-not available or the question is not decisive, continue with the assumption the spec
-states. Do not ask about anything else.
+changes what counts as *correct* (not merely nice to know), that question is decisive. In an
+interactive session, ask the user that one question with AskUserQuestion, offering the
+interpretations as options. An unattended run (the runner, a todo-review run, or any run with
+no human to ask) never asks in the chat: it continues with the assumption the spec states, and
+step 3 puts the question on the ticket's card for the human. If the question is not decisive,
+or the user is not available, continue with the assumption the spec states. Do not ask about
+anything else.
 
 ## Strategy by kind
 
