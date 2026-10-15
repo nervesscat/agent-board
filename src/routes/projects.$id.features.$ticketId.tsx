@@ -2014,7 +2014,7 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
       {relayed && !changing && (
         <p className="text-sm">
           <span className="text-xs text-muted-foreground">What you said in chat:</span>{' '}
-          <span className="whitespace-pre-wrap">“{u.relayedText}”</span>
+          <span className="whitespace-pre-wrap break-words">“{u.relayedText}”</span>
         </p>
       )}
       {choosing && (
