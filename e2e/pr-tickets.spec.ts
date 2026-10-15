@@ -2,19 +2,23 @@ import type { APIRequestContext } from '@playwright/test'
 
 import type { PrRow, Project, TicketFull } from '#/lib/api'
 import { inDatabase } from './db'
+import { HUMAN } from './env'
 import { expect, ok, section, test } from './fixtures'
 
 /**
  * A PR of the queue has a ticket of its own, unless a feature ticket names it: its card opens that
- * ticket, it lives in To do, it is on no features view, and its decisions wait in Needs you.
+ * ticket, it lives in To do, it is on no features view, and its decisions and replies wait in Needs you.
  */
 
 type Row = { id: number }
 
 let prNumbers = 5000
 
-/** An open PR row as a refresh from GitHub would leave it (the e2e repos have no GitHub slug, so none comes). */
-function seedPr(project: Project, title: string) {
+/**
+ * An open PR row as a refresh from GitHub would leave it (the e2e repos have no GitHub slug, so none
+ * comes). Its author owns its ticket's threads, so a test that waits on the human names the human.
+ */
+function seedPr(project: Project, title: string, author = 'someone') {
   const number = ++prNumbers
   const now = new Date().toISOString()
   const id = inDatabase(
@@ -24,7 +28,7 @@ function seedPr(project: Project, title: string) {
           .prepare(
             `insert into prs (project_id, repo_id, number, title, url, author, head_ref, base_ref, head_sha,
                waiting_on, review_stage, updated_at, fetched_at)
-             values (?, ?, ?, ?, ?, 'someone', ?, 'main', 'abcdef1234567', 'me', 'pending', ?, ?) returning id`,
+             values (?, ?, ?, ?, ?, ?, ?, 'main', 'abcdef1234567', 'me', 'pending', ?, ?) returning id`,
           )
           .get(
             project.id,
@@ -32,6 +36,7 @@ function seedPr(project: Project, title: string) {
             number,
             title,
             `https://github.com/example/repo/pull/${number}`,
+            author,
             `branch-${number}`,
             now,
             now,
@@ -143,4 +148,29 @@ test("a decision on a PR's ticket is a PR row in Needs you, linked to its post",
     `/projects/${project.id}/features/${ticket!.id}#post-${decision.id}`,
   )
   await expect(needs.getByText(`PR #${pr.number}: Ship it?`)).toBeVisible()
+})
+
+test("a reply on a PR's ticket that waits on the human is a PR row in Needs you, linked to the reply", async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const pr = seedPr(project, 'Mine, waiting', HUMAN)
+  const { ticket } = await refreshedRow(human, project, pr)
+  const question = await ok<Row>(
+    human.post(`/api/tickets/${ticket!.id}/updates`, { data: { body: 'Is CI green?', progress: false } }),
+  )
+  const reply = await ok<Row>(
+    agent.post('/api/comments', {
+      data: { parentType: 'update', parentId: question.id, body: 'CI is green now.' },
+    }),
+  )
+
+  await page.goto(`/projects/${project.id}`)
+  const row = section(page, 'Needs you').getByRole('link', { name: `PR #${pr.number}: Mine, waiting` })
+  await expect(row).toHaveAttribute(
+    'href',
+    `/projects/${project.id}/features/${ticket!.id}#post-${question.id}-reply-${reply.id}`,
+  )
 })
