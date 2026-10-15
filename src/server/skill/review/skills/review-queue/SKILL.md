@@ -175,7 +175,9 @@ summary if not.
 **Building** (`build` only). After the reviews and their report, run the `todo-review` skill through
 the Skill tool for the same project, passing `parallel` and `model` through. It works the To do
 tickets through the build cycle (spec → builder → `/feature-review` until the change survives →
-hand-off), one `todo-review-ticket` agent per ticket, with its own scheduling and report. Do not
+hand-off), one `todo-review-ticket` agent per ticket, with its own scheduling and report. The cycle
+follows each ticket's complexity: a low ticket has no spec agent and no review, so it leaves no review
+record; a mid ticket gets one review round, a high ticket up to three. Do not
 work tickets yourself.
 
 ## Notes
