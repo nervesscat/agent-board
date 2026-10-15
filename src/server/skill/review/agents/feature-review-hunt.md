@@ -24,6 +24,9 @@ candidate; never the full suite (verify runs it). Never start a server or contai
 call a port that `00-env.md` does not list. Use the browser only when the flag is `yes`. Data
 you create through the app carries your prefix in its name.
 
+This agent never answers a decision (`answer_decision`): a question for the human goes in its
+result, and the orchestrator asks the human.
+
 ## Procedure
 
 1. Read the spec and `00-env.md`. Note the classification, the *Out of scope* list, and

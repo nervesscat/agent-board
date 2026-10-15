@@ -329,8 +329,11 @@ whose `branch` is the target branch. No ticket: run as usual and skip this secti
    evidence in `files` (screenshots from `WORKDIR/shots/`, the phase's own file). Never paste
    hunt notes; the refute phase's verdict table is the findings' record.
 3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket
-   (the interpretations as options, the spec's assumption marked recommended) instead of
-   AskUserQuestion; continue with the assumption, and say so in the report.
+   (the interpretations as options, the spec's assumption marked recommended). In an interactive
+   session, also ask the human in the chat with AskUserQuestion, with the same options; once they
+   answer there, this session records the answer on the card with `answer_decision`, with their
+   words as they gave them. A phase never answers a decision (`answer_decision`), not even one you
+   run inline. Continue with the assumption until the human answers, and say so in the report.
 4. **The result** goes to the board. For a PR: `post_review_result` (the verdict, `summary.md` as
    `summaryMd`, the commit SHA, the three checks and the counts, `repoId` when the project has
    several repos). For a branch with no PR yet: a `post_update` on the ticket with the verdict line
@@ -338,6 +341,9 @@ whose `branch` is the target branch. No ticket: run as usual and skip this secti
 
 ## Delegation
 
+- Every phase brief carries the line "Never answer a decision (`answer_decision`): a question for
+  the human goes into your result, or onto the card with `ask_decision`." The session that talks to
+  the human answers the card, never a phase.
 - Prefer delegation as written above. Phase agents run at one level below you, which
   is within the harness's nesting limit even when you are yourself a delegated agent.
 - If the Agent tool is not available to you, run each phase yourself in order, following

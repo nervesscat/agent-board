@@ -172,7 +172,13 @@ Lanes of a ticket you are working are yours to create (next section).
   under yours (`comment` on the post, `parentType: update`, replies there). A choice between clear
   options (an approach, a trade-off, a scope call) is an `ask_decision` instead: the question with
   the context, 2 to 5 options (a label, what it means, at most one `recommended`). The ticket
-  blocks until the human picks one; the answer comes as a reply under the card. If you cannot go on
+  blocks until the human picks one; the answer comes as a reply under the card. If the human
+  answers the card in the chat instead, the session that talks to the human asks them there first
+  (AskUserQuestion in Claude Code, or the client's equivalent, with the card's options), then
+  `answer_decision` records their answer on the card: the option's index and their words as they
+  gave them. Only that session does it, never a subagent, never with `as`, never unattended. A
+  relay is refused on a card already decided, by the human or an earlier relay: the human changes
+  it on the card. If you cannot go on
   without the answer, also `update_ticket` → `status: blocked`, and back to `in_progress` once it
   is answered. When only one step waits on the human, tag that task blocked instead and go on. On resuming, and between steps, `list_my_threads` shows what is waiting on you.
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
@@ -196,6 +202,9 @@ Every spawned agent and lane costs time: hand out only what is new, and only wha
      earlier results.
   4. Done when: the condition to stop at.
   5. Return: the exact shape of the answer.
+- A subagent never answers a decision (`answer_decision`). If its work needs the human's answer, it
+  asks (`ask_decision`) or returns the question in its result; you ask the human in the chat and
+  answer the card yourself.
 
 ### Watch for feedback
 
@@ -418,7 +427,11 @@ Without those skills, or for one ticket, orchestrate by hand:
    post what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`,
    its evidence in `files`); tick the tasks it finished; go where its notes say next.
 3. A call that is the human's (two valid behaviours, a finding that keeps coming back, ship as is
-   or not) → `ask_decision`, and work on something else until it is decided.
+   or not) → `ask_decision`. In a session with the human, ask them in the chat as well, with the
+   card's options (AskUserQuestion in Claude Code, or the client's equivalent); once they answer
+   there, `answer_decision` records it on the card with their words, and work on something else
+   until then. An unattended run has no human to ask: it leaves the card open and skips the
+   ticket, and never answers a decision.
 4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests. Check
    every item of the checklist yourself before moving the ticket to `review` (`get_ticket`: `push`,
    `pr`, the workspace's `managedPreview` `running`, the hand-off post): a subagent saying it is

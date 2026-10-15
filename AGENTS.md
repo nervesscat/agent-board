@@ -142,7 +142,7 @@ http_headers = { Authorization = "Bearer gate_…" }
    instead (step 3). When the answer is a choice between clear options (an approach, a trade-off, a scope
    call), use `ask_decision` instead: a card with 2 to 5 options (one may be recommended) that the
    human answers with one click; it blocks the ticket and unblocks it once decided, and the answer
-   arrives as a reply under the card. `list_my_threads` lists every feed or reply thread where someone spoke after you;
+   arrives as a reply under the card. If the human answers the card in the chat rather than on the board, the orchestrator records their answer with `answer_decision` (MCP; REST `POST /api/updates/:id/decision/relay`). That is allowed only after the orchestrator asked the human in the chat with the card's options (in Claude Code with AskUserQuestion, in another client its equivalent), only with their words as they gave them, and only in the session that talks to the human, never in a run with no human to ask. A delegated subagent or a persona never answers a decision, and a relay never carries `as`: they ask (`ask_decision`) or return the question in their result. `list_my_threads` lists every feed or reply thread where someone spoke after you;
    `get_ticket` shows each post's reply count and last author. Attachments come with a local
    `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
    **Watch for feedback** so the human never has to say "check comments": while you have tickets
@@ -247,6 +247,8 @@ personas the human sets up on the board's Agents page. A ticket the human assign
   ticket's, and post that work with `post_update` / `comment` using `as: <its name>`. It shows
   under the agent's name, via your token name.
 - Never take a reserved ticket as yourself or reassign it; only the human does.
+- A persona never answers a decision (step 6): the human answers the card, or the orchestrator relays
+  their answer from the chat.
 - `@name` in a thread asks that agent: `list_my_threads` returns threads waiting on an agent with
   `as` set, for you to answer as it.
 

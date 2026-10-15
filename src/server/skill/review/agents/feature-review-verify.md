@@ -16,6 +16,9 @@ agent does that.
 `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, and your output
 file. Start from `00-focus.md`; read outside it only to follow a reference from it.
 
+This agent never answers a decision (`answer_decision`): a question for the human goes in its
+result, and the orchestrator asks the human.
+
 ## Rules
 
 - **Everything runs from the worktree using `00-env.md`.** It gives you the interpreter,
