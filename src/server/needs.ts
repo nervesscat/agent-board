@@ -397,10 +397,11 @@ export async function changeTicket(
   }
   const to = patch.status ? resolveStage(listStages(before.projectId), patch.status).key : before.status
   const unmet = await guardDone(subject, to, ids, { force, agent: opts.agent })
-  if (needs !== undefined) setNeeds(id, ids, actor)
-  const row = Object.keys(patch).length
-    ? features.updateTicket(id, patch, actor, opts)
-    : features.getTicket(id)
+  // The needs and the update land together: an update that is refused leaves the needs as they were.
+  const row = db.transaction(() => {
+    if (needs !== undefined) setNeeds(id, ids, actor)
+    return Object.keys(patch).length ? features.updateTicket(id, patch, actor, opts) : features.getTicket(id)
+  })
   logOverride(row, unmet, actor)
   if (patch.status && !row.prId && kindOf(listStages(row.projectId), row.status) === 'review')
     return { ...row, handoff: await ticketHandoff(await features.getTicketWithPush(id)) }

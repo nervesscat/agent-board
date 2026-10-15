@@ -332,4 +332,49 @@ describe('PR tickets', () => {
     expect(moved).not.toHaveProperty('handoff')
     expect((await needs.ticketView(own.id)).handoff).toBeNull()
   })
+
+  it('keeps a refused PATCH whole: the needs it came with are not stored either', async () => {
+    const { db, schema } = await import('#/db')
+    const needs = await import('./needs')
+    const prTickets = await import('./prTickets')
+    const features = await import('./features')
+    const p = db.insert(schema.projects).values({ name: 'pr refused' }).returning().get().id
+    const r = db
+      .insert(schema.repos)
+      .values({ projectId: p, name: 'app', repoPath: repo, baseBranch: 'main' })
+      .returning()
+      .get()
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: p,
+        repoId: r.id,
+        number: 13,
+        title: 'thirteen',
+        url: 'https://github.com/acme/app/pull/13',
+        author: 'ana',
+        headRef: 'feat/b',
+        baseRef: 'main',
+        headSha: 'abc1234',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    const feature = features.createTicket(p, { title: 'feature', branch: 'feat/d' }, 'claude')
+    prTickets.openPrTickets(p, () => 'pending')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    // A PR's ticket has no branch of its own: the PATCH is refused, and the needs it came with stay unstored.
+    await expect(
+      needs.changeTicket(own.id, { needs: [feature.id], branch: 'x' }, 'claude', agent),
+    ).rejects.toThrow(/no branch of its own/)
+    expect(needs.needIds(own.id)).toEqual([])
+    expect((await needs.ticketView(own.id)).needs).toEqual([])
+    // The same for a feature ticket given a repo that does not exist (a 404 from the update).
+    await expect(
+      needs.changeTicket(feature.id, { needs: [own.id], repoId: 999_999 }, 'claude', agent),
+    ).rejects.toMatchObject({ status: 404 })
+    expect(needs.needIds(feature.id)).toEqual([])
+  })
 })
