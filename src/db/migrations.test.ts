@@ -220,3 +220,71 @@ describe('0023_daily_reports_and_shifts', () => {
     })
   })
 })
+
+describe('0027_relayed_decisions', () => {
+  it('keeps the decided card, its reply and the other posts when the relay columns are added', () => {
+    const sqlite = databaseAt('0026_task_blocked_tag')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('relay').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'Answer in the chat', 'claude').lastInsertRowid,
+    )
+    // A decision card with two options, which the human picked.
+    const options = [{ label: 'Merge now' }, { label: 'Wait for the review', recommended: true }]
+    const card = Number(
+      sqlite
+        .prepare(
+          'INSERT INTO updates (ticket_id, author, body, progress, decision, decided_option, decided_by, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          ticket,
+          'claude',
+          'Merge now or wait for the review?',
+          0,
+          JSON.stringify(options),
+          1,
+          'enrique',
+          '2026-10-10T10:00:00.000Z',
+        ).lastInsertRowid,
+    )
+    // The human's reply under the card: a child row through the comments table.
+    sqlite
+      .prepare('INSERT INTO comments (parent_type, parent_id, author, body) VALUES (?, ?, ?, ?)')
+      .run('update', card, 'enrique', 'Decided: **Wait for the review**')
+    const plain = Number(
+      sqlite
+        .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+        .run(ticket, 'claude', 'Pushed the branch.').lastInsertRowid,
+    )
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(
+      sqlite
+        .prepare('SELECT decision, decided_option, decided_by, decided_at FROM updates WHERE id = ?')
+        .get(card),
+    ).toEqual({
+      decision: JSON.stringify(options),
+      decided_option: 1,
+      decided_by: 'enrique',
+      decided_at: '2026-10-10T10:00:00.000Z',
+    })
+    expect(
+      sqlite
+        .prepare('SELECT author, body FROM comments WHERE parent_type = ? AND parent_id = ?')
+        .all('update', card),
+    ).toEqual([{ author: 'enrique', body: 'Decided: **Wait for the review**' }])
+    expect(sqlite.prepare('SELECT body FROM updates WHERE id = ?').get(plain)).toEqual({
+      body: 'Pushed the branch.',
+    })
+    // Every post, the two written before the migration included, reads '' for the relay.
+    expect(sqlite.prepare('SELECT relayed_by, relayed_text FROM updates ORDER BY id').all()).toEqual([
+      { relayed_by: '', relayed_text: '' },
+      { relayed_by: '', relayed_text: '' },
+    ])
+    sqlite.close()
+  })
+})
