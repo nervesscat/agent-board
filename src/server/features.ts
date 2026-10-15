@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { RESUME_TEMPLATE } from '#/lib/constants'
+import { type Complexity, DEFAULT_COMPLEXITY, RESUME_TEMPLATE } from '#/lib/constants'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
 import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
@@ -429,6 +429,8 @@ export function createTicket(
     body?: string
     /** A stage key, name or kind; the project's last open stage when left out. */
     status?: string
+    /** How much review it gets; a lane's parent's when left out, else the default. */
+    complexity?: Complexity
     assignee?: string
     branch?: string
     baseBranch?: string
@@ -461,6 +463,8 @@ export function createTicket(
       body: input.body ?? '',
       status,
       ...startedPatch(stages, null, status),
+      // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
+      complexity: input.complexity ?? parent?.complexity ?? DEFAULT_COMPLEXITY,
       assignee: input.assignee ?? '',
       branch: input.branch ?? '',
       baseBranch,
@@ -515,7 +519,16 @@ export function updateTicket(
   patch: Partial<
     Pick<
       schema.Ticket,
-      'title' | 'body' | 'status' | 'assignee' | 'branch' | 'baseBranch' | 'repoId' | 'tags' | 'prNumber'
+      | 'title'
+      | 'body'
+      | 'status'
+      | 'complexity'
+      | 'assignee'
+      | 'branch'
+      | 'baseBranch'
+      | 'repoId'
+      | 'tags'
+      | 'prNumber'
     >
   >,
   actor: string,

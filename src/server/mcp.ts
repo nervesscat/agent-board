@@ -2,7 +2,7 @@ import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 
-import { COMMENT_PARENTS, RESUME_TEMPLATE } from '#/lib/constants'
+import { COMMENT_PARENTS, COMPLEXITIES, RESUME_TEMPLATE } from '#/lib/constants'
 import { listActors } from './actors'
 import { cleanupReport } from './cleanup'
 import { dailyReport, today } from './daily'
@@ -60,6 +60,8 @@ Keep the board out of the repo. The board, trazic, habits and any other personal
 
 const STATUS =
   'a stage key from get_project, a stage name, or a kind (open, active, blocked, review, done, cancelled; todo and in_progress also work): the first stage of that kind'
+const COMPLEXITY =
+  "how much review the ticket gets: low none (the builder verifies itself), mid one review round, high three. Mid when left out; a lane without one copies its parent's."
 const AS = z
   .string()
   .optional()
@@ -233,7 +235,7 @@ function buildServer(actor: string) {
   )
   tool(
     'create_ticket',
-    "Create a ticket (a feature or piece of work) with optional initial tasks. A top-level ticket starts with its project's default phases (get_project's defaultPhases: Implementation, Pushed, PR, CI, Preview, Hand-off post unless the project changed them): tasks given as plain texts become the steps under the first phase, and {text, subtasks} items are phases of yours that go right after it. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, branch, tasks and updates, which starts without phases unless defaultPhases is true. defaultPhases false stores the tasks exactly as given.",
+    "Create a ticket (a feature or piece of work) with optional initial tasks. A top-level ticket starts with its project's default phases (get_project's defaultPhases: Implementation, Pushed, PR, CI, Preview, Hand-off post unless the project changed them): tasks given as plain texts become the steps under the first phase, and {text, subtasks} items are phases of yours that go right after it. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, branch, tasks and updates, which starts without phases unless defaultPhases is true. defaultPhases false stores the tasks exactly as given. complexity sets how much review the ticket gets (low, mid or high; mid by default, and a lane without one copies its parent's).",
     {
       projectId: z.number().int(),
       title: z.string(),
@@ -242,6 +244,7 @@ function buildServer(actor: string) {
         .string()
         .optional()
         .describe(`${STATUS}. Defaults to the last open stage (To do rather than Backlog)`),
+      complexity: z.enum(COMPLEXITIES).optional().describe(COMPLEXITY),
       assignee: z.string().default(''),
       branch: z.string().default(''),
       baseBranch: z.string().optional().describe("defaults to the repo's base branch"),
@@ -269,12 +272,13 @@ function buildServer(actor: string) {
   )
   tool(
     'update_ticket',
-    "Change status, assignee, branch, tags, prNumber, title or instructions. Use claim_ticket to pick a ticket up. Changing the assignee of a ticket reserved for one of the project's agents fails: only the human reassigns those. Status blocked means you are waiting on the human: say what for in a comment on the ticket. A move to done is refused while one of its needs is not merged into its base (the error says which); merge order is the human's, so leave it in review. A move to a review stage goes through and answers with handoff: missing [{code, text}] lists what the hand-off still lacks (tasks_open: Implementation, the ticket's tasks and subtasks, its phases and their steps, the hand-off phases included: missing while it has none or some of them, its lanes' included, are open; no_pr: no PR set or open on the branch; not_pushed: the branch is not on origin; no_preview: no preview the board runs or that answers; no_handoff_post: no progress post of yours since the branch's last commit; checks_unknown: the PR's CI is failing or still running), and checks has every item with ok, first not_merged (Merged: the PR merged on GitHub or the branch merged into its base), which is never in missing: merging is the human's. Fix what it lists.",
+    "Change status, assignee, branch, tags, prNumber, title, instructions or complexity (the review level, low, mid or high). Use claim_ticket to pick a ticket up. Changing the assignee of a ticket reserved for one of the project's agents fails: only the human reassigns those. Status blocked means you are waiting on the human: say what for in a comment on the ticket. A move to done is refused while one of its needs is not merged into its base (the error says which); merge order is the human's, so leave it in review. A move to a review stage goes through and answers with handoff: missing [{code, text}] lists what the hand-off still lacks (tasks_open: Implementation, the ticket's tasks and subtasks, its phases and their steps, the hand-off phases included: missing while it has none or some of them, its lanes' included, are open; no_pr: no PR set or open on the branch; not_pushed: the branch is not on origin; no_preview: no preview the board runs or that answers; no_handoff_post: no progress post of yours since the branch's last commit; checks_unknown: the PR's CI is failing or still running), and checks has every item with ok, first not_merged (Merged: the PR merged on GitHub or the branch merged into its base), which is never in missing: merging is the human's. Fix what it lists.",
     {
       ticketId: z.number().int(),
       title: z.string().optional(),
       body: z.string().optional(),
       status: z.string().optional().describe(STATUS),
+      complexity: z.enum(COMPLEXITIES).optional().describe(COMPLEXITY),
       assignee: z.string().optional(),
       branch: z.string().optional(),
       baseBranch: z.string().optional(),
