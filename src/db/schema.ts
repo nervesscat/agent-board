@@ -160,6 +160,9 @@ export const tickets = sqliteTable(
     baseBranch: text('base_branch').notNull().default('main'),
     // The PR the ticket's branch was opened as, in the ticket's repo; null until there is one.
     prNumber: integer('pr_number'),
+    // The PR queue row a PR ticket is for: the ticket the board opened for a PR of the queue, which lives in
+    // the queue only (no feature list counts it). Null on every other ticket.
+    prId: integer('pr_id').references(() => prs.id, { onDelete: 'set null' }),
     createdBy: text('created_by').notNull(),
     // Free labels the agents choose (severity, area, …); the lanes list filters on them.
     tags: text({ mode: 'json' })
