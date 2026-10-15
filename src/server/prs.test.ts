@@ -854,4 +854,45 @@ describe('PR tickets over the API', () => {
     ).toBe(400)
     expect((await call('GET', `/api/comments?parentType=pr&parentId=${ticket.id}`)).status).toBe(400)
   })
+
+  it('tell agents the same over MCP: the instructions and the tools name a PR ticket, and no PR thread', async () => {
+    const { handleMcp } = await import('./mcp')
+    let rpcId = 0
+    const rpc = async (method: string, params: Record<string, unknown> = {}) => {
+      const res = await handleMcp(
+        new Request('http://localhost/api/mcp', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
+        }),
+        'claude',
+      )
+      return ((await res.json()) as { result: any }).result
+    }
+    const init = await rpc('initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '1' },
+    })
+    expect(init.instructions).toContain('list_prs names it as ticket')
+    expect(init.instructions).toContain('this ticket takes the PR over')
+    expect(init.instructions).not.toContain('PR thread')
+    const tools = (await rpc('tools/list')).tools as {
+      name: string
+      description: string
+      inputSchema: unknown
+    }[]
+    const told = (name: string) => {
+      const tool = tools.find((t) => t.name === name)!
+      return `${tool.description} ${JSON.stringify(tool.inputSchema)}`
+    }
+    expect(told('list_prs')).toContain('ticket is the ticket its card opens')
+    expect(told('post_review_result')).toContain('list_prs ticket')
+    expect(told('list_tickets')).toContain("a PR's own ticket")
+    expect(told('get_summary')).toContain('prTicket true')
+    expect(told('create_ticket')).toContain('takes the PR over')
+    expect(told('update_ticket')).toContain('takes the PR over')
+    for (const name of ['comment', 'list_comments'])
+      expect(told(name)).not.toMatch(/under a PR|a PR or a review/)
+  })
 })
