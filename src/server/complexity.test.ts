@@ -212,3 +212,177 @@ describe("a ticket's complexity", () => {
     }
   })
 })
+
+describe('the review texts the board ships', () => {
+  const skills = path.join(import.meta.dirname, 'skill', 'review')
+  const repo = path.join(import.meta.dirname, '..', '..')
+  // Read as the repo holds them, with the line endings folded to \n.
+  const read = (file: string) => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
+  const todoReview = read(path.join(skills, 'skills', 'todo-review', 'SKILL.md'))
+  const ticketAgent = read(path.join(skills, 'agents', 'todo-review-ticket.md'))
+  const reviewQueue = read(path.join(skills, 'skills', 'review-queue', 'SKILL.md'))
+  const boardSkill = read(path.join(import.meta.dirname, 'skill', 'board.md'))
+  const agentsDoc = read(path.join(repo, 'AGENTS.md'))
+  const readme = read(path.join(repo, 'README.md'))
+  // A sentence that a line break splits still matches: the whitespace is folded first.
+  const flat = (text: string) => text.replace(/\s+/g, ' ')
+  /** The text from `start` up to `end`, or to the end of the text when `end` is left out. */
+  const between = (text: string, start: string, end?: string) => {
+    const from = text.indexOf(start)
+    expect(from, start).toBeGreaterThanOrEqual(0)
+    if (end === undefined) return text.slice(from)
+    const to = text.indexOf(end, from + start.length)
+    expect(to, end).toBeGreaterThan(from)
+    return text.slice(from, to)
+  }
+  /** The MCP instructions and tool descriptions, as a client gets them from the server. */
+  async function served() {
+    const init = await rpc('initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '0' },
+    })
+    const tools = (await rpc('tools/list')).tools as { name: string; description: string }[]
+    return { instructions: init.instructions as string, tools }
+  }
+
+  it('todo-review takes no rounds setting, and its brief to each ticket agent passes COMPLEXITY', () => {
+    expect(todoReview).not.toContain('rounds=')
+    expect(todoReview).not.toContain('ROUNDS=<n>')
+    expect(todoReview).toContain('COMPLEXITY=<low, mid or high>')
+  })
+
+  it("todo-review says the orchestrator never changes a ticket's complexity, and the ticket agent never changes its own", () => {
+    expect(flat(todoReview)).toContain("The orchestrator never changes a ticket's complexity")
+    expect(flat(ticketAgent)).toContain("You never change a ticket's complexity")
+  })
+
+  it('todo-review reads each ticket level from the board into plan.md, and skips the DEPTH measure for a low ticket', () => {
+    const text = flat(todoReview)
+    expect(text).toContain(
+      'plan.md`: every ticket with its repo, its complexity (the `complexity` field of its list row)',
+    )
+    expect(text).toContain('A low ticket skips this measure')
+  })
+
+  it('todo-review-ticket takes COMPLEXITY as its input and no ROUNDS input, and names the budget of each level', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('`COMPLEXITY` (`low`, `mid` or `high`')
+    expect(ticketAgent).not.toContain('`ROUNDS`')
+    expect(text).toContain('low none, mid one round, high three')
+    expect(text).toContain(
+      'Round 1 is the first build with its gate and its review; rounds 2 and 3 are fix passes',
+    )
+  })
+
+  it('todo-review-ticket runs a low ticket with no spec agent and no review, and the builder verifies it itself', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('A low ticket has no spec and no spec agent')
+    expect(text).toContain('Low: no review.')
+    expect(text).toContain('Low: the builder codes and verifies itself.')
+    expect(text).toContain('Its return gives the evidence per criterion')
+  })
+
+  it('todo-review-ticket sends a failed gate back at most twice, then asks the human, and a gate return uses no review round', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('A gate return uses up no review round')
+    expect(text).toContain('sends the change back at most twice, on every level')
+    expect(text).toContain('`ask_decision` (keep going or drop) and stop: `BLOCKER: decision`')
+  })
+
+  it('todo-review-ticket keeps the review depth rules for mid and high, and its Review depth section names no ROUNDS budget', () => {
+    const depth = between(ticketAgent, '## Review depth', '## Escalation')
+    expect(depth).not.toContain('ROUNDS')
+    expect(depth).toContain('`light`')
+    expect(depth).toContain('`standard`')
+    expect(depth).toContain('`deep`')
+  })
+
+  it('todo-review-ticket keeps nine labelled output lines, with ROUNDS 0 and VERDICT and DEPTH none for a low ticket', () => {
+    const lines = between(ticketAgent, '## Output').split('```')[1]!.trim().split('\n')
+    expect(lines.map((line) => line.split(':')[0])).toEqual([
+      'STATUS',
+      'TICKET',
+      'VERDICT',
+      'ROUNDS',
+      'DEPTH',
+      'PR',
+      'PREVIEW',
+      'BLOCKER',
+      'NOTES',
+    ])
+    const line = (label: string) => lines.find((l) => l.startsWith(`${label}:`))!
+    expect(line('ROUNDS')).toContain('0 for low')
+    expect(line('VERDICT')).toContain('(low: no review)')
+    expect(line('DEPTH')).toContain('(low: no review)')
+  })
+
+  it("todo-review-ticket's hand-off names the level and what checked it, and records a review only when one ran", () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('"How it was tested" names the level (`low`, `mid` or `high`)')
+    expect(text).toContain('Only when a review ran (mid and high)')
+  })
+
+  it('the default builder note drops "three fix rounds" and names the complexity; the spec note names the low exception', async () => {
+    const { DEFAULT_AGENTS } = await import('./defaultAgents')
+    const byName = Object.fromEntries(DEFAULT_AGENTS.map((a) => [a.name, flat(a.delegation)]))
+    expect(byName.builder).not.toContain('three fix rounds')
+    expect(byName.builder).toContain(
+      "the rounds its ticket's complexity allows are used up (none for low, one for mid, three for high)",
+    )
+    expect(byName.spec).toContain('Not on a low ticket')
+  })
+
+  it('board.md, the MCP instructions and AGENTS.md give the rounds as the complexity sets them, never "at most three rounds"', async () => {
+    const { instructions } = await served()
+    for (const [name, text] of Object.entries({
+      'board.md': boardSkill,
+      'MCP instructions': instructions,
+      'AGENTS.md': agentsDoc,
+    })) {
+      expect(flat(text), name).toContain('none for low, one for mid, three for high')
+      expect(flat(text), name).not.toContain('at most three rounds')
+    }
+  })
+
+  it('the MCP get_ticket and list_tickets descriptions say that complexity is returned, low, mid or high', async () => {
+    const { tools } = await served()
+    for (const name of ['get_ticket', 'list_tickets']) {
+      expect(tools.find((t) => t.name === name)?.description, name).toContain('complexity (low, mid or high')
+    }
+  })
+
+  it('README and board.md name complexity where the ticket fields are listed', () => {
+    const row = readme
+      .split('\n')
+      .find((l) => l.includes('`/api/projects/:id/tickets`') && l.includes('`/api/tickets/:id`'))
+    expect(row, 'the README row for tickets').toBeDefined()
+    expect(row).toContain('`complexity` on create and PATCH')
+    expect(between(boardSkill, 'Creating a top-level ticket', '\n\n')).toContain('`complexity`')
+  })
+
+  it('no shipped text tells an agent to use a rounds setting', async () => {
+    const { instructions, tools } = await served()
+    const reviewFiles = fs
+      .readdirSync(skills, { recursive: true, encoding: 'utf8' })
+      .filter((f) => f.endsWith('.md'))
+    const texts: Record<string, string> = {
+      ...Object.fromEntries(reviewFiles.map((f) => [f, read(path.join(skills, f))])),
+      'skill/board.md': boardSkill,
+      'AGENTS.md': agentsDoc,
+      'README.md': readme,
+      'defaultAgents.ts': read(path.join(import.meta.dirname, 'defaultAgents.ts')),
+      'MCP instructions': instructions,
+      'MCP tool descriptions': tools.map((t) => t.description).join('\n'),
+    }
+    const banned = /rounds=|ROUNDS=|at most three rounds|three fix rounds/
+    expect(Object.keys(texts).filter((name) => banned.test(texts[name]!))).toEqual([])
+  })
+
+  it('the skill and agent descriptions, and the review-queue build paragraph, promise no review for every ticket', () => {
+    expect(todoReview).toMatch(/^description: .*low none, mid one, high three/m)
+    expect(ticketAgent).toMatch(/^description: .*low gets no review/m)
+    const building = reviewQueue.slice(reviewQueue.indexOf('**Building**'))
+    expect(flat(building)).toContain('a low ticket has no spec agent and no review')
+  })
+})
