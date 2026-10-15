@@ -253,8 +253,8 @@ type HumanThread = ProjectSummary['needsYou']['threads'][number]
 
 /**
  * Where a thread waiting on the human is, as an anchor its page lands on (src/lib/reveal.ts): its
- * latest message. On a ticket, a post of the feed; a reply, by the post or PR whose thread holds it;
- * on a review result, which its dialog shows alone.
+ * latest message. On a ticket, a post of the feed; a reply, by the post whose thread holds it; on a
+ * review result, which its dialog shows alone.
  */
 function threadAnchor(th: HumanThread) {
   if (th.parentType === 'ticket') return `post-${th.last.id}`
@@ -288,7 +288,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               meta={
                 <>
                   <span className="truncate">
-                    #{d.ticketId} {d.ticketTitle}
+                    {d.prTicket ? d.ticketTitle : `#${d.ticketId} ${d.ticketTitle}`}
                   </span>
                   <span>
                     {plural(d.options, 'option')} · asked by {d.author} {ago(d.createdAt)}
@@ -347,7 +347,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                     hash={threadAnchor(th)}
                     className="hover:underline"
                   >
-                    {th.parentType === 'ticket' ? `#${th.ticketId} ${th.title}` : th.title}
+                    {th.parentType === 'ticket' && !th.prTicket ? `#${th.ticketId} ${th.title}` : th.title}
                   </Link>
                 ) : (
                   <Link

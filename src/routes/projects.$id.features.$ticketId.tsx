@@ -373,32 +373,35 @@ function TicketPage() {
               </Button>
             </Tip>
           )}
-          <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
-              <Trash2 />
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this ticket?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Tasks, updates, attachments and the thread go with it.
-                  {t.lanes.length > 0 &&
-                    ` It has ${t.lanes.length} lane${t.lanes.length === 1 ? '' : 's'}: delete them too, or keep them and move them up a level.`}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                {t.lanes.length > 0 && (
-                  <AlertDialogAction variant="outline" onClick={() => remove.mutate(true)}>
-                    Delete, keep lanes
+          {/* A PR's ticket is kept while its PR is in the queue: the board refuses its delete. */}
+          {!t.prId && (
+            <AlertDialog>
+              <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                <Trash2 />
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this ticket?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tasks, updates, attachments and the thread go with it.
+                    {t.lanes.length > 0 &&
+                      ` It has ${t.lanes.length} lane${t.lanes.length === 1 ? '' : 's'}: delete them too, or keep them and move them up a level.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  {t.lanes.length > 0 && (
+                    <AlertDialogAction variant="outline" onClick={() => remove.mutate(true)}>
+                      Delete, keep lanes
+                    </AlertDialogAction>
+                  )}
+                  <AlertDialogAction onClick={() => remove.mutate(false)}>
+                    {t.lanes.length > 0 ? 'Delete with lanes' : 'Delete'}
                   </AlertDialogAction>
-                )}
-                <AlertDialogAction onClick={() => remove.mutate(false)}>
-                  {t.lanes.length > 0 ? 'Delete with lanes' : 'Delete'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </header>
 
