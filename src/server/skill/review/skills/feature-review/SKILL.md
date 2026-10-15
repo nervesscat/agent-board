@@ -332,8 +332,11 @@ whose `branch` is the target branch. No ticket: run as usual and skip this secti
    (the interpretations as options, the spec's assumption marked recommended). In an interactive
    session, also ask the human in the chat with AskUserQuestion, with the same options; once they
    answer there, this session records the answer on the card with `answer_decision`, with their
-   words as they gave them. A phase never answers a decision (`answer_decision`), not even one you
-   run inline. Continue with the assumption until the human answers, and say so in the report.
+   words as they gave them. The AskUserQuestion step applies only in an interactive session. An
+   unattended run (the runner, a todo-review run, or any run with no human to ask) never asks in the
+   chat and never relays a decision: it leaves the card open for the human. A phase never answers a
+   decision (`answer_decision`), not even one you run inline. Continue with the assumption until the
+   human answers, and say so in the report.
 4. **The result** goes to the board. For a PR: `post_review_result` (the verdict, `summary.md` as
    `summaryMd`, the commit SHA, the three checks and the counts, `repoId` when the project has
    several repos). For a branch with no PR yet: a `post_update` on the ticket with the verdict line
