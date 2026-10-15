@@ -224,12 +224,15 @@ repository below its top (HEAD, objects and refs, with no `.git`). Its links
 (a `node_modules` or `data` linked to another checkout's, a junction on Windows) are removed first,
 each the link alone: on Windows `git worktree remove` would delete what a junction leads to. A folder
 one leads to out of the worktree stays, and the result names each such link with where it led
-(`unlinked`); one of those that git tracks, or a folder that cannot be read, keeps the worktree. The
-board then removes the worktree itself rather than git: it renames the folder out of the way, deletes
-it entry by entry, a link (one made again meanwhile too) as the link alone and its `.git` last, then
-the worktree's own entry in the repository's `worktrees` folder, no other. A folder that cannot be
-moved (on Windows, one a process works in) is left as it is, one that cannot be emptied is put back,
-and the branch is kept either way. A preview the board runs
+(`unlinked`); one of those that git tracks, or a folder that cannot be read, keeps the worktree. A
+worktree whose folder is itself a link is refused before any of that. The board then removes the
+worktree itself rather than git: it renames the folder out of the way, checks that what moved is that
+worktree (the same folder, `.git` file and entry in the repository's `worktrees` folder as it
+checked), and deletes it entry by entry, each only while it is what was there when its folder was
+read, a link (one made again meanwhile too) as the link alone; then the worktree's own entry, no other,
+its `.git` and the folder, each checked again just before. A folder that cannot be moved (on Windows,
+one a process works in) is left as it is, anything found changed stops it and what was moved is put
+back, and the branch is kept either way. A preview the board runs
 from it is stopped first, and so is a server an agent started from it and linked on a workspace
 registered at it, when the rule of the Previews page's Stop tells it runs from there (one it does
 not stays running, and the worktree goes all the same); the workspaces registered at it are

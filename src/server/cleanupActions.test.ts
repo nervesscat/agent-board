@@ -3106,6 +3106,9 @@ describe('a link made again in a worktree while it is being removed', () => {
     const item: DeleteItem = { ticketId: t.id, branch, kind: 'worktrees', sha, worktrees: [tree] }
     return { branch, sha, item, tree }
   }
+  /** A worktree's entry in its repository's `worktrees` folder, where its `.git` file points. */
+  const entryOf = (dir: string) =>
+    path.resolve(dir, /^gitdir: (.+)$/m.exec(fs.readFileSync(path.join(dir, '.git'), 'utf8'))![1]!.trim())
 
   afterAll(() => {
     for (const link of made.filter(isLink)) unlinkDir(link)
@@ -3309,8 +3312,6 @@ describe('a link made again in a worktree while it is being removed', () => {
 
   it('removes its own entry in the repository’s worktrees folder and no other, none git would prune either', async () => {
     const { item, tree } = worktree('j9')
-    const entryOf = (dir: string) =>
-      path.resolve(dir, /^gitdir: (.+)$/m.exec(fs.readFileSync(path.join(dir, '.git'), 'utf8'))![1]!.trim())
     const own = entryOf(tree)
     // Another worktree, its folder deleted by hand: git lists it as one to prune.
     git('worktree', 'add', '-q', '-b', 'feat/j9-gone', wt('j9-gone'), 'main')
@@ -3325,6 +3326,127 @@ describe('a link made again in a worktree while it is being removed', () => {
       expect(worktreePaths()).not.toContain(tree)
     } finally {
       git('worktree', 'remove', wt('j9-gone'))
+    }
+  })
+
+  it('deletes nothing put in place of its entry as the worktree goes, and puts the worktree back', async () => {
+    const { item, tree, branch, sha } = worktree('k1')
+    const entry = entryOf(tree)
+    const target = canary('k1')
+    try {
+      const [r] = await asAgent([item], projectId, {
+        // The worktree's entry moved aside, and a folder of someone else's put in its place.
+        emptied: (_moved, at) => {
+          fs.renameSync(at, `${at}-aside`)
+          fs.renameSync(target, at)
+        },
+      })
+      expect(intact(entry, 'k1')).toBe(true)
+      expect(r).toMatchObject({ ok: false, outcome: 'failed', removed: [] })
+      expect(fs.existsSync(path.join(tree, '.git'))).toBe(true)
+      expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+    } finally {
+      if (fs.existsSync(`${entry}-aside`)) {
+        if (fs.existsSync(entry)) fs.renameSync(entry, target)
+        fs.renameSync(`${entry}-aside`, entry)
+      }
+    }
+  })
+
+  it('deletes no folder put in place of the worktree’s .git as it goes', async () => {
+    const { item, tree, branch, sha } = worktree('k2')
+    const target = canary('k2')
+    const aside = path.join(tmp, 'k2-dotgit')
+    let moved = ''
+    const [r] = await asAgent([item], projectId, {
+      // Its .git file moved out, and a folder of someone else's put in its place.
+      emptied: (at) => {
+        moved = at
+        fs.renameSync(path.join(at, '.git'), aside)
+        fs.renameSync(target, path.join(at, '.git'))
+      },
+    })
+    const there = [tree, moved].map((dir) => path.join(dir, '.git')).find((p) => fs.existsSync(p))
+    expect(there && intact(there, 'k2')).toBe(true)
+    expect(r).toMatchObject({ ok: false, outcome: 'failed', removed: [] })
+    expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+  })
+
+  it('stops when a folder being emptied turns into a link, and deletes nothing where it leads', async () => {
+    const { item, tree, branch, sha } = worktree('k3')
+    const names = ['a.js', 'b.js', 'c.js']
+    fs.mkdirSync(path.join(tree, 'node_modules'))
+    for (const name of names) fs.writeFileSync(path.join(tree, 'node_modules', name), 'ours')
+    // A folder of someone else's, holding the same names.
+    const target = path.join(tmp, 'canary-k3')
+    fs.mkdirSync(target)
+    for (const name of names) fs.writeFileSync(path.join(target, name), 'theirs')
+    let swapped = ''
+    try {
+      const [r] = await asAgent([item], projectId, {
+        deleting: (entry) => {
+          const dir = path.dirname(entry)
+          if (swapped || path.basename(dir) !== 'node_modules') return
+          // Just as its files are about to go, the folder turns into a link to that one.
+          swapped = dir
+          fs.renameSync(dir, `${dir}-aside`)
+          linkDir(target, dir)
+        },
+      })
+      expect(swapped).not.toBe('')
+      for (const name of names) expect(fs.readFileSync(path.join(target, name), 'utf8')).toBe('theirs')
+      expect(r).toMatchObject({ ok: false, outcome: 'failed', removed: [] })
+      expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+    } finally {
+      for (const link of [swapped, path.join(tree, 'node_modules')]) if (link && isLink(link)) unlinkDir(link)
+    }
+  })
+
+  it('refuses a worktree whose folder is a link before anything, and leaves the links where it leads', async () => {
+    const target = canary('k4')
+    const { item, tree, branch, sha } = worktree('k4')
+    // A copy of the worktree, holding a link of its own where git ignores one.
+    const decoy = path.join(tmp, 'decoy-k4')
+    fs.cpSync(tree, decoy, { recursive: true })
+    const theirs = path.join(decoy, 'node_modules')
+    linkDir(target, theirs)
+    const aside = `${tree}-aside`
+    fs.renameSync(tree, aside)
+    linkDir(decoy, tree)
+    try {
+      const [r] = await asAgent([item])
+      expect(isLink(theirs)).toBe(true)
+      expect(intact(target, 'k4')).toBe(true)
+      expect(r).toMatchObject({ ok: false, outcome: 'refused', removed: [], unlinked: [] })
+      expect(r!.reason).toContain('its folder is a link: no worktree is removed through one')
+      expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+    } finally {
+      if (isLink(tree)) unlinkDir(tree)
+      fs.renameSync(aside, tree)
+    }
+  })
+
+  it('deletes no folder put at the worktree’s path after it was checked, and puts that folder back', async () => {
+    const { item, tree, branch, sha } = worktree('k5')
+    const target = canary('k5')
+    const aside = `${tree}-aside`
+    try {
+      const [r] = await asAgent([item], projectId, {
+        // Checked, the worktree is moved aside and a folder of someone else's put at its path.
+        beforeRemoval: () => {
+          fs.renameSync(tree, aside)
+          fs.renameSync(target, tree)
+        },
+      })
+      expect(intact(tree, 'k5')).toBe(true)
+      expect(r).toMatchObject({ ok: false, outcome: 'failed', removed: [] })
+      expect(fs.existsSync(path.join(aside, '.git'))).toBe(true)
+      expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+    } finally {
+      if (fs.existsSync(aside)) {
+        if (fs.existsSync(tree)) fs.renameSync(tree, target)
+        fs.renameSync(aside, tree)
+      }
     }
   })
 })

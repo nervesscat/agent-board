@@ -284,6 +284,8 @@ async function deleteOne(
     // All of them are checked before any is removed: git refuses one with changes, and a refusal
     // half-way would leave the rest removed for nothing.
     for (const w of trees) {
+      // A folder that is a link leads to another one: nothing there is read or touched, its links neither.
+      if (await isLink(w.path)) return result(item, 'refused', linkedFolder(w.path))
       // A folder deleted by hand leaves git a worktree to prune (`git worktree prune`), not one to remove.
       if (!fs.existsSync(w.path))
         return result(item, 'refused', `${w.path} is gone: git worktree prune drops it`)
@@ -310,6 +312,15 @@ async function deleteOne(
           : result(item, 'refused', why)
       }
       await stopLinkPreviews(w.linkedPreviews, actor)
+      // A folder turned into a link since the check is not read through for links either.
+      if (await isLink(w.path))
+        return removed.length
+          ? result(item, 'failed', `${linkedFolder(w.path)}; ${b.name} is kept`, {
+              removed,
+              unlinked,
+              restore,
+            })
+          : result(item, 'refused', linkedFolder(w.path))
       // Looked for again: a link made since the check goes as a link too.
       const links = await linksOut(w.path)
       if (typeof links === 'string')
@@ -425,6 +436,16 @@ function reposSaid(worktreePath: string, repos: WorktreeRepo[]): string {
 }
 
 const fsSaid = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
+/** Whether the path is a link itself, on Windows a junction too: looked at without following it. */
+const isLink = (p: string) =>
+  fs.promises.lstat(p).then(
+    (stat) => stat.isSymbolicLink(),
+    () => false,
+  )
+/** Why a worktree whose folder is a link is not removed, as `removeWorktree` says it. */
+const linkedFolder = (worktreePath: string) =>
+  `${worktreePath}: its folder is a link: no worktree is removed through one`
 
 async function deleteLocal(
   item: DeleteItem,

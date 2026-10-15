@@ -638,25 +638,27 @@ export async function commitsBrought(
 
 /**
  * Removes a worktree: its folder, then its entry in the repository's `worktrees` folder, what `git
- * worktree remove` deletes, but never through a link. git is not asked to: on Windows it deletes
- * through a directory junction as through a folder, and one made again after the caller removed the
- * worktree's links (`worktreeLinks.ts`) would have it empty the folder the junction leads to, the main
- * checkout too. So the folder is first renamed out of the way, beside itself: a rename moves a link,
- * never what it leads to, and nothing a process makes at the old path afterwards is in it (Windows
- * renames no folder a process works in, which then fails here with nothing deleted). Then each entry is
- * looked at without following it and deleted (`removeFolder`): a link, a junction too, as the link
- * alone, a folder once it is empty, the worktree's `.git` last. A deletion that fails puts back at its
- * path what is left, a worktree git still knows. The entry goes once the folder is gone. Never forced,
- * as git would not: the worktree must be one of this repository's, not locked, without changes or
- * untracked files as it goes, and its folder no link itself. `hooks` are for tests alone.
+ * worktree remove` deletes, but never through a link, nor anything put in their place meanwhile. git
+ * is not asked to: on Windows it deletes through a directory junction as through a folder, and one
+ * made again after the caller removed the worktree's links (`worktreeLinks.ts`) would have it empty
+ * the folder the junction leads to, the main checkout too. So the worktree is checked as git checks
+ * one, and what it is made of is looked at without following it (`Look`): its folder, its `.git` file
+ * and its entry. The folder is then renamed out of the way, beside itself: a rename moves a link, never
+ * what it leads to, and nothing a process makes at the old path afterwards is in it (Windows renames
+ * no folder a process works in, which then fails here with nothing deleted). What the rename moved is
+ * checked again as that worktree (`checkMoved`) and emptied entry by entry, each deleted only while it
+ * is what was listed (`removeFolder`); then its entry goes, then its `.git`, then the folder, each
+ * looked at again just before. On a failure what was moved goes back to its path, while it is still
+ * that, and the branch is kept. Never forced, as git would not: the worktree must be one of this
+ * repository's, not locked, and without changes or untracked files as it goes. `hooks` are for tests.
  */
 export async function removeWorktree(
   repoPath: string,
   worktreePath: string,
   hooks: RemovalHooks = {},
 ): Promise<void> {
-  const entry = await worktreeEntry(repoPath, worktreePath)
-  if (fs.existsSync(path.join(entry, 'locked'))) throw new Error('it is locked')
+  const tree = await checkWorktree(repoPath, worktreePath)
+  if (fs.existsSync(path.join(tree.entry, 'locked'))) throw new Error('it is locked')
   const changes = await worktreeChanges(worktreePath)
   if (changes.length)
     throw new Error(
@@ -671,22 +673,22 @@ export async function removeWorktree(
   } catch (err) {
     throw new Error(`it could not be moved out of the way to be removed: ${messageOf(err)}`)
   }
+  // Whatever the rename moved goes back on a failure, and only while it is still that.
+  const movedLook = await lookAt(moved).catch(() => null)
   try {
     await hooks.renamed?.(worktreePath, moved)
-    // Looked at again as it is now: a link put in its place meanwhile is no folder to empty.
-    if (!(await fs.promises.lstat(moved)).isDirectory())
-      throw new Error('its folder turned into a link as it was being removed')
-    await removeFolder(moved, '.git')
+    await checkMoved(moved, tree)
+    await removeFolder(moved, tree.looks.folder, hooks, '.git')
+    await hooks.emptied?.(moved, tree.entry)
+    // Its .git still the file checked, so that a failure from here puts back a worktree git knows.
+    await mustBe(path.join(moved, '.git'), tree.looks.dotGit)
+    await removeFolder(tree.entry, tree.looks.entry, hooks)
+    await removeEntry(path.join(moved, '.git'), tree.looks.dotGit, hooks)
+    await mustBe(moved, tree.looks.folder)
+    await fs.promises.rmdir(moved)
   } catch (err) {
-    const back = await fs.promises.rename(moved, worktreePath).then(
-      () => '',
-      () => `; what is left of it is at ${moved}`,
-    )
-    throw new Error(`${messageOf(err)}${back}`)
+    throw new Error(`${messageOf(err)}${await putBack(moved, movedLook, worktreePath)}`)
   }
-  await removeFolder(entry).catch((err: unknown) => {
-    throw new Error(`its folder is gone, but not its entry ${entry}: ${messageOf(err)}`)
-  })
 }
 
 /** Moments of a worktree's removal a test acts at, as another process could meanwhile. */
@@ -695,20 +697,42 @@ export interface RemovalHooks {
   beforeRemoval?: (worktreePath: string) => Promise<void> | void
   /** Its folder is moved out of the way, to `moved`; nothing in it is deleted yet. */
   renamed?: (worktreePath: string, moved: string) => Promise<void> | void
+  /** An entry of a folder being emptied is about to go, once it is looked at again. */
+  deleting?: (entry: string) => Promise<void> | void
+  /** All in the moved folder but its `.git` is gone; its entry (`entry`) and its `.git` go next. */
+  emptied?: (moved: string, entry: string) => Promise<void> | void
 }
 
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
+/** A path as compared: slashes one way, no trailing one, and in any case where Windows ignores it. */
+const keyOf = (p: string) => {
+  const s = path.resolve(p).replace(/\\/g, '/').replace(/\/+$/, '')
+  return process.platform === 'win32' ? s.toLowerCase() : s
+}
+
+/** A worktree as checked before it is removed: its entry, and what it was made of then. */
+interface CheckedWorktree {
+  /** Its entry in the repository's `worktrees` folder. */
+  entry: string
+  /** Where the entry said its `.git` is. */
+  back: string
+  /** Its folder, its `.git` file and its entry, as they were looked at. */
+  looks: { folder: Look; dotGit: Look; entry: Look }
+}
+
 /**
- * The worktree's entry in its repository's git folder (`.git/worktrees/<name>`), checked as git checks
- * one before it removes it: the worktree's `.git` is a file that points there, the entry is one of the
- * `worktrees` of `repoPath`'s repository, and it points back at that `.git`. Throws otherwise: for the
- * main checkout (its `.git` a folder), another repository's worktree, a folder that is no worktree.
+ * The worktree, checked as git checks one before it removes it: its folder is no link, its `.git` is a
+ * file that points at an entry of the `worktrees` of `repoPath`'s repository, and the entry points back
+ * at that `.git`. Throws otherwise: for the main checkout (its `.git` a folder), another repository's
+ * worktree, a folder that is no worktree.
  */
-async function worktreeEntry(repoPath: string, worktreePath: string): Promise<string> {
-  const dotGit = path.join(worktreePath, '.git')
-  if (!(await fs.promises.lstat(dotGit).catch(() => null))?.isFile())
-    throw new Error('it has no .git file: it is no worktree of a repository')
+async function checkWorktree(repoPath: string, worktreePath: string): Promise<CheckedWorktree> {
+  const folder = await lookAt(worktreePath)
+  if (folder?.kind === 'link') throw new Error('its folder is a link: no worktree is removed through one')
+  if (folder?.kind !== 'folder') throw new Error('its folder is not there')
+  const dotGit = await lookAt(path.join(worktreePath, '.git'))
+  if (dotGit?.kind !== 'file') throw new Error('it has no .git file: it is no worktree of a repository')
   const [entry, ours] = await Promise.all([gitDirOf(worktreePath), gitDirOf(repoPath)])
   if (!entry || !ours) throw new Error('it is no worktree of this repository')
   const common = await commonDir(entry)
@@ -716,13 +740,48 @@ async function worktreeEntry(repoPath: string, worktreePath: string): Promise<st
     (await sameReal(path.dirname(entry), path.join(common, 'worktrees'))) &&
     (await sameReal(common, await commonDir(ours)))
   if (!mine) throw new Error('it is no worktree of this repository')
-  const back = await fs.promises.readFile(path.join(entry, 'gitdir'), 'utf8').then(
-    // Relative to the entry when git wrote it so (`worktree.useRelativePaths`).
-    (text) => path.resolve(entry, text.trim()),
-    () => null,
+  const back = await pointedAt(entry)
+  if (!back || !(await sameReal(back, path.join(worktreePath, '.git'))))
+    throw new Error(`its entry ${entry} points elsewhere`)
+  const entryLook = await lookAt(entry)
+  if (entryLook?.kind !== 'folder') throw new Error(`its entry ${entry} is no folder`)
+  return { entry, back, looks: { folder, dotGit, entry: entryLook } }
+}
+
+/**
+ * What the rename moved is the worktree checked: the very folder, with the very `.git` file pointing at
+ * the very entry, which still points back where it did, and the worktree is not locked meanwhile.
+ */
+async function checkMoved(moved: string, tree: CheckedWorktree): Promise<void> {
+  await mustBe(moved, tree.looks.folder)
+  await mustBe(path.join(moved, '.git'), tree.looks.dotGit)
+  const entry = await gitDirOf(moved)
+  if (!entry || keyOf(entry) !== keyOf(tree.entry)) throw new Error('its .git points at another entry now')
+  await mustBe(tree.entry, tree.looks.entry)
+  const back = await pointedAt(tree.entry)
+  if (!back || keyOf(back) !== keyOf(tree.back))
+    throw new Error(`its entry ${tree.entry} points elsewhere now`)
+  if (fs.existsSync(path.join(tree.entry, 'locked'))) throw new Error('it is locked')
+}
+
+/** Where a worktree's entry says its `.git` is (its `gitdir`, relative to the entry when git wrote it so). */
+async function pointedAt(entry: string): Promise<string | null> {
+  const text = await fs.promises.readFile(path.join(entry, 'gitdir'), 'utf8').catch(() => '')
+  return text.trim() ? path.resolve(entry, text.trim()) : null
+}
+
+/**
+ * Puts back at `to` what the rename moved to `from` (`moved`), while it is still that; else says what
+ * became of it, left as it is.
+ */
+async function putBack(from: string, moved: Look | null, to: string): Promise<string> {
+  const now = await lookAt(from).catch(() => null)
+  if (!now) return `; ${from} is gone`
+  if (!moved || !sameLook(now, moved)) return `; what is at ${from} is not what was moved there, and stays`
+  return fs.promises.rename(from, to).then(
+    () => '',
+    () => `; what is left of it is at ${from}`,
   )
-  if (!back || !(await sameReal(back, dotGit))) throw new Error(`its entry ${entry} points elsewhere`)
-  return entry
 }
 
 /** The repository's own git folder, which a worktree's (`gitDir`) shares (its `commondir`); or itself. */
@@ -734,68 +793,96 @@ async function commonDir(gitDir: string): Promise<string> {
 /** Whether two paths are the same file or folder, every link on the way resolved. */
 async function sameReal(a: string, b: string): Promise<boolean> {
   const [x, y] = await Promise.all([a, b].map((p) => fs.promises.realpath(p).catch(() => null)))
-  const key = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
-  return !!x && !!y && key(x) === key(y)
+  return !!x && !!y && keyOf(x) === keyOf(y)
 }
 
-/** How many entries of a folder are deleted at once. */
+/** What a path was when it was looked at without following it: its device, its file id, its kind. */
+interface Look {
+  dev: bigint
+  ino: bigint
+  kind: 'link' | 'folder' | 'file'
+}
+
+/** `path` looked at without following it (`lstat`, on Windows a junction a link too); null when gone. */
+async function lookAt(p: string): Promise<Look | null> {
+  const stat = await fs.promises.lstat(p, { bigint: true }).catch((err: NodeJS.ErrnoException) => {
+    if (err.code === 'ENOENT') return null
+    throw err
+  })
+  if (!stat) return null
+  const kind = stat.isSymbolicLink() ? 'link' : stat.isDirectory() ? 'folder' : 'file'
+  return { dev: stat.dev, ino: stat.ino, kind }
+}
+
+const sameLook = (a: Look | null, b: Look) => !!a && a.dev === b.dev && a.ino === b.ino && a.kind === b.kind
+
+/** Throws unless `p` is still what `look` saw. */
+async function mustBe(p: string, look: Look): Promise<void> {
+  if (!sameLook(await lookAt(p), look)) throw new Error(`${p} is not what was checked any more`)
+}
+
+/**
+ * Whether `p` is still what `look` saw, looked at again just before it is acted on: false when it is
+ * gone, which leaves nothing to do; throws when something else is there now.
+ */
+async function stillThere(p: string, look: Look): Promise<boolean> {
+  const now = await lookAt(p)
+  if (!now) return false
+  if (!sameLook(now, look)) throw new Error(`${p} changed as it was being removed`)
+  return true
+}
+
+/** How many entries of a folder are looked at, or deleted, at once. */
 const AT_ONCE = 64
 
 /**
- * Deletes the folder `dir` and all it holds, never going through a link: each entry is looked at
- * without following it (`lstat`), and a link, on Windows a junction too, goes as the link alone,
- * wherever it leads; a file is deleted; a folder is emptied the same way, then removed. A folder is
- * looked at again once read, and before each batch of its entries goes: one that turned into a link or
- * into another folder meanwhile is not emptied. Deletions go by path, so a folder swapped for a link
- * between that look and the deletion of one of its entries would still mislead that one: a process
- * would have to find the renamed folder and swap one inside it in that moment. `last`, an entry of
- * `dir`, goes after all the others.
+ * Deletes what the folder `dir` holds, then the folder, never going through a link nor deleting what
+ * was not there when it was listed. `seen` is what `dir` was when it was looked at: it is looked at
+ * again before it is read, once its entries are looked at, and before it is removed. Each entry is
+ * looked at as it is listed and again just before it goes, and goes only while it is the same (device,
+ * file id, kind): a link, on Windows a junction too, as the link alone, wherever it leads; a file; a
+ * folder, emptied the same way. One that is something else now stops the removal; one gone is done.
+ * `keep` names an entry left there, and the folder with it, for the caller. A deletion still goes by
+ * path: a folder on its way swapped for a link between the last look at an entry and its deletion
+ * would mislead that one deletion.
  */
-async function removeFolder(dir: string, last?: string): Promise<void> {
-  const seen = await fs.promises.lstat(dir, { bigint: true })
-  if (!seen.isDirectory()) throw new Error(`${dir} turned into a link as it was being removed`)
-  const names = await fs.promises.readdir(dir)
-  const same = async () => {
-    const now = await fs.promises.lstat(dir, { bigint: true })
-    if (!now.isDirectory() || now.ino !== seen.ino || now.dev !== seen.dev)
-      throw new Error(`${dir} changed as it was being removed`)
+async function removeFolder(dir: string, seen: Look, hooks: RemovalHooks, keep?: string): Promise<void> {
+  if (!(await stillThere(dir, seen))) return
+  const names = (await fs.promises.readdir(dir)).filter((name) => name !== keep)
+  const listed: [string, Look][] = []
+  for (let i = 0; i < names.length; i += AT_ONCE) {
+    const batch = names.slice(i, i + AT_ONCE)
+    const looks = await Promise.all(batch.map((name) => lookAt(path.join(dir, name))))
+    looks.forEach((look, j) => look && listed.push([batch[j]!, look]))
   }
-  const first = names.filter((name) => name !== last)
-  for (let i = 0; i < first.length; i += AT_ONCE) {
-    await same()
+  // What was listed and looked at is this folder's, not one put in its place meanwhile.
+  await mustBe(dir, seen)
+  for (let i = 0; i < listed.length; i += AT_ONCE) {
     // Each batch settles whole before a failure is told: nothing of it still runs once the caller
     // puts the folder back.
     const done = await Promise.allSettled(
-      first.slice(i, i + AT_ONCE).map((name) => removeEntry(path.join(dir, name))),
+      listed.slice(i, i + AT_ONCE).map(([name, look]) => removeEntry(path.join(dir, name), look, hooks)),
     )
     const failed = done.find((d) => d.status === 'rejected')
     if (failed) throw failed.reason
   }
-  if (last !== undefined && names.includes(last)) {
-    await same()
-    await removeEntry(path.join(dir, last))
-  }
-  await fs.promises.rmdir(dir)
+  if (keep === undefined && (await stillThere(dir, seen))) await fs.promises.rmdir(dir)
 }
 
-/** An entry of a folder being removed, looked at without following it; one gone already is done. */
-async function removeEntry(entry: string): Promise<void> {
-  const stat = await fs.promises.lstat(entry).catch((err: NodeJS.ErrnoException) => {
-    if (err.code === 'ENOENT') return null
-    throw err
-  })
-  if (!stat) return
-  if (stat.isSymbolicLink()) {
-    // The link alone: `unlink`, or `rmdir` where the system wants that for a link to a folder.
-    try {
-      await fs.promises.unlink(entry)
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code
-      if (code !== 'EPERM' && code !== 'EISDIR') throw err
-      await fs.promises.rmdir(entry)
-    }
-  } else if (stat.isDirectory()) await removeFolder(entry)
-  else await fs.promises.unlink(entry)
+/** An entry of a folder being removed, deleted only while it is what `look` saw as it was listed. */
+async function removeEntry(entry: string, look: Look, hooks: RemovalHooks): Promise<void> {
+  await hooks.deleting?.(entry)
+  if (look.kind === 'folder') return removeFolder(entry, look, hooks)
+  if (!(await stillThere(entry, look))) return
+  if (look.kind === 'file') return fs.promises.unlink(entry)
+  // The link alone: `unlink`, or `rmdir` where the system wants that for a link to a folder.
+  try {
+    await fs.promises.unlink(entry)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code !== 'EPERM' && code !== 'EISDIR') throw err
+    if (await stillThere(entry, look)) await fs.promises.rmdir(entry)
+  }
 }
 
 /**
