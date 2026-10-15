@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ExternalLink, GitMerge, MessageSquare, PauseCircle, PlayCircle, RefreshCw } from 'lucide-react'
+import { ExternalLink, GitMerge, PauseCircle, PlayCircle, RefreshCw, Ticket } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -8,9 +8,8 @@ import { z } from 'zod'
 import { Empty } from '#/components/Empty'
 import { PrAlert, PrState } from '#/components/PrState'
 import { ReviewResultDialog, verdictTone } from '#/components/ReviewResult'
-import { Thread } from '#/components/Thread'
 import { Badge } from '#/components/ui/badge'
-import { Button } from '#/components/ui/button'
+import { Button, buttonVariants } from '#/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -34,8 +33,8 @@ type Filter = (typeof FILTER_KEYS)[number]
 
 // ?result=<id> opens that review result over the queue (a verdict on a card links there); ?filter= is
 // the filter picked (none, or one no longer offered such as an old `all`: the one this browser
-// remembers, else To review). A link lands on a PR's card as #pr-<id>, on a reply in its thread as
-// #pr-<id>-reply-<id>, on a reply to the review result as #reply-<id> (src/lib/reveal.ts).
+// remembers, else To review). A link lands on a PR's card as #pr-<id>, on a reply to the review result
+// as #reply-<id> (src/lib/reveal.ts).
 export const Route = createFileRoute('/projects/$id/prs')({
   component: PrQueue,
   validateSearch: z.object({
@@ -142,7 +141,7 @@ function PrQueue() {
           <p className="text-sm text-muted-foreground">
             Pull requests by others that you review, and your own, across every repo of the project, by where
             their reviews stand; merged ones stay under Done for two weeks. Read-only against GitHub; holds
-            and threads live here.
+            live here, and each PR's ticket opens from its card.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
@@ -243,15 +242,8 @@ function MergeAfter({ pr }: { pr: PrRow }) {
 
 function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: string | null }) {
   const qc = useQueryClient()
-  const [thread, setThread] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
   const [note, setNote] = useState(pr.holdNote)
-  // A link to a reply in its thread (#pr-<id>-reply-<id>) opens the thread, once per link.
-  const anchor = useAnchor()
-  const opensFor = anchor?.holder === `pr-${pr.id}` ? anchor.hash : null
-  useEffect(() => {
-    if (opensFor) setThread(true)
-  }, [opensFor])
   const hold = useMutation({
     mutationFn: (v: { hold: boolean; holdNote: string }) => patch<PrRow>(`/api/prs/${pr.id}`, v),
     onSuccess: () => {
@@ -318,9 +310,15 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
               </Link>
             </Tip>
           )}
-          <Button variant="ghost" size="sm" aria-expanded={thread} onClick={() => setThread((v) => !v)}>
-            <MessageSquare data-icon="inline-start" /> thread
-          </Button>
+          {pr.ticket && (
+            <Link
+              to="/projects/$id/features/$ticketId"
+              params={{ id: projectId, ticketId: String(pr.ticket.id) }}
+              className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+            >
+              <Ticket data-icon="inline-start" /> Open ticket
+            </Link>
+          )}
           {pr.hold ? (
             <Button variant="ghost" size="sm" onClick={() => hold.mutate({ hold: false, holdNote: '' })}>
               <PlayCircle data-icon="inline-start" /> release
@@ -335,11 +333,6 @@ function PrCard({ pr, projectId, repo }: { pr: PrRow; projectId: string; repo: s
           )}
         </div>
       </div>
-      {thread && (
-        <div className="mt-3 border-t pt-3">
-          <Thread parentType="pr" parentId={pr.id} compact />
-        </div>
-      )}
       <Dialog open={holdOpen} onOpenChange={setHoldOpen}>
         <DialogContent>
           <DialogHeader>

@@ -1451,8 +1451,8 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
     .where(eq(schema.reviewResults.projectId, projectId))
     .all()
 
-  // owners: whose subject it is (a ticket's assignee and opener, a post's author). A PR's own ticket is its
-  // PR's author's, as the PR's thread was.
+  // owners: whose subject it is (a ticket's assignee and opener, a post's author). A PR's own ticket is
+  // its PR's author's.
   const authors = new Map(
     db
       .select({ id: schema.prs.id, author: schema.prs.author })
