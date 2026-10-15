@@ -81,6 +81,27 @@ test('a PR of the queue gets its own ticket at the refresh, and its card opens t
   await expect(page.locator('svg.lucide-trash-2')).toHaveCount(1)
 })
 
+test("a PR's ticket page has no stage navigation: it is in no feature column", async ({
+  page,
+  project,
+  human,
+  api,
+}) => {
+  const pr = seedPr(project, 'Not in a column')
+  const { ticket } = await refreshedRow(human, project, pr)
+  const feature = await api.ticket({ title: 'A feature in To do', status: 'todo' })
+
+  // The control: a feature ticket's page counts it in its column.
+  await page.goto(`/projects/${project.id}/features/${feature.id}`)
+  await expect(page.getByText(/\d+ of \d+ in To do/)).toBeVisible()
+
+  await page.goto(`/projects/${project.id}/features/${ticket!.id}`)
+  await expect(
+    page.getByRole('heading', { level: 1, name: `PR #${pr.number}: Not in a column` }),
+  ).toBeVisible()
+  await expect(page.getByText(/\d+ of \d+ in /)).toHaveCount(0)
+})
+
 test("a PR's ticket is in To do, and on no features view: not the board, the list or the archive", async ({
   page,
   project,

@@ -304,7 +304,7 @@ function TicketPage() {
         <ChevronRight className="size-3.5" />
         <span className="text-foreground">#{t.id}</span>
         {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
-        {!t.parentId && board && <StageNav key={t.id} projectId={id} tickets={board} t={t} />}
+        {!t.parentId && !t.prId && board && <StageNav key={t.id} projectId={id} tickets={board} t={t} />}
       </nav>
 
       {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
