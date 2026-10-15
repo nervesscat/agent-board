@@ -11,8 +11,8 @@ import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
 import { previewState, previewUrl, type PreviewState } from './preview'
-import { cancelSupersededPrTickets } from './prTickets'
-import { prForTicket, refreshPrsInBackground, withMergeCheck } from './prs'
+import { cancelSupersededPrTickets, prTicketStage } from './prTickets'
+import { prForTicket, prStatus, refreshPrsInBackground, withMergeCheck } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
 import { reportDueFor } from './reportDue'
@@ -740,12 +740,9 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
 /** Lanes go with the ticket unless `keepLanes`, which moves them up to the ticket's own parent. */
 export function deleteTicket(id: number, actor: string, opts: { keepLanes?: boolean } = {}) {
   const t = getTicket(id)
-  // A PR's ticket stays while the PR is in the queue: the next refresh would open it again.
-  if (t.prId)
-    throw new HttpError(
-      409,
-      `PR #${t.prNumber}'s ticket is kept while its PR is in the queue: cancel or archive it instead`,
-    )
+  // A PR's ticket is kept, not deleted: while its PR is open the next refresh would open it again, and the
+  // human archives it like any finished ticket.
+  if (t.prId) throw new HttpError(409, `PR #${t.prNumber}'s ticket cannot be deleted: archive it instead`)
   // Its workspaces go with it (and its lanes', unless they are kept).
   const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, t.projectId)).all()
   const gone = [id, ...(opts.keepLanes ? [] : laneTree(all, id).map((l) => l.id))]
@@ -1725,8 +1722,8 @@ export function askDecision(
 /**
  * The human's answer to a decision: the option picked, and an optional note. It is posted as a reply
  * under the decision too, so the agent that asked finds it in its threads. A blocked ticket goes back
- * to the project's first active stage once no decision on it is left open. Deciding again changes
- * the answer.
+ * to the project's first active stage once no decision on it is left open, except a PR's ticket, which
+ * goes to the stage its PR's status gives. Deciding again changes the answer.
  */
 export function decide(postId: number, option: number, note: string, actor: string) {
   const post = getPost(postId)
@@ -1755,12 +1752,19 @@ export function decide(postId: number, option: number, note: string, actor: stri
       ),
     )
     .get()
-  const active = firstOfKind(stages, 'active')
-  if (!stillOpen && active && kindOf(stages, ticket.status) === 'blocked')
-    db.update(schema.tickets)
-      .set({ status: active.key, ...startedPatch(stages, ticket.status, active.key, ticket.startedAt) })
-      .where(eq(schema.tickets.id, ticket.id))
-      .run()
+  if (!stillOpen && kindOf(stages, ticket.status) === 'blocked') {
+    // A PR's ticket goes to the stage its PR's status gives. Otherwise (any other ticket, or the PR's stage or
+    // row missing), to the first active stage.
+    const pr = ticket.prId
+      ? db.select().from(schema.prs).where(eq(schema.prs.id, ticket.prId)).get()
+      : undefined
+    const back = (pr && prTicketStage(stages, prStatus(pr))) ?? firstOfKind(stages, 'active')
+    if (back && back.key !== ticket.status)
+      db.update(schema.tickets)
+        .set({ status: back.key, ...startedPatch(stages, ticket.status, back.key, ticket.startedAt) })
+        .where(eq(schema.tickets.id, ticket.id))
+        .run()
+  }
   touch(ticket.id)
   logActivity({
     projectId: ticket.projectId,

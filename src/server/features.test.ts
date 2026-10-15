@@ -850,12 +850,140 @@ describe('PR tickets', () => {
     expect(refusal).toBeInstanceOf(HttpError)
     expect(refusal).toMatchObject({
       status: 409,
-      message: "PR #12's ticket is kept while its PR is in the queue: cancel or archive it instead",
+      message: "PR #12's ticket cannot be deleted: archive it instead",
     })
     expect(features.getTicket(own.id).prId).toBe(pr.id)
     // The PR's refresh keeps the one ticket it has: it does not open another.
     prTickets.openPrTickets(pid, () => 'pending')
     expect(db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).all()).toHaveLength(1)
+  })
+
+  it('goes back to To do when a decision on it is answered, not to In progress', async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket decide' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/pr-ticket-decide' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 13,
+        title: 'thirteen',
+        url: 'https://github.com/acme/app/pull/13',
+        author: 'ana',
+        headRef: 'feat/13',
+        baseRef: 'main',
+        headSha: 'abc13def0123',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(pid, () => 'pending')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    expect(own.status).toBe('todo')
+
+    // The agent asks the human: the ticket is blocked until the answer.
+    const q = features.askDecision(
+      own.id,
+      { body: 'which way?', options: [{ label: 'A' }, { label: 'B' }] },
+      'claude',
+    )
+    expect(features.getTicket(own.id).status).toBe('blocked')
+    features.decide(q.id, 0, '', 'enrique')
+    expect(features.getTicket(own.id).status).toBe('todo')
+  })
+
+  it("stays in Blocked when a decision on an on-hold PR's ticket is answered", async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket decide hold' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/pr-ticket-decide-hold' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 14,
+        title: 'fourteen',
+        url: 'https://github.com/acme/app/pull/14',
+        author: 'ana',
+        headRef: 'feat/14',
+        baseRef: 'main',
+        headSha: 'abc14def0123',
+        hold: true,
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(pid, () => 'on_hold')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    expect(own.status).toBe('blocked')
+
+    const q = features.askDecision(
+      own.id,
+      { body: 'hold or drop?', options: [{ label: 'Hold' }, { label: 'Drop' }] },
+      'claude',
+    )
+    features.decide(q.id, 1, '', 'enrique')
+    expect(features.getTicket(own.id).status).toBe('blocked')
+  })
+
+  it("falls back to In progress when the project has no stage for its PR's status", async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const stagesMod = await import('./stages')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket decide gone' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/pr-ticket-decide-gone' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 15,
+        title: 'fifteen',
+        url: 'https://github.com/acme/app/pull/15',
+        author: 'ana',
+        headRef: 'feat/15',
+        baseRef: 'main',
+        headSha: 'abc15def0123',
+        reviewStage: 'reviewed',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(pid, () => 'reviewed')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    expect(own.status).toBe('review')
+    // The review stage becomes a done stage: no stage is left of the kind the PR's status gives.
+    const review = stagesMod.listStages(pid).find((s) => s.kind === 'review')!
+    stagesMod.updateStage(pid, review.id, { kind: 'done' }, 'enrique')
+
+    const q = features.askDecision(
+      own.id,
+      { body: 'which way?', options: [{ label: 'A' }, { label: 'B' }] },
+      'claude',
+    )
+    features.decide(q.id, 0, '', 'enrique')
+    expect(features.getTicket(own.id).status).toBe('in_progress')
   })
 })
 
