@@ -186,10 +186,10 @@ function Cleanup() {
             Done and cancelled tickets that still have worktrees, branches, registered workspaces or a running
             preview, each branch checked against where its work should have landed: a lane's parent branch,
             then the parent's base. Delete what landed from here, after a confirmation; the board checks each
-            item again first and never forces anything. Agents may delete local branches and worktrees too,
-            through the same checks (<span className="font-mono">cleanup_delete</span>, or{' '}
-            <span className="font-mono">/board cleanup</span> when you ask); deleting branches on origin stays
-            yours.
+            item again first and never forces anything. Agents may delete local branches that landed, through
+            the same checks (<span className="font-mono">cleanup_delete</span>, or{' '}
+            <span className="font-mono">/board cleanup</span> when you ask); removing worktrees and deleting
+            branches on origin stay yours, from this page.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>

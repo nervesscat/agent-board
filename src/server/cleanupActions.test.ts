@@ -2082,50 +2082,32 @@ describe('the route', () => {
     expect(logged(t.id)).toEqual([['enrique', `deleted the branch feat/b11 @ ${sha} of #${t.id}`]])
   })
 
-  it('lets an agent delete landed local branches and worktrees, each checked as for the human, under its name', async () => {
-    const shas = land(['feat/g1', 'feat/g1w', 'feat/g1m', 'feat/g1mw'])
+  it('lets an agent delete landed local branches, each checked as for the human, under its name', async () => {
+    const shas = land(['feat/g1', 'feat/g1m'])
     const unique = land(['feat/g1u'], { unique: true })['feat/g1u']!
-    git('push', '-q', 'origin', 'feat/g1', 'feat/g1w')
-    git('worktree', 'add', '-q', wt('g1w'), 'feat/g1w')
-    git('worktree', 'add', '-q', wt('g1mw'), 'feat/g1mw')
+    git('push', '-q', 'origin', 'feat/g1')
     const t = done('g1', 'feat/g1')
-    const tw = done('g1w', 'feat/g1w')
-    features.addWorkspace(tw.id, { name: 'wt', branch: 'feat/g1w', path: wt('g1w') }, 'claude')
     const tm = done('g1m', 'feat/g1m')
-    const tmw = done('g1mw', 'feat/g1mw')
     const tu = done('g1u', 'feat/g1u')
     const onMain = done('g1 on main', 'main', { baseBranch: 'main' })
-    const listed = (await branchOf(tw.id, 'feat/g1w'))!.worktrees.map((w) => w.path)
     const main = git('rev-parse', 'main')
 
     const res = await call('agent:codex', {
       items: [
         { ticketId: t.id, branch: 'feat/g1', kind: 'local', sha: shas['feat/g1'] },
-        { ticketId: tw.id, branch: 'feat/g1w', kind: 'worktrees', sha: shas['feat/g1w'], worktrees: listed },
-        // Not the commits they are at: they moved since the agent looked.
+        // Not the commit it is at: it moved since the agent looked.
         { ticketId: tm.id, branch: 'feat/g1m', kind: 'local', sha: shas['feat/g1'] },
-        {
-          ticketId: tmw.id,
-          branch: 'feat/g1mw',
-          kind: 'worktrees',
-          sha: shas['feat/g1'],
-          worktrees: [wt('g1mw')],
-        },
         { ticketId: tu.id, branch: 'feat/g1u', kind: 'local', sha: unique },
         { ticketId: onMain.id, branch: 'main', kind: 'local', sha: main },
-        { ticketId: onMain.id, branch: 'main', kind: 'worktrees', sha: main, worktrees: [] },
       ],
     })
     expect(res.status).toBe(200)
     const results = (await res.json()) as DeleteResult[]
-    expect(results.map((r) => [r.branch, r.kind, r.outcome])).toEqual([
-      ['feat/g1', 'local', 'deleted'],
-      ['feat/g1w', 'worktrees', 'deleted'],
-      ['feat/g1m', 'local', 'refused'],
-      ['feat/g1mw', 'worktrees', 'refused'],
-      ['feat/g1u', 'local', 'refused'],
-      ['main', 'local', 'refused'],
-      ['main', 'worktrees', 'refused'],
+    expect(results.map((r) => [r.branch, r.outcome])).toEqual([
+      ['feat/g1', 'deleted'],
+      ['feat/g1m', 'refused'],
+      ['feat/g1u', 'refused'],
+      ['main', 'refused'],
     ])
     expect(results[0]).toMatchObject({
       ok: true,
@@ -2133,45 +2115,55 @@ describe('the route', () => {
       removed: [],
       restore: [`git branch feat/g1 ${shas['feat/g1']}`],
     })
-    expect(results[1]!.removed.map((p) => path.resolve(p))).toEqual([wt('g1w')])
-    expect(results[1]!.restore[0]).toBe(`git branch feat/g1w ${shas['feat/g1w']}`)
-    expect(results[1]!.restore[1]).toMatch(/^git worktree add \S+agent-board-g1w feat\/g1w$/)
-    expect(results[2]!.reason).toBe(`feat/g1m moved since: now at ${shas['feat/g1m']!.slice(0, 7)}`)
-    expect(results[3]!.reason).toBe(`feat/g1mw moved since: now at ${shas['feat/g1mw']!.slice(0, 7)}`)
-    expect(results[4]!.reason).toMatch(/1 commit of its own/)
-    expect(results[5]!.reason).toMatch(/base branch/)
-    expect(results[6]!.reason).toMatch(/base branch/)
+    expect(results[1]!.reason).toBe(`feat/g1m moved since: now at ${shas['feat/g1m']!.slice(0, 7)}`)
+    expect(results[2]!.reason).toMatch(/1 commit of its own/)
+    expect(results[3]!.reason).toMatch(/base branch/)
 
-    // Here the landed ones are gone and the rest where they were; origin's copies did not move.
+    // Here the landed one is gone and the rest where they were; origin's copy did not move.
     expect(hasRef(repo, 'refs/heads/feat/g1')).toBe(false)
-    expect(hasRef(repo, 'refs/heads/feat/g1w')).toBe(false)
-    expect(fs.existsSync(wt('g1w'))).toBe(false)
-    expect(worktreePaths()).not.toContain(wt('g1w'))
     expect(git('rev-parse', 'refs/heads/feat/g1m')).toBe(shas['feat/g1m'])
-    expect(git('rev-parse', 'refs/heads/feat/g1mw')).toBe(shas['feat/g1mw'])
-    expect(worktreePaths()).toContain(wt('g1mw'))
     expect(git('rev-parse', 'refs/heads/feat/g1u')).toBe(unique)
     expect(git('rev-parse', 'refs/heads/main')).toBe(main)
-    for (const b of ['feat/g1', 'feat/g1w']) {
-      expect(gitIn(origin)('rev-parse', `refs/heads/${b}`)).toBe(shas[b])
-      expect(git('rev-parse', `refs/remotes/origin/${b}`)).toBe(shas[b])
-    }
-    // Logged on each ticket under the agent's name, the workspace at the removed worktree closed too.
+    expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g1')).toBe(shas['feat/g1'])
+    expect(git('rev-parse', 'refs/remotes/origin/feat/g1')).toBe(shas['feat/g1'])
+    // Logged on its ticket under the agent's name.
     expect(logged(t.id)).toEqual([['codex', `deleted the branch feat/g1 @ ${shas['feat/g1']} of #${t.id}`]])
-    expect(logged(tw.id)).toEqual([
-      [
-        'codex',
-        expect.stringMatching(
-          new RegExp(`^removed the worktree .+agent-board-g1w \\(feat/g1w\\) of #${tw.id}$`),
-        ),
-      ],
-      ['codex', `deleted the branch feat/g1w @ ${shas['feat/g1w']} of #${tw.id}`],
-    ])
-    expect(logged(tw.id, 'workspace')).toContainEqual(['codex', `closed workspace wt on #${tw.id}`])
+    for (const id of [tm.id, tu.id, onMain.id]) expect(logged(id)).toEqual([])
+  })
+
+  it('refuses an agent’s request with a worktree in it whole, and removes nothing', async () => {
+    const shas = land(['feat/g8', 'feat/g8w'])
+    git('worktree', 'add', '-q', wt('g8w'), 'feat/g8w')
+    const t = done('g8', 'feat/g8')
+    const tw = done('g8w', 'feat/g8w')
+    features.addWorkspace(tw.id, { name: 'wt', branch: 'feat/g8w', path: wt('g8w') }, 'claude')
+    const files = fs.readdirSync(wt('g8w')).sort()
+    const listed = (await branchOf(tw.id, 'feat/g8w'))!.worktrees.map((w) => w.path)
+    const local = { ticketId: t.id, branch: 'feat/g8', kind: 'local', sha: shas['feat/g8'] }
+    const trees = {
+      ticketId: tw.id,
+      branch: 'feat/g8w',
+      kind: 'worktrees',
+      sha: shas['feat/g8w'],
+      worktrees: listed,
+    }
+    // Its own worktree with the main checkout and a folder out of the repository named beside it.
+    const named = { ...trees, worktrees: [...listed, repo, tmp] }
+    for (const items of [[trees], [local, trees], [named, local]]) {
+      const res = await call('agent:codex', { items })
+      expect(res.status, items.map((i) => i.kind).join(', ')).toBe(403)
+      expect(await res.json()).toEqual({ error: 'only the human removes worktrees, from the Cleanup page' })
+    }
+    expect(fs.readdirSync(wt('g8w')).sort()).toEqual(files)
+    expect(worktreePaths()).toContain(wt('g8w'))
+    expect(git('rev-parse', 'refs/heads/feat/g8w')).toBe(shas['feat/g8w'])
+    expect(git('rev-parse', 'refs/heads/feat/g8')).toBe(shas['feat/g8'])
+    expect(fs.existsSync(path.join(repo, '.git'))).toBe(true)
     expect(
       dbm.db.select().from(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.ticketId, tw.id)).all(),
-    ).toEqual([])
-    for (const id of [tm.id, tmw.id, tu.id, onMain.id]) expect(logged(id)).toEqual([])
+    ).toHaveLength(1)
+    expect(logged(t.id)).toEqual([])
+    expect(logged(tw.id)).toEqual([])
   })
 
   it('refuses an agent’s request with a branch on origin in it whole, wherever it is, before anything runs', async () => {
@@ -2290,22 +2282,24 @@ describe('the cleanup_delete tool', () => {
     return JSON.parse(r.content[0]!.text) as DeleteResult[]
   }
 
-  it('is offered for local branches and worktrees alone, and the instructions say what it does', async () => {
+  it('is offered for local branches alone, and the instructions say what it does', async () => {
     const tools = (await rpc('tools/list')).tools as { name: string; description: string; inputSchema: any }[]
     const entry = tools.find((t) => t.name === 'cleanup_delete')!
     expect(entry.inputSchema.required).toEqual(expect.arrayContaining(['projectId', 'items']))
     const items = entry.inputSchema.properties.items
     expect(items).toMatchObject({ type: 'array', minItems: 1, maxItems: 200 })
-    expect(items.items.properties.kind.enum).toEqual(['local', 'worktrees'])
+    expect(items.items.properties.kind.enum).toEqual(['local'])
+    expect(Object.keys(items.items.properties).sort()).toEqual(['branch', 'kind', 'sha', 'ticketId'])
     expect(items.items.required).toEqual(expect.arrayContaining(['ticketId', 'branch', 'kind', 'sha']))
-    expect(items.items.required).not.toContain('worktrees')
-    expect(entry.description).toContain('closed tickets (done, cancelled or archived)')
+    expect(entry.description).toContain("closed tickets' (done, cancelled or archived) landed local branches")
     expect(entry.description).toContain('as for the human')
-    expect(entry.description).toContain('Never origin')
+    expect(entry.description).toContain('Never a worktree, never origin')
     expect(entry.description).toContain('restore')
     expect(entry.description).toContain('Post the deleted branch @ sha lines on the ticket')
     const report = tools.find((t) => t.name === 'cleanup_report')!.description
-    expect(report).toContain('local and worktrees by you with cleanup_delete')
+    expect(report).toContain(
+      'local by you with cleanup_delete, or by the human; worktrees and remote by the human alone',
+    )
     expect(report).not.toMatch(/Only the human deletes|go-ahead/)
 
     const init = await rpc('initialize', {
@@ -2315,34 +2309,25 @@ describe('the cleanup_delete tool', () => {
     })
     const instructions = init.instructions as string
     expect(instructions.split('\n')[0]).toContain(
-      "but for closed tickets' landed local branches and worktrees, which cleanup_delete deletes",
+      "but for closed tickets' landed local branches, which cleanup_delete deletes (worktrees and origin's branches are the human's",
     )
     const step8 = instructions.split('\n').find((l) => l.startsWith('8. '))!
     expect(step8).toContain(
-      "cleanup_delete deletes closed tickets' landed local branches and their worktrees",
+      "cleanup_delete deletes closed tickets' landed local branches, the board checking",
     )
-    expect(step8).toContain('never delete branches on origin')
+    expect(step8).toContain('Leave its worktrees')
+    expect(step8).not.toMatch(/remove its worktree/)
+    expect(step8).toContain('never delete branches on origin nor remove worktrees')
     expect(instructions).not.toMatch(/only the human deletes finished branches/)
   })
 
-  it('deletes a landed local branch and a branch’s worktrees as the agent, and answers how to restore them', async () => {
-    const shas = land(['feat/g3', 'feat/g3w'])
+  it('deletes a landed local branch as the agent, and answers how to restore it', async () => {
+    const { 'feat/g3': sha } = land(['feat/g3'])
     git('push', '-q', 'origin', 'feat/g3')
-    git('worktree', 'add', '-q', wt('g3w'), 'feat/g3w')
     const t = done('g3', 'feat/g3')
-    const tw = done('g3w', 'feat/g3w')
-    features.addWorkspace(tw.id, { name: 'wt', branch: 'feat/g3w', path: wt('g3w') }, 'claude')
-    const listed = (await branchOf(tw.id, 'feat/g3w'))!.worktrees.map((w) => w.path)
-    const local = { ticketId: t.id, branch: 'feat/g3', kind: 'local', sha: shas['feat/g3']! }
-    const trees = {
-      ticketId: tw.id,
-      branch: 'feat/g3w',
-      kind: 'worktrees',
-      sha: shas['feat/g3w']!,
-      worktrees: listed,
-    }
+    const local = { ticketId: t.id, branch: 'feat/g3', kind: 'local', sha }
 
-    const results = answered(await tool({ projectId, items: [local, trees] }))
+    const results = answered(await tool({ projectId, items: [local] }))
     expect(results).toEqual([
       {
         ...local,
@@ -2351,30 +2336,42 @@ describe('the cleanup_delete tool', () => {
         reason: null,
         removed: [],
         unlinked: [],
-        restore: [`git branch feat/g3 ${shas['feat/g3']}`],
-      },
-      {
-        ...trees,
-        ok: true,
-        outcome: 'deleted',
-        reason: null,
-        removed: listed,
-        unlinked: [],
-        restore: [
-          `git branch feat/g3w ${shas['feat/g3w']}`,
-          expect.stringMatching(/^git worktree add \S+agent-board-g3w feat\/g3w$/),
-        ],
+        restore: [`git branch feat/g3 ${sha}`],
       },
     ])
     expect(hasRef(repo, 'refs/heads/feat/g3')).toBe(false)
-    expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g3')).toBe(shas['feat/g3'])
-    expect(git('rev-parse', 'refs/remotes/origin/feat/g3')).toBe(shas['feat/g3'])
-    expect(hasRef(repo, 'refs/heads/feat/g3w')).toBe(false)
-    expect(fs.existsSync(wt('g3w'))).toBe(false)
-    expect(worktreePaths()).not.toContain(wt('g3w'))
-    expect(logged(t.id)).toEqual([['codex', `deleted the branch feat/g3 @ ${shas['feat/g3']} of #${t.id}`]])
-    expect(logged(tw.id).map(([actor]) => actor)).toEqual(['codex', 'codex'])
-    expect(logged(tw.id, 'workspace')).toContainEqual(['codex', `closed workspace wt on #${tw.id}`])
+    expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g3')).toBe(sha)
+    expect(git('rev-parse', 'refs/remotes/origin/feat/g3')).toBe(sha)
+    expect(logged(t.id)).toEqual([['codex', `deleted the branch feat/g3 @ ${sha} of #${t.id}`]])
+  })
+
+  it('takes no worktree: a request with one, alone or not, is refused before anything runs', async () => {
+    const shas = land(['feat/g9', 'feat/g9w'])
+    git('worktree', 'add', '-q', wt('g9w'), 'feat/g9w')
+    const t = done('g9', 'feat/g9')
+    const tw = done('g9w', 'feat/g9w')
+    const files = fs.readdirSync(wt('g9w')).sort()
+    const listed = (await branchOf(tw.id, 'feat/g9w'))!.worktrees.map((w) => w.path)
+    const local = { ticketId: t.id, branch: 'feat/g9', kind: 'local', sha: shas['feat/g9'] }
+    const trees = {
+      ticketId: tw.id,
+      branch: 'feat/g9w',
+      kind: 'worktrees',
+      sha: shas['feat/g9w'],
+      worktrees: listed,
+    }
+    for (const items of [[trees], [local, trees], [trees, local]]) {
+      const r = await tool({ projectId, items })
+      expect(r.isError).toBe(true)
+      expect(r.content[0]!.text).toMatch(/Input validation error: Invalid arguments for tool cleanup_delete/)
+      expect(r.content[0]!.text).toMatch(/at items\[\d+\]\.kind/)
+    }
+    expect(fs.readdirSync(wt('g9w')).sort()).toEqual(files)
+    expect(worktreePaths()).toContain(wt('g9w'))
+    expect(git('rev-parse', 'refs/heads/feat/g9w')).toBe(shas['feat/g9w'])
+    expect(git('rev-parse', 'refs/heads/feat/g9')).toBe(shas['feat/g9'])
+    expect(logged(t.id)).toEqual([])
+    expect(logged(tw.id)).toEqual([])
   })
 
   it('takes no branch on origin: a request with one, alone or not, is refused before anything runs', async () => {
@@ -2397,10 +2394,8 @@ describe('the cleanup_delete tool', () => {
   })
 
   it('answers a refused item as a result, with the human’s own reason, and goes on with the next', async () => {
-    const shas = land(['feat/g6m', 'feat/g6d', 'feat/g6ok'])
+    const shas = land(['feat/g6m', 'feat/g6ok'])
     const unique = land(['feat/g6u'], { unique: true })['feat/g6u']!
-    git('worktree', 'add', '-q', wt('g6d'), 'feat/g6d')
-    fs.writeFileSync(path.join(wt('g6d'), 'notes.txt'), 'mine')
     const main = git('rev-parse', 'main')
     const refused: DeleteItem[] = [
       // Not the commit it is at: moved since.
@@ -2412,16 +2407,9 @@ describe('the cleanup_delete tool', () => {
         kind: 'local',
         sha: main,
       },
-      {
-        ticketId: done('g6d', 'feat/g6d').id,
-        branch: 'feat/g6d',
-        kind: 'worktrees',
-        sha: shas['feat/g6d']!,
-        worktrees: [wt('g6d')],
-      },
     ]
     const human = await del(refused)
-    expect(human.map((r) => r.outcome)).toEqual(['refused', 'refused', 'refused', 'refused'])
+    expect(human.map((r) => r.outcome)).toEqual(['refused', 'refused', 'refused'])
     const ok = done('g6ok', 'feat/g6ok')
 
     const results = answered(
@@ -2430,13 +2418,11 @@ describe('the cleanup_delete tool', () => {
         items: [...refused, { ticketId: ok.id, branch: 'feat/g6ok', kind: 'local', sha: shas['feat/g6ok'] }],
       }),
     )
-    expect(results.slice(0, 4)).toEqual(human)
-    expect(results[4]).toMatchObject({ branch: 'feat/g6ok', ok: true, outcome: 'deleted' })
+    expect(results.slice(0, 3)).toEqual(human)
+    expect(results[3]).toMatchObject({ branch: 'feat/g6ok', ok: true, outcome: 'deleted' })
     expect(git('rev-parse', 'refs/heads/feat/g6m')).toBe(shas['feat/g6m'])
     expect(git('rev-parse', 'refs/heads/feat/g6u')).toBe(unique)
     expect(git('rev-parse', 'refs/heads/main')).toBe(main)
-    expect(git('rev-parse', 'refs/heads/feat/g6d')).toBe(shas['feat/g6d'])
-    expect(fs.readFileSync(path.join(wt('g6d'), 'notes.txt'), 'utf8')).toBe('mine')
     expect(hasRef(repo, 'refs/heads/feat/g6ok')).toBe(false)
   })
 
@@ -2495,7 +2481,7 @@ describe('an agent’s delete takes what it names alone, checked as the human’
     const results = await asAgent(
       [
         { ticketId: none.id, branch: 'feat/a2', kind: 'local', sha },
-        { ticketId: borrowed.id, branch: 'feat/a2', kind: 'worktrees', sha, worktrees: [] },
+        { ticketId: borrowed.id, branch: 'feat/a2', kind: 'local', sha },
       ],
       bare,
     )
@@ -2515,18 +2501,10 @@ describe('an agent’s delete takes what it names alone, checked as the human’
     const results = await asAgent([
       { ticketId: t.id, branch: 'main', kind: 'local', sha: main },
       { ticketId: t.id, branch: 'feat/a4-other', kind: 'local', sha: shas['feat/a4-other']! },
-      {
-        ticketId: t.id,
-        branch: 'feat/a4-other',
-        kind: 'worktrees',
-        sha: shas['feat/a4-other']!,
-        worktrees: [],
-      },
       { ticketId: t.id, branch: 'feat/a4-side', kind: 'local', sha: shas['feat/a4-side']! },
     ])
     expect(results.map((r) => [r.outcome, r.reason])).toEqual([
       ['refused', `main is no branch of #${t.id}`],
-      ['refused', `feat/a4-other is no branch of #${t.id}`],
       ['refused', `feat/a4-other is no branch of #${t.id}`],
       ['deleted', null],
     ])
@@ -2537,97 +2515,8 @@ describe('an agent’s delete takes what it names alone, checked as the human’
     expect(logged(other.id)).toEqual([])
   })
 
-  it('removes the branch’s own worktrees alone, whatever else its list names, and never the main checkout', async () => {
-    const shas = land(['feat/a5', 'feat/a5-other'])
-    git('worktree', 'add', '-q', wt('a5'), 'feat/a5')
-    git('worktree', 'add', '-q', wt('a5-other'), 'feat/a5-other')
-    fs.writeFileSync(path.join(wt('a5-other'), 'kept.txt'), 'theirs\n')
-    const loose = path.join(tmp, 'a5-loose')
-    fs.mkdirSync(loose)
-    fs.writeFileSync(path.join(loose, 'keep.txt'), 'keep\n')
-    const t = done('a5', 'feat/a5')
-    done('a5 other', 'feat/a5-other')
-    const item = (worktrees: string[]): DeleteItem => ({
-      ticketId: t.id,
-      branch: 'feat/a5',
-      kind: 'worktrees',
-      sha: shas['feat/a5']!,
-      worktrees,
-    })
-    // The main checkout, however it is named: a link to it, or a path that goes up to it.
-    const toMain = path.join(tmp, 'a5-main-link')
-    fs.symlinkSync(repo, toMain, process.platform === 'win32' ? 'junction' : 'dir')
-    try {
-      for (const named of [repo, `${wt('a5')}/../agent-board/`, toMain]) {
-        const [r] = await asAgent([item([wt('a5'), named])])
-        expect(r, named).toMatchObject({
-          outcome: 'refused',
-          reason: 'the main checkout is never removed',
-          removed: [],
-        })
-      }
-    } finally {
-      // The link alone, never through it.
-      try {
-        fs.unlinkSync(toMain)
-      } catch {
-        fs.rmdirSync(toMain)
-      }
-    }
-    expect(fs.existsSync(path.join(repo, '.git'))).toBe(true)
-    expect(() => git('status', '--porcelain')).not.toThrow()
-    expect(fs.existsSync(wt('a5'))).toBe(true)
-
-    // Another branch's worktree and folders out of the repo, without its own: its own came up since.
-    const [unseen] = await asAgent([item([wt('a5-other'), loose, code])])
-    expect(unseen).toMatchObject({ outcome: 'refused', reason: expect.stringMatching(/came up since/) })
-    expect(fs.existsSync(wt('a5'))).toBe(true)
-
-    // Beside its own, they change nothing: its own goes, and they stay as they were.
-    const [r] = await asAgent([item([wt('a5-other'), loose, code, wt('a5')])])
-    expect(r).toMatchObject({ ok: true, outcome: 'deleted' })
-    expect(r!.removed.map((p) => path.resolve(p))).toEqual([wt('a5')])
-    expect(fs.existsSync(wt('a5'))).toBe(false)
-    expect(hasRef(repo, 'refs/heads/feat/a5')).toBe(false)
-    expect(fs.readFileSync(path.join(wt('a5-other'), 'kept.txt'), 'utf8')).toBe('theirs\n')
-    expect(worktreePaths()).toContain(wt('a5-other'))
-    expect(git('rev-parse', 'refs/heads/feat/a5-other')).toBe(shas['feat/a5-other'])
-    expect(fs.readFileSync(path.join(loose, 'keep.txt'), 'utf8')).toBe('keep\n')
-    expect(fs.existsSync(path.join(repo, '.git'))).toBe(true)
-  })
-
-  it('keeps another branch’s worktree that a workspace of the ticket points at, and all with it', async () => {
-    const shas = land(['feat/a6', 'feat/a6-other'])
-    git('worktree', 'add', '-q', wt('a6'), 'feat/a6')
-    git('worktree', 'add', '-q', wt('a6-other'), 'feat/a6-other')
-    const t = done('a6', 'feat/a6')
-    done('a6 other', 'feat/a6-other')
-    // Registered on the closed ticket, on its branch, at the other branch's worktree.
-    features.addWorkspace(t.id, { name: 'stray', branch: 'feat/a6', path: wt('a6-other') }, 'claude')
-    const b = (await branchOf(t.id, 'feat/a6'))!
-    expect(b.worktrees.map((w) => [path.resolve(w.path), w.protected]).sort()).toEqual([
-      [wt('a6'), null],
-      [wt('a6-other'), 'has feat/a6-other checked out'],
-    ])
-    const [r] = await asAgent([
-      {
-        ticketId: t.id,
-        branch: 'feat/a6',
-        kind: 'worktrees',
-        sha: shas['feat/a6']!,
-        worktrees: b.worktrees.map((w) => w.path),
-      },
-    ])
-    expect(r).toMatchObject({ outcome: 'refused', removed: [] })
-    expect(r!.reason).toContain('has feat/a6-other checked out')
-    expect(worktreePaths()).toEqual(expect.arrayContaining([wt('a6'), wt('a6-other')]))
-    expect(git('rev-parse', 'refs/heads/feat/a6')).toBe(shas['feat/a6'])
-    expect(git('rev-parse', 'refs/heads/feat/a6-other')).toBe(shas['feat/a6-other'])
-  })
-
   it('deletes a branch asked for more than once one time, and nothing else', async () => {
     const shas = land(['feat/a7', 'feat/a7-kept'])
-    git('worktree', 'add', '-q', wt('a7'), 'feat/a7')
     git('worktree', 'add', '-q', wt('a7-kept'), 'feat/a7-kept')
     const t = done('a7', 'feat/a7')
     const kept = done('a7 kept', 'feat/a7-kept')
@@ -2637,22 +2526,16 @@ describe('an agent’s delete takes what it names alone, checked as the human’
         .filter((l) => !l.startsWith('refs/heads/feat/a7 '))
     const before = others()
     const local: DeleteItem = { ticketId: t.id, branch: 'feat/a7', kind: 'local', sha: shas['feat/a7']! }
-    const trees: DeleteItem = { ...local, kind: 'worktrees', worktrees: [wt('a7')] }
 
-    const results = await asAgent([local, trees, trees, local])
-    expect(results.map((r) => r.outcome)).toEqual(['refused', 'deleted', 'gone', 'gone'])
-    expect(results[0]!.reason).toMatch(/^checked out in .+agent-board-a7$/)
-    expect(results[1]!.removed.map((p) => path.resolve(p))).toEqual([wt('a7')])
-    for (const r of [results[0]!, results[2]!, results[3]!])
+    const results = await asAgent([local, local, local])
+    expect(results.map((r) => r.outcome)).toEqual(['deleted', 'gone', 'gone'])
+    expect(results[0]!.restore).toEqual([`git branch feat/a7 ${shas['feat/a7']}`])
+    for (const r of [results[1]!, results[2]!])
       expect(r).toMatchObject({ removed: [], unlinked: [], restore: [] })
     expect(hasRef(repo, 'refs/heads/feat/a7')).toBe(false)
-    expect(fs.existsSync(wt('a7'))).toBe(false)
     expect(others()).toEqual(before)
     expect(worktreePaths()).toContain(wt('a7-kept'))
-    expect(logged(t.id).map(([, text]) => text)).toEqual([
-      expect.stringMatching(/^removed the worktree .+agent-board-a7 \(feat\/a7\) of #/),
-      `deleted the branch feat/a7 @ ${shas['feat/a7']} of #${t.id}`,
-    ])
+    expect(logged(t.id)).toEqual([['codex', `deleted the branch feat/a7 @ ${shas['feat/a7']} of #${t.id}`]])
     expect(logged(kept.id)).toEqual([])
   })
 })

@@ -15,7 +15,7 @@ import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
-import { DELETE_KINDS, deleteItems, deleteLeftovers } from './cleanupActions'
+import { DeleteItems, deleteLeftovers } from './cleanupActions'
 import { authMode } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
@@ -459,10 +459,11 @@ api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
   json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),
 )
 // Deletes closed tickets' worked branches, here or on origin, or with their worktrees: the human's,
-// once confirmed on the Cleanup page, and an agent's (also MCP `cleanup_delete`) but never on origin: a
-// request of theirs with an origin branch in it gets 403 whole. Each item is checked again first.
+// once confirmed on the Cleanup page, and an agent's (also MCP `cleanup_delete`) for local branches
+// alone: a request of theirs with a worktree or an origin branch in it gets 403 whole. Each item is
+// checked again first.
 api.post('/api/projects/:id/cleanup/delete', async ({ request, params, actor }) => {
-  const body = await readJson(request, z.object({ items: deleteItems(DELETE_KINDS) }))
+  const body = await readJson(request, z.object({ items: DeleteItems }))
   return json(await deleteLeftovers(id(params), body.items, actor, { agent: isAgent(request) }))
 })
 

@@ -37,8 +37,8 @@ import { unattachedUploads, type UnattachedUploads } from './unattached'
  * What is left behind by finished work: branches, worktrees and registered workspaces of tickets in
  * a done or cancelled stage or archived, whether each branch's work reached where it was meant to
  * land, and whether it may be deleted (`cleanupActions.ts` does, after checking it all again): by the
- * human from the Cleanup page, and by an agent (`cleanup_delete`) but for origin's branches, which
- * stay the human's.
+ * human from the Cleanup page, and by an agent (`cleanup_delete`) for local branches alone: worktrees
+ * and origin's branches stay the human's.
  */
 
 type Chainable = Pick<schema.Ticket, 'id' | 'parentId' | 'repoId' | 'baseBranch'>
