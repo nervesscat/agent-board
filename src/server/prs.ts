@@ -284,14 +284,23 @@ const REFRESH_MS = 5 * 60_000
 const lastRefresh = new Map<number, number>()
 /** Per project: the last refresh queued, which never rejects, so the next one can wait on it. */
 const refreshing = new Map<number, Promise<void>>()
+/** Per project: the refresh waiting behind the running one, not started yet, which later requests join. */
+const queued = new Map<number, Promise<void>>()
 
 /**
  * Refreshes the project's queue once its previous refresh has finished, whether that succeeded or threw. Two
  * refreshes of one project never overlap, so one's reads and writes are all done before the next one starts:
- * the tickets it moves follow its own reads, and an older read cannot be written after a newer one.
+ * the tickets it moves follow its own reads, and an older read cannot be written after a newer one. At most
+ * one refresh waits behind the running one: a request made while one waits joins it, as it reads after them.
  */
 export function refreshPrs(projectId: number): Promise<void> {
-  const run = (refreshing.get(projectId) ?? Promise.resolve()).then(() => runRefresh(projectId))
+  const waiting = queued.get(projectId)
+  if (waiting) return waiting
+  const run = (refreshing.get(projectId) ?? Promise.resolve()).then(() => {
+    queued.delete(projectId)
+    return runRefresh(projectId)
+  })
+  queued.set(projectId, run)
   const settled = run.catch(() => undefined)
   refreshing.set(projectId, settled)
   return run
@@ -457,6 +466,7 @@ export function resetPrRefreshes() {
   followUps.clear()
   lastRefresh.clear()
   refreshing.clear()
+  queued.clear()
   lastTry.clear()
 }
 

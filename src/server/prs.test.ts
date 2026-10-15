@@ -20,9 +20,12 @@ let failing = new Set<string>()
 let states: Record<number, 'OPEN' | 'CLOSED' | 'MERGED'> = {}
 // A checkout whose next search waits for its promise, once: a test holds one refresh's read while another runs.
 let holdNext = new Map<string, Promise<void>>()
+// How many searches each checkout has had.
+let searches = new Map<string, number>()
 vi.mock('./git', async (original) => ({
   ...(await original<typeof import('./git')>()),
   listMyPrs: async (repoPath: string) => {
+    searches.set(repoPath, (searches.get(repoPath) ?? 0) + 1)
     const hold = holdNext.get(repoPath)
     holdNext.delete(repoPath)
     if (hold) await hold
@@ -39,6 +42,7 @@ afterEach(() => {
   foundIn = {}
   failing = new Set()
   holdNext = new Map()
+  searches = new Map()
   states = {}
   vi.useRealTimers()
 })
@@ -858,6 +862,34 @@ describe('PR tickets', () => {
     const stored = await storedPr(projectId, 40)
     expect(stored.row.reviewStage).toBe('on_hold')
     expect(stored.ticket).toMatchObject({ status: 'blocked' })
+  })
+
+  it('keeps at most one refresh of a project waiting behind the running one, which later requests join', async () => {
+    const { db, schema } = await import('#/db')
+    const projectId = db.insert(schema.projects).values({ name: 'pr-refresh-coalesce' }).returning().get().id
+    const repo = db
+      .insert(schema.repos)
+      .values({
+        projectId,
+        name: 'two',
+        repoPath: '/r/coalesce-two',
+        baseBranch: 'main',
+        githubRepo: 'acme/two',
+      })
+      .returning()
+      .get()
+    foundIn = { [repo.repoPath]: [] }
+    let release = () => {}
+    holdNext.set(repo.repoPath, new Promise<void>((resolve) => (release = () => resolve())))
+    const a = prs.refreshPrs(projectId)
+    await settle()
+    const waiting = [prs.refreshPrs(projectId), prs.refreshPrs(projectId), prs.refreshPrs(projectId)]
+    await settle()
+    release()
+    await expect(Promise.all([a, ...waiting])).resolves.toHaveLength(4)
+
+    // A's search and one more for the three that waited together.
+    expect(searches.get(repo.repoPath)).toBe(2)
   })
 
   it('runs the next refresh of a project after one that failed', async () => {
