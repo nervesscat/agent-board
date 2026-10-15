@@ -69,7 +69,7 @@ export function ReviewSkills({
           <code className="rounded bg-muted px-1">/todo-review</code> works the To do tickets to hand-off and{' '}
           <code className="rounded bg-muted px-1">/review-queue</code> reviews the PR queue, both delegating
           to these agents. <code className="rounded bg-muted px-1">/feature-review</code> is the review they
-          run on each change, except a low ticket's. One line installs all three, with their agents, into{' '}
+          run on each change. One line installs all three, with their agents, into{' '}
           <code className="rounded bg-muted px-1">~/.claude</code> (Claude Code; OpenCode reads its skills
           too), replacing files of the same name.
           {!token && (
