@@ -1669,7 +1669,7 @@ export function askDecision(
  * The human's answer to a decision: the option picked, and an optional note. It is posted as a reply
  * under the decision too, so the agent that asked finds it in its threads. A blocked ticket goes back
  * to the project's first active stage once no decision on it is left open. Deciding again changes
- * the answer.
+ * the answer, and drops a relayed one: the card then shows only the human's own decision.
  */
 export function decide(postId: number, option: number, note: string, actor: string) {
   const post = getPost(postId)
@@ -1679,12 +1679,79 @@ export function decide(postId: number, option: number, note: string, actor: stri
   const changed = post.decidedAt !== null
   const row = db
     .update(schema.updates)
-    .set({ decidedOption: option, decidedBy: actor, decidedAt: new Date().toISOString() })
+    .set({
+      decidedOption: option,
+      decidedBy: actor,
+      decidedAt: new Date().toISOString(),
+      relayedBy: '',
+      relayedText: '',
+    })
     .where(eq(schema.updates.id, postId))
     .returning()
     .get()!
   const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}`
-  addComment({ parentType: 'update', parentId: postId, body: words }, actor)
+  settleDecision(row, actor, words, `decided "${picked.label}"`)
+  return row
+}
+
+/**
+ * The orchestrator's record of the human's answer to a decision, given in the chat: the card is decided
+ * with the human's pick, `relayedBy` the connected agent `actor` and `relayedText` the words as the
+ * human gave them. The board cannot see the chat, so it trusts the connected agent's account of it. The
+ * relay is refused to a human, to any call with `as` (a project's agent, or a delegated subagent that
+ * holds the orchestrator's token, never answers), and to a card already decided. The check and the
+ * write are one statement, so two relays cannot both land.
+ */
+export function relayDecision(
+  postId: number,
+  input: { option: number; words: string; as?: string },
+  actor: string,
+  opts: { agent: boolean },
+) {
+  if (!opts.agent)
+    throw new HttpError(403, 'only a connected agent relays a decision: the human answers the card')
+  if (input.as !== undefined)
+    throw new HttpError(403, "a decision is relayed by the orchestrator, not as one of the project's agents")
+  const words = input.words.trim()
+  if (!words || words.length > 5_000)
+    throw new HttpError(400, "give the human's answer as they gave it: 1 to 5000 characters")
+  const post = getPost(postId)
+  if (!post.decision) throw new HttpError(400, `post ${postId} is not a decision`)
+  const picked = post.decision[input.option]
+  if (!picked) throw new HttpError(400, `no option ${input.option}; there are ${post.decision.length}`)
+  const alreadyDecided = `decision ${postId} is already decided; the human changes it on the card`
+  if (post.decidedAt !== null) throw new HttpError(409, alreadyDecided, 'decided')
+  const row = db
+    .update(schema.updates)
+    .set({
+      decidedOption: input.option,
+      decidedBy: '',
+      decidedAt: new Date().toISOString(),
+      relayedBy: actor,
+      relayedText: words,
+    })
+    .where(and(eq(schema.updates.id, postId), isNull(schema.updates.decidedAt)))
+    .returning()
+    .get()
+  // Nothing matched: another answer landed between the read above and this write.
+  if (!row) throw new HttpError(409, alreadyDecided, 'decided')
+  settleDecision(
+    row,
+    actor,
+    `Decided in chat: **${picked.label}**\n\n${words}`,
+    `relayed the decision "${picked.label}"`,
+  )
+  return row
+}
+
+/**
+ * What answering a decision does once its row is set, for the human's answer and a relayed one alike:
+ * the reply under the card (`reply`, by `actor`), a blocked ticket back to the project's first active
+ * stage once no decision on it is left open, the touch, and the activity line (`did` is what was done,
+ * with the option's label).
+ */
+function settleDecision(post: { id: number; ticketId: number }, actor: string, reply: string, did: string) {
+  addComment({ parentType: 'update', parentId: post.id, body: reply }, actor)
   const ticket = getTicket(post.ticketId)
   const stages = listStages(ticket.projectId)
   const stillOpen = db
@@ -1709,11 +1776,10 @@ export function decide(postId: number, option: number, note: string, actor: stri
     projectId: ticket.projectId,
     actor,
     kind: 'ticket',
-    text: `decided "${picked.label}" on #${ticket.id} ${ticket.title}`,
+    text: `${did} on #${ticket.id} ${ticket.title}`,
     refType: 'ticket',
     refId: ticket.id,
   })
-  return row
 }
 
 export function getPost(id: number) {

@@ -463,6 +463,124 @@ describe('the agent loop', () => {
     expect(features.getTicket(t.id).status).toBe('in_progress')
   })
 
+  it("records the orchestrator's relay of an answer given in the chat, which the human's own answer replaces", async () => {
+    const { db, schema } = await import('#/db')
+    // What a refused call says: its status, code and message.
+    const refusal = (call: () => unknown) => {
+      try {
+        call()
+      } catch (err) {
+        const e = err as { status?: number; code?: string; message: string }
+        return { status: e.status, code: e.code, message: e.message }
+      }
+      throw new Error('the call went through')
+    }
+    const relay = (
+      postId: number,
+      input: { option: number; words: string; as?: string },
+      actor = 'claude',
+      agent = true,
+    ) => features.relayDecision(postId, input, actor, { agent })
+    const options = [{ label: 'Postgres' }, { label: 'SQLite', recommended: true }]
+    const t = features.createTicket(pid, { title: 'relayed answer', status: 'in_progress' }, 'enrique')
+    const q1 = features.askDecision(t.id, { body: 'which db?', options }, 'claude')
+    const q2 = features.askDecision(t.id, { body: 'which cache?', options }, 'claude')
+    const plain = features.postUpdate(t.id, 'just a note', [], 'claude')
+    // A plain post reads the defaults: no relay.
+    expect(features.getPost(plain.id)).toMatchObject({ relayedBy: '', relayedText: '' })
+
+    // Refused, and nothing changes: a human caller, any call with as, blank or over-long words, an option
+    // the card lacks, a post that is not a decision.
+    expect(refusal(() => relay(q1.id, { option: 1, words: 'SQLite' }, 'enrique', false))).toMatchObject({
+      status: 403,
+      message: 'only a connected agent relays a decision: the human answers the card',
+    })
+    expect(refusal(() => relay(q1.id, { option: 1, words: 'SQLite', as: 'builder' }))).toMatchObject({
+      status: 403,
+      message: "a decision is relayed by the orchestrator, not as one of the project's agents",
+    })
+    expect(refusal(() => relay(q1.id, { option: 1, words: ' \n ' }))).toMatchObject({ status: 400 })
+    expect(refusal(() => relay(q1.id, { option: 1, words: 'x'.repeat(5_001) }))).toMatchObject({
+      status: 400,
+    })
+    expect(refusal(() => relay(q1.id, { option: 5, words: 'SQLite' }))).toMatchObject({
+      status: 400,
+      message: 'no option 5; there are 2',
+    })
+    expect(refusal(() => relay(plain.id, { option: 0, words: 'Postgres' }))).toMatchObject({
+      status: 400,
+      message: `post ${plain.id} is not a decision`,
+    })
+    expect(features.getPost(q1.id)).toMatchObject({ decidedAt: null, decidedOption: null, relayedBy: '' })
+
+    // Accepted: the card is decided with the pick, relayed by the caller, the words trimmed and kept as given.
+    const row = relay(q1.id, { option: 1, words: '  SQLite, as the notes say  ' })
+    expect(row).toMatchObject({
+      decidedOption: 1,
+      decidedBy: '',
+      relayedBy: 'claude',
+      relayedText: 'SQLite, as the notes say',
+    })
+    expect(row.decidedAt).not.toBeNull()
+    // Its reply is under the card, by the orchestrator; the activity line says what was relayed.
+    expect(features.listComments('update', q1.id).map((c) => [c.author, c.body])).toEqual([
+      ['claude', 'Decided in chat: **SQLite**\n\nSQLite, as the notes say'],
+    ])
+    expect(
+      db
+        .select()
+        .from(schema.activity)
+        .where(eq(schema.activity.projectId, pid))
+        .all()
+        .map((r) => r.text),
+    ).toContain(`relayed the decision "SQLite" on #${t.id} relayed answer`)
+    // The second card is still open, so the ticket stays blocked.
+    expect(features.getTicket(t.id).status).toBe('blocked')
+
+    // Decided: a second answer is refused with its code, and the first one stands.
+    expect(refusal(() => relay(q1.id, { option: 0, words: 'Postgres' }))).toMatchObject({
+      status: 409,
+      code: 'decided',
+    })
+    expect(features.getPost(q1.id)).toMatchObject({
+      decidedOption: 1,
+      relayedText: 'SQLite, as the notes say',
+    })
+
+    // The human answers the second card: nothing is open any more, so the ticket resumes.
+    features.decide(q2.id, 0, '', 'enrique')
+    expect(features.getTicket(t.id).status).toBe('in_progress')
+
+    // The human changes the relayed answer on the card: the card shows only their decision now.
+    features.decide(q1.id, 0, 'Postgres after all', 'enrique')
+    expect(features.getPost(q1.id)).toMatchObject({
+      decidedOption: 0,
+      decidedBy: 'enrique',
+      relayedBy: '',
+      relayedText: '',
+    })
+    expect(features.listComments('update', q1.id).map((c) => c.body)).toEqual([
+      'Decided in chat: **SQLite**\n\nSQLite, as the notes say',
+      'Changed the decision to: **Postgres**\n\nPostgres after all',
+    ])
+
+    // A relay on the only open card unblocks the ticket, as the human's answer does.
+    const solo = features.createTicket(pid, { title: 'one relayed card', status: 'in_progress' }, 'enrique')
+    const soloQ = features.askDecision(solo.id, { body: 'which?', options }, 'claude')
+    expect(features.getTicket(solo.id).status).toBe('blocked')
+    relay(soloQ.id, { option: 0, words: 'Postgres' })
+    expect(features.getTicket(solo.id).status).toBe('in_progress')
+
+    // Either order: the human answers one of two cards, the relay the other.
+    const pair = features.createTicket(pid, { title: 'two cards', status: 'in_progress' }, 'enrique')
+    const pairA = features.askDecision(pair.id, { body: 'a?', options }, 'claude')
+    const pairB = features.askDecision(pair.id, { body: 'b?', options }, 'claude')
+    features.decide(pairA.id, 0, '', 'enrique')
+    expect(features.getTicket(pair.id).status).toBe('blocked')
+    relay(pairB.id, { option: 1, words: 'SQLite' })
+    expect(features.getTicket(pair.id).status).toBe('in_progress')
+  })
+
   it('links a ticket to its PR both ways, by number or by branch', async () => {
     const { db, schema } = await import('#/db')
     const prs = await import('./prs')
