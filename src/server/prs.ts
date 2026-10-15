@@ -4,11 +4,27 @@ import { db, schema } from '#/db'
 import type { PrCheck } from '#/lib/constants'
 import { isClosed } from '#/lib/stages'
 import { logActivity } from './activity'
-import { currentGithubLogin, listMyPrs, mergeConflicts, prMerged, type GhCheck, type GhPr } from './git'
+import {
+  currentGithubLogin,
+  listMyPrs,
+  mergeConflicts,
+  prMerged,
+  prStateOf,
+  type GhCheck,
+  type GhPr,
+} from './git'
 import { notFound } from './http'
 import { hasPreviews, stopPreviewsFor } from './managedPreview'
 import { getProject } from './projects'
 import { fetchStatus } from './push'
+import {
+  featureTicketsOf,
+  hasOwnTicket,
+  movePrTicket,
+  openPrTickets,
+  prTicketOf,
+  type PrTicketStatus,
+} from './prTickets'
 import { listRepos, ticketRepo } from './repos'
 import { kindOf, listStages } from './stages'
 
@@ -269,7 +285,8 @@ const lastRefresh = new Map<number, number>()
 
 /**
  * Every repo of the project, refreshed side by side; the queue is their union. A repo gh cannot see
- * (no GitHub remote) is skipped, and one failing repo does not hide the others' PRs.
+ * (no GitHub remote) is skipped, and one failing repo does not hide the others' PRs. Then the PRs' own
+ * tickets follow, for every project, one without a GitHub repo included.
  */
 export async function refreshPrs(projectId: number) {
   getProject(projectId)
@@ -280,8 +297,48 @@ export async function refreshPrs(projectId: number) {
   )
   for (const f of failed) console.error(`PR refresh failed for ${f.repo.name}:`, f.err)
   if (repos.length && failed.length === repos.length) throw failed[0]!.err
+  await syncPrTickets(
+    projectId,
+    results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),
+  )
   lastRefresh.set(projectId, Date.now())
   followUnknowns(projectId)
+}
+
+/** A PR row a refresh changed: as it was stored, and as it is now. */
+interface RowChange {
+  repo: schema.Repo
+  before: schema.Pr
+  after: schema.Pr
+}
+
+/** Where a PR stands for its own ticket: its status in the queue, merged, or left the open queue. */
+type QueueState = PrTicketStatus | 'left'
+const queueState = (pr: Pick<schema.Pr, 'open' | 'mergedAt' | 'hold' | 'reviewStage'>): QueueState =>
+  pr.mergedAt ? 'done' : pr.open ? prStatus(pr) : 'left'
+
+/**
+ * The PR tickets after a refresh. Each open PR that neither a feature ticket nor a ticket of its own covers gets
+ * one, in its status's stage. A PR whose status changed moves its ticket to the stage the new status has. A PR
+ * that left the open queue is asked of GitHub, when it has a ticket of its own: closed without merging is
+ * cancelled and merged is done, while a PR that only left the searches keeps its stage.
+ */
+async function syncPrTickets(projectId: number, changes: RowChange[]) {
+  openPrTickets(projectId, prStatus)
+  const left: RowChange[] = []
+  for (const c of changes) {
+    const from = queueState(c.before)
+    const to = queueState(c.after)
+    if (from === to) continue
+    if (to === 'left') left.push(c)
+    else movePrTicket(c.after, to)
+  }
+  const asked = left.filter((c) => hasOwnTicket(c.after))
+  const states = await Promise.all(asked.map((c) => prStateOf(c.repo.repoPath, c.after.number)))
+  asked.forEach((c, i) => {
+    if (states[i] === 'CLOSED') movePrTicket(c.after, 'cancelled')
+    else if (states[i] === 'MERGED') movePrTicket(c.after, 'done')
+  })
 }
 
 const backgroundRefresh = (projectId: number) =>
@@ -409,9 +466,9 @@ const mergedSince = () => new Date(Date.now() - MERGED_DAYS * 86_400_000).toISOS
 
 /**
  * Pull my PRs from GitHub, open and recently merged, and upsert the snapshot; board-side fields (hold)
- * are kept.
+ * are kept. Returns the rows that were stored before and changed.
  */
-async function refreshRepoPrs(repo: schema.Repo) {
+async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
   const { projectId } = repo
   const [ghPrs, me] = await Promise.all([
     listMyPrs(repo.repoPath, { mergedSince: mergedSince().slice(0, 10) }),
@@ -421,6 +478,7 @@ async function refreshRepoPrs(repo: schema.Repo) {
   const seen = new Set<number>()
   // The rows that leave the open queue now.
   const left: schema.Pr[] = []
+  const changes: RowChange[] = []
   for (const pr of ghPrs) {
     seen.add(pr.number)
     const existing = db
@@ -460,6 +518,7 @@ async function refreshRepoPrs(repo: schema.Repo) {
         .where(eq(schema.prs.id, existing.id))
         .returning()
         .get()!
+      changes.push({ repo, before: existing, after: row })
       if (existing.open && !open) left.push(row)
     } else
       db.insert(schema.prs)
@@ -474,26 +533,17 @@ async function refreshRepoPrs(repo: schema.Repo) {
     .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.open, true)))
     .all()
     .filter((row) => !seen.has(row.number))
-  for (const row of gone)
+  for (const row of gone) {
     db.update(schema.prs)
       .set({ open: false, closedAt: fetchedAt, fetchedAt })
       .where(eq(schema.prs.id, row.id))
       .run()
+    changes.push({ repo, before: row, after: { ...row, open: false, closedAt: fetchedAt, fetchedAt } })
+  }
   left.push(...gone)
   if (left.length) await stopMergedPreviews(repo, left)
+  return changes
 }
-
-/** The tickets a PR came from: named by their PR number, or on its head branch when they name none. */
-const prTickets = <T extends Pick<schema.Ticket, 'repoId' | 'prNumber' | 'branch'>>(
-  tickets: T[],
-  repos: schema.Repo[],
-  pr: Pick<schema.Pr, 'repoId' | 'number' | 'headRef'>,
-) =>
-  tickets.filter(
-    (t) =>
-      (t.repoId ?? repos[0]?.id) === pr.repoId &&
-      (t.prNumber === pr.number || (t.prNumber === null && !!t.branch && t.branch === pr.headRef)),
-  )
 
 /**
  * The board's previews of a merged PR's tickets (and their lanes) have nothing left to show: stop
@@ -504,7 +554,7 @@ async function stopMergedPreviews(repo: schema.Repo, left: schema.Pr[]) {
   const repos = listRepos(repo.projectId)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, repo.projectId)).all()
   for (const pr of left) {
-    const ids = prTickets(tickets, repos, pr).map((t) => t.id)
+    const ids = featureTicketsOf(tickets, repos, pr).map((t) => t.id)
     if (
       ids.length &&
       hasPreviews(ids) &&
@@ -549,7 +599,9 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
   )
   return rows.map((pr, i) => {
     const r = latestResult(results, pr.number, pr.repoId)
-    const from = prTickets(tickets, repos, pr)
+    const from = featureTicketsOf(tickets, repos, pr)
+    // The ticket the card opens: the feature ticket that names the PR, else the PR's own ticket.
+    const opens = from.find((t) => t.prNumber === pr.number) ?? from[0] ?? prTicketOf(tickets, pr.id)
     return {
       ...pr,
       ...prState(pr, merges[i]!),
@@ -558,7 +610,8 @@ export async function listPrs(projectId: number, opts: { refresh?: boolean } = {
       latestReview: r
         ? { id: r.id, verdict: r.verdict, sha: r.sha, fresh: r.sha === pr.headSha, createdAt: r.createdAt }
         : null,
-      // The tickets this PR came from: named by their PR number, or on its head branch when they name none.
+      ticket: opens ? { id: opens.id, title: opens.title, status: opens.status } : null,
+      // The feature tickets that name this PR: by its number, or on its head branch when they name none.
       tickets: from.map((t) => ({
         id: t.id,
         title: t.title,
@@ -726,5 +779,8 @@ export function setPrHold(id: number, hold: boolean, holdNote: string, actor: st
     refType: 'pr',
     refId: id,
   })
+  // A hold or its release changes the status, and the PR's ticket follows it.
+  const to = queueState(row)
+  if (to !== 'left' && to !== queueState(pr)) movePrTicket(row, to, actor)
   return { ...row, status: prStatus(row) }
 }

@@ -11,6 +11,7 @@ import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
 import { previewState, previewUrl, type PreviewState } from './preview'
+import { cancelSupersededPrTickets } from './prTickets'
 import { prForTicket, refreshPrsInBackground, withMergeCheck } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
@@ -42,14 +43,17 @@ export type LaneCounts = {
 /**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
  * theirs), how many of those tasks are blocked on the human, and how many lanes it has in each stage.
- * One pass over the project keeps this cheap.
+ * One pass over the project keeps this cheap. A PR's own ticket is left out unless `prTickets` (a
+ * ticket's own page reads it that way): it lives in the PR queue, not on the features board.
  */
-function projectTickets(projectId: number) {
+function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
   const stages = listStages(projectId)
   const rows = db
     .select()
     .from(schema.tickets)
-    .where(eq(schema.tickets.projectId, projectId))
+    .where(
+      and(eq(schema.tickets.projectId, projectId), opts.prTickets ? undefined : isNull(schema.tickets.prId)),
+    )
     .orderBy(desc(schema.tickets.updatedAt))
     .all()
   const ids = rows.map((t) => t.id)
@@ -287,7 +291,7 @@ export function getTicket(id: number) {
  */
 export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) {
   const ticket = getTicket(id)
-  const all = projectTickets(ticket.projectId)
+  const all = projectTickets(ticket.projectId, { prTickets: true })
   const byId = new Map(all.map((t) => [t.id, t]))
   const self = byId.get(id)!
   const ancestors: { id: number; title: string }[] = []
@@ -444,6 +448,7 @@ export function createTicket(
   actor: string,
 ) {
   const { parent, repo, baseBranch } = placement(projectId, input)
+  if (parent?.prId) throw new HttpError(400, `ticket ${parent.id} is a PR's: it has no lanes`)
   // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
   const attachmentIds = input.attachmentIds ?? []
   assertUnattached(attachmentIds)
@@ -483,7 +488,22 @@ export function createTicket(
     refType: 'ticket',
     refId: row.id,
   })
+  if (row.prNumber || row.branch) takeOverPrTickets(row, actor)
   return row
+}
+
+/**
+ * A feature ticket that names a PR (by its number, or its branch as the PR's head) takes the PR over from the
+ * PR's own ticket: that one is cancelled, and its feed says where the PR went.
+ */
+function takeOverPrTickets(t: schema.Ticket, actor: string) {
+  for (const own of cancelSupersededPrTickets(t, actor))
+    postUpdate(
+      own.id,
+      `PR #${own.number} has a feature ticket now, #${t.id} ${t.title}, so this ticket is cancelled.`,
+      [],
+      actor,
+    )
 }
 
 /** Bump a ticket and its parents, so a busy lane keeps its parent near the top of the board. */
@@ -522,6 +542,16 @@ export function updateTicket(
   opts: { agent?: boolean } = {},
 ) {
   const before = getTicket(id)
+  if (before.prId) {
+    // A PR's own ticket is for that PR, in that repo, and has no branch of its own.
+    if (
+      (patch.prNumber !== undefined && patch.prNumber !== before.prNumber) ||
+      (patch.repoId !== undefined && patch.repoId !== before.repoId)
+    )
+      throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: its PR and repo cannot change`)
+    if (patch.branch !== undefined && patch.branch !== before.branch)
+      throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: it has no branch of its own`)
+  }
   if (patch.assignee !== undefined && patch.assignee !== before.assignee) {
     // Tickets are shared between agents, except one the human reserved for one of the project's agents.
     const holder = opts.agent ? reservedFor(before) : null
@@ -567,6 +597,8 @@ export function updateTicket(
     refType: 'ticket',
     refId: id,
   })
+  if (!row.prId && (patch.prNumber !== undefined || patch.branch !== undefined || patch.repoId !== undefined))
+    takeOverPrTickets(row, actor)
   return row
 }
 
@@ -600,9 +632,12 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
         ? `ticket ${id} is reserved for ${holder.name}, not ${as.name}`
         : `ticket ${id} is reserved for ${holder.name}: claim it with as: "${holder.name}" and work it as that agent, briefed with its instructions`,
     )
+  if (before.prId && opts.branch !== undefined && opts.branch !== before.branch)
+    throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: it has no branch of its own`)
   const assignee = as?.name ?? actor
   const active = firstOfKind(stages, 'active')
-  const start = (from.kind === 'open' || from.kind === 'blocked') && active ? active : null
+  // A PR's own ticket keeps its stage: its PR's status is what sets it.
+  const start = !before.prId && (from.kind === 'open' || from.kind === 'blocked') && active ? active : null
   const row = db
     .update(schema.tickets)
     .set({
@@ -627,6 +662,7 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
       refType: 'ticket',
       refId: id,
     })
+  if (!row.prId && opts.branch !== undefined) takeOverPrTickets(row, assignee)
   return row
 }
 
@@ -644,6 +680,11 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
  */
 export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { reopenTo?: string } = {}) {
   const t = getTicket(id)
+  if (t.prId && verdict !== null)
+    throw new HttpError(
+      409,
+      `ticket ${id} is PR #${t.prNumber}'s: a PR is reviewed on the PR queue, not approved`,
+    )
   const before = verdictOf(t)
   if (before === verdict) return t
   const now = new Date().toISOString()
@@ -1404,14 +1445,23 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
     .where(eq(schema.reviewResults.projectId, projectId))
     .all()
 
-  // owners: whose subject it is (a ticket's assignee and opener, a post's author).
+  // owners: whose subject it is (a ticket's assignee and opener, a post's author). A PR's own ticket is its
+  // PR's author's, as the PR's thread was.
+  const authors = new Map(
+    db
+      .select({ id: schema.prs.id, author: schema.prs.author })
+      .from(schema.prs)
+      .where(eq(schema.prs.projectId, projectId))
+      .all()
+      .map((p) => [p.id, p.author]),
+  )
   type Subject = { ticketId: number | null; title: string; owners: string[] }
   const subjects = new Map<string, Subject>()
   for (const t of tickets)
     subjects.set(`ticket:${t.id}`, {
       ticketId: t.id,
       title: t.title,
-      owners: [t.assignee, t.createdBy],
+      owners: t.prId === null ? [t.assignee, t.createdBy] : [authors.get(t.prId) ?? ''],
     })
   for (const u of updates)
     subjects.set(`update:${u.id}`, {

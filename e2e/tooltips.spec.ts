@@ -109,6 +109,7 @@ function prRow(projectId: number, n: number, extra: Partial<PrRow> = {}): PrRow 
     projectId,
     repoId: null,
     repo: null,
+    ticket: null,
     number: n,
     title: `PR ${n}`,
     url: `https://github.com/example/repo/pull/${n}`,

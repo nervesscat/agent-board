@@ -227,8 +227,9 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
       const t = ctx.byId.get(id)
       return t ? [{ id: t.id, title: t.title, branch: t.branch, prNumber: t.prNumber, status: t.status }] : []
     })
+  // A PR's own ticket has no hand-off: its PR is reviewed on the queue, not handed off.
   const handoff: Handoff | null =
-    kindOf(ctx.stages, full.status) === 'review' ? await ticketHandoff(full) : null
+    kindOf(ctx.stages, full.status) === 'review' && !full.prId ? await ticketHandoff(full) : null
   return withResume({ ...full, needs, neededBy, handoff })
 }
 
@@ -401,7 +402,7 @@ export async function changeTicket(
     ? features.updateTicket(id, patch, actor, opts)
     : features.getTicket(id)
   logOverride(row, unmet, actor)
-  if (patch.status && kindOf(listStages(row.projectId), row.status) === 'review')
+  if (patch.status && !row.prId && kindOf(listStages(row.projectId), row.status) === 'review')
     return { ...row, handoff: await ticketHandoff(await features.getTicketWithPush(id)) }
   return row
 }
