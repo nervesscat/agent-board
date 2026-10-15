@@ -809,6 +809,54 @@ describe('PR tickets', () => {
     expect(ownOf(seven)).toMatchObject({ status: 'done' })
     expect(features.getTicketFull(ownOf(seven).id).updates).toEqual([])
   })
+
+  it("cannot be deleted: the next refresh would open its PR's ticket again", async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const { HttpError } = await import('./http')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket delete' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/pr-ticket-delete' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 12,
+        title: 'twelve',
+        url: 'https://github.com/acme/app/pull/12',
+        author: 'ana',
+        headRef: 'feat/12',
+        baseRef: 'main',
+        headSha: 'abc12def0123',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(pid, () => 'pending')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+
+    let refusal: unknown
+    try {
+      features.deleteTicket(own.id, 'enrique')
+    } catch (err) {
+      refusal = err
+    }
+    expect(refusal).toBeInstanceOf(HttpError)
+    expect(refusal).toMatchObject({
+      status: 409,
+      message: "PR #12's ticket is kept while its PR is in the queue: cancel or archive it instead",
+    })
+    expect(features.getTicket(own.id).prId).toBe(pr.id)
+    // The PR's refresh keeps the one ticket it has: it does not open another.
+    prTickets.openPrTickets(pid, () => 'pending')
+    expect(db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).all()).toHaveLength(1)
+  })
 })
 
 describe('custom stages', () => {

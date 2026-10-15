@@ -740,6 +740,12 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
 /** Lanes go with the ticket unless `keepLanes`, which moves them up to the ticket's own parent. */
 export function deleteTicket(id: number, actor: string, opts: { keepLanes?: boolean } = {}) {
   const t = getTicket(id)
+  // A PR's ticket stays while the PR is in the queue: the next refresh would open it again.
+  if (t.prId)
+    throw new HttpError(
+      409,
+      `PR #${t.prNumber}'s ticket is kept while its PR is in the queue: cancel or archive it instead`,
+    )
   // Its workspaces go with it (and its lanes', unless they are kept).
   const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, t.projectId)).all()
   const gone = [id, ...(opts.keepLanes ? [] : laneTree(all, id).map((l) => l.id))]
