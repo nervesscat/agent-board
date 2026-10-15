@@ -259,7 +259,6 @@ type HumanThread = ProjectSummary['needsYou']['threads'][number]
 function threadAnchor(th: HumanThread) {
   if (th.parentType === 'ticket') return `post-${th.last.id}`
   if (th.parentType === 'update') return `post-${th.parentId}-reply-${th.last.id}`
-  if (th.parentType === 'pr') return `pr-${th.parentId}-reply-${th.last.id}`
   return `reply-${th.last.id}`
 }
 

@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { RESUME_TEMPLATE } from '#/lib/constants'
+import { COMMENT_PARENTS, RESUME_TEMPLATE } from '#/lib/constants'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
 import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
@@ -1277,11 +1277,18 @@ export async function setResumeNote(
 
 // --- comments (threads on tickets, updates, PRs, review results) ---
 
+/** The parent types a thread can have. The comments a PR once had stay in the database, unread. */
+function assertThreadParent(parentType: string) {
+  if (!(COMMENT_PARENTS as readonly string[]).includes(parentType))
+    throw new HttpError(400, `${parentType} has no thread`)
+}
+
 /**
  * A thread. On a ticket that is its posts, oldest first, shaped like comments (with `progress`); on a
- * post, its replies; on a PR or a review result, its comments.
+ * post, its replies; on a review result, its comments.
  */
 export function listComments(parentType: schema.CommentParent, parentId: number) {
+  assertThreadParent(parentType)
   if (parentType === 'ticket') {
     const posts = db
       .select()
@@ -1386,7 +1393,6 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
         )
         .all()
     : []
-  const prs = db.select().from(schema.prs).where(eq(schema.prs.projectId, projectId)).all()
   const reviews = db
     .select({
       id: schema.reviewResults.id,
@@ -1413,12 +1419,6 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
       title: `post on #${u.ticketId} ${ticketById.get(u.ticketId)?.title ?? ''}: ${gist(u.body, 60)}`,
       owners: [u.author],
     })
-  for (const p of prs)
-    subjects.set(`pr:${p.id}`, {
-      ticketId: null,
-      title: `PR #${p.number} ${p.title}`,
-      owners: [p.author],
-    })
   for (const r of reviews)
     subjects.set(`review:${r.id}`, {
       ticketId: null,
@@ -1428,7 +1428,7 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
 
   const ids = (type: string) =>
     [...subjects.keys()].filter((k) => k.startsWith(`${type}:`)).map((k) => Number(k.split(':')[1]))
-  const comments = (['update', 'pr', 'review'] as const).flatMap((type) => {
+  const comments = (['update', 'review'] as const).flatMap((type) => {
     const parentIds = ids(type)
     return parentIds.length
       ? db
@@ -1553,6 +1553,7 @@ export function addComment(
   },
   actor: string,
 ): schema.Comment | schema.Update {
+  assertThreadParent(input.parentType)
   // On a ticket, a comment is a post (not progress); with replyTo, a reply under that post.
   if (input.parentType === 'ticket') {
     if (!input.replyTo)
@@ -1791,6 +1792,8 @@ export function deletePost(id: number, actor: string, opts: { human?: boolean } 
 
 export function editComment(id: number, body: string, actor: string, opts: { human?: boolean } = {}) {
   const before = getComment(id)
+  // Checked before the write: a comment on a thread that no longer exists is not changed.
+  const projectId = commentProject(before.parentType, before.parentId)
   mayChange(before, actor, opts.human ?? false)
   const row = db
     .update(schema.comments)
@@ -1799,7 +1802,7 @@ export function editComment(id: number, body: string, actor: string, opts: { hum
     .returning()
     .get()!
   logActivity({
-    projectId: commentProject(row.parentType, row.parentId),
+    projectId,
     actor,
     kind: 'comment',
     text: `edited a reply on ${row.parentType} #${row.parentId}`,
@@ -1812,11 +1815,13 @@ export function editComment(id: number, body: string, actor: string, opts: { hum
 /** Replies nested under it go with it, and their files. */
 export function deleteComment(id: number, actor: string, opts: { human?: boolean } = {}) {
   const c = getComment(id)
+  // Checked before the delete: a comment on a thread that no longer exists is not removed.
+  const projectId = commentProject(c.parentType, c.parentId)
   mayChange(c, actor, opts.human ?? false)
   db.delete(schema.comments).where(eq(schema.comments.replyTo, id)).run()
   db.delete(schema.comments).where(eq(schema.comments.id, id)).run()
   logActivity({
-    projectId: commentProject(c.parentType, c.parentId),
+    projectId,
     actor,
     kind: 'comment',
     text: `deleted a reply by ${c.author} on ${c.parentType} #${c.parentId}: ${firstLine(c.body, 60)}`,
@@ -1833,11 +1838,6 @@ function commentProject(parentType: schema.CommentParent, parentId: number): num
       const u = db.select().from(schema.updates).where(eq(schema.updates.id, parentId)).get()
       if (!u) throw notFound('update')
       return getTicket(u.ticketId).projectId
-    }
-    case 'pr': {
-      const pr = db.select().from(schema.prs).where(eq(schema.prs.id, parentId)).get()
-      if (!pr) throw notFound('PR')
-      return pr.projectId
     }
     case 'review': {
       const r = db.select().from(schema.reviewResults).where(eq(schema.reviewResults.id, parentId)).get()

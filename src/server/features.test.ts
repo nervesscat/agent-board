@@ -632,6 +632,53 @@ describe('PR reviews', () => {
   })
 })
 
+describe('PR threads are gone', () => {
+  it('refuse writes and reads on a PR, and no list shows the comments it once had', async () => {
+    const { db, schema } = await import('#/db')
+    const { HttpError } = await import('./http')
+    const pid = db.insert(schema.projects).values({ name: 'old pr threads' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/old-pr-threads' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 3,
+        title: 'old',
+        url: 'https://github.com/acme/app/pull/3',
+        author: 'ana',
+        headRef: 'feat/3',
+        baseRef: 'main',
+        headSha: 'abc3def0123',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    // A comment from before the change, under the PR's id: the row stays as it is.
+    const oldParent = 'pr' as unknown as schema.CommentParent
+    const old = db
+      .insert(schema.comments)
+      .values({ parentType: oldParent, parentId: pr.id, author: 'ana', body: 'Is CI green?' })
+      .returning()
+      .get()
+
+    const refused = (f: () => unknown) => expect(f).toThrow(HttpError)
+    refused(() => features.listComments(oldParent, pr.id))
+    refused(() => features.addComment({ parentType: oldParent, parentId: pr.id, body: 'yes' }, 'enrique'))
+    refused(() => features.editComment(old.id, 'changed', 'ana'))
+    refused(() => features.deleteComment(old.id, 'ana'))
+    expect(db.select().from(schema.comments).where(eq(schema.comments.id, old.id)).get()).toEqual(old)
+    expect(features.listOpenThreads(pid, 'ana')).toEqual([])
+    expect(features.listHumanThreads(pid, ['enrique'])).toEqual([])
+  })
+})
+
 describe('custom stages', () => {
   let stages: typeof import('./stages')
   let pid: number
