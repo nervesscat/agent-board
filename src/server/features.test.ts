@@ -547,8 +547,10 @@ describe('the agent loop', () => {
       relayedText: 'SQLite, as the notes say',
     })
 
-    // The human answers the second card: nothing is open any more, so the ticket resumes.
+    // The human answers the second card: nothing is open any more, so the ticket resumes. Their own
+    // answer carries no relay.
     features.decide(q2.id, 0, '', 'enrique')
+    expect(features.getPost(q2.id)).toMatchObject({ decidedBy: 'enrique', relayedBy: '', relayedText: '' })
     expect(features.getTicket(t.id).status).toBe('in_progress')
 
     // The human changes the relayed answer on the card: the card shows only their decision now.
