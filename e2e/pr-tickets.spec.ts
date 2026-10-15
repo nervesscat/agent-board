@@ -28,7 +28,7 @@ function seedPr(project: Project, title: string, author = 'someone') {
           .prepare(
             `insert into prs (project_id, repo_id, number, title, url, author, head_ref, base_ref, head_sha,
                waiting_on, review_stage, updated_at, fetched_at)
-             values (?, ?, ?, ?, ?, ?, ?, 'main', 'abcdef1234567', 'me', 'pending', ?, ?) returning id`,
+             values (?, ?, ?, ?, ?, ?, ?, 'main', 'abcdef1234567', ?, 'pending', ?, ?) returning id`,
           )
           .get(
             project.id,
@@ -38,6 +38,7 @@ function seedPr(project: Project, title: string, author = 'someone') {
             `https://github.com/example/repo/pull/${number}`,
             author,
             `branch-${number}`,
+            author === HUMAN ? 'others' : 'me',
             now,
             now,
           ) as Row
