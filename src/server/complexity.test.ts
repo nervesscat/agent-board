@@ -281,12 +281,62 @@ describe('the review texts the board ships', () => {
     expect(text).toContain('(ship as is, keep going, drop) and stop: `BLOCKER: decision`')
   })
 
+  it('mid runs one build-and-review round, with no fix pass after its review: a round that does not survive goes to a decision', async () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('low none, mid one round, high three.')
+    expect(text).toContain(
+      'When a round does not survive and no round is left: post what is still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`.',
+    )
+    // No other sentence gives mid a second round.
+    for (const phrase of [
+      'mid two',
+      'mid, two',
+      'mid gets',
+      'two rounds',
+      'a second round',
+      'another round',
+    ]) {
+      expect(text, phrase).not.toContain(phrase)
+    }
+    const { instructions } = await served()
+    expect(flat(instructions)).toContain('a mid ticket stops after its review')
+  })
+
+  it('high runs up to three build-and-review rounds: a surviving round ends the cycle, and there is no fourth round', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('low none, mid one round, high three.')
+    expect(text).toContain(
+      'Round 1 is the first build with its gate and its review; rounds 2 and 3 are fix passes, each followed by the gate and a review.',
+    )
+    expect(text).toContain('A surviving round ends the cycle: go on to step 6.')
+    expect(text).toContain('Never start one more round on your own.')
+    expect(text).toContain('a `deep` review earns no extra round')
+    expect(text).not.toContain('fourth')
+    expect(text).not.toContain('round 4')
+  })
+
   it('todo-review-ticket runs a low ticket with no spec agent and no review, and the builder verifies it itself', () => {
     const text = flat(ticketAgent)
     expect(text).toContain('A low ticket has no spec and no spec agent')
     expect(text).toContain('Low: no review.')
     expect(text).toContain('Low: the builder codes and verifies itself.')
     expect(text).toContain('Its return gives the evidence per criterion')
+  })
+
+  it("low survives on the gate and the builder's evidence, a criterion without evidence is a gate return, and steps 6 and 7 follow as for any ticket", () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      "The change survives when the gate passed (step 4) and the builder's evidence covers every criterion",
+    )
+    expect(text).toContain(
+      'A criterion without that evidence goes back to the builder (step 3) as a gate return (step 4).',
+    )
+    expect(text).toContain('Then go on to step 6.')
+    // Step 6 (evidence) and step 7 (hand-off) come next, in order; step 6 names the low case.
+    expect(text).toContain('A low ticket has no review folder, so its screenshots come from the preview.')
+    expect(text.indexOf('### 6. Evidence')).toBeGreaterThan(text.indexOf('Then go on to step 6.'))
+    expect(text.indexOf('### 7. Hand off')).toBeGreaterThan(text.indexOf('### 6. Evidence'))
+    expect(text).toContain("Every item, in order, as the board skill's hand-off checklist says")
   })
 
   it('todo-review-ticket sends a failed gate back at most twice, then asks the human, and a gate return uses no review round', () => {
@@ -341,6 +391,22 @@ describe('the review texts the board ships', () => {
     expect(byName.spec).toContain('Not on a low ticket')
   })
 
+  it("the builder and runner delegation notes send a low ticket's build to hand-off with no runner, and no note says three fix rounds", async () => {
+    const { DEFAULT_AGENTS } = await import('./defaultAgents')
+    const byName = Object.fromEntries(DEFAULT_AGENTS.map((a) => [a.name, flat(a.delegation)]))
+    expect(byName.builder).toContain(
+      "except for a low ticket: its build goes to hand-off on the project's checks and the builder's evidence, with no runner",
+    )
+    expect(byName.runner).toContain(
+      "except a low ticket's build, which goes to hand-off on the project's checks and the builder's evidence, with no runner",
+    )
+    // A review that does not survive the last round goes to a human decision, not to another builder.
+    expect(byName.runner).toContain(
+      'with the findings while the ticket has a round left, and with none left the human decides (ship as is, keep going, or drop).',
+    )
+    for (const [name, text] of Object.entries(byName)) expect(text, name).not.toContain('three fix rounds')
+  })
+
   it('board.md, the MCP instructions and AGENTS.md give the rounds as the complexity sets them, never "at most three rounds"', async () => {
     const { instructions } = await served()
     for (const [name, text] of Object.entries({
@@ -350,6 +416,20 @@ describe('the review texts the board ships', () => {
     })) {
       expect(flat(text), name).toContain('none for low, one for mid, three for high')
       expect(flat(text), name).not.toContain('at most three rounds')
+    }
+  })
+
+  it('board.md, the MCP instructions and AGENTS.md say the counts are review rounds, and a mid ticket stops after its review', async () => {
+    const { instructions } = await served()
+    for (const [name, text] of Object.entries({
+      'board.md': boardSkill,
+      'MCP instructions': instructions,
+      'AGENTS.md': agentsDoc,
+    })) {
+      expect(flat(text), name).toContain(
+        "review rounds as the ticket's complexity allows: none for low, one for mid, three for high",
+      )
+      expect(flat(text), name).toContain('a mid ticket stops after its review')
     }
   })
 
