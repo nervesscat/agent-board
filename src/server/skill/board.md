@@ -95,7 +95,9 @@ Then:
   tasks and subtasks, all counted, and together they are the hand-off's Implementation item.
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
-`repoId`; it starts with the default phases, the `tasks` you give as plain texts under the first.
+`repoId` and, when the human says how much review it gets, `complexity` (`low`, `mid` or `high`;
+`mid` when left out); it starts with the default phases, the `tasks` you give as plain texts under
+the first.
 Lanes of a ticket you are working are yours to create (next section).
 
 ## 3. While working
@@ -402,7 +404,8 @@ The project's Agents page adds a default set, the build and review cycle of the
 `/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
 criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
 **env**, **verify**, **hunt**, **refute** and **merge** try to break it) → back to **builder** with
-the confirmed findings, at most three rounds → hand off. `/todo-review` is that orchestrator for
+the confirmed findings, the rounds its ticket's complexity sets (none for low, one for mid, three for
+high) → hand off. `/todo-review` is that orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
 working, no weakened tests, screenshots) and blocks only for what only the human can give.
 `/review-queue` reviews the board's PR queue (with `build`, it runs `/todo-review` after).

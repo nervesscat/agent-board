@@ -61,7 +61,8 @@ export const DEFAULT_AGENTS: { name: string; instructions: string; delegation: s
     name: 'spec',
     instructions: brief('spec'),
     delegation: `**When:** first, on every ticket a build starts from, before any code exists, and again
-if the ticket's instructions change. In a review, the feature-review skill runs it as its spec
+if the ticket's instructions change. Not on a low ticket: its criteria come from its instructions,
+and the builder takes those as its spec. In a review, the feature-review skill runs it as its spec
 phase.
 
 **Give it:** the ticket (instructions, posts, attachments) as the context, the project's
@@ -78,7 +79,8 @@ with \`parentTaskId\` = its id). A ticket with no tasks gets the project's defau
   {
     name: 'builder',
     instructions: BUILDER,
-    delegation: `**When:** after **spec** on a new build, and after every review (**runner**) whose verdict
+    delegation: `**When:** after **spec** on a new build (a low ticket has none; the builder then
+takes its instructions as the spec), and after every review (**runner**) whose verdict
 is not SHIP. Never two builders on one branch.
 
 **Give it:** the ticket, the spec's acceptance criteria, the project's instructions, the worktree and
@@ -88,8 +90,9 @@ with its scenario.
 **Returns:** its commits, what changed per criterion or finding, the tests and checks it ran, and
 anything left open.
 
-**Next:** **runner** on the branch. A question it returns → \`ask_decision\`. After three fix rounds
-with findings still open, stop and ask the human (ship as is, keep going, or drop).`,
+**Next:** **runner** on the branch. A question it returns → \`ask_decision\`. After the rounds its ticket's
+complexity allows are used up (none for low, one for mid, three for high), stop and ask the human
+(ship as is, keep going, or drop).`,
   },
   {
     name: 'runner',
