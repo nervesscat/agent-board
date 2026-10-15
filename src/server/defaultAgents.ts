@@ -96,8 +96,8 @@ rounds its ticket's complexity allows are none for low, one for mid, three for h
 first build and its review. Mid has one: a review that does not survive then goes to the human (ship as
 is, keep going, or drop). High has three: two fix passes follow the first build, each with the checks and
 a new review, and a round that does not survive after the third goes to the human the same way. Low has
-no review: its checks return the build at most twice, and when they still fail after the second return,
-the human decides (keep going or drop).`,
+no review: its checks return the build at most twice, and after the second return, when the checks still
+fail or a criterion still has no evidence, the human decides (keep going or drop).`,
   },
   {
     name: 'runner',

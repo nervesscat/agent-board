@@ -207,10 +207,10 @@ builder, release `LOCK` first.
 From the worktree:
 1. Run the project's checks (typecheck, lint, unit tests, and the end-to-end suite when the
    project has one). A failure goes back to the builder with its output. A gate return uses up no review
-   round. A run sends the change back at most twice, on every level: after the second return, when the
-   checks still fail, post what fails, `ask_decision` (keep going or drop) and stop:
-   `BLOCKER: decision`. A failure that also happens on `origin/BASE` is pre-existing: confirm it
-   there, note it, go on.
+   round. A run sends the change back at most twice, on every level. After the second return, when the
+   checks still fail, or, for a low ticket, when a criterion still has no evidence (step 5), post what
+   fails or is unproven, `ask_decision` (keep going or drop) and stop: `BLOCKER: decision`. A failure
+   that also happens on `origin/BASE` is pre-existing: confirm it there, note it, go on.
 2. Read the whole diff: `git diff origin/BASE...<branch>`. Then grep the added lines for
    `.skip(`, `.only(`, `xit(`, `xdescribe(`, `test.todo`, `@ts-ignore`, `@ts-expect-error`,
    `eslint-disable`, `oxlint-ignore`, `NODE_ENV`, `process.env.CI`, `vi.mock(`, `jest.mock(`,
@@ -227,7 +227,9 @@ From the worktree:
 the gate passed (step 4) and the builder's evidence covers every criterion: each one shows execution of
 the real code (the test or the run its evidence names), or is `UNVERIFIED` only for a reason in
 **Escalation** that you could not get past. A criterion without that evidence goes back to the builder
-(step 3) as a gate return (step 4). Then go on to step 6.
+(step 3) as a gate return (step 4). After the second return, a criterion that still has no evidence is
+the decision in step 4, never a hand-off. Only a gate that passed with that evidence for every criterion
+may go on. Then go on to step 6.
 
 **Mid and high.** A review that is done is not run again. Read the branch's head SHA
 (`git -C <worktree> rev-parse HEAD`) and `git -C REPO fetch origin BASE`. Skip the review, on a

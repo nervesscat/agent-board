@@ -332,6 +332,17 @@ describe('the review texts the board ships', () => {
       'A criterion without that evidence goes back to the builder (step 3) as a gate return (step 4).',
     )
     expect(text).toContain('Then go on to step 6.')
+    // The low path reaches step 6 only through a gate that passed with that evidence for every criterion.
+    const low = flat(between(ticketAgent, '**Low: no review.**', '**Mid and high.**'))
+    expect(low).toContain(
+      'After the second return, a criterion that still has no evidence is the decision in step 4, never a hand-off.',
+    )
+    expect(low).toContain(
+      'Only a gate that passed with that evidence for every criterion may go on. Then go on to step 6.',
+    )
+    expect(flat(between(ticketAgent, '### 4. Your own gate', '### 5. Review'))).toContain(
+      'when the checks still fail, or, for a low ticket, when a criterion still has no evidence (step 5)',
+    )
     // Step 6 (evidence) and step 7 (hand-off) come next, in order; step 6 names the low case.
     expect(text).toContain('A low ticket has no review folder, so its screenshots come from the preview.')
     expect(text.indexOf('### 6. Evidence')).toBeGreaterThan(text.indexOf('Then go on to step 6.'))
@@ -388,6 +399,9 @@ describe('the review texts the board ships', () => {
     expect(byName.builder).toContain('Mid has one: a review that does not survive then goes to the human')
     expect(byName.builder).toContain('High has three: two fix passes follow the first build')
     expect(byName.builder).toContain('Low has no review: its checks return the build at most twice')
+    expect(byName.builder).toContain(
+      'after the second return, when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop).',
+    )
     expect(byName.builder).toContain(
       'after every review (**runner**) whose verdict is not SHIP, while the ticket has a round left.',
     )

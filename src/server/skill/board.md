@@ -408,7 +408,9 @@ criteria) → **builder** (the code) → **runner** (a `/feature-review` of the 
 review rounds as the ticket's complexity allows: none for low, one for mid, three for high; round 1 is
 the first build and its review, so a mid ticket stops after its review, and a review that does not
 survive after the last round goes to a human decision; a high ticket gets two fix passes; a low ticket
-has no review, and its checks return the build at most twice) → hand off. `/todo-review` is that
+has no review, and its checks return the build at most twice; after the second return, when the checks
+still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes
+to hand-off only with evidence for every criterion) → hand off. `/todo-review` is that
 orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
 working, no weakened tests, screenshots) and blocks only for what only the human can give.
