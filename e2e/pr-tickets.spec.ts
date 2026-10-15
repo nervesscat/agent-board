@@ -56,6 +56,7 @@ test('a PR of the queue gets its own ticket at the refresh, and its card opens t
   page,
   project,
   human,
+  api,
 }) => {
   const pr = seedPr(project, 'Fresh from the queue')
   const { ticket } = await refreshedRow(human, project, pr)
@@ -69,6 +70,11 @@ test('a PR of the queue gets its own ticket at the refresh, and its card opens t
   await expect(
     page.getByRole('heading', { level: 1, name: `PR #${pr.number}: Fresh from the queue` }),
   ).toBeVisible()
+  // Its page offers no delete (the trash icon is the delete trigger). A feature ticket's page does: the control.
+  await expect(page.locator('svg.lucide-trash-2')).toHaveCount(0)
+  const feature = await api.ticket({ title: 'A feature, for the delete control' })
+  await page.goto(`/projects/${project.id}/features/${feature.id}`)
+  await expect(page.locator('svg.lucide-trash-2')).toHaveCount(1)
 })
 
 test("a PR's ticket is in To do, and on no features view: not the board, the list or the archive", async ({
