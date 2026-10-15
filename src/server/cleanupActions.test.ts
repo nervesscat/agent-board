@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { DeleteItem, DeleteResult } from './cleanupActions'
+import type { RemovalHooks } from './git'
 import type { PreviewRunner, Proc } from './managedPreview'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -162,8 +163,8 @@ const logged = (ticketId: number, kind = 'git') =>
     .filter((a) => a.refType === 'ticket' && a.kind === kind)
     .map((a) => [a.actor, a.text])
 /** An agent's request as `cleanup_delete` runs it, for the agent `codex`. */
-const asAgent = (items: DeleteItem[], pid = projectId) =>
-  deleteLeftovers(pid, items, 'codex', { agent: true })
+const asAgent = (items: DeleteItem[], pid = projectId, removal?: RemovalHooks) =>
+  deleteLeftovers(pid, items, 'codex', { agent: true, removal })
 /** Requests each caller's input check refuses, built around one well-formed local item. */
 const malformed = (item: DeleteItem): unknown[][] => [
   [{ ...item, sha: 'HEAD' }],
@@ -3049,6 +3050,281 @@ describe('a symbolic ref, a branch that is an alias of another', () => {
       gitIn(origin)('update-ref', '--no-deref', '-d', 'refs/heads/alias-y2')
       gitIn(origin)('update-ref', '-d', 'refs/heads/y2-target')
       git('update-ref', '-d', 'refs/remotes/origin/alias-y2')
+    }
+  })
+})
+
+describe('a link made again in a worktree while it is being removed', () => {
+  // A directory junction on Windows, where git deletes through one as through a folder; a symbolic
+  // link elsewhere.
+  const made: string[] = []
+  const linkDir = (target: string, link: string) => {
+    fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : 'dir')
+    made.push(link)
+  }
+  const isLink = (p: string) => {
+    try {
+      return fs.lstatSync(p).isSymbolicLink()
+    } catch {
+      return false
+    }
+  }
+  /** The link alone, never through it. */
+  const unlinkDir = (link: string) => {
+    try {
+      fs.unlinkSync(link)
+    } catch {
+      fs.rmdirSync(link)
+    }
+  }
+  /** Makes each of `links` a link to `target` again where it is missing, as a process keeping it would. */
+  const relink = (target: string, ...links: string[]) => {
+    for (const link of links) {
+      if (isLink(link)) continue
+      fs.mkdirSync(path.dirname(link), { recursive: true })
+      linkDir(target, link)
+    }
+  }
+  /** A folder out of every worktree, with files that must outlive their removal. */
+  const canary = (name: string) => {
+    const dir = path.join(tmp, `canary-${name}`)
+    fs.mkdirSync(path.join(dir, 'inner'), { recursive: true })
+    fs.writeFileSync(path.join(dir, 'keep.txt'), name)
+    fs.writeFileSync(path.join(dir, 'inner', 'keep.txt'), name)
+    return dir
+  }
+  const intact = (dir: string, name: string) =>
+    ['keep.txt', path.join('inner', 'keep.txt')].every(
+      (file) => fs.existsSync(path.join(dir, file)) && fs.readFileSync(path.join(dir, file), 'utf8') === name,
+    )
+  /** A closed ticket's landed branch with a worktree at `tree`, and the item that removes them. */
+  const worktree = (name: string, tree = wt(name)) => {
+    const branch = `feat/${name}`
+    const sha = land([branch])[branch]!
+    git('worktree', 'add', '-q', tree, branch)
+    const t = done(name, branch)
+    const item: DeleteItem = { ticketId: t.id, branch, kind: 'worktrees', sha, worktrees: [tree] }
+    return { branch, sha, item, tree }
+  }
+
+  afterAll(() => {
+    for (const link of made.filter(isLink)) unlinkDir(link)
+  })
+
+  it('leaves the folder a link of the worktree leads to, when an agent removes it', async () => {
+    const target = canary('j1')
+    const { item, tree, branch } = worktree('j1')
+    linkDir(target, path.join(tree, 'node_modules'))
+    const [r] = await asAgent([item])
+    expect(intact(target, 'j1')).toBe(true)
+    expect(r).toMatchObject({ ok: true, outcome: 'deleted', reason: null })
+    expect(r!.unlinked.map((u) => path.resolve(u.path))).toEqual([path.join(tree, 'node_modules')])
+    expect(fs.existsSync(tree)).toBe(false)
+    expect(hasRef(repo, `refs/heads/${branch}`)).toBe(false)
+  })
+
+  it('leaves it when the link is made again just before the folder goes', async () => {
+    const target = canary('j2')
+    const { item, tree, branch } = worktree('j2')
+    const link = path.join(tree, 'node_modules')
+    linkDir(target, link)
+    const [r] = await asAgent([item], projectId, { beforeRemoval: () => relink(target, link) })
+    expect(intact(target, 'j2')).toBe(true)
+    expect(r).toMatchObject({ ok: true, outcome: 'deleted', reason: null })
+    expect(fs.existsSync(tree)).toBe(false)
+    expect(worktreePaths()).not.toContain(tree)
+    expect(hasRef(repo, `refs/heads/${branch}`)).toBe(false)
+  })
+
+  it('leaves it when the link is made again in the folder being removed, or where the folder was', async () => {
+    const target = canary('j3')
+    const { item, tree, branch } = worktree('j3')
+    const link = path.join(tree, 'node_modules')
+    linkDir(target, link)
+    let moved = ''
+    try {
+      const [r] = await asAgent([item], projectId, {
+        renamed: (from, to) => {
+          moved = to
+          relink(target, path.join(to, 'node_modules'), path.join(from, 'node_modules'))
+        },
+      })
+      expect(intact(target, 'j3')).toBe(true)
+      expect(r).toMatchObject({ ok: true, outcome: 'deleted', reason: null })
+      expect(fs.existsSync(moved)).toBe(false)
+      // What a process makes at its old path afterwards is no worktree: it is left as it was made.
+      expect(isLink(link)).toBe(true)
+      expect(worktreePaths()).not.toContain(tree)
+      expect(hasRef(repo, `refs/heads/${branch}`)).toBe(false)
+    } finally {
+      if (isLink(link)) unlinkDir(link)
+      if (fs.existsSync(tree)) fs.rmdirSync(tree)
+    }
+  })
+
+  it('never removes the main checkout a link of the worktree leads to, made again as it goes', async () => {
+    // A repository of its own: a removal gone astray could harm that one alone.
+    const own = path.join(tmp, 'own-j4')
+    const main = path.join(own, 'repo')
+    fs.mkdirSync(main, { recursive: true })
+    const g = gitIn(main)
+    g('init', '-q', '-b', 'main')
+    g('config', 'user.email', 't@t')
+    g('config', 'user.name', 't')
+    fs.writeFileSync(path.join(main, '.gitignore'), 'node_modules\n')
+    fs.writeFileSync(path.join(main, 'keep.txt'), 'the main checkout\n')
+    g('add', '.')
+    g('commit', '-q', '-m', 'base')
+    const head = g('rev-parse', 'HEAD')
+    g('branch', 'feat/j4')
+    const tree = path.join(own, 'wt-j4')
+    g('worktree', 'add', '-q', tree, 'feat/j4')
+    const link = path.join(tree, 'node_modules')
+    linkDir(main, link)
+    const pid = dbm.db.insert(dbm.schema.projects).values({ name: 'own j4' }).returning().get().id
+    dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId: pid, name: 'own', repoPath: main, baseBranch: 'main' })
+      .run()
+    const t = features.createTicket(pid, { title: 'j4', branch: 'feat/j4', status: 'done' }, 'claude')
+
+    const [r] = await asAgent(
+      [{ ticketId: t.id, branch: 'feat/j4', kind: 'worktrees', sha: head, worktrees: [tree] }],
+      pid,
+      { beforeRemoval: () => relink(main, link) },
+    )
+    expect(fs.readFileSync(path.join(main, 'keep.txt'), 'utf8')).toBe('the main checkout\n')
+    expect(g('rev-parse', 'HEAD')).toBe(head)
+    expect(g('status', '--porcelain')).toBe('')
+    expect(r).toMatchObject({ ok: true, outcome: 'deleted', reason: null })
+    expect(fs.existsSync(tree)).toBe(false)
+  })
+
+  it('protects the human’s removal the same way', async () => {
+    const target = canary('j5')
+    const { item, tree, branch } = worktree('j5')
+    const link = path.join(tree, 'node_modules')
+    linkDir(target, link)
+    const [r] = await deleteLeftovers(projectId, [item], 'enrique', {
+      removal: { beforeRemoval: () => relink(target, link) },
+    })
+    expect(intact(target, 'j5')).toBe(true)
+    expect(r).toMatchObject({ ok: true, outcome: 'deleted', reason: null })
+    expect(fs.existsSync(tree)).toBe(false)
+    expect(hasRef(repo, `refs/heads/${branch}`)).toBe(false)
+  })
+
+  it('removes no worktree whose folder turned into a link, nor anything where it leads', async () => {
+    const { item, tree, branch, sha } = worktree('j6')
+    // A copy of the worktree, which git would take for it, with a file of its own where git ignores one.
+    const decoy = path.join(tmp, 'decoy-j6')
+    fs.cpSync(tree, decoy, { recursive: true })
+    fs.mkdirSync(path.join(decoy, 'node_modules'))
+    fs.writeFileSync(path.join(decoy, 'node_modules', 'keep.txt'), 'decoy')
+    const aside = `${tree}-aside`
+    try {
+      const [r] = await asAgent([item], projectId, {
+        beforeRemoval: () => {
+          fs.renameSync(tree, aside)
+          linkDir(decoy, tree)
+        },
+      })
+      expect(fs.readFileSync(path.join(decoy, 'node_modules', 'keep.txt'), 'utf8')).toBe('decoy')
+      expect(r).toMatchObject({ ok: false, outcome: 'failed', removed: [] })
+      expect(r!.reason).toContain('is a link')
+      expect(fs.existsSync(path.join(aside, '.git'))).toBe(true)
+      expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+    } finally {
+      if (isLink(tree)) unlinkDir(tree)
+      if (fs.existsSync(aside)) fs.renameSync(aside, tree)
+    }
+  })
+
+  it.skipIf(process.platform !== 'win32' && process.getuid?.() === 0)(
+    'removes nothing of a worktree it cannot move out of the way, and keeps the branch',
+    async () => {
+      // In a folder of its own, which the test can seal.
+      const parent = path.join(tmp, 'sealed-j7')
+      fs.mkdirSync(parent)
+      const { item, tree, branch, sha } = worktree('j7', path.join(parent, 'agent-board-j7'))
+      const files = fs.readdirSync(tree).sort()
+      let release: () => Promise<unknown> = async () => {}
+      try {
+        const [r] = await asAgent([item], projectId, {
+          beforeRemoval: async () => {
+            if (process.platform === 'win32') {
+              // A process working in it, once it runs: Windows moves no folder a process is in.
+              const busy = spawn(
+                process.execPath,
+                ['-e', "process.stdout.write('ready'); setTimeout(() => {}, 60_000)"],
+                { cwd: tree, stdio: ['ignore', 'pipe', 'ignore'] },
+              )
+              release = () =>
+                new Promise((resolve) => {
+                  busy.once('exit', resolve)
+                  busy.kill()
+                })
+              await new Promise((resolve) => busy.stdout!.once('data', resolve))
+            } else {
+              // Its parent sealed: nothing in it is renamed.
+              fs.chmodSync(parent, 0o555)
+              release = async () => fs.chmodSync(parent, 0o755)
+            }
+          },
+        })
+        expect(r).toMatchObject({ ok: false, outcome: 'failed', removed: [] })
+        expect(fs.readdirSync(tree).sort()).toEqual(files)
+        expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+        expect(worktreePaths()).toContain(tree)
+      } finally {
+        await release()
+      }
+    },
+  )
+
+  it.runIf(process.platform === 'linux' && process.getuid?.() !== 0)(
+    'puts back a worktree it could not empty, its .git still in it, and keeps the branch',
+    async () => {
+      const { item, tree, branch, sha } = worktree('j8')
+      try {
+        const [r] = await asAgent([item], projectId, {
+          renamed: (_from, moved) => {
+            // Something in it that cannot be deleted.
+            const sealed = path.join(moved, 'sealed')
+            fs.mkdirSync(sealed)
+            fs.writeFileSync(path.join(sealed, 'x.txt'), 'x')
+            fs.chmodSync(sealed, 0o555)
+          },
+        })
+        expect(r).toMatchObject({ ok: false, outcome: 'failed', removed: [] })
+        expect(fs.existsSync(path.join(tree, '.git'))).toBe(true)
+        expect(gitIn(tree)('rev-parse', '--abbrev-ref', 'HEAD')).toBe(branch)
+        expect(git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+        expect(worktreePaths()).toContain(tree)
+      } finally {
+        if (fs.existsSync(path.join(tree, 'sealed'))) fs.chmodSync(path.join(tree, 'sealed'), 0o755)
+      }
+    },
+  )
+
+  it('removes its own entry in the repository’s worktrees folder and no other, none git would prune either', async () => {
+    const { item, tree } = worktree('j9')
+    const entryOf = (dir: string) =>
+      path.resolve(dir, /^gitdir: (.+)$/m.exec(fs.readFileSync(path.join(dir, '.git'), 'utf8'))![1]!.trim())
+    const own = entryOf(tree)
+    // Another worktree, its folder deleted by hand: git lists it as one to prune.
+    git('worktree', 'add', '-q', '-b', 'feat/j9-gone', wt('j9-gone'), 'main')
+    const gone = entryOf(wt('j9-gone'))
+    fs.rmSync(wt('j9-gone'), { recursive: true, force: true })
+    try {
+      const [r] = await asAgent([item])
+      expect(r).toMatchObject({ ok: true, outcome: 'deleted', reason: null })
+      expect(fs.existsSync(own)).toBe(false)
+      expect(fs.existsSync(gone)).toBe(true)
+      expect(worktreePaths()).toContain(wt('j9-gone'))
+      expect(worktreePaths()).not.toContain(tree)
+    } finally {
+      git('worktree', 'remove', wt('j9-gone'))
     }
   })
 })

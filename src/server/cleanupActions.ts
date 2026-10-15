@@ -23,6 +23,7 @@ import {
   gitSaid,
   listWorktrees,
   originSymref,
+  type RemovalHooks,
   removeWorktree,
   worktreeChanges,
 } from './git'
@@ -48,7 +49,8 @@ import { inBatches, removeLink, type WorktreeLink, type WorktreeRepo, worktreeLi
  * is then (origin fetched first) and against the commit the caller saw, the same checks for both; the
  * deletions in one checkout run one at a time. Nothing is forced: a worktree with changes, a branch
  * that moved and an origin branch someone pushed to are all left alone. A worktree's links are removed
- * as links before it, so git never deletes through one what lies out of it (`worktreeLinks.ts`).
+ * as links before it (`worktreeLinks.ts`), and its removal never goes through a link either, one made
+ * again meanwhile included (`removeWorktree`): nothing out of it is deleted with it.
  */
 
 export const DELETE_KINDS = ['local', 'remote', 'worktrees'] as const
@@ -158,13 +160,14 @@ const short = (sha: string) => sha.slice(0, 7)
 /**
  * Deletes what the caller confirmed, item by item: one refused or failing does not stop the rest.
  * Answers each item's outcome, in the order asked. An agent's request with a branch on origin in it is
- * refused whole (403), before anything is looked at.
+ * refused whole (403), before anything is looked at. `removal` is for tests: what they do while a
+ * worktree is being removed (`removeWorktree`).
  */
 export async function deleteLeftovers(
   projectId: number,
   items: DeleteItem[],
   actor: string,
-  opts: { agent?: boolean } = {},
+  opts: { agent?: boolean; removal?: RemovalHooks } = {},
 ): Promise<DeleteResult[]> {
   if (opts.agent && items.some((item) => !agentMay.has(item.kind)))
     throw new HttpError(403, 'only the human deletes branches on origin, from the Cleanup page')
@@ -191,7 +194,7 @@ export async function deleteLeftovers(
         for (const i of at) {
           const item = items[i]!
           try {
-            results[i] = await deleteOne(projectId, item, actor, fetchError)
+            results[i] = await deleteOne(projectId, item, actor, fetchError, opts.removal)
           } catch (err) {
             results[i] = result(item, 'failed', gitSaid(err))
           } finally {
@@ -210,6 +213,7 @@ async function deleteOne(
   item: DeleteItem,
   actor: string,
   fetchError: string | null,
+  removal: RemovalHooks = {},
 ): Promise<DeleteResult> {
   const report = await cleanupReport(projectId, { only: [item.ticketId] })
   const t = report.tickets[0]
@@ -330,7 +334,7 @@ async function deleteOne(
           { removed, unlinked, restore },
         )
       try {
-        await removeWorktree(repoPath, w.path)
+        await removeWorktree(repoPath, w.path, removal)
       } catch (err) {
         return result(item, 'failed', `${w.path}: ${gitSaid(err)}; ${b.name} is kept`, {
           removed,

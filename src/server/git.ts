@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -637,13 +637,165 @@ export async function commitsBrought(
 // --- writes: the human's Cleanup actions, nothing else ---
 
 /**
- * Removes a worktree and its folder, never with `--force`: git refuses one with changed or untracked
- * files (ignored ones, such as node_modules, go with it), a locked one and the main checkout. On
- * Windows git deletes through a directory junction in it, as through a folder: the caller removes its
- * links first, each the link alone (`worktreeLinks.ts`).
+ * Removes a worktree: its folder, then its entry in the repository's `worktrees` folder, what `git
+ * worktree remove` deletes, but never through a link. git is not asked to: on Windows it deletes
+ * through a directory junction as through a folder, and one made again after the caller removed the
+ * worktree's links (`worktreeLinks.ts`) would have it empty the folder the junction leads to, the main
+ * checkout too. So the folder is first renamed out of the way, beside itself: a rename moves a link,
+ * never what it leads to, and nothing a process makes at the old path afterwards is in it (Windows
+ * renames no folder a process works in, which then fails here with nothing deleted). Then each entry is
+ * looked at without following it and deleted (`removeFolder`): a link, a junction too, as the link
+ * alone, a folder once it is empty, the worktree's `.git` last. A deletion that fails puts back at its
+ * path what is left, a worktree git still knows. The entry goes once the folder is gone. Never forced,
+ * as git would not: the worktree must be one of this repository's, not locked, without changes or
+ * untracked files as it goes, and its folder no link itself. `hooks` are for tests alone.
  */
-export async function removeWorktree(repoPath: string, worktreePath: string): Promise<void> {
-  await git(repoPath, ['worktree', 'remove', '--', worktreePath])
+export async function removeWorktree(
+  repoPath: string,
+  worktreePath: string,
+  hooks: RemovalHooks = {},
+): Promise<void> {
+  const entry = await worktreeEntry(repoPath, worktreePath)
+  if (fs.existsSync(path.join(entry, 'locked'))) throw new Error('it is locked')
+  const changes = await worktreeChanges(worktreePath)
+  if (changes.length)
+    throw new Error(
+      `it has changes or untracked files now: ${changes.slice(0, 3).join(', ')}${changes.length > 3 ? ', …' : ''}`,
+    )
+  await hooks.beforeRemoval?.(worktreePath)
+  if ((await fs.promises.lstat(worktreePath)).isSymbolicLink())
+    throw new Error('its folder is a link: no worktree is removed through one')
+  const moved = `${worktreePath}.removing-${randomBytes(6).toString('hex')}`
+  try {
+    await fs.promises.rename(worktreePath, moved)
+  } catch (err) {
+    throw new Error(`it could not be moved out of the way to be removed: ${messageOf(err)}`)
+  }
+  try {
+    await hooks.renamed?.(worktreePath, moved)
+    // Looked at again as it is now: a link put in its place meanwhile is no folder to empty.
+    if (!(await fs.promises.lstat(moved)).isDirectory())
+      throw new Error('its folder turned into a link as it was being removed')
+    await removeFolder(moved, '.git')
+  } catch (err) {
+    const back = await fs.promises.rename(moved, worktreePath).then(
+      () => '',
+      () => `; what is left of it is at ${moved}`,
+    )
+    throw new Error(`${messageOf(err)}${back}`)
+  }
+  await removeFolder(entry).catch((err: unknown) => {
+    throw new Error(`its folder is gone, but not its entry ${entry}: ${messageOf(err)}`)
+  })
+}
+
+/** Moments of a worktree's removal a test acts at, as another process could meanwhile. */
+export interface RemovalHooks {
+  /** The worktree is checked, its links removed: just before its folder goes. */
+  beforeRemoval?: (worktreePath: string) => Promise<void> | void
+  /** Its folder is moved out of the way, to `moved`; nothing in it is deleted yet. */
+  renamed?: (worktreePath: string, moved: string) => Promise<void> | void
+}
+
+const messageOf = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
+/**
+ * The worktree's entry in its repository's git folder (`.git/worktrees/<name>`), checked as git checks
+ * one before it removes it: the worktree's `.git` is a file that points there, the entry is one of the
+ * `worktrees` of `repoPath`'s repository, and it points back at that `.git`. Throws otherwise: for the
+ * main checkout (its `.git` a folder), another repository's worktree, a folder that is no worktree.
+ */
+async function worktreeEntry(repoPath: string, worktreePath: string): Promise<string> {
+  const dotGit = path.join(worktreePath, '.git')
+  if (!(await fs.promises.lstat(dotGit).catch(() => null))?.isFile())
+    throw new Error('it has no .git file: it is no worktree of a repository')
+  const [entry, ours] = await Promise.all([gitDirOf(worktreePath), gitDirOf(repoPath)])
+  if (!entry || !ours) throw new Error('it is no worktree of this repository')
+  const common = await commonDir(entry)
+  const mine =
+    (await sameReal(path.dirname(entry), path.join(common, 'worktrees'))) &&
+    (await sameReal(common, await commonDir(ours)))
+  if (!mine) throw new Error('it is no worktree of this repository')
+  const back = await fs.promises.readFile(path.join(entry, 'gitdir'), 'utf8').then(
+    // Relative to the entry when git wrote it so (`worktree.useRelativePaths`).
+    (text) => path.resolve(entry, text.trim()),
+    () => null,
+  )
+  if (!back || !(await sameReal(back, dotGit))) throw new Error(`its entry ${entry} points elsewhere`)
+  return entry
+}
+
+/** The repository's own git folder, which a worktree's (`gitDir`) shares (its `commondir`); or itself. */
+async function commonDir(gitDir: string): Promise<string> {
+  const to = await fs.promises.readFile(path.join(gitDir, 'commondir'), 'utf8').catch(() => '')
+  return to.trim() ? path.resolve(gitDir, to.trim()) : gitDir
+}
+
+/** Whether two paths are the same file or folder, every link on the way resolved. */
+async function sameReal(a: string, b: string): Promise<boolean> {
+  const [x, y] = await Promise.all([a, b].map((p) => fs.promises.realpath(p).catch(() => null)))
+  const key = (p: string) => (process.platform === 'win32' ? p.toLowerCase() : p)
+  return !!x && !!y && key(x) === key(y)
+}
+
+/** How many entries of a folder are deleted at once. */
+const AT_ONCE = 64
+
+/**
+ * Deletes the folder `dir` and all it holds, never going through a link: each entry is looked at
+ * without following it (`lstat`), and a link, on Windows a junction too, goes as the link alone,
+ * wherever it leads; a file is deleted; a folder is emptied the same way, then removed. A folder is
+ * looked at again once read, and before each batch of its entries goes: one that turned into a link or
+ * into another folder meanwhile is not emptied. Deletions go by path, so a folder swapped for a link
+ * between that look and the deletion of one of its entries would still mislead that one: a process
+ * would have to find the renamed folder and swap one inside it in that moment. `last`, an entry of
+ * `dir`, goes after all the others.
+ */
+async function removeFolder(dir: string, last?: string): Promise<void> {
+  const seen = await fs.promises.lstat(dir, { bigint: true })
+  if (!seen.isDirectory()) throw new Error(`${dir} turned into a link as it was being removed`)
+  const names = await fs.promises.readdir(dir)
+  const same = async () => {
+    const now = await fs.promises.lstat(dir, { bigint: true })
+    if (!now.isDirectory() || now.ino !== seen.ino || now.dev !== seen.dev)
+      throw new Error(`${dir} changed as it was being removed`)
+  }
+  const first = names.filter((name) => name !== last)
+  for (let i = 0; i < first.length; i += AT_ONCE) {
+    await same()
+    // Each batch settles whole before a failure is told: nothing of it still runs once the caller
+    // puts the folder back.
+    const done = await Promise.allSettled(
+      first.slice(i, i + AT_ONCE).map((name) => removeEntry(path.join(dir, name))),
+    )
+    const failed = done.find((d) => d.status === 'rejected')
+    if (failed) throw failed.reason
+  }
+  if (last !== undefined && names.includes(last)) {
+    await same()
+    await removeEntry(path.join(dir, last))
+  }
+  await fs.promises.rmdir(dir)
+}
+
+/** An entry of a folder being removed, looked at without following it; one gone already is done. */
+async function removeEntry(entry: string): Promise<void> {
+  const stat = await fs.promises.lstat(entry).catch((err: NodeJS.ErrnoException) => {
+    if (err.code === 'ENOENT') return null
+    throw err
+  })
+  if (!stat) return
+  if (stat.isSymbolicLink()) {
+    // The link alone: `unlink`, or `rmdir` where the system wants that for a link to a folder.
+    try {
+      await fs.promises.unlink(entry)
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code !== 'EPERM' && code !== 'EISDIR') throw err
+      await fs.promises.rmdir(entry)
+    }
+  } else if (stat.isDirectory()) await removeFolder(entry)
+  else await fs.promises.unlink(entry)
 }
 
 /**

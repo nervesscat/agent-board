@@ -4,13 +4,13 @@ import path from 'node:path'
 import { pathKey } from './cleanup'
 
 /**
- * The links in a worktree, removed as links before it. `git worktree remove` deletes the worktree's
- * folder with all it holds, and on Windows it goes through a directory junction as through a folder:
- * a `node_modules` or `data` linked to another checkout's would be emptied with it. So before a
- * worktree is removed, each of its links is removed first, the link alone, and what one leads to out
- * of the worktree stays as it is. Those within it go too: git deletes what they lead to by its own
- * path, where a junction it reached after its target would stop the removal half-way (pnpm's
- * `node_modules/<package>` into `node_modules/.pnpm`, which comes first).
+ * The links in a worktree, removed as links before it. On Windows `git worktree remove` would go
+ * through a directory junction as through a folder: a `node_modules` or `data` linked to another
+ * checkout's would be emptied with it. So before a worktree is removed, each of its links is removed
+ * first, the link alone, and what one leads to out of the worktree stays as it is: each such link is
+ * answered with where it led, and one that git tracks keeps the worktree. Those within it go too
+ * (pnpm's `node_modules/<package>` into `node_modules/.pnpm`). The removal itself (`removeWorktree`)
+ * never goes through a link either, one made again after these went included.
  */
 
 export interface WorktreeLink {
