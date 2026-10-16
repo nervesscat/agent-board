@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { X } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { z } from 'zod'
 
 import { Empty } from '#/components/Empty'
@@ -163,15 +164,47 @@ function GalleryPage() {
         <>
           <FileGrid projectId={id} files={files} />
           {hasNextPage && (
-            <div className="flex justify-center">
-              <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-                {isFetchingNextPage ? 'Loading…' : 'Load more'}
-              </Button>
-            </div>
+            <MoreFiles
+              loading={isFetchingNextPage}
+              onNear={() => {
+                if (hasNextPage && !isFetchingNextPage) void fetchNextPage()
+              }}
+            />
           )}
         </>
       ) : (
         <Empty>{filtered ? 'No files match these filters.' : 'No files on this project yet.'}</Empty>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The end of the grid while more files are to come: the next page loads as it nears the screen, by a
+ * scroll or by tabbing to the last tiles (focus scrolls them, and this, into view). Observed afresh
+ * after each page, so a page too short to push it off the screen brings the one after it too.
+ */
+function MoreFiles({ loading, onNear }: { loading: boolean; onNear: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const near = useRef(onNear)
+  useEffect(() => {
+    near.current = onNear
+  })
+  useEffect(() => {
+    const el = ref.current
+    if (!el || loading) return
+    const io = new IntersectionObserver(([e]) => e?.isIntersecting && near.current(), {
+      rootMargin: '0px 0px 600px 0px',
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [loading])
+  return (
+    <div ref={ref} data-slot="more-files" className="flex min-h-8 justify-center" role="status">
+      {loading && (
+        <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading more files…
+        </span>
       )}
     </div>
   )

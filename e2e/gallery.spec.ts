@@ -311,7 +311,9 @@ async function manyFiles(api: Api, agent: APIRequestContext, count: number) {
   return t
 }
 
-test('a large gallery comes a page at a time, with Load more until the last', async ({
+const more = (page: Page) => page.locator('[data-slot="more-files"]')
+
+test('a large gallery comes a page at a time, the next as the grid is scrolled to its end', async ({
   page,
   project,
   api,
@@ -325,18 +327,55 @@ test('a large gallery comes a page at a time, with Load more until the last', as
 
   await gallery(page, project.id)
   await expect(tiles(page)).toHaveCount(60)
-  await page.getByRole('button', { name: 'Load more' }).click()
+  // Nothing more until the end of the grid nears the screen.
+  await expect(more(page)).not.toBeInViewport()
+  await page.waitForLoadState('networkidle')
+  await expect(tiles(page)).toHaveCount(60)
+
+  await more(page).scrollIntoViewIfNeeded()
   await expect(tiles(page)).toHaveCount(61)
-  await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
+  // After the last page there is nothing more to load.
+  await expect(more(page)).toHaveCount(0)
   // The last page brought the oldest, and none twice.
   expect(new Set(await tileNames(page)).size).toBe(61)
   await expect(tiles(page).last()).toContainText('number-000.bin')
+
+  // The lightbox steps through every tile loaded.
+  await thumb(tiles(page).last()).click()
+  await expect(page.getByRole('dialog')).toContainText('61 / 61')
+})
+
+test('tabbing through the tiles to the last loads the next page too, and on into it', async ({
+  page,
+  project,
+  api,
+  agent,
+}) => {
+  await manyFiles(api, agent, 61)
+  await gallery(page, project.id)
+  await expect(tiles(page)).toHaveCount(60)
+  // From a tile some rows above the end, by the keyboard alone: each Tab scrolls the focused link into
+  // view, and the end of the grid with it, until the next page comes and Tab goes on into it.
+  await thumb(tiles(page).nth(44)).focus()
+  const focusedTile = () =>
+    page.evaluate(() => {
+      const li = document.activeElement?.closest('li[data-file]')
+      return li ? [...document.querySelectorAll('li[data-file]')].indexOf(li) : -1
+    })
+  let at = await focusedTile()
+  for (let presses = 0; at < 60 && presses < 200; presses++) {
+    await page.keyboard.press('Tab')
+    at = await focusedTile()
+  }
+  expect(at).toBe(60)
+  await expect(tiles(page)).toHaveCount(61)
+  await expect(tiles(page).nth(60)).toContainText('number-000.bin')
 })
 
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  test('no sideways scroll at 390px: filters, tiles with long names and Load more', async ({
+  test('no sideways scroll at 390px: filters, tiles with long names, and the next page as it scrolls', async ({
     page,
     project,
     api,
@@ -345,15 +384,16 @@ test.describe('on a phone', () => {
     await manyFiles(api, agent, 61)
     await gallery(page, project.id, '?type=other&archived=include')
     await expect(tiles(page)).toHaveCount(60)
-    await expect(page.getByRole('button', { name: 'Load more' })).toBeVisible()
     await expect(page.getByRole('group', { name: 'File type' })).toBeVisible()
     expect(await scrollsSideways(page)).toBe(false)
     // Fewer columns than on a desktop: two tiles side by side.
     const [a, b, c] = await Promise.all([0, 1, 2].map((i) => box(tiles(page).nth(i))))
     expect(a!.y).toBe(b!.y)
     expect(c!.y).toBeGreaterThan(a!.y)
-    await page.getByRole('button', { name: 'Load more' }).click()
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
     await expect(tiles(page)).toHaveCount(61)
+    await expect(more(page)).toHaveCount(0)
+    expect(new Set(await tileNames(page)).size).toBe(61)
     expect(await scrollsSideways(page)).toBe(false)
   })
 })
