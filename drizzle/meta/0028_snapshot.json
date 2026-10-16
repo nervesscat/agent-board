@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "189c68c6-fe0d-49da-88b0-c19c9f2b2e66",
+  "id": "627c5637-3a4b-4d27-b264-e90ed41e887d",
   "prevId": "5494cd89-71b6-4bb2-ac7c-3670a6e4e3fa",
   "tables": {
     "activity": {
@@ -624,14 +624,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "tag_suggestions": {
-          "name": "tag_suggestions",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[\"Bug\",\"UI\",\"Implementation\",\"Report\"]'"
         }
       },
       "indexes": {},
@@ -1672,6 +1664,14 @@
           "autoincrement": false,
           "default": "'todo'"
         },
+        "complexity": {
+          "name": "complexity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'mid'"
+        },
         "assignee": {
           "name": "assignee",
           "type": "text",
@@ -1855,7 +1855,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "tickets_complexity": {
+          "name": "tickets_complexity",
+          "value": "\"tickets\".\"complexity\" IN ('low', 'mid', 'high')"
+        }
+      }
     },
     "updates": {
       "name": "updates",

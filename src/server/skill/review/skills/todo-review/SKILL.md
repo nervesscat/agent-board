@@ -1,8 +1,8 @@
 ---
 name: todo-review
-description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket runs spec, build and the /feature-review cycle (verify and hunt, refute) at a depth scaled to the change until the change survives it, then pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
+description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket builds the change and runs the /feature-review cycle (verify and hunt, refute) as many rounds as the ticket's complexity sets (low none, mid one, high three), at a depth scaled to the change, until the change survives it, then pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
 user-invocable: true
-argument-hint: "[project=<id>] [<ticket id> ...] [parallel=N] [rounds=N] [depth=auto|light|standard|deep] [model=<name>] [dry]"
+argument-hint: "[project=<id>] [<ticket id> ...] [parallel=N] [depth=auto|light|standard|deep] [model=<name>] [dry]"
 ---
 
 # Todo Review
@@ -24,7 +24,6 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `project=<id>` | the board project | the project of the repo in the current directory (the board skill's table, or `list_projects` matched by repo path or GitHub slug) |
 | a number | work only these ticket ids, in this order | every eligible To do ticket |
 | `parallel=N` | maximum tickets in flight, 1 to 3, tickets of the same repo included | 2 |
-| `rounds=N` | build-and-review rounds per ticket before it goes to the human, the same for every review depth | 3 |
 | `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round | `auto` |
 | `model=<name>` | model for the ticket agents, which their own agents inherit | the session model |
 | `dry` | inventory and schedule only: write the plan, start nothing | off |
@@ -53,7 +52,8 @@ Create `QUEUE = ~/.claude/feature-review/todo-<YYYYMMDD-HHMM>/` (resolve `~` wit
 4. Per ticket, its repo (`repoId`, else the project's first repo) and that repo's checkout path
    and base branch. A repo whose checkout path does not exist on this machine: skip its tickets
    with "repo not on this machine".
-5. Write `QUEUE/plan.md`: every ticket with its repo, eligibility and the reason it was skipped.
+5. Write `QUEUE/plan.md`: every ticket with its repo, its complexity (the `complexity` field of its
+   list row), eligibility and the reason it was skipped.
    With `dry`, print it and stop.
 
 ## Step 2: Schedule
@@ -84,8 +84,8 @@ Rules:
 3. Each ticket in flight gets its own slot, whatever its repo, and each slot its own port range for
    the review's servers: slot 1 `8100-8199`, slot 2 `8200-8299`, slot 3 `8300-8399`. Two tickets
    in flight never share a slot.
-4. The total never exceeds `parallel`: each ticket runs a build and a full review, so 3 is the
-   ceiling.
+4. The total never exceeds `parallel`: each ticket runs a build and its review (none for low), so 3 is
+   the ceiling.
 
 ## Step 3: Run
 
@@ -93,9 +93,12 @@ Loop until nothing is pending or running:
 - Fill every free slot with the first pending ticket whose lanes are free. Spawn one
   `todo-review-ticket` agent per ticket, all in one message when several start together, with:
   `PROJECT=<id>`, `TICKET=<id>`, `REPO=<checkout path>`, `REPO_ID=<id>`, `BASE=<base branch>`,
-  `PORTS=<slot range>`, `BROWSER=<yes|no>`, `ROUNDS=<n>`, `DEPTH=<light|standard|deep>` when
+  `PORTS=<slot range>`, `BROWSER=<yes|no>`, `COMPLEXITY=<low, mid or high>`,
+  `DEPTH=<light|standard|deep>` when
   `depth=` was given and is not `auto`, `AS=<agent name>` when the ticket is reserved, and
-  `QUEUE`. Pass `model` on the Agent call when `model=` was given. They run in the background; do
+  `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
+  as the ticket's complexity sets it: `low` for low, `medium` for mid and high; the ticket agent passes
+  the same effort to every agent it starts (spec, builder, the review's phase agents). They run in the background; do
   not poll. Continue when a completion notification arrives.
 - On completion, however the run ended (a result, an error, an agent that died), release the
   ticket's lanes and slot, and remove its repo's test lock `QUEUE/locks/tests-<repo id>/` when the
@@ -113,17 +116,20 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    and `handoff.missing` is empty, or holds only `no_preview` with a hand-off post saying why the
    change cannot be tried. The hand-off post (the newest progress post of the agent's) has
    screenshots in its attachments when the change has a UI, and a "Tested" part that names the
-   review depth and why. Unless `depth=` was given (other than `auto`), measure the branch
+   level and what checked it (for mid and high, the review depth and why). Unless `depth=` was given
+   (other than `auto`), measure the branch
    yourself the way the ticket agent's "Review depth" says
    (`git -C REPO diff --numstat origin/BASE...<branch>`, lockfiles and generated files left out,
    and the Classification of `QUEUE/t<id>/01-spec.md`): `DEPTH` must be at least the depth that
    measure gives (`light`, then `standard`, then `deep`); below it, the change was reviewed too
-   lightly. Anything missing or wrong: send it back once (below) with the list.
+   lightly. A low ticket skips this measure: it has no review, so its `DEPTH` is `none`.
+   Anything missing or wrong: send it back once (below) with the list.
 2. **`blocked`**: the ticket is in a `blocked` stage with an open decision card or a post that
    says what is needed. Then judge the blocker. It stands only in these categories:
-   - `decision`: two valid behaviours, a product or scope call, or `rounds` used up (the agent
-     asked ship as is / keep going / drop). The human answers that card: an unattended run never
-     answers it (`answer_decision`), and it stays blocked for them;
+   - `decision`: two valid behaviours, a product or scope call, the complexity's rounds used up, or
+     the gate's two returns used up (the agent asked the human what to do next: ship as is, keep going
+     or drop). The human answers that card: an unattended run never answers it (`answer_decision`),
+     and it stays blocked for them;
    - `credential`: a secret or account the work cannot be written without, that the project has
      no test mode, emulator, seed or fake for;
    - `external`: a service, device or permission outside this machine;
@@ -168,6 +174,8 @@ Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview
   add a level, and never do a ticket agent's work yourself.
 - Never two ticket agents on one ticket or one branch. Never move a ticket yourself except to leave
   a comment on an error; the ticket agents own their tickets' stages.
+- The orchestrator never changes a ticket's complexity: it passes the level on, and the ticket agent
+  never changes its own.
 - Nothing here merges, approves, or comments on GitHub. Pushing the ticket's own branch and opening
   its PR (the project's way) are the ticket agent's only remote writes.
 - If the user interrupts, tell them which tickets were in flight. Their worktrees are registered

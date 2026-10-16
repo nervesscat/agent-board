@@ -263,7 +263,15 @@ the hand-off checklist (step 7); its result is posted on the ticket as that agen
 the next agent. Before moving the ticket to
 `review`, check every item of that checklist yourself. The Agents page adds a default set (spec, builder, runner, and
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
-→ build again with the confirmed findings (at most three rounds) → hand off. The `/review-queue`
+→ (a fix pass by the builder on the confirmed findings, each with the project's checks and a new
+review, for as many review rounds as the ticket's complexity allows: none for low, one for mid, three
+for high; round 1 is the first build and its review, so a mid ticket stops after its review, and a
+review that does not survive after the last round goes to a human decision; a high ticket gets two fix
+passes; a low ticket has no review, and its checks return the build at most twice; after the second return,
+when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop), and
+the build goes to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
+high; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
+(the ticket agent, the spec agent, the builder and the review's phase agents). The `/review-queue`
 skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with
 `ask_decision` instead of guessing; never two builders on one branch. The board skill has the full
 routine.

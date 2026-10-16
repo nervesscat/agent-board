@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
+import { ComplexitySelect } from '#/components/Complexity'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
@@ -23,6 +24,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { errorMessage, post, type Ticket, type TicketFull } from '#/lib/api'
+import { DEFAULT_COMPLEXITY, type Complexity } from '#/lib/constants'
 import { useProject } from '#/lib/project'
 import { newTicketStage } from '#/lib/stages'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -34,7 +36,8 @@ import { cn } from '#/lib/utils'
  * A new top-level ticket, or with `parent` a new lane of that ticket. Files for the instructions
  * (attach, paste or drop anywhere on the dialog) upload as they are added and go with the ticket
  * when it is created. A ticket starts in the stage picked here, the first open one (Backlog) unless
- * another is picked; a lane has none to pick and starts where the server puts it (To do).
+ * another is picked, at the review level picked here (Mid unless changed); a lane has neither to pick,
+ * so it starts where the server puts it (To do) at its parent's level.
  */
 export function NewTicket({ projectId, parent }: { projectId: string; parent?: TicketFull }) {
   const qc = useQueryClient()
@@ -51,6 +54,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   const repos = project?.repos ?? []
   const repoId = picked || String(parent?.repoId ?? repos[0]?.id ?? '')
   const [stage, setStage] = useState('')
+  const [complexity, setComplexity] = useState<Complexity>(DEFAULT_COMPLEXITY)
   // Sent as the stage's key: the kind `open` would resolve to To do. None until the stages have loaded.
   const status = parent ? undefined : stage || newTicketStage(project?.stages ?? [])?.key
   // A ticket waits for its stage, so that leaving it alone always means Backlog.
@@ -86,6 +90,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         tags: addTags(tags, tagText),
         parentId: parent?.id,
         status,
+        // A lane has no picker: it copies its parent's level on the server.
+        complexity: parent ? undefined : complexity,
         repoId: repoId ? Number(repoId) : undefined,
         tasks: addTasks(tasks, taskText),
         attachmentIds: files.ids,
@@ -110,7 +116,14 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   })
   const noun = parent ? 'lane' : 'ticket'
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // Mid each time it opens, after a create too; the other fields are kept as typed.
+        if (next) setComplexity(DEFAULT_COMPLEXITY)
+        setOpen(next)
+      }}
+    >
       <DialogTrigger
         render={<Button size={parent ? 'sm' : 'default'} variant={parent ? 'outline' : 'default'} />}
       >
@@ -203,17 +216,32 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             )}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {status && (
-              <div className="space-y-2">
-                <Label htmlFor="stage">Stage</Label>
-                <StatusSelect
-                  id="stage"
-                  stages={project?.stages ?? []}
-                  value={status}
-                  onChange={setStage}
-                  size="default"
-                  className="w-full"
-                />
+            {/* A top-level ticket's Stage and level share a row: Stage takes what the level leaves of the cell. */}
+            {!parent && (
+              <div className="flex gap-4">
+                {status && (
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label htmlFor="stage">Stage</Label>
+                    <StatusSelect
+                      id="stage"
+                      stages={project?.stages ?? []}
+                      value={status}
+                      onChange={setStage}
+                      size="default"
+                      className="w-full"
+                    />
+                  </div>
+                )}
+                <div className="w-28 space-y-2">
+                  <Label htmlFor="complexity">Complexity</Label>
+                  <ComplexitySelect
+                    id="complexity"
+                    value={complexity}
+                    onChange={setComplexity}
+                    size="default"
+                    className="w-full"
+                  />
+                </div>
               </div>
             )}
             {repos.length > 1 && (
