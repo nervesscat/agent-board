@@ -490,4 +490,37 @@ describe('the review texts the board ships', () => {
     const building = reviewQueue.slice(reviewQueue.indexOf('**Building**'))
     expect(flat(building)).toContain('a low ticket has no spec agent and no review')
   })
+  it("sets the agents' effort from the complexity: low for low, medium for mid and high", async () => {
+    const { COMPLEXITY_EFFORT } = await import('#/lib/constants')
+    expect(COMPLEXITY_EFFORT).toEqual({ low: 'low', mid: 'medium', high: 'medium' })
+    const rule =
+      "low for a low ticket, medium for mid and high; the orchestrator passes it as the Agent tool's"
+    const { instructions } = await served()
+    for (const [name, text] of Object.entries({
+      'board.md': boardSkill,
+      'MCP instructions': instructions,
+      'AGENTS.md': agentsDoc,
+    }))
+      expect(flat(text).replace(/`/g, ''), name).toContain(rule)
+    expect(flat(readme)).toContain("the agents' effort, `low` for low and `medium` for mid and high")
+    expect(flat(todoReview)).toContain(
+      "Pass `effort` on the Agent call as the ticket's complexity sets it: `low` for low, `medium` for mid and high",
+    )
+    expect(flat(ticketAgent)).toContain(
+      '**The effort** is set by the complexity too: `low` for low, `medium` for mid and high.',
+    )
+    expect(ticketAgent).toContain('browser=<BROWSER> effort=<the effort>`')
+    const featureReview = read(path.join(skills, 'skills', 'feature-review', 'SKILL.md'))
+    expect(featureReview).toContain(
+      "high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`",
+    )
+    expect(featureReview).toContain("pass it as `effort` on every phase agent's Agent call")
+    expect(flat(reviewQueue)).toContain('pass `effort` on the Agent call and `effort=` to the runner')
+    expect(flat(reviewQueue)).toContain('runs at the effort the complexity sets')
+    const { DEFAULT_AGENTS } = await import('./defaultAgents')
+    const builder = DEFAULT_AGENTS.find((a) => a.name === 'builder')!
+    expect(flat(builder.delegation)).toContain(
+      'runs at the effort its complexity sets: low for low, medium for mid and high',
+    )
+  })
 })

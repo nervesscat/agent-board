@@ -98,7 +98,9 @@ first build and its review. Mid has one: a review that does not survive then goe
 is, keep going, or drop). High has three: two fix passes follow the first build, each with the checks and
 a new review, and a round that does not survive after the third goes to the human the same way. Low has
 no review: its checks return the build at most twice, and after the second return, when the checks still
-fail or a criterion still has no evidence, the human decides (keep going or drop).`,
+fail or a criterion still has no evidence, the human decides (keep going or drop). Every agent the cycle
+starts for the ticket runs at the effort its complexity sets: low for low, medium for mid and high (the
+Agent tool's \`effort\`).`,
   },
   {
     name: 'runner',

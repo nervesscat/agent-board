@@ -108,7 +108,9 @@ Loop until nothing is pending or running:
 - Fill every free slot with the first pending PR whose lanes are free. Spawn one
   `feature-review-runner` per PR, all in one message when several start together, with:
   `REPO=<abs path>`, `TARGET=<number>`, `PORTS=<slot range>`, `BROWSER=<yes|no>`, and the
-  pass-through flags. Pass `model` on the Agent call when `model=` was given. Runners
+  pass-through flags. Pass `model` on the Agent call when `model=` was given. When the PR is a
+  ticket's, pass `effort` on the Agent call and `effort=` to the runner as the ticket's complexity
+  sets it (`low` for low, `medium` for mid and high). Runners
   run in the background; do not poll. Continue when a completion notification arrives.
 - On completion, release the runner's lanes and slot, check the result (Step 5), then
   fill the slot again.
@@ -177,7 +179,9 @@ the Skill tool for the same project, passing `parallel` and `model` through. It 
 tickets through the build cycle (spec → builder → `/feature-review` until the change survives →
 hand-off), one `todo-review-ticket` agent per ticket, with its own scheduling and report. The cycle
 follows each ticket's complexity: a low ticket has no spec agent and no review, so it leaves no review
-record; a mid ticket gets one review round, a high ticket up to three. Do not
+record; a mid ticket gets one review round, a high ticket up to three. Every agent it starts for a
+ticket runs at the effort the complexity sets (the Agent tool's `effort`): `low` for low, `medium` for
+mid and high. Do not
 work tickets yourself.
 
 ## Notes

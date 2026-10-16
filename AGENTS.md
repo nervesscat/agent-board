@@ -266,7 +266,9 @@ for high; round 1 is the first build and its review, so a mid ticket stops after
 review that does not survive after the last round goes to a human decision; a high ticket gets two fix
 passes; a low ticket has no review, and its checks return the build at most twice; after the second return,
 when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop), and
-the build goes to hand-off only with evidence for every criterion) → hand off. The `/review-queue`
+the build goes to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
+high; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
+(the ticket agent, the spec agent, the builder and the review's phase agents). The `/review-queue`
 skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with
 `ask_decision` instead of guessing; never two builders on one branch. The board skill has the full
 routine.

@@ -419,7 +419,9 @@ the first build and its review, so a mid ticket stops after its review, and a re
 survive after the last round goes to a human decision; a high ticket gets two fix passes; a low ticket
 has no review, and its checks return the build at most twice; after the second return, when the checks
 still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes
-to hand-off only with evidence for every criterion) → hand off. `/todo-review` is that
+to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
+high; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
+(the ticket agent, the spec agent, the builder and the review's phase agents). `/todo-review` is that
 orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
 working, no weakened tests, screenshots) and blocks only for what only the human can give.

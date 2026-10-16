@@ -96,7 +96,9 @@ Loop until nothing is pending or running:
   `PORTS=<slot range>`, `BROWSER=<yes|no>`, `COMPLEXITY=<low, mid or high>`,
   `DEPTH=<light|standard|deep>` when
   `depth=` was given and is not `auto`, `AS=<agent name>` when the ticket is reserved, and
-  `QUEUE`. Pass `model` on the Agent call when `model=` was given. They run in the background; do
+  `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
+  as the ticket's complexity sets it: `low` for low, `medium` for mid and high; the ticket agent passes
+  the same effort to every agent it starts (spec, builder, the review's phase agents). They run in the background; do
   not poll. Continue when a completion notification arrives.
 - On completion, however the run ended (a result, an error, an agent that died), release the
   ticket's lanes and slot, and remove its repo's test lock `QUEUE/locks/tests-<repo id>/` when the

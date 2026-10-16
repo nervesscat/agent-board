@@ -248,7 +248,7 @@ findings. Then release `LOCK` and go on to step 6 with that review.
 
 Otherwise, still holding `LOCK` (rewrite its holder line to `#<TICKET> review <ISO time>`), run
 `/feature-review` through the Skill tool, unattended:
-`repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER>`, plus `light` when the depth
+`repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, plus `light` when the depth
 is `light` and `deep` when it is `deep` (nothing more for `standard`). It reviews the branch's
 commits in a worktree of its own, posts its phases on the ticket, and writes `review.md` and
 `summary.md`. When it would ask a question, go on with the spec's assumption and note it. When it
@@ -268,6 +268,10 @@ and 3 are fix passes, each followed by the gate and a review. When a round does 
 round is left: post what is still open, `ask_decision` (ship as is, keep going, drop) and stop:
 `BLOCKER: decision`. Never start one more round on your own. The complexity sets the budget at every
 review depth: a `deep` review earns no extra round, a `light` one loses none.
+
+**The effort** is set by the complexity too: `low` for low, `medium` for mid and high. Pass it as the
+Agent tool's `effort` on every subagent you start (the spec agent, the builder), and give it to
+`/feature-review` as `effort=<level>`, so its phase agents run at it.
 
 ### 6. Evidence
 

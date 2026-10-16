@@ -67,6 +67,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `browser=yes\|no` | whether browser automation may be used | `yes` |
 | `frontend=<path>` | main checkout of the UI repo that talks to this backend; the env agent starts its dev server against the review backend and the verify agent drives it | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
+| `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high) | the session's |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR when the board is connected |
 
 ## Setup
@@ -361,6 +362,7 @@ whose `branch` is the target branch. No ticket: run as usual and skip this secti
   and writing the same files. Before the refute phase, re-read only `01-spec.md`,
   `00-env.md`, and `03-all-candidates.md`, and state in the report's Freshness block that
   the refutation ran inline without blinding.
+- With `effort=` given, pass it as `effort` on every phase agent's Agent call.
 - Agents inherit the session model. Review quality depends on it, so do not downgrade
   the hunt or refute agents.
 - If an agent fails, report the failure and produce the report from what succeeded.
