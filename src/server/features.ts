@@ -1318,22 +1318,28 @@ export function postUpdate(
       progress,
       via,
     })
-  const row = db
-    .insert(schema.updates)
-    .values({
-      ticketId,
-      author,
-      via,
-      body,
-      progress,
-      handoff,
-      tab,
-      summary,
-      summaryChange: opts.summary?.change ?? '',
-    })
-    .returning()
-    .get()
-  attachTo(attachmentIds, { updateId: row.id })
+  // A file that is not there or already attached is refused before anything is written, and the post
+  // and its files land together: a refused file never leaves a post (a summary's version) behind.
+  assertUnattached(attachmentIds)
+  const row = db.transaction(() => {
+    const inserted = db
+      .insert(schema.updates)
+      .values({
+        ticketId,
+        author,
+        via,
+        body,
+        progress,
+        handoff,
+        tab,
+        summary,
+        summaryChange: opts.summary?.change ?? '',
+      })
+      .returning()
+      .get()
+    attachTo(attachmentIds, { updateId: inserted.id })
+    return inserted
+  })
   touch(ticketId)
   const on = `#${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}`
   logActivity({

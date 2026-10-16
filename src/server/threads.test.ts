@@ -267,6 +267,47 @@ describe('the summary', () => {
     expect(kept.map((a: { id: number }) => a.id)).toEqual([proof.id])
   })
 
+  it('refuses a file that is not there or already attached without storing a version, and the retry is the first', async () => {
+    const t = newTicket('refused files')
+    const uploads = await import('./uploads')
+    const used = await uploads.saveUpload(new File(['a'], 'a.txt', { type: 'text/plain' }), 'claude')
+    const other = newTicket('holds the file')
+    features.setSummary(other.id, { body: 'other', attachmentIds: [used.id] }, 'claude')
+    const versions = () =>
+      dbm.db
+        .select()
+        .from(dbm.schema.updates)
+        .all()
+        .filter((u) => u.ticketId === t.id).length
+
+    const missing = await call('PUT', `/api/tickets/${t.id}/summary`, AGENT, {
+      body: 'v1',
+      attachmentIds: [999_999],
+    })
+    expect(missing.status).toBe(404)
+    const attached = await call('PUT', `/api/tickets/${t.id}/summary`, AGENT, {
+      body: 'v1',
+      attachmentIds: [used.id],
+    })
+    expect(attached.status).toBe(409)
+    expect((await tool('post_update', { ticketId: t.id, body: 'x', files: [] })).id).toBeDefined()
+    const progressOnly = versions()
+    expect(
+      (await call('POST', `/api/tickets/${t.id}/updates`, AGENT, { body: 'y', attachmentIds: [999_999] }))
+        .status,
+    ).toBe(404)
+    expect(versions()).toBe(progressOnly)
+    // Nothing was stored: no summary, and the retry needs no change line, as a first version.
+    const read = (await call('GET', `/api/tickets/${t.id}/summary`, HUMAN)).body
+    expect(read.versions).toEqual([])
+    expect(read.summary).toMatchObject({ fallback: true })
+    const retry = await call('PUT', `/api/tickets/${t.id}/summary`, AGENT, { body: 'v1' })
+    expect(retry.status).toBe(200)
+    expect(retry.body).toMatchObject({ body: 'v1', versions: 1, fallback: false })
+    // The file stays with the version it was on.
+    expect(features.getTicketFull(other.id).summary!.attachments.map((a) => a.id)).toEqual([used.id])
+  })
+
   it('is new activity on every write: the ticket bumps, the Daily view logs it, the inboxes get it', async () => {
     // The human opened the ticket; an agent works it.
     const t = newTicket('watched')
@@ -364,6 +405,15 @@ describe('what agents are told', () => {
     'AGENTS.md': read(repo, 'AGENTS.md'),
     'board.md': read(import.meta.dirname, 'skill', 'board.md'),
     'todo-review-ticket.md': read(import.meta.dirname, 'skill', 'review', 'agents', 'todo-review-ticket.md'),
+    'todo-review SKILL.md': read(import.meta.dirname, 'skill', 'review', 'skills', 'todo-review', 'SKILL.md'),
+    'feature-review SKILL.md': read(
+      import.meta.dirname,
+      'skill',
+      'review',
+      'skills',
+      'feature-review',
+      'SKILL.md',
+    ),
   }
 
   it('where posts go, to keep Main short, to rewrite the summary, and to reply under the human', async () => {
@@ -390,7 +440,8 @@ describe('what agents are told', () => {
       expect(text, name).toContain('set_ticket_summary')
       expect(text, name).toMatch(/Agents/)
       expect(text, name).toMatch(/short and to the point|Keep Main short/)
-      expect(text, name).toMatch(/never (with )?a new top-level post/)
+      expect(text, name).toMatch(/never (with |as )?a new top-level post/)
+      expect(text, name).toMatch(/plan/)
       expect(text, name).not.toMatch(/hand-off post \(`?post_update/i)
     }
   })
