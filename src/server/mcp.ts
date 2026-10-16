@@ -2,7 +2,7 @@ import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 
-import { COMMENT_PARENTS, COMPLEXITIES, RESUME_TEMPLATE } from '#/lib/constants'
+import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, RESUME_TEMPLATE } from '#/lib/constants'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
@@ -68,6 +68,12 @@ const AS = z
   .string()
   .optional()
   .describe("one of the project's agents (get_project): post under its name, as the work you did for it")
+const TAB = z
+  .enum(FEED_TABS)
+  .optional()
+  .describe(
+    "the tab of the ticket's feed it goes to: main (the human's) or agents (your working record). Leave it out and the board picks: progress posts and posts made with as go to agents; the human's posts, decision cards, questions to the human and the summary to main",
+  )
 const SINCE = z
   .string()
   .optional()
@@ -415,18 +421,47 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'post_update',
-    'Post on a ticket: markdown plus optional files (screenshots, recordings) given as absolute paths on this machine. progress (default true) marks it as a step of the work; false makes it discussion, like comment on the ticket.',
+    "Post on a ticket: markdown plus optional files (screenshots, recordings) given as absolute paths on this machine. progress (default true) marks it as a step of the work; false makes it discussion, like comment on the ticket. A progress post, and any post made with as, goes to the feed's Agents tab, out of the human's way; the hand-off is the summary (set_ticket_summary), not a post, and an answer to the human's post is a reply under it (comment with replyTo), not a new post. tab says otherwise.",
     {
       ticketId: z.number().int(),
       body: z.string(),
       files: z.array(z.string()).default([]).describe('absolute paths to attach'),
       as: AS,
       progress: z.boolean().default(true),
+      tab: TAB,
     },
-    async ({ ticketId, body, files, as, progress }) => {
+    async ({ ticketId, body, files, as, progress, tab }) => {
       const ids = (await Promise.all(files.map((f) => uploads.saveFromPath(f, actor)))).map((a) => a.id)
-      return features.postUpdate(ticketId, body, ids, actor, { as, progress })
+      return features.postUpdate(ticketId, body, ids, actor, { as, progress, tab })
     },
+  )
+  tool(
+    'set_ticket_summary',
+    "Write the ticket's summary: the one post at the top of the feed's Main tab, for the human, and the hand-off (no_handoff_post reads it). Short and to the point: what the change does, where it stands now, each review round's verdict in one line, the PR, the preview and what to try there, and the proofs (screenshots, recordings) as files. Rewrite it to the current state instead of posting a new hand-off: each write replaces it, and the board keeps every earlier version as its history. change says in one line what changed since the last version (required from the second version on), shown as \"updated <time>: <change>\". Like a new post, every write bumps the ticket and reaches the human's Needs you and the inboxes. Returns the summary as get_ticket shows it.",
+    {
+      ticketId: z.number().int(),
+      body: z.string().describe('markdown: the whole summary as it stands now'),
+      change: z
+        .string()
+        .max(features.MAX_SUMMARY_CHANGE)
+        .optional()
+        .describe('what changed since the last version, one line; required from the second version on'),
+      files: z.array(z.string()).default([]).describe('absolute paths to attach: the proofs'),
+      as: AS,
+    },
+    async ({ ticketId, body, change, files, as }) => {
+      const ids = (await Promise.all(files.map((f) => uploads.saveFromPath(f, actor)))).map((a) => a.id)
+      return features.setSummary(ticketId, { body, change, attachmentIds: ids, as }, actor)
+    },
+  )
+  tool(
+    'get_ticket_summary',
+    "A ticket's summary with its history: summary as get_ticket shows it, and versions, every version written, newest first, each with postId, body, change, at, by, via and attachments (local paths). Nothing is ever deleted from it.",
+    { ticketId: z.number().int() },
+    ({ ticketId }) => ({
+      summary: features.getTicketFull(ticketId).summary,
+      versions: features.summaryHistory(ticketId),
+    }),
   )
   tool(
     'ask_decision',
@@ -446,6 +481,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
         .max(5),
       as: AS,
       block: z.boolean().default(true),
+      tab: TAB.describe("the tab of the ticket's feed it goes to; main, the human's, when left out"),
     },
     ({ ticketId, ...input }) => features.askDecision(ticketId, input, actor),
   )
@@ -471,7 +507,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'edit_post',
-    'Change a post you made on a ticket (its body, or whether it is progress), or a reply (kind reply: its body). Edits show as edited.',
+    'Change a post you made on a ticket (its body, whether it is progress, or its tab of the feed: tab main or agents moves it), or a reply (kind reply: its body). Edits show as edited. A version of the summary is never edited: write a new one with set_ticket_summary.',
     {
       kind: z.enum(['post', 'reply']).default('post'),
       id: z
@@ -480,9 +516,13 @@ It replaces the previous note; each new version is also posted to the ticket's f
         .describe('the post id (from get_ticket updates) or the reply id (from list_comments)'),
       body: z.string().min(1).optional(),
       progress: z.boolean().optional().describe('posts only'),
+      tab: z
+        .enum(FEED_TABS)
+        .optional()
+        .describe("posts only: move it to that tab of the ticket's feed (main or agents)"),
     },
-    ({ kind, id, body, progress }) => {
-      if (kind === 'post') return features.editPost(id, { body, progress }, actor)
+    ({ kind, id, body, progress, tab }) => {
+      if (kind === 'post') return features.editPost(id, { body, progress, tab }, actor)
       if (body === undefined) throw new HttpError(400, 'give the new body')
       return features.editComment(id, body, actor)
     },
@@ -539,6 +579,9 @@ It replaces the previous note; each new version is also posted to the ticket's f
       replyTo: z.number().int().optional(),
       files: z.array(z.string()).default([]),
       as: AS,
+      tab: TAB.describe(
+        "on a ticket without replyTo: the tab of its feed the post goes to. Left out: main, or agents when posted with as. A reply goes under its post, in that post's tab",
+      ),
     },
     async ({ files, ...rest }) =>
       features.addComment(

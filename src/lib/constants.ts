@@ -97,6 +97,15 @@ export const DEFAULT_AGENT_NAMES = [
 export const COMMENT_PARENTS = ['ticket', 'update', 'pr', 'review'] as const
 export type CommentParent = (typeof COMMENT_PARENTS)[number]
 
+/**
+ * The two tabs of a ticket's feed. main is the human's: their posts with the agents' replies under them,
+ * decision cards, questions to the human and the summary. agents is the agents' working record: progress
+ * posts, posts made as one of the project's agents (the review phases, the builder), the resume note's
+ * versions. Each post has one, picked when it is posted (`tabOf` in the server's features).
+ */
+export const FEED_TABS = ['main', 'agents'] as const
+export type FeedTab = (typeof FEED_TABS)[number]
+
 /** One CI check on a PR's head commit, sorted into the buckets `gh pr checks` uses. */
 export type PrCheck = { name: string; state: 'pass' | 'fail' | 'pending' | 'skipped'; url: string | null }
 
