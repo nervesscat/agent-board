@@ -112,6 +112,35 @@ test('the board filter by tag lives in ?tag=, matches any casing, and clears', a
   await expect(page.getByText('Untagged')).toBeVisible()
 })
 
+test('the tag count is the rows shown, the search on the List included', async ({ page, project, api }) => {
+  await api.ticket({ title: 'Header layout', status: 'todo', tags: ['UI'] })
+  await api.ticket({ title: 'Footer spacing', status: 'todo', tags: ['ui'] })
+  await api.ticket({ title: 'Button colors', status: 'review', tags: ['UI'] })
+  await api.ticket({ title: 'Menu icons', status: 'todo', tags: ['UI', 'Bug'] })
+  await api.ticket({ title: 'Header cache', status: 'todo', tags: ['Backend'] })
+  const count = page.getByText(/^\d+ tickets?$/)
+
+  await page.goto(`/projects/${project.id}/features?view=list&tag=UI&q=Footer`)
+  await expect(page.getByText('Footer spacing')).toBeVisible()
+  await expect(page.getByText('Header layout')).toHaveCount(0)
+  await expect(count).toHaveText('1 ticket')
+
+  // Another search, the same tag: one of the two it finds carries it.
+  await page.getByRole('searchbox', { name: 'Search tickets' }).fill('Header')
+  await expect(page).toHaveURL(/[?&]q=Header/)
+  await expect(page.getByText('Header layout')).toBeVisible()
+  await expect(page.getByText('Header cache')).toHaveCount(0)
+  await expect(count).toHaveText('1 ticket')
+
+  // Cleared, the List shows every ticket with the tag; so does the Board, which ignores the search.
+  await page.getByRole('button', { name: 'Clear search' }).click()
+  await expect(page.getByText('Button colors')).toBeVisible()
+  await expect(count).toHaveText('4 tickets')
+  await page.goto(`/projects/${project.id}/features?view=board&tag=UI&q=Footer`)
+  await expect(page.getByText('Header layout')).toBeVisible()
+  await expect(count).toHaveText('4 tickets')
+})
+
 test.describe('at 390px', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

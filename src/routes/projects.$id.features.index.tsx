@@ -178,7 +178,13 @@ function Features() {
       {view !== 'archived' ? (
         <div className="flex flex-wrap items-center gap-2">
           {view === 'list' && <TicketSearch q={q} onSearch={search} />}
-          <TagFilter projectId={id} tickets={data ?? []} value={tag} onChange={filterTag} />
+          <TagFilter
+            projectId={id}
+            // The rows on screen: those the search found, else the board's or the list's.
+            count={searching ? (found.data === undefined ? undefined : listed.length) : shown.length}
+            value={tag}
+            onChange={filterTag}
+          />
         </div>
       ) : (
         <TicketSearch q={q} onSearch={search} />
@@ -245,16 +251,17 @@ const ALL_TAGS = '__all__'
 
 /**
  * The tag the Board and the List are narrowed to (`?tag=`): the project's suggestions and the tags its
- * tickets carry, most used first. A tag from a link that none of them has is offered too.
+ * tickets carry, most used first. A tag from a link that none of them has is offered too. `count` is how
+ * many tickets the view shows with it (none while a search is still loading).
  */
 function TagFilter({
   projectId,
-  tickets,
+  count,
   value,
   onChange,
 }: {
   projectId: string
-  tickets: TicketRow[]
+  count: number | undefined
   value: string
   onChange: (tag: string) => void
 }) {
@@ -262,9 +269,6 @@ function TagFilter({
   const tags = tagChoices(project?.tagSuggestions ?? [], project?.usedTags ?? [], [])
   const current = tags.find((t) => t.toLowerCase() === value.toLowerCase()) ?? value
   const all = value && !tags.includes(current) ? [current, ...tags] : tags
-  const matching = value
-    ? tickets.filter((t) => t.tags.some((x) => x.toLowerCase() === value.toLowerCase()))
-    : []
   return (
     <div className="flex min-w-0 items-center gap-1">
       <Select
@@ -287,9 +291,11 @@ function TagFilter({
       </Select>
       {value && (
         <>
-          <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
-            {matching.length} ticket{matching.length === 1 ? '' : 's'}
-          </span>
+          {count !== undefined && (
+            <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+              {count} ticket{count === 1 ? '' : 's'}
+            </span>
+          )}
           <Tip content="Show every tag">
             <Button
               variant="ghost"

@@ -169,17 +169,6 @@ api.post('/api/projects', async ({ request, actor }) => {
 api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
 // The phases every new ticket of the project starts with; null goes back to the built-in list.
 const DefaultPhases = z.array(z.string().trim().min(1).max(500)).max(20).nullable()
-// The tags offered under every ticket's tags field; [] offers none of the project's own.
-const TagSuggestions = z
-  .array(
-    z
-      .string()
-      .trim()
-      .min(1)
-      .max(MAX_TAG_LENGTH)
-      .refine((t) => !t.includes(','), 'a tag cannot have a comma'),
-  )
-  .max(50)
 api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
@@ -187,7 +176,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       name: z.string().min(1).max(100).optional(),
       instructions: Instructions.optional(),
       defaultPhases: DefaultPhases.optional(),
-      tagSuggestions: TagSuggestions.optional(),
+      tagSuggestions: projects.TagSuggestions.optional(),
     }),
   )
   // They shape every new ticket of the project: agents change the phases of a ticket instead.

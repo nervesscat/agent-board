@@ -92,7 +92,8 @@ http_headers = { Authorization = "Bearer gate_…" }
    sibling lanes and never in the title. Tag every ticket too with the module it touches, a short
    name (`Auth`, `Board`, `MCP`): check `get_project`'s `tagSuggestions` and `usedTags` (or the
    tags `list_tickets` returns) first and reuse an existing tag in its casing rather than a new
-   spelling. Register where code runs
+   spelling. `set_tag_suggestions` replaces the project's suggestions (when the human asks, or to
+   add a module its tickets keep touching). Register where code runs
    (worktree, sub-branch, sandbox) with `add_workspace`, every worktree as soon as you open it:
    the registered workspaces are the cleanup list. `remove_workspace` when it is gone.
    Split lanes by files: one owning lane per file (a file two lanes need goes to one, or the other

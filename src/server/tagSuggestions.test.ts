@@ -119,6 +119,45 @@ describe("a project's tag suggestions", () => {
   })
 })
 
+describe('set_tag_suggestions', () => {
+  it('replaces the suggestions over MCP as PATCH does, and answers with them and the tags in use', async () => {
+    const p = newProject('mcp')
+    expect((await call('POST', `/api/projects/${p}/tickets`, { title: 't', tags: ['Board'] })).status).toBe(
+      201,
+    )
+    const set = await tool('set_tag_suggestions', {
+      projectId: p,
+      tags: [' Auth ', 'login   form', 'AUTH', 'MCP'],
+    })
+    expect(set).toEqual({ tagSuggestions: ['Auth', 'login form', 'MCP'], usedTags: ['Board'] })
+    expect(await suggestions(p)).toEqual(['Auth', 'login form', 'MCP'])
+    expect((await tool('get_project', { projectId: p })).tagSuggestions).toEqual([
+      'Auth',
+      'login form',
+      'MCP',
+    ])
+    expect((await tool('set_tag_suggestions', { projectId: p, tags: [] })).tagSuggestions).toEqual([])
+    expect(await suggestions(p)).toEqual([])
+  })
+
+  it('refuses what PATCH refuses, and an unknown project, leaving the list as it was', async () => {
+    const p = newProject('mcp-refused')
+    const refused = async (args: Record<string, unknown>) =>
+      ((await rpc('tools/call', { name: 'set_tag_suggestions', arguments: args })) as { isError?: boolean })
+        .isError
+    for (const tags of [
+      ['ok', '  '],
+      ['x'.repeat(41)],
+      ['a, b'],
+      null,
+      Array.from({ length: 51 }, (_, i) => `t${i}`),
+    ])
+      expect(await refused({ projectId: p, tags }), JSON.stringify(tags)).toBe(true)
+    expect(await refused({ projectId: 999_999, tags: ['Auth'] })).toBe(true)
+    expect(await suggestions(p)).toEqual(DEFAULTS)
+  })
+})
+
 describe("a project's used tags", () => {
   it('are the tags its tickets carry, most used first, once each in the casing used most', async () => {
     const p = newProject('used')

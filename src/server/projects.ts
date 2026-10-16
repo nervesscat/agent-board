@@ -1,7 +1,8 @@
 import { asc, count, eq, type SQL } from 'drizzle-orm'
+import { z } from 'zod'
 
 import { db, schema } from '#/db'
-import { cleanSuggestions, usedTags } from '#/lib/tags'
+import { MAX_TAG_LENGTH, cleanSuggestions, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
 import { notFound } from './http'
 import { listAgents } from './projectAgents'
@@ -103,6 +104,18 @@ export function createProject(input: { name: string; instructions?: string }, ac
   })
   return withPhases(row)
 }
+
+/** The tags offered under every ticket's tags field, as REST and MCP take them; [] offers none of the project's own. */
+export const TagSuggestions = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(MAX_TAG_LENGTH)
+      .refine((t) => !t.includes(','), 'a tag cannot have a comma'),
+  )
+  .max(50)
 
 /**
  * `defaultPhases`: the names trimmed, null for the built-in list again. `tagSuggestions`: trimmed,
