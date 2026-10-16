@@ -20,6 +20,9 @@ intent is unclear you record a question instead of guessing.
    outside it only to follow a reference from it.
 4. Output path.
 
+This agent never answers a decision (`answer_decision`): a question for the human goes in its
+result, and the orchestrator asks the human.
+
 ## Task
 
 - Read the context first, then the diff, then the files in `00-focus.md`: callers,

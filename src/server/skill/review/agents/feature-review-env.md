@@ -30,6 +30,9 @@ precisely; never fall back to a server or environment you did not start.
 - `FRONTEND` (optional): the main checkout of the UI repo that talks to this backend. When
   given, you also start its dev server against the review backend (see **Frontend**).
 
+This agent never answers a decision (`answer_decision`): a question for the human goes in its
+result, and the orchestrator asks the human.
+
 ## Invariants you must establish
 
 1. **The interpreter and packages match the commit.** For each dependency manifest the

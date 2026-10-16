@@ -162,6 +162,9 @@ test('the Tags field of the New ticket dialog makes chips of what is typed', asy
   // The label still reaches the text input, which takes the focus from the field before it by Tab.
   await expect(again.input).toHaveJSProperty('tagName', 'INPUT')
   await again.dialog.getByLabel('Stage').focus()
+  // Complexity sits between Stage and Tags in the form, so it takes the first Tab.
+  await page.keyboard.press('Tab')
+  await expect(again.dialog.getByLabel('Complexity')).toBeFocused()
   await page.keyboard.press('Tab')
   await expect(again.input).toBeFocused()
 })

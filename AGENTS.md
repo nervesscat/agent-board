@@ -142,7 +142,7 @@ http_headers = { Authorization = "Bearer gate_…" }
    instead (step 3). When the answer is a choice between clear options (an approach, a trade-off, a scope
    call), use `ask_decision` instead: a card with 2 to 5 options (one may be recommended) that the
    human answers with one click; it blocks the ticket and unblocks it once decided, and the answer
-   arrives as a reply under the card. `list_my_threads` lists every feed or reply thread where someone spoke after you;
+   arrives as a reply under the card. If the human answers the card in the chat rather than on the board, the orchestrator records their answer with `answer_decision` (MCP; REST `POST /api/updates/:id/decision/relay`). That is allowed only after the orchestrator asked the human in the chat with the card's options (in Claude Code with AskUserQuestion, in another client its equivalent), only with their words as they gave them, and only in the session that talks to the human, never in a run with no human to ask. A delegated subagent or a persona never answers a decision, and a relay never carries `as`: they ask (`ask_decision`) or return the question in their result. `list_my_threads` lists every feed or reply thread where someone spoke after you;
    `get_ticket` shows each post's reply count and last author. Attachments come with a local
    `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
    **Watch for feedback** so the human never has to say "check comments": while you have tickets
@@ -248,6 +248,8 @@ personas the human sets up on the board's Agents page. A ticket the human assign
   ticket's, and post that work with `post_update` / `comment` using `as: <its name>`. It shows
   under the agent's name, via your token name.
 - Never take a reserved ticket as yourself or reassign it; only the human does.
+- A persona never answers a decision (step 6): the human answers the card, or the orchestrator relays
+  their answer from the chat.
 - `@name` in a thread asks that agent: `list_my_threads` returns threads waiting on an agent with
   `as` set, for you to answer as it.
 
@@ -259,7 +261,15 @@ the hand-off checklist (step 7); its result is posted on the ticket as that agen
 the next agent. Before moving the ticket to
 `review`, check every item of that checklist yourself. The Agents page adds a default set (spec, builder, runner, and
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
-→ build again with the confirmed findings (at most three rounds) → hand off. The `/review-queue`
+→ (a fix pass by the builder on the confirmed findings, each with the project's checks and a new
+review, for as many review rounds as the ticket's complexity allows: none for low, one for mid, three
+for high; round 1 is the first build and its review, so a mid ticket stops after its review, and a
+review that does not survive after the last round goes to a human decision; a high ticket gets two fix
+passes; a low ticket has no review, and its checks return the build at most twice; after the second return,
+when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop), and
+the build goes to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
+high; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
+(the ticket agent, the spec agent, the builder and the review's phase agents). The `/review-queue`
 skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with
 `ask_decision` instead of guessing; never two builders on one branch. The board skill has the full
 routine.

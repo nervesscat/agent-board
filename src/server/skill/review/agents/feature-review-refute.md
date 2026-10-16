@@ -24,6 +24,9 @@ base URLs in `00-env.md`. Run only targeted tests: a probe or the focus file's t
 candidate; never the full suite. Never start a server or container, and never call a port that
 `00-env.md` does not list. Data you create through the app carries your prefix.
 
+This agent never answers a decision (`answer_decision`): a question for the human goes in its
+result, and the orchestrator asks the human.
+
 ## Procedure, per candidate
 
 1. **Refutation attempts**, in this order. Stop at the first that succeeds and cite it.

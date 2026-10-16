@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   type AnySQLiteColumn,
+  check,
   index,
   integer,
   primaryKey,
@@ -11,8 +12,10 @@ import {
 
 import {
   COMMENT_PARENTS,
+  DEFAULT_COMPLEXITY,
   STAGE_KINDS,
   type CommentParent,
+  type Complexity,
   type PrCheck,
   type ReportCadence,
   type ReportFormat,
@@ -155,6 +158,8 @@ export const tickets = sqliteTable(
     body: text().notNull().default(''),
     // The key of one of the project's stages.
     status: text().notNull().default('todo'),
+    // How much review the ticket gets: low none, mid one round, high three (COMPLEXITIES).
+    complexity: text().$type<Complexity>().notNull().default(DEFAULT_COMPLEXITY),
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
     baseBranch: text('base_branch').notNull().default('main'),
@@ -191,7 +196,10 @@ export const tickets = sqliteTable(
     createdAt: now(),
     updatedAt: now(),
   },
-  (t) => [index('tickets_parent').on(t.parentId)],
+  (t) => [
+    index('tickets_parent').on(t.parentId),
+    check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high')`),
+  ],
 )
 
 // A ticket that cannot be done before another ticket's branch is merged into its base: a stacked
@@ -264,6 +272,10 @@ export const updates = sqliteTable('updates', {
   decidedOption: integer('decided_option'),
   decidedBy: text('decided_by').notNull().default(''),
   decidedAt: text('decided_at'),
+  // Set when the orchestrator recorded the human's answer from the chat: the connected agent that relayed
+  // it, and the words as the human gave them. Both '' on a decision the human made on the board.
+  relayedBy: text('relayed_by').notNull().default(''),
+  relayedText: text('relayed_text').notNull().default(''),
   createdAt: now(),
   editedAt: text('edited_at'),
 })

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import {
   AGENT_CLIENTS,
   COMMENT_PARENTS,
+  COMPLEXITIES,
   PREVIEW_LIMIT,
   SKILLS_TRACKING,
   STAGE_COLORS,
@@ -86,6 +87,8 @@ const TicketPatch = z.object({
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(50_000).optional(),
   status: Status.optional(),
+  // Exactly low, mid or high; a lane created without one copies its parent's (features.ts createTicket).
+  complexity: z.enum(COMPLEXITIES).optional(),
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),
@@ -618,6 +621,19 @@ api.put('/api/updates/:id/decision', async ({ request, params, actor }) => {
     z.object({ option: z.number().int().min(0), note: z.string().max(5_000).default('') }),
   )
   return json(features.decide(id(params), body.option, body.note, actor))
+})
+// The orchestrator's record of the human's answer given in the chat: only a connected agent, and never
+// as one of the project's agents (features.relayDecision checks both, and that the card is open).
+api.post('/api/updates/:id/decision/relay', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      option: z.number().int().min(0),
+      words: z.string().trim().min(1).max(5_000),
+      as: AgentName.optional(),
+    }),
+  )
+  return json(features.relayDecision(id(params), body, actor, { agent: isAgent(request) }))
 })
 // Its author edits or deletes a post or reply; the human (passkey) any.
 api.patch('/api/updates/:id', async ({ request, params, actor }) => {

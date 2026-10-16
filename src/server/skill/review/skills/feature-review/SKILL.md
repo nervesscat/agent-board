@@ -67,6 +67,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `browser=yes\|no` | whether browser automation may be used | `yes` |
 | `frontend=<path>` | main checkout of the UI repo that talks to this backend; the env agent starts its dev server against the review backend and the verify agent drives it | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
+| `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high) | the session's |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
 
 ## Setup
@@ -150,10 +151,13 @@ Spawn `feature-review-spec` with paths to `00-diff.patch`, `00-context.md`, `00-
 the output path `01-spec.md`. Wait for it.
 
 Read `01-spec.md`. If its **Open questions** section contains a question whose answer
-changes what counts as *correct* (not merely nice to know), ask the user that one
-question with AskUserQuestion, offering the interpretations as options. If the user is
-not available or the question is not decisive, continue with the assumption the spec
-states. Do not ask about anything else.
+changes what counts as *correct* (not merely nice to know), that question is decisive. In an
+interactive session, ask the user that one question with AskUserQuestion, offering the
+interpretations as options. An unattended run (the runner, a todo-review run, or any run with
+no human to ask) never asks in the chat: it continues with the assumption the spec states, and
+step 3 puts the question on the ticket's card for the human. If the question is not decisive,
+or the user is not available, continue with the assumption the spec states. Do not ask about
+anything else.
 
 ## Strategy by kind
 
@@ -329,9 +333,19 @@ and skip this section.
    `progress: true`, a few lines (what it established, counts, anything unavailable) and its
    evidence in `files` (screenshots from `WORKDIR/shots/`, the phase's own file). Never paste
    hunt notes; the refute phase's verdict table is the findings' record.
-3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket
-   (the interpretations as options, the spec's assumption marked recommended) instead of
-   AskUserQuestion; continue with the assumption, and say so in the report.
+3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket (the
+   interpretations as options, the spec's assumption marked recommended). If Phase 1 already asked
+   the human this question in the chat, step 3 never asks it again, whatever the human did. If they
+   answered with one of the options, this session records that answer on the card with
+   `answer_decision`, with the option they picked and their words as they gave them. If they did not
+   answer, or their answer matches none of the options, the card stays open for the human on the
+   board. Only when Phase 1 did not ask the question, and the session is interactive, ask the human
+   in the chat with AskUserQuestion, with the same options, and record their answer on the card the
+   same way. The AskUserQuestion step applies only in an interactive session. An unattended run (the
+   runner, a todo-review run, or any run with no human to ask) never asks in the chat and never
+   relays a decision: it leaves the card open for the human. A phase never answers a decision
+   (`answer_decision`), not even one you run inline. Continue with the assumption until the human
+   answers, and say so in the report.
 4. **The result** goes to the board. For a PR: `post_review_result` (the verdict, `summary.md` as
    `summaryMd`, the commit SHA, the three checks and the counts, `repoId` when the project has
    several repos), which also posts the summary on the PR's ticket. For a branch with no PR yet: a `post_update` on the ticket with the verdict line
@@ -339,6 +353,9 @@ and skip this section.
 
 ## Delegation
 
+- Every phase brief carries the line "Never answer a decision (`answer_decision`): a question for
+  the human goes into your result, or onto the card with `ask_decision`." The session that talks to
+  the human answers the card, never a phase.
 - Prefer delegation as written above. Phase agents run at one level below you, which
   is within the harness's nesting limit even when you are yourself a delegated agent.
 - If the Agent tool is not available to you, run each phase yourself in order, following
@@ -346,6 +363,7 @@ and skip this section.
   and writing the same files. Before the refute phase, re-read only `01-spec.md`,
   `00-env.md`, and `03-all-candidates.md`, and state in the report's Freshness block that
   the refutation ran inline without blinding.
+- With `effort=` given, pass it as `effort` on every phase agent's Agent call.
 - Agents inherit the session model. Review quality depends on it, so do not downgrade
   the hunt or refute agents.
 - If an agent fails, report the failure and produce the report from what succeeded.

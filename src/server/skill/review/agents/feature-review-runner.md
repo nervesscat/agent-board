@@ -19,6 +19,9 @@ orchestrator only receives the summary.
 - `FRONTEND` (optional): path of the UI repo checkout, passed through as `frontend=<path>`.
 - Flags to pass through: any of `deep`, `keep`, `post`.
 
+This agent runs unattended and never answers a decision (`answer_decision`): a question for the
+human goes in its result, and the orchestrator asks the human.
+
 ## Procedure
 
 1. Confirm `REPO` is a git repository and, for a PR target, that `gh auth status`

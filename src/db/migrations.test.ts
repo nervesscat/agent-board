@@ -221,9 +221,128 @@ describe('0023_daily_reports_and_shifts', () => {
   })
 })
 
-describe('0027_ticket_pr_link', () => {
-  it('adds the PR link column without rebuilding the tickets, so their tasks, posts and lanes stay', () => {
+describe('0027_relayed_decisions', () => {
+  it('keeps the decided card, its reply and the other posts when the relay columns are added', () => {
     const sqlite = databaseAt('0026_task_blocked_tag')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('relay').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'Answer in the chat', 'claude').lastInsertRowid,
+    )
+    // A decision card with two options, which the human picked.
+    const options = [{ label: 'Merge now' }, { label: 'Wait for the review', recommended: true }]
+    const card = Number(
+      sqlite
+        .prepare(
+          'INSERT INTO updates (ticket_id, author, body, progress, decision, decided_option, decided_by, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        )
+        .run(
+          ticket,
+          'claude',
+          'Merge now or wait for the review?',
+          0,
+          JSON.stringify(options),
+          1,
+          'enrique',
+          '2026-10-10T10:00:00.000Z',
+        ).lastInsertRowid,
+    )
+    // The human's reply under the card: a child row through the comments table.
+    sqlite
+      .prepare('INSERT INTO comments (parent_type, parent_id, author, body) VALUES (?, ?, ?, ?)')
+      .run('update', card, 'enrique', 'Decided: **Wait for the review**')
+    const plain = Number(
+      sqlite
+        .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+        .run(ticket, 'claude', 'Pushed the branch.').lastInsertRowid,
+    )
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(
+      sqlite
+        .prepare('SELECT decision, decided_option, decided_by, decided_at FROM updates WHERE id = ?')
+        .get(card),
+    ).toEqual({
+      decision: JSON.stringify(options),
+      decided_option: 1,
+      decided_by: 'enrique',
+      decided_at: '2026-10-10T10:00:00.000Z',
+    })
+    expect(
+      sqlite
+        .prepare('SELECT author, body FROM comments WHERE parent_type = ? AND parent_id = ?')
+        .all('update', card),
+    ).toEqual([{ author: 'enrique', body: 'Decided: **Wait for the review**' }])
+    expect(sqlite.prepare('SELECT body FROM updates WHERE id = ?').get(plain)).toEqual({
+      body: 'Pushed the branch.',
+    })
+    // Every post, the two written before the migration included, reads '' for the relay.
+    expect(sqlite.prepare('SELECT relayed_by, relayed_text FROM updates ORDER BY id').all()).toEqual([
+      { relayed_by: '', relayed_text: '' },
+      { relayed_by: '', relayed_text: '' },
+    ])
+    sqlite.close()
+  })
+})
+
+describe('0028_task_complexity', () => {
+  it('gives every existing ticket the level mid, keeps what refers to it, and refuses any other level', () => {
+    const sqlite = databaseAt('0027_relayed_decisions')
+    const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
+    const insert = sqlite.prepare(
+      'INSERT INTO tickets (project_id, title, created_by, status) VALUES (?, ?, ?, ?)',
+    )
+    const older = Number(insert.run(project, 'before the column', 'enrique', 'todo').lastInsertRowid)
+    const finished = Number(insert.run(project, 'finished', 'claude', 'done').lastInsertRowid)
+    // The rows that refer to a ticket are kept by the migration: a table rebuild would cascade into them.
+    sqlite.prepare('INSERT INTO tasks (ticket_id, text) VALUES (?, ?)').run(older, 'Implementation')
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(sqlite.prepare('SELECT id, complexity FROM tickets ORDER BY id').all()).toEqual([
+      { id: older, complexity: 'mid' },
+      { id: finished, complexity: 'mid' },
+    ])
+    expect(sqlite.prepare('SELECT text FROM tasks WHERE ticket_id = ?').all(older)).toEqual([
+      { text: 'Implementation' },
+    ])
+
+    // A ticket written without the column reads mid; the table refuses any other level, case included.
+    const added = Number(
+      sqlite
+        .prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (?, 'new', 'claude')")
+        .run(project).lastInsertRowid,
+    )
+    expect(sqlite.prepare('SELECT complexity FROM tickets WHERE id = ?').get(added)).toEqual({
+      complexity: 'mid',
+    })
+    const setLevel = sqlite.prepare('UPDATE tickets SET complexity = ? WHERE id = ?')
+    for (const level of ['extreme', 'High', ''])
+      expect(() => setLevel.run(level, added)).toThrow(/CHECK constraint/)
+    expect(() =>
+      sqlite
+        .prepare(
+          "INSERT INTO tickets (project_id, title, created_by, complexity) VALUES (?, 'x', 'claude', 'extreme')",
+        )
+        .run(project),
+    ).toThrow(/CHECK constraint/)
+    for (const level of ['low', 'mid', 'high']) {
+      setLevel.run(level, added)
+      expect(sqlite.prepare('SELECT complexity FROM tickets WHERE id = ?').get(added)).toEqual({
+        complexity: level,
+      })
+    }
+    sqlite.close()
+  })
+})
+
+describe('0029_ticket_pr_link', () => {
+  it('adds the PR link column without rebuilding the tickets, so their tasks, posts and lanes stay', () => {
+    const sqlite = databaseAt('0028_task_complexity')
     const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
     const ticket = (title: string, parentId: number | null = null) =>
       Number(
