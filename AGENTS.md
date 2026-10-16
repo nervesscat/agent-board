@@ -3,8 +3,9 @@
 The board at `http://localhost:47100` is where the human and every agent (claude, codex,
 opencode, …) coordinate. You read your work from it and you report back to it. GitHub is
 **read-only** from the board's side, and git too but for the finished branches and worktrees the
-human deletes from its Cleanup page; from yours, acting through the board, both are: never push,
-merge, approve or comment on GitHub on the board's behalf.
+human deletes from its Cleanup page, and the landed local branches deleted with `cleanup_delete`;
+from yours, acting through the board, both are too but for `cleanup_delete`: never push, merge,
+approve or comment on GitHub on the board's behalf.
 
 ## Identity and auth
 
@@ -229,14 +230,18 @@ http_headers = { Authorization = "Bearer gate_…" }
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
    `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
-   remove its worktree and local branch (first any link in it to a folder out of it, such as a
-   `node_modules` linked to another checkout's: on Windows `git worktree remove` deletes what a
-   junction leads to), `remove_workspace`, and `post_update` the deleted branches
-   as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
+   delete its local branch once no worktree holds it, and `post_update` the deleted branches as
+   `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Do not remove its
+   worktrees: leave them, and the workspaces registered at them, to the human, who removes them from
+   the board's Cleanup page (the board removes each link in one first, the link alone). Never delete
    origin branches: list them for the human, who deletes them from the board's Cleanup page. Never
    delete a branch `cleanup_report` marks `protected` (a base, the main checkout's branch, in use by
    a ticket in work or an open PR). `cleanup_report` lists every leftover of the project's
-   closed tickets (previews the board still runs for them too); the board skill's `/board cleanup` walks it with the human.
+   closed tickets (previews the board still runs for them too); `cleanup_delete` deletes their
+   landed local branches alone (`kind` `local`, items as the report gives them), the board checking
+   each again as for the human and answering the command that restores it, never a worktree nor a
+   branch on origin: `post_update` its deleted `branch @ sha` lines on the ticket. The board skill's
+   `/board cleanup` walks it with the human.
 9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
    `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
    blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that

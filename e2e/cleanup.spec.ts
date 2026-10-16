@@ -1,8 +1,9 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { CleanupReport, TicketFull } from '#/lib/api'
-import { commitFile, e2eEnv, git } from './env'
+import type { CleanupReport, DailyPayload, TicketFull } from '#/lib/api'
+import { AGENT, commitFile, e2eEnv, git } from './env'
 import { expect, ok, test } from './fixtures'
 
 const hasRef = (ref: string) => {
@@ -12,6 +13,37 @@ const hasRef = (ref: string) => {
   } catch {
     return false
   }
+}
+/** The local day of `d`, as `/api/daily` takes it. */
+const localDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+/**
+ * A repository of a test's own at `dir`, with a bare origin beside it: a worktree it adds or removes
+ * races no other test's listing of the run's repo, nor does one of theirs its listings (git fails to
+ * list a repository's worktrees while another process adds one).
+ */
+function ownRepo(dir: string) {
+  const run = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=e2e', '-c', 'user.email=e2e@example.com', ...args], {
+      cwd: dir,
+      encoding: 'utf8',
+    }).trim()
+  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', `${dir}.git`])
+  fs.mkdirSync(dir)
+  run('init', '-q', '-b', 'main')
+  run('commit', '-q', '--allow-empty', '-m', 'init')
+  run('remote', 'add', 'origin', `${dir}.git`)
+  run('push', '-q', '-u', 'origin', 'main')
+  const has = (ref: string) => {
+    try {
+      run('show-ref', '--verify', '--quiet', ref)
+      return true
+    } catch {
+      return false
+    }
+  }
+  return { git: run, hasRef: has }
 }
 
 test('the human removes a worked branch with its worktree, after a dialog listing exactly that', async ({
@@ -153,27 +185,98 @@ test('the dialog names a server linked on this machine at the worktree, which it
   expect(fs.existsSync(tree)).toBe(true)
 })
 
-test('deleting branches is the human’s: an agent gets 403 and nothing changes', async ({
+test('an agent deletes landed local branches alone: a request with a worktree or a branch on origin is 403 whole', async ({
   agent,
   human,
-  project,
+  page,
 }) => {
-  const branch = `e2e-${project.id}-agent`
-  const sha = commitFile('main', 'agent.txt', 'agent\n', 'agent work')
-  git('update-ref', `refs/heads/${branch}`, sha)
-  git('update-ref', `refs/heads/e2e-${project.id}-agent-base`, sha)
-  git('push', '-q', 'origin', branch)
-  const t = await ok<TicketFull>(
-    human.post(`/api/projects/${project.id}/tickets`, {
-      data: { title: 'Done by an agent', status: 'done', branch, baseBranch: `e2e-${project.id}-agent-base` },
-    }),
+  // A project on a repository of its own (ownRepo), with its branches' work landed in their bases.
+  const { id } = await ok<{ id: number }>(
+    human.post('/api/projects', { data: { name: 'Cleaned up by an agent' } }),
   )
-  for (const kind of ['local', 'remote', 'worktrees'] as const) {
-    const res = await agent.post(`/api/projects/${project.id}/cleanup/delete`, {
-      data: { items: [{ ticketId: t.id, branch, kind, sha, worktrees: [] }] },
-    })
-    expect(res.status()).toBe(403)
+  const dir = path.join(e2eEnv().root, `agent-repo-${id}`)
+  const repo = ownRepo(dir)
+  await ok(human.post('/api/repos', { data: { projectId: id, repoPath: dir, name: 'repo' } }))
+  const landed = (branch: string) => {
+    const sha = repo.git('commit-tree', 'main^{tree}', '-p', 'main', '-m', `${branch} work`)
+    repo.git('update-ref', `refs/heads/${branch}`, sha)
+    repo.git('update-ref', `refs/heads/${branch}-base`, sha)
+    return sha
   }
-  expect(git('rev-parse', `refs/heads/${branch}`).trim()).toBe(sha)
-  expect(git('ls-remote', 'origin', `refs/heads/${branch}`)).toContain(sha)
+  const done = (title: string, branch: string) =>
+    ok<TicketFull>(
+      human.post(`/api/projects/${id}/tickets`, {
+        data: { title, status: 'done', branch, baseBranch: `${branch}-base` },
+      }),
+    )
+
+  const branch = 'agent-local'
+  const sha = landed(branch)
+  repo.git('push', '-q', 'origin', branch)
+  const t = await done('Done by an agent', branch)
+  // A branch with a worktree, as the report lists them.
+  const withTree = 'agent-tree'
+  const treeSha = landed(withTree)
+  const tree = path.join(e2eEnv().root, `wt-agent-${id}`)
+  repo.git('worktree', 'add', '-q', tree, withTree)
+  const tt = await done('Done in a worktree', withTree)
+  const report = await ok<CleanupReport>(agent.get(`/api/projects/${id}/cleanup`))
+  const listed = report.tickets.find((x) => x.id === tt.id)!.branches.find((b) => b.name === withTree)!
+  const local = { ticketId: t.id, branch, kind: 'local', sha }
+  const remote = { ticketId: t.id, branch, kind: 'remote', sha }
+  const trees = {
+    ticketId: tt.id,
+    branch: withTree,
+    kind: 'worktrees',
+    sha: listed.local,
+    worktrees: listed.worktrees.map((w) => w.path),
+  }
+  for (const items of [[remote], [local, remote], [remote, local]]) {
+    const res = await agent.post(`/api/projects/${id}/cleanup/delete`, { data: { items } })
+    expect(res.status()).toBe(403)
+    expect(await res.json()).toEqual({
+      error: expect.stringMatching(/only the human deletes branches on origin/),
+    })
+  }
+  for (const items of [[trees], [local, trees]]) {
+    const res = await agent.post(`/api/projects/${id}/cleanup/delete`, { data: { items } })
+    expect(res.status()).toBe(403)
+    expect(await res.json()).toEqual({ error: 'only the human removes worktrees, from the Cleanup page' })
+  }
+  expect(repo.git('rev-parse', `refs/heads/${branch}`)).toBe(sha)
+  expect(repo.git('ls-remote', 'origin', `refs/heads/${branch}`)).toContain(sha)
+  expect(fs.existsSync(path.join(tree, '.git'))).toBe(true)
+  expect(repo.git('rev-parse', `refs/heads/${withTree}`)).toBe(treeSha)
+
+  const since = new Date()
+  const res = await agent.post(`/api/projects/${id}/cleanup/delete`, { data: { items: [local] } })
+  expect(res.status()).toBe(200)
+  expect(await res.json()).toEqual([
+    expect.objectContaining({
+      branch,
+      ok: true,
+      outcome: 'deleted',
+      restore: [`git branch ${branch} ${sha}`],
+    }),
+  ])
+  expect(repo.hasRef(`refs/heads/${branch}`)).toBe(false)
+  expect(repo.git('ls-remote', 'origin', `refs/heads/${branch}`)).toContain(sha)
+
+  // The deletion is logged on its ticket under the agent's name (the days the test spans).
+  const days = [...new Set([since, new Date()].map(localDay))]
+  const logged = (
+    await Promise.all(days.map((d) => ok<DailyPayload>(human.get(`/api/daily?projectId=${id}&date=${d}`))))
+  )
+    .flatMap((r) => r.activity)
+    .filter((a) => a.kind === 'git')
+    .map((a) => [a.actor, a.text])
+  expect(logged).toEqual([[AGENT, `deleted the branch ${branch} @ ${sha} of #${t.id}`]])
+
+  // The Cleanup page says as much to the human.
+  await page.goto(`/projects/${id}/cleanup`)
+  const intro = page.locator('p', { hasText: 'Agents may delete local branches that landed' })
+  await expect(intro).toContainText('cleanup_delete')
+  await expect(intro).toContainText(
+    'removing worktrees and deleting branches on origin stay yours, from this page',
+  )
 })
