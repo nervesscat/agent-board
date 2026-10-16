@@ -356,3 +356,42 @@ describe('Needs you from either tab', () => {
     expect(waiting()).toEqual(expect.arrayContaining([inMain.id, inAgents.id]))
   })
 })
+
+describe('what agents are told', () => {
+  const repo = path.join(import.meta.dirname, '..', '..')
+  const read = (...parts: string[]) => fs.readFileSync(path.join(...parts), 'utf8').replace(/\s+/g, ' ')
+  const docs = {
+    'AGENTS.md': read(repo, 'AGENTS.md'),
+    'board.md': read(import.meta.dirname, 'skill', 'board.md'),
+    'todo-review-ticket.md': read(import.meta.dirname, 'skill', 'review', 'agents', 'todo-review-ticket.md'),
+  }
+
+  it('where posts go, to keep Main short, to rewrite the summary, and to reply under the human', async () => {
+    const { handleMcp } = await import('./mcp')
+    const res = await handleMcp(
+      new Request('http://localhost/api/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: ++rpcId,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name: 't', version: '0' },
+          },
+        }),
+      }),
+      'claude',
+    )
+    const instructions = ((await res.json()) as { result: { instructions: string } }).result.instructions
+    for (const [name, text] of Object.entries({ 'MCP instructions': instructions, ...docs })) {
+      expect(text, name).toContain('set_ticket_summary')
+      expect(text, name).toMatch(/Agents/)
+      expect(text, name).toMatch(/short and to the point|Keep Main short/)
+      expect(text, name).toMatch(/never (with )?a new top-level post/)
+      expect(text, name).not.toMatch(/hand-off post \(`?post_update/i)
+    }
+  })
+})

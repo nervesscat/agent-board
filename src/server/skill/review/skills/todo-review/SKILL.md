@@ -113,8 +113,9 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
 
 1. **`handed-off`**: the ticket is in a `review` stage, `push.state` is `pushed`, `pr` is set,
    the PR's CI has finished and passed (`gh pr checks <number>`; still running: wait for it),
-   and `handoff.missing` is empty, or holds only `no_preview` with a hand-off post saying why the
-   change cannot be tried. The hand-off post (the newest progress post of the agent's) has
+   and `handoff.missing` is empty, or holds only `no_preview` with a summary saying why the
+   change cannot be tried. The ticket's summary (`summary` on `get_ticket`, `fallback: false`:
+   the hand-off is the summary the agent wrote, not a separate post) has
    screenshots in its attachments when the change has a UI, and a "Tested" part that names the
    level and what checked it (for mid and high, the review depth and why). Unless `depth=` was given
    (other than `auto`), measure the branch

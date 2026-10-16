@@ -331,7 +331,10 @@ whose `branch` is the target branch. No ticket: run as usual and skip this secti
 2. **Each phase reports on the ticket as its agent**: `post_update` with `as: <agent name>` and
    `progress: true`, a few lines (what it established, counts, anything unavailable) and its
    evidence in `files` (screenshots from `WORKDIR/shots/`, the phase's own file). Never paste
-   hunt notes; the refute phase's verdict table is the findings' record.
+   hunt notes; the refute phase's verdict table is the findings' record. These posts go to the
+   ticket's Agents tab, the agents' working record, out of the human's way: a phase never writes
+   to Main (no summary, no new top-level post for the human), and the ticket's summary is the
+   job of whoever hands the ticket off.
 3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket (the
    interpretations as options, the spec's assumption marked recommended). If Phase 1 already asked
    the human this question in the chat, step 3 never asks it again, whatever the human did. If they
@@ -348,7 +351,8 @@ whose `branch` is the target branch. No ticket: run as usual and skip this secti
 4. **The result** goes to the board. For a PR: `post_review_result` (the verdict, `summary.md` as
    `summaryMd`, the commit SHA, the three checks and the counts, `repoId` when the project has
    several repos). For a branch with no PR yet: a `post_update` on the ticket with the verdict line
-   and `summary.md`. Never post it to GitHub unless `post` was given.
+   and `summary.md` (it goes to Agents; the verdict's one line goes in the ticket's summary when
+   the ticket is handed off). Never post it to GitHub unless `post` was given.
 
 ## Delegation
 

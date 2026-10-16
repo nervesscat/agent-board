@@ -115,10 +115,10 @@ port or browser.
 its port range and whether it may use the browser.
 
 **Returns:** eight lines: status, verdict, the three checks, counts, SHA and the paths of
-\`review.md\` and \`summary.md\`. Its phases post on the ticket themselves.
+\`review.md\` and \`summary.md\`. Its phases post on the ticket themselves, in its Agents tab.
 
 **Next:** a PR → the result is recorded (\`post_review_result\`; record it from the summary if it
-is missing). A build → SHIP hands off; anything else goes back to **builder** with the findings while
+is missing). A build → SHIP hands off (the ticket's summary rewritten to where it stands, never a new hand-off post); anything else goes back to **builder** with the findings while
 the ticket has a round left, and with none left the human decides (ship as is, keep going, or drop).
 Error or STALE → run it again once, alone.`,
   },
