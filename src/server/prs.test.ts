@@ -1,6 +1,8 @@
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
+import { Worker } from 'node:worker_threads'
 
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -627,6 +629,74 @@ describe('PR tickets', () => {
       status: 'todo',
     })
     expect(queue.find((p) => p.number === 4)!.ticket).toBeNull()
+  })
+
+  it('opens its ticket while another connection holds the write lock, waiting for it instead of failing', async () => {
+    const { db, schema } = await import('#/db')
+    // A stored open PR without a ticket, in a project with no GitHub repo: the refresh only opens its ticket.
+    const projectId = db.insert(schema.projects).values({ name: 'pr-tickets-locked' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId, name: 'app', repoPath: '/r/pr-tickets-locked', baseBranch: 'main' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    db.insert(schema.prs)
+      .values({
+        projectId,
+        repoId,
+        number: 9002,
+        title: 'Locked PR',
+        url: 'https://example.invalid/pr/9002',
+        author: 'someone',
+        headRef: 'locked-branch',
+        baseRef: 'main',
+        headSha: 'abcdef1234567',
+        waitingOn: 'me',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .run()
+    // Another connection, on a thread of its own (this one blocks while it waits for the lock), takes
+    // the write lock, writes, and commits 300 ms later.
+    const locker = new Worker(
+      `const { parentPort, workerData } = require('node:worker_threads')
+      const Database = require(workerData.driver)
+      const other = new Database(workerData.file)
+      other.prepare('BEGIN IMMEDIATE').run()
+      other.prepare('INSERT INTO projects (name) VALUES (?)').run('pr-tickets-locker')
+      parentPort.postMessage('locked')
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)
+      other.prepare('COMMIT').run()
+      other.close()`,
+      {
+        eval: true,
+        workerData: {
+          driver: createRequire(import.meta.url).resolve('better-sqlite3'),
+          file: path.join(tmp, 'board.db'),
+        },
+      },
+    )
+    const done = new Promise<void>((resolve, reject) => {
+      locker.once('error', reject)
+      locker.once('exit', () => resolve())
+    })
+    await new Promise<void>((resolve, reject) => {
+      locker.once('message', () => resolve())
+      locker.once('error', reject)
+    })
+    try {
+      await prs.refreshPrs(projectId)
+    } finally {
+      await done
+    }
+    expect((await storedPr(projectId, 9002)).ticket).toMatchObject({
+      title: 'PR #9002: Locked PR',
+      status: 'todo',
+    })
+    expect(
+      db.select().from(schema.projects).where(eq(schema.projects.name, 'pr-tickets-locker')).get(),
+    ).toBeDefined()
   })
 
   it('opens one for a stored open PR of a project with no GitHub repo, at the next refresh', async () => {

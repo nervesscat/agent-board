@@ -80,46 +80,49 @@ export const hasOwnTicket = (pr: Pr) => ownTicketOf(pr) !== undefined
  * that overlap cannot open two tickets for one PR.
  */
 export function openPrTickets(projectId: number, statusOf: (pr: schema.Pr) => PrTicketStatus) {
-  db.transaction((tx) => {
-    const open = tx
-      .select()
-      .from(schema.prs)
-      .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true)))
-      .orderBy(asc(schema.prs.id))
-      .all()
-    if (!open.length) return
-    const tickets = tx.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
-    const repos = listRepos(projectId)
-    const stages = listStages(projectId)
-    for (const pr of open) {
-      if (prTicketOf(tickets, pr.id) || featureTicketsOf(tickets, repos, pr).length) continue
-      const stage = prTicketStage(stages, statusOf(pr)) ?? startStage(stages)
-      const row = tx
-        .insert(schema.tickets)
-        .values({
+  db.transaction(
+    (tx) => {
+      const open = tx
+        .select()
+        .from(schema.prs)
+        .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.open, true)))
+        .orderBy(asc(schema.prs.id))
+        .all()
+      if (!open.length) return
+      const tickets = tx.select().from(schema.tickets).where(eq(schema.tickets.projectId, projectId)).all()
+      const repos = listRepos(projectId)
+      const stages = listStages(projectId)
+      for (const pr of open) {
+        if (prTicketOf(tickets, pr.id) || featureTicketsOf(tickets, repos, pr).length) continue
+        const stage = prTicketStage(stages, statusOf(pr)) ?? startStage(stages)
+        const row = tx
+          .insert(schema.tickets)
+          .values({
+            projectId,
+            repoId: pr.repoId,
+            title: prTicketTitle(pr),
+            body: pr.url,
+            status: stage.key,
+            ...startedPatch(stages, null, stage.key),
+            prNumber: pr.number,
+            prId: pr.id,
+            createdBy: 'board',
+          })
+          .returning()
+          .get()
+        tickets.push(row)
+        logActivity({
           projectId,
-          repoId: pr.repoId,
-          title: prTicketTitle(pr),
-          body: pr.url,
-          status: stage.key,
-          ...startedPatch(stages, null, stage.key),
-          prNumber: pr.number,
-          prId: pr.id,
-          createdBy: 'board',
+          actor: 'board',
+          kind: 'pr',
+          text: `opened ticket #${row.id} for PR #${pr.number} ${pr.title}`,
+          refType: 'ticket',
+          refId: row.id,
         })
-        .returning()
-        .get()
-      tickets.push(row)
-      logActivity({
-        projectId,
-        actor: 'board',
-        kind: 'pr',
-        text: `opened ticket #${row.id} for PR #${pr.number} ${pr.title}`,
-        refType: 'ticket',
-        refId: row.id,
-      })
-    }
-  })
+      }
+    },
+    { behavior: 'immediate' },
+  )
 }
 
 /**
