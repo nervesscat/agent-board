@@ -322,6 +322,15 @@ a board project, the review also runs **on the board**. Find the ticket: `ticket
 else the ticket whose `prNumber` is the target PR (`list_prs` → `tickets`), else the ticket
 whose `branch` is the target branch. No ticket: run as usual and skip this section.
 
+Where posts go: a ticket's feed has two tabs. Agents is the agents' working record: every phase
+post and the review's result post below go there (posted `as` an agent or as progress, the board
+puts them there). Main is the human's and stays short and to the point: their posts, decision
+cards, questions to them, and the ticket's summary on top. The review never writes the summary
+and never posts a new hand-off: whoever hands the ticket off rewrites the summary
+(`set_ticket_summary`) with the review's verdict in one line. When the human posted on the ticket
+and the review answers them, it replies under their post, never with a new top-level post: the
+plan first, then the result with its proofs.
+
 1. **The project's agents brief the phases.** `get_project` → `agents`. For each phase, when the
    project has an agent with that name (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`)
    and instructions, spawn a general-purpose subagent whose prompt is that agent's `instructions`
