@@ -1936,11 +1936,14 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
 
 /**
  * A decision an agent asked the human to make: its options as choices, one maybe recommended. Picking
- * one (and an optional note) answers it; once decided the choice stays marked and can be changed.
+ * one (and an optional note) answers it; once decided the choice stays marked and can be changed. An
+ * answer the orchestrator relayed from the chat shows the words the human said there, as they were.
  */
 function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   const options = u.decision!
   const decided = u.decidedOption !== null && u.decidedAt !== null
+  // Relayed: the words are the human's, and no one on the board picked the option (decidedBy is '').
+  const relayed = decided && u.relayedBy !== ''
   const [changing, setChanging] = useState(false)
   const [picked, setPicked] = useState<number | null>(null)
   const [note, setNote] = useState('')
@@ -1961,7 +1964,19 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
         <Scale className="size-3.5 text-amber-600 dark:text-amber-400" />
         {decided && !changing ? (
           <span className="text-muted-foreground">
-            decided by <Actor name={u.decidedBy} /> {ago(u.decidedAt!)} ·{' '}
+            {relayed ? (
+              <>
+                Decided in chat by you ·{' '}
+                <Tip content="The orchestrator recorded your answer from the chat. Nothing was clicked on the card.">
+                  <span className="cursor-help underline decoration-dotted underline-offset-2">relayed</span>
+                </Tip>{' '}
+                by <Actor name={u.relayedBy} /> {ago(u.decidedAt!)} ·{' '}
+              </>
+            ) : (
+              <>
+                decided by <Actor name={u.decidedBy} /> {ago(u.decidedAt!)} ·{' '}
+              </>
+            )}
             <button
               type="button"
               className="underline hover:text-foreground"
@@ -2008,6 +2023,12 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
           )
         })}
       </ul>
+      {relayed && !changing && (
+        <p className="text-sm">
+          <span className="text-xs text-muted-foreground">What you said in chat:</span>{' '}
+          <span className="whitespace-pre-wrap break-words">“{u.relayedText}”</span>
+        </p>
+      )}
       {choosing && (
         <div className="flex flex-wrap items-center gap-2">
           <Input

@@ -49,7 +49,8 @@ refute, merge) will try to break what you built. Build so it survives that.
 - Commit on the branch with messages that say what changed and why. Never push, never open a PR,
   never merge: the orchestrator hands off.
 - Something only the human can decide (two valid behaviours, a product call): stop and return the
-  question with the options, rather than picking one.
+  question with the options, rather than picking one. Never answer a decision (\`answer_decision\`):
+  the orchestrator asks the human and records their answer.
 
 ## Output
 

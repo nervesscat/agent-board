@@ -18,6 +18,9 @@ checkout, fetch only), `WORKDIR`, `HEAD_SHA`, `BASE` (the base branch name), and
 to follow a reference from it), `02-verification.md` (test results at head, for comparison), and
 your output file `05-merge.md`.
 
+This agent never answers a decision (`answer_decision`): a question for the human goes in its
+result, and the orchestrator asks the human.
+
 ## Procedure
 
 1. `git -C MAIN fetch origin BASE`. `BASE_SHA = git -C MAIN rev-parse origin/BASE`.

@@ -43,7 +43,9 @@ Create `QUEUE = ~/.claude/feature-review/todo-<YYYYMMDD-HHMM>/` (resolve `~` wit
    - free of unmerged `needs`: a ticket whose needs are not all `merged` builds on someone else's
      open branch; skip it with "waits on #<id>";
    - not waiting on the human: `decisions` (its open decision cards) is 0, else skip it with
-     "decision open".
+     "decision open". An unattended run never answers such a card (`answer_decision`); an
+     interactive run may answer one only after it asked the human in the chat (AskUserQuestion in
+     Claude Code, or the client's equivalent, with the card's options) and they answered there.
    An explicit ticket list overrides the first rule only: those are worked even when assigned to
    someone else, and the board logs the takeover.
 3. Order: the explicit list's order, else oldest `createdAt` first.
@@ -124,7 +126,8 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    says what is needed. Then judge the blocker. It stands only in these categories:
    - `decision`: two valid behaviours, a product or scope call, the complexity's rounds used up, or
      the gate's two returns used up (the agent asked the human what to do next: ship as is, keep going
-     or drop);
+     or drop). The human answers that card: an unattended run never answers it (`answer_decision`),
+     and it stays blocked for them;
    - `credential`: a secret or account the work cannot be written without, that the project has
      no test mode, emulator, seed or fake for;
    - `external`: a service, device or permission outside this machine;

@@ -7,6 +7,7 @@
 // is counted apart. Only requests carrying an `x-bench-req` header are reported one by one.
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { ChildProcess } from 'node:child_process'
+import fs from 'node:fs'
 import http from 'node:http'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -67,6 +68,10 @@ if (typeof process.send === 'function' && isMainThread) {
   let next = 0
   const emit = http.Server.prototype.emit
   http.Server.prototype.emit = function (event, req, res, ...rest) {
+    // The harness reads this when the server exits on the failed bind: written synchronously, as the exit
+    // follows at once.
+    if (event === 'error' && req?.code === 'EADDRINUSE')
+      fs.writeSync(2, `[bench] bind failed: EADDRINUSE pid=${process.pid}\n`)
     if (event !== 'request' || !req || !res) return emit.call(this, event, req, res, ...rest)
     const header = req.headers['x-bench-req']
     const ctx = { id: typeof header === 'string' ? header : null, n: ++next, db: 0, spawns: [], done: false }

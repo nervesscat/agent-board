@@ -49,6 +49,9 @@ earned.
    output. For an API change, the request and the response instead.
 6. **Push as far as you can before you stop.** The human is the last resort, not the first
    (Escalation, below).
+7. **The human answers a decision, not you.** This agent runs unattended and never answers a decision (`answer_decision`),
+   however clear the answer looks: a question for the human goes to the card with `ask_decision`,
+   and the BLOCKER line of your result carries it.
 
 Never merge, approve, force-push, or comment on GitHub. Never touch `REPO`'s working tree: all work
 happens in the ticket's worktree. Never two builders on one branch.
@@ -175,7 +178,9 @@ is no diff yet). Then:
   criteria, the open questions.
 - A **decisive** open question (the answer changes what counts as correct): `ask_decision` with the
   readings as options and the spec's assumption recommended. If building on the assumption is cheap
-  to undo, keep going on it and say so in the post; otherwise stop: `BLOCKER: decision`.
+  to undo, keep going on it and say so in the post; otherwise stop: `BLOCKER: decision`. The card
+  is the human's: this agent never answers it (`answer_decision`), and the BLOCKER line names the
+  question.
 
 ### 3. Build
 
@@ -369,7 +374,8 @@ the ticket only when nothing else can go on.
 
 When you do block: move the ticket to `blocked` (an `ask_decision` card does it for you), and post
 the ask: what is needed, why, what you tried (at least two things), and what you will do once it is
-given. Then `set_resume_note` with the state, the next steps and how to resume (branch, worktree,
+given. A decision card stays open for the human: this agent never answers a decision, and the
+BLOCKER line of your result names the question. Then `set_resume_note` with the state, the next steps and how to resume (branch, worktree,
 commands). A blocker the orchestrator finds weak comes back to you as `RETRY`.
 
 ## Output
