@@ -1,7 +1,10 @@
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
+import { Worker } from 'node:worker_threads'
 
+import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { GhCheck, MyGhPr } from './git'
@@ -11,24 +14,38 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-'))
 process.env.DATA_DIR = tmp
 
 // gh answers from fixtures: the refresh reads whatever `found` holds, or what `foundIn` holds for a
-// repo's checkout; a checkout in `failing` has its searches fail.
+// repo's checkout; a checkout in `failing` has its searches fail. `states` is GitHub's state of a PR
+// when a refresh asks for it (a PR that left the searches).
 let found: MyGhPr[] = []
 let foundIn: Record<string, MyGhPr[]> = {}
 let failing = new Set<string>()
+let states: Record<number, 'OPEN' | 'CLOSED' | 'MERGED'> = {}
+// A checkout whose next search waits for its promise, once: a test holds one refresh's read while another runs.
+let holdNext = new Map<string, Promise<void>>()
+// How many searches each checkout has had.
+let searches = new Map<string, number>()
 vi.mock('./git', async (original) => ({
   ...(await original<typeof import('./git')>()),
   listMyPrs: async (repoPath: string) => {
+    searches.set(repoPath, (searches.get(repoPath) ?? 0) + 1)
+    const hold = holdNext.get(repoPath)
+    holdNext.delete(repoPath)
+    if (hold) await hold
     if (failing.has(repoPath)) throw new Error(`gh pr list failed in ${repoPath}`)
     return foundIn[repoPath] ?? found
   },
   currentGithubLogin: async () => 'enrique',
   prMerged: async () => false,
+  prStateOf: async (_repoPath: string, number: number) => states[number] ?? null,
 }))
 
 afterEach(() => {
   found = []
   foundIn = {}
   failing = new Set()
+  holdNext = new Map()
+  searches = new Map()
+  states = {}
   vi.useRealTimers()
 })
 
@@ -541,5 +558,504 @@ describe('the queue', () => {
     expect((await prs.listPrs(projectId)).find((p) => p.number === 12)!.mergeAfter).toMatchObject([
       { ticketId: outside.id, number: 99, url: 'https://github.com/acme/app/pull/99' },
     ])
+  })
+})
+
+/** A project with one GitHub repo, which the refreshes in these tests read from `found`. */
+async function queueProject(name: string) {
+  const { db, schema } = await import('#/db')
+  const projectId = db.insert(schema.projects).values({ name }).returning().get().id
+  const repoId = db
+    .insert(schema.repos)
+    .values({ projectId, name: 'app', repoPath: `/r/${name}`, baseBranch: 'main', githubRepo: 'acme/app' })
+    .returning()
+    .get().id
+  return { projectId, repoId }
+}
+
+/** Lets every refresh that can run without a held search run to its end: the searches here answer at once. */
+const settle = () => new Promise<void>((resolve) => setImmediate(resolve))
+
+/** PR `number` as stored, with the PR ticket its row holds (undefined when it has none). */
+async function storedPr(projectId: number, number: number) {
+  const { db, schema } = await import('#/db')
+  const row = db
+    .select()
+    .from(schema.prs)
+    .where(and(eq(schema.prs.projectId, projectId), eq(schema.prs.number, number)))
+    .get()!
+  const ticket = db.select().from(schema.tickets).where(eq(schema.tickets.prId, row.id)).get()
+  return { row, ticket }
+}
+
+describe('PR tickets', () => {
+  it('opens one for each open PR of the queue, in the stage its status has, and never a second', async () => {
+    const { db, schema } = await import('#/db')
+    const { projectId, repoId } = await queueProject('pr-tickets-open')
+    found = [
+      ghPr(1),
+      theirs(2, { reviews: [review('enrique', HEAD, undefined, 'APPROVED')] }),
+      ghPr(3, { isDraft: true }),
+      ghPr(4, { mergedAt: new Date().toISOString() }),
+    ]
+    await prs.refreshPrs(projectId)
+    // Two refreshes at once: each checks and inserts in one synchronous step, so neither opens a second.
+    await Promise.all([prs.refreshPrs(projectId), prs.refreshPrs(projectId)])
+    const own = db
+      .select()
+      .from(schema.tickets)
+      .all()
+      .filter((t) => t.projectId === projectId && t.prId !== null)
+    expect(own.map((t) => t.prNumber).sort()).toEqual([1, 2, 3])
+    const one = (await storedPr(projectId, 1)).ticket!
+    expect(one).toMatchObject({
+      title: 'PR #1: pr 1',
+      status: 'todo',
+      repoId,
+      prNumber: 1,
+      createdBy: 'board',
+      branch: '',
+      body: 'https://github.com/acme/app/pull/1',
+      archivedAt: null,
+    })
+    expect((await storedPr(projectId, 2)).ticket).toMatchObject({ title: 'PR #2: pr 2', status: 'review' })
+    expect((await storedPr(projectId, 3)).ticket).toMatchObject({ status: 'todo' })
+    // First seen merged: no ticket.
+    expect((await storedPr(projectId, 4)).ticket).toBeUndefined()
+    const queue = await prs.listPrs(projectId)
+    expect(queue.find((p) => p.number === 1)!.ticket).toEqual({
+      id: one.id,
+      title: 'PR #1: pr 1',
+      status: 'todo',
+    })
+    expect(queue.find((p) => p.number === 4)!.ticket).toBeNull()
+  })
+
+  it('opens its ticket while another connection holds the write lock, waiting for it instead of failing', async () => {
+    const { db, schema } = await import('#/db')
+    // A stored open PR without a ticket, in a project with no GitHub repo: the refresh only opens its ticket.
+    const projectId = db.insert(schema.projects).values({ name: 'pr-tickets-locked' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId, name: 'app', repoPath: '/r/pr-tickets-locked', baseBranch: 'main' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    db.insert(schema.prs)
+      .values({
+        projectId,
+        repoId,
+        number: 9002,
+        title: 'Locked PR',
+        url: 'https://example.invalid/pr/9002',
+        author: 'someone',
+        headRef: 'locked-branch',
+        baseRef: 'main',
+        headSha: 'abcdef1234567',
+        waitingOn: 'me',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .run()
+    // Another connection, on a thread of its own (this one blocks while it waits for the lock), takes
+    // the write lock, writes, and commits 300 ms later.
+    const locker = new Worker(
+      `const { parentPort, workerData } = require('node:worker_threads')
+      const Database = require(workerData.driver)
+      const other = new Database(workerData.file)
+      other.prepare('BEGIN IMMEDIATE').run()
+      other.prepare('INSERT INTO projects (name) VALUES (?)').run('pr-tickets-locker')
+      parentPort.postMessage('locked')
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300)
+      other.prepare('COMMIT').run()
+      other.close()`,
+      {
+        eval: true,
+        workerData: {
+          driver: createRequire(import.meta.url).resolve('better-sqlite3'),
+          file: path.join(tmp, 'board.db'),
+        },
+      },
+    )
+    const done = new Promise<void>((resolve, reject) => {
+      locker.once('error', reject)
+      locker.once('exit', () => resolve())
+    })
+    await new Promise<void>((resolve, reject) => {
+      locker.once('message', () => resolve())
+      locker.once('error', reject)
+    })
+    try {
+      await prs.refreshPrs(projectId)
+    } finally {
+      await done
+    }
+    expect((await storedPr(projectId, 9002)).ticket).toMatchObject({
+      title: 'PR #9002: Locked PR',
+      status: 'todo',
+    })
+    expect(
+      db.select().from(schema.projects).where(eq(schema.projects.name, 'pr-tickets-locker')).get(),
+    ).toBeDefined()
+  })
+
+  it('opens one for a stored open PR of a project with no GitHub repo, at the next refresh', async () => {
+    const { db, schema } = await import('#/db')
+    const projectId = db.insert(schema.projects).values({ name: 'pr-tickets-seeded' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId, name: 'app', repoPath: '/r/pr-tickets-seeded', baseBranch: 'main' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    db.insert(schema.prs)
+      .values({
+        projectId,
+        repoId,
+        number: 9001,
+        title: 'Seeded PR',
+        url: 'https://example.invalid/pr/9001',
+        author: 'someone',
+        headRef: 'seed-branch',
+        baseRef: 'main',
+        headSha: 'abcdef1234567',
+        waitingOn: 'me',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .run()
+    await prs.refreshPrs(projectId)
+    expect((await storedPr(projectId, 9001)).ticket).toMatchObject({
+      title: 'PR #9001: Seeded PR',
+      status: 'todo',
+    })
+  })
+
+  it("titles it with its number and the PR's title, cut to 80 characters", async () => {
+    const { projectId } = await queueProject('pr-tickets-title')
+    found = [ghPr(5, { title: 'x'.repeat(120) })]
+    await prs.refreshPrs(projectId)
+    const title = (await storedPr(projectId, 5)).ticket!.title
+    expect(title).toHaveLength(80)
+    expect(title.startsWith('PR #5: xxx')).toBe(true)
+  })
+
+  it('gives no ticket to a PR a feature ticket names, by number or by branch, but opens one for a PR a feature names by another number', async () => {
+    const features = await import('./features')
+    const { projectId } = await queueProject('pr-tickets-feature')
+    const seven = features.createTicket(projectId, { title: 'seven', prNumber: 7 }, 'claude')
+    const eight = features.createTicket(projectId, { title: 'eight', branch: 'feat/8' }, 'claude')
+    // Its branch is PR 9's, but it names PR 99: it claims no PR by its branch.
+    features.createTicket(projectId, { title: 'other', branch: 'feat/9', prNumber: 99 }, 'claude')
+    found = [ghPr(7), ghPr(8), ghPr(9)]
+    const queue = await prs.listPrs(projectId, { refresh: true })
+    const byNumber = (n: number) => queue.find((p) => p.number === n)!
+    expect((await storedPr(projectId, 7)).ticket).toBeUndefined()
+    expect((await storedPr(projectId, 8)).ticket).toBeUndefined()
+    expect((await storedPr(projectId, 9)).ticket).toMatchObject({ title: 'PR #9: pr 9' })
+    // The card opens the feature ticket that names the PR; `tickets` lists only those.
+    expect(byNumber(7).ticket).toEqual({ id: seven.id, title: 'seven', status: 'todo' })
+    expect(byNumber(8).ticket).toEqual({ id: eight.id, title: 'eight', status: 'todo' })
+    expect(byNumber(7).tickets.map((t) => t.id)).toEqual([seven.id])
+    expect(byNumber(9).ticket).toMatchObject({ title: 'PR #9: pr 9' })
+    expect(byNumber(9).tickets).toEqual([])
+  })
+
+  it('follows its PR: a refresh, a hold and its release, merged to done, closed to cancelled, and a PR that only leaves the searches keeps its stage', async () => {
+    const features = await import('./features')
+    const { projectId } = await queueProject('pr-tickets-stages')
+    const status = async (n: number) => (await storedPr(projectId, n)).ticket!.status
+    found = [ghPr(20), ghPr(21), ghPr(22), ghPr(23)]
+    await prs.refreshPrs(projectId)
+    expect(await status(20)).toBe('todo')
+    // A person's move holds through a refresh that finds no change of status.
+    features.updateTicket((await storedPr(projectId, 20)).ticket!.id, { status: 'in_progress' }, 'enrique')
+    await prs.refreshPrs(projectId)
+    expect(await status(20)).toBe('in_progress')
+    // Approved by the human: its reviews are reviewed, so it is in review.
+    const approved = theirs(20, { reviews: [review('enrique', HEAD, undefined, 'APPROVED')] })
+    found = [approved, ghPr(21), ghPr(22), ghPr(23)]
+    await prs.refreshPrs(projectId)
+    expect(await status(20)).toBe('review')
+    // Held: blocked; released: back to its status.
+    const held = prs.setPrHold((await storedPr(projectId, 20)).row.id, true, 'wait', 'enrique')
+    expect(await status(20)).toBe('blocked')
+    prs.setPrHold(held.id, false, '', 'enrique')
+    expect(await status(20)).toBe('review')
+    // Merged: done in the refresh that finds it. Closed without merging: cancelled. Only gone from the searches
+    // (GitHub says it is still open): keeps its stage.
+    states = { 22: 'CLOSED', 23: 'OPEN' }
+    found = [approved, ghPr(21, { mergedAt: new Date().toISOString() })]
+    await prs.refreshPrs(projectId)
+    expect(await status(21)).toBe('done')
+    expect(await status(22)).toBe('cancelled')
+    expect(await status(23)).toBe('todo')
+    // The board archives none of them: that stays the human's.
+    for (const n of [20, 21, 22, 23]) expect((await storedPr(projectId, n)).ticket!.archivedAt).toBeNull()
+  })
+
+  it('leaves no ticket to a PR stored before the change that is merged or closed, nor to one first seen merged', async () => {
+    const { db, schema } = await import('#/db')
+    const { projectId, repoId } = await queueProject('pr-tickets-old')
+    const now = new Date().toISOString()
+    const stored = (number: number, values: { open: boolean; mergedAt?: string; closedAt: string }) =>
+      db
+        .insert(schema.prs)
+        .values({
+          projectId,
+          repoId,
+          number,
+          title: `pr ${number}`,
+          url: `https://github.com/acme/app/pull/${number}`,
+          author: 'enrique',
+          headRef: `feat/${number}`,
+          baseRef: 'main',
+          headSha: HEAD,
+          updatedAt: now,
+          fetchedAt: now,
+          ...values,
+        })
+        .run()
+    stored(88, { open: false, mergedAt: now, closedAt: now })
+    stored(89, { open: false, closedAt: now })
+    found = [ghPr(90, { mergedAt: now })]
+    await prs.refreshPrs(projectId)
+    expect(
+      db
+        .select()
+        .from(schema.tickets)
+        .all()
+        .filter((t) => t.projectId === projectId),
+    ).toEqual([])
+  })
+
+  it('takes posts and tasks like any ticket, shows its PR with the latest review, and gets the reviews of its PR posted', async () => {
+    const features = await import('./features')
+    const reviews = await import('./reviews')
+    const { projectId } = await queueProject('pr-tickets-review')
+    found = [ghPr(30)]
+    await prs.refreshPrs(projectId)
+    const ticket = (await storedPr(projectId, 30)).ticket!
+    features.postUpdate(ticket.id, 'Checked the diff.', [], 'claude')
+    features.addTasks(ticket.id, ['Read the change'], 'claude')
+    reviews.postResult(
+      projectId,
+      { prNumber: 30, sha: HEAD, verdict: 'SHIP', summaryMd: 'Looks right.' },
+      'claude',
+    )
+    const full = features.getTicketFull(ticket.id)
+    expect(full.updates.map((u) => u.body)).toEqual([
+      'Review of PR #30 at a1b2c3d: SHIP\n\nLooks right.',
+      'Checked the diff.',
+    ])
+    expect(full.updates[0]).toMatchObject({ author: 'claude', progress: true })
+    expect(full.tasks.map((t) => t.text)).toEqual(['Read the change'])
+    expect(full.pr).toMatchObject({
+      number: 30,
+      queue: { status: 'pending' },
+      latestReview: { verdict: 'SHIP', fresh: true },
+    })
+  })
+
+  it('posts a review on the ticket of its PR, the feature ticket that names it first, and on no ticket for a PR nobody has one for', async () => {
+    const { db, schema } = await import('#/db')
+    const features = await import('./features')
+    const reviews = await import('./reviews')
+    const { projectId } = await queueProject('pr-tickets-posts')
+    const named = features.createTicket(projectId, { title: 'named', prNumber: 41 }, 'claude')
+    found = [ghPr(40), ghPr(41)]
+    await prs.refreshPrs(projectId)
+    reviews.postResult(
+      projectId,
+      { prNumber: 40, sha: HEAD, verdict: 'FIX FIRST', summaryMd: 'Two findings.' },
+      'claude',
+    )
+    reviews.postResult(projectId, { prNumber: 41, sha: HEAD, verdict: 'SHIP', summaryMd: '' }, 'claude')
+    reviews.postResult(
+      projectId,
+      { prNumber: 42, sha: HEAD, verdict: 'SHIP', summaryMd: 'Not in the queue.' },
+      'claude',
+    )
+    const bodies = (ticketId: number) => features.getTicketFull(ticketId).updates.map((u) => u.body)
+    expect(bodies((await storedPr(projectId, 40)).ticket!.id)).toEqual([
+      'Review of PR #40 at a1b2c3d: FIX FIRST\n\nTwo findings.',
+    ])
+    expect(bodies(named.id)).toEqual(['Review of PR #41 at a1b2c3d: SHIP'])
+    expect((await storedPr(projectId, 41)).ticket).toBeUndefined()
+    expect(reviews.listResults(projectId, 20, { prNumber: 42 })).toHaveLength(1)
+    expect(
+      db
+        .select()
+        .from(schema.updates)
+        .all()
+        .some((u) => u.body.includes('Not in the queue.')),
+    ).toBe(false)
+  })
+
+  it('runs overlapping refreshes of a project one after the other, so an older read cannot move a ticket last', async () => {
+    const { db, schema } = await import('#/db')
+    const projectId = db.insert(schema.projects).values({ name: 'pr-refresh-overlap' }).returning().get().id
+    const [one, two] = ['one', 'two'].map((name) =>
+      db
+        .insert(schema.repos)
+        .values({
+          projectId,
+          name,
+          repoPath: `/r/overlap-${name}`,
+          baseBranch: 'main',
+          githubRepo: `acme/${name}`,
+        })
+        .returning()
+        .get(),
+    )
+    // Someone else's PR in repo one, waiting on my review: pending, with its ticket in To do.
+    foundIn = { [one.repoPath]: [theirs(40)], [two.repoPath]: [] }
+    await prs.refreshPrs(projectId)
+    expect((await storedPr(projectId, 40)).ticket).toMatchObject({ status: 'todo' })
+
+    // Refresh A reads repo one with my approval, then waits on repo two's search.
+    foundIn[one.repoPath] = [theirs(40, { reviews: [review('enrique', HEAD, undefined, 'APPROVED')] })]
+    let release = () => {}
+    holdNext.set(two.repoPath, new Promise<void>((resolve) => (release = () => resolve())))
+    const a = prs.refreshPrs(projectId)
+    await settle()
+    // Then I request changes, and refresh B reads that while A still waits.
+    foundIn[one.repoPath] = [
+      theirs(40, { reviews: [review('enrique', HEAD, undefined, 'CHANGES_REQUESTED')] }),
+    ]
+    const b = prs.refreshPrs(projectId)
+    await settle()
+    release()
+    await Promise.all([a, b])
+
+    // The row and its ticket agree: on hold, in Blocked. A's older read must not put the ticket back in review.
+    const stored = await storedPr(projectId, 40)
+    expect(stored.row.reviewStage).toBe('on_hold')
+    expect(stored.ticket).toMatchObject({ status: 'blocked' })
+  })
+
+  it('keeps at most one refresh of a project waiting behind the running one, which later requests join', async () => {
+    const { db, schema } = await import('#/db')
+    const projectId = db.insert(schema.projects).values({ name: 'pr-refresh-coalesce' }).returning().get().id
+    const repo = db
+      .insert(schema.repos)
+      .values({
+        projectId,
+        name: 'two',
+        repoPath: '/r/coalesce-two',
+        baseBranch: 'main',
+        githubRepo: 'acme/two',
+      })
+      .returning()
+      .get()
+    foundIn = { [repo.repoPath]: [] }
+    let release = () => {}
+    holdNext.set(repo.repoPath, new Promise<void>((resolve) => (release = () => resolve())))
+    const a = prs.refreshPrs(projectId)
+    await settle()
+    const waiting = [prs.refreshPrs(projectId), prs.refreshPrs(projectId), prs.refreshPrs(projectId)]
+    await settle()
+    release()
+    await expect(Promise.all([a, ...waiting])).resolves.toHaveLength(4)
+
+    // A's search and one more for the three that waited together.
+    expect(searches.get(repo.repoPath)).toBe(2)
+  })
+
+  it('runs the next refresh of a project after one that failed', async () => {
+    const { projectId } = await queueProject('pr-refresh-after-failure')
+    failing = new Set(['/r/pr-refresh-after-failure'])
+    await expect(prs.refreshPrs(projectId)).rejects.toThrow('gh pr list failed')
+    failing = new Set()
+    found = [theirs(41)]
+    await prs.refreshPrs(projectId)
+    expect((await storedPr(projectId, 41)).ticket).toMatchObject({ status: 'todo' })
+  })
+})
+
+describe('PR tickets over the API', () => {
+  let handle: (request: Request) => Promise<Response>
+  beforeAll(async () => {
+    const { api } = await import('./api')
+    const { api: guard } = await import('./http')
+    // As the server answers: a bearer token is an agent (`claude`), anyone else is the human.
+    const guarded = guard(({ request }: { request: Request }) =>
+      api.handle(request, request.headers.has('authorization') ? 'claude' : 'enrique'),
+    )
+    handle = (request) => guarded({ request })
+  })
+
+  async function call(method: string, pathname: string, body?: unknown, as: 'human' | 'agent' = 'human') {
+    const res = await handle(
+      new Request(`http://localhost${pathname}`, {
+        method,
+        headers: {
+          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...(as === 'agent' ? { authorization: 'Bearer gate_test' } : {}),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+    )
+    return { status: res.status, body: (await res.json()) as any }
+  }
+
+  it("gives each queue row its ticket, keeps it off the features board, and refuses an agent's archive and PR threads", async () => {
+    const { projectId } = await queueProject('pr-tickets-api')
+    found = [ghPr(60)]
+    const rows = await call('GET', `/api/projects/${projectId}/prs?refresh=1`)
+    expect(rows.status).toBe(200)
+    const ticket = rows.body.find((p: { number: number }) => p.number === 60).ticket
+    expect(ticket).toMatchObject({ title: 'PR #60: pr 60', status: 'todo' })
+    expect((await call('GET', `/api/projects/${projectId}/tickets`)).body).toEqual([])
+    expect((await call('GET', `/api/tickets/${ticket.id}`)).body).toMatchObject({
+      id: ticket.id,
+      prNumber: 60,
+    })
+    expect((await call('POST', `/api/tickets/${ticket.id}/archive`, undefined, 'agent')).status).toBe(403)
+    expect(
+      (await call('POST', '/api/comments', { parentType: 'pr', parentId: ticket.id, body: 'hi' })).status,
+    ).toBe(400)
+    expect((await call('GET', `/api/comments?parentType=pr&parentId=${ticket.id}`)).status).toBe(400)
+  })
+
+  it('tell agents the same over MCP: the instructions and the tools name a PR ticket, and no PR thread', async () => {
+    const { handleMcp } = await import('./mcp')
+    let rpcId = 0
+    const rpc = async (method: string, params: Record<string, unknown> = {}) => {
+      const res = await handleMcp(
+        new Request('http://localhost/api/mcp', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
+        }),
+        'claude',
+      )
+      return ((await res.json()) as { result: any }).result
+    }
+    const init = await rpc('initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '1' },
+    })
+    expect(init.instructions).toContain('list_prs names it as ticket')
+    expect(init.instructions).toContain('this ticket takes the PR over')
+    expect(init.instructions).not.toContain('PR thread')
+    const tools = (await rpc('tools/list')).tools as {
+      name: string
+      description: string
+      inputSchema: unknown
+    }[]
+    const told = (name: string) => {
+      const tool = tools.find((t) => t.name === name)!
+      return `${tool.description} ${JSON.stringify(tool.inputSchema)}`
+    }
+    expect(told('list_prs')).toContain('ticket is the ticket its card opens')
+    expect(told('post_review_result')).toContain('list_prs ticket')
+    expect(told('list_tickets')).toContain("a PR's own ticket")
+    expect(told('get_summary')).toContain('prTicket true')
+    expect(told('create_ticket')).toContain('takes the PR over')
+    expect(told('update_ticket')).toContain('takes the PR over')
+    for (const name of ['comment', 'list_comments'])
+      expect(told(name)).not.toMatch(/under a PR|a PR or a review/)
   })
 })

@@ -305,7 +305,7 @@ function TicketPage() {
         <ChevronRight className="size-3.5" />
         <span className="text-foreground">#{t.id}</span>
         {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
-        {!t.parentId && board && <StageNav key={t.id} projectId={id} tickets={board} t={t} />}
+        {!t.parentId && !t.prId && board && <StageNav key={t.id} projectId={id} tickets={board} t={t} />}
       </nav>
 
       {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
@@ -385,32 +385,35 @@ function TicketPage() {
               </Button>
             </Tip>
           )}
-          <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
-              <Trash2 />
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this ticket?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Tasks, updates, attachments and the thread go with it.
-                  {t.lanes.length > 0 &&
-                    ` It has ${t.lanes.length} lane${t.lanes.length === 1 ? '' : 's'}: delete them too, or keep them and move them up a level.`}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                {t.lanes.length > 0 && (
-                  <AlertDialogAction variant="outline" onClick={() => remove.mutate(true)}>
-                    Delete, keep lanes
+          {/* A PR's ticket cannot be deleted: it is archived instead. */}
+          {!t.prId && (
+            <AlertDialog>
+              <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                <Trash2 />
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this ticket?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tasks, updates, attachments and the thread go with it.
+                    {t.lanes.length > 0 &&
+                      ` It has ${t.lanes.length} lane${t.lanes.length === 1 ? '' : 's'}: delete them too, or keep them and move them up a level.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  {t.lanes.length > 0 && (
+                    <AlertDialogAction variant="outline" onClick={() => remove.mutate(true)}>
+                      Delete, keep lanes
+                    </AlertDialogAction>
+                  )}
+                  <AlertDialogAction onClick={() => remove.mutate(false)}>
+                    {t.lanes.length > 0 ? 'Delete with lanes' : 'Delete'}
                   </AlertDialogAction>
-                )}
-                <AlertDialogAction onClick={() => remove.mutate(false)}>
-                  {t.lanes.length > 0 ? 'Delete with lanes' : 'Delete'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </header>
 

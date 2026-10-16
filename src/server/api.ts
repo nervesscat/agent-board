@@ -634,7 +634,7 @@ api.delete('/api/updates/:id', ({ request, params, actor }) => {
 
 // --- comments ---
 api.get('/api/comments', async ({ request, url }) => {
-  const parentType = z.enum(COMMENT_PARENTS).parse(url.searchParams.get('parentType'))
+  const parentType = query(z.enum(COMMENT_PARENTS), url.searchParams.get('parentType'), 'parentType')
   const parentId = intParam(url.searchParams.get('parentId') ?? '', 'parentId')
   return json(await forAgent(request, features.listComments(parentType, parentId)))
 })

@@ -144,14 +144,22 @@ export async function listMyPrs(repoPath: string, opts: { mergedSince: string })
   return [...byNumber.values()]
 }
 
-/** Whether a PR was merged: one that left the queue may also have been closed or unassigned. */
-export async function prMerged(repoPath: string, number: number): Promise<boolean> {
+/** A PR's state on GitHub, or null when GitHub cannot say (the read failed). */
+export async function prStateOf(
+  repoPath: string,
+  number: number,
+): Promise<'OPEN' | 'CLOSED' | 'MERGED' | null> {
   try {
     const r = await gh<{ state: string }>(repoPath, ['pr', 'view', String(number), '--json', 'state'])
-    return r.state === 'MERGED'
+    return r.state === 'OPEN' || r.state === 'CLOSED' || r.state === 'MERGED' ? r.state : null
   } catch {
-    return false
+    return null
   }
+}
+
+/** Whether a PR was merged: one that left the queue may also have been closed or unassigned. */
+export async function prMerged(repoPath: string, number: number): Promise<boolean> {
+  return (await prStateOf(repoPath, number)) === 'MERGED'
 }
 
 export interface BranchInfo {

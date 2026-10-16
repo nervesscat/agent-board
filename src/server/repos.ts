@@ -1,9 +1,10 @@
-import { asc, eq } from 'drizzle-orm'
+import { asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import { assertRepo, repoNameWithOwner } from './git'
 import { HttpError, notFound } from './http'
+import { forgetPreview } from './managedPreview'
 import { createProject, getProject } from './projects'
 
 /** A local git checkout the board reads with git and gh. Every repo belongs to one project. */
@@ -129,6 +130,25 @@ export async function updateRepo(
 
 export function deleteRepo(id: number, actor: string) {
   const r = getRepo(id)
-  db.delete(schema.repos).where(eq(schema.repos.id, id)).run()
+  db.transaction(
+    (tx) => {
+      // The repo's PR rows go with it, and so do their tickets: a PR's own ticket is for its PR, and would read as a
+      // feature ticket without one. Their workspaces' previews stop, as deleting a ticket stops them.
+      const repoPrIds = tx.select({ id: schema.prs.id }).from(schema.prs).where(eq(schema.prs.repoId, id))
+      const prTicketIds = tx
+        .select({ id: schema.tickets.id })
+        .from(schema.tickets)
+        .where(inArray(schema.tickets.prId, repoPrIds))
+      const workspaces = tx
+        .select({ id: schema.workspaces.id })
+        .from(schema.workspaces)
+        .where(inArray(schema.workspaces.ticketId, prTicketIds))
+        .all()
+      for (const w of workspaces) forgetPreview(w.id, actor)
+      tx.delete(schema.tickets).where(inArray(schema.tickets.prId, repoPrIds)).run()
+      tx.delete(schema.repos).where(eq(schema.repos.id, id)).run()
+    },
+    { behavior: 'immediate' },
+  )
   logActivity({ projectId: r.projectId, actor, kind: 'project', text: `removed repo ${r.name}` })
 }

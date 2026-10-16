@@ -186,8 +186,8 @@ export function RepoDialog({
                   <AlertDialogHeader>
                     <AlertDialogTitle>Remove {repo.name}?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Its PR queue entries go with it. Tickets and review results stay in the project. The
-                      checkout on disk is untouched.
+                      Its PR queue entries go with it. Tickets and review results stay in the project, but its
+                      PR tickets go with it. The checkout on disk is untouched.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

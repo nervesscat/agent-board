@@ -137,7 +137,7 @@ http_headers = { Authorization = "Bearer gate_…" }
    never off loopback, never the live board.
 
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
-   (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
+   (`parentType: update`, the post's id) or on a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
    answered). When only one step waits on the human and the rest can go on, tag that task blocked
    instead (step 3). When the answer is a choice between clear options (an approach, a trade-off, a scope
@@ -173,7 +173,8 @@ http_headers = { Authorization = "Bearer gate_…" }
    5. PR open, assigned to the human (`gh pr create --assignee <their login>`, or `--assignee @me`
       when you push with their account; GitHub never lets a PR's author be its requested reviewer,
       and the PR queue lists their own PRs under Waiting on others), and `update_ticket` with its
-      `prNumber` (the PR queue then shows the ticket, and the ticket its PR and latest review).
+      `prNumber`: the PR queue then shows this ticket on the PR's card, with the PR and its latest
+      review. A PR ticket the board made for that PR is cancelled, with a post saying so.
    6. **Preview running**: `start_preview` on the workspace and wait for `running` (for a repo the
       board cannot build, start one the project's way and `set_preview`; see Previews above).
       Required whenever the change can be tried; when it cannot (docs only, a script), say why in
@@ -286,16 +287,27 @@ routine.
   (approved: by the human on others' PRs, by every reviewer on theirs), `on_hold` (review comments
   or requested changes not yet addressed by a push or a new review request, or a board-side hold)
   or `done` (merged). Each also has where it stands on GitHub (`merge`, `ci` with its `checks`,
-  `reviewDecision`), the latest review verdict and the tickets it came from. An open PR's `merge` is
+  `reviewDecision`), the latest review verdict, `ticket` (below) and `tickets`, the feature tickets it
+  came from. An open PR's `merge` is
   checked in the repo's checkout against origin's base first, so a base that moved shows at the next
   fetch; `mergeCheck` says whether it is that (`local`) or GitHub's word, and as of when. `set_pr_hold` parks
   an open one with a note (board-only). `list_review_results` (by `prNumber`, `sha`) tells whether
   a head SHA was already reviewed; `get_review_result` has the findings.
+- A PR of the queue that no feature ticket names has a ticket of its own, made at the refresh that
+  first sees it, and `list_prs` names it as `ticket` (the ticket its card opens). A feature ticket
+  that names the PR (by its `prNumber`, or by its branch when it names none) is `ticket` instead:
+  no ticket of the PR's is made, and one already made is cancelled, with a post. Reviews, findings
+  and progress on the PR are posts on that ticket. The ticket follows the PR's status: `pending` in
+  To do, `reviewed` in In review, `on_hold` in Blocked, merged in Done, closed without merging in
+  Cancelled (the first stage of each kind); a PR that only leaves the queue keeps its stage. The
+  human archives it, like any finished ticket. A PR ticket is in no features list, count or summary
+  list; its decisions and threads waiting on the human show in Needs you as PR rows. A PR has no
+  comment thread: its discussion is on its ticket.
 - `list_actors` gives the names to use for `assignee`.
 - If you review a PR, record it with `post_review_result` (verdict, markdown summary with
   findings, how to test, checks): that is how findings reach the human, as the verdict on the PR
-  queue and on the ticket's Branch card, which open the result in full. Never post the review to
-  GitHub.
+  queue and on the ticket's Branch card, which open the result in full, and as a progress post on
+  the PR's ticket when it has one. Never post the review to GitHub.
 
 ## Writing style on the board
 
