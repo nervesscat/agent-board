@@ -261,6 +261,10 @@ export const updates = sqliteTable('updates', {
   decidedOption: integer('decided_option'),
   decidedBy: text('decided_by').notNull().default(''),
   decidedAt: text('decided_at'),
+  // Set when the orchestrator recorded the human's answer from the chat: the connected agent that relayed
+  // it, and the words as the human gave them. Both '' on a decision the human made on the board.
+  relayedBy: text('relayed_by').notNull().default(''),
+  relayedText: text('relayed_text').notNull().default(''),
   createdAt: now(),
   editedAt: text('edited_at'),
 })
