@@ -2,7 +2,7 @@ import type { Locator } from '@playwright/test'
 
 import type { TicketFull, TicketRow } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
-import { expect, expectTooltip, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, openFeedTab, test } from './fixtures'
 
 /** Top, bottom and middle of a box on the page, in px. */
 type Box = { top: number; bottom: number; mid: number }
@@ -510,6 +510,8 @@ test('an author in the header of a post or a reply stays centred on it, on a pho
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto(`/projects/${project.id}/features/${t.id}`)
+    // Progress and project agents' posts: in the agents' tab.
+    await openFeedTab(page, 'Agents')
     const article = (body: string) => page.getByRole('article').filter({ hasText: body })
     await article('From the agent itself.').getByRole('button', { name: '1 reply' }).click()
     await expect(page.getByText('A reply from a project agent.')).toBeVisible()

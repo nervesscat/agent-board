@@ -14,6 +14,7 @@ import {
   GitBranch,
   GitCommitHorizontal,
   Hand,
+  History,
   Layers,
   ListPlus,
   ListTodo,
@@ -23,6 +24,7 @@ import {
   Pencil,
   Plus,
   Scale,
+  ScrollText,
   Trash2,
   TriangleAlert,
   X,
@@ -30,7 +32,7 @@ import {
 import { Fragment, type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
-import { Actor } from '#/components/Actor'
+import { Actor, useActorKinds } from '#/components/Actor'
 import { ComplexitySelect } from '#/components/Complexity'
 import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
@@ -46,7 +48,7 @@ import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { ManagedLine, PreviewActions, PreviewBadge, previewActive } from '#/components/Preview'
 import { PrState } from '#/components/PrState'
-import { RESUME_TEMPLATE } from '#/lib/constants'
+import { type FeedTab, RESUME_TEMPLATE } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
 import { ReachBadge } from '#/components/ReachBadge'
@@ -69,6 +71,7 @@ import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Checkbox } from '#/components/ui/checkbox'
 import { Switch } from '#/components/ui/switch'
+import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
@@ -83,6 +86,7 @@ import {
   upload,
   type TicketFull,
   type TicketGit,
+  type SummaryHistory,
   type TicketRow,
   type UpdateRow,
   type Workspace,
@@ -427,7 +431,8 @@ function TicketPage() {
           <Tasks t={t} onChange={invalidate} />
           <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
           <ShownAnchor value={drawn ? anchor : null}>
-            <Activity t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+            {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
+            <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
           </ShownAnchor>
         </div>
         <aside className="min-w-0 space-y-4">
@@ -747,7 +752,9 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const decisions = own.filter((u) => u.decision && !u.decidedAt).length
   // Discussion where someone other than the assignee spoke last: waiting on whoever works the ticket.
   const waiting = t.assignee
-    ? own.filter((u) => !u.progress && !u.decision && (u.thread.lastAuthor ?? u.author) !== t.assignee).length
+    ? own.filter(
+        (u) => !u.progress && !u.decision && !u.summary && (u.thread.lastAuthor ?? u.author) !== t.assignee,
+      ).length
     : 0
   const commits = r.commitsSince ?? 0
   const chip = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5'
@@ -1651,10 +1658,51 @@ function Lanes({
 }
 
 /**
- * The ticket's feed: one kind of post, newest first, with one box to write one. A decision still
- * waiting on the human comes first, however old, until it is decided. A post marked progress is a
- * step of the work (what agents post as they go); one written here is not, until its mark progress
- * action makes it one. Any post can have replies.
+ * When a post was last active: the post itself, or the last reply under it, so a reply brings it up in
+ * Main. A decision card keeps its own time: its answer is a reply too.
+ */
+const lastActivity = (u: UpdateRow) =>
+  !u.decision && u.thread.lastAt && u.thread.lastAt > u.createdAt ? u.thread.lastAt : u.createdAt
+
+/** Where this browser keeps when it last opened the Agents tab of a ticket. */
+const agentsSeenKey = (ticketId: number) => `ticket-agents-seen:${ticketId}`
+
+/**
+ * How many Agents posts are new to this browser: posted after it last opened the tab on this ticket,
+ * or, before it ever did, after the human's own last post there (all of them when there is none).
+ * Opening the tab marks them seen. Storage is read after mount only, and may be unavailable.
+ */
+function useNewAgentPosts(t: TicketFull, posts: UpdateRow[], open: boolean) {
+  const kind = useActorKinds()
+  const [seen, setSeen] = useState<string | null | undefined>(undefined)
+  useEffect(() => {
+    let saved: string | null = null
+    try {
+      saved = localStorage.getItem(agentsSeenKey(t.id))
+    } catch {}
+    setSeen(saved)
+  }, [t.id])
+  const newest = posts.reduce((m, u) => (u.createdAt > m ? u.createdAt : m), '')
+  useEffect(() => {
+    if (!open || seen === undefined || !newest || (seen && seen >= newest)) return
+    try {
+      localStorage.setItem(agentsSeenKey(t.id), newest)
+    } catch {}
+    setSeen(newest)
+  }, [open, newest, seen, t.id])
+  if (seen === undefined || open) return 0
+  const since =
+    seen ?? t.updates.find((u) => !u.lane && !u.via && kind(u.author) === 'human')?.createdAt ?? ''
+  return posts.filter((u) => u.createdAt > since).length
+}
+
+/**
+ * The ticket's feed in two tabs. Main, open on arrival, is the human's: the summary on top, then the
+ * decisions still waiting on them, then the posts by their last activity, so a reply brings its post
+ * up. Agents is the agents' working record, newest first: progress, the review phases, the builder's
+ * notes, the resume note's versions. The board puts each post in one as it is posted; the box posts
+ * in the tab that is open. A post marked progress is a step of the work; one written here is not,
+ * until its mark progress action makes it one. Any post can have replies, which stay under it.
  */
 function Activity({
   t,
@@ -1669,14 +1717,26 @@ function Activity({
 }) {
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
+  const [tab, setTab] = useState<FeedTab>('main')
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
+
+  // A link to a post (or to a reply under one) in the other tab opens that tab, once per link.
+  const anchor = useContext(ShownAnchor)
+  const anchored = anchorId(anchor?.holder ?? anchor?.target, 'post')
+  const linkedTab = anchored === null ? undefined : t.updates.find((u) => u.id === anchored)?.tab
+  const shownFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (!anchor || !linkedTab || shownFor.current === anchor.hash) return
+    shownFor.current = anchor.hash
+    setTab(linkedTab)
+  }, [anchor, linkedTab])
 
   const send = useMutation({
     mutationFn: async () => {
       const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
       // Said outright: the API makes a post progress unless told otherwise, as agents post.
-      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress: false })
+      return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress: false, tab })
     },
     onSuccess: () => {
       setBody('')
@@ -1686,20 +1746,56 @@ function Activity({
     onError: (err) => toast.error(errorMessage(err)),
   })
   const submit = () => body.trim() && !send.isPending && send.mutate()
-  // Open decisions on top, newest first among them; the rest keep their place.
+
+  // The summary's versions are behind the summary card, not in the feed; a lane's newest one shows
+  // in it as a post, marked with its lane.
+  const laneSummary = new Map<number, number>()
+  for (const u of t.updates)
+    if (u.lane && u.summary && !laneSummary.has(u.ticketId)) laneSummary.set(u.ticketId, u.id)
+  const shown = t.updates.filter((u) => !u.summary || laneSummary.get(u.ticketId) === u.id)
+  const main = shown
+    .filter((u) => u.tab === 'main')
+    .sort((a, b) => lastActivity(b).localeCompare(lastActivity(a)) || b.id - a.id)
+  const agents = shown.filter((u) => u.tab === 'agents')
+  // Open decisions on top, newest first among them; the rest keep their order.
   const open = (u: UpdateRow) => u.decision && !u.decidedAt
-  const feed = [...t.updates.filter(open), ...t.updates.filter((u) => !open(u))]
+  const list = tab === 'main' ? main : agents
+  const feed = [...list.filter(open), ...list.filter((u) => !open(u))]
+  const fresh = useNewAgentPosts(t, agents, tab === 'agents')
 
   return (
     <section>
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h2 className="text-sm font-medium">Activity</h2>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as FeedTab)}>
+          <TabsList aria-label="Feed">
+            <Tip content="For you: your posts with the replies under them, decisions, questions, the summary">
+              <TabsTrigger value="main" className="after:hidden">
+                Main
+              </TabsTrigger>
+            </Tip>
+            <Tip content="The agents' working record: progress, review phases, builder notes, resume notes">
+              <TabsTrigger value="agents" className="after:hidden">
+                Agents
+                {fresh > 0 && (
+                  <span
+                    aria-label={`${fresh} new`}
+                    className="ml-1 rounded-full bg-primary px-1.5 text-xs text-primary-foreground tabular-nums"
+                  >
+                    {fresh}
+                  </span>
+                )}
+              </TabsTrigger>
+            </Tip>
+          </TabsList>
+        </Tabs>
         {t.lanes.length > 0 && (
           <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
             <Switch size="sm" checked={laneFeed} onCheckedChange={onLaneFeed} /> include lane posts
           </label>
         )}
       </div>
+      {tab === 'main' && t.summary && <SummaryCard t={t} />}
       <form
         {...drop.props}
         className={cn('mb-4 space-y-2 rounded-lg border p-3', drop.className)}
@@ -1715,7 +1811,11 @@ function Activity({
           onAttach={() => fileInput.current?.click()}
           onSubmit={submit}
           label="New post"
-          placeholder="Write a post: a question, an answer, progress. Paste or drop screenshots and recordings."
+          placeholder={
+            tab === 'main'
+              ? 'Write a post: a question, an answer, progress. Paste or drop screenshots and recordings.'
+              : "Write in the agents' record: a note for whoever works it. Paste or drop files."
+          }
         />
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -1731,12 +1831,18 @@ function Activity({
           />
           <PendingFiles files={files} onChange={setFiles} />
           <Button type="submit" size="sm" className="ml-auto" disabled={!body.trim() || send.isPending}>
-            {send.isPending ? 'Posting…' : 'Post'}
+            {send.isPending ? 'Posting…' : tab === 'main' ? 'Post' : 'Post in Agents'}
           </Button>
         </div>
       </form>
-      {t.updates.length === 0 ? (
-        <Empty>No posts yet.</Empty>
+      {feed.length === 0 ? (
+        <Empty>
+          {t.updates.length === 0
+            ? 'No posts yet.'
+            : tab === 'main'
+              ? 'No posts here yet.'
+              : 'No agent posts yet.'}
+        </Empty>
       ) : (
         <Timeline>
           {feed.map((u) => (
@@ -1747,6 +1853,83 @@ function Activity({
         </Timeline>
       )}
     </section>
+  )
+}
+
+/**
+ * The ticket's summary, on top of Main: what the change does and where it stands, written by the agents
+ * and rewritten as the work moves on: "updated <when>: <what changed>" (the exact time on hover), its
+ * earlier versions behind history, each as it was written. Until one is written, the newest agent
+ * progress post stands in for it.
+ */
+function SummaryCard({ t }: { t: TicketFull }) {
+  const s = t.summary!
+  const [history, setHistory] = useState(false)
+  const { data } = useQuery({
+    queryKey: ['ticket', String(t.id), 'summary', s.postId],
+    queryFn: () => get<SummaryHistory>(`/api/tickets/${t.id}/summary`),
+    enabled: history,
+  })
+  const earlier = data?.versions.filter((v) => v.postId !== s.postId) ?? []
+  const when = s.fallback ? 'posted' : s.versions > 1 ? 'updated' : 'written'
+  return (
+    // A link to the summary's post (#post-<id>) lands here, below the stuck header.
+    <article
+      id={`post-${s.postId}`}
+      aria-label="Summary"
+      className="mb-4 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border border-primary/30 bg-primary/5 p-3"
+    >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        <h3 className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
+          <ScrollText className="size-4" /> Summary
+        </h3>
+        <Actor name={s.by} via={s.via} className="text-foreground" />
+        <Tip content={stamp(s.at)}>
+          <span className="min-w-0 break-words">
+            {when} {ago(s.at)}
+            {s.change && `: ${s.change}`}
+          </span>
+        </Tip>
+        {s.versions > 1 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="ml-auto"
+            aria-expanded={history}
+            onClick={() => setHistory((v) => !v)}
+          >
+            <History data-icon="inline-start" /> {history ? 'hide history' : `history (${s.versions - 1})`}
+          </Button>
+        )}
+      </div>
+      {s.fallback && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          No summary yet: the latest progress post stands in for it until an agent writes one.
+        </p>
+      )}
+      <Markdown className="mt-2">{s.body}</Markdown>
+      <Attachments items={s.attachments} />
+      {history && (
+        <ol aria-label="Earlier versions" className="mt-3 space-y-3 border-t pt-3">
+          {!data && <li className="text-xs text-muted-foreground">Loading…</li>}
+          {earlier.map((v) => (
+            <li key={v.postId} className="min-w-0 rounded-md border bg-background p-3">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                <Actor name={v.by} via={v.via} className="text-foreground" />
+                <Tip content={stamp(v.at)}>
+                  <span className="min-w-0 break-words">
+                    {ago(v.at)}: {v.change || 'the first version'}
+                  </span>
+                </Tip>
+              </div>
+              <Markdown className="mt-2">{v.body}</Markdown>
+              <Attachments items={v.attachments} />
+            </li>
+          ))}
+        </ol>
+      )}
+    </article>
   )
 }
 
@@ -1862,7 +2045,13 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
       <div className="group/post p-3">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Actor name={u.author} via={u.via} className="text-foreground" />
-          {u.handoff ? (
+          {u.summary ? (
+            <Tip content="The lane's summary: where its work stands, as its agents keep it">
+              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
+                <ScrollText className="size-3" /> summary
+              </span>
+            </Tip>
+          ) : u.handoff ? (
             <Tip content="A resume note as it was saved: where the work was left off then">
               <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
                 <Bookmark className="size-3" /> resume note

@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test'
 import type { TicketFull, TicketRow } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { startedAt, yesterdayNoon } from './db'
-import { expect, ok, section, test } from './fixtures'
+import { expect, ok, openFeedTab, section, test } from './fixtures'
 
 test('writes a resume note from the template; it shows with who and when, and posts a handoff', async ({
   page,
@@ -34,7 +34,8 @@ test('writes a resume note from the template; it shows with who and when, and po
 
   await expect(card).toContainText('State: parser done, tests next')
   await expect(card.getByText(/^by enrique/)).toContainText('just now')
-  // Saving it also posted it to the feed, marked as a resume note.
+  // Saving it also posted it to the feed, marked as a resume note, in the agents' tab.
+  await openFeedTab(page, 'Agents')
   const handoff = page.getByRole('article').filter({ hasText: 'resume note' })
   await expect(handoff).toHaveCount(1)
   await expect(handoff).toContainText('State: parser done, tests next')
@@ -272,7 +273,8 @@ test('an editor open on one ticket is not open on the next; each note version is
   await expect(page.getByRole('textbox', { name: 'Resume note' })).toHaveCount(0)
   await expect(page.getByRole('textbox', { name: 'Instructions' })).toHaveCount(0)
   await expect(card.getByRole('button', { name: 'edit', exact: true })).toBeVisible()
-  // The earlier version is in the feed, as the latest is, each marked as a resume note.
+  // The earlier version is in the feed, as the latest is, each marked as a resume note, in Agents.
+  await openFeedTab(page, 'Agents')
   const versions = page.getByRole('article').filter({ hasText: 'resume note' })
   await expect(versions).toHaveCount(2)
   await expect(versions.filter({ hasText: 'Read there, started' })).toHaveCount(1)
