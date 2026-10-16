@@ -6,6 +6,12 @@ import { isoWeekday, periodLabel } from '#/lib/reports'
 import { inDatabase } from './db'
 import { expect, ok, seedProject, test } from './fixtures'
 
+// A daily report left missing shows its reminder on every later test's pages once its shift has ended,
+// so each test here turns its project's reports off when it is done (as `quiet()` does in dailyPage.ts).
+test.afterEach(async ({ human, project }) => {
+  await ok(human.patch(`/api/projects/${project.id}/report-settings`, { data: { cadence: 'off' } }))
+})
+
 // Every day here is local, like the board's. Last month is wholly past whatever today is, so its
 // days are done, missing or off for sure; this month holds today and maybe days to come.
 const today = localDate()
