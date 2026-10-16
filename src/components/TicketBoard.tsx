@@ -13,6 +13,7 @@ import {
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
+import { ComplexityChip } from '#/components/Complexity'
 import { NeedsBadge } from '#/components/Needs'
 import { PushDot } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
@@ -155,8 +156,11 @@ export function TicketBoard({
                         dragging === t.id ? 'opacity-40' : ''
                       }`}
                     >
-                      <div className="line-clamp-2 font-medium leading-snug">
-                        <span className="text-muted-foreground">#{t.id}</span> {t.title}
+                      <div className="flex items-start gap-1.5">
+                        <ComplexityChip level={t.complexity} className="mt-0.5" />
+                        <div className="line-clamp-2 min-w-0 font-medium leading-snug">
+                          <span className="text-muted-foreground">#{t.id}</span> {t.title}
+                        </div>
                       </div>
                       {(t.decisions > 0 ||
                         t.blockedTasks > 0 ||

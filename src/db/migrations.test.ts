@@ -288,3 +288,54 @@ describe('0027_relayed_decisions', () => {
     sqlite.close()
   })
 })
+
+describe('0028_task_complexity', () => {
+  it('gives every existing ticket the level mid, keeps what refers to it, and refuses any other level', () => {
+    const sqlite = databaseAt('0027_relayed_decisions')
+    const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
+    const insert = sqlite.prepare(
+      'INSERT INTO tickets (project_id, title, created_by, status) VALUES (?, ?, ?, ?)',
+    )
+    const older = Number(insert.run(project, 'before the column', 'enrique', 'todo').lastInsertRowid)
+    const finished = Number(insert.run(project, 'finished', 'claude', 'done').lastInsertRowid)
+    // The rows that refer to a ticket are kept by the migration: a table rebuild would cascade into them.
+    sqlite.prepare('INSERT INTO tasks (ticket_id, text) VALUES (?, ?)').run(older, 'Implementation')
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(sqlite.prepare('SELECT id, complexity FROM tickets ORDER BY id').all()).toEqual([
+      { id: older, complexity: 'mid' },
+      { id: finished, complexity: 'mid' },
+    ])
+    expect(sqlite.prepare('SELECT text FROM tasks WHERE ticket_id = ?').all(older)).toEqual([
+      { text: 'Implementation' },
+    ])
+
+    // A ticket written without the column reads mid; the table refuses any other level, case included.
+    const added = Number(
+      sqlite
+        .prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (?, 'new', 'claude')")
+        .run(project).lastInsertRowid,
+    )
+    expect(sqlite.prepare('SELECT complexity FROM tickets WHERE id = ?').get(added)).toEqual({
+      complexity: 'mid',
+    })
+    const setLevel = sqlite.prepare('UPDATE tickets SET complexity = ? WHERE id = ?')
+    for (const level of ['extreme', 'High', ''])
+      expect(() => setLevel.run(level, added)).toThrow(/CHECK constraint/)
+    expect(() =>
+      sqlite
+        .prepare(
+          "INSERT INTO tickets (project_id, title, created_by, complexity) VALUES (?, 'x', 'claude', 'extreme')",
+        )
+        .run(project),
+    ).toThrow(/CHECK constraint/)
+    for (const level of ['low', 'mid', 'high']) {
+      setLevel.run(level, added)
+      expect(sqlite.prepare('SELECT complexity FROM tickets WHERE id = ?').get(added)).toEqual({
+        complexity: level,
+      })
+    }
+    sqlite.close()
+  })
+})

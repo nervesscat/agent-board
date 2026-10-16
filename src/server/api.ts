@@ -4,6 +4,7 @@ import { z } from 'zod'
 import {
   AGENT_CLIENTS,
   COMMENT_PARENTS,
+  COMPLEXITIES,
   PREVIEW_LIMIT,
   SKILLS_TRACKING,
   STAGE_COLORS,
@@ -86,6 +87,8 @@ const TicketPatch = z.object({
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(50_000).optional(),
   status: Status.optional(),
+  // Exactly low, mid or high; a lane created without one copies its parent's (features.ts createTicket).
+  complexity: z.enum(COMPLEXITIES).optional(),
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
   baseBranch: z.string().max(200).optional(),

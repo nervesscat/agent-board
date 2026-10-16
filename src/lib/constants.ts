@@ -9,6 +9,23 @@
 export const STAGE_KINDS = ['open', 'active', 'blocked', 'review', 'done', 'cancelled'] as const
 export type StageKind = (typeof STAGE_KINDS)[number]
 
+/**
+ * How much review a ticket gets: `low` none (the builder verifies itself), `mid` one review round,
+ * `high` three. Chosen by the human when the ticket is created, and changeable after.
+ */
+export const COMPLEXITIES = ['low', 'mid', 'high'] as const
+export type Complexity = (typeof COMPLEXITIES)[number]
+/** The level of a ticket created without one, and of every ticket stored before levels existed. */
+export const DEFAULT_COMPLEXITY: Complexity = 'mid'
+/**
+ * The thinking effort of every agent the review cycle starts for a ticket (the ticket agent, the spec
+ * agent, the builder, the review's phase agents): the orchestrator passes it as the Agent tool's `effort`.
+ */
+export const COMPLEXITY_EFFORT = { low: 'low', mid: 'medium', high: 'medium' } as const satisfies Record<
+  Complexity,
+  'low' | 'medium' | 'high'
+>
+
 export const STAGE_COLORS = [
   'gray',
   'slate',

@@ -31,6 +31,7 @@ import { Fragment, type ReactNode, createContext, useContext, useEffect, useRef,
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
+import { ComplexitySelect } from '#/components/Complexity'
 import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { BranchSelect } from '#/components/BranchSelect'
@@ -314,7 +315,8 @@ function TicketPage() {
         ref={measureHeader}
         className="sticky top-[calc(3rem+1px)] z-10 -my-2 flex flex-wrap items-start gap-3 bg-background py-2"
       >
-        <div className="min-w-0 flex-1">
+        {/* At least 12rem wide: a toolbar too wide to sit beside it wraps under it, not squeezes the title. */}
+        <div className="min-w-48 flex-1">
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>
@@ -361,6 +363,16 @@ function TicketPage() {
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
           <StatusSelect stages={stages} value={t.status} onChange={(status) => update.mutate({ status })} />
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="complexity" className="text-xs font-normal text-muted-foreground">
+              Complexity
+            </Label>
+            <ComplexitySelect
+              id="complexity"
+              value={t.complexity}
+              onChange={(complexity) => update.mutate({ complexity })}
+            />
+          </div>
           {!t.archivedAt && !t.parentId && isClosed(kind) && (
             <Tip content="Take it off the board, with its lanes; Archived on the features page brings it back">
               <Button

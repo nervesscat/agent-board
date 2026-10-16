@@ -116,7 +116,8 @@ test('renames the ticket from the stuck title, and the status changes from the s
   await expectStuck(page)
 
   const blocked = project.stages.find((s) => s.kind === 'blocked')!
-  await ticketHeader(page).getByRole('combobox').click()
+  // The header has the ticket's Complexity select too: the status is the one showing its stage's name.
+  await ticketHeader(page).getByRole('combobox').filter({ hasText: 'In progress' }).click()
   const option = page.getByRole('option', { name: blocked.name })
   await expect(option).toBeInViewport()
   await option.click()
