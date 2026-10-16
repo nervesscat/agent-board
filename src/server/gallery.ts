@@ -12,6 +12,7 @@ import {
   TEXT_EXTENSIONS,
   TEXT_MIMES,
 } from '#/lib/fileKinds'
+import { isDay } from '#/lib/reports'
 import { dayBounds } from './activity'
 import { HttpError } from './http'
 import { getProject } from './projects'
@@ -30,7 +31,7 @@ export const GALLERY_MAX_PAGE = 200
 const Day = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
-  .refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00`)), 'not a day')
+  .refine(isDay, 'not a day')
 
 /** The filters, as MCP's list_gallery takes them; REST's query parameters are the same. */
 export const galleryShape = {

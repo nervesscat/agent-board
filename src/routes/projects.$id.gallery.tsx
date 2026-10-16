@@ -14,11 +14,12 @@ import { Switch } from '#/components/ui/switch'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type Gallery } from '#/lib/api'
 import { FILE_KINDS, FILE_KIND_LABEL, type FileKind, parseKinds } from '#/lib/fileKinds'
+import { isDay } from '#/lib/reports'
 
 const Day = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine((d) => !Number.isNaN(Date.parse(`${d}T00:00:00`)))
+  .refine(isDay)
 
 // The filters live in the URL, so a filtered gallery reloads and shares as it is: ?type=image,pdf (the
 // kinds), ?from=&to= (local days, inclusive, on the upload date), ?sort=oldest, ?archived=include. A

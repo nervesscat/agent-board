@@ -369,4 +369,33 @@ describe('the gallery over REST and MCP', () => {
     ])
       expect((await call(`/api/projects/${p}/gallery?${bad}`)).status, bad).toBe(400)
   })
+
+  it('refuses days the calendar does not have instead of rolling them into the next month', async () => {
+    const p = newProject('impossible days')
+    const post = newPost(newTicket(p, 'T').id)
+    file('april.png', { updateId: post }, { createdAt: new Date('2026-04-30T12:00:00').toISOString() })
+    file('may.png', { updateId: post }, { createdAt: new Date('2026-05-01T12:00:00').toISOString() })
+
+    for (const bad of [
+      'to=2026-02-30',
+      'from=2026-04-01&to=2026-04-31',
+      'from=2026-04-31',
+      'to=2027-02-29',
+    ]) {
+      expect((await call(`/api/projects/${p}/gallery?${bad}`)).status, bad).toBe(400)
+    }
+    for (const bad of ['2026-02-30', '2026-04-31']) {
+      expect(gallery.GalleryQuery.safeParse({ from: bad }).success, bad).toBe(false)
+      expect(gallery.GalleryQuery.safeParse({ to: bad }).success, bad).toBe(false)
+      expect((await tool('list_gallery', { projectId: p, to: bad })).isError, bad).toBe(true)
+    }
+
+    for (const good of ['2026-02-28', '2028-02-29', '2026-04-30']) {
+      expect(gallery.GalleryQuery.safeParse({ from: good, to: good }).success, good).toBe(true)
+      expect((await call(`/api/projects/${p}/gallery?from=${good}&to=${good}`)).status, good).toBe(200)
+      expect((await tool('list_gallery', { projectId: p, from: good, to: good })).isError, good).toBeFalsy()
+    }
+    const april = await call(`/api/projects/${p}/gallery?from=2026-04-01&to=2026-04-30`)
+    expect(april.body.items.map((i: { name: string }) => i.name)).toEqual(['april.png'])
+  })
 })
