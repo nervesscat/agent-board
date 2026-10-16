@@ -1,6 +1,7 @@
 import { asc, count, eq, type SQL } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { cleanSuggestions, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
 import { notFound } from './http'
 import { listAgents } from './projectAgents'
@@ -61,10 +62,27 @@ export function getProject(id: number) {
 
 /**
  * The project plus its repos, its stages in board order and its agents (name, picture, instructions):
- * what agents read before working on it.
+ * what agents read before working on it. `usedTags` are the tags its tickets carry (archived and lanes
+ * too), most used first, each once in the casing used most: the ones to reuse.
  */
 export function getProjectFull(id: number) {
-  return { ...getProject(id), repos: listRepos(id), stages: listStages(id), agents: listAgents(id) }
+  return {
+    ...getProject(id),
+    usedTags: projectUsedTags(id),
+    repos: listRepos(id),
+    stages: listStages(id),
+    agents: listAgents(id),
+  }
+}
+
+function projectUsedTags(projectId: number) {
+  const rows = db
+    .select({ tags: schema.tickets.tags })
+    .from(schema.tickets)
+    .where(eq(schema.tickets.projectId, projectId))
+    .orderBy(asc(schema.tickets.id))
+    .all()
+  return usedTags(rows.map((r) => r.tags))
 }
 
 export type ProjectFull = ReturnType<typeof getProjectFull>
@@ -86,17 +104,21 @@ export function createProject(input: { name: string; instructions?: string }, ac
   return withPhases(row)
 }
 
-/** `defaultPhases`: the names trimmed, null for the built-in list again. */
+/**
+ * `defaultPhases`: the names trimmed, null for the built-in list again. `tagSuggestions`: trimmed,
+ * blanks and repeats in any casing left out; [] stays empty.
+ */
 export function updateProject(
   id: number,
-  patch: Partial<Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases'>>,
+  patch: Partial<Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions'>>,
   actor: string,
 ) {
   getProject(id)
-  const { defaultPhases, ...rest } = patch
+  const { defaultPhases, tagSuggestions, ...rest } = patch
   const set = {
     ...rest,
     ...(defaultPhases !== undefined && { defaultPhases: defaultPhases?.map((name) => name.trim()) ?? null }),
+    ...(tagSuggestions !== undefined && { tagSuggestions: cleanSuggestions(tagSuggestions) }),
   }
   const row = db.update(schema.projects).set(set).where(eq(schema.projects.id, id)).returning().get()!
   logActivity({

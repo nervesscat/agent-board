@@ -197,6 +197,13 @@
       "when": 1792058839336,
       "tag": "0027_relayed_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1792128526176,
+      "tag": "0028_project_tag_suggestions",
+      "breakpoints": true
     }
   ]
 }

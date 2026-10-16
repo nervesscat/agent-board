@@ -7,7 +7,7 @@ import { AssigneeSelect } from '#/components/AssigneeSelect'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
-import { TagsInput } from '#/components/TagsInput'
+import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { TasksInput } from '#/components/TasksInput'
 import { Button } from '#/components/ui/button'
 import {
@@ -60,6 +60,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
   // Tags the server would refuse: the field says why, and Create waits until they are fixed.
   const over = overTagLimits(tags, tagText)
   const tagsOver = over.tooMany || over.tooLong
+  const tagChoices = useTagChoices(projectId, tags)
   const files = useUploads()
   const fileInput = useRef<HTMLInputElement>(null)
   const drop = useFileDrop(files.add)
@@ -91,6 +92,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
+      // Its tags are the project's used ones now, offered under the next ticket's field.
+      qc.invalidateQueries({ queryKey: ['project', projectId] })
       if (parent) qc.invalidateQueries({ queryKey: ['ticket', String(parent.id)] })
       setOpen(false)
       setTitle('')
@@ -251,6 +254,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
                 text={tagText}
                 onTextChange={setTagText}
                 placeholder="High, Forms"
+                choices={tagChoices}
               />
             </div>
           </div>

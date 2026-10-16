@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { Archive, BrushCleaning, Columns3, List, Search, X } from 'lucide-react'
+import { Archive, BrushCleaning, Columns3, List, Search, Tags, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -10,12 +10,16 @@ import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/components/PushDot'
 import { ArchivedList, TicketBoard, TicketList } from '#/components/TicketBoard'
+import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, patch, post, type CleanupReport, type Push, type TicketRow } from '#/lib/api'
+import { useProject } from '#/lib/project'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
+import { tagChoices } from '#/lib/tags'
 import { type TicketsScope, keepSearchRows, ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 const VIEWS = ['board', 'list', 'archived'] as const
@@ -23,12 +27,13 @@ type View = (typeof VIEWS)[number]
 
 // ?view= is the view picked (none: the one this browser remembers, else board). ?q= searches the List
 // and the Archived tickets; the Board shows them all. A query that reads as a number (`?q=84`) comes in
-// as one.
+// as one. ?tag= keeps the Board and the List to the tickets carrying that tag, in any casing.
 export const Route = createFileRoute('/projects/$id/features/')({
   component: Features,
   validateSearch: z.object({
     view: z.enum(VIEWS).optional().catch(undefined),
     q: z.union([z.string(), z.number()]).transform(String).optional().catch(undefined),
+    tag: z.union([z.string(), z.number()]).transform(String).optional().catch(undefined),
   }),
 })
 
@@ -39,7 +44,7 @@ const REMEMBERED_VIEWS = ['board', 'list'] as const
 
 function Features() {
   const { id } = Route.useParams()
-  const { view: picked, q = '' } = Route.useSearch()
+  const { view: picked, q = '', tag = '' } = Route.useSearch()
   const navigate = Route.useNavigate()
   const qc = useQueryClient()
   // The tabs and the page both follow the URL, so the server's render and the browser's agree.
@@ -116,10 +121,17 @@ function Features() {
   // Only the tickets whose branch is not on origin, from the line under the header.
   const [onlyUnpushed, setOnlyUnpushed] = useState(false)
   const unpushed = (data ?? []).filter((t) => isUnpushed(push.get(t.id)))
-  const shown = onlyUnpushed ? unpushed : (data ?? [])
+  // The tag picked narrows the Board and the List, searched or not; the archive shows them all.
+  const tagged = (t: TicketRow) =>
+    !tag || view === 'archived' || t.tags.some((x) => x.toLowerCase() === tag.toLowerCase())
+  const shown = (onlyUnpushed ? unpushed : (data ?? [])).filter(tagged)
+  const filterTag = (next: string) =>
+    navigate({ search: (s) => ({ ...s, tag: next || undefined }), replace: true })
   // The line narrows the List alone, searched or not; the archive shows every ticket it finds.
   const listed = searching
-    ? (found.data ?? []).filter((t) => view !== 'list' || !onlyUnpushed || isUnpushed(push.get(t.id)))
+    ? (found.data ?? [])
+        .filter((t) => view !== 'list' || !onlyUnpushed || isUnpushed(push.get(t.id)))
+        .filter(tagged)
     : shown
   return (
     <div className="space-y-4">
@@ -163,7 +175,14 @@ function Features() {
           onToggle={() => setOnlyUnpushed((v) => !v)}
         />
       )}
-      {view !== 'board' && <TicketSearch q={q} onSearch={search} />}
+      {view !== 'archived' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {view === 'list' && <TicketSearch q={q} onSearch={search} />}
+          <TagFilter projectId={id} tickets={data ?? []} value={tag} onChange={filterTag} />
+        </div>
+      ) : (
+        <TicketSearch q={q} onSearch={search} />
+      )}
       {searching ? (
         // A search not answered yet says nothing about its query: the rows kept from the last one
         // show, dimmed, or none narrowed by the line under the header, the skeleton.
@@ -222,6 +241,71 @@ function Features() {
   )
 }
 
+const ALL_TAGS = '__all__'
+
+/**
+ * The tag the Board and the List are narrowed to (`?tag=`): the project's suggestions and the tags its
+ * tickets carry, most used first. A tag from a link that none of them has is offered too.
+ */
+function TagFilter({
+  projectId,
+  tickets,
+  value,
+  onChange,
+}: {
+  projectId: string
+  tickets: TicketRow[]
+  value: string
+  onChange: (tag: string) => void
+}) {
+  const { data: project } = useProject(projectId)
+  const tags = tagChoices(project?.tagSuggestions ?? [], project?.usedTags ?? [], [])
+  const current = tags.find((t) => t.toLowerCase() === value.toLowerCase()) ?? value
+  const all = value && !tags.includes(current) ? [current, ...tags] : tags
+  const matching = value
+    ? tickets.filter((t) => t.tags.some((x) => x.toLowerCase() === value.toLowerCase()))
+    : []
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <Select
+        value={value ? current : ALL_TAGS}
+        onValueChange={(v) => onChange(!v || v === ALL_TAGS ? '' : v)}
+        items={{ [ALL_TAGS]: 'All tags', ...Object.fromEntries(all.map((t) => [t, t])) }}
+      >
+        <SelectTrigger size="sm" aria-label="Filter by tag" className="max-w-56 min-w-0">
+          <Tags className="text-muted-foreground" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_TAGS}>All tags</SelectItem>
+          {all.map((t) => (
+            <SelectItem key={t} value={t}>
+              {t}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {value && (
+        <>
+          <span className="text-xs text-muted-foreground tabular-nums" aria-live="polite">
+            {matching.length} ticket{matching.length === 1 ? '' : 's'}
+          </span>
+          <Tip content="Show every tag">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => onChange('')}
+              aria-label="Clear the tag filter"
+            >
+              <X />
+            </Button>
+          </Tip>
+        </>
+      )}
+    </div>
+  )
+}
+
 /**
  * The search over the List and the Archived tickets. What is typed goes to the URL (`?q=`) once the
  * typing pauses; Escape or the clear button empty it at once.
@@ -252,7 +336,7 @@ function TicketSearch({ q, onSearch }: { q: string; onSearch: (q: string) => voi
     send.current('')
   }
   return (
-    <div className="relative max-w-sm">
+    <div className="relative w-full max-w-sm">
       <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         type="search"

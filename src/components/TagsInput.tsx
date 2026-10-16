@@ -1,9 +1,10 @@
-import { X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
 
 import { Tag } from '#/components/Tag'
 import { Tip } from '#/components/ui/tooltip'
-import { addTags, MAX_TAG_LENGTH, MAX_TAGS, overTagLimits, tagTooLong } from '#/lib/tags'
+import { useProject } from '#/lib/project'
+import { addTags, MAX_TAG_LENGTH, MAX_TAGS, overTagLimits, tagChoices, tagTooLong } from '#/lib/tags'
 import { cn } from '#/lib/utils'
 
 /**
@@ -17,6 +18,9 @@ import { cn } from '#/lib/utils'
  * Tags past the server's limits (`overTagLimits`) are not refused here: the field turns invalid, as
  * an `aria-invalid` input does, a line under it says which limit, and a chip too long is marked. The
  * form is the one to hold back its submit meanwhile.
+ *
+ * `choices` show as chips under the field (`useTagChoices`): a click adds that tag as it is spelled
+ * there, and the chip goes. Pressing one keeps the focus where it is, so the field is not left.
  */
 export function TagsInput({
   id,
@@ -26,6 +30,8 @@ export function TagsInput({
   onTextChange,
   placeholder,
   className,
+  choices = [],
+  'aria-label': ariaLabel,
 }: {
   /** The text input's, for a `<Label htmlFor>`. */
   id?: string
@@ -35,6 +41,9 @@ export function TagsInput({
   onTextChange: (text: string) => void
   placeholder?: string
   className?: string
+  /** Tags offered as chips under the field, none of them in `value`. */
+  choices?: string[]
+  'aria-label'?: string
 }) {
   const input = useRef<HTMLInputElement>(null)
   const over = overTagLimits(value, text)
@@ -113,6 +122,7 @@ export function TagsInput({
         <input
           ref={input}
           id={id}
+          aria-label={ariaLabel}
           value={text}
           placeholder={value.length ? undefined : placeholder}
           aria-invalid={invalid || undefined}
@@ -155,6 +165,23 @@ export function TagsInput({
           className="h-6 min-w-16 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
         />
       </div>
+      {choices.length > 0 && value.length < MAX_TAGS && (
+        <div role="group" aria-label="Suggested tags" className="flex min-w-0 flex-wrap gap-1">
+          {choices.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onChange([...value, tag])}
+              aria-label={`Add tag ${tag}`}
+              className="inline-flex max-w-full items-center gap-0.5 rounded-md border border-dashed px-1.5 py-0.5 text-xs break-all text-muted-foreground hover:border-solid hover:text-foreground"
+            >
+              <Plus className="size-3 shrink-0" />
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
       {invalid && (
         <p id={messageId} className="text-xs text-destructive">
           {[
@@ -167,6 +194,16 @@ export function TagsInput({
       )}
     </>
   )
+}
+
+/**
+ * The chips to offer under a project's tags field: its suggestions, then the tags its tickets carry
+ * (most used first), each once in the casing already used, none of those in `value`.
+ */
+export function useTagChoices(projectId: string | number, value: string[]) {
+  const { data: project } = useProject(projectId)
+  if (!project) return []
+  return tagChoices(project.tagSuggestions, project.usedTags, value)
 }
 
 /**
