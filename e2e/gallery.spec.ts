@@ -3,6 +3,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import type { Gallery } from '#/lib/api'
 import { fileSize, localDate, shiftDate } from '#/lib/format'
 import { AGENT } from './env'
+import { uploadedAt } from './db'
 import { type Api, expect, expectTooltip, ok, test } from './fixtures'
 import { png, pdf } from './files'
 import { box, coveredAt, feedDrawn, longTicket, ticketHeader } from './scrolling'
@@ -29,7 +30,9 @@ const gallery = (page: Page, projectId: number, search = '') =>
   page.goto(`/projects/${projectId}/gallery${search}`)
 const tiles = (page: Page) => page.locator('li[data-file]')
 const tile = (page: Page, name: string) => tiles(page).filter({ has: page.getByText(name, { exact: true }) })
-const tileNames = (page: Page) => tiles(page).locator('[data-slot="file-name"]').allInnerTexts()
+const names = (page: Page) => tiles(page).locator('[data-slot="file-name"]')
+/** The names on the tiles now: only once the tiles are known to be there (allInnerTexts does not wait). */
+const tileNames = (page: Page) => names(page).allInnerTexts()
 const thumb = (t: Locator) => t.getByRole('link', { name: /^Open .+\./ })
 
 const scrollsSideways = (page: Page) =>
@@ -124,7 +127,6 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   await expect(page.getByText('No files on this project yet.')).toBeVisible()
 
   const t = await api.ticket({ title: 'Filtered', status: 'in_progress' })
-  // One after the other, so they are in this order by upload time.
   const files = [
     await upload(agent, 'shot.png', png()),
     await upload(agent, 'spec.pdf', pdf()),
@@ -137,8 +139,13 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   )
   // A done ticket the human archived: its file shows only with Include archived.
   const old = await api.ticket({ title: 'Shipped long ago', status: 'done' })
-  await postWith(agent, old.id, [(await upload(agent, 'archived.png', png())).id])
+  const archivedFile = await upload(agent, 'archived.png', png())
+  await postWith(agent, old.id, [archivedFile.id])
   await ok(human.post(`/api/tickets/${old.id}/archive`))
+  // All uploaded on one local day, a minute apart in this order: the day filters and the order then
+  // hold in any time zone and at any hour the test runs, midnight too.
+  const day = shiftDate(localDate(), -10)
+  for (const [i, f] of [...files, archivedFile].entries()) uploadedAt(f.id, new Date(`${day}T12:0${i}:00`))
 
   await gallery(page, project.id)
   await expect(tiles(page)).toHaveCount(3)
@@ -149,11 +156,10 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   await expect(tiles(page)).toHaveCount(2)
   expect((await tileNames(page)).sort()).toEqual(['shot.png', 'spec.pdf'])
 
-  const today = localDate()
-  await page.getByLabel('From').fill(today)
-  await page.getByLabel('To').fill(today)
-  await expect(page).toHaveURL(new RegExp(`from=${today}`))
-  await expect(page).toHaveURL(new RegExp(`to=${today}`))
+  await page.getByLabel('From').fill(day)
+  await page.getByLabel('To').fill(day)
+  await expect(page).toHaveURL(new RegExp(`from=${day}`))
+  await expect(page).toHaveURL(new RegExp(`to=${day}`))
   await expect(tiles(page)).toHaveCount(2)
 
   await page.reload()
@@ -162,14 +168,14 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   await expect(types.getByRole('checkbox', { name: 'Images' })).toBeChecked()
   await expect(types.getByRole('checkbox', { name: 'PDFs' })).toBeChecked()
   await expect(types.getByRole('checkbox', { name: 'Videos' })).not.toBeChecked()
-  await expect(page.getByLabel('From')).toHaveValue(today)
-  await expect(page.getByLabel('To')).toHaveValue(today)
+  await expect(page.getByLabel('From')).toHaveValue(day)
+  await expect(page.getByLabel('To')).toHaveValue(day)
 
   // A day with no upload: the empty state, and no error.
   const errors: string[] = []
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
-  await page.getByLabel('To').fill(shiftDate(today, -1))
-  await page.getByLabel('From').fill(shiftDate(today, -3))
+  await page.getByLabel('To').fill(shiftDate(day, -1))
+  await page.getByLabel('From').fill(shiftDate(day, -3))
   await expect(page.getByText('No files match these filters.')).toBeVisible()
   await page.getByRole('button', { name: 'Clear filters' }).click()
   await expect(tiles(page)).toHaveCount(3)
@@ -184,11 +190,11 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   await expect(archived).toBeChecked()
   await expect(tiles(page)).toHaveCount(4)
 
-  // Oldest first, from the URL.
+  // Oldest first, from the URL. The tiles come once the list has loaded: wait for them, in order.
   await gallery(page, project.id, '?sort=oldest')
-  expect(await tileNames(page)).toEqual(['shot.png', 'spec.pdf', 'notes.md'])
+  await expect(names(page)).toHaveText(['shot.png', 'spec.pdf', 'notes.md'])
   await gallery(page, project.id)
-  expect(await tileNames(page)).toEqual(['notes.md', 'spec.pdf', 'shot.png'])
+  await expect(names(page)).toHaveText(['notes.md', 'spec.pdf', 'shot.png'])
 
   // Values it does not know are left out: the gallery unfiltered on that count.
   await gallery(page, project.id, '?type=bogus&from=someday&sort=sideways')
