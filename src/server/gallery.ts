@@ -20,7 +20,8 @@ import { attachmentView } from './uploads'
 
 /**
  * A project's gallery: every file on its tickets' posts, on the replies under those posts and with
- * their instructions, lanes' included (each under its own lane), newest first. Report files, agents'
+ * their instructions, newest first. A lane's files are listed under its top-level ticket, with the lane
+ * that holds them as `lane`. Report files, agents'
  * pictures, replies on PRs and review results, and uploads nothing holds are not on a ticket, so they
  * are not here. It only reads: browsing it holds no upload (src/server/unattached.ts).
  */
@@ -117,7 +118,7 @@ export function listGallery(projectId: number, q: GalleryQuery = {}) {
       file: a,
       kind: kindSql,
       postId: sql<number | null>`coalesce(${a.updateId}, ${reply.parentId})`,
-      ticket: { id: t.id, title: t.title, parentId: t.parentId },
+      owner: { id: t.id, title: t.title, parentId: t.parentId },
     })
     .from(a)
     .leftJoin(post, eq(post.id, a.updateId))
@@ -131,8 +132,12 @@ export function listGallery(projectId: number, q: GalleryQuery = {}) {
     .all()
   const page = rows.slice(0, limit)
   const last = page.at(-1)
+  const topOf = topLevelTickets(
+    projectId,
+    page.some((r) => r.owner.parentId !== null),
+  )
   return {
-    items: page.map(({ file, kind, postId, ticket }) => {
+    items: page.map(({ file, kind, postId, owner }) => {
       const source = file.commentId
         ? { kind: 'reply' as const, postId: postId!, commentId: file.commentId }
         : file.updateId
@@ -141,7 +146,9 @@ export function listGallery(projectId: number, q: GalleryQuery = {}) {
       return {
         ...attachmentView(file),
         kind,
-        ticket,
+        // A lane's file is under its top-level ticket; the lane is where on it the file is.
+        ticket: owner.parentId === null ? { id: owner.id, title: owner.title } : topOf(owner),
+        lane: owner.parentId === null ? null : { id: owner.id, title: owner.title },
         source,
         // Where the ticket's page lands on the file's post or reply (src/lib/reveal.ts); none for instructions.
         anchor:
@@ -153,6 +160,35 @@ export function listGallery(projectId: number, q: GalleryQuery = {}) {
       }
     }),
     next: rows.length > limit && last ? encodeCursor(last.file.createdAt, last.file.id) : null,
+  }
+}
+
+/**
+ * The top-level ticket over a lane, however deep it is nested. Read only when the page has a lane's
+ * file. The archived filter reads the lane's own mark, which is its top-level ticket's: a lane is
+ * archived and restored along with it.
+ */
+function topLevelTickets(projectId: number, needed: boolean) {
+  const byId = new Map(
+    needed
+      ? db
+          .select({ id: t.id, title: t.title, parentId: t.parentId })
+          .from(t)
+          .where(eq(t.projectId, projectId))
+          .all()
+          .map((row) => [row.id, row])
+      : [],
+  )
+  return (lane: { id: number; title: string; parentId: number | null }) => {
+    let top = lane
+    const seen = new Set<number>()
+    while (top.parentId !== null && !seen.has(top.id)) {
+      seen.add(top.id)
+      const up = byId.get(top.parentId)
+      if (!up) break
+      top = up
+    }
+    return { id: top.id, title: top.title }
   }
 }
 

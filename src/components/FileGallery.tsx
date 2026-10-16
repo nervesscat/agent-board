@@ -26,7 +26,9 @@ export function FileGrid({ projectId, files }: { projectId: string; files: Galle
 
 function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile }) {
   const ticket = { id: projectId, ticketId: String(f.ticket.id) }
+  // A lane's file is under its top-level ticket, whose page also shows the lane's posts and replies.
   const name = `#${f.ticket.id} ${f.ticket.title}`
+  const lane = f.lane && `#${f.lane.id} ${f.lane.title}`
   return (
     <li className="flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card" data-file={f.id}>
       <a
@@ -54,14 +56,14 @@ function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile
             <time dateTime={f.createdAt}>{ago(f.createdAt)}</time>
           </Tip>
         </div>
-        <Tip content={f.ticket.parentId ? `${name}, a lane of #${f.ticket.parentId}` : name}>
-          <div className="truncate">
-            {name}
-            {f.ticket.parentId !== null && (
-              <span className="text-muted-foreground"> · lane of #{f.ticket.parentId}</span>
-            )}
-          </div>
+        <Tip content={name}>
+          <div className="truncate">{name}</div>
         </Tip>
+        {lane && (
+          <Tip content={`In lane ${lane}`}>
+            <div className="truncate text-muted-foreground">in lane {lane}</div>
+          </Tip>
+        )}
         <div className="mt-auto flex flex-wrap gap-x-3 pt-1">
           <Link
             to="/projects/$id/features/$ticketId"

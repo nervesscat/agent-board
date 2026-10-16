@@ -103,6 +103,7 @@ describe('which files the gallery lists', () => {
     const other = newProject('another project')
     const t = newTicket(p, 'A ticket')
     const lane = newTicket(p, 'A lane', { parentId: t.id })
+    const subLane = newTicket(p, 'A lane of the lane', { parentId: lane.id })
     const post = newPost(t.id)
     const lanePost = newPost(lane.id)
 
@@ -111,6 +112,8 @@ describe('which files the gallery lists', () => {
       file('reply.png', { commentId: newComment('update', post) }),
       file('instructions.png', { ticketId: t.id }),
       file('lane-post.png', { updateId: lanePost }),
+      file('lane-reply.png', { commentId: newComment('update', lanePost) }),
+      file('sub-lane-instructions.png', { ticketId: subLane.id }),
     ]
     // Another project's post, a report's file, an agent's picture, replies on a PR and on a review
     // result, and an upload nothing holds.
@@ -135,8 +138,26 @@ describe('which files the gallery lists', () => {
     expect(g.next).toBeNull()
 
     const byName = Object.fromEntries(g.items.map((i) => [i.name, i]))
-    expect(byName['lane-post.png']!.ticket).toEqual({ id: lane.id, title: 'A lane', parentId: t.id })
-    expect(byName['post.png']!.ticket).toEqual({ id: t.id, title: 'A ticket', parentId: null })
+    // A lane's files are under its top-level ticket, however deep the lane, with the lane as context.
+    expect(byName['post.png']).toMatchObject({ ticket: { id: t.id, title: 'A ticket' }, lane: null })
+    expect(byName['lane-post.png']).toMatchObject({
+      ticket: { id: t.id, title: 'A ticket' },
+      lane: { id: lane.id, title: 'A lane' },
+      source: { kind: 'post', postId: lanePost },
+      anchor: `post-${lanePost}`,
+    })
+    expect(byName['lane-reply.png']).toMatchObject({
+      ticket: { id: t.id, title: 'A ticket' },
+      lane: { id: lane.id, title: 'A lane' },
+      source: { kind: 'reply', postId: lanePost },
+    })
+    expect(byName['sub-lane-instructions.png']).toMatchObject({
+      ticket: { id: t.id, title: 'A ticket' },
+      lane: { id: subLane.id, title: 'A lane of the lane' },
+      source: { kind: 'instructions' },
+      anchor: null,
+    })
+    expect(byName['post.png']!.ticket).toEqual({ id: t.id, title: 'A ticket' })
     expect(byName['post.png']!.source).toEqual({ kind: 'post', postId: post })
     expect(byName['post.png']!.anchor).toBe(`post-${post}`)
     const r = byName['reply.png']!
@@ -329,7 +350,8 @@ describe('the gallery over REST and MCP', () => {
       size: 2048,
       uploadedBy: 'claude',
       url: `/api/uploads/${png}`,
-      ticket: { id: t.id, title: 'Over REST', parentId: null },
+      ticket: { id: t.id, title: 'Over REST' },
+      lane: null,
       source: { kind: 'post', postId: post },
       anchor: `post-${post}`,
     })

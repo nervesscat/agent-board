@@ -203,7 +203,7 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   await expect(page.getByText('No files match')).toHaveCount(0)
 })
 
-test("a tile links to its ticket, a lane's to the lane, and a reply's thread link lands on the reply, marked", async ({
+test("a tile links to its ticket, a lane's to the top-level ticket, and a thread link lands on the post or reply, marked", async ({
   page,
   project,
   api,
@@ -236,12 +236,15 @@ test("a tile links to its ticket, a lane's to the lane, and a reply's thread lin
       data: { title: 'The lane', parentId: t.id, status: 'in_progress' },
     }),
   )
-  await postWith(agent, lane.id, [(await upload(agent, 'lane-shot.png', png())).id])
+  const lanePost = await postWith(agent, lane.id, [(await upload(agent, 'lane-shot.png', png())).id])
 
   await gallery(page, project.id)
   await expect(tiles(page)).toHaveCount(4)
-  await expect(tile(page, 'lane-shot.png')).toContainText(`#${lane.id} The lane`)
-  await expect(tile(page, 'lane-shot.png')).toContainText(`lane of #${t.id}`)
+  // A lane's file is under its top-level ticket, with the lane named below it.
+  const laneTile = tile(page, 'lane-shot.png')
+  await expect(laneTile).toContainText(`#${t.id} Deep thread`)
+  await expect(laneTile).toContainText(`in lane #${lane.id} The lane`)
+  await expectTooltip(laneTile.getByText(`in lane #${lane.id} The lane`), `In lane #${lane.id} The lane`)
   // Instructions have no post to land on: only the ticket.
   await expect(tile(page, 'brief.pdf').getByRole('link', { name: 'Open thread' })).toHaveCount(0)
   await expect(tile(page, 'brief.pdf').getByRole('link', { name: 'Open ticket' })).toHaveAttribute(
@@ -249,9 +252,20 @@ test("a tile links to its ticket, a lane's to the lane, and a reply's thread lin
     `/projects/${project.id}/features/${t.id}`,
   )
 
-  await tile(page, 'lane-shot.png').getByRole('link', { name: 'Open ticket' }).click()
-  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${lane.id}$`))
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('The lane')
+  await laneTile.getByRole('link', { name: 'Open ticket' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}$`))
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Deep thread')
+
+  // The lane's post is shown on the top-level ticket's page, its lanes' posts folded in, and marked.
+  await gallery(page, project.id)
+  await tile(page, 'lane-shot.png').getByRole('link', { name: 'Open thread' }).click()
+  await expect(page).toHaveURL(new RegExp(`/features/${t.id}#post-${lanePost.id}$`))
+  await feedDrawn(page)
+  const shown = page.locator(`#post-${lanePost.id}`)
+  await expect(shown).toHaveAttribute('data-revealed', '')
+  await expect(page.locator('[data-revealed]')).toHaveCount(1)
+  await expect(shown).toBeInViewport()
+  await expect(shown).toContainText('The lane')
 
   await gallery(page, project.id)
   const replyLink = tile(page, 'reply-shot.png').getByRole('link', { name: 'Open thread' })
