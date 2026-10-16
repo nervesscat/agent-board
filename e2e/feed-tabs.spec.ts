@@ -120,3 +120,57 @@ test('a link to a post in Agents opens that tab', async ({ page, api, agent }) =
   await expect(tab(page, 'Agents')).toHaveAttribute('aria-selected', 'true')
   await expect(page.locator(`#post-${step.id}`)).toBeInViewport()
 })
+
+test('the summary takes replies like a post: shown on its card, opened by a link, answered from it', async ({
+  page,
+  api,
+  agent,
+  human,
+}) => {
+  const t = await api.ticket({ title: 'Answer the summary' })
+  type Summary = { postId: number }
+  const first = await ok<Summary>(
+    agent.put(`/api/tickets/${t.id}/summary`, { data: { body: 'Version one.' } }),
+  )
+  const old = await ok<{ id: number }>(
+    human.post('/api/comments', {
+      data: { parentType: 'update', parentId: first.postId, body: 'On version one.' },
+    }),
+  )
+  const now = await ok<Summary>(
+    agent.put(`/api/tickets/${t.id}/summary`, { data: { body: 'Version two.', change: 'the second' } }),
+  )
+  const reply = await ok<{ id: number }>(
+    agent.post('/api/comments', {
+      data: { parentType: 'update', parentId: now.postId, body: 'Why the change?' },
+    }),
+  )
+
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const card = page.getByRole('article', { name: 'Summary' })
+  const actions = card.getByRole('group', { name: 'Summary actions' }).first()
+  await expect(actions.getByRole('button', { name: '1 reply', exact: true })).toBeVisible()
+  await expectTooltip(actions.getByRole('button', { name: '1 reply', exact: true }), 'Show 1 reply')
+  await actions.getByRole('button', { name: '1 reply', exact: true }).click()
+  await expect(card.getByText('Why the change?')).toBeVisible()
+
+  // Answered from the card: the reply stays under this version.
+  await card.getByRole('textbox', { name: 'Reply' }).fill('Because of the review.')
+  await card.getByRole('button', { name: 'Reply', exact: true }).click()
+  await expect(card.getByText('Because of the review.')).toBeVisible()
+  const thread = await ok<{ body: string }[]>(
+    human.get(`/api/comments?parentType=update&parentId=${now.postId}`),
+  )
+  expect(thread.map((c) => c.body)).toEqual(['Why the change?', 'Because of the review.'])
+
+  // A link to a reply opens its thread on the card; one under an earlier version opens the history.
+  // Each opened afresh, as a link from another page is.
+  await page.goto(`/projects/${t.projectId}/features`)
+  await page.goto(`/projects/${t.projectId}/features/${t.id}#post-${now.postId}-reply-${reply.id}`)
+  await expect(card.getByText('Why the change?')).toBeVisible()
+  await page.goto(`/projects/${t.projectId}/features`)
+  await page.goto(`/projects/${t.projectId}/features/${t.id}#post-${first.postId}-reply-${old.id}`)
+  const earlier = card.getByRole('list', { name: 'Earlier versions' })
+  await expect(earlier.getByText('On version one.')).toBeVisible()
+  await expect(card.getByText('On version one.')).toBeInViewport()
+})

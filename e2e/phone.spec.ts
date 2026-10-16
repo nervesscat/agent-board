@@ -81,6 +81,13 @@ test("a ticket's feed tabs, a long summary with its history open and long lane c
   await expect(summary).toContainText('again')
   await summary.getByRole('button', { name: 'history (1)' }).click()
   await expect(summary.getByRole('list', { name: 'Earlier versions' })).toBeVisible()
+  // Its reply box, open.
+  await summary
+    .getByRole('group', { name: 'Summary actions' })
+    .first()
+    .getByRole('button', { name: 'reply' })
+    .tap()
+  await expect(summary.getByRole('textbox', { name: 'Reply' })).toBeVisible()
   await page.getByText('include lane posts').click()
   await expect(page.getByText('The lane is done.')).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)

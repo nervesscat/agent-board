@@ -1865,6 +1865,16 @@ function Activity({
 function SummaryCard({ t }: { t: TicketFull }) {
   const s = t.summary!
   const [history, setHistory] = useState(false)
+  // Every version's replies, from the feed (the versions are its posts).
+  const replies = (postId: number) => t.updates.find((u) => u.id === postId)?.thread.count ?? 0
+  // A link to an earlier version, or to a reply under one, opens the history, once per link.
+  const anchor = useContext(ShownAnchor)
+  const anchored = anchorId(anchor?.holder ?? anchor?.target, 'post')
+  const older =
+    anchored !== null && anchored !== s.postId && t.updates.some((u) => u.id === anchored && u.summary)
+  useEffect(() => {
+    if (older) setHistory(true)
+  }, [older, anchor?.hash])
   const { data } = useQuery({
     queryKey: ['ticket', String(t.id), 'summary', s.postId],
     queryFn: () => get<SummaryHistory>(`/api/tickets/${t.id}/summary`),
@@ -1910,11 +1920,17 @@ function SummaryCard({ t }: { t: TicketFull }) {
       )}
       <Markdown className="mt-2">{s.body}</Markdown>
       <Attachments items={s.attachments} />
+      {/* The stand-in's replies are under the post itself, in Agents. */}
+      {!s.fallback && <SummaryReplies postId={s.postId} count={replies(s.postId)} />}
       {history && (
         <ol aria-label="Earlier versions" className="mt-3 space-y-3 border-t pt-3">
           {!data && <li className="text-xs text-muted-foreground">Loading…</li>}
           {earlier.map((v) => (
-            <li key={v.postId} className="min-w-0 rounded-md border bg-background p-3">
+            <li
+              key={v.postId}
+              id={`post-${v.postId}`}
+              className="min-w-0 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-md border bg-background p-3"
+            >
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <Actor name={v.by} via={v.via} className="text-foreground" />
                 <Tip content={stamp(v.at)}>
@@ -1925,11 +1941,48 @@ function SummaryCard({ t }: { t: TicketFull }) {
               </div>
               <Markdown className="mt-2">{v.body}</Markdown>
               <Attachments items={v.attachments} />
+              <SummaryReplies postId={v.postId} count={replies(v.postId)} />
             </li>
           ))}
         </ol>
       )}
     </article>
+  )
+}
+
+/**
+ * The replies under a version of the summary, as under any post: the toggle with their count, then
+ * the thread and its Reply box. Each reply stays with the version it was written under. A link to one
+ * of them (#post-<id>-reply-<id>) opens the thread, once per link.
+ */
+function SummaryReplies({ postId, count }: { postId: number; count: number }) {
+  const [open, setOpen] = useState(false)
+  const anchor = useContext(ShownAnchor)
+  const opensFor = anchor?.holder === `post-${postId}` ? anchor.hash : null
+  useEffect(() => {
+    if (opensFor) setOpen(true)
+  }, [opensFor])
+  const label = `${count} ${count === 1 ? 'reply' : 'replies'}`
+  return (
+    <>
+      <div role="group" aria-label="Summary actions" className="mt-2 flex items-center gap-0.5">
+        <ActionButton
+          label={open ? 'hide replies' : count ? label : 'reply'}
+          tip={open ? 'Hide replies' : count ? `Show ${label}` : 'Reply to the summary'}
+          size={count && !open ? 'xs' : 'icon-xs'}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <MessageSquare />
+          {!open && count > 0 && count}
+        </ActionButton>
+      </div>
+      {open && (
+        <div className="mt-3 min-w-0 border-t pt-3">
+          <Thread parentType="update" parentId={postId} compact />
+        </div>
+      )}
+    </>
   )
 }
 
