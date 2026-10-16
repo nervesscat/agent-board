@@ -9,6 +9,12 @@ import { AGENT, e2eEnv, git, HUMAN } from './env'
 import { pdf, png } from './files'
 import { expect, expectTooltip, ok, test, tooltip } from './fixtures'
 
+// A daily report left missing shows its reminder on every later test's pages once its shift has ended,
+// so each test here turns its project's reports off when it is done (as `quiet()` does in dailyPage.ts).
+test.afterEach(async ({ human, project }) => {
+  await ok(human.patch(`/api/projects/${project.id}/report-settings`, { data: { cadence: 'off' } }))
+})
+
 /*
  * Every hover tooltip is the app's shared one (`[data-slot="tooltip-content"]`), never a native title:
  * it shows the same text on hover and on keyboard focus, keeps line breaks, leaves the elements as they

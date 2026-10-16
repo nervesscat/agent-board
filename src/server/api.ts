@@ -16,7 +16,7 @@ import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
-import { DELETE_KINDS, deleteLeftovers } from './cleanupActions'
+import { DeleteItems, deleteLeftovers } from './cleanupActions'
 import { authMode } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
@@ -461,29 +461,13 @@ api.post('/api/projects/:id/push/refresh', async ({ params }) => json(await refr
 api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
   json(await cleanupReport(id(params), { reach: url.searchParams.get('reach') !== '0' })),
 )
-// The human deletes closed tickets' worked branches, here or on origin, or with their worktrees, once
-// confirmed on the Cleanup page; each is checked again first. Never an agent: they get 403.
-const Sha = z.string().regex(/^[0-9a-f]{40}([0-9a-f]{24})?$/, 'a full commit sha')
+// Deletes closed tickets' worked branches, here or on origin, or with their worktrees: the human's,
+// once confirmed on the Cleanup page, and an agent's (also MCP `cleanup_delete`) for local branches
+// alone: a request of theirs with a worktree or an origin branch in it gets 403 whole. Each item is
+// checked again first.
 api.post('/api/projects/:id/cleanup/delete', async ({ request, params, actor }) => {
-  if (isAgent(request)) throw new HttpError(403, 'only the human deletes branches and worktrees')
-  const body = await readJson(
-    request,
-    z.object({
-      items: z
-        .array(
-          z.object({
-            ticketId: z.number().int(),
-            branch: z.string().min(1).max(250),
-            kind: z.enum(DELETE_KINDS),
-            sha: Sha.nullable(),
-            worktrees: z.array(z.string().min(1).max(1000)).max(50).optional(),
-          }),
-        )
-        .min(1)
-        .max(200),
-    }),
-  )
-  return json(await deleteLeftovers(id(params), body.items, actor))
+  const body = await readJson(request, z.object({ items: DeleteItems }))
+  return json(await deleteLeftovers(id(params), body.items, actor, { agent: isAgent(request) }))
 })
 
 // Every preview of the project's tickets, running or not, running first, and the board-wide use of the

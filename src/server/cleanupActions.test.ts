@@ -7,7 +7,7 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import type { DeleteItem } from './cleanupActions'
+import type { DeleteItem, DeleteResult } from './cleanupActions'
 import type { PreviewRunner, Proc } from './managedPreview'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -152,6 +152,32 @@ const activity = (ticketId: number) =>
     .all()
     .map((a) => a.text)
     .join('\n')
+/** Who logged each of the ticket's lines of `kind` (its git deletions by default), and what, in order. */
+const logged = (ticketId: number, kind = 'git') =>
+  dbm.db
+    .select()
+    .from(dbm.schema.activity)
+    .where(eq(dbm.schema.activity.refId, ticketId))
+    .all()
+    .filter((a) => a.refType === 'ticket' && a.kind === kind)
+    .map((a) => [a.actor, a.text])
+/** An agent's request as `cleanup_delete` runs it, for the agent `codex`. */
+const asAgent = (items: DeleteItem[], pid = projectId) =>
+  deleteLeftovers(pid, items, 'codex', { agent: true })
+/** Requests each caller's input check refuses, built around one well-formed local item. */
+const malformed = (item: DeleteItem): unknown[][] => [
+  [{ ...item, sha: 'HEAD' }],
+  [{ ...item, sha: item.sha!.slice(0, 7) }],
+  [{ ...item, kind: 'everything' }],
+  [{ ...item, branch: '' }],
+  [{ ...item, branch: 'b'.repeat(251) }],
+  [{ ...item, kind: 'worktrees', worktrees: Array.from({ length: 51 }, (_, i) => wt(`many-${i}`)) }],
+  [{ ...item, kind: 'worktrees', worktrees: ['x'.repeat(1001)] }],
+  [],
+  Array.from({ length: 201 }, () => item),
+  // Malformed, with a branch on origin in it: the input check answers first.
+  [{ ...item, kind: 'remote', sha: 'HEAD' }],
+]
 
 beforeAll(async () => {
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', origin], { stdio: 'ignore' })
@@ -2042,27 +2068,475 @@ describe('the route', () => {
     })
   }
 
-  it('answers an agent 403 and deletes nothing; the human gets each item’s outcome', async () => {
+  it('gives the human each item’s outcome, under their name, and refuses a sha that is not one', async () => {
     const { 'feat/b11': sha } = land(['feat/b11'])
     const t = done('b11', 'feat/b11')
     const items = [{ ticketId: t.id, branch: 'feat/b11', kind: 'local', sha }]
-    const agent = await call('agent:claude', { items })
-    expect(agent.status).toBe(403)
-    expect(hasRef(repo, 'refs/heads/feat/b11')).toBe(true)
-
     const bad = await call('human:enrique', { items: [{ ...items[0], sha: 'HEAD' }] })
     expect(bad.status).toBe(400)
+    expect(hasRef(repo, 'refs/heads/feat/b11')).toBe(true)
     const human = await call('human:enrique', { items })
     expect(human.status).toBe(200)
     expect(await human.json()).toEqual([expect.objectContaining({ branch: 'feat/b11', outcome: 'deleted' })])
     expect(hasRef(repo, 'refs/heads/feat/b11')).toBe(false)
+    expect(logged(t.id)).toEqual([['enrique', `deleted the branch feat/b11 @ ${sha} of #${t.id}`]])
   })
 
-  it('no MCP tool deletes a branch or a worktree', async () => {
-    const source = fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8')
-    expect(source).not.toMatch(
-      /cleanupActions|deleteLeftovers|deleteLocalBranch|deleteOriginBranch|removeWorktree/,
+  it('lets an agent delete landed local branches, each checked as for the human, under its name', async () => {
+    const shas = land(['feat/g1', 'feat/g1m'])
+    const unique = land(['feat/g1u'], { unique: true })['feat/g1u']!
+    git('push', '-q', 'origin', 'feat/g1')
+    const t = done('g1', 'feat/g1')
+    const tm = done('g1m', 'feat/g1m')
+    const tu = done('g1u', 'feat/g1u')
+    const onMain = done('g1 on main', 'main', { baseBranch: 'main' })
+    const main = git('rev-parse', 'main')
+
+    const res = await call('agent:codex', {
+      items: [
+        { ticketId: t.id, branch: 'feat/g1', kind: 'local', sha: shas['feat/g1'] },
+        // Not the commit it is at: it moved since the agent looked.
+        { ticketId: tm.id, branch: 'feat/g1m', kind: 'local', sha: shas['feat/g1'] },
+        { ticketId: tu.id, branch: 'feat/g1u', kind: 'local', sha: unique },
+        { ticketId: onMain.id, branch: 'main', kind: 'local', sha: main },
+      ],
+    })
+    expect(res.status).toBe(200)
+    const results = (await res.json()) as DeleteResult[]
+    expect(results.map((r) => [r.branch, r.outcome])).toEqual([
+      ['feat/g1', 'deleted'],
+      ['feat/g1m', 'refused'],
+      ['feat/g1u', 'refused'],
+      ['main', 'refused'],
+    ])
+    expect(results[0]).toMatchObject({
+      ok: true,
+      reason: null,
+      removed: [],
+      restore: [`git branch feat/g1 ${shas['feat/g1']}`],
+    })
+    expect(results[1]!.reason).toBe(`feat/g1m moved since: now at ${shas['feat/g1m']!.slice(0, 7)}`)
+    expect(results[2]!.reason).toMatch(/1 commit of its own/)
+    expect(results[3]!.reason).toMatch(/base branch/)
+
+    // Here the landed one is gone and the rest where they were; origin's copy did not move.
+    expect(hasRef(repo, 'refs/heads/feat/g1')).toBe(false)
+    expect(git('rev-parse', 'refs/heads/feat/g1m')).toBe(shas['feat/g1m'])
+    expect(git('rev-parse', 'refs/heads/feat/g1u')).toBe(unique)
+    expect(git('rev-parse', 'refs/heads/main')).toBe(main)
+    expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g1')).toBe(shas['feat/g1'])
+    expect(git('rev-parse', 'refs/remotes/origin/feat/g1')).toBe(shas['feat/g1'])
+    // Logged on its ticket under the agent's name.
+    expect(logged(t.id)).toEqual([['codex', `deleted the branch feat/g1 @ ${shas['feat/g1']} of #${t.id}`]])
+    for (const id of [tm.id, tu.id, onMain.id]) expect(logged(id)).toEqual([])
+  })
+
+  it('refuses an agent’s request with a worktree in it whole, and removes nothing', async () => {
+    const shas = land(['feat/g8', 'feat/g8w'])
+    git('worktree', 'add', '-q', wt('g8w'), 'feat/g8w')
+    const t = done('g8', 'feat/g8')
+    const tw = done('g8w', 'feat/g8w')
+    features.addWorkspace(tw.id, { name: 'wt', branch: 'feat/g8w', path: wt('g8w') }, 'claude')
+    const files = fs.readdirSync(wt('g8w')).sort()
+    const listed = (await branchOf(tw.id, 'feat/g8w'))!.worktrees.map((w) => w.path)
+    const local = { ticketId: t.id, branch: 'feat/g8', kind: 'local', sha: shas['feat/g8'] }
+    const trees = {
+      ticketId: tw.id,
+      branch: 'feat/g8w',
+      kind: 'worktrees',
+      sha: shas['feat/g8w'],
+      worktrees: listed,
+    }
+    // Its own worktree with the main checkout and a folder out of the repository named beside it.
+    const named = { ...trees, worktrees: [...listed, repo, tmp] }
+    for (const items of [[trees], [local, trees], [named, local]]) {
+      const res = await call('agent:codex', { items })
+      expect(res.status, items.map((i) => i.kind).join(', ')).toBe(403)
+      expect(await res.json()).toEqual({ error: 'only the human removes worktrees, from the Cleanup page' })
+    }
+    expect(fs.readdirSync(wt('g8w')).sort()).toEqual(files)
+    expect(worktreePaths()).toContain(wt('g8w'))
+    expect(git('rev-parse', 'refs/heads/feat/g8w')).toBe(shas['feat/g8w'])
+    expect(git('rev-parse', 'refs/heads/feat/g8')).toBe(shas['feat/g8'])
+    expect(fs.existsSync(path.join(repo, '.git'))).toBe(true)
+    expect(
+      dbm.db.select().from(dbm.schema.workspaces).where(eq(dbm.schema.workspaces.ticketId, tw.id)).all(),
+    ).toHaveLength(1)
+    expect(logged(t.id)).toEqual([])
+    expect(logged(tw.id)).toEqual([])
+  })
+
+  it('refuses an agent’s request with a branch on origin in it whole, wherever it is, before anything runs', async () => {
+    const shas = land(['feat/g2', 'feat/g2w'])
+    // Landed on origin too: only the refusal keeps origin's copy.
+    git('push', '-q', 'origin', 'feat/g2', 'feat/g2w', 'main')
+    git('worktree', 'add', '-q', wt('g2w'), 'feat/g2w')
+    const t = done('g2', 'feat/g2')
+    const tw = done('g2w', 'feat/g2w')
+    // Origin moves on behind the checkout's back: a fetch would bring that here.
+    const them = gitIn(other)
+    them('fetch', '-q', 'origin')
+    const theirs = them('commit-tree', 'origin/feat/g2^{tree}', '-p', 'origin/feat/g2', '-m', 'more')
+    them('push', '-q', 'origin', `${theirs}:refs/heads/feat/g2`)
+    const refs = () =>
+      git(
+        'for-each-ref',
+        '--format=%(refname) %(objectname)',
+        'refs/heads/feat/g2',
+        'refs/heads/feat/g2w',
+        'refs/remotes/origin/feat/g2',
+        'refs/remotes/origin/feat/g2w',
+      )
+    const before = refs()
+    const local = { ticketId: t.id, branch: 'feat/g2', kind: 'local', sha: shas['feat/g2'] }
+    const remote = { ticketId: t.id, branch: 'feat/g2', kind: 'remote', sha: theirs }
+    const trees = {
+      ticketId: tw.id,
+      branch: 'feat/g2w',
+      kind: 'worktrees',
+      sha: shas['feat/g2w'],
+      worktrees: [wt('g2w')],
+    }
+    for (const items of [
+      [remote],
+      [local, remote],
+      [remote, local],
+      [trees, remote],
+      [local, trees, remote],
+    ]) {
+      const res = await call('agent:codex', { items })
+      expect(res.status, items.map((i) => i.kind).join(', ')).toBe(403)
+      expect(await res.json()).toEqual({
+        error: 'only the human deletes branches on origin, from the Cleanup page',
+      })
+    }
+    expect(refs()).toBe(before)
+    expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g2')).toBe(theirs)
+    expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g2w')).toBe(shas['feat/g2w'])
+    expect(fs.existsSync(wt('g2w'))).toBe(true)
+    expect(worktreePaths()).toContain(wt('g2w'))
+    expect(logged(t.id)).toEqual([])
+    expect(logged(tw.id)).toEqual([])
+  })
+
+  it('still lets the human delete on origin, also beside a local branch', async () => {
+    const { 'feat/g3h': sha } = land(['feat/g3h'])
+    git('push', '-q', 'origin', 'feat/g3h', 'main')
+    const t = done('g3h', 'feat/g3h')
+    const res = await call('human:enrique', {
+      items: [
+        { ticketId: t.id, branch: 'feat/g3h', kind: 'local', sha },
+        { ticketId: t.id, branch: 'feat/g3h', kind: 'remote', sha },
+      ],
+    })
+    expect(res.status).toBe(200)
+    const results = (await res.json()) as DeleteResult[]
+    expect(results.map((r) => [r.kind, r.outcome])).toEqual([
+      ['local', 'deleted'],
+      ['remote', 'deleted'],
+    ])
+    expect(results[1]!.restore).toEqual([`git push origin ${sha}:refs/heads/feat/g3h`])
+    expect(hasRef(repo, 'refs/heads/feat/g3h')).toBe(false)
+    expect(hasRef(origin, 'refs/heads/feat/g3h')).toBe(false)
+    expect(logged(t.id)).toEqual([
+      ['enrique', `deleted the branch feat/g3h @ ${sha} of #${t.id}`],
+      ['enrique', `deleted origin's branch feat/g3h @ ${sha} of #${t.id}`],
+    ])
+  })
+
+  it('checks an agent’s request as the human’s: a malformed one is a 400, before anything runs', async () => {
+    const { 'feat/g4v': sha } = land(['feat/g4v'])
+    const t = done('g4v', 'feat/g4v')
+    const item: DeleteItem = { ticketId: t.id, branch: 'feat/g4v', kind: 'local', sha }
+    for (const body of [...malformed(item).map((items) => ({ items })), {}, { items: item }])
+      for (const actor of ['agent:codex', 'human:enrique']) {
+        const res = await call(actor, body)
+        expect(res.status, `${actor}: ${JSON.stringify(body).slice(0, 120)}`).toBe(400)
+      }
+    expect(git('rev-parse', 'refs/heads/feat/g4v')).toBe(sha)
+    expect(logged(t.id)).toEqual([])
+  })
+})
+
+describe('the cleanup_delete tool', () => {
+  let rpcId = 0
+  /** An MCP call as the agent `codex`, as its gate token names it. */
+  const rpc = async (method: string, params: Record<string, unknown> = {}) => {
+    const { handleMcp } = await import('./mcp')
+    const res = await handleMcp(
+      new Request('http://localhost/api/mcp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }),
+      }),
+      'codex',
     )
+    return ((await res.json()) as { result: any }).result
+  }
+  type ToolResult = { isError?: boolean; content: { text: string }[] }
+  const tool = async (args: Record<string, unknown>) =>
+    (await rpc('tools/call', { name: 'cleanup_delete', arguments: args })) as ToolResult
+  /** What it answered, once it is no error. */
+  const answered = (r: ToolResult) => {
+    expect(r.isError, r.content[0]!.text).toBeFalsy()
+    return JSON.parse(r.content[0]!.text) as DeleteResult[]
+  }
+
+  it('is offered for local branches alone, and the instructions say what it does', async () => {
+    const tools = (await rpc('tools/list')).tools as { name: string; description: string; inputSchema: any }[]
+    const entry = tools.find((t) => t.name === 'cleanup_delete')!
+    expect(entry.inputSchema.required).toEqual(expect.arrayContaining(['projectId', 'items']))
+    const items = entry.inputSchema.properties.items
+    expect(items).toMatchObject({ type: 'array', minItems: 1, maxItems: 200 })
+    expect(items.items.properties.kind.enum).toEqual(['local'])
+    expect(Object.keys(items.items.properties).sort()).toEqual(['branch', 'kind', 'sha', 'ticketId'])
+    expect(items.items.required).toEqual(expect.arrayContaining(['ticketId', 'branch', 'kind', 'sha']))
+    expect(entry.description).toContain("closed tickets' (done, cancelled or archived) landed local branches")
+    expect(entry.description).toContain('as for the human')
+    expect(entry.description).toContain('Never a worktree, never origin')
+    expect(entry.description).toContain('restore')
+    expect(entry.description).toContain('Post the deleted branch @ sha lines on the ticket')
+    const report = tools.find((t) => t.name === 'cleanup_report')!.description
+    expect(report).toContain(
+      'local by you with cleanup_delete, or by the human; worktrees and remote by the human alone',
+    )
+    expect(report).not.toMatch(/Only the human deletes|go-ahead/)
+
+    const init = await rpc('initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'test', version: '1' },
+    })
+    const instructions = init.instructions as string
+    expect(instructions.split('\n')[0]).toContain(
+      "but for closed tickets' landed local branches, which cleanup_delete deletes (worktrees and origin's branches are the human's",
+    )
+    const step8 = instructions.split('\n').find((l) => l.startsWith('8. '))!
+    expect(step8).toContain(
+      "cleanup_delete deletes closed tickets' landed local branches, the board checking",
+    )
+    expect(step8).toContain('Leave its worktrees')
+    expect(step8).not.toMatch(/remove its worktree/)
+    expect(step8).toContain('never delete branches on origin nor remove worktrees')
+    expect(instructions).not.toMatch(/only the human deletes finished branches/)
+  })
+
+  it('deletes a landed local branch as the agent, and answers how to restore it', async () => {
+    const { 'feat/g3': sha } = land(['feat/g3'])
+    git('push', '-q', 'origin', 'feat/g3')
+    const t = done('g3', 'feat/g3')
+    const local = { ticketId: t.id, branch: 'feat/g3', kind: 'local', sha }
+
+    const results = answered(await tool({ projectId, items: [local] }))
+    expect(results).toEqual([
+      {
+        ...local,
+        ok: true,
+        outcome: 'deleted',
+        reason: null,
+        removed: [],
+        unlinked: [],
+        restore: [`git branch feat/g3 ${sha}`],
+      },
+    ])
+    expect(hasRef(repo, 'refs/heads/feat/g3')).toBe(false)
+    expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g3')).toBe(sha)
+    expect(git('rev-parse', 'refs/remotes/origin/feat/g3')).toBe(sha)
+    expect(logged(t.id)).toEqual([['codex', `deleted the branch feat/g3 @ ${sha} of #${t.id}`]])
+  })
+
+  it('takes no worktree: a request with one, alone or not, is refused before anything runs', async () => {
+    const shas = land(['feat/g9', 'feat/g9w'])
+    git('worktree', 'add', '-q', wt('g9w'), 'feat/g9w')
+    const t = done('g9', 'feat/g9')
+    const tw = done('g9w', 'feat/g9w')
+    const files = fs.readdirSync(wt('g9w')).sort()
+    const listed = (await branchOf(tw.id, 'feat/g9w'))!.worktrees.map((w) => w.path)
+    const local = { ticketId: t.id, branch: 'feat/g9', kind: 'local', sha: shas['feat/g9'] }
+    const trees = {
+      ticketId: tw.id,
+      branch: 'feat/g9w',
+      kind: 'worktrees',
+      sha: shas['feat/g9w'],
+      worktrees: listed,
+    }
+    for (const items of [[trees], [local, trees], [trees, local]]) {
+      const r = await tool({ projectId, items })
+      expect(r.isError).toBe(true)
+      expect(r.content[0]!.text).toMatch(/Input validation error: Invalid arguments for tool cleanup_delete/)
+      expect(r.content[0]!.text).toMatch(/at items\[\d+\]\.kind/)
+    }
+    expect(fs.readdirSync(wt('g9w')).sort()).toEqual(files)
+    expect(worktreePaths()).toContain(wt('g9w'))
+    expect(git('rev-parse', 'refs/heads/feat/g9w')).toBe(shas['feat/g9w'])
+    expect(git('rev-parse', 'refs/heads/feat/g9')).toBe(shas['feat/g9'])
+    expect(logged(t.id)).toEqual([])
+    expect(logged(tw.id)).toEqual([])
+  })
+
+  it('takes no branch on origin: a request with one, alone or not, is refused before anything runs', async () => {
+    const { 'feat/g4': sha } = land(['feat/g4'])
+    // Landed on origin too: only the refusal keeps origin's copy.
+    git('push', '-q', 'origin', 'feat/g4', 'main')
+    const t = done('g4', 'feat/g4')
+    const local = { ticketId: t.id, branch: 'feat/g4', kind: 'local', sha }
+    const remote = { ...local, kind: 'remote' }
+    for (const items of [[remote], [local, remote], [remote, local]]) {
+      const r = await tool({ projectId, items })
+      expect(r.isError).toBe(true)
+      expect(r.content[0]!.text).toMatch(/Input validation error: Invalid arguments for tool cleanup_delete/)
+      expect(r.content[0]!.text).toMatch(/at items\[\d+\]\.kind/)
+    }
+    expect(git('rev-parse', 'refs/heads/feat/g4')).toBe(sha)
+    expect(gitIn(origin)('rev-parse', 'refs/heads/feat/g4')).toBe(sha)
+    expect(git('rev-parse', 'refs/remotes/origin/feat/g4')).toBe(sha)
+    expect(logged(t.id)).toEqual([])
+  })
+
+  it('answers a refused item as a result, with the human’s own reason, and goes on with the next', async () => {
+    const shas = land(['feat/g6m', 'feat/g6ok'])
+    const unique = land(['feat/g6u'], { unique: true })['feat/g6u']!
+    const main = git('rev-parse', 'main')
+    const refused: DeleteItem[] = [
+      // Not the commit it is at: moved since.
+      { ticketId: done('g6m', 'feat/g6m').id, branch: 'feat/g6m', kind: 'local', sha: shas['feat/g6ok']! },
+      { ticketId: done('g6u', 'feat/g6u').id, branch: 'feat/g6u', kind: 'local', sha: unique },
+      {
+        ticketId: done('g6 on main', 'main', { baseBranch: 'main' }).id,
+        branch: 'main',
+        kind: 'local',
+        sha: main,
+      },
+    ]
+    const human = await del(refused)
+    expect(human.map((r) => r.outcome)).toEqual(['refused', 'refused', 'refused'])
+    const ok = done('g6ok', 'feat/g6ok')
+
+    const results = answered(
+      await tool({
+        projectId,
+        items: [...refused, { ticketId: ok.id, branch: 'feat/g6ok', kind: 'local', sha: shas['feat/g6ok'] }],
+      }),
+    )
+    expect(results.slice(0, 3)).toEqual(human)
+    expect(results[3]).toMatchObject({ branch: 'feat/g6ok', ok: true, outcome: 'deleted' })
+    expect(git('rev-parse', 'refs/heads/feat/g6m')).toBe(shas['feat/g6m'])
+    expect(git('rev-parse', 'refs/heads/feat/g6u')).toBe(unique)
+    expect(git('rev-parse', 'refs/heads/main')).toBe(main)
+    expect(hasRef(repo, 'refs/heads/feat/g6ok')).toBe(false)
+  })
+
+  it('takes what the route takes: a request it answers 400 is an input error here, and nothing runs', async () => {
+    const { 'feat/g7': sha } = land(['feat/g7'])
+    const t = done('g7', 'feat/g7')
+    const item: DeleteItem = { ticketId: t.id, branch: 'feat/g7', kind: 'local', sha }
+    for (const args of [...malformed(item).map((items) => ({ projectId, items })), { items: [item] }]) {
+      const r = await tool(args)
+      expect(r.isError, JSON.stringify(args).slice(0, 120)).toBe(true)
+      expect(r.content[0]!.text).toMatch(/Input validation error: Invalid arguments for tool cleanup_delete/)
+    }
+    expect(git('rev-parse', 'refs/heads/feat/g7')).toBe(sha)
+    expect(logged(t.id)).toEqual([])
+  })
+})
+
+describe('an agent’s delete takes what it names alone, checked as the human’s', () => {
+  const projectWithoutRepo = (name: string) =>
+    dbm.db.insert(dbm.schema.projects).values({ name }).returning().get().id
+  /** A closed ticket put in as it is: the board makes none in a project without a repo. */
+  const closedIn = (pid: number, title: string, branch: string, more: { repoId?: number } = {}) =>
+    dbm.db
+      .insert(dbm.schema.tickets)
+      .values({ projectId: pid, title, branch, status: 'done', createdBy: 'claude', ...more })
+      .returning()
+      .get()
+
+  it('refuses a ticket of another project, or of none, and goes on with the next item', async () => {
+    const shas = land(['feat/a1-theirs', 'feat/a1-ok'])
+    const theirs = closedIn(projectWithoutRepo('elsewhere'), 'theirs', 'feat/a1-theirs')
+    const ok = done('a1 ok', 'feat/a1-ok')
+    // Past the last ticket made: no ticket has it.
+    const missing = ok.id + 1
+    const results = await asAgent([
+      { ticketId: theirs.id, branch: 'feat/a1-theirs', kind: 'local', sha: shas['feat/a1-theirs']! },
+      { ticketId: missing, branch: 'feat/a1-theirs', kind: 'local', sha: shas['feat/a1-theirs']! },
+      { ticketId: ok.id, branch: 'feat/a1-ok', kind: 'local', sha: shas['feat/a1-ok']! },
+    ])
+    expect(results.map((r) => [r.outcome, r.reason])).toEqual([
+      ['refused', `#${theirs.id} is no ticket of this project`],
+      ['refused', `#${missing} is no ticket of this project`],
+      ['deleted', null],
+    ])
+    expect(git('rev-parse', 'refs/heads/feat/a1-theirs')).toBe(shas['feat/a1-theirs'])
+    expect(hasRef(repo, 'refs/heads/feat/a1-ok')).toBe(false)
+    expect(logged(theirs.id)).toEqual([])
+  })
+
+  it('refuses a ticket whose project has no repo for it', async () => {
+    const { 'feat/a2': sha } = land(['feat/a2'])
+    const bare = projectWithoutRepo('no repo')
+    const none = closedIn(bare, 'no repo', 'feat/a2')
+    // Its repo is another project's.
+    const borrowed = closedIn(bare, 'borrowed', 'feat/a2', { repoId })
+    const results = await asAgent(
+      [
+        { ticketId: none.id, branch: 'feat/a2', kind: 'local', sha },
+        { ticketId: borrowed.id, branch: 'feat/a2', kind: 'local', sha },
+      ],
+      bare,
+    )
+    expect(results.map((r) => [r.outcome, r.reason])).toEqual([
+      ['refused', 'the ticket has no repo'],
+      ['refused', 'the ticket has no repo'],
+    ])
+    expect(git('rev-parse', 'refs/heads/feat/a2')).toBe(sha)
+  })
+
+  it('refuses a branch that is neither the ticket’s nor one of its workspaces’, and deletes a workspace’s', async () => {
+    const shas = land(['feat/a4', 'feat/a4-side', 'feat/a4-other'])
+    const t = done('a4', 'feat/a4')
+    features.addWorkspace(t.id, { name: 'side', branch: 'feat/a4-side' }, 'claude')
+    const other = done('a4 other', 'feat/a4-other')
+    const main = git('rev-parse', 'main')
+    const results = await asAgent([
+      { ticketId: t.id, branch: 'main', kind: 'local', sha: main },
+      { ticketId: t.id, branch: 'feat/a4-other', kind: 'local', sha: shas['feat/a4-other']! },
+      { ticketId: t.id, branch: 'feat/a4-side', kind: 'local', sha: shas['feat/a4-side']! },
+    ])
+    expect(results.map((r) => [r.outcome, r.reason])).toEqual([
+      ['refused', `main is no branch of #${t.id}`],
+      ['refused', `feat/a4-other is no branch of #${t.id}`],
+      ['deleted', null],
+    ])
+    expect(git('rev-parse', 'refs/heads/main')).toBe(main)
+    expect(git('rev-parse', 'refs/heads/feat/a4-other')).toBe(shas['feat/a4-other'])
+    expect(git('rev-parse', 'refs/heads/feat/a4')).toBe(shas['feat/a4'])
+    expect(hasRef(repo, 'refs/heads/feat/a4-side')).toBe(false)
+    expect(logged(other.id)).toEqual([])
+  })
+
+  it('deletes a branch asked for more than once one time, and nothing else', async () => {
+    const shas = land(['feat/a7', 'feat/a7-kept'])
+    git('worktree', 'add', '-q', wt('a7-kept'), 'feat/a7-kept')
+    const t = done('a7', 'feat/a7')
+    const kept = done('a7 kept', 'feat/a7-kept')
+    const others = () =>
+      git('for-each-ref', '--format=%(refname) %(objectname)')
+        .split('\n')
+        .filter((l) => !l.startsWith('refs/heads/feat/a7 '))
+    const before = others()
+    const local: DeleteItem = { ticketId: t.id, branch: 'feat/a7', kind: 'local', sha: shas['feat/a7']! }
+
+    const results = await asAgent([local, local, local])
+    expect(results.map((r) => r.outcome)).toEqual(['deleted', 'gone', 'gone'])
+    expect(results[0]!.restore).toEqual([`git branch feat/a7 ${shas['feat/a7']}`])
+    for (const r of [results[1]!, results[2]!])
+      expect(r).toMatchObject({ removed: [], unlinked: [], restore: [] })
+    expect(hasRef(repo, 'refs/heads/feat/a7')).toBe(false)
+    expect(others()).toEqual(before)
+    expect(worktreePaths()).toContain(wt('a7-kept'))
+    expect(logged(t.id)).toEqual([['codex', `deleted the branch feat/a7 @ ${shas['feat/a7']} of #${t.id}`]])
+    expect(logged(kept.id)).toEqual([])
   })
 })
 

@@ -3,6 +3,12 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import type { Project, ReportSettingsView } from '#/lib/api'
 import { expect, ok, test } from './fixtures'
 
+// A daily report left missing shows its reminder on every later test's pages once its shift has ended,
+// so each test here turns its project's reports off when it is done (as `quiet()` does in dailyPage.ts).
+test.afterEach(async ({ human, project }) => {
+  await ok(human.patch(`/api/projects/${project.id}/report-settings`, { data: { cadence: 'off' } }))
+})
+
 /** The project's Daily page with its report settings open: the schedule group, where the clocks are. */
 async function openSchedule(page: Page, project: Project) {
   await page.goto(`/projects/${project.id}/daily`)
