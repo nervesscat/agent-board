@@ -1,0 +1,339 @@
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
+
+import type { Gallery } from '#/lib/api'
+import { fileSize, localDate, shiftDate } from '#/lib/format'
+import { AGENT } from './env'
+import { type Api, expect, expectTooltip, ok, test } from './fixtures'
+import { png, pdf } from './files'
+import { box, coveredAt, feedDrawn, longTicket, ticketHeader } from './scrolling'
+
+/**
+ * The project's Gallery: every file on its tickets as a grid, filtered by kind and upload day in the
+ * URL, a page at a time; a tile opens its file in the lightbox and links to its ticket, and to the post
+ * or reply it came with.
+ */
+
+type Row = { id: number }
+type Upload = { id: number; url: string; size: number }
+
+// Not a playable video: enough for the tile to be a <video>, which only reads its metadata.
+const WEBM = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01])
+
+async function upload(ctx: APIRequestContext, name: string, data: Buffer, mime?: string) {
+  return ok<Upload>(ctx.post('/api/uploads', { data: { name, base64: data.toString('base64'), mime } }))
+}
+const postWith = (ctx: APIRequestContext, ticketId: number, attachmentIds: number[], body = 'Files.') =>
+  ok<Row>(ctx.post(`/api/tickets/${ticketId}/updates`, { data: { body, attachmentIds } }))
+
+const gallery = (page: Page, projectId: number, search = '') =>
+  page.goto(`/projects/${projectId}/gallery${search}`)
+const tiles = (page: Page) => page.locator('li[data-file]')
+const tile = (page: Page, name: string) => tiles(page).filter({ has: page.getByText(name, { exact: true }) })
+const tileNames = (page: Page) => tiles(page).locator('[data-slot="file-name"]').allInnerTexts()
+const thumb = (t: Locator) => t.getByRole('link', { name: /^Open .+\./ })
+
+const scrollsSideways = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+
+test('the Gallery module lists the files with their size, uploader, time and ticket, and opens them in place', async ({
+  page,
+  project,
+  api,
+  agent,
+}) => {
+  const t = await api.ticket({ title: 'Screens of the parser', status: 'in_progress' })
+  const longName = 'a-very-long-file-name-for-the-screenshot-of-the-parser-error-dialog.png'
+  const image = await upload(agent, longName, png(64))
+  const doc = await upload(agent, 'spec.pdf', pdf('Spec'))
+  const video = await upload(agent, 'clip.webm', WEBM, 'video/webm')
+  const notes = await upload(agent, 'notes.md', Buffer.from('# Notes\n\nThe parser is fixed.'))
+  const blob = await upload(agent, 'blob.bin', Buffer.alloc(3000, 1))
+  await postWith(agent, t.id, [image.id, doc.id, video.id, notes.id, blob.id])
+
+  // Every request the page makes, to show the PDF's bytes are not read before it is opened.
+  const requested: string[] = []
+  page.on('request', (r) => requested.push(new URL(r.url()).pathname))
+
+  await page.goto(`/projects/${project.id}`)
+  const link = page.getByRole('navigation').getByRole('link', { name: 'Gallery', exact: true })
+  await link.click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/gallery$`))
+  await expect(link).toHaveClass(/active/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Gallery' })).toBeVisible()
+  await expect(tiles(page)).toHaveCount(5)
+
+  const shot = tile(page, longName)
+  await expect(shot).toContainText(fileSize(image.size))
+  await expect(shot).toContainText(AGENT)
+  await expect(shot).toContainText('just now')
+  await expect(shot).toContainText(`#${t.id} Screens of the parser`)
+  // The name is cut short on the tile; the whole of it shows on hover, as does the exact time.
+  await expectTooltip(shot.getByText(longName, { exact: true }), longName)
+  await expectTooltip(shot.locator('time'), /\d/)
+
+  // An image is the file itself, loaded lazily; a video only its first frame, never playing.
+  await expect(thumb(shot).locator('img')).toHaveAttribute('loading', 'lazy')
+  await expect(thumb(shot).locator('img')).toHaveAttribute('src', image.url)
+  const clip = thumb(tile(page, 'clip.webm')).locator('video')
+  await expect(clip).toHaveAttribute('preload', 'metadata')
+  expect(await clip.evaluate((v: HTMLVideoElement) => v.autoplay || v.hasAttribute('autoplay'))).toBe(false)
+  // A PDF, a text file and any other file are icons with their name.
+  for (const name of ['spec.pdf', 'notes.md', 'blob.bin']) {
+    await expect(thumb(tile(page, name)).locator('img, video, iframe, canvas')).toHaveCount(0)
+    await expect(thumb(tile(page, name)).locator('svg')).toHaveCount(1)
+  }
+  await expect(thumb(tile(page, 'notes.md'))).toContainText('MD')
+
+  await page.waitForLoadState('networkidle')
+  expect(requested).toContain(image.url)
+  expect(requested).not.toContain(doc.url)
+
+  // Opened in place: the lightbox, stepping through the gallery's tiles; the URL stays on the gallery.
+  const dialog = page.getByRole('dialog')
+  await thumb(shot).click()
+  await expect(dialog.locator(`img[src="${image.url}"]`)).toBeVisible()
+  await expect(dialog).toContainText('/ 5')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+
+  await thumb(tile(page, 'spec.pdf')).click()
+  await expect(dialog.locator('iframe')).toHaveAttribute('src', doc.url)
+  await expect.poll(() => requested.includes(doc.url)).toBe(true)
+  await page.keyboard.press('Escape')
+
+  await thumb(tile(page, 'notes.md')).click()
+  await expect(dialog).toContainText('The parser is fixed.')
+  await page.keyboard.press('Escape')
+
+  await thumb(tile(page, 'blob.bin')).click()
+  await expect(dialog.getByText('No preview for this file type.')).toBeVisible()
+  // The panel's own Download link (the header's is an icon).
+  await expect(dialog.getByText('Download', { exact: true })).toHaveAttribute('href', blob.url)
+  await page.keyboard.press('Escape')
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/gallery$`))
+})
+
+test('the type, day and archived filters live in the URL, survive a reload, and show an empty state', async ({
+  page,
+  project,
+  api,
+  human,
+  agent,
+}) => {
+  await gallery(page, project.id)
+  await expect(page.getByText('No files on this project yet.')).toBeVisible()
+
+  const t = await api.ticket({ title: 'Filtered', status: 'in_progress' })
+  // One after the other, so they are in this order by upload time.
+  const files = [
+    await upload(agent, 'shot.png', png()),
+    await upload(agent, 'spec.pdf', pdf()),
+    await upload(agent, 'notes.md', Buffer.from('notes')),
+  ]
+  await postWith(
+    agent,
+    t.id,
+    files.map((f) => f.id),
+  )
+  // A done ticket the human archived: its file shows only with Include archived.
+  const old = await api.ticket({ title: 'Shipped long ago', status: 'done' })
+  await postWith(agent, old.id, [(await upload(agent, 'archived.png', png())).id])
+  await ok(human.post(`/api/tickets/${old.id}/archive`))
+
+  await gallery(page, project.id)
+  await expect(tiles(page)).toHaveCount(3)
+  const types = page.getByRole('group', { name: 'File type' })
+  await types.getByRole('checkbox', { name: 'Images' }).click()
+  await types.getByRole('checkbox', { name: 'PDFs' }).click()
+  await expect(page).toHaveURL(/[?&]type=image(,|%2C)pdf(&|$)/)
+  await expect(tiles(page)).toHaveCount(2)
+  expect((await tileNames(page)).sort()).toEqual(['shot.png', 'spec.pdf'])
+
+  const today = localDate()
+  await page.getByLabel('From').fill(today)
+  await page.getByLabel('To').fill(today)
+  await expect(page).toHaveURL(new RegExp(`from=${today}`))
+  await expect(page).toHaveURL(new RegExp(`to=${today}`))
+  await expect(tiles(page)).toHaveCount(2)
+
+  await page.reload()
+  await expect(tiles(page)).toHaveCount(2)
+  expect((await tileNames(page)).sort()).toEqual(['shot.png', 'spec.pdf'])
+  await expect(types.getByRole('checkbox', { name: 'Images' })).toBeChecked()
+  await expect(types.getByRole('checkbox', { name: 'PDFs' })).toBeChecked()
+  await expect(types.getByRole('checkbox', { name: 'Videos' })).not.toBeChecked()
+  await expect(page.getByLabel('From')).toHaveValue(today)
+  await expect(page.getByLabel('To')).toHaveValue(today)
+
+  // A day with no upload: the empty state, and no error.
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  await page.getByLabel('To').fill(shiftDate(today, -1))
+  await page.getByLabel('From').fill(shiftDate(today, -3))
+  await expect(page.getByText('No files match these filters.')).toBeVisible()
+  await page.getByRole('button', { name: 'Clear filters' }).click()
+  await expect(tiles(page)).toHaveCount(3)
+  expect(errors).toEqual([])
+
+  const archived = page.getByRole('switch', { name: 'Include archived' })
+  await archived.click()
+  await expect(page).toHaveURL(/[?&]archived=include/)
+  await expect(tile(page, 'archived.png')).toContainText(`#${old.id} Shipped long ago`)
+  await expect(tiles(page)).toHaveCount(4)
+  await page.reload()
+  await expect(archived).toBeChecked()
+  await expect(tiles(page)).toHaveCount(4)
+
+  // Oldest first, from the URL.
+  await gallery(page, project.id, '?sort=oldest')
+  expect(await tileNames(page)).toEqual(['shot.png', 'spec.pdf', 'notes.md'])
+  await gallery(page, project.id)
+  expect(await tileNames(page)).toEqual(['notes.md', 'spec.pdf', 'shot.png'])
+
+  // Values it does not know are left out: the gallery unfiltered on that count.
+  await gallery(page, project.id, '?type=bogus&from=someday&sort=sideways')
+  await expect(tiles(page)).toHaveCount(3)
+  await expect(types.getByRole('checkbox', { name: 'Images' })).not.toBeChecked()
+  await expect(page.getByText('No files match')).toHaveCount(0)
+})
+
+test("a tile links to its ticket, a lane's to the lane, and a reply's thread link lands on the reply, marked", async ({
+  page,
+  project,
+  api,
+  human,
+  agent,
+}) => {
+  let thread = { post: 0, reply: 0 }
+  // The reply is deep down a long feed, in a thread that loads only once opened.
+  const t = await longTicket(api, human, 'Deep thread', 'in_progress', async (id) => {
+    const p = await ok<Row>(
+      human.post(`/api/tickets/${id}/updates`, { data: { body: 'Does it render?', progress: false } }),
+    )
+    const shot = await upload(agent, 'reply-shot.png', png())
+    const r = await ok<Row>(
+      agent.post('/api/comments', {
+        data: { parentType: 'update', parentId: p.id, body: 'It does, see this.', attachmentIds: [shot.id] },
+      }),
+    )
+    thread = { post: p.id, reply: r.id }
+  })
+  const postFile = await upload(agent, 'post-shot.png', png())
+  const post = await postWith(agent, t.id, [postFile.id], 'A post with a file.')
+  await ok(
+    human.post(`/api/tickets/${t.id}/attachments`, {
+      data: { attachmentIds: [(await upload(human, 'brief.pdf', pdf())).id] },
+    }),
+  )
+  const lane = await ok<Row>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'The lane', parentId: t.id, status: 'in_progress' },
+    }),
+  )
+  await postWith(agent, lane.id, [(await upload(agent, 'lane-shot.png', png())).id])
+
+  await gallery(page, project.id)
+  await expect(tiles(page)).toHaveCount(4)
+  await expect(tile(page, 'lane-shot.png')).toContainText(`#${lane.id} The lane`)
+  await expect(tile(page, 'lane-shot.png')).toContainText(`lane of #${t.id}`)
+  // Instructions have no post to land on: only the ticket.
+  await expect(tile(page, 'brief.pdf').getByRole('link', { name: 'Open thread' })).toHaveCount(0)
+  await expect(tile(page, 'brief.pdf').getByRole('link', { name: 'Open ticket' })).toHaveAttribute(
+    'href',
+    `/projects/${project.id}/features/${t.id}`,
+  )
+
+  await tile(page, 'lane-shot.png').getByRole('link', { name: 'Open ticket' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${lane.id}$`))
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('The lane')
+
+  await gallery(page, project.id)
+  const replyLink = tile(page, 'reply-shot.png').getByRole('link', { name: 'Open thread' })
+  await expect(replyLink).toHaveAttribute(
+    'href',
+    `/projects/${project.id}/features/${t.id}#post-${thread.post}-reply-${thread.reply}`,
+  )
+  await replyLink.click()
+  await expect(page).toHaveURL(new RegExp(`/features/${t.id}#post-${thread.post}-reply-${thread.reply}$`))
+  await feedDrawn(page)
+  const reply = page.locator(`#reply-${thread.reply}`)
+  await expect(reply).toHaveAttribute('data-revealed', '')
+  await expect(page.locator('[data-revealed]')).toHaveCount(1)
+  await expect(reply).toBeInViewport()
+  await expect(reply).toContainText('It does, see this.')
+  // Below the ticket's stuck header, with nothing drawn over it.
+  const header = await box(ticketHeader(page))
+  expect((await box(reply)).y).toBeGreaterThanOrEqual(header.y + header.height - 1)
+  expect(await coveredAt(reply, 6)).toEqual([])
+
+  await gallery(page, project.id)
+  await tile(page, 'post-shot.png').getByRole('link', { name: 'Open thread' }).click()
+  await expect(page).toHaveURL(new RegExp(`/features/${t.id}#post-${post.id}$`))
+  await expect(page.locator(`#post-${post.id}`)).toHaveAttribute('data-revealed', '')
+  await expect(page.locator(`#post-${post.id}`)).toBeInViewport()
+})
+
+/** `count` small files on one post of a new ticket, each its own upload. */
+async function manyFiles(api: Api, agent: APIRequestContext, count: number) {
+  const t = await api.ticket({ title: 'Many files' })
+  const ids: number[] = []
+  for (let i = 0; i < count; i++)
+    ids.push(
+      (
+        await upload(
+          agent,
+          `build-output-with-a-rather-long-name-number-${String(i).padStart(3, '0')}.bin`,
+          Buffer.from([i]),
+        )
+      ).id,
+    )
+  await postWith(agent, t.id, ids)
+  return t
+}
+
+test('a large gallery comes a page at a time, with Load more until the last', async ({
+  page,
+  project,
+  api,
+  human,
+  agent,
+}) => {
+  await manyFiles(api, agent, 61)
+  const first = await ok<Gallery>(human.get(`/api/projects/${project.id}/gallery`))
+  expect(first.items).toHaveLength(60)
+  expect(first.next).toBeTruthy()
+
+  await gallery(page, project.id)
+  await expect(tiles(page)).toHaveCount(60)
+  await page.getByRole('button', { name: 'Load more' }).click()
+  await expect(tiles(page)).toHaveCount(61)
+  await expect(page.getByRole('button', { name: 'Load more' })).toHaveCount(0)
+  // The last page brought the oldest, and none twice.
+  expect(new Set(await tileNames(page)).size).toBe(61)
+  await expect(tiles(page).last()).toContainText('number-000.bin')
+})
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  test('no sideways scroll at 390px: filters, tiles with long names and Load more', async ({
+    page,
+    project,
+    api,
+    agent,
+  }) => {
+    await manyFiles(api, agent, 61)
+    await gallery(page, project.id, '?type=other&archived=include')
+    await expect(tiles(page)).toHaveCount(60)
+    await expect(page.getByRole('button', { name: 'Load more' })).toBeVisible()
+    await expect(page.getByRole('group', { name: 'File type' })).toBeVisible()
+    expect(await scrollsSideways(page)).toBe(false)
+    // Fewer columns than on a desktop: two tiles side by side.
+    const [a, b, c] = await Promise.all([0, 1, 2].map((i) => box(tiles(page).nth(i))))
+    expect(a!.y).toBe(b!.y)
+    expect(c!.y).toBeGreaterThan(a!.y)
+    await page.getByRole('button', { name: 'Load more' }).click()
+    await expect(tiles(page)).toHaveCount(61)
+    expect(await scrollsSideways(page)).toBe(false)
+  })
+})

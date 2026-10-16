@@ -31,7 +31,7 @@ import {
   type DeleteKind,
   type DeleteResult,
 } from '#/lib/api'
-import { shortSha } from '#/lib/format'
+import { fileSize, shortSha } from '#/lib/format'
 import { useStages } from '#/lib/project'
 import { stageOf } from '#/lib/stages'
 
@@ -118,9 +118,6 @@ const itemOf = (kind: DeleteKind, { ticket, branch }: Target): DeleteItem => ({
   ...(kind === 'worktrees' ? { worktrees: branch.worktrees.filter((w) => !w.main).map((w) => w.path) } : {}),
 })
 
-const size = (n: number) =>
-  n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
-
 const copy = (text: string) =>
   navigator.clipboard.writeText(text).then(
     () => toast.success('Copied'),
@@ -151,7 +148,7 @@ function Cleanup() {
         toast.error(
           `Deleted ${r.deleted} file${r.deleted === 1 ? '' : 's'}; ${r.failed} could not be deleted and stay for the next run`,
         )
-      else toast.success(`Deleted ${r.deleted} file${r.deleted === 1 ? '' : 's'} (${size(r.bytes)})`)
+      else toast.success(`Deleted ${r.deleted} file${r.deleted === 1 ? '' : 's'} (${fileSize(r.bytes)})`)
       void refetch()
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -474,7 +471,7 @@ function Cleanup() {
           <h2 className="text-sm font-medium">
             Unattached uploads{' '}
             <span className="text-muted-foreground">
-              · {uploads.count} · {size(uploads.bytes)}
+              · {uploads.count} · {fileSize(uploads.bytes)}
             </span>
           </h2>
           <p className="text-xs text-muted-foreground">
@@ -485,7 +482,7 @@ function Cleanup() {
           <div className="flex items-center gap-2 rounded-lg border p-3 text-sm">
             <Paperclip className="size-4 shrink-0 text-muted-foreground" />
             <span className="flex-1">
-              {uploads.count} file{uploads.count === 1 ? '' : 's'}, {size(uploads.bytes)}
+              {uploads.count} file{uploads.count === 1 ? '' : 's'}, {fileSize(uploads.bytes)}
             </span>
             <AlertDialog open={confirmSweep} onOpenChange={setConfirmSweep}>
               <AlertDialogTrigger render={<Button variant="outline" size="sm" disabled={sweep.isPending} />}>
@@ -495,8 +492,9 @@ function Cleanup() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Delete the unattached uploads?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {uploads.count} file{uploads.count === 1 ? '' : 's'} ({size(uploads.bytes)}) that no post,
-                    reply, ticket or agent picture uses, uploaded more than a day ago. This cannot be undone.
+                    {uploads.count} file{uploads.count === 1 ? '' : 's'} ({fileSize(uploads.bytes)}) that no
+                    post, reply, ticket or agent picture uses, uploaded more than a day ago. This cannot be
+                    undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

@@ -43,6 +43,10 @@ export function shiftDate(date: string, days: number): string {
   return localDate(d)
 }
 
+/** A file's size: 512 B, 40 KB, 3.2 MB. */
+export const fileSize = (n: number) =>
+  n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
+
 export const shortSha = (sha: string) => sha.slice(0, 7)
 
 /** PR queue statuses. Ticket stages carry their own names (`#/lib/stages`). */

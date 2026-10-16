@@ -8,6 +8,7 @@ import { isAgent } from './auth'
 import { cleanupReport } from './cleanup'
 import { dailyReport, today } from './daily'
 import * as features from './features'
+import { galleryShape, listGallery } from './gallery'
 import { HttpError } from './http'
 import * as needs from './needs'
 import { isActive, managedPreview, restartPreview, startPreview, stopPreview } from './managedPreview'
@@ -557,6 +558,12 @@ It replaces the previous note; each new version is also posted to the ticket's f
     'A file someone attached to a post or reply: name, type, size and the absolute path to open it on this machine (windowsPath too when the board runs in WSL).',
     { attachmentId: z.number().int() },
     ({ attachmentId }) => uploads.attachmentView(uploads.getAttachment(attachmentId)),
+  )
+  tool(
+    'list_gallery',
+    "The project's files, newest first: every file on its tickets' posts, on the replies under those posts and with their instructions (a lane's under the lane), each with name, type, kind, size, who uploaded it and when, the absolute path to open it on this machine (windowsPath too when the board runs in WSL), its ticket (id, title, parentId for a lane), where it is (source: post, reply or instructions, with postId and commentId) and anchor (the #hash of the ticket page's link to that post or reply). Files of archived tickets only with archived: include. A page at a time: pass next back as cursor for the next one, null after the last.",
+    { projectId: z.number().int(), ...galleryShape },
+    ({ projectId, ...filters }) => listGallery(projectId, filters),
   )
   tool(
     'list_actors',
