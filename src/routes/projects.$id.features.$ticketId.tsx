@@ -1921,7 +1921,9 @@ function SummaryCard({ t }: { t: TicketFull }) {
       <Markdown className="mt-2">{s.body}</Markdown>
       <Attachments items={s.attachments} />
       {/* The stand-in's replies are under the post itself, in Agents. */}
-      {!s.fallback && <SummaryReplies postId={s.postId} count={replies(s.postId)} />}
+      {/* Keyed by version: a rewrite swaps in a new post, and a draft or a reply-to begun under the
+          old one must not go to the new one. */}
+      {!s.fallback && <SummaryReplies key={s.postId} postId={s.postId} count={replies(s.postId)} />}
       {history && (
         <ol aria-label="Earlier versions" className="mt-3 space-y-3 border-t pt-3">
           {!data && <li className="text-xs text-muted-foreground">Loading…</li>}

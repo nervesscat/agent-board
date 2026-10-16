@@ -373,6 +373,49 @@ describe('the summary', () => {
   })
 })
 
+describe('a reply', () => {
+  it('is refused under a comment of another thread, and nests under one of its own', async () => {
+    const t = newTicket('nested replies')
+    const v1 = features.setSummary(t.id, { body: 'v1' }, 'claude')
+    const under = await call('POST', '/api/comments', AGENT, {
+      parentType: 'update',
+      parentId: v1.postId,
+      body: 'on v1',
+    })
+    const v2 = features.setSummary(t.id, { body: 'v2', change: 'again' }, 'claude')
+    const stray = await call('POST', '/api/comments', HUMAN, {
+      parentType: 'update',
+      parentId: v2.postId,
+      replyTo: under.body.id,
+      body: 'an answer begun under v1',
+    })
+    expect(stray.status).toBe(400)
+    expect(stray.body.error).toMatch(/not in this thread/)
+    expect(
+      (
+        await call('POST', '/api/comments', HUMAN, {
+          parentType: 'update',
+          parentId: v2.postId,
+          replyTo: 999_999,
+          body: 'x',
+        })
+      ).status,
+    ).toBe(400)
+    expect(features.listComments('update', v2.postId)).toEqual([])
+    const nested = await call('POST', '/api/comments', HUMAN, {
+      parentType: 'update',
+      parentId: v1.postId,
+      replyTo: under.body.id,
+      body: 'an answer under v1',
+    })
+    expect(nested.status).toBe(201)
+    expect(features.listComments('update', v1.postId).map((c) => [c.body, c.replyTo])).toEqual([
+      ['on v1', null],
+      ['an answer under v1', under.body.id],
+    ])
+  })
+})
+
 describe('Needs you from either tab', () => {
   it('reaches the human whichever tab the post that waits on them is in', async () => {
     const { getSummary } = await import('./summary')

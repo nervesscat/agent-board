@@ -1749,6 +1749,15 @@ export function addComment(
     return addComment({ ...input, parentType: 'update', parentId: post.id, replyTo: null }, actor)
   }
   const projectId = commentProject(input.parentType, input.parentId)
+  // A reply nests under a comment of the same thread: one elsewhere would be stored where no thread shows it.
+  if (input.replyTo) {
+    const to = db.select().from(schema.comments).where(eq(schema.comments.id, input.replyTo)).get()
+    if (!to || to.parentType !== input.parentType || to.parentId !== input.parentId)
+      throw new HttpError(
+        400,
+        `comment ${input.replyTo} is not in this thread (${input.parentType} ${input.parentId})`,
+      )
+  }
   const { author, via } = signer(projectId, actor, input.as)
   const row = db
     .insert(schema.comments)

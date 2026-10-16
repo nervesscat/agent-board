@@ -174,3 +174,42 @@ test('the summary takes replies like a post: shown on its card, opened by a link
   await expect(earlier.getByText('On version one.')).toBeVisible()
   await expect(card.getByText('On version one.')).toBeInViewport()
 })
+
+test('a rewrite of the summary drops a reply begun under the old version: nothing goes to the new one by mistake', async ({
+  page,
+  api,
+  agent,
+  human,
+}) => {
+  const t = await api.ticket({ title: 'Rewritten while typing' })
+  type Summary = { postId: number }
+  const v1 = await ok<Summary>(agent.put(`/api/tickets/${t.id}/summary`, { data: { body: 'Version one.' } }))
+  await ok(
+    agent.post('/api/comments', { data: { parentType: 'update', parentId: v1.postId, body: 'Agent note.' } }),
+  )
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const card = page.getByRole('article', { name: 'Summary' })
+  await card.getByRole('group', { name: 'Summary actions' }).getByRole('button', { name: '1 reply' }).click()
+  await card.getByRole('group', { name: 'Reply actions' }).getByRole('button', { name: 'reply' }).click()
+  await expect(card.getByText(/^replying to claude/)).toBeVisible()
+  await card.getByRole('textbox', { name: 'Reply' }).fill('Begun under version one.')
+
+  // The agent rewrites it while the human types.
+  const v2 = await ok<Summary>(
+    agent.put(`/api/tickets/${t.id}/summary`, { data: { body: 'Version two.', change: 'rewritten' } }),
+  )
+  // The ticket page polls every 10 s: the card takes the new version on the next one.
+  await expect(card).toContainText('Version two.', { timeout: 15_000 })
+
+  // The draft and its reply-to were v1's: the card holds neither, and a reply from it goes under v2.
+  await expect(card.getByText(/^replying to/)).toHaveCount(0)
+  await card.getByRole('group', { name: 'Summary actions' }).getByRole('button', { name: 'reply' }).click()
+  await expect(card.getByRole('textbox', { name: 'Reply' })).toHaveText('')
+  await card.getByRole('textbox', { name: 'Reply' }).fill('Under version two.')
+  await card.getByRole('button', { name: 'Reply', exact: true }).click()
+  await expect(card.getByText('Under version two.')).toBeVisible()
+  const under2 = await ok<{ body: string; replyTo: number | null }[]>(
+    human.get(`/api/comments?parentType=update&parentId=${v2.postId}`),
+  )
+  expect(under2.map((c) => [c.body, c.replyTo])).toEqual([['Under version two.', null]])
+})
