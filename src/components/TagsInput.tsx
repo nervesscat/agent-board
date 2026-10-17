@@ -166,7 +166,16 @@ export function TagsInput({
         />
       </div>
       {choices.length > 0 && value.length < MAX_TAGS && (
-        <div role="group" aria-label="Suggested tags" className="flex min-w-0 flex-wrap gap-1">
+        // At most two rows of chips, the rest a scroll away, so that many suggestions do not stretch the
+        // form. A chip is 1rem of text-xs line, 0.25rem of padding and 2px of border; two of them, the
+        // 0.25rem gap and the 0.125rem padding each side make the height. The padding keeps a focused
+        // chip's outline clear of the scroll box's edge; the negative margins give its room back (the
+        // bottom one only when nothing follows, so a parent's `space-y` gap below is kept).
+        <div
+          role="group"
+          aria-label="Suggested tags"
+          className="-mx-0.5 -mt-0.5 flex max-h-[calc(2*(1rem+0.25rem+2px)+0.25rem+0.25rem)] min-w-0 flex-wrap gap-1 overflow-y-auto p-0.5 last:-mb-0.5"
+        >
           {choices.map((tag) => (
             <button
               key={tag}

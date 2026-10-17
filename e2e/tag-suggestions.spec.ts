@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
 
 import type { Project, TicketFull } from '#/lib/api'
 import { expect, ok, test } from './fixtures'
@@ -80,6 +80,101 @@ test('chips under the Tags field offer the suggestions and the tags in use, in t
   await expect.poll(async () => (await api.getTicket(created.id)).tags).toEqual(['ui', 'Forms', 'Bug'])
 })
 
+/** As many suggestions as a project can have (50), more than two rows of chips at any width. */
+const MANY = Array.from({ length: 50 }, (_, i) => `Module ${i + 1}`)
+
+/**
+ * The suggested chips' box: its heights, its overflow, and the height two rows of its chips take with
+ * the gap between them and the box's own padding.
+ */
+const chipBox = (group: Locator) =>
+  group.evaluate((el) => {
+    const style = getComputedStyle(el)
+    const chip = el.querySelector('button')!.getBoundingClientRect().height
+    const px = (v: string) => parseFloat(v)
+    return {
+      client: el.clientHeight,
+      scroll: el.scrollHeight,
+      scrollTop: el.scrollTop,
+      overflowY: style.overflowY,
+      twoRows: 2 * chip + px(style.rowGap) + px(style.paddingTop) + px(style.paddingBottom),
+    }
+  })
+
+/** Many chips: two rows of them show, no more, and the rest scroll. */
+async function expectTwoRowsThatScroll(group: Locator) {
+  const box = await chipBox(group)
+  expect(box.overflowY).toBe('auto')
+  expect(box.client).toBeLessThanOrEqual(Math.ceil(box.twoRows))
+  expect(box.client).toBeGreaterThanOrEqual(Math.floor(box.twoRows))
+  expect(box.scroll).toBeGreaterThan(box.client)
+}
+
+/** Scrolls the group to its last chip and presses it: its tag is added and the focus stays in `field`. */
+async function addLastChip(group: Locator, field: Locator, scope: Page | Locator) {
+  const last = group.getByRole('button').last()
+  const name = (await last.getAttribute('aria-label'))!.replace(/^Add tag /, '')
+  await last.scrollIntoViewIfNeeded()
+  expect((await chipBox(group)).scrollTop).toBeGreaterThan(0)
+  await expect(last).toBeInViewport()
+  await last.click()
+  await expect(scope.getByRole('button', { name: `Remove ${name}` })).toBeVisible()
+  await expect(group.getByRole('button', { name: `Add tag ${name}` })).toHaveCount(0)
+  await expect(field).toBeFocused()
+}
+
+test('many suggested chips stay two rows tall and scroll, in the New ticket dialog and on the ticket', async ({
+  page,
+  project,
+  api,
+  human,
+}) => {
+  await ok(human.patch(`/api/projects/${project.id}`, { data: { tagSuggestions: MANY } }))
+  const created = await api.ticket({ title: 'Untagged' })
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  const dialog = page.getByRole('dialog')
+  const group = dialog.getByRole('group', { name: 'Suggested tags' })
+  await expect(group.getByRole('button')).toHaveCount(50)
+  await expectTwoRowsThatScroll(group)
+  const field = dialog.getByLabel('Tags (optional)')
+  await field.click()
+  await addLastChip(group, field, dialog)
+  await expect(group.getByRole('button')).toHaveCount(49)
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+
+  await page.goto(`/projects/${project.id}/features/${created.id}`)
+  await page.getByRole('button', { name: '+ tags' }).click()
+  const inline = page.getByRole('group', { name: 'Suggested tags' })
+  const inlineField = page.getByRole('textbox', { name: 'Tags, comma separated' })
+  await expect(inline.getByRole('button')).toHaveCount(50)
+  await expectTwoRowsThatScroll(inline)
+  await expect(inlineField).toBeFocused()
+  await addLastChip(inline, inlineField, page)
+  await inlineField.press('Enter')
+  await expect.poll(async () => (await api.getTicket(created.id)).tags).toEqual(['Module 50'])
+})
+
+test('a few suggested chips take their own height, with no scroll', async ({ page, project }) => {
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  const group = page.getByRole('dialog').getByRole('group', { name: 'Suggested tags' })
+  await expect(group.getByRole('button')).toHaveText(DEFAULTS)
+  const box = await chipBox(group)
+  expect(box.scroll).toBe(box.client)
+  // As tall as the rows its chips take and its padding, no room left empty.
+  const rows = await group.evaluate((el) => {
+    const style = getComputedStyle(el)
+    const rects = [...el.querySelectorAll('button')].map((b) => b.getBoundingClientRect())
+    const top = Math.min(...rects.map((r) => r.top))
+    const bottom = Math.max(...rects.map((r) => r.bottom))
+    return bottom - top + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+  })
+  expect(Math.abs(box.client - rows)).toBeLessThanOrEqual(1)
+  expect(box.client).toBeLessThanOrEqual(Math.ceil(box.twoRows))
+})
+
 test('the board filter by tag lives in ?tag=, matches any casing, and clears', async ({
   page,
   project,
@@ -159,6 +254,27 @@ test.describe('at 390px', () => {
     await expect(chip).toBeInViewport()
     await chip.tap()
     await expect(dialog.getByRole('button', { name: 'Remove A rather long module name' })).toBeVisible()
+    expect(await scrollsSideways(page)).toBe(false)
+  })
+
+  test('many suggested chips stay two rows tall and scroll, without a sideways scroll', async ({
+    page,
+    project,
+    human,
+  }) => {
+    await ok(human.patch(`/api/projects/${project.id}`, { data: { tagSuggestions: MANY } }))
+    await page.goto(`/projects/${project.id}/features?view=board`)
+    await page.getByRole('button', { name: 'New ticket' }).click()
+    const dialog = page.getByRole('dialog')
+    const group = dialog.getByRole('group', { name: 'Suggested tags' })
+    await expect(group.getByRole('button')).toHaveCount(50)
+    await expectTwoRowsThatScroll(group)
+    expect(await scrollsSideways(page)).toBe(false)
+    const last = group.getByRole('button').last()
+    await last.scrollIntoViewIfNeeded()
+    await expect(last).toBeInViewport()
+    await last.tap()
+    await expect(dialog.getByRole('button', { name: 'Remove Module 50' })).toBeVisible()
     expect(await scrollsSideways(page)).toBe(false)
   })
 })
