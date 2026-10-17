@@ -303,10 +303,10 @@ untick the phases the new work redoes first.
    on another platform than yours, and a failure there is a failed check like any other, fixed
    through the builder before you hand off, never waved through as flaky without a rerun that
    passes. Only when a review ran (mid and high) and the PR's head SHA is the SHA whose review survived,
-   record that review on the PR so
-   the review queue does not run it again: `post_review_result` with its verdict, its `summary.md`
-   as `summaryMd`, the `sha`, its checks and counts, and `repoId` when the project has several
-   repos. Right before, check `list_review_results` (with `sha`) and the ledger for a newer review
+   record that review on the PR's ticket so the review queue does not run it again: `post_review_result`
+   with its verdict, its `summary.md` as `summaryMd`, the `sha`, its checks and counts, and `repoId` when
+   the project has several repos. It also posts the summary there as a progress post, on the PR's ticket
+   (`ticket` in `list_prs`). Right before, check `list_review_results` (with `sha`) and the ledger for a newer review
    of that SHA: post only when there is none. A newer one that did not survive is not posted over:
    the change did not survive, and its findings go back to the builder (step 5).
    Tick PR once it is open, and CI once its checks are green.

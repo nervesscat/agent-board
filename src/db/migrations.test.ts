@@ -340,9 +340,67 @@ describe('0028_task_complexity', () => {
   })
 })
 
-describe('0029_post_tabs_and_summary', () => {
-  it('sorts every existing post into a tab of the feed by the rules a new post goes by, and changes nothing else', () => {
+describe('0029_ticket_pr_link', () => {
+  it('adds the PR link column without rebuilding the tickets, so their tasks, posts and lanes stay', () => {
     const sqlite = databaseAt('0028_task_complexity')
+    const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
+    const ticket = (title: string, parentId: number | null = null) =>
+      Number(
+        sqlite
+          .prepare('INSERT INTO tickets (project_id, parent_id, title, created_by) VALUES (?, ?, ?, ?)')
+          .run(project, parentId, title, 'enrique').lastInsertRowid,
+      )
+    const feature = ticket('feature')
+    const lane = ticket('lane', feature)
+    const daily = ticket('daily ticket')
+    const step = Number(
+      sqlite.prepare('INSERT INTO tasks (ticket_id, text, position) VALUES (?, ?, ?)').run(feature, 'step', 0)
+        .lastInsertRowid,
+    )
+    sqlite
+      .prepare('INSERT INTO tasks (ticket_id, parent_id, text, position) VALUES (?, ?, ?, ?)')
+      .run(feature, step, 'subtask', 0)
+    sqlite
+      .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+      .run(feature, 'enrique', 'a post')
+    sqlite
+      .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+      .run(lane, 'claude', 'a lane post')
+
+    const rows = () => ({
+      tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
+      tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
+      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
+    })
+    const before = rows()
+    expect(before.tickets).toHaveLength(3)
+    expect(before.tasks).toHaveLength(2)
+    expect(before.updates).toHaveLength(2)
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(columns(sqlite, 'tickets')).toContain('pr_id')
+    const after = rows()
+    // The same tickets, tasks and posts, row for row; the new column is empty on every ticket.
+    expect(after.tickets.map((t) => t.id)).toEqual([feature, lane, daily])
+    expect(after.tickets.map((t) => t.pr_id)).toEqual([null, null, null])
+    // Every other column is what it was (toEqual leaves an undefined column out of the comparison).
+    expect(after.tickets.map((t) => ({ ...t, pr_id: undefined }))).toEqual(before.tickets)
+    expect(after.tasks).toEqual(before.tasks)
+    // A later migration adds the posts' tab and summary columns: the rest of each post is what it was.
+    expect(after.updates.map(({ tab: _t, summary: _s, summary_change: _c, ...rest }) => rest)).toEqual(
+      before.updates,
+    )
+    expect(sqlite.prepare('SELECT parent_id FROM tickets WHERE id = ?').get(lane)).toEqual({
+      parent_id: feature,
+    })
+    sqlite.close()
+  })
+})
+
+describe('0030_post_tabs_and_summary', () => {
+  it('sorts every existing post into a tab of the feed by the rules a new post goes by, and changes nothing else', () => {
+    const sqlite = databaseAt('0029_ticket_pr_link')
     const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
     const ticket = Number(
       sqlite

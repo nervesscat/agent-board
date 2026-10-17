@@ -1,6 +1,6 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
-import type { Project } from '#/lib/api'
+import type { PrRow, Project } from '#/lib/api'
 import { inDatabase } from './db'
 import { HUMAN } from './env'
 import { type Api, expect, ok, section, test } from './fixtures'
@@ -910,28 +910,25 @@ test('Back and Forward over a #link in a review result mark nothing', async ({ p
   await expect(page.locator('[data-revealed]')).toHaveCount(0)
 })
 
-test("a reply on a PR's thread opens it on the PR's tab", async ({ page, project, agent, human }) => {
+test("a PR's card opens its ticket, and has no thread", async ({ page, project, human }) => {
   const pr = seedPr(project, {
     title: 'Mine, reviewed',
     author: HUMAN,
     waitingOn: 'others',
     stage: 'reviewed',
   })
-  await ok(human.post('/api/comments', { data: { parentType: 'pr', parentId: pr.id, body: 'Is CI green?' } }))
-  const r = await ok<Row>(
-    agent.post('/api/comments', { data: { parentType: 'pr', parentId: pr.id, body: 'CI is green now.' } }),
-  )
-  await overview(page, project)
-  const link = needsYou(page).getByRole('link', { name: `PR #${pr.number} Mine, reviewed` })
-  await expect(link).toHaveAttribute('href', `/projects/${project.id}/prs#pr-${pr.id}-reply-${r.id}`)
-  await link.click()
-  // To review shows no PR of the human's own: the queue switches to the filter that shows it.
-  await expect(page.getByRole('tab', { name: /^Waiting on others/ })).toHaveAttribute('aria-selected', 'true')
-  await expect(page).toHaveURL(new RegExp(`filter=others#pr-${pr.id}-reply-${r.id}$`))
-  await expect(page.getByRole('tab', { name: /^Reviewed/ })).toHaveAttribute('aria-selected', 'true')
+  // The refresh opens a ticket for each open PR that no feature ticket names.
+  const rows = await ok<PrRow[]>(human.get(`/api/projects/${project.id}/prs?refresh=1`))
+  const ticket = rows.find((p) => p.id === pr.id)?.ticket
+  expect(ticket).toBeTruthy()
+  await page.goto(`/projects/${project.id}/prs#pr-${pr.id}`)
   const card = page.locator(`#pr-${pr.id}`)
-  await expect(card.getByRole('button', { name: 'thread' })).toHaveAttribute('aria-expanded', 'true')
-  await expectRevealed(page, reply(page, r.id), topBar(page))
+  await expect(card.getByRole('link', { name: 'Open ticket' })).toHaveAttribute(
+    'href',
+    `/projects/${project.id}/features/${ticket!.id}`,
+  )
+  await expect(card.getByRole('button', { name: 'thread', exact: true })).toHaveCount(0)
+  await expectRevealed(page, card, topBar(page))
 })
 
 test('a reply on a review result opens it, scrolled to the reply', async ({

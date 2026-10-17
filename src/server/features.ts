@@ -1,7 +1,13 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { type Complexity, DEFAULT_COMPLEXITY, type FeedTab, RESUME_TEMPLATE } from '#/lib/constants'
+import {
+  COMMENT_PARENTS,
+  type Complexity,
+  DEFAULT_COMPLEXITY,
+  type FeedTab,
+  RESUME_TEMPLATE,
+} from '#/lib/constants'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
 import { isHumanName, listActors } from './actors'
@@ -12,7 +18,8 @@ import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
 import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
 import { previewState, previewUrl, type PreviewState } from './preview'
-import { prForTicket, refreshPrsInBackground, withMergeCheck } from './prs'
+import { cancelSupersededPrTickets, prTicketStage } from './prTickets'
+import { prForTicket, prStatus, refreshPrsInBackground, withMergeCheck } from './prs'
 import { NO_PUSH, pushStates } from './push'
 import { resolveRepo, ticketRepo } from './repos'
 import { reportDueFor } from './reportDue'
@@ -43,14 +50,17 @@ export type LaneCounts = {
 /**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
  * theirs), how many of those tasks are blocked on the human, and how many lanes it has in each stage.
- * One pass over the project keeps this cheap.
+ * One pass over the project keeps this cheap. A PR's own ticket is left out unless `prTickets` (a
+ * ticket's own page reads it that way): it lives in the PR queue, not on the features board.
  */
-function projectTickets(projectId: number) {
+function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
   const stages = listStages(projectId)
   const rows = db
     .select()
     .from(schema.tickets)
-    .where(eq(schema.tickets.projectId, projectId))
+    .where(
+      and(eq(schema.tickets.projectId, projectId), opts.prTickets ? undefined : isNull(schema.tickets.prId)),
+    )
     .orderBy(desc(schema.tickets.updatedAt))
     .all()
   const ids = rows.map((t) => t.id)
@@ -288,7 +298,7 @@ export function getTicket(id: number) {
  */
 export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) {
   const ticket = getTicket(id)
-  const all = projectTickets(ticket.projectId)
+  const all = projectTickets(ticket.projectId, { prTickets: true })
   const byId = new Map(all.map((t) => [t.id, t]))
   const self = byId.get(id)!
   const ancestors: { id: number; title: string }[] = []
@@ -506,6 +516,7 @@ export function createTicket(
   actor: string,
 ) {
   const { parent, repo, baseBranch } = placement(projectId, input)
+  if (parent?.prId) throw new HttpError(400, `ticket ${parent.id} is a PR's: it has no lanes`)
   // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
   const attachmentIds = input.attachmentIds ?? []
   assertUnattached(attachmentIds)
@@ -547,7 +558,22 @@ export function createTicket(
     refType: 'ticket',
     refId: row.id,
   })
+  if (row.prNumber || row.branch) takeOverPrTickets(row, actor)
   return row
+}
+
+/**
+ * A feature ticket that names a PR (by its number, or its branch as the PR's head) takes the PR over from the
+ * PR's own ticket: that one is cancelled, and its feed says where the PR went.
+ */
+function takeOverPrTickets(t: schema.Ticket, actor: string) {
+  for (const own of cancelSupersededPrTickets(t, actor))
+    postUpdate(
+      own.id,
+      `PR #${own.number} has a feature ticket now, #${t.id} ${t.title}, so this ticket is cancelled.`,
+      [],
+      actor,
+    )
 }
 
 /** Bump a ticket and its parents, so a busy lane keeps its parent near the top of the board. */
@@ -595,6 +621,16 @@ export function updateTicket(
   opts: { agent?: boolean } = {},
 ) {
   const before = getTicket(id)
+  if (before.prId) {
+    // A PR's own ticket is for that PR, in that repo, and has no branch of its own.
+    if (
+      (patch.prNumber !== undefined && patch.prNumber !== before.prNumber) ||
+      (patch.repoId !== undefined && patch.repoId !== before.repoId)
+    )
+      throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: its PR and repo cannot change`)
+    if (patch.branch !== undefined && patch.branch !== before.branch)
+      throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: it has no branch of its own`)
+  }
   if (patch.assignee !== undefined && patch.assignee !== before.assignee) {
     // Tickets are shared between agents, except one the human reserved for one of the project's agents.
     const holder = opts.agent ? reservedFor(before) : null
@@ -640,6 +676,8 @@ export function updateTicket(
     refType: 'ticket',
     refId: id,
   })
+  if (!row.prId && (patch.prNumber !== undefined || patch.branch !== undefined || patch.repoId !== undefined))
+    takeOverPrTickets(row, actor)
   return row
 }
 
@@ -673,9 +711,12 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
         ? `ticket ${id} is reserved for ${holder.name}, not ${as.name}`
         : `ticket ${id} is reserved for ${holder.name}: claim it with as: "${holder.name}" and work it as that agent, briefed with its instructions`,
     )
+  if (before.prId && opts.branch !== undefined && opts.branch !== before.branch)
+    throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: it has no branch of its own`)
   const assignee = as?.name ?? actor
   const active = firstOfKind(stages, 'active')
-  const start = (from.kind === 'open' || from.kind === 'blocked') && active ? active : null
+  // A PR's own ticket keeps its stage: its PR's status is what sets it.
+  const start = !before.prId && (from.kind === 'open' || from.kind === 'blocked') && active ? active : null
   const row = db
     .update(schema.tickets)
     .set({
@@ -700,6 +741,7 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
       refType: 'ticket',
       refId: id,
     })
+  if (!row.prId && opts.branch !== undefined) takeOverPrTickets(row, assignee)
   return row
 }
 
@@ -717,6 +759,11 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
  */
 export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { reopenTo?: string } = {}) {
   const t = getTicket(id)
+  if (t.prId && verdict !== null)
+    throw new HttpError(
+      409,
+      `ticket ${id} is PR #${t.prNumber}'s: a PR is reviewed on the PR queue, not approved`,
+    )
   const before = verdictOf(t)
   if (before === verdict) return t
   const now = new Date().toISOString()
@@ -772,6 +819,9 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
 /** Lanes go with the ticket unless `keepLanes`, which moves them up to the ticket's own parent. */
 export function deleteTicket(id: number, actor: string, opts: { keepLanes?: boolean } = {}) {
   const t = getTicket(id)
+  // A PR's ticket is kept, not deleted: while its PR is open the next refresh would open it again, and the
+  // human archives it like any finished ticket.
+  if (t.prId) throw new HttpError(409, `PR #${t.prNumber}'s ticket cannot be deleted: archive it instead`)
   // Its workspaces go with it (and its lanes', unless they are kept).
   const all = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, t.projectId)).all()
   const gone = [id, ...(opts.keepLanes ? [] : laneTree(all, id).map((l) => l.id))]
@@ -1448,11 +1498,18 @@ export async function setResumeNote(
 
 // --- comments (threads on tickets, updates, PRs, review results) ---
 
+/** The parent types a thread can have. The comments a PR once had stay in the database, unread. */
+function assertThreadParent(parentType: string) {
+  if (!(COMMENT_PARENTS as readonly string[]).includes(parentType))
+    throw new HttpError(400, `${parentType} has no thread`)
+}
+
 /**
  * A thread. On a ticket that is its posts, oldest first, shaped like comments (with `progress`); on a
- * post, its replies; on a PR or a review result, its comments.
+ * post, its replies; on a review result, its comments.
  */
 export function listComments(parentType: schema.CommentParent, parentId: number) {
+  assertThreadParent(parentType)
   if (parentType === 'ticket') {
     const posts = db
       .select()
@@ -1558,7 +1615,6 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
         )
         .all()
     : []
-  const prs = db.select().from(schema.prs).where(eq(schema.prs.projectId, projectId)).all()
   const reviews = db
     .select({
       id: schema.reviewResults.id,
@@ -1570,26 +1626,29 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
     .where(eq(schema.reviewResults.projectId, projectId))
     .all()
 
-  // owners: whose subject it is (a ticket's assignee and opener, a post's author).
+  // owners: whose subject it is (a ticket's assignee and opener, a post's author). A PR's own ticket is
+  // its PR's author's.
+  const authors = new Map(
+    db
+      .select({ id: schema.prs.id, author: schema.prs.author })
+      .from(schema.prs)
+      .where(eq(schema.prs.projectId, projectId))
+      .all()
+      .map((p) => [p.id, p.author]),
+  )
   type Subject = { ticketId: number | null; title: string; owners: string[] }
   const subjects = new Map<string, Subject>()
   for (const t of tickets)
     subjects.set(`ticket:${t.id}`, {
       ticketId: t.id,
       title: t.title,
-      owners: [t.assignee, t.createdBy],
+      owners: t.prId === null ? [t.assignee, t.createdBy] : [authors.get(t.prId) ?? ''],
     })
   for (const u of updates)
     subjects.set(`update:${u.id}`, {
       ticketId: u.ticketId,
       title: `post on #${u.ticketId} ${ticketById.get(u.ticketId)?.title ?? ''}: ${gist(u.body, 60)}`,
       owners: [u.author],
-    })
-  for (const p of prs)
-    subjects.set(`pr:${p.id}`, {
-      ticketId: null,
-      title: `PR #${p.number} ${p.title}`,
-      owners: [p.author],
     })
   for (const r of reviews)
     subjects.set(`review:${r.id}`, {
@@ -1600,7 +1659,7 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
 
   const ids = (type: string) =>
     [...subjects.keys()].filter((k) => k.startsWith(`${type}:`)).map((k) => Number(k.split(':')[1]))
-  const comments = (['update', 'pr', 'review'] as const).flatMap((type) => {
+  const comments = (['update', 'review'] as const).flatMap((type) => {
     const parentIds = ids(type)
     return parentIds.length
       ? db
@@ -1735,6 +1794,7 @@ export function addComment(
   },
   actor: string,
 ): schema.Comment | schema.Update {
+  assertThreadParent(input.parentType)
   // On a ticket, a comment is a post (not progress); with replyTo, a reply under that post, in its tab.
   if (input.parentType === 'ticket') {
     if (!input.replyTo)
@@ -1865,8 +1925,9 @@ export function askDecision(
 /**
  * The human's answer to a decision: the option picked, and an optional note. It is posted as a reply
  * under the decision too, so the agent that asked finds it in its threads. A blocked ticket goes back
- * to the project's first active stage once no decision on it is left open. Deciding again changes
- * the answer, and drops a relayed one: the card then shows only the human's own decision.
+ * to the project's first active stage once no decision on it is left open, except a PR's ticket, which
+ * goes to the stage its PR's status gives. Deciding again changes the answer, and drops a relayed one:
+ * the card then shows only the human's own decision.
  */
 export function decide(postId: number, option: number, note: string, actor: string) {
   const post = getPost(postId)
@@ -1963,12 +2024,19 @@ function settleDecision(post: { id: number; ticketId: number }, actor: string, r
       ),
     )
     .get()
-  const active = firstOfKind(stages, 'active')
-  if (!stillOpen && active && kindOf(stages, ticket.status) === 'blocked')
-    db.update(schema.tickets)
-      .set({ status: active.key, ...startedPatch(stages, ticket.status, active.key, ticket.startedAt) })
-      .where(eq(schema.tickets.id, ticket.id))
-      .run()
+  if (!stillOpen && kindOf(stages, ticket.status) === 'blocked') {
+    // A PR's ticket goes to the stage its PR's status gives. Otherwise (any other ticket, or the PR's stage or
+    // row missing), to the first active stage.
+    const pr = ticket.prId
+      ? db.select().from(schema.prs).where(eq(schema.prs.id, ticket.prId)).get()
+      : undefined
+    const back = (pr && prTicketStage(stages, prStatus(pr))) ?? firstOfKind(stages, 'active')
+    if (back && back.key !== ticket.status)
+      db.update(schema.tickets)
+        .set({ status: back.key, ...startedPatch(stages, ticket.status, back.key, ticket.startedAt) })
+        .where(eq(schema.tickets.id, ticket.id))
+        .run()
+  }
   touch(ticket.id)
   logActivity({
     projectId: ticket.projectId,
@@ -2072,6 +2140,8 @@ export function deletePost(id: number, actor: string, opts: { human?: boolean } 
 
 export function editComment(id: number, body: string, actor: string, opts: { human?: boolean } = {}) {
   const before = getComment(id)
+  // Checked before the write: a comment on a thread that no longer exists is not changed.
+  const projectId = commentProject(before.parentType, before.parentId)
   mayChange(before, actor, opts.human ?? false)
   const row = db
     .update(schema.comments)
@@ -2080,7 +2150,7 @@ export function editComment(id: number, body: string, actor: string, opts: { hum
     .returning()
     .get()!
   logActivity({
-    projectId: commentProject(row.parentType, row.parentId),
+    projectId,
     actor,
     kind: 'comment',
     text: `edited a reply on ${row.parentType} #${row.parentId}`,
@@ -2093,11 +2163,13 @@ export function editComment(id: number, body: string, actor: string, opts: { hum
 /** Replies nested under it go with it, and their files. */
 export function deleteComment(id: number, actor: string, opts: { human?: boolean } = {}) {
   const c = getComment(id)
+  // Checked before the delete: a comment on a thread that no longer exists is not removed.
+  const projectId = commentProject(c.parentType, c.parentId)
   mayChange(c, actor, opts.human ?? false)
   db.delete(schema.comments).where(eq(schema.comments.replyTo, id)).run()
   db.delete(schema.comments).where(eq(schema.comments.id, id)).run()
   logActivity({
-    projectId: commentProject(c.parentType, c.parentId),
+    projectId,
     actor,
     kind: 'comment',
     text: `deleted a reply by ${c.author} on ${c.parentType} #${c.parentId}: ${firstLine(c.body, 60)}`,
@@ -2114,11 +2186,6 @@ function commentProject(parentType: schema.CommentParent, parentId: number): num
       const u = db.select().from(schema.updates).where(eq(schema.updates.id, parentId)).get()
       if (!u) throw notFound('update')
       return getTicket(u.ticketId).projectId
-    }
-    case 'pr': {
-      const pr = db.select().from(schema.prs).where(eq(schema.prs.id, parentId)).get()
-      if (!pr) throw notFound('PR')
-      return pr.projectId
     }
     case 'review': {
       const r = db.select().from(schema.reviewResults).where(eq(schema.reviewResults.id, parentId)).get()

@@ -5,6 +5,8 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import type { CommentParent } from '#/lib/constants'
+
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-'))
 process.env.DATA_DIR = tmp
@@ -749,6 +751,359 @@ describe('PR reviews', () => {
     expect(features.setVerdict(ok.id, null, 'enrique').status).toBe('review')
     const plain = features.createTicket(pid, { title: 'feature', status: 'review' }, 'me')
     expect(features.setVerdict(plain.id, 'approved', 'enrique').status).toBe('review')
+  })
+})
+
+describe('PR threads are gone', () => {
+  it('refuse writes and reads on a PR, and no list shows the comments it once had', async () => {
+    const { db, schema } = await import('#/db')
+    const { HttpError } = await import('./http')
+    const pid = db.insert(schema.projects).values({ name: 'old pr threads' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/old-pr-threads' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 3,
+        title: 'old',
+        url: 'https://github.com/acme/app/pull/3',
+        author: 'ana',
+        headRef: 'feat/3',
+        baseRef: 'main',
+        headSha: 'abc3def0123',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    // A comment from before the change, under the PR's id: the row stays as it is.
+    const oldParent = 'pr' as unknown as CommentParent
+    const old = db
+      .insert(schema.comments)
+      .values({ parentType: oldParent, parentId: pr.id, author: 'ana', body: 'Is CI green?' })
+      .returning()
+      .get()
+
+    const refused = (f: () => unknown) => expect(f).toThrow(HttpError)
+    refused(() => features.listComments(oldParent, pr.id))
+    refused(() => features.addComment({ parentType: oldParent, parentId: pr.id, body: 'yes' }, 'enrique'))
+    refused(() => features.editComment(old.id, 'changed', 'ana'))
+    refused(() => features.deleteComment(old.id, 'ana'))
+    expect(db.select().from(schema.comments).where(eq(schema.comments.id, old.id)).get()).toEqual(old)
+    expect(features.listOpenThreads(pid, 'ana')).toEqual([])
+    expect(features.listHumanThreads(pid, ['enrique'])).toEqual([])
+  })
+})
+
+describe('PR tickets', () => {
+  it('stay out of the feature lists and counts, and nothing a feature does changes their PR, repo or branch', async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const projects = await import('./projects')
+    const stagesMod = await import('./stages')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket lists' }).returning().get().id
+    const [repo, other] = db
+      .insert(schema.repos)
+      .values([
+        { projectId: pid, name: 'app', repoPath: '/r/pr-lists', baseBranch: 'main' },
+        { projectId: pid, name: 'web', repoPath: '/r/pr-lists-web', baseBranch: 'main' },
+      ])
+      .returning()
+      .all()
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId: repo!.id,
+        number: 5,
+        title: 'five',
+        url: 'https://github.com/acme/app/pull/5',
+        author: 'ana',
+        headRef: 'feat/5',
+        baseRef: 'main',
+        headSha: 'abc5def0123',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    const feature = features.createTicket(pid, { title: 'feature', repoId: repo!.id }, 'claude')
+    prTickets.openPrTickets(pid, () => 'pending')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    expect(own).toMatchObject({
+      title: 'PR #5: five',
+      status: 'todo',
+      prNumber: 5,
+      repoId: repo!.id,
+      branch: '',
+    })
+
+    // The lists and the counts leave it out; the ticket's own read keeps it.
+    expect(features.listTickets(pid).map((t) => t.id)).toEqual([feature.id])
+    expect(features.listTickets(pid, { parentId: null }).map((t) => t.id)).toEqual([feature.id])
+    expect(features.listTickets(pid, { archived: 'include' }).map((t) => t.id)).toEqual([feature.id])
+    expect(features.listTickets(pid, { archived: 'only' })).toEqual([])
+    expect(features.getTicket(own.id).id).toBe(own.id)
+    expect(features.getTicketFull(own.id)).toMatchObject({ id: own.id, pr: { number: 5 } })
+    expect(stagesMod.stageCounts(pid)).toEqual({ todo: 1 })
+    expect(stagesMod.stageCounts(pid, { prTickets: true })).toEqual({ todo: 2 })
+    expect(projects.listProjects().find((p) => p.id === pid)!.counts.tickets).toBe(1)
+
+    // No lane under it, no approval, no new PR, repo or branch: its PR is the one it was opened for.
+    expect(() => features.createTicket(pid, { title: 'lane', parentId: own.id }, 'claude')).toThrow(
+      'no lanes',
+    )
+    expect(() => features.setVerdict(own.id, 'approved', 'enrique')).toThrow('reviewed on the PR queue')
+    expect(() => features.updateTicket(own.id, { prNumber: 6 }, 'claude')).toThrow('cannot change')
+    expect(() => features.updateTicket(own.id, { repoId: other!.id }, 'claude')).toThrow('cannot change')
+    expect(() => features.updateTicket(own.id, { branch: 'feat/5' }, 'claude')).toThrow(
+      'no branch of its own',
+    )
+    expect(() => features.claimTicket(own.id, 'claude', { branch: 'feat/5' })).toThrow('no branch of its own')
+    // Claiming it keeps its stage; its title still changes.
+    expect(features.claimTicket(own.id, 'claude')).toMatchObject({ status: 'todo', assignee: 'claude' })
+    expect(features.updateTicket(own.id, { title: 'PR #5: five (renamed)' }, 'claude').title).toBe(
+      'PR #5: five (renamed)',
+    )
+
+    // A stage's removal counts them: they must be moved first.
+    const todo = stagesMod.listStages(pid).find((s) => s.key === 'todo')!
+    expect(() => stagesMod.deleteStage(pid, todo.id, {}, 'enrique')).toThrow('2 tickets in To do')
+  })
+
+  it('are taken over by a feature ticket that names their PR, unless they are done or cancelled', async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const pid = db.insert(schema.projects).values({ name: 'takeover' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/takeover' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const stored = (number: number) =>
+      db
+        .insert(schema.prs)
+        .values({
+          projectId: pid,
+          repoId,
+          number,
+          title: `pr ${number}`,
+          url: `https://github.com/acme/app/pull/${number}`,
+          author: 'ana',
+          headRef: `feat/${number}`,
+          baseRef: 'main',
+          headSha: 'abc6def0123',
+          updatedAt: now,
+          fetchedAt: now,
+        })
+        .returning()
+        .get()
+    const six = stored(6)
+    const seven = stored(7)
+    const eight = stored(8)
+    prTickets.openPrTickets(pid, () => 'pending')
+    const ownOf = (pr: { id: number }) =>
+      db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    // 7 is done already: a feature ticket naming it leaves its ticket alone.
+    features.updateTicket(ownOf(seven).id, { status: 'done' }, 'enrique')
+
+    // By branch, when the ticket is made; by number, when it is claimed with its branch.
+    const named = features.createTicket(pid, { title: 'six', branch: 'feat/6' }, 'claude')
+    const claimed = features.createTicket(pid, { title: 'eight' }, 'claude')
+    features.createTicket(pid, { title: 'seven', prNumber: 7 }, 'claude')
+    features.claimTicket(claimed.id, 'claude', { branch: 'feat/8' })
+
+    expect(ownOf(six)).toMatchObject({ status: 'cancelled', archivedAt: null })
+    expect(features.getTicketFull(ownOf(six).id).updates.map((u) => u.body)).toEqual([
+      `PR #6 has a feature ticket now, #${named.id} six, so this ticket is cancelled.`,
+    ])
+    expect(ownOf(eight)).toMatchObject({ status: 'cancelled' })
+    expect(ownOf(seven)).toMatchObject({ status: 'done' })
+    expect(features.getTicketFull(ownOf(seven).id).updates).toEqual([])
+  })
+
+  it("cannot be deleted: the next refresh would open its PR's ticket again", async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const { HttpError } = await import('./http')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket delete' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/pr-ticket-delete' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 12,
+        title: 'twelve',
+        url: 'https://github.com/acme/app/pull/12',
+        author: 'ana',
+        headRef: 'feat/12',
+        baseRef: 'main',
+        headSha: 'abc12def0123',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(pid, () => 'pending')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+
+    let refusal: unknown
+    try {
+      features.deleteTicket(own.id, 'enrique')
+    } catch (err) {
+      refusal = err
+    }
+    expect(refusal).toBeInstanceOf(HttpError)
+    expect(refusal).toMatchObject({
+      status: 409,
+      message: "PR #12's ticket cannot be deleted: archive it instead",
+    })
+    expect(features.getTicket(own.id).prId).toBe(pr.id)
+    // The PR's refresh keeps the one ticket it has: it does not open another.
+    prTickets.openPrTickets(pid, () => 'pending')
+    expect(db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).all()).toHaveLength(1)
+  })
+
+  it('goes back to To do when a decision on it is answered, not to In progress', async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket decide' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/pr-ticket-decide' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 13,
+        title: 'thirteen',
+        url: 'https://github.com/acme/app/pull/13',
+        author: 'ana',
+        headRef: 'feat/13',
+        baseRef: 'main',
+        headSha: 'abc13def0123',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(pid, () => 'pending')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    expect(own.status).toBe('todo')
+
+    // The agent asks the human: the ticket is blocked until the answer.
+    const q = features.askDecision(
+      own.id,
+      { body: 'which way?', options: [{ label: 'A' }, { label: 'B' }] },
+      'claude',
+    )
+    expect(features.getTicket(own.id).status).toBe('blocked')
+    features.decide(q.id, 0, '', 'enrique')
+    expect(features.getTicket(own.id).status).toBe('todo')
+  })
+
+  it("stays in Blocked when a decision on an on-hold PR's ticket is answered", async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket decide hold' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/pr-ticket-decide-hold' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 14,
+        title: 'fourteen',
+        url: 'https://github.com/acme/app/pull/14',
+        author: 'ana',
+        headRef: 'feat/14',
+        baseRef: 'main',
+        headSha: 'abc14def0123',
+        hold: true,
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(pid, () => 'on_hold')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    expect(own.status).toBe('blocked')
+
+    const q = features.askDecision(
+      own.id,
+      { body: 'hold or drop?', options: [{ label: 'Hold' }, { label: 'Drop' }] },
+      'claude',
+    )
+    features.decide(q.id, 1, '', 'enrique')
+    expect(features.getTicket(own.id).status).toBe('blocked')
+  })
+
+  it("falls back to In progress when the project has no stage for its PR's status", async () => {
+    const { db, schema } = await import('#/db')
+    const prTickets = await import('./prTickets')
+    const stagesMod = await import('./stages')
+    const pid = db.insert(schema.projects).values({ name: 'pr ticket decide gone' }).returning().get().id
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId: pid, name: 'app', repoPath: '/r/pr-ticket-decide-gone' })
+      .returning()
+      .get().id
+    const now = new Date().toISOString()
+    const pr = db
+      .insert(schema.prs)
+      .values({
+        projectId: pid,
+        repoId,
+        number: 15,
+        title: 'fifteen',
+        url: 'https://github.com/acme/app/pull/15',
+        author: 'ana',
+        headRef: 'feat/15',
+        baseRef: 'main',
+        headSha: 'abc15def0123',
+        reviewStage: 'reviewed',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get()
+    prTickets.openPrTickets(pid, () => 'reviewed')
+    const own = db.select().from(schema.tickets).where(eq(schema.tickets.prId, pr.id)).get()!
+    expect(own.status).toBe('review')
+    // The review stage becomes a done stage: no stage is left of the kind the PR's status gives.
+    const review = stagesMod.listStages(pid).find((s) => s.kind === 'review')!
+    stagesMod.updateStage(pid, review.id, { kind: 'done' }, 'enrique')
+
+    const q = features.askDecision(
+      own.id,
+      { body: 'which way?', options: [{ label: 'A' }, { label: 'B' }] },
+      'claude',
+    )
+    features.decide(q.id, 0, '', 'enrique')
+    expect(features.getTicket(own.id).status).toBe('in_progress')
   })
 })
 

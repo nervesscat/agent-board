@@ -111,7 +111,7 @@ finished, except a low ticket's build, which goes to hand-off on the project's c
 evidence, with no runner. One runner per PR or branch; two at once only when they share no repo, fixed
 port or browser.
 
-**Give it:** \`REPO\` (the main checkout), \`TARGET\` (the PR number or the branch), \`ticket=<id>\`,
+**Give it:** \`REPO\` (the main checkout), \`TARGET\` (the PR number or the branch), \`ticket=<id>\` (for a PR: its \`ticket\` in \`list_prs\`, the feature ticket that names the PR or else the PR's own ticket),
 its port range and whether it may use the browser.
 
 **Returns:** eight lines: status, verdict, the three checks, counts, SHA and the paths of
