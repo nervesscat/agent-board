@@ -247,8 +247,6 @@ function Features() {
   )
 }
 
-const ALL_TAGS = '__all__'
-
 /**
  * The tag the Board and the List are narrowed to (`?tag=`): the project's suggestions and the tags its
  * tickets carry, most used first. A tag from a link that none of them has is offered too. `count` is how
@@ -272,16 +270,17 @@ function TagFilter({
   return (
     <div className="flex min-w-0 items-center gap-1">
       <Select
-        value={value ? current : ALL_TAGS}
-        onValueChange={(v) => onChange(!v || v === ALL_TAGS ? '' : v)}
-        items={{ [ALL_TAGS]: 'All tags', ...Object.fromEntries(all.map((t) => [t, t])) }}
+        // "All tags" is no value at all (null), so no tag, whatever it is spelled, can be taken for it.
+        value={value ? current : null}
+        onValueChange={(v) => onChange(v ?? '')}
+        items={Object.fromEntries(all.map((t) => [t, t]))}
       >
         <SelectTrigger size="sm" aria-label="Filter by tag" className="max-w-56 min-w-0">
           <Tags className="text-muted-foreground" />
-          <SelectValue />
+          <SelectValue placeholder="All tags" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL_TAGS}>All tags</SelectItem>
+          <SelectItem value={null}>All tags</SelectItem>
           {all.map((t) => (
             <SelectItem key={t} value={t}>
               {t}
