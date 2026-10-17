@@ -6,8 +6,9 @@ import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import type { CommentParent } from '#/lib/constants'
-import { type FileKind, fileKind } from '#/lib/fileKinds'
+import { FILE_KINDS, type FileKind, GALLERY_SORTS, type GallerySort, fileKind } from '#/lib/fileKinds'
 import { parseAnchor } from '#/lib/reveal'
+import type { GalleryQuery } from './gallery'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-gallery-'))
@@ -307,6 +308,115 @@ describe('filters, order and pages', () => {
     }
   })
 
+  describe('every order', () => {
+    // Names equal but for case, sizes and kinds shared, times shared: each order has ties to break.
+    const specs: [string, string, number, string][] = [
+      ['b.png', 'image/png', 300, '2026-03-01T10:00:00.000Z'],
+      ['B.png', 'image/png', 100, '2026-03-01T10:00:00.000Z'],
+      ['a.pdf', 'application/pdf', 300, '2026-03-02T10:00:00.000Z'],
+      ['A.pdf', 'application/pdf', 200, '2026-03-02T10:00:00.000Z'],
+      ['c.md', 'text/markdown', 100, '2026-03-03T10:00:00.000Z'],
+      ['clip.webm', 'video/webm', 300, '2026-03-01T10:00:00.000Z'],
+      ['zeta.zip', 'application/zip', 200, '2026-03-04T10:00:00.000Z'],
+      ['b.png', 'image/png', 200, '2026-03-05T10:00:00.000Z'],
+      ['Alpha.png', 'image/png', 100, '2026-03-05T10:00:00.000Z'],
+    ]
+    type Made = { id: number; name: string; size: number; createdAt: string; kind: FileKind }
+    let p = 0
+    let made: Made[] = []
+    beforeAll(() => {
+      p = newProject('every order')
+      const post = newPost(newTicket(p, 'T').id)
+      made = specs.map(([name, mime, size, createdAt]) => {
+        const id = db()
+          .insert(s().attachments)
+          .values({
+            name,
+            mime,
+            size,
+            createdAt,
+            storedAs: `${name}-${size}`,
+            uploadedBy: 'claude',
+            updateId: post,
+          })
+          .returning()
+          .get().id
+        return { id, name, size, createdAt, kind: fileKind({ name, mime }) }
+      })
+    })
+
+    const by =
+      <T extends string | number>(key: (m: Made) => T, descending = false) =>
+      (x: Made, y: Made) => {
+        const kx = key(x)
+        const ky = key(y)
+        const c = kx < ky ? -1 : kx > ky ? 1 : x.id - y.id
+        return descending ? -c : c
+      }
+    const rank = (k: FileKind) => FILE_KINDS.indexOf(k)
+    const expected: Record<GallerySort, (x: Made, y: Made) => number> = {
+      newest: by((m) => m.createdAt, true),
+      oldest: by((m) => m.createdAt),
+      name: by((m) => m.name.toLowerCase()),
+      'name-desc': by((m) => m.name.toLowerCase(), true),
+      largest: by((m) => m.size, true),
+      smallest: by((m) => m.size),
+      type: (x, y) => rank(x.kind) - rank(y.kind) || by((m) => m.name.toLowerCase())(x, y),
+    }
+
+    const walk = (q: Omit<GalleryQuery, 'cursor'>) => {
+      const seen: number[] = []
+      let cursor: string | undefined
+      do {
+        const page = gallery.listGallery(p, { ...q, limit: 2, cursor })
+        expect(page.items.length).toBeLessThanOrEqual(2)
+        seen.push(...ids(page))
+        cursor = page.next ?? undefined
+      } while (cursor)
+      return seen
+    }
+
+    it.each(GALLERY_SORTS)('sorts by %s and pages through every file once, two at a time', (sort) => {
+      const want = [...made].sort(expected[sort]).map((m) => m.id)
+      expect(ids(gallery.listGallery(p, { sort }))).toEqual(want)
+      expect(walk({ sort })).toEqual(want)
+    })
+
+    it.each(GALLERY_SORTS)('pages by %s under a kind filter', (sort) => {
+      const want = [...made]
+        .filter((m) => m.kind === 'image' || m.kind === 'pdf')
+        .sort(expected[sort])
+        .map((m) => m.id)
+      expect(walk({ sort, type: ['image', 'pdf'] })).toEqual(want)
+    })
+
+    it('names order ignores case, and by type is by kind, then name', () => {
+      const names = (sort: GallerySort) => gallery.listGallery(p, { sort }).items.map((i) => i.name)
+      expect(names('name').slice(0, 4)).toEqual(['a.pdf', 'A.pdf', 'Alpha.png', 'b.png'])
+      expect(gallery.listGallery(p, { sort: 'type' }).items.map((i) => i.kind)).toEqual([
+        'image',
+        'image',
+        'image',
+        'image',
+        'video',
+        'pdf',
+        'pdf',
+        'docs',
+        'other',
+      ])
+      expect(names('type').slice(0, 4)).toEqual(['Alpha.png', 'b.png', 'B.png', 'b.png'])
+    })
+
+    it('refuses a cursor handed out by another order, so paging on never skips or repeats', () => {
+      const first = gallery.listGallery(p, { sort: 'name', limit: 2 })
+      for (const sort of GALLERY_SORTS.filter((s) => s !== 'name'))
+        expect(() => gallery.listGallery(p, { sort, limit: 2, cursor: first.next! }), sort).toThrow(/cursor/)
+      // A cursor from before the orders, [createdAt, id], is not one either.
+      const old = Buffer.from(JSON.stringify(['2026-03-01T10:00:00.000Z', made[0]!.id])).toString('base64url')
+      expect(() => gallery.listGallery(p, { cursor: old })).toThrow(/cursor/)
+    })
+  })
+
   it('pages stay right under a kind filter', () => {
     const p = newProject('filtered pages')
     const post = newPost(newTicket(p, 'T').id)
@@ -381,6 +491,40 @@ describe('the gallery over REST and MCP', () => {
     const second = await call(`/api/projects/${p}/gallery?limit=2&sort=oldest&cursor=${first.body.next}`)
     expect(second.body.items.map((i: { id: number }) => i.id)).toEqual(made.slice(2))
     expect(second.body.next).toBeNull()
+
+    // Every order over REST, the same as list_gallery, page for page.
+    file('A-big.png', { updateId: post }, { createdAt: '2026-05-04T10:00:00.000Z' })
+    for (const sort of GALLERY_SORTS) {
+      let cursor = ''
+      const seen: string[] = []
+      do {
+        const rest = await call(
+          `/api/projects/${p}/gallery?limit=2&sort=${sort}${cursor && `&cursor=${cursor}`}`,
+        )
+        expect(rest.status, sort).toBe(200)
+        const listed = await tool('list_gallery', {
+          projectId: p,
+          sort,
+          limit: 2,
+          ...(cursor ? { cursor } : {}),
+        })
+        expect(JSON.parse(listed.content[0]!.text), sort).toEqual(rest.body)
+        seen.push(...rest.body.items.map((i: { name: string }) => i.name))
+        cursor = rest.body.next ?? ''
+      } while (cursor)
+      expect(seen, sort).toEqual(gallery.listGallery(p, { sort }).items.map((i) => i.name))
+    }
+    expect(
+      (await call(`/api/projects/${p}/gallery?limit=2&sort=name`)).body.items.map(
+        (i: { name: string }) => i.name,
+      ),
+    ).toEqual(['A-big.png', 'p1.png'])
+    // A cursor is good for the order that handed it out only.
+    const byName = await call(`/api/projects/${p}/gallery?limit=2&sort=name`)
+    const reused = await call(`/api/projects/${p}/gallery?limit=2&sort=largest&cursor=${byName.body.next}`)
+    expect(reused.status).toBe(400)
+    expect(reused.body.error).toMatch(/cursor/)
+    expect((await tool('list_gallery', { projectId: p, sort: 'sideways' })).isError).toBe(true)
 
     for (const bad of [
       'type=bogus',

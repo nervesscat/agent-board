@@ -726,8 +726,8 @@ api.get('/api/uploads/:id', async ({ request, params }) => {
   })
 })
 
-// The project's gallery: the files on its tickets, newest first, a page at a time. ?type=image,pdf (kinds,
-// comma-separated), ?from=&to= (local days, inclusive), ?sort=oldest, ?archived=include, ?cursor= (the
+// The project's gallery: the files on its tickets, newest first by default, a page at a time. ?type=image,pdf (kinds,
+// comma-separated), ?from=&to= (local days, inclusive), ?sort= (an order of GALLERY_SORTS), ?archived=include, ?cursor= (the
 // last page's next), ?limit= (60 by default, 200 at most).
 api.get('/api/projects/:id/gallery', async ({ request, params, url }) => {
   const q = url.searchParams

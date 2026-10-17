@@ -187,8 +187,8 @@ Lanes of a ticket you are working are yours to create (next section).
 - Files the human attaches (screenshots on a post or reply) come with `path` (and
   `windowsPath` when the board runs in WSL): open that file directly. `get_attachment` looks one
   up by id. To find a file again, `list_gallery` lists the project's files (posts, replies under
-  them, instructions), filtered by `type` and the upload days `from`/`to`, newest first, a page at a
-  time (`next` back as `cursor`), each with its ticket and the post or reply it came with.
+  them, instructions), filtered by `type` and the upload days `from`/`to`, newest first or by `sort` (`oldest`,
+  `name`, `name-desc`, `largest`, `smallest`, `type`), a page at a time (`next` back as `cursor`), each with its ticket and the post or reply it came with.
 
 ### Delegating
 

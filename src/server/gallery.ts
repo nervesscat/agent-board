@@ -1,4 +1,4 @@
-import { type SQL, and, asc, desc, eq, gt, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
+import { type SQL, and, asc, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import { z } from 'zod'
 
@@ -9,6 +9,8 @@ import {
   DOCUMENT_MIMES,
   FILE_KINDS,
   type FileKind,
+  GALLERY_SORTS,
+  type GallerySort,
   TEXT_EXTENSIONS,
   TEXT_MIMES,
 } from '#/lib/fileKinds'
@@ -20,7 +22,7 @@ import { attachmentView } from './uploads'
 
 /**
  * A project's gallery: every file on its tickets' posts, on the replies under those posts and with
- * their instructions, newest first. A lane's files are listed under its top-level ticket, with the lane
+ * their instructions, newest first unless asked otherwise. A lane's files are listed under its top-level ticket, with the lane
  * that holds them as `lane`. Report files, agents'
  * pictures, replies on PRs and review results, and uploads nothing holds are not on a ticket, so they
  * are not here. It only reads: browsing it holds no upload (src/server/unattached.ts).
@@ -44,7 +46,12 @@ export const galleryShape = {
     ),
   from: Day.optional().describe('uploaded on or after this local day, YYYY-MM-DD'),
   to: Day.optional().describe('uploaded on or before this local day, YYYY-MM-DD'),
-  sort: z.enum(['newest', 'oldest']).optional().describe('newest first by default'),
+  sort: z
+    .enum(GALLERY_SORTS)
+    .optional()
+    .describe(
+      'newest (the default) or oldest first by upload time; name or name-desc, A to Z or Z to A ignoring case; largest or smallest first by size; type: by kind (image, video, pdf, docs, other), then name. Ties go by id',
+    ),
   archived: z
     .enum(['hide', 'include'])
     .optional()
@@ -83,16 +90,53 @@ export const kindSql: SQL<FileKind> = sql<FileKind>`CASE
   )} THEN 'docs'
   ELSE 'other' END`
 
-/** Where a page ended: the last file's time and id, opaque to the caller. */
-const encodeCursor = (createdAt: string, id: number) =>
-  Buffer.from(JSON.stringify([createdAt, id])).toString('base64url')
+const nameSql = sql<string>`lower(${a.name})`
+const kindRankSql = sql<number>`CASE ${kindSql} ${sql.join(
+  FILE_KINDS.map((k, i) => sql`WHEN ${k} THEN ${i}`),
+  sql` `,
+)} END`
 
-function decodeCursor(cursor: string): { createdAt: string; id: number } {
+/**
+ * What each order sorts by, all in one direction, before the id that breaks ties: the keyset compares
+ * the row (keys, id) with the last one handed out.
+ */
+const ORDERS: Record<GallerySort, { keys: SQL[]; descending: boolean }> = {
+  newest: { keys: [sql`${a.createdAt}`], descending: true },
+  oldest: { keys: [sql`${a.createdAt}`], descending: false },
+  name: { keys: [nameSql], descending: false },
+  'name-desc': { keys: [nameSql], descending: true },
+  largest: { keys: [sql`${a.size}`], descending: true },
+  smallest: { keys: [sql`${a.size}`], descending: false },
+  type: { keys: [kindRankSql, nameSql], descending: false },
+}
+
+type Key = string | number
+
+/** Where a page ended: its order, the last file's sort keys (as SQL gave them) and id, opaque to the caller. */
+const encodeCursor = (sort: GallerySort, keys: Key[], id: number) =>
+  Buffer.from(JSON.stringify([sort, ...keys, id])).toString('base64url')
+
+function decodeCursor(cursor: string, sort: GallerySort): { keys: Key[]; id: number } {
+  let parts: unknown
   try {
-    const [createdAt, id] = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as unknown[]
-    if (typeof createdAt === 'string' && Number.isInteger(id)) return { createdAt, id: id as number }
+    parts = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
   } catch {
     // falls through to the refusal
+  }
+  if (Array.isArray(parts)) {
+    const [from, ...rest] = parts as unknown[]
+    // A cursor of another order points into a different sequence: paging on with it would skip or repeat.
+    if (from !== sort && GALLERY_SORTS.includes(from as GallerySort))
+      throw new HttpError(400, `cursor: handed out for sort ${String(from)}, not ${sort}`)
+    const id = rest.pop()
+    const keys = rest.filter((k): k is Key => typeof k === 'string' || Number.isFinite(k))
+    if (
+      from === sort &&
+      Number.isInteger(id) &&
+      keys.length === ORDERS[sort].keys.length &&
+      keys.length === rest.length
+    )
+      return { keys, id: id as number }
   }
   throw new HttpError(400, 'cursor: not one this list handed out')
 }
@@ -100,7 +144,8 @@ function decodeCursor(cursor: string): { createdAt: string; id: number } {
 export function listGallery(projectId: number, q: GalleryQuery = {}) {
   getProject(projectId)
   const limit = q.limit ?? GALLERY_PAGE
-  const oldest = q.sort === 'oldest'
+  const sort = q.sort ?? 'newest'
+  const { keys, descending } = ORDERS[sort]
   const where = [eq(t.projectId, projectId)]
   if (q.archived !== 'include') where.push(isNull(t.archivedAt))
   if (q.from) where.push(gte(a.createdAt, dayBounds(q.from).from))
@@ -108,15 +153,21 @@ export function listGallery(projectId: number, q: GalleryQuery = {}) {
   if (q.type?.length) where.push(inArray(kindSql, q.type))
   if (q.cursor) {
     // Keyset: the files after the last one handed out, so files that arrive meanwhile move nothing.
-    const c = decodeCursor(q.cursor)
-    const after = oldest ? gt : lt
-    where.push(or(after(a.createdAt, c.createdAt), and(eq(a.createdAt, c.createdAt), after(a.id, c.id)))!)
+    const c = decodeCursor(q.cursor, sort)
+    where.push(
+      sql`(${sql.join([...keys, sql`${a.id}`], sql`, `)}) ${descending ? sql`<` : sql`>`} (${sql.join(
+        [...c.keys, c.id].map((v) => sql`${v}`),
+        sql`, `,
+      )})`,
+    )
   }
-  const order = oldest ? asc : desc
+  const order = descending ? desc : asc
   const rows = db
     .select({
       file: a,
       kind: kindSql,
+      // The sort keys as SQL computed them, for the cursor: lower() is SQLite's, not JavaScript's.
+      sortKeys: sql<string>`json_array(${sql.join(keys, sql`, `)})`,
       postId: sql<number | null>`coalesce(${a.updateId}, ${reply.parentId})`,
       owner: { id: t.id, title: t.title, parentId: t.parentId },
     })
@@ -127,7 +178,7 @@ export function listGallery(projectId: number, q: GalleryQuery = {}) {
     .leftJoin(replyPost, eq(replyPost.id, reply.parentId))
     .innerJoin(t, eq(t.id, sql`coalesce(${post.ticketId}, ${replyPost.ticketId}, ${a.ticketId})`))
     .where(and(...where))
-    .orderBy(order(a.createdAt), order(a.id))
+    .orderBy(...keys.map((k) => order(k)), order(a.id))
     .limit(limit + 1)
     .all()
   const page = rows.slice(0, limit)
@@ -159,7 +210,10 @@ export function listGallery(projectId: number, q: GalleryQuery = {}) {
               : null,
       }
     }),
-    next: rows.length > limit && last ? encodeCursor(last.file.createdAt, last.file.id) : null,
+    next:
+      rows.length > limit && last
+        ? encodeCursor(sort, JSON.parse(last.sortKeys) as Key[], last.file.id)
+        : null,
   }
 }
 

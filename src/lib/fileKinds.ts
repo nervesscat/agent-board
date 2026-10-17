@@ -64,6 +64,23 @@ export const FILE_KIND_LABEL: Record<FileKind, string> = {
   other: 'Other',
 }
 
+/**
+ * The gallery's orders, in the order they are offered; newest first by default. Name orders ignore
+ * case; by type is by kind (in FILE_KINDS' order), then name. Ties go by id.
+ */
+export const GALLERY_SORTS = ['newest', 'oldest', 'name', 'name-desc', 'largest', 'smallest', 'type'] as const
+export type GallerySort = (typeof GALLERY_SORTS)[number]
+
+export const GALLERY_SORT_LABEL: Record<GallerySort, string> = {
+  newest: 'Newest first',
+  oldest: 'Oldest first',
+  name: 'Name A to Z',
+  'name-desc': 'Name Z to A',
+  largest: 'Largest first',
+  smallest: 'Smallest first',
+  type: 'By type',
+}
+
 export interface FileLike {
   mime: string
   name: string
