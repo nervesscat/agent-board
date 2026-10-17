@@ -1,4 +1,4 @@
-import { and, asc, count, eq } from 'drizzle-orm'
+import { and, asc, count, eq, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { DEFAULT_STAGES, STAGE_KINDS, type StageColor, type StageKind } from '#/lib/constants'
@@ -129,12 +129,17 @@ function getStage(projectId: number, id: number) {
 const log = (projectId: number, actor: string, text: string) =>
   logActivity({ projectId, actor, kind: 'project', text, refType: 'project', refId: projectId })
 
-/** Tickets per stage key, lanes included. */
-export function stageCounts(projectId: number): Record<string, number> {
+/**
+ * Tickets per stage key, lanes included, a PR's own ticket left out unless `prTickets` (a stage's removal
+ * counts them: it moves them too).
+ */
+export function stageCounts(projectId: number, opts: { prTickets?: boolean } = {}): Record<string, number> {
   const rows = db
     .select({ status: schema.tickets.status, n: count() })
     .from(schema.tickets)
-    .where(eq(schema.tickets.projectId, projectId))
+    .where(
+      and(eq(schema.tickets.projectId, projectId), opts.prTickets ? undefined : isNull(schema.tickets.prId)),
+    )
     .groupBy(schema.tickets.status)
     .all()
   return Object.fromEntries(rows.map((r) => [r.status, r.n]))
@@ -198,14 +203,14 @@ export function reorderStages(projectId: number, ids: number[], actor: string) {
 }
 
 /**
- * Remove a stage. Its tickets (lanes too) move to `moveTo` first, which is required when there are
- * any; the last stage of a project stays.
+ * Remove a stage. Its tickets (lanes, and a PR's own ticket, too) move to `moveTo` first, which is required
+ * when there are any; the last stage of a project stays.
  */
 export function deleteStage(projectId: number, id: number, opts: { moveTo?: string }, actor: string) {
   const stages = listStages(projectId)
   const stage = getStage(projectId, id)
   if (stages.length === 1) throw new HttpError(409, 'a project needs at least one stage')
-  const held = stageCounts(projectId)[stage.key] ?? 0
+  const held = stageCounts(projectId, { prTickets: true })[stage.key] ?? 0
   let target: Stage | undefined
   if (held) {
     if (!opts.moveTo)

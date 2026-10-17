@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -543,6 +544,78 @@ describe('archived tickets', () => {
     expect(s.carryingOver).toEqual([])
     expect(s.doneToday.tickets).toEqual([])
     expect(s.next).toMatchObject({ tickets: [], total: 0, blocked: 0, backlog: 0 })
+  })
+})
+
+describe('PR tickets', () => {
+  it('stay out of every list but needs you, where their decisions and threads show as PR rows', async () => {
+    const { db, schema } = dbm
+    const features = await import('./features')
+    const prTickets = await import('./prTickets')
+    const pid = project('pr tickets')
+    const pr = (number: number) =>
+      db
+        .insert(schema.prs)
+        .values({
+          projectId: pid,
+          number,
+          title: `PR ${number}`,
+          url: `https://github.com/o/r/pull/${number}`,
+          author: HUMAN,
+          waitingOn: 'others',
+          headRef: `b${number}`,
+          baseRef: 'main',
+          headSha: 'abc1234',
+          updatedAt: iso(at(7, 9)),
+          fetchedAt: iso(at(7, 9)),
+        })
+        .returning()
+        .get()
+    const [todo, doing, reviewed] = [pr(81), pr(82), pr(83)]
+    prTickets.openPrTickets(pid, (row) => (row.number === 83 ? 'reviewed' : 'pending'))
+    const ownOf = (row: { id: number }) =>
+      db
+        .select()
+        .from(schema.tickets)
+        .all()
+        .find((t) => t.prId === row.id)!
+    // 82 is worked on since before today, with a task waiting on the human and a question asked on it.
+    const doingTicket = ownOf(doing)
+    db.update(schema.tickets)
+      .set({ status: 'in_progress', startedAt: iso(at(5, 9)) })
+      .where(eq(schema.tickets.id, doingTicket.id))
+      .run()
+    features.addTasks(
+      doingTicket.id,
+      [{ text: 'Get the token', blocked: true, blockedReason: 'Give it the token' }],
+      'claude',
+    )
+    features.askDecision(
+      doingTicket.id,
+      { body: 'Ship the fix?', options: [{ label: 'Yes' }, { label: 'No' }], block: false },
+      'claude',
+    )
+    features.addComment(
+      { parentType: 'ticket', parentId: doingTicket.id, body: 'Is it safe to merge?' },
+      'ana',
+    )
+
+    const s = take(pid)
+    // Their decisions and their threads waiting on the human show here, as PR rows.
+    expect(s.needsYou.decisions).toMatchObject([
+      { ticketId: doingTicket.id, ticketTitle: 'PR #82: PR 82', prTicket: true, question: 'Ship the fix?' },
+    ])
+    expect(s.needsYou.threads).toMatchObject([
+      { parentType: 'ticket', ticketId: doingTicket.id, title: 'PR #82: PR 82', prTicket: true, waiting: 2 },
+    ])
+    // Nothing else lists them: not in progress, not in review, not next, not carrying over, not a blocked task.
+    expect(s.inProgress).toEqual([])
+    expect(s.needsYou.reviews).toEqual([])
+    expect(s.needsYou.blockedTasks).toEqual([])
+    expect(s.next).toMatchObject({ tickets: [], total: 0 })
+    expect(s.carryingOver).toEqual([])
+    expect(ownOf(todo).status).toBe('todo')
+    expect(ownOf(reviewed).status).toBe('review')
   })
 })
 

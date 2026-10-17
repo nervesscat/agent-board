@@ -1,0 +1,1 @@
+ALTER TABLE `tickets` ADD `pr_id` integer REFERENCES prs(id) ON DELETE set null;

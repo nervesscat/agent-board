@@ -15,7 +15,6 @@ describe('parseAnchor', () => {
       target: 'reply-40',
       holder: 'post-12',
     })
-    expect(parseAnchor('pr-3-reply-7')).toEqual({ hash: 'pr-3-reply-7', target: 'reply-7', holder: 'pr-3' })
   })
 
   it('has nothing without a hash, and takes anything else as an id as it is', () => {

@@ -3,8 +3,9 @@
 The board at `http://localhost:47100` is where the human and every agent (claude, codex,
 opencode, …) coordinate. You read your work from it and you report back to it. GitHub is
 **read-only** from the board's side, and git too but for the finished branches and worktrees the
-human deletes from its Cleanup page; from yours, acting through the board, both are: never push,
-merge, approve or comment on GitHub on the board's behalf.
+human deletes from its Cleanup page, and the landed local branches deleted with `cleanup_delete`;
+from yours, acting through the board, both are too but for `cleanup_delete`: never push, merge,
+approve or comment on GitHub on the board's behalf.
 
 ## Identity and auth
 
@@ -136,7 +137,7 @@ http_headers = { Authorization = "Bearer gate_…" }
    never off loopback, never the live board.
 
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
-   (`parentType: update`, the post's id), a PR or a review result replies under it. When you cannot
+   (`parentType: update`, the post's id) or on a review result replies under it. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
    answered). When only one step waits on the human and the rest can go on, tag that task blocked
    instead (step 3). When the answer is a choice between clear options (an approach, a trade-off, a scope
@@ -174,7 +175,8 @@ http_headers = { Authorization = "Bearer gate_…" }
    5. PR open, assigned to the human (`gh pr create --assignee <their login>`, or `--assignee @me`
       when you push with their account; GitHub never lets a PR's author be its requested reviewer,
       and the PR queue lists their own PRs under Waiting on others), and `update_ticket` with its
-      `prNumber` (the PR queue then shows the ticket, and the ticket its PR and latest review).
+      `prNumber`: the PR queue then shows this ticket on the PR's card, with the PR and its latest
+      review. A PR ticket the board made for that PR is cancelled, with a post saying so.
    6. **Preview running**: `start_preview` on the workspace and wait for `running` (for a repo the
       board cannot build, start one the project's way and `set_preview`; see Previews above).
       Required whenever the change can be tried; when it cannot (docs only, a script), say why in
@@ -208,14 +210,18 @@ http_headers = { Authorization = "Bearer gate_…" }
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
    `edited`: safe to delete; `unique`: still has work, ask first). Before moving a lane to `done`,
-   remove its worktree and local branch (first any link in it to a folder out of it, such as a
-   `node_modules` linked to another checkout's: on Windows `git worktree remove` deletes what a
-   junction leads to), `remove_workspace`, and `post_update` the deleted branches
-   as `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Never delete
+   delete its local branch once no worktree holds it, and `post_update` the deleted branches as
+   `branch @ sha` (`lane/47 @ 9ec12e8b`) so any can be restored with `git branch`. Do not remove its
+   worktrees: leave them, and the workspaces registered at them, to the human, who removes them from
+   the board's Cleanup page (the board removes each link in one first, the link alone). Never delete
    origin branches: list them for the human, who deletes them from the board's Cleanup page. Never
    delete a branch `cleanup_report` marks `protected` (a base, the main checkout's branch, in use by
    a ticket in work or an open PR). `cleanup_report` lists every leftover of the project's
-   closed tickets (previews the board still runs for them too); the board skill's `/board cleanup` walks it with the human.
+   closed tickets (previews the board still runs for them too); `cleanup_delete` deletes their
+   landed local branches alone (`kind` `local`, items as the report gives them), the board checking
+   each again as for the human and answering the command that restores it, never a worktree nor a
+   branch on origin: `post_update` its deleted `branch @ sha` lines on the ticket. The board skill's
+   `/board cleanup` walks it with the human.
 9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
    `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
    blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that
@@ -283,16 +289,27 @@ routine.
   (approved: by the human on others' PRs, by every reviewer on theirs), `on_hold` (review comments
   or requested changes not yet addressed by a push or a new review request, or a board-side hold)
   or `done` (merged). Each also has where it stands on GitHub (`merge`, `ci` with its `checks`,
-  `reviewDecision`), the latest review verdict and the tickets it came from. An open PR's `merge` is
+  `reviewDecision`), the latest review verdict, `ticket` (below) and `tickets`, the feature tickets it
+  came from. An open PR's `merge` is
   checked in the repo's checkout against origin's base first, so a base that moved shows at the next
   fetch; `mergeCheck` says whether it is that (`local`) or GitHub's word, and as of when. `set_pr_hold` parks
   an open one with a note (board-only). `list_review_results` (by `prNumber`, `sha`) tells whether
   a head SHA was already reviewed; `get_review_result` has the findings.
+- A PR of the queue that no feature ticket names has a ticket of its own, made at the refresh that
+  first sees it, and `list_prs` names it as `ticket` (the ticket its card opens). A feature ticket
+  that names the PR (by its `prNumber`, or by its branch when it names none) is `ticket` instead:
+  no ticket of the PR's is made, and one already made is cancelled, with a post. Reviews, findings
+  and progress on the PR are posts on that ticket. The ticket follows the PR's status: `pending` in
+  To do, `reviewed` in In review, `on_hold` in Blocked, merged in Done, closed without merging in
+  Cancelled (the first stage of each kind); a PR that only leaves the queue keeps its stage. The
+  human archives it, like any finished ticket. A PR ticket is in no features list, count or summary
+  list; its decisions and threads waiting on the human show in Needs you as PR rows. A PR has no
+  comment thread: its discussion is on its ticket.
 - `list_actors` gives the names to use for `assignee`.
 - If you review a PR, record it with `post_review_result` (verdict, markdown summary with
   findings, how to test, checks): that is how findings reach the human, as the verdict on the PR
-  queue and on the ticket's Branch card, which open the result in full. Never post the review to
-  GitHub.
+  queue and on the ticket's Branch card, which open the result in full, and as a progress post on
+  the PR's ticket when it has one. Never post the review to GitHub.
 
 ## Writing style on the board
 

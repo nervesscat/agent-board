@@ -133,6 +133,7 @@ function prRow(projectId: number, n: number, waitingOn: PrRow['waitingOn'], stat
     projectId,
     repoId: null,
     repo: null,
+    ticket: null,
     number: n,
     title: `PR ${n} ${waitingOn} ${status}`,
     url: `https://github.com/example/repo/pull/${n}`,

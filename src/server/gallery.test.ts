@@ -5,6 +5,7 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
+import type { CommentParent } from '#/lib/constants'
 import { type FileKind, fileKind } from '#/lib/fileKinds'
 import { parseAnchor } from '#/lib/reveal'
 
@@ -41,10 +42,11 @@ const newTicket = (projectId: number, title: string, more: { parentId?: number; 
     .get()
 const newPost = (ticketId: number) =>
   db().insert(s().updates).values({ ticketId, author: 'claude', body: 'a post' }).returning().get().id
-const newComment = (parentType: 'update' | 'pr' | 'review', parentId: number) =>
+// 'pr' is no longer a comment parent, but the replies made on PRs before stay in the database.
+const newComment = (parentType: CommentParent | 'pr', parentId: number) =>
   db()
     .insert(s().comments)
-    .values({ parentType, parentId, author: 'claude', body: 'a reply' })
+    .values({ parentType: parentType as CommentParent, parentId, author: 'claude', body: 'a reply' })
     .returning()
     .get().id
 

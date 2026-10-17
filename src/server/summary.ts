@@ -119,7 +119,21 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
   const parse = moveParser(stages)
 
   // --- needs you ---
-  const decisions = ids.length
+  // A PR's own ticket is not in the lists above: its decisions and threads show here as PR rows (`prTicket`).
+  const prTicketRows = db
+    .select()
+    .from(schema.tickets)
+    .where(
+      and(
+        eq(schema.tickets.projectId, project.id),
+        isNotNull(schema.tickets.prId),
+        isNull(schema.tickets.archivedAt),
+      ),
+    )
+    .all()
+  const prTicketById = new Map(prTicketRows.map((t) => [t.id, t]))
+  const deciding = [...ids, ...prTicketRows.map((t) => t.id)]
+  const decisions = deciding.length
     ? db
         .select({
           id: schema.updates.id,
@@ -132,7 +146,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         .from(schema.updates)
         .where(
           and(
-            inArray(schema.updates.ticketId, ids),
+            inArray(schema.updates.ticketId, deciding),
             isNotNull(schema.updates.decision),
             isNull(schema.updates.decidedAt),
           ),
@@ -142,7 +156,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         .map((d) => ({
           postId: d.id,
           ticketId: d.ticketId,
-          ticketTitle: byId.get(d.ticketId)?.title ?? '',
+          ticketTitle: (byId.get(d.ticketId) ?? prTicketById.get(d.ticketId))?.title ?? '',
+          prTicket: prTicketById.has(d.ticketId),
           question: gist(d.body),
           options: d.decision?.length ?? 0,
           author: d.author,
@@ -178,8 +193,11 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
     }))
   const threads = humans.length
     ? listHumanThreads(project.id, humans)
-        .filter((th) => th.ticketId === null || byId.has(th.ticketId))
-        .map(({ as: _as, ...th }) => th)
+        .filter((th) => th.ticketId === null || byId.has(th.ticketId) || prTicketById.has(th.ticketId))
+        .map(({ as: _as, ...th }) => ({
+          ...th,
+          prTicket: th.ticketId !== null && prTicketById.has(th.ticketId),
+        }))
     : []
   // Tasks and subtasks tagged blocked on the human, on work still going: not on a done or cancelled
   // ticket, nor under one (a cancelled lane's tasks are out of the work, as in the rollup).

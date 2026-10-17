@@ -94,7 +94,7 @@ export const DEFAULT_AGENT_NAMES = [
   'merge',
 ] as const
 
-export const COMMENT_PARENTS = ['ticket', 'update', 'pr', 'review'] as const
+export const COMMENT_PARENTS = ['ticket', 'update', 'review'] as const
 export type CommentParent = (typeof COMMENT_PARENTS)[number]
 
 /** One CI check on a PR's head commit, sorted into the buckets `gh pr checks` uses. */

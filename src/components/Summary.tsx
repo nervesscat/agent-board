@@ -276,7 +276,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               meta={
                 <>
                   <span className="truncate">
-                    #{d.ticketId} {d.ticketTitle}
+                    {d.prTicket ? d.ticketTitle : `#${d.ticketId} ${d.ticketTitle}`}
                   </span>
                   <span>
                     {plural(d.options, 'option')} · asked by {d.author} {ago(d.createdAt)}
@@ -335,7 +335,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                     hash={threadAnchor(th)}
                     className="hover:underline"
                   >
-                    {th.parentType === 'ticket' ? `#${th.ticketId} ${th.title}` : th.title}
+                    {th.parentType === 'ticket' && !th.prTicket ? `#${th.ticketId} ${th.title}` : th.title}
                   </Link>
                 ) : (
                   <Link
