@@ -1,4 +1,4 @@
-import { asc, count, eq, type SQL } from 'drizzle-orm'
+import { asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
@@ -31,7 +31,8 @@ function withPhases<T extends { defaultPhases: string[] | null }>(p: T) {
 /** Projects with their repos and what they hold, for the top-bar menu and agents' `list_projects`. */
 export function listProjects() {
   const repos = listRepos()
-  const tickets = countBy(schema.tickets.projectId, schema.tickets)
+  // The features' count: a PR's own ticket is in the PR queue only.
+  const tickets = countBy(schema.tickets.projectId, schema.tickets, isNull(schema.tickets.prId))
   const prs = countBy(schema.prs.projectId, schema.prs, eq(schema.prs.open, true))
   return db
     .select()

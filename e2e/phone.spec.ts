@@ -7,6 +7,12 @@ import type { TicketFull } from '#/lib/api'
 import { named, pushedPill, reminder, seedDailyPage, today, yesterday } from './dailyPage'
 import { expect, ok, seededProject, test } from './fixtures'
 
+// A daily report left missing shows its reminder on every later test's pages once its shift has ended,
+// so each test here turns its project's reports off when it is done (as `quiet()` does in dailyPage.ts).
+test.afterEach(async ({ human, project }) => {
+  await ok(human.patch(`/api/projects/${project.id}/report-settings`, { data: { cadence: 'off' } }))
+})
+
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
 /** Whether the page itself scrolls sideways (a board's own column scroller does not count). */

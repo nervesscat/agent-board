@@ -8,8 +8,9 @@ description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - 
 The board is where the human and every agent coordinate. Its tools come from the `board` MCP
 server. If they are missing, say so and stop: the human connects it with a gate token from the
 board's Connect agents page ({{BOARD_URL}}/agents). {{MCP_HINT}} Git and GitHub stay read-only
-through the board for you (only the human deletes finished branches, from its Cleanup page): never
-push, merge, approve or comment on GitHub on its behalf.
+through the board for you, but for closed tickets' landed local branches, which `cleanup_delete`
+deletes (worktrees and origin's branches are the human's, from its Cleanup page): never push,
+merge, approve or comment on GitHub on its behalf.
 
 ## Keep the board out of the repo
 
@@ -252,8 +253,9 @@ the ticket as its item is done:
 5. PR open, assigned to the human, `prNumber` set: `gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account (GitHub never lets a PR's author be its
    requested reviewer; the PR queue lists the human's own PRs under Waiting on others). Then
-   `update_ticket` with the PR's `prNumber`: the PR queue shows the ticket, and `get_ticket` the PR
-   with its latest review. (A PR on the ticket's branch links by itself.)
+   `update_ticket` with the PR's `prNumber`: the PR queue shows this ticket on the PR's card, and
+   `get_ticket` the PR with its latest review. A PR ticket the board made for that PR is cancelled,
+   with a post, and this ticket takes the PR over. (A PR on the ticket's branch links by itself.)
 6. **Preview running**: `start_preview` on the workspace, then `get_ticket` until its
    `managedPreview` is `running` (`failed`: read the log lines and fix). For a repo the board cannot
    build, start one the project's way and `set_preview` (see Previews in
@@ -355,12 +357,18 @@ worked:
     would change nothing. Safe (`git branch -D`); say so in the update.
   - `unique`: the branch still has work its bases lack; the commits are listed. Do not delete it
     without the human's go-ahead.
-- Deleting: `git worktree remove <path>`, then `git branch -d|-D <name>`, then `remove_workspace`
-  for each workspace, then **one** `post_update` on the ticket listing every deleted branch with
-  its commit hash, as `branch @ sha` (e.g. `lane/47 @ 9ec12e8b`). That line is the only way back:
-  `git branch lane/47 9ec12e8b` restores it. Before `git worktree remove`, remove each link in the
-  worktree to a folder out of it (a `node_modules` or `data` linked to another checkout's), the link
-  alone: on Windows git deletes what a junction leads to.
+- Deleting a branch: `git branch -d|-D <name>` once no worktree holds it, then **one**
+  `post_update` on the ticket listing every deleted branch with its commit hash, as `branch @ sha`
+  (e.g. `lane/47 @ 9ec12e8b`). That line is the only way back: `git branch lane/47 9ec12e8b`
+  restores it.
+- Worktrees: do not remove them. Leave each, and the workspaces registered at it, to the human, who
+  removes it from the board's Cleanup page with the branch it holds (the board removes each link in
+  it first, the link alone).
+- A closed ticket's (done, cancelled or archived) landed local branches: `cleanup_delete` deletes
+  them, items as `cleanup_report` gives them (`kind` `local`, the `sha` it shows). The board checks
+  each one again first, as for the human (landed, not protected, not moved since, held by no
+  worktree) and answers each with its `restore` command; post those `branch @ sha` lines as above.
+  It takes no worktree and no branch on origin.
 - Branches on origin: never delete them (git and GitHub stay read-only for you). List the ones
   left for closed tickets in the update, so the human deletes them from the board's Cleanup page.
 - A branch `cleanup_report` marks `protected` (a base, the main checkout's branch, origin's default
@@ -383,12 +391,14 @@ When the human asks to clean up (`/board cleanup`, "clean up branches", "clean u
 4. Show the human one table, grouped as **safe to delete** (merged, rebased), **edited but
    present** and **still has unique work**, with columns: ticket, branch, sha, reach and base,
    worktree path, on origin; `protected` branches go in a **kept** group with the reason. Below
-   it, the `untracked` worktrees and the origin branches left for the human, who deletes those from
-   the board's Cleanup page.
-5. Wait for the human's approval (all, a group, or named rows). Then, per ticket: remove the
-   worktrees, delete the branches, `remove_workspace` each registered workspace, and `post_update`
-   on the ticket with the deleted `branch @ sha` lines. Finish with a short summary: what was
-   removed, what is left and why.
+   it, the `untracked` worktrees, and what is left for the human: the worktrees (with the branches
+   they hold) and the origin branches, which they remove and delete from the board's Cleanup page.
+5. Wait for the human's approval (all, a group, or named rows). Then, per ticket: `cleanup_delete`
+   the approved local branches that no worktree holds (`kind` `local`), and `remove_workspace` each
+   of its workspaces that is no worktree; the board checks each branch again, and what it refuses
+   stays, with its reason. Worktrees, and the branches they hold, stay for the human to remove from
+   the board's Cleanup page: list them. Then `post_update` on the ticket with the deleted
+   `branch @ sha` lines. Finish with a short summary: what was removed, what is left and why.
 
 Nothing here touches a ticket in any other stage, even when its branch looks merged.
 
@@ -463,12 +473,18 @@ human's own (`waitingOn: others`; agents' PRs pushed with their account are thei
 or merged in the last two weeks. `status` is where the reviews stand: `pending` (approval missing),
 `reviewed` (approved: by the human on others' PRs, by every reviewer on theirs), `on_hold` (review
 comments or requested changes not yet addressed by a push or a new review request, or a board-side
-hold) or `done` (merged). Each PR lists the `tickets` it came from and its `merge` and `ci` state:
-conflicts or failed `checks` on a PR from your ticket are yours to fix. Before reviewing a PR,
-`list_review_results` with its `prNumber` and head `sha`: if that SHA was already reviewed,
-`get_review_result` has the findings. If you review a PR, record it with `post_review_result`
-(verdict, markdown summary with findings, how to test, checks, `repoId` when the project has several
-repos): the human reads it from its verdict on the PR queue and on the ticket's Branch card. Never post the review to GitHub.
+hold) or `done` (merged). Each PR lists `ticket`, the ticket its card opens: the feature ticket that
+names the PR, else the PR's own ticket, which the board made when the PR first showed in the queue.
+It also lists `tickets`, the feature tickets it came from, and its `merge` and `ci` state:
+conflicts or failed `checks` on a PR from your ticket are yours to fix. A PR's findings and progress
+are posted on its `ticket`, not on a daily ticket; the board moves a PR's own ticket with the PR's
+status (To do, In review, Blocked, Done when merged, Cancelled when closed without merging), and the
+human archives it. Before reviewing a PR, `list_review_results` with its `prNumber` and head `sha`:
+if that SHA was already reviewed, `get_review_result` has the findings. If you review a PR, record
+it with `post_review_result` (verdict, markdown summary with findings, how to test, checks, `repoId`
+when the project has several repos): the human reads it from its verdict on the PR queue and on the
+ticket's Branch card, and the summary is also a progress post on the PR's ticket. Never post the
+review to GitHub.
 
 `list_actors` gives every name that signs in to the board (the project's agents are in
 `get_project`); use those exact names for `assignee`.

@@ -68,7 +68,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `frontend=<path>` | main checkout of the UI repo that talks to this backend; the env agent starts its dev server against the review backend and the verify agent drives it | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
 | `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high) | the session's |
-| `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR when the board is connected |
+| `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
 
 ## Setup
 
@@ -319,8 +319,9 @@ commit SHA, and the paths to `review.md` and `summary.md`.
 
 When the board's MCP tools are available (`get_project`, `post_update`, …) and the repo belongs to
 a board project, the review also runs **on the board**. Find the ticket: `ticket=<id>` when given,
-else the ticket whose `prNumber` is the target PR (`list_prs` → `tickets`), else the ticket
-whose `branch` is the target branch. No ticket: run as usual and skip this section.
+else, for a PR, the `ticket` that `list_prs` names for it (the feature ticket that names the PR, or
+the PR's own ticket), else the ticket whose `branch` is the target branch. No ticket: run as usual
+and skip this section.
 
 1. **The project's agents brief the phases.** `get_project` → `agents`. For each phase, when the
    project has an agent with that name (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`)
@@ -347,7 +348,7 @@ whose `branch` is the target branch. No ticket: run as usual and skip this secti
    answers, and say so in the report.
 4. **The result** goes to the board. For a PR: `post_review_result` (the verdict, `summary.md` as
    `summaryMd`, the commit SHA, the three checks and the counts, `repoId` when the project has
-   several repos). For a branch with no PR yet: a `post_update` on the ticket with the verdict line
+   several repos), which also posts the summary on the PR's ticket. For a branch with no PR yet: a `post_update` on the ticket with the verdict line
    and `summary.md`. Never post it to GitHub unless `post` was given.
 
 ## Delegation

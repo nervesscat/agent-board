@@ -15,7 +15,7 @@ import { del, errorMessage, get, patch, post, upload, type CommentRow } from '#/
 import { ago } from '#/lib/format'
 import { useProjectAgents } from '#/lib/project'
 
-export type Parent = 'ticket' | 'update' | 'pr' | 'review'
+export type Parent = 'ticket' | 'update' | 'review'
 
 /** The comments under one parent, all levels, refreshed every 10 s. */
 export function useComments(parentType: Parent, parentId: number) {

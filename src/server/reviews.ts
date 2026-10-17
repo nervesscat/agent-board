@@ -2,7 +2,9 @@ import { and, desc, eq, isNull, like, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
+import { postUpdate } from './features'
 import { notFound } from './http'
+import { ticketForPr } from './prTickets'
 import { getProject } from './projects'
 import { resolveRepo } from './repos'
 
@@ -77,5 +79,11 @@ export function postResult(
     refType: 'review',
     refId: row.id,
   })
+  // The PR's ticket (the feature ticket that names it, else its own) gets the verdict and the summary, as a post.
+  const ticket = ticketForPr(projectId, repo.id, input.prNumber)
+  if (ticket) {
+    const verdict = `Review of PR #${input.prNumber} at ${input.sha.slice(0, 7)}: ${input.verdict}`
+    postUpdate(ticket.id, [verdict, input.summaryMd.trim()].filter(Boolean).join('\n\n'), [], actor)
+  }
   return row
 }
