@@ -20,7 +20,8 @@ import { cn } from '#/lib/utils'
  * form is the one to hold back its submit meanwhile.
  *
  * `choices` show as chips under the field (`useTagChoices`): a click adds that tag as it is spelled
- * there, and the chip goes. Pressing one keeps the focus where it is, so the field is not left.
+ * there, and the chip goes. Pressing one keeps the focus where it is, and one taken from the keyboard
+ * gives it back to the text, so the field is not left.
  */
 export function TagsInput({
   id,
@@ -181,7 +182,12 @@ export function TagsInput({
               key={tag}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onChange([...value, tag])}
+              onClick={() => {
+                onChange([...value, tag])
+                // The chip goes once added: from the keyboard, the focus it had goes back to the text
+                // rather than to the page, so the field is not left.
+                input.current?.focus()
+              }}
               aria-label={`Add tag ${tag}`}
               className="inline-flex max-w-full items-center gap-0.5 rounded-md border border-dashed px-1.5 py-0.5 text-xs break-all text-muted-foreground hover:border-solid hover:text-foreground"
             >

@@ -80,6 +80,60 @@ test('chips under the Tags field offer the suggestions and the tags in use, in t
   await expect.poll(async () => (await api.getTicket(created.id)).tags).toEqual(['ui', 'Forms', 'Bug'])
 })
 
+test('on the ticket, Enter on a chip reached by Tab adds its tag and keeps the editor open', async ({
+  page,
+  project,
+  api,
+}) => {
+  const created = await api.ticket({ title: 'Keyboard', tags: ['Forms'] })
+  await page.goto(`/projects/${project.id}/features/${created.id}`)
+  await page.getByRole('button').filter({ hasText: 'Forms' }).click()
+  const field = page.getByRole('textbox', { name: 'Tags, comma separated' })
+  await expect(field).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: 'Add tag Bug' })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: 'Remove Bug' })).toBeVisible()
+  await expect(field).toBeFocused()
+  await field.press('Enter')
+  await expect(field).toBeHidden()
+  await expect.poll(async () => (await api.getTicket(created.id)).tags).toEqual(['Forms', 'Bug'])
+})
+
+test('a chip taken from the keyboard gives the focus back to the text, so leaving the field saves', async ({
+  page,
+  project,
+  api,
+}) => {
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await page.getByRole('button', { name: 'New ticket' }).click()
+  const dialog = page.getByRole('dialog')
+  const field = dialog.getByLabel('Tags (optional)')
+  await field.click()
+  await page.keyboard.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Add tag Bug' })).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect(dialog.getByRole('button', { name: 'Remove Bug' })).toBeVisible()
+  await expect(field).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+
+  const created = await api.ticket({ title: 'Keyboard', tags: ['Forms'] })
+  await page.goto(`/projects/${project.id}/features/${created.id}`)
+  await page.getByRole('button').filter({ hasText: 'Forms' }).click()
+  const inlineField = page.getByRole('textbox', { name: 'Tags, comma separated' })
+  await expect(inlineField).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('button', { name: 'Add tag Bug' })).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect(page.getByRole('button', { name: 'Remove Bug' })).toBeVisible()
+  await expect(inlineField).toBeFocused()
+  // Leaving the field for the page saves what the chip added.
+  await page.mouse.click(1200, 700)
+  await expect(inlineField).toBeHidden()
+  await expect.poll(async () => (await api.getTicket(created.id)).tags).toEqual(['Forms', 'Bug'])
+})
+
 /** As many suggestions as a project can have (50), more than two rows of chips at any width. */
 const MANY = Array.from({ length: 50 }, (_, i) => `Module ${i + 1}`)
 
@@ -205,6 +259,27 @@ test('the board filter by tag lives in ?tag=, matches any casing, and clears', a
   await page.getByRole('button', { name: 'Clear the tag filter' }).click()
   await expect(page).not.toHaveURL(/[?&]tag=/)
   await expect(page.getByText('Untagged')).toBeVisible()
+})
+
+test('a tag spelled like a placeholder value is filtered on as any other', async ({ page, project, api }) => {
+  await api.ticket({ title: 'Odd tag', status: 'todo', tags: ['__all__'] })
+  await api.ticket({ title: 'Plain', status: 'todo' })
+  await page.goto(`/projects/${project.id}/features?view=list`)
+  const filter = page.getByRole('combobox', { name: 'Filter by tag' })
+  const shown = filter.locator('[data-slot="select-value"]')
+  await expect(shown).toHaveText('All tags')
+  await filter.click()
+  await page.getByRole('option', { name: '__all__' }).click()
+  await expect(page).toHaveURL(/[?&]tag=__all__/)
+  await expect(shown).toHaveText('__all__')
+  await expect(page.getByText('Plain')).toHaveCount(0)
+  await expect(page.getByText('Odd tag')).toBeVisible()
+
+  await filter.click()
+  await page.getByRole('option', { name: 'All tags' }).click()
+  await expect(page).not.toHaveURL(/[?&]tag=/)
+  await expect(shown).toHaveText('All tags')
+  await expect(page.getByText('Plain')).toBeVisible()
 })
 
 test('the tag count is the rows shown, the search on the List included', async ({ page, project, api }) => {

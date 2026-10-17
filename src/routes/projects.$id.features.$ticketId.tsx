@@ -562,7 +562,8 @@ function InlineTags({
         }}
         onKeyDown={(e) => {
           if (e.defaultPrevented || e.nativeEvent.isComposing) return
-          if (e.key === 'Enter' && !text.trim()) {
+          // Enter in the text saves; Enter on a suggested chip is the chip's own, and adds its tag.
+          if (e.key === 'Enter' && e.target instanceof HTMLInputElement && !text.trim()) {
             e.preventDefault()
             done(true)
           }
