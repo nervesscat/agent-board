@@ -25,7 +25,8 @@ import { attachmentView } from './uploads'
  * their instructions, newest first unless asked otherwise. A lane's files are listed under its top-level ticket, with the lane
  * that holds them as `lane`. Report files, agents'
  * pictures, replies on PRs and review results, and uploads nothing holds are not on a ticket, so they
- * are not here. It only reads: browsing it holds no upload (src/server/unattached.ts).
+ * are not here; nor are the files of a PR's own ticket, which is that PR's discussion (it has no
+ * lanes). It only reads: browsing it holds no upload (src/server/unattached.ts).
  */
 
 export const GALLERY_PAGE = 60
@@ -141,15 +142,24 @@ function decodeCursor(cursor: string, sort: GallerySort): { keys: Key[]; id: num
   throw new HttpError(400, 'cursor: not one this list handed out')
 }
 
+/**
+ * Whether a day's bound is written like the stored times, with a four-digit year, so that comparing
+ * the strings compares the moments. One past year 9999 (`+010000-…`, the end of 9999-12-31 west of
+ * UTC) or before year 0 (`-000001-…`) is after or before every stored time, so it bounds nothing.
+ */
+const storedYear = (bound: string) => /^\d{4}-/.test(bound)
+
 export function listGallery(projectId: number, q: GalleryQuery = {}) {
   getProject(projectId)
   const limit = q.limit ?? GALLERY_PAGE
   const sort = q.sort ?? 'newest'
   const { keys, descending } = ORDERS[sort]
-  const where = [eq(t.projectId, projectId)]
+  const where = [eq(t.projectId, projectId), isNull(t.prId)]
   if (q.archived !== 'include') where.push(isNull(t.archivedAt))
-  if (q.from) where.push(gte(a.createdAt, dayBounds(q.from).from))
-  if (q.to) where.push(lt(a.createdAt, dayBounds(q.to).to))
+  const from = q.from && dayBounds(q.from).from
+  const to = q.to && dayBounds(q.to).to
+  if (from && storedYear(from)) where.push(gte(a.createdAt, from))
+  if (to && storedYear(to)) where.push(lt(a.createdAt, to))
   if (q.type?.length) where.push(inArray(kindSql, q.type))
   if (q.cursor) {
     // Keyset: the files after the last one handed out, so files that arrive meanwhile move nothing.

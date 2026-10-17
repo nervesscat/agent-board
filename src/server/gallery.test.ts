@@ -172,6 +172,42 @@ describe('which files the gallery lists', () => {
     expect(byName['instructions.png']!.anchor).toBeNull()
   })
 
+  it("leaves out the files of a PR's own ticket, which is the PR's discussion", async () => {
+    const p = newProject('pr tickets')
+    const now = new Date().toISOString()
+    const pr = db()
+      .insert(s().prs)
+      .values({
+        projectId: p,
+        number: 7,
+        title: 'seven',
+        url: 'https://github.com/acme/app/pull/7',
+        author: 'ana',
+        headRef: 'feat/seven',
+        baseRef: 'main',
+        headSha: 'abc1234',
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .returning()
+      .get().id
+    const prTicket = db()
+      .insert(s().tickets)
+      .values({ projectId: p, title: 'PR #7', createdBy: 'claude', prId: pr, prNumber: 7 })
+      .returning()
+      .get()
+    const prPost = newPost(prTicket.id)
+    file('pr-post.png', { updateId: prPost })
+    file('pr-reply.png', { commentId: newComment('update', prPost) })
+    file('pr-instructions.png', { ticketId: prTicket.id })
+    const kept = file('ticket.png', { updateId: newPost(newTicket(p, 'A ticket').id) })
+
+    expect(ids(gallery.listGallery(p))).toEqual([kept])
+    expect(ids(gallery.listGallery(p, { archived: 'include' }))).toEqual([kept])
+    const rest = await call(`/api/projects/${p}/gallery`)
+    expect(rest.body.items.map((i: { id: number }) => i.id)).toEqual([kept])
+  })
+
   it('hides the files of archived tickets unless asked, and shows those of cancelled ones', () => {
     const p = newProject('archived')
     const archived = newTicket(p, 'Archived', { status: 'done' })
@@ -261,6 +297,30 @@ describe('filters, order and pages', () => {
     expect(ids(gallery.listGallery(p, { from: '2026-09-10' }))).toEqual([after, end, on, start])
     expect(ids(gallery.listGallery(p, { to: '2026-09-10' }))).toEqual([end, on, start, before])
     expect(ids(gallery.listGallery(p, { from: '2026-09-11', to: '2026-09-11' }))).toEqual([])
+  })
+
+  it('takes the first and last days the calendar check accepts as bounds that hold every file', async () => {
+    const p = newProject('far days')
+    const post = newPost(newTicket(p, 'T').id)
+    const one = file(
+      'one.png',
+      { updateId: post },
+      { createdAt: new Date('2026-09-10T12:00:00').toISOString() },
+    )
+    // West of UTC the end of 9999-12-31 is in year 10000, written +010000-…, which compared as a string
+    // falls before every stored time; east of UTC the start of 0000-01-01 is in year -1.
+    for (const q of [
+      { to: '9999-12-31' },
+      { from: '0000-01-01' },
+      { from: '0000-01-01', to: '9999-12-31' },
+    ]) {
+      expect(ids(gallery.listGallery(p, q)), JSON.stringify(q)).toEqual([one])
+    }
+    expect(ids(gallery.listGallery(p, { from: '9999-12-31', to: '9999-12-31' }))).toEqual([])
+    expect(ids(gallery.listGallery(p, { from: '0000-01-01', to: '0000-01-01' }))).toEqual([])
+    const rest = await call(`/api/projects/${p}/gallery?to=9999-12-31`)
+    expect(rest.status).toBe(200)
+    expect(rest.body.items.map((i: { id: number }) => i.id)).toEqual([one])
   })
 
   it('lists newest first, ties by id, and oldest first with sort: oldest', () => {
