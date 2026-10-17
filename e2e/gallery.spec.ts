@@ -35,6 +35,24 @@ const names = (page: Page) => tiles(page).locator('[data-slot="file-name"]')
 const tileNames = (page: Page) => names(page).allInnerTexts()
 const thumb = (t: Locator) => t.getByRole('link', { name: /^Open .+\./ })
 
+const typeChips = (page: Page) => page.getByRole('group', { name: 'File type' })
+const chip = (page: Page, name: string) => typeChips(page).getByRole('button', { name, exact: true })
+const dayButton = (page: Page, name: 'From' | 'To') =>
+  page.getByRole('button', { name: new RegExp(`^${name}\\b`) })
+const calendar = (page: Page) => page.locator('[data-slot="popover-content"]')
+
+/** Picks `day` (YYYY-MM-DD) in the From or To date picker, going back a month or two to reach it. */
+async function pickDay(page: Page, name: 'From' | 'To', day: string) {
+  await dayButton(page, name).click()
+  const cell = calendar(page).locator(`td[data-day="${day}"]:not([data-outside]) button`)
+  for (let back = 0; back < 3 && !(await cell.isVisible()); back++)
+    await calendar(page)
+      .getByRole('button', { name: /previous month/i })
+      .click()
+  await cell.click()
+  await expect(calendar(page)).toHaveCount(0)
+}
+
 const scrollsSideways = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
 
@@ -149,33 +167,89 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
 
   await gallery(page, project.id)
   await expect(tiles(page)).toHaveCount(3)
-  const types = page.getByRole('group', { name: 'File type' })
-  await types.getByRole('checkbox', { name: 'Images' }).click()
-  await types.getByRole('checkbox', { name: 'PDFs' }).click()
+  // The kinds are chips like the PR queue's, any number on at once; no checkboxes.
+  await expect(typeChips(page).getByRole('button')).toHaveText([
+    'Images',
+    'Videos',
+    'PDFs',
+    'Documents and text',
+    'Other',
+  ])
+  await expect(page.getByRole('checkbox')).toHaveCount(0)
+  await chip(page, 'Images').click()
+  await chip(page, 'PDFs').click()
   await expect(page).toHaveURL(/[?&]type=image(,|%2C)pdf(&|$)/)
   await expect(tiles(page)).toHaveCount(2)
   expect((await tileNames(page)).sort()).toEqual(['shot.png', 'spec.pdf'])
+  await expect(chip(page, 'Images')).toHaveAttribute('aria-pressed', 'true')
+  await expect(chip(page, 'Images')).toHaveAttribute('data-active', '')
+  await expect(chip(page, 'Videos')).toHaveAttribute('aria-pressed', 'false')
+  // Off again, and on: the URL follows each toggle.
+  await chip(page, 'PDFs').click()
+  await expect(page).toHaveURL(/[?&]type=image(&|$)/)
+  await expect(tiles(page)).toHaveCount(1)
+  await chip(page, 'PDFs').click()
+  await expect(page).toHaveURL(/[?&]type=image(,|%2C)pdf(&|$)/)
 
-  await page.getByLabel('From').fill(day)
-  await page.getByLabel('To').fill(day)
+  // The days are date pickers, each a button opening a calendar; no native date inputs.
+  await expect(page.locator('input[type="date"]')).toHaveCount(0)
+  await expect(dayButton(page, 'From')).toHaveText('From')
+  await expect(dayButton(page, 'To')).toHaveText('To')
+  await pickDay(page, 'From', day)
   await expect(page).toHaveURL(new RegExp(`from=${day}`))
+  // To cannot be before From: the day before it is off.
+  await dayButton(page, 'To').click()
+  await expect(
+    calendar(page)
+      .locator(`td[data-day="${shiftDate(day, -1)}"] button`)
+      .first(),
+  ).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(calendar(page)).toHaveCount(0)
+  await pickDay(page, 'To', day)
   await expect(page).toHaveURL(new RegExp(`to=${day}`))
   await expect(tiles(page)).toHaveCount(2)
+  // And From cannot be after To.
+  await dayButton(page, 'From').click()
+  await expect(
+    calendar(page)
+      .locator(`td[data-day="${shiftDate(day, 1)}"] button`)
+      .first(),
+  ).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(calendar(page)).toHaveCount(0)
+  const shown = new Date(`${day}T00:00:00`).toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+  await expect(dayButton(page, 'From')).toHaveText(shown)
 
   await page.reload()
   await expect(tiles(page)).toHaveCount(2)
   expect((await tileNames(page)).sort()).toEqual(['shot.png', 'spec.pdf'])
-  await expect(types.getByRole('checkbox', { name: 'Images' })).toBeChecked()
-  await expect(types.getByRole('checkbox', { name: 'PDFs' })).toBeChecked()
-  await expect(types.getByRole('checkbox', { name: 'Videos' })).not.toBeChecked()
-  await expect(page.getByLabel('From')).toHaveValue(day)
-  await expect(page.getByLabel('To')).toHaveValue(day)
+  await expect(chip(page, 'Images')).toHaveAttribute('aria-pressed', 'true')
+  await expect(chip(page, 'PDFs')).toHaveAttribute('aria-pressed', 'true')
+  await expect(chip(page, 'Videos')).toHaveAttribute('aria-pressed', 'false')
+  await expect(dayButton(page, 'From')).toHaveText(shown)
+  await expect(dayButton(page, 'To')).toHaveText(shown)
+
+  // Each day clears on its own.
+  await page.getByRole('button', { name: 'Clear To' }).click()
+  await expect(page).not.toHaveURL(/[?&]to=/)
+  await expect(page).toHaveURL(new RegExp(`from=${day}`))
+  await expect(dayButton(page, 'To')).toHaveText('To')
+  await page.getByRole('button', { name: 'Clear From' }).click()
+  await expect(page).not.toHaveURL(/[?&]from=/)
+  await expect(dayButton(page, 'From')).toHaveText('From')
+  await expect(tiles(page)).toHaveCount(2)
 
   // A day with no upload: the empty state, and no error.
   const errors: string[] = []
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
-  await page.getByLabel('To').fill(shiftDate(day, -1))
-  await page.getByLabel('From').fill(shiftDate(day, -3))
+  await pickDay(page, 'From', shiftDate(day, -3))
+  await pickDay(page, 'To', shiftDate(day, -1))
   await expect(page.getByText('No files match these filters.')).toBeVisible()
   await page.getByRole('button', { name: 'Clear filters' }).click()
   await expect(tiles(page)).toHaveCount(3)
@@ -199,8 +273,86 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   // Values it does not know are left out: the gallery unfiltered on that count.
   await gallery(page, project.id, '?type=bogus&from=someday&sort=sideways')
   await expect(tiles(page)).toHaveCount(3)
-  await expect(types.getByRole('checkbox', { name: 'Images' })).not.toBeChecked()
+  await expect(chip(page, 'Images')).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('combobox', { name: 'Sort' })).toContainText('Newest first')
+  await expect(names(page)).toHaveText(['notes.md', 'spec.pdf', 'shot.png'])
   await expect(page.getByText('No files match')).toHaveCount(0)
+})
+
+test('the sort control offers every order with an icon, names the current one on hover, and keeps it in the URL', async ({
+  page,
+  project,
+  api,
+  agent,
+}) => {
+  const t = await api.ticket({ title: 'Sorted', status: 'in_progress' })
+  // Uploaded in this order, a minute apart; names, sizes and kinds each in another order.
+  const named = ['beta.pdf', 'Alpha.png', 'gamma.md', 'delta.png']
+  const made = [
+    await upload(agent, named[0]!, pdf('a longer document than the others, by a fair few bytes')),
+    await upload(agent, named[1]!, png(8)),
+    await upload(agent, named[2]!, Buffer.from('a note')),
+    await upload(agent, named[3]!, png(64)),
+  ]
+  await postWith(
+    agent,
+    t.id,
+    made.map((f) => f.id),
+  )
+  const day = shiftDate(localDate(), -2)
+  for (const [i, f] of made.entries()) uploadedAt(f.id, new Date(`${day}T12:0${i}:00`))
+  const bySize = made
+    .map((f, i) => ({ ...f, name: named[i]! }))
+    .sort((a, b) => b.size - a.size || b.id - a.id)
+    .map((f) => f.name)
+
+  await gallery(page, project.id)
+  await expect(names(page)).toHaveText(['delta.png', 'gamma.md', 'Alpha.png', 'beta.pdf'])
+  const sort = page.getByRole('combobox', { name: 'Sort' })
+  await expect(sort).toContainText('Newest first')
+  // The order's icon, then the chevron.
+  await expect(sort.locator('svg')).toHaveCount(2)
+  await expectTooltip(sort, 'Sort: Newest first')
+  await expect(sort).not.toHaveAttribute('title')
+
+  await sort.click()
+  const options = page.getByRole('option')
+  await expect(options).toHaveText([
+    'Newest first',
+    'Oldest first',
+    'Name A to Z',
+    'Name Z to A',
+    'Largest first',
+    'Smallest first',
+    'By type',
+  ])
+  for (const option of await options.all()) await expect(option.locator('svg').first()).toBeVisible()
+  await page.getByRole('option', { name: 'Name A to Z' }).click()
+  await expect(page).toHaveURL(/[?&]sort=name(&|$)/)
+  await expect(names(page)).toHaveText(['Alpha.png', 'beta.pdf', 'delta.png', 'gamma.md'])
+  await page.reload()
+  await expect(names(page)).toHaveText(['Alpha.png', 'beta.pdf', 'delta.png', 'gamma.md'])
+  await expect(sort).toContainText('Name A to Z')
+  await expectTooltip(sort, 'Sort: Name A to Z')
+
+  const orders: [string, string, string[]][] = [
+    ['Name Z to A', 'name-desc', ['gamma.md', 'delta.png', 'beta.pdf', 'Alpha.png']],
+    ['Largest first', 'largest', bySize],
+    ['Smallest first', 'smallest', [...bySize].reverse()],
+    ['By type', 'type', ['Alpha.png', 'delta.png', 'beta.pdf', 'gamma.md']],
+    ['Oldest first', 'oldest', ['beta.pdf', 'Alpha.png', 'gamma.md', 'delta.png']],
+  ]
+  for (const [label, key, order] of orders) {
+    await sort.click()
+    await page.getByRole('option', { name: label }).click()
+    await expect(page).toHaveURL(new RegExp(`[?&]sort=${key}(&|$)`))
+    await expect(names(page)).toHaveText(order)
+  }
+  // Newest first is the default: no sort in the URL.
+  await sort.click()
+  await page.getByRole('option', { name: 'Newest first' }).click()
+  await expect(page).not.toHaveURL(/[?&]sort=/)
+  await expect(names(page)).toHaveText(['delta.png', 'gamma.md', 'Alpha.png', 'beta.pdf'])
 })
 
 test("a tile links to its ticket, a lane's to the top-level ticket, and a thread link lands on the post or reply, marked", async ({
@@ -382,9 +534,26 @@ test.describe('on a phone', () => {
     agent,
   }) => {
     await manyFiles(api, agent, 61)
-    await gallery(page, project.id, '?type=other&archived=include')
+    const today = localDate()
+    await gallery(
+      page,
+      project.id,
+      `?type=other,docs&archived=include&from=${today}&to=${today}&sort=name-desc`,
+    )
     await expect(tiles(page)).toHaveCount(60)
-    await expect(page.getByRole('group', { name: 'File type' })).toBeVisible()
+    // The chips, both date pickers with a day and the sort control fit the screen, wrapping as they need.
+    await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
+    for (const control of [
+      ...(await typeChips(page).getByRole('button').all()),
+      dayButton(page, 'From'),
+      dayButton(page, 'To'),
+      page.getByRole('combobox', { name: 'Sort' }),
+    ]) {
+      await expect(control).toBeVisible()
+      const b = await box(control)
+      expect(b.x).toBeGreaterThanOrEqual(0)
+      expect(b.x + b.width).toBeLessThanOrEqual(390)
+    }
     expect(await scrollsSideways(page)).toBe(false)
     // Fewer columns than on a desktop: two tiles side by side.
     const [a, b, c] = await Promise.all([0, 1, 2].map((i) => box(tiles(page).nth(i))))

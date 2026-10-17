@@ -1,20 +1,39 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Loader2, X } from 'lucide-react'
+import {
+  ArrowDownAZ,
+  ArrowDownNarrowWide,
+  ArrowDownWideNarrow,
+  ArrowDownZA,
+  ClockArrowDown,
+  ClockArrowUp,
+  Loader2,
+  type LucideIcon,
+  Shapes,
+  X,
+} from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { z } from 'zod'
 
+import { ChipToggles } from '#/components/Chips'
+import { DatePicker } from '#/components/DatePicker'
 import { Empty } from '#/components/Empty'
 import { FileGrid } from '#/components/FileGallery'
 import { Button } from '#/components/ui/button'
-import { Checkbox } from '#/components/ui/checkbox'
-import { Input } from '#/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Switch } from '#/components/ui/switch'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type Gallery } from '#/lib/api'
-import { FILE_KINDS, FILE_KIND_LABEL, type FileKind, parseKinds } from '#/lib/fileKinds'
+import {
+  FILE_KINDS,
+  FILE_KIND_LABEL,
+  type FileKind,
+  GALLERY_SORTS,
+  GALLERY_SORT_LABEL,
+  type GallerySort,
+  parseKinds,
+} from '#/lib/fileKinds'
 import { isDay } from '#/lib/reports'
 
 const Day = z
@@ -23,29 +42,48 @@ const Day = z
   .refine(isDay)
 
 // The filters live in the URL, so a filtered gallery reloads and shares as it is: ?type=image,pdf (the
-// kinds), ?from=&to= (local days, inclusive, on the upload date), ?sort=oldest, ?archived=include. A
-// value that is not one of these is dropped: the gallery shows unfiltered on that count.
+// kinds), ?from=&to= (local days, inclusive, on the upload date), ?sort= (an order of GALLERY_SORTS; none
+// for newest first), ?archived=include. A value that is not one of these is dropped: the gallery shows
+// unfiltered, or newest first, on that count.
 export const Route = createFileRoute('/projects/$id/gallery')({
   component: GalleryPage,
   validateSearch: z.object({
     type: z.string().optional().catch(undefined),
     from: Day.optional().catch(undefined),
     to: Day.optional().catch(undefined),
-    sort: z.enum(['oldest']).optional().catch(undefined),
+    sort: z.enum(GALLERY_SORTS).optional().catch(undefined),
     archived: z.enum(['include']).optional().catch(undefined),
   }),
 })
 
-const SORTS = [
-  { value: 'newest', label: 'Newest first' },
-  { value: 'oldest', label: 'Oldest first' },
-]
+const SORT_ICON: Record<GallerySort, LucideIcon> = {
+  newest: ClockArrowDown,
+  oldest: ClockArrowUp,
+  name: ArrowDownAZ,
+  'name-desc': ArrowDownZA,
+  largest: ArrowDownWideNarrow,
+  smallest: ArrowDownNarrowWide,
+  type: Shapes,
+}
+const SORTS = GALLERY_SORTS.map((value) => ({ value, label: GALLERY_SORT_LABEL[value] }))
+const KIND_CHIPS = FILE_KINDS.map((key) => ({ key, label: FILE_KIND_LABEL[key] }))
+
+function SortLabel({ sort }: { sort: GallerySort }) {
+  const Icon = SORT_ICON[sort]
+  return (
+    <>
+      <Icon aria-hidden />
+      {GALLERY_SORT_LABEL[sort]}
+    </>
+  )
+}
 
 function GalleryPage() {
   const { id } = Route.useParams()
   const search = Route.useSearch()
   const navigate = Route.useNavigate()
   const kinds = parseKinds(search.type)
+  const sort = search.sort ?? 'newest'
   const set = (patch: Partial<typeof search>) =>
     navigate({ search: (s) => ({ ...s, ...patch }), replace: true })
   const toggleKind = (kind: FileKind, on: boolean) => {
@@ -57,7 +95,7 @@ function GalleryPage() {
   if (kinds.length) params.set('type', kinds.join(','))
   if (search.from) params.set('from', search.from)
   if (search.to) params.set('to', search.to)
-  if (search.sort) params.set('sort', search.sort)
+  if (sort !== 'newest') params.set('sort', sort)
   if (search.archived) params.set('archived', search.archived)
   const filters = params.toString()
   const filtered = Boolean(kinds.length || search.from || search.to)
@@ -85,48 +123,42 @@ function GalleryPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3" role="group" aria-label="Filters">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="group" aria-label="File type">
-          {FILE_KINDS.map((k) => (
-            <label key={k} className="inline-flex items-center gap-1.5 text-sm">
-              <Checkbox checked={kinds.includes(k)} onCheckedChange={(on) => toggleKind(k, on)} />
-              {FILE_KIND_LABEL[k]}
-            </label>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <label className="inline-flex items-center gap-1.5">
-            From
-            <Input
-              type="date"
-              className="h-8 w-auto"
-              value={search.from ?? ''}
-              max={search.to}
-              onChange={(e) => set({ from: e.target.value || undefined })}
-            />
-          </label>
-          <label className="inline-flex items-center gap-1.5">
-            To
-            <Input
-              type="date"
-              className="h-8 w-auto"
-              value={search.to ?? ''}
-              min={search.from}
-              onChange={(e) => set({ to: e.target.value || undefined })}
-            />
-          </label>
+        <ChipToggles
+          chips={KIND_CHIPS}
+          value={kinds}
+          onToggle={toggleKind}
+          label="File type"
+          // Five chips do not fit one row on a phone: there they wrap, and the page never scrolls sideways.
+          className="flex-wrap justify-start group-data-horizontal/tabs:h-auto"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <DatePicker
+            value={search.from}
+            onChange={(day?: string) => set({ from: day })}
+            placeholder="From"
+            max={search.to}
+          />
+          <DatePicker
+            value={search.to}
+            onChange={(day?: string) => set({ to: day })}
+            placeholder="To"
+            min={search.from}
+          />
         </div>
         <Select
-          value={search.sort ?? 'newest'}
-          onValueChange={(v) => set({ sort: v === 'oldest' ? 'oldest' : undefined })}
+          value={sort}
+          onValueChange={(v) => set({ sort: v && v !== 'newest' ? (v as GallerySort) : undefined })}
           items={SORTS}
         >
-          <SelectTrigger size="sm" aria-label="Sort" className="min-w-32">
-            <SelectValue />
-          </SelectTrigger>
+          <Tip content={`Sort: ${GALLERY_SORT_LABEL[sort]}`}>
+            <SelectTrigger size="sm" aria-label="Sort" className="min-w-36">
+              <SelectValue>{(v: GallerySort) => <SortLabel sort={v} />}</SelectValue>
+            </SelectTrigger>
+          </Tip>
           <SelectContent alignItemWithTrigger={false} align="start">
             {SORTS.map((o) => (
               <SelectItem key={o.value} value={o.value}>
-                {o.label}
+                <SortLabel sort={o.value} />
               </SelectItem>
             ))}
           </SelectContent>
