@@ -1886,9 +1886,11 @@ function SummaryCard({ t }: { t: TicketFull }) {
   const earlier = data?.versions.filter((v) => v.postId !== s.postId) ?? []
   const when = s.fallback ? 'posted' : s.versions > 1 ? 'updated' : 'written'
   return (
-    // A link to the summary's post (#post-<id>) lands here, below the stuck header.
+    // A link to the summary's post (#post-<id>) lands here, below the stuck header. Not the stand-in's:
+    // that post is in the feed too (in Agents, with its replies), and a link to it opens that tab, which
+    // would take this card away from under the mark, so the id stays with the post.
     <article
-      id={`post-${s.postId}`}
+      id={s.fallback ? undefined : `post-${s.postId}`}
       aria-label="Summary"
       className="mb-4 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border border-primary/30 bg-primary/5 p-3"
     >

@@ -28,6 +28,7 @@ import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketB
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
+import { threadAnchor } from '#/lib/anchors'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
@@ -248,19 +249,6 @@ function Stale() {
 }
 
 // --- the sections ---
-
-type HumanThread = ProjectSummary['needsYou']['threads'][number]
-
-/**
- * Where a thread waiting on the human is, as an anchor its page lands on (src/lib/reveal.ts): its
- * latest message. On a ticket, a post of the feed; a reply, by the post whose thread holds it; on a
- * review result, which its dialog shows alone.
- */
-function threadAnchor(th: HumanThread) {
-  if (th.parentType === 'ticket') return `post-${th.last.id}`
-  if (th.parentType === 'update') return `post-${th.parentId}-reply-${th.last.id}`
-  return `reply-${th.last.id}`
-}
 
 function NeedsYou({ p }: { p: ProjectSummary }) {
   const { decisions, prs, threads, reviews, blockedTasks, total } = p.needsYou

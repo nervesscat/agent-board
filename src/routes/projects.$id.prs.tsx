@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
+import { ChipTabs } from '#/components/Chips'
 import { Empty } from '#/components/Empty'
 import { PrAlert, PrState } from '#/components/PrState'
 import { ReviewResultDialog, verdictTone } from '#/components/ReviewResult'
@@ -117,7 +118,7 @@ function PrQueue() {
   const settled =
     staying !== null && (!linked || inFilter(linked, staying)) && (linkedId === null || data !== undefined)
   useReveal(anchor, { ready: settled })
-  const [tab, setTab] = useState<string>('pending')
+  const [tab, setTab] = useState<(typeof TABS)[number]['key']>('pending')
   const tabFor = useRef<string | null>(null)
   const switchedFor = useRef<string | null>(null)
   useEffect(() => {
@@ -173,19 +174,14 @@ function PrQueue() {
       {isLoading ? (
         <Skeleton className="h-40" />
       ) : (
-        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-          {/* Four stages do not fit one row on a phone: there they take two rows of two, so every stage
-              and its count shows without the list or the page scrolling. */}
-          <TabsList className="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-fit sm:group-data-horizontal/tabs:h-8">
-            {TABS.map((t) => (
-              <TabsTrigger key={t.key} value={t.key} className={NO_UNDERLINE}>
-                {t.label}
-                <span className="ml-1.5 rounded-full bg-background px-1.5 text-xs tabular-nums">
-                  {shown.filter((p) => p.status === t.key).length}
-                </span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        <ChipTabs
+          chips={TABS.map((t) => ({ ...t, count: shown.filter((p) => p.status === t.key).length }))}
+          value={tab}
+          onChange={setTab}
+          // Four stages do not fit one row on a phone: there they take two rows of two, so every stage
+          // and its count shows without the list or the page scrolling.
+          listClassName="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-fit sm:group-data-horizontal/tabs:h-8"
+        >
           {TABS.map((t) => (
             <TabsContent key={t.key} value={t.key} className="space-y-2">
               {shown.filter((p) => p.status === t.key).length ? (
@@ -201,7 +197,7 @@ function PrQueue() {
               )}
             </TabsContent>
           ))}
-        </Tabs>
+        </ChipTabs>
       )}
       <ReviewResultDialog
         resultId={result ?? null}

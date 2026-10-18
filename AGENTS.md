@@ -166,7 +166,9 @@ http_headers = { Authorization = "Bearer gate_…" }
    human answers with one click; it blocks the ticket and unblocks it once decided, and the answer
    arrives as a reply under the card. If the human answers the card in the chat rather than on the board, the orchestrator records their answer with `answer_decision` (MCP; REST `POST /api/updates/:id/decision/relay`). That is allowed only after the orchestrator asked the human in the chat with the card's options (in Claude Code with AskUserQuestion, in another client its equivalent), only with their words as they gave them, and only in the session that talks to the human, never in a run with no human to ask. A delegated subagent or a persona never answers a decision, and a relay never carries `as`: they ask (`ask_decision`) or return the question in their result. `list_my_threads` lists every feed or reply thread where someone spoke after you;
    `get_ticket` shows each post's reply count and last author. Attachments come with a local
-   `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up.
+   `path` (and `windowsPath` when the board runs in WSL); `get_attachment` looks one up, and
+   `list_gallery` lists the project's files (by kind and upload day, newest first or by `sort`: oldest, name, name-desc, largest, smallest, type; a page at a time), each
+   with its ticket and the post or reply it came with.
    **Watch for feedback** so the human never has to say "check comments": while you have tickets
    in `in_progress` or `review`, call `check_inbox` every few minutes with `since` = the `cursor`
    of your last call (in Claude Code, under `/loop 5m …`). It returns `count`, a new `cursor` and

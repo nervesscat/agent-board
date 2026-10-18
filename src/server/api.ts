@@ -21,6 +21,7 @@ import { DeleteItems, deleteLeftovers } from './cleanupActions'
 import { authMode } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
+import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { HttpError, intParam, readJson } from './http'
@@ -760,6 +761,28 @@ api.get('/api/uploads/:id', async ({ request, params }) => {
       'content-range': `bytes ${range.start}-${range.end}/${a.size}`,
     },
   })
+})
+
+// The project's gallery: the files on its tickets, newest first by default, a page at a time. ?type=image,pdf (kinds,
+// comma-separated), ?from=&to= (local days, inclusive), ?sort= (an order of GALLERY_SORTS), ?archived=include, ?cursor= (the
+// last page's next), ?limit= (60 by default, 200 at most).
+api.get('/api/projects/:id/gallery', async ({ request, params, url }) => {
+  const q = url.searchParams
+  const limit = q.get('limit')
+  const filters = query(
+    GalleryQuery,
+    {
+      type: q.get('type')?.split(',').filter(Boolean),
+      from: q.get('from') || undefined,
+      to: q.get('to') || undefined,
+      sort: q.get('sort') || undefined,
+      archived: q.get('archived') || undefined,
+      cursor: q.get('cursor') || undefined,
+      limit: limit ? Number(limit) : undefined,
+    },
+    'query',
+  )
+  return json(await forAgent(request, listGallery(id(params), filters)))
 })
 
 // --- reviews ---

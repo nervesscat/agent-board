@@ -23,6 +23,7 @@ import type { CleanupReport } from '#/server/cleanup'
 import type { DeleteItem, DeleteKind, DeleteResult } from '#/server/cleanupActions'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
+import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { Handoff } from '#/server/handoff'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { PreviewState } from '#/server/preview'
@@ -42,6 +43,8 @@ export type ProjectRow = ReturnType<typeof listProjects>[number]
 export type {
   CarryOver,
   DirListing,
+  Gallery,
+  GalleryFile,
   Handoff,
   ManagedPreview,
   PreviewState,

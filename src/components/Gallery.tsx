@@ -12,6 +12,7 @@ import {
 import { type PointerEvent, type RefObject, useEffect, useRef, useState } from 'react'
 
 import { Tip } from '#/components/ui/tooltip'
+import { viewKind } from '#/lib/fileKinds'
 
 /**
  * Anything on the page marked with `data-gallery-src` opens in a full-screen viewer on click, and the
@@ -33,22 +34,6 @@ export function galleryItem(item: GalleryItem, group?: string) {
     'data-gallery-mime': item.mime,
     'data-gallery-group': group,
   }
-}
-
-// Text is fetched and shown in the gallery's own panel: in an iframe, a dark-mode browser draws plain
-// text light on a transparent page, which vanishes against a white frame.
-const TEXT_MIMES = ['text/', 'application/json', 'application/xml', 'application/x-yaml', 'application/yaml']
-// Browsers give some text files no type at all (.md, .log), so the name decides for those.
-const TEXT_NAMES =
-  /\.(txt|md|markdown|log|json|jsonl|csv|tsv|ya?ml|xml|toml|ini|env|diff|patch|sh|sql|[cm]?[jt]sx?|py|go|rs|java|css|html?)$/i
-
-function kindOf(item: GalleryItem): 'image' | 'video' | 'pdf' | 'text' | 'file' {
-  const { mime } = item
-  if (mime.startsWith('image/')) return 'image'
-  if (mime.startsWith('video/')) return 'video'
-  if (mime === 'application/pdf') return 'pdf'
-  if (TEXT_MIMES.some((p) => mime.startsWith(p)) || TEXT_NAMES.test(item.name)) return 'text'
-  return 'file'
 }
 
 function collect(group: string): GalleryItem[] {
@@ -206,7 +191,7 @@ const arrow =
   'absolute top-1/2 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white/90 ring-1 ring-white/15 outline-none backdrop-blur hover:bg-black/70 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60'
 
 function Viewer({ item, zoomKeys }: { item: GalleryItem; zoomKeys: RefObject<ZoomKeys | null> }) {
-  const kind = kindOf(item)
+  const kind = viewKind(item)
   if (kind === 'image') return <ZoomableImage src={item.src} name={item.name} zoomKeys={zoomKeys} />
   if (kind === 'video') return <video src={item.src} controls autoPlay className="max-h-full max-w-full" />
   if (kind === 'text') return <TextViewer item={item} />
