@@ -76,6 +76,62 @@ the board itself happens in worktrees, never in the main checkout (Development, 
 The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
 starting after a reboot.
 
+## Install
+
+The board also comes as a Windows app, CrossBoard: an installer that runs the built board in a
+window of its own, with no checkout, pnpm or node to run. From a checkout:
+
+```
+pnpm install
+pnpm desktop:package   # builds the board, then desktop/dist/agent-board-setup-<version>.exe and desktop/dist/win-unpacked/
+pnpm desktop:smoke     # runs the unpacked app from a temp folder on port 8240 and checks it (Testing, below)
+```
+
+CI builds the installer on every pull request (the `agent-board-setup` artifact of the run).
+
+**Installing.** Run `agent-board-setup-<version>.exe`. It installs for you alone, without admin rights,
+into `%LOCALAPPDATA%\Programs\agent-board`, adds CrossBoard to the Start menu and the desktop, and
+opens it. It is not code-signed, so Windows SmartScreen may stop it the first time (More info, Run
+anyway). It does not update itself: install a newer build over it, and the data stays.
+
+**What it runs.** The app starts the board on `127.0.0.1` in production, as `pnpm start` does (it
+always asks who is signed in), waits until it answers, and opens a window on
+`http://localhost:<PORT>/`. Its tray icon has Open, Open in browser and Quit. Closing the window
+keeps the board running for your agents (`http://localhost:<PORT>/api/mcp`, as in `AGENTS.md`);
+Quit stops it and frees the port. One copy runs at a time: starting it again brings its window back.
+
+**Prerequisites.** `git`, `gh` (signed in) and `claude` on `PATH`, as for a checkout: the board runs
+them just the same. Managed previews of a board worktree also need `pnpm` and `node`.
+
+**Data and settings** live in `%LOCALAPPDATA%\agent-board`:
+
+- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`), what `data/`
+  is in a checkout.
+- `config.env`: the settings, `KEY=value` as in `.env`, read at each start. The first start writes it
+  with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
+  like; a relative path is under `%LOCALAPPDATA%\agent-board`), `GATE_URL`, `CLAUDE_BIN`, and the
+  tailnet entrance's `PUBLIC_ORIGIN`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` (Using it from
+  other devices, below); any other key of `.env` works too. A variable set in the environment wins
+  over the file. `BOARD_ENV` and `HOST` are not settings: the app always runs production on
+  `127.0.0.1`.
+- `electron\`: the window's browser profile (its sign-in, its cache).
+
+`AGENT_BOARD_HOME` in the environment moves all three elsewhere (the smoke test runs its copy that way).
+
+**When it cannot start**, it says so in a dialog instead of closing: a busy port (another board,
+such as `pnpm start` from a checkout, also wants 47100) offers to open `config.env`, to set another
+`PORT` there, or stop the other one; a board that fails to start shows the end of its log and offers
+the logs folder.
+
+**Signing in.** The window signs in the way the board does in a browser (First run, above), with the
+passkey prompt in the window. Where that prompt cannot show in the window, Open in browser in the
+tray opens the board in your default browser, where you sign in and use it as usual (the window and
+the browser keep separate sign-ins).
+
+**Uninstalling.** Settings, Apps, CrossBoard, Uninstall (or `Uninstall CrossBoard.exe` in the install
+folder). It leaves `%LOCALAPPDATA%\agent-board` alone: delete that folder to remove the data and the
+settings too.
+
 ## Using it from other devices
 
 The board opens on your phone, tablet or another computer through your tailnet: HTTPS on this
@@ -450,6 +506,8 @@ pnpm test:e2e        # Playwright against a built board in test mode (Testing, b
 pnpm check:migrations # the drizzle folder and its journal agree
 pnpm bench           # in a worktree: the benchmark (Benchmark, below)
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
+pnpm desktop:package # the Windows installer and the unpacked app in desktop/dist (Install, above)
+pnpm desktop:smoke   # runs the unpacked app from a temp folder and checks it (Testing, below)
 ```
 
 `src/server/git.ts` is the only place that spawns `git`/`gh`, and every command in it is a read, but
@@ -457,8 +515,9 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
 
 ## Testing
 
-- **Unit** (`pnpm test`): vitest, `src/**/*.test.ts` and `scripts/**/*.test.mjs`. Server tests open
-  their own SQLite in a temp folder; the S3 ones run only with `S3_TEST_ENDPOINT` set (CLAUDE.md).
+- **Unit** (`pnpm test`): vitest, `src/**/*.test.ts`, `scripts/**/*.test.mjs` and
+  `desktop/**/*.test.mjs`. Server tests open their own SQLite in a temp folder; the S3 ones run only
+  with `S3_TEST_ENDPOINT` set (CLAUDE.md).
 - **End to end** (`pnpm test:e2e`): Playwright, `e2e/`. It builds the board into `.output-e2e`
   (never `.output`, so a preview running from the same worktree is left alone) and starts it in test mode (above) on
   a free loopback port above 47140, with its data and a scratch git repo (a bare repo beside it is
@@ -475,9 +534,19 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   a journal entry, every entry its file, `idx` matches, and `when` grows down the journal. Drizzle
   applies only migrations dated after the last one applied, so one merged with an older `when`
   would be skipped on every existing database without an error.
+- **Desktop app** (`pnpm desktop:smoke`, after `pnpm desktop:package`; `--app <folder>`, `--port`,
+  `--screenshot <png>`, `--busy-screenshot <png>`): copies the unpacked app (or `--app`, an installed
+  one) to a temp folder and runs it there with its own settings folder and data, the
+  passkey-gate stood in for by a loopback server that signs anyone in. It checks that the board
+  answers `/api/health` and the window shows it, that a project made through the API survives a
+  restart, that a second launch brings the first window back, that Quit frees the port, that
+  `config.env`'s `PORT` and `DATA_DIR` are used, and that a busy port is reported. It never runs on
+  47100 or the live `data/`.
 - **CI** (`.github/workflows/ci.yml`, on pull requests and pushes to `main`): install, typecheck,
   lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
-  Playwright report and traces are uploaded as the `playwright-report` artifact.
+  Playwright report and traces are uploaded as the `playwright-report` artifact. A second job, on
+  `windows-latest`, builds the installer, runs the desktop smoke test on the unpacked app and on the
+  app as the installer puts it (then uninstalls it), and uploads the installer as `agent-board-setup`.
 
 ## Benchmark
 
