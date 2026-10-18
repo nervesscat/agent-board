@@ -1,0 +1,18 @@
+{
+  // The desktop app is plain ESM that Electron and Node run as written; this checks its JSDoc types.
+  "include": ["app/**/*.mjs", "*.mjs"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  }
+}
