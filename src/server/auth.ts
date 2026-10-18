@@ -1,18 +1,27 @@
 import { type ActorKind, lastHuman, noteActor } from './actors'
-import { type AuthMode, authMode, config } from './config'
+import { type AuthMode, authMode, config, type PublicEntrance, servedEntrance } from './config'
+import {
+  cameThroughEntrance,
+  type GateRoute,
+  isBearer,
+  loginLocation,
+  publicRoute,
+  wantsHtml,
+} from './entrance'
+import { gateCaller } from './gate'
 
 /**
- * passkey-gate is the only identity source. Every request is answered by GATE_URL/auth exactly as
+ * passkey-gate is the only identity source. Every request is answered by a gate's /auth exactly as
  * Traefik's forwardAuth would ask it: the browser's cookie or an agent's `Bearer gate_…` token goes
- * through unchanged, and the gate's X-Gate-Device header (device or token name) becomes the actor.
+ * through unchanged, and the gate's X-Gate-Device header (device or token name) becomes the actor
+ * (gate.ts). That gate is GATE_URL, or the public gate for a request that came through the tailnet
+ * entrance (PUBLIC_GATE_AUTH_URL; entrance.ts, README "Using it from other devices"): never both.
  *
  * Outside production the gate can be off (config.ts, README "Test mode"): in development with
  * AUTH=off every request is the human; in test the X-Test-Actor header says who calls, and a request
  * without it is the human. In production and development that header is never read.
  */
 
-const CACHE_MS = 60_000
-const cache = new Map<string, { actor: string | null; until: number }>()
 const actors = new WeakMap<Request, string>()
 
 export const TEST_ACTOR_HEADER = 'x-test-actor'
@@ -22,22 +31,32 @@ export interface Caller {
   kind: ActorKind
 }
 
-async function askGate(header: string, value: string): Promise<string | null> {
-  const key = `${header}:${value}`
-  const hit = cache.get(key)
-  if (hit && hit.until > Date.now()) return hit.actor
-  let actor: string | null = null
-  try {
-    const res = await fetch(`${config.gateUrl}/auth`, {
-      headers: { [header]: value, accept: 'application/json' },
-    })
-    if (res.ok) actor = res.headers.get('x-gate-device') || 'unknown'
-  } catch (err) {
-    console.error(`gate unreachable at ${config.gateUrl}:`, err instanceof Error ? err.message : err)
-    return null
-  }
-  cache.set(key, { actor, until: Date.now() + CACHE_MS })
-  return actor
+/** The localhost gate: GATE_URL for the login and /auth alike, back to BOARD_URL after it. */
+export const localRoute = (): GateRoute => ({
+  loginUrl: config.gateUrl,
+  authUrl: config.gateUrl,
+  boardUrl: config.boardUrl,
+})
+
+/** The address the request's connection came from, where the server can tell (srvx's Node request). */
+export function peerOf(request: Request): string | undefined {
+  type NodeRequest = { runtime?: { node?: { req?: { socket?: { remoteAddress?: string } } } } }
+  return (request as NodeRequest).runtime?.node?.req?.socket?.remoteAddress
+}
+
+/**
+ * The gate a request answers to: the public gate when it came through the tailnet entrance, else the
+ * localhost gate. Null when it came through a proxy and no entrance is configured: no gate is asked
+ * then (the guard in src/start.ts has refused it already).
+ */
+export function routeOf(
+  request: Request,
+  entrance: PublicEntrance | null = servedEntrance(),
+  peer: string | undefined = peerOf(request),
+): GateRoute | null {
+  if (!cameThroughEntrance({ method: request.method, headers: request.headers, peer }, entrance))
+    return localRoute()
+  return entrance ? publicRoute(entrance) : null
 }
 
 /** An X-Test-Actor value, `human:<name>` or `agent:<name>`; null when it is neither. */
@@ -54,34 +73,29 @@ export function offHuman(auth: AuthMode): string {
   return auth.human ?? (lastSeenHuman ??= lastHuman() ?? 'human')
 }
 
-const isBearer = (request: Request) =>
-  request.headers.get('authorization')?.toLowerCase().startsWith('bearer ') ?? false
-
 /**
  * Who is calling and what they are, or null when nobody is signed in (or the gate is unreachable, or
  * in test a malformed X-Test-Actor). With the gate on, how they got in says what they are: a gate
- * token is an agent, the browser's passkey session is a human.
+ * token is an agent, the browser's passkey session is a human. The gate asked is `route`'s, by default
+ * the one the request answers to (routeOf).
  */
-export async function callerOf(request: Request, auth: AuthMode = authMode()): Promise<Caller | null> {
+export async function callerOf(
+  request: Request,
+  auth: AuthMode = authMode(),
+  route?: GateRoute | null,
+): Promise<Caller | null> {
   if (auth.boardEnv === 'test') {
     const header = request.headers.get(TEST_ACTOR_HEADER)
     return header === null ? { name: offHuman(auth), kind: 'human' } : parseTestActor(header)
   }
   if (auth.off) return { name: offHuman(auth), kind: 'human' }
-  const authorization = request.headers.get('authorization')
-  const cookie = request.headers.get('cookie')
-  const [name, kind] =
-    authorization && isBearer(request)
-      ? [await askGate('authorization', authorization), 'agent' as const]
-      : cookie?.includes('gate_session=')
-        ? [await askGate('cookie', cookie), 'human' as const]
-        : [null, null]
-  return name && kind ? { name, kind } : null
+  const gate = route === undefined ? routeOf(request) : route
+  return gate ? gateCaller(gate.authUrl, request.headers) : null
 }
 
 /** Resolve who is calling, or null when they are not signed in, and remember how they signed in. */
-export async function authenticate(request: Request): Promise<string | null> {
-  const caller = await callerOf(request)
+export async function authenticate(request: Request, route?: GateRoute | null): Promise<string | null> {
+  const caller = await callerOf(request, authMode(), route)
   if (caller) noteActor(caller.name, caller.kind)
   return caller?.name ?? null
 }
@@ -95,7 +109,7 @@ export function isAgent(request: Request, auth: AuthMode = authMode()): boolean 
     const header = request.headers.get(TEST_ACTOR_HEADER)
     return header !== null && parseTestActor(header)?.kind === 'agent'
   }
-  return !auth.off && isBearer(request)
+  return !auth.off && isBearer(request.headers.get('authorization'))
 }
 
 export function rememberActor(request: Request, actor: string) {
@@ -107,12 +121,15 @@ export function actorOf(request: Request): string {
   return actors.get(request) ?? 'unknown'
 }
 
-export function loginRedirect(request: Request): Response {
+/**
+ * To the login of the gate the request answers to, and back to the same page on the origin the browser
+ * used: GATE_URL and BOARD_URL on this machine, PUBLIC_GATE_URL and PUBLIC_ORIGIN through the entrance.
+ */
+export function loginRedirect(request: Request, route: GateRoute = localRoute()): Response {
   const url = new URL(request.url)
-  const rd = `${config.boardUrl}${url.pathname}${url.search}`
-  return Response.redirect(`${config.gateUrl}/login?rd=${encodeURIComponent(rd)}`, 302)
+  return Response.redirect(loginLocation(route, `${url.pathname}${url.search}`), 302)
 }
 
 export function isBrowserNavigation(request: Request): boolean {
-  return request.method === 'GET' && (request.headers.get('accept') || '').includes('text/html')
+  return wantsHtml(request.method, request.headers.get('accept'))
 }

@@ -1,11 +1,18 @@
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { nitro } from 'nitro/vite'
 
-import { checkBind, readAuthMode, StartupError } from './src/server/config.ts'
+import {
+  checkBind,
+  readAuthMode,
+  readPublicEntrance,
+  readServedEntrance,
+  StartupError,
+} from './src/server/config.ts'
 import { endConnectionGone } from './src/server/connectionGone.ts'
+import { entranceGuard } from './src/server/devEntrance.ts'
 
 /**
  * In dev, Nitro hands a request the browser marks as an image, video or embed (`Sec-Fetch-Dest`) to
@@ -25,7 +32,8 @@ const apiIsNeverAnAsset = (): Plugin => ({
 
 /**
  * `vite dev` listens before Nitro's plugins run, so the gate-off checks of src/server/startup.ts on
- * where it listens happen here, on Vite's own host and port: loopback only, never the live port.
+ * where it listens happen here, on Vite's own host and port: loopback only, never the live port. So does
+ * its refusal of a tailnet entrance only half configured (README: "Using it from other devices").
  */
 const refuseUnsafeAuth = (): Plugin => ({
   name: 'agent-board:refuse-unsafe-auth',
@@ -36,6 +44,7 @@ const refuseUnsafeAuth = (): Plugin => ({
       // Vite's default host is localhost; `true` is every interface.
       const bind = { host: host === true ? undefined : host || 'localhost', port }
       checkBind(readAuthMode(process.env), bind)
+      readPublicEntrance(process.env)
     } catch (err) {
       if (err instanceof StartupError) throw new Error(`agent-board refuses to start: ${err.message}`)
       throw err
@@ -66,10 +75,28 @@ const connectionGoneIsNotAnError = (): Plugin => ({
   },
 })
 
-export default defineConfig({
+/**
+ * The host `vite dev` answers besides loopback: the tailnet entrance's public host, once its keys are
+ * valid and the gate is on; otherwise none. Never `true`, never a wildcard. Nitro loads .env only after
+ * this file has run, so it is read here as Vite reads it (the shell's values win, as they do in Nitro).
+ */
+function allowedHosts(mode: string): string[] {
+  try {
+    const entrance = readServedEntrance(loadEnv(mode, process.cwd(), ''))
+    return entrance ? [entrance.host] : []
+  } catch (err) {
+    // A half-configured entrance: refuseUnsafeAuth stops the start and says why.
+    if (err instanceof StartupError) return []
+    throw err
+  }
+}
+
+export default defineConfig(({ mode }) => ({
   resolve: { tsconfigPaths: true },
   plugins: [
     refuseUnsafeAuth(),
+    // Ahead of Nitro's and Vite's own middlewares: Vite's files and its WebSocket are behind it too.
+    entranceGuard(),
     apiIsNeverAnAsset(),
     nitro({
       plugins: ['./src/server/startup.ts', './src/server/plugins/uploadSweep.ts'],
@@ -82,7 +109,10 @@ export default defineConfig({
     connectionGoneIsNotAnError(),
   ],
   ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
-  // The board writes its database, uploads and logs under data/ all the time; none of it is code. Nor
-  // is what the benchmark keeps in .bench/ (its builds, copies of the data and results).
-  server: { watch: { ignored: ['**/data/**', '**/.output*/**', '**/.bench/**'] } },
-})
+  server: {
+    // The board writes its database, uploads and logs under data/ all the time; none of it is code. Nor
+    // is what the benchmark keeps in .bench/ (its builds, copies of the data and results).
+    watch: { ignored: ['**/data/**', '**/.output*/**', '**/.bench/**'] },
+    allowedHosts: allowedHosts(mode),
+  },
+}))

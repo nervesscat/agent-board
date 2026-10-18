@@ -273,6 +273,30 @@ describe('a preview the board runs', () => {
     expect(await fake.answers(p.url!)).toBe(false)
   })
 
+  it("leaves the board's tailnet entrance out of what it builds and runs: a preview stays on loopback", async () => {
+    const entrance = {
+      PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net',
+      PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443',
+      PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111',
+      TAILNET_HOST: 'devbox.example-tailnet.ts.net',
+    }
+    for (const [key, value] of Object.entries(entrance)) vi.stubEnv(key, value)
+    try {
+      const fake = useFake()
+      const { ws } = ticketWithWorktree()
+      await startRunning(ws.id)
+      // The build and the server alike.
+      expect(fake.calls.map((c) => c.command)).toEqual(['pnpm build', process.execPath])
+      for (const call of fake.calls)
+        for (const key of Object.keys(entrance)) expect(call.env, key).not.toHaveProperty(key)
+      const env = mp.serverEnv(47150, path.join(tmp, 'preview-data'))
+      for (const key of Object.keys(entrance)) expect(env, key).not.toHaveProperty(key)
+      expect(env).toMatchObject({ BOARD_ENV: 'development', AUTH: 'off', HOST: '127.0.0.1' })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('installs first when the lockfile changed', async () => {
     const fake = useFake()
     const { ws } = ticketWithWorktree(worktree(path.join(repos, 'agent-board-newdeps'), { lock: 'old' }))
