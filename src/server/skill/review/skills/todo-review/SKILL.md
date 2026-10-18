@@ -113,8 +113,9 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
 
 1. **`handed-off`**: the ticket is in a `review` stage, `push.state` is `pushed`, `pr` is set,
    the PR's CI has finished and passed (`gh pr checks <number>`; still running: wait for it),
-   and `handoff.missing` is empty, or holds only `no_preview` with a hand-off post saying why the
-   change cannot be tried. The hand-off post (the newest progress post of the agent's) has
+   and `handoff.missing` is empty, or holds only `no_preview` with a summary saying why the
+   change cannot be tried. The ticket's summary (`summary` on `get_ticket`, `fallback: false`:
+   the hand-off is the summary the agent wrote, not a separate post) has
    screenshots in its attachments when the change has a UI, and a "Tested" part that names the
    level and what checked it (for mid and high, the review depth and why). Unless `depth=` was given
    (other than `auto`), measure the branch
@@ -176,6 +177,16 @@ Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview
   a comment on an error; the ticket agents own their tickets' stages.
 - The orchestrator never changes a ticket's complexity: it passes the level on, and the ticket agent
   never changes its own.
+- Where posts go on a ticket: progress posts and anything posted `as` one of the project's agents
+  (spec, builder, the review phases) land in its Agents tab, the agents' working record; Main is
+  the human's and stays short and to the point: their posts, decision cards, questions to them,
+  and the summary on top. The hand-off is the summary (`set_ticket_summary`), rewritten to the
+  current state, never a new hand-off post. Your own writes follow the same rules: an error
+  comment (Step 4) is a word to the human, so it goes to Main and stays one line; a relay of the
+  human's chat answer (`answer_decision`, only in a session with the human) lands under its card.
+  When the human posted on a ticket, the answer goes under their post, never as a new top-level
+  post: a reply with the plan first, then a reply with the result and its proofs. The ticket agent
+  does both; when you check a `handed-off` result, see that it did.
 - Nothing here merges, approves, or comments on GitHub. Pushing the ticket's own branch and opening
   its PR (the project's way) are the ticket agent's only remote writes.
 - If the user interrupts, tell them which tickets were in flight. Their worktrees are registered

@@ -18,7 +18,7 @@ import type { ReportDue } from '#/server/reportDue'
 import type { ReportList, ReportPeriod, ReportSettingsView, ReportView } from '#/server/reports'
 import type { ReportsOverview } from '#/server/reportsOverview'
 import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
-import type { WorkspacePreview } from '#/server/features'
+import type { WorkspacePreview, summaryHistory } from '#/server/features'
 import type { CleanupReport } from '#/server/cleanup'
 import type { DeleteItem, DeleteKind, DeleteResult } from '#/server/cleanupActions'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
@@ -170,6 +170,11 @@ export interface Me {
 export type CommentRow = Comment & { attachments: (Attachment & { url: string })[] }
 export type UpdateRow = TicketFull['updates'][number]
 export type LaneRow = TicketFull['lanes'][number]
+/** GET /api/tickets/:id/summary: the summary as the ticket shows it, and every version, newest first. */
+export interface SummaryHistory {
+  summary: TicketFull['summary']
+  versions: ReturnType<typeof summaryHistory>
+}
 
 export interface TicketGit {
   repo: { id: number; name: string } | null

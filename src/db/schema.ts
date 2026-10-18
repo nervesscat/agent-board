@@ -21,6 +21,7 @@ import {
   type ReportFormat,
   type StageColor,
   type StageKind,
+  type FeedTab,
 } from '#/lib/constants'
 
 export { COMMENT_PARENTS, STAGE_KINDS, type CommentParent, type StageColor, type StageKind }
@@ -253,32 +254,42 @@ export const workspaces = sqliteTable('workspaces', {
 
 // A post on a ticket: progress (`progress`, what agents report as they go) or discussion. Its replies
 // are the comments whose parent is the post (parent_type 'update', the table's historical name).
-export const updates = sqliteTable('updates', {
-  id: id(),
-  ticketId: integer('ticket_id')
-    .notNull()
-    .references(() => tickets.id, { onDelete: 'cascade' }),
-  author: text().notNull(),
-  // The connected agent that posted it on `author`'s behalf when `author` is one of the project's agents.
-  via: text().notNull().default(''),
-  body: text().notNull(),
-  progress: integer({ mode: 'boolean' }).notNull().default(true),
-  // A resume note as it was saved (see tickets.resumeNote): the ticket's handoffs, oldest to newest.
-  handoff: integer({ mode: 'boolean' }).notNull().default(false),
-  // A decision the human is asked to make: the post's body is the question, these are the answers
-  // to pick from. Null on any other post.
-  decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),
-  // The human's pick (an index into `decision`), who and when; null until decided.
-  decidedOption: integer('decided_option'),
-  decidedBy: text('decided_by').notNull().default(''),
-  decidedAt: text('decided_at'),
-  // Set when the orchestrator recorded the human's answer from the chat: the connected agent that relayed
-  // it, and the words as the human gave them. Both '' on a decision the human made on the board.
-  relayedBy: text('relayed_by').notNull().default(''),
-  relayedText: text('relayed_text').notNull().default(''),
-  createdAt: now(),
-  editedAt: text('edited_at'),
-})
+export const updates = sqliteTable(
+  'updates',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    author: text().notNull(),
+    // The connected agent that posted it on `author`'s behalf when `author` is one of the project's agents.
+    via: text().notNull().default(''),
+    body: text().notNull(),
+    progress: integer({ mode: 'boolean' }).notNull().default(true),
+    // A resume note as it was saved (see tickets.resumeNote): the ticket's handoffs, oldest to newest.
+    handoff: integer({ mode: 'boolean' }).notNull().default(false),
+    // A decision the human is asked to make: the post's body is the question, these are the answers
+    // to pick from. Null on any other post.
+    decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),
+    // The human's pick (an index into `decision`), who and when; null until decided.
+    decidedOption: integer('decided_option'),
+    decidedBy: text('decided_by').notNull().default(''),
+    decidedAt: text('decided_at'),
+    // Set when the orchestrator recorded the human's answer from the chat: the connected agent that relayed
+    // it, and the words as the human gave them. Both '' on a decision the human made on the board.
+    relayedBy: text('relayed_by').notNull().default(''),
+    relayedText: text('relayed_text').notNull().default(''),
+    // The tab of the ticket's feed it shows in (FEED_TABS): picked when it is posted, moved only on purpose.
+    tab: text().$type<FeedTab>().notNull().default('main'),
+    // A version of the ticket's summary: the newest is the summary, the older ones its history. Never a
+    // progress post. `summaryChange` is what that version changed, in one line.
+    summary: integer({ mode: 'boolean' }).notNull().default(false),
+    summaryChange: text('summary_change').notNull().default(''),
+    createdAt: now(),
+    editedAt: text('edited_at'),
+  },
+  (t) => [check('updates_tab', sql`${t.tab} IN ('main', 'agents')`)],
+)
 
 export type DecisionOption = { label: string; detail?: string; recommended?: boolean }
 

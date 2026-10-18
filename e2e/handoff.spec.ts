@@ -88,7 +88,7 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   expect(moved.handoff.missing.map((m) => m.code)).toEqual(ALL)
 
   // The agent pushes, links its PR and registers a preview that answers (this very board). The
-  // human's question is not a hand-off post.
+  // human's question does not hand it off.
   git('push', '-q', 'origin', branch)
   await ok(agent.patch(`/api/tickets/${t.id}`, { data: { prNumber: 4242 } }))
   await ok(
@@ -109,9 +109,9 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   await ok(agent.patch(`/api/tasks/${step!.id}`, { data: { done: true } }))
   await expect.poll(missing).toEqual(['no_handoff_post'])
 
-  // Then the hand-off post: nothing is missing.
+  // Then the summary: nothing is missing.
   await ok(
-    agent.post(`/api/tickets/${t.id}/updates`, {
+    agent.put(`/api/tickets/${t.id}/summary`, {
       data: { body: `PR #4242. Preview: ${e2eEnv().baseURL}, try the Hand-off card.` },
     }),
   )
@@ -127,7 +127,7 @@ test('a ticket moved to review lists what its hand-off lacks, and ticks each ite
   await expect(item('no_pr')).toContainText('PR #4242')
   await expect(item('not_pushed')).toContainText('Branch pushed')
   await expect(item('no_preview')).toContainText(`Running at ${e2eEnv().baseURL}`)
-  await expect(item('no_handoff_post')).toContainText('Posted by claude after the last commit')
+  await expect(item('no_handoff_post')).toContainText('Summary updated by claude after the last commit')
   await card.screenshot({ path: test.info().outputPath('handoff-card.png') })
 })
 

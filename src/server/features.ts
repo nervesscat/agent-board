@@ -1,9 +1,16 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, RESUME_TEMPLATE } from '#/lib/constants'
+import {
+  COMMENT_PARENTS,
+  type Complexity,
+  DEFAULT_COMPLEXITY,
+  type FeedTab,
+  RESUME_TEMPLATE,
+} from '#/lib/constants'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
+import { isHumanName, listActors } from './actors'
 import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
 import { branchHead, NO_BRANCH } from './git'
 import { HttpError, notFound } from './http'
@@ -349,9 +356,13 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     .orderBy(asc(schema.attachments.createdAt), asc(schema.attachments.id))
     .all()
   const agent = reservedFor(ticket)
+  const humans = listActors().flatMap((a) => (a.kind === 'human' ? [a.name] : []))
   return {
     ...ticket,
     reserved: self.reserved,
+    // The ticket's summary at the top of the feed's main tab: the newest version, or until there is one,
+    // the post that stands in for it. Null when there is neither.
+    summary: summaryOf(own, humans, files),
     // Set when the ticket is reserved for one of the project's agents: who to brief, and with what.
     agent: agent
       ? { id: agent.id, name: agent.name, instructions: agent.instructions, avatarUrl: agent.avatarUrl }
@@ -383,6 +394,61 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
       thread: updateThreads.get(u.id) ?? NO_THREAD,
     })),
   }
+}
+
+type Post = schema.Update
+
+/** One version of a ticket's summary, as reads hand it out. */
+function summaryVersion(u: Post, files: schema.Attachment[]) {
+  return {
+    postId: u.id,
+    body: u.body,
+    change: u.summaryChange,
+    at: u.createdAt,
+    by: u.author,
+    via: u.via,
+    attachments: files.filter((f) => f.updateId === u.id).map((f) => attachmentView(f)),
+  }
+}
+
+/**
+ * The summary of a ticket, from its own posts newest first: the newest summary version, with how many
+ * there are. Until one is written, the post that stands in for it (`fallback`, summaryStandIn), read as
+ * it is and never copied. Null with neither.
+ */
+function summaryOf(own: Post[], humans: string[], files: schema.Attachment[]) {
+  const versions = own.filter((u) => u.summary)
+  const current = versions[0] ?? summaryStandIn(own, humans)
+  if (!current) return null
+  return { ...summaryVersion(current, files), versions: versions.length, fallback: !current.summary }
+}
+
+/**
+ * The post shown as the summary of a ticket that has none yet, from its posts newest first: the newest
+ * progress post by an agent that is not a resume note's version (what a hand-off post was before the
+ * summary). The hand-off check goes by the same post until a summary is written.
+ */
+export const summaryStandIn = <T extends Pick<Post, 'author' | 'progress' | 'handoff' | 'summary'>>(
+  own: T[],
+  humans: string[],
+) => own.find((u) => u.progress && !u.handoff && !u.summary && !humans.includes(u.author))
+
+export type TicketSummary = NonNullable<ReturnType<typeof summaryOf>>
+
+/** Every version of a ticket's summary, newest first, each with its files: its history. */
+export function summaryHistory(ticketId: number) {
+  getTicket(ticketId)
+  const rows = db
+    .select()
+    .from(schema.updates)
+    .where(and(eq(schema.updates.ticketId, ticketId), eq(schema.updates.summary, true)))
+    .orderBy(desc(schema.updates.createdAt), desc(schema.updates.id))
+    .all()
+  const ids = rows.map((r) => r.id)
+  const files = ids.length
+    ? db.select().from(schema.attachments).where(inArray(schema.attachments.updateId, ids)).all()
+    : []
+  return rows.map((u) => summaryVersion(u, files))
 }
 
 /** A ticket in full as reads hand it out (`withResume`): its resume note and state under `resume`. */
@@ -1246,36 +1312,134 @@ function signer(projectId: number, actor: string, as?: string) {
 }
 
 /**
+ * The tab of the ticket's feed a new post goes to when its writer names none, by the first rule that
+ * fits: a decision card, main; a resume note's version, agents (the human's too); the human's post,
+ * main; the summary, main; a progress post or one made as one of the project's agents (`via` set: the
+ * review phases, the builder), agents; anything else (a question to the human, an answer), main.
+ * Migration 0029 sorted the posts written before it by the same rules.
+ */
+export function tabOf(p: {
+  decision: boolean
+  handoff: boolean
+  human: boolean
+  summary: boolean
+  progress: boolean
+  via: string
+}): FeedTab {
+  if (p.decision) return 'main'
+  if (p.handoff) return 'agents'
+  if (p.human || p.summary) return 'main'
+  if (p.progress || p.via) return 'agents'
+  return 'main'
+}
+
+/**
  * A post on a ticket. `progress` (the default, what `post_update` means) marks a step of the work: lane
  * summaries and the Daily view pick those out. Without it, it is discussion: a question, an answer.
+ * `tab` puts it in that tab of the feed; left out, tabOf picks it. `summary` makes it a new
+ * version of the ticket's summary (setSummary), never progress.
  */
 export function postUpdate(
   ticketId: number,
   body: string,
   attachmentIds: number[],
   actor: string,
-  opts: { as?: string; progress?: boolean; handoff?: boolean } = {},
+  opts: {
+    as?: string
+    progress?: boolean
+    handoff?: boolean
+    tab?: FeedTab
+    decision?: boolean
+    summary?: { change: string; first: boolean }
+  } = {},
 ) {
   const ticket = getTicket(ticketId)
   const { author, via } = signer(ticket.projectId, actor, opts.as)
-  const progress = opts.progress ?? true
+  const summary = Boolean(opts.summary)
+  const progress = !summary && (opts.progress ?? true)
   const handoff = opts.handoff ?? false
-  const row = db
-    .insert(schema.updates)
-    .values({ ticketId, author, via, body, progress, handoff })
-    .returning()
-    .get()
-  attachTo(attachmentIds, { updateId: row.id })
+  const tab =
+    opts.tab ??
+    tabOf({
+      decision: opts.decision ?? false,
+      handoff,
+      human: !via && isHumanName(author),
+      summary,
+      progress,
+      via,
+    })
+  // A file that is not there or already attached is refused before anything is written, and the post
+  // and its files land together: a refused file never leaves a post (a summary's version) behind.
+  assertUnattached(attachmentIds)
+  const row = db.transaction(() => {
+    const inserted = db
+      .insert(schema.updates)
+      .values({
+        ticketId,
+        author,
+        via,
+        body,
+        progress,
+        handoff,
+        tab,
+        summary,
+        summaryChange: opts.summary?.change ?? '',
+      })
+      .returning()
+      .get()
+    attachTo(attachmentIds, { updateId: inserted.id })
+    return inserted
+  })
   touch(ticketId)
+  const on = `#${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}`
   logActivity({
     projectId: ticket.projectId,
     actor: author,
-    kind: handoff ? 'handoff' : progress ? 'update' : 'comment',
-    text: `${handoff ? 'left a resume note on' : progress ? 'posted an update on' : 'posted on'} #${ticketId} ${ticket.title}${via ? ` (via ${via})` : ''}: ${handoff ? gist(body) : firstLine(body)}`,
+    kind: summary ? 'summary' : handoff ? 'handoff' : progress ? 'update' : 'comment',
+    text: opts.summary
+      ? `${opts.summary.first ? 'wrote the summary of' : 'updated the summary of'} ${on}: ${opts.summary.change || gist(body)}`
+      : `${handoff ? 'left a resume note on' : progress ? 'posted an update on' : 'posted on'} ${on}: ${handoff ? gist(body) : firstLine(body)}`,
     refType: 'ticket',
     refId: ticketId,
   })
   return row
+}
+
+/** The longest "what changed" line a summary version keeps. */
+export const MAX_SUMMARY_CHANGE = 200
+
+/**
+ * Write the ticket's summary: the one post at the top of the feed's main tab that says what the change
+ * does, where it stands, each review round's verdict, the PR, the preview and what to try there, and
+ * the proofs (files). Each write is a new version, kept with the earlier ones as its history; `change`
+ * says in one line what changed since the last one (needed from the second version on). Like a new
+ * post by its writer it bumps the ticket and reaches the inboxes, so a rewrite is never silent. It is
+ * what the hand-off's no_handoff_post check reads.
+ */
+export function setSummary(
+  ticketId: number,
+  input: { body: string; change?: string; attachmentIds?: number[]; as?: string },
+  actor: string,
+) {
+  getTicket(ticketId)
+  const body = input.body.trim()
+  if (!body) throw new HttpError(400, 'the summary is empty')
+  const change = (input.change ?? '').replace(/\s+/g, ' ').trim()
+  if (change.length > MAX_SUMMARY_CHANGE)
+    throw new HttpError(400, `say what changed in one line of at most ${MAX_SUMMARY_CHANGE} characters`)
+  const first = !db
+    .select({ id: schema.updates.id })
+    .from(schema.updates)
+    .where(and(eq(schema.updates.ticketId, ticketId), eq(schema.updates.summary, true)))
+    .get()
+  if (!first && !change)
+    throw new HttpError(400, 'say what changed since the last version, in change (one line)')
+  postUpdate(ticketId, body, input.attachmentIds ?? [], actor, {
+    as: input.as,
+    progress: false,
+    summary: { change, first },
+  })
+  return getTicketFull(ticketId).summary!
 }
 
 /** The first line that says something: markdown markers stripped, bare labels ("Evidence:") skipped. */
@@ -1439,6 +1603,7 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
           progress: schema.updates.progress,
           decision: schema.updates.decision,
           decidedAt: schema.updates.decidedAt,
+          tab: schema.updates.tab,
           createdAt: schema.updates.createdAt,
         })
         .from(schema.updates)
@@ -1528,6 +1693,7 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
   }
 
   const agents = listAgents(projectId)
+  const postTab = new Map(updates.map((u) => [u.id, u.tab]))
   const out = []
   for (const [key, list] of threads) {
     const subject = subjects.get(key)!
@@ -1537,6 +1703,13 @@ function openThreads(projectId: number, me: string[], opts: { agents: boolean; d
       parentId: last.parentId,
       ticketId: subject.ticketId,
       title: subject.title,
+      // The tab of the ticket's feed it is in: the last post's, or the post a reply is under; null off a ticket.
+      tab:
+        last.parentType === 'ticket'
+          ? (postTab.get(last.id) ?? null)
+          : last.parentType === 'update'
+            ? (postTab.get(last.parentId) ?? null)
+            : null,
       // Set when the thread waits on one of the project's agents: answer with comment as: <that name>.
       as,
       waiting: list.length - 1 - list.map((c) => who(c.author)).lastIndexOf(true),
@@ -1616,16 +1789,19 @@ export function addComment(
     attachmentIds?: number[]
     /** One of the project's agents, answering through the connected agent `actor`. */
     as?: string
+    /** On a ticket without replyTo, the tab of the feed the post goes to (tabOf when left out). */
+    tab?: FeedTab
   },
   actor: string,
 ): schema.Comment | schema.Update {
   assertThreadParent(input.parentType)
-  // On a ticket, a comment is a post (not progress); with replyTo, a reply under that post.
+  // On a ticket, a comment is a post (not progress); with replyTo, a reply under that post, in its tab.
   if (input.parentType === 'ticket') {
     if (!input.replyTo)
       return postUpdate(input.parentId, input.body, input.attachmentIds ?? [], actor, {
         as: input.as,
         progress: false,
+        tab: input.tab,
       })
     const post = getPost(input.replyTo)
     if (post.ticketId !== input.parentId)
@@ -1633,6 +1809,15 @@ export function addComment(
     return addComment({ ...input, parentType: 'update', parentId: post.id, replyTo: null }, actor)
   }
   const projectId = commentProject(input.parentType, input.parentId)
+  // A reply nests under a comment of the same thread: one elsewhere would be stored where no thread shows it.
+  if (input.replyTo) {
+    const to = db.select().from(schema.comments).where(eq(schema.comments.id, input.replyTo)).get()
+    if (!to || to.parentType !== input.parentType || to.parentId !== input.parentId)
+      throw new HttpError(
+        400,
+        `comment ${input.replyTo} is not in this thread (${input.parentType} ${input.parentId})`,
+      )
+  }
   const { author, via } = signer(projectId, actor, input.as)
   const row = db
     .insert(schema.comments)
@@ -1696,7 +1881,7 @@ export function removeTicketFile(ticketId: number, attachmentId: number, actor: 
  */
 export function askDecision(
   ticketId: number,
-  input: { body: string; options: schema.DecisionOption[]; as?: string; block?: boolean },
+  input: { body: string; options: schema.DecisionOption[]; as?: string; block?: boolean; tab?: FeedTab },
   actor: string,
 ) {
   const options = input.options
@@ -1705,7 +1890,12 @@ export function askDecision(
   if (options.length < 2 || options.length > 5) throw new HttpError(400, 'give 2 to 5 options')
   if (options.filter((o) => o.recommended).length > 1)
     throw new HttpError(400, 'recommend at most one option')
-  const post = postUpdate(ticketId, input.body, [], actor, { as: input.as, progress: false })
+  const post = postUpdate(ticketId, input.body, [], actor, {
+    as: input.as,
+    progress: false,
+    decision: true,
+    tab: input.tab,
+  })
   const row = db
     .update(schema.updates)
     .set({ decision: options })
@@ -1879,14 +2069,27 @@ function mayChange(row: { author: string; via: string }, actor: string, human: b
   throw new HttpError(403, `only ${row.author} or the human can change this`)
 }
 
+/** A summary's versions are its history: a new version is written (setSummary), never an edit. */
+function keepSummary(post: Post) {
+  if (post.summary)
+    throw new HttpError(
+      409,
+      'a version of the summary is kept as it was written: write a new version (set_ticket_summary) instead',
+    )
+}
+
+/** Its body, whether it is progress, and the tab of the feed it shows in (`tab`: only moved this way). */
 export function editPost(
   id: number,
-  patch: { body?: string; progress?: boolean },
+  patch: { body?: string; progress?: boolean; tab?: FeedTab },
   actor: string,
   opts: { human?: boolean } = {},
 ) {
   const before = getPost(id)
   mayChange(before, actor, opts.human ?? false)
+  if (patch.body === undefined && patch.progress === undefined && patch.tab === undefined)
+    throw new HttpError(400, 'give the new body, progress or tab')
+  if (patch.body !== undefined || patch.progress !== undefined) keepSummary(before)
   const edited = patch.body !== undefined && patch.body !== before.body
   const row = db
     .update(schema.updates)
@@ -1896,11 +2099,14 @@ export function editPost(
     .get()!
   const ticket = getTicket(row.ticketId)
   const mark =
-    patch.progress === undefined || patch.progress === before.progress
+    (patch.progress === undefined || patch.progress === before.progress
       ? ''
       : patch.progress
         ? ' (marked as progress)'
-        : ' (no longer progress)'
+        : ' (no longer progress)') +
+    (patch.tab === undefined || patch.tab === before.tab
+      ? ''
+      : ` (moved to ${patch.tab === 'main' ? 'Main' : 'Agents'})`)
   logActivity({
     projectId: ticket.projectId,
     actor,
@@ -1916,6 +2122,7 @@ export function editPost(
 export function deletePost(id: number, actor: string, opts: { human?: boolean } = {}) {
   const post = getPost(id)
   mayChange(post, actor, opts.human ?? false)
+  keepSummary(post)
   db.delete(schema.comments)
     .where(and(eq(schema.comments.parentType, 'update'), eq(schema.comments.parentId, id)))
     .run()

@@ -35,6 +35,14 @@ export function listActors(): { name: string; kind: ActorKind }[] {
   ]
 }
 
+/** Whether `name` signs in as the human (a passkey); a name the board never saw sign in does not. */
+export function isHumanName(name: string): boolean {
+  return (
+    db.select({ kind: schema.actors.kind }).from(schema.actors).where(eq(schema.actors.name, name)).get()
+      ?.kind === 'human'
+  )
+}
+
 /** The human the board saw sign in most recently: who a request is in development with the gate off. */
 export function lastHuman(): string | null {
   return (
