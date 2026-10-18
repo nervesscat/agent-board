@@ -57,3 +57,57 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 14
+
+  # The desktop app (README: "Install"): the Windows installer, a smoke test of the unpacked app and of
+  # the app as the installer puts it, and the installer kept as an artifact of the run.
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the installer
+        run: pnpm desktop:package
+
+      - name: Smoke-test the unpacked app
+        run: pnpm desktop:smoke --port 8240 --screenshot desktop/dist/smoke/window.png --busy-screenshot desktop/dist/smoke/busy-port.png
+
+      - name: Install it, smoke-test the installed app, uninstall it
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'agent-board-installed'
+          $setup = (Get-Item desktop/dist/agent-board-setup-*.exe).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/S', "/D=$dir"
+          if (-not (Test-Path "$dir/agent-board.exe")) { throw "the installer put no agent-board.exe in $dir" }
+          pnpm desktop:smoke --app $dir --port 8250
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # The uninstaller hands over to a copy of itself and returns at once.
+          Start-Process -Wait -FilePath "$dir/Uninstall CrossBoard.exe" -ArgumentList '/S'
+          for ($i = 0; $i -lt 60 -and (Test-Path "$dir/agent-board.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$dir/agent-board.exe") { throw "the uninstaller left $dir/agent-board.exe" }
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-board-setup
+          path: desktop/dist/agent-board-setup-*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the smoke test's screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-smoke
+          path: desktop/dist/smoke/
+          if-no-files-found: ignore
+          retention-days: 14
