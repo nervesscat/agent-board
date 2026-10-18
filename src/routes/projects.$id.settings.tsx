@@ -23,6 +23,7 @@ import { Textarea } from '#/components/ui/textarea'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch } from '#/lib/api'
 import { useProject } from '#/lib/project'
+import { DEFAULT_TAG_SUGGESTIONS, cleanSuggestions } from '#/lib/tags'
 
 export const Route = createFileRoute('/projects/$id/settings')({ component: Settings })
 
@@ -63,6 +64,7 @@ function Settings() {
         </div>
       </div>
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
+      <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
       <StagesEditor projectId={id} />
     </div>
   )
@@ -132,6 +134,70 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
             onClick={() => save.mutate(null)}
           >
             Use the built-in list
+          </Button>
+          <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+/**
+ * The tags offered as chips under every ticket's tags field, one per line, before the ones the
+ * project's tickets carry. Emptying it offers none of its own; the defaults can be had back.
+ */
+function TagSuggestions({ projectId, saved }: { projectId: string; saved: string[] }) {
+  const qc = useQueryClient()
+  const [text, setText] = useState(saved.join('\n'))
+  const dirty = cleanSuggestions(lines(text)).join('\n') !== saved.join('\n')
+  const save = useMutation({
+    mutationFn: (tagSuggestions: string[]) =>
+      patch<{ tagSuggestions: string[] }>(`/api/projects/${projectId}`, { tagSuggestions }),
+    onSuccess: async (row) => {
+      setText(row.tagSuggestions.join('\n'))
+      await qc.invalidateQueries({ queryKey: ['project', projectId] })
+      toast.success('Saved')
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    <section aria-label="Tag suggestions" className="max-w-3xl space-y-3">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">Tag suggestions</h2>
+        <p className="text-sm text-muted-foreground">
+          The tags offered as chips under a ticket&apos;s tags, one per line, followed by the tags its tickets
+          already carry. Agents read them in <code className="rounded bg-muted px-1">get_project</code> and
+          reuse them. Leave it empty to offer only the tags in use.
+        </p>
+      </div>
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (dirty && !save.isPending) save.mutate(cleanSuggestions(lines(text)))
+        }}
+      >
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          aria-label="Tag suggestions, one per line"
+          placeholder="No suggestions: only the tags in use are offered."
+          className="font-mono"
+        />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
+            {dirty ? 'Unsaved changes.' : 'No changes.'}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={save.isPending}
+            onClick={() => save.mutate([...DEFAULT_TAG_SUGGESTIONS])}
+          >
+            Use the defaults
           </Button>
           <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
             {save.isPending ? 'Saving…' : 'Save'}

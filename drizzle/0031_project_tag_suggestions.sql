@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `tag_suggestions` text DEFAULT '["Bug","UI","Implementation","Report"]' NOT NULL;

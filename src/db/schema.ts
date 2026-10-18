@@ -41,6 +41,12 @@ export const projects = sqliteTable('projects', {
   // The top-level phases a new ticket starts with, in order. Null is the built-in list, so a later
   // change to it reaches the project; [] seeds nothing.
   defaultPhases: text('default_phases', { mode: 'json' }).$type<string[]>(),
+  // The tags offered under every ticket's tags field, before the ones the project's tickets carry.
+  // [] offers none of its own.
+  tagSuggestions: text('tag_suggestions', { mode: 'json' })
+    .$type<string[]>()
+    .notNull()
+    .default(['Bug', 'UI', 'Implementation', 'Report']),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key

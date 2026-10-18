@@ -180,6 +180,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       name: z.string().min(1).max(100).optional(),
       instructions: Instructions.optional(),
       defaultPhases: DefaultPhases.optional(),
+      tagSuggestions: projects.TagSuggestions.optional(),
     }),
   )
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
