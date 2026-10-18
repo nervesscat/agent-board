@@ -227,6 +227,16 @@ describe('needsInstall', () => {
   })
 })
 
+describe('previewNode', () => {
+  it("runs the preview's server under this board's Node", () => {
+    expect(mp.previewNode('', 'C:\\node.exe')).toBe('C:\\node.exe')
+  })
+
+  it('runs it under the node on PATH when the board runs in the desktop app, under Electron', () => {
+    expect(mp.previewNode('42.11.10', 'C:\\agent-board.exe')).toBe('node')
+  })
+})
+
 describe('a preview the board runs', () => {
   it('builds, copies the data, starts the server and sets the link; stop kills it and frees the port', async () => {
     const fake = useFake()
