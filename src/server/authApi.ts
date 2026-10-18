@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { isAgent, onThisMachine, siteOf } from './auth'
 import { authMode, config, servedEntrance } from './config'
-import { readCookie, SESSION_COOKIE } from './credentials'
+import { readCookie, sessionCookieName } from './credentials'
 import { localSite, type SignInSite } from './entrance'
 import { HttpError, intParam, readJson } from './http'
 import * as passkeys from './passkeys'
@@ -50,10 +50,14 @@ function hostOnly(request: Request): SignInSite {
   return site
 }
 
+/** The session cookie's value of this board (its port), if the request has one. */
+const sessionToken = (request: Request) =>
+  readCookie(request.headers.get('cookie'), sessionCookieName(config.port))
+
 const signedIn = (site: SignInSite, session: passkeys.NewSession) =>
   Response.json(
     { ok: true, expiresAt: session.expiresAt },
-    { headers: { 'set-cookie': passkeys.sessionCookie(site, session) } },
+    { headers: { 'set-cookie': passkeys.sessionCookie(site, config.port, session) } },
   )
 
 export function authRoutes(api: ApiRouter) {
@@ -83,9 +87,12 @@ export function authRoutes(api: ApiRouter) {
   })
   api.post('/api/auth/logout', ({ request }) => {
     const site = siteOrRefuse(request)
-    const token = readCookie(request.headers.get('cookie'), SESSION_COOKIE)
+    const token = sessionToken(request)
     if (token) passkeys.endSession(token)
-    return Response.json({ ok: true }, { headers: { 'set-cookie': passkeys.clearedCookie(site) } })
+    return Response.json(
+      { ok: true },
+      { headers: { 'set-cookie': passkeys.clearedCookie(site, config.port) } },
+    )
   })
 
   // --- another device: the human makes a one-time link, the device enrols its passkey with it ---
@@ -129,7 +136,7 @@ export function authRoutes(api: ApiRouter) {
   })
   api.get('/api/auth/sessions', ({ request }) => {
     humanOnly(request, 'lists sessions')
-    return Response.json(passkeys.listSessions(readCookie(request.headers.get('cookie'), SESSION_COOKIE)))
+    return Response.json(passkeys.listSessions(sessionToken(request)))
   })
   api.delete('/api/auth/sessions/:id', ({ request, params }) => {
     humanOnly(request, 'ends sessions')

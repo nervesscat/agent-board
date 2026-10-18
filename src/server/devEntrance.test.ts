@@ -205,7 +205,7 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
 
   it('serves them with a session of the public origin or an agent token: the app loads through the entrance', async () => {
     const credentials: Record<string, string>[] = [
-      { cookie: 'theme=dark; board_session=public-ok' },
+      { cookie: `theme=dark; board_session_${on}=public-ok` },
       { authorization: 'Bearer agent-ok' },
     ]
     for (const credential of credentials)
@@ -218,13 +218,17 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
 
   it('refuses a session of localhost there, an expired one, and a revoked or unknown token', async () => {
     for (const credential of [
-      { cookie: 'board_session=local-ok' },
-      { cookie: 'board_session=public-expired' },
-      { cookie: 'board_session=made-up' },
+      { cookie: `board_session_${on}=local-ok` },
+      { cookie: `board_session_${on}=public-expired` },
+      { cookie: `board_session_${on}=made-up` },
       { cookie: 'gate_session=public-ok' },
       { authorization: 'Bearer agent-revoked' },
       { authorization: 'Bearer made-up' },
-      { authorization: 'Bearer made-up', cookie: 'board_session=public-ok' },
+      { authorization: 'Bearer made-up', cookie: `board_session_${on}=public-ok` },
+      { authorization: 'Bearer', cookie: `board_session_${on}=public-ok` },
+      // The cookie of a board on another port of localhost: never this board's.
+      { cookie: `board_session_${on + 1}=public-ok` },
+      { cookie: 'board_session=public-ok' },
     ] as Record<string, string>[]) {
       const res = await send(on, '/@vite/client', { host: PUBLIC, ...SERVE, ...credential })
       expect(res.status, JSON.stringify(credential)).toBe(401)
@@ -235,7 +239,7 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
     for (const headers of [
       { host: PUBLIC },
       { host: `localhost:${on}`, ...SERVE },
-      { host: PUBLIC, ...SERVE, cookie: 'board_session=public-ok' },
+      { host: PUBLIC, ...SERVE, cookie: `board_session_${on}=public-ok` },
     ])
       expect(await upgrade(on, headers), JSON.stringify(headers)).toBe('HTTP/1.1 403 Forbidden')
     // The hot reload of a browser on this machine still connects.
@@ -246,7 +250,7 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
     const res = await send(on, '/@vite/client', {
       host: PUBLIC,
       ...SERVE,
-      cookie: 'board_session=public-ok',
+      cookie: `board_session_${on}=public-ok`,
       'tailscale-funnel-request': '?1',
     })
     expect(res.status).toBe(403)
@@ -284,7 +288,7 @@ describe('vite dev with sign-in off', () => {
       { host: `localhost:${off}`, ...SERVE },
       { host: `127.0.0.1:${off}`, 'x-forwarded-for': '100.101.102.103' },
       { host: `localhost:${off}`, 'tailscale-user-login': 'someone@example.com' },
-      { host: `localhost:${off}`, ...SERVE, cookie: 'board_session=public-ok' },
+      { host: `localhost:${off}`, ...SERVE, cookie: `board_session_${off}=public-ok` },
     ]
     for (const headers of forwarded)
       for (const { target, headers: extra, mark } of surface) {

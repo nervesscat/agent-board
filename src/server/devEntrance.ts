@@ -84,10 +84,11 @@ export interface SignInCheck {
 }
 
 /**
- * Sign-ins read from the board's database in `dataDir`: opened on the first question, and again after a
- * failure (before the board's first start there is no database yet, and then nobody is signed in).
+ * Sign-ins read from the database in `dataDir` of the board on `port` (its session cookie's name): opened
+ * on the first question, and again after a failure (before the board's first start there is no database
+ * yet, and then nobody is signed in).
  */
-export function databaseSignIn(dataDir: string): SignInCheck {
+export function databaseSignIn(dataDir: string, port: number): SignInCheck {
   let sqlite: Database.Database | null = null
   const close = () => {
     sqlite?.close()
@@ -97,7 +98,7 @@ export function databaseSignIn(dataDir: string): SignInCheck {
     signedIn(headers, rpId) {
       try {
         sqlite ??= new Database(path.join(dataDir, 'board.db'), { fileMustExist: true })
-        return signedIn(sqlite, headers, rpId)
+        return signedIn(sqlite, headers, rpId, port)
       } catch (err) {
         console.error(
           'agent-board: cannot read sign-ins from the database:',
@@ -185,7 +186,7 @@ export function entranceGuard(options: { env?: () => Record<string, string | und
           if (err instanceof StartupError) throw new Error(`agent-board refuses to start: ${err.message}`)
           throw err
         }
-        const check = databaseSignIn(cfg.dataDir)
+        const check = databaseSignIn(cfg.dataDir, cfg.port)
         server.middlewares.use(entranceMiddleware(cfg, check))
         server.httpServer?.prependListener('upgrade', entranceUpgradeGuard(cfg))
         server.httpServer?.once('close', check.close)

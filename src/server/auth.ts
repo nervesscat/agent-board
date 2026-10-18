@@ -3,11 +3,10 @@ import { eq } from 'drizzle-orm'
 import { db, schema } from '#/db'
 import { type ActorKind, lastHuman, noteActor } from './actors'
 import { type AuthMode, authMode, config, type PublicEntrance, servedEntrance } from './config'
-import { agentTokenOf, bearerToken, readCookie, SESSION_COOKIE } from './credentials'
+import { agentTokenOf, bearerToken, isBearer, readCookie, sessionCookieName } from './credentials'
 import {
   cameThroughEntrance,
   guardRequest,
-  isBearer,
   isLoopbackPeer,
   isSignInPath,
   localSite,
@@ -121,7 +120,7 @@ export async function callerOf(
     const token = bearerToken(authorization)
     return token ? agentCaller(token) : null
   }
-  const cookie = readCookie(request.headers.get('cookie'), SESSION_COOKIE)
+  const cookie = readCookie(request.headers.get('cookie'), sessionCookieName(config.port))
   if (!cookie || !liveSession(cookie, where)) return null
   const account = getAccount()
   return account ? { name: account.name, kind: 'human' } : null

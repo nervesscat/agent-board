@@ -11,8 +11,12 @@ import type { Database } from 'better-sqlite3'
  * own process, before it serves its files through the tailnet entrance (devEntrance.ts).
  */
 
-/** The browser's session cookie. HttpOnly, SameSite=Lax, Secure over HTTPS (sessionCookie). */
-export const SESSION_COOKIE = 'board_session'
+/**
+ * The browser's session cookie of the board on `port` (PORT). HttpOnly, SameSite=Lax, Secure over HTTPS
+ * (sessionCookie). Browsers do not tell cookies apart by port, so the name does: a copy of the board on
+ * localhost:47101 never overwrites or clears the session of the board on localhost:47100.
+ */
+export const sessionCookieName = (port: number) => `board_session_${port}`
 
 /** A new secret for a cookie, a token or a one-time code: 32 random bytes, base64url. */
 export const newSecret = () => randomBytes(32).toString('base64url')
@@ -28,6 +32,12 @@ export function readCookie(header: string | null, name: string): string | null {
   }
   return null
 }
+
+/**
+ * An Authorization header of the Bearer scheme, a bare `Bearer` included: a claim to be an agent, which
+ * is let in on a valid token only, never on a cookie that comes with it.
+ */
+export const isBearer = (authorization: string | null) => /^bearer(\s|$)/i.test(authorization ?? '')
 
 /** The token of an `Authorization: Bearer <token>` header, or null. */
 export function bearerToken(authorization: string | null): string | null {
@@ -79,20 +89,22 @@ export function agentTokenOf(sqlite: Database, token: string, now = new Date()):
 }
 
 /**
- * Whether these headers sign someone in on the origin of `rpId`: a valid agent token, else a session of
- * a passkey of that RP ID. A Bearer header that is not a valid token is a no, whatever cookie comes with it.
+ * Whether these headers sign someone in on the origin of `rpId`, on the board on `port`: a valid agent
+ * token, else a session of a passkey of that RP ID. A Bearer header that is not a valid token (a bare
+ * `Bearer` too) is a no, whatever cookie comes with it.
  */
 export function signedIn(
   sqlite: Database,
   headers: { get(name: string): string | null },
   rpId: string,
+  port: number,
   now = new Date(),
 ): boolean {
   const authorization = headers.get('authorization')
-  if (authorization !== null && /^bearer\s/i.test(authorization)) {
+  if (isBearer(authorization)) {
     const token = bearerToken(authorization)
     return token !== null && agentTokenOf(sqlite, token, now) !== null
   }
-  const cookie = readCookie(headers.get('cookie'), SESSION_COOKIE)
+  const cookie = readCookie(headers.get('cookie'), sessionCookieName(port))
   return cookie !== null && sessionOf(sqlite, cookie, rpId, now) !== null
 }

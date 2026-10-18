@@ -19,10 +19,26 @@ import { lastHuman } from './actors'
 const escape = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 
-/** Where to go after signing in: a path on this origin, never another site (`//host`, `/\host`). */
+// `next` is resolved against this stand-in origin: what stays on it is a path of the board's own.
+const HERE = 'http://board.invalid'
+
+/**
+ * Where to go after signing in: a path on this origin, never another site (`//host`, `/\host`, `/.//host`)
+ * as the browser reads it. No control character or whitespace either: a URL parser drops tabs and line breaks
+ * (`/<tab>/host` is `//host`), and a Location header cannot carry them. What comes back is the path,
+ * query and fragment the URL parser makes of it, percent-encoded, so a header takes it too.
+ */
 export function safeNext(raw: string | null): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return '/'
-  return raw
+  if (!raw || !raw.startsWith('/') || /[\s\p{Cc}]/u.test(raw)) return '/'
+  let url: URL
+  try {
+    url = new URL(raw, HERE)
+  } catch {
+    return '/'
+  }
+  // A path that resolves to `//host` (`/.//host`, `/..//host`) would be another site once in a Location.
+  if (url.origin !== HERE || url.pathname.startsWith('//')) return '/'
+  return `${url.pathname}${url.search}${url.hash}`
 }
 
 const STYLE = `

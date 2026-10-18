@@ -1,5 +1,5 @@
 import { expandPath, type PublicEntrance, readAuthMode, readPort, readServedEntrance } from './config.ts'
-import { SESSION_COOKIE } from './credentials.ts'
+import { isBearer, sessionCookieName } from './credentials.ts'
 
 /**
  * The guard in front of every request, before anyone's sign-in is checked: pages, /api/* and /api/mcp
@@ -92,9 +92,6 @@ export function cameThroughEntrance(req: GuardRequest, entrance: PublicEntrance 
   return false
 }
 
-export const isBearer = (authorization: string | null) =>
-  authorization?.toLowerCase().startsWith('bearer ') ?? false
-
 /** The origins of the board's own pages: loopback on its own port, and the public origin. */
 export function boardOrigins(cfg: GuardConfig): string[] {
   const own = ['localhost', '127.0.0.1', '[::1]'].map((host) => `http://${host}:${cfg.port}`)
@@ -112,7 +109,7 @@ function crossSiteWrite(req: GuardRequest, cfg: GuardConfig): string | null {
   if (READS.has(req.method.toUpperCase())) return null
   const origin = req.headers.get('origin')
   if (origin === null || isBearer(req.headers.get('authorization'))) return null
-  if (!(req.headers.get('cookie') ?? '').includes(`${SESSION_COOKIE}=`)) return null
+  if (!(req.headers.get('cookie') ?? '').includes(`${sessionCookieName(cfg.port)}=`)) return null
   return boardOrigins(cfg).includes(origin) ? null : origin
 }
 

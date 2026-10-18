@@ -19,6 +19,7 @@ test.describe.configure({ mode: 'serial' })
 
 let board: ChildProcess
 let origin = ''
+let port = 0
 
 /** A free loopback port: E2E_AUTH_PORT when set, else one the system picks. */
 function freePort(): Promise<number> {
@@ -34,7 +35,7 @@ function freePort(): Promise<number> {
 
 test.beforeAll(async () => {
   const { root } = e2eEnv()
-  const port = await freePort()
+  port = await freePort()
   origin = `http://localhost:${port}`
   const dataDir = fs.mkdtempSync(path.join(root, 'sign-in-'))
   board = spawn(process.execPath, ['.output-e2e/server/index.mjs'], {
@@ -120,7 +121,7 @@ test('setup creates the account and its passkey, signs the browser in, and is re
     status: 200,
     body: expect.objectContaining({ actor: 'Enrique', agent: false, authOff: false }),
   })
-  const cookie = (await host.context.cookies()).find((c) => c.name === 'board_session')!
+  const cookie = (await host.context.cookies()).find((c) => c.name === `board_session_${port}`)!
   expect(cookie).toMatchObject({ httpOnly: true, sameSite: 'Lax', secure: false })
   expect(cookie.expires * 1000 - Date.now()).toBeGreaterThan(89 * 86_400_000)
 
@@ -150,14 +151,20 @@ test('signing out on Settings ends the session; the passkey signs back in on /lo
   const devices = page.getByRole('region', { name: 'Devices' })
   await expect(devices.getByRole('list', { name: 'Passkeys' })).toContainText('E2E desktop')
   await expect(devices.getByRole('list', { name: 'Sessions' })).toContainText('this browser')
-  const before = (await host.context.cookies()).find((c) => c.name === 'board_session')!.value
+  const before = (await host.context.cookies()).find((c) => c.name === `board_session_${port}`)!.value
+  // Browsers keep one cookie jar for every port of localhost: what a board on another port set stays.
+  const neighbour = { name: `board_session_${port + 1}`, value: 'of-the-board-next-door', url: origin }
+  await host.context.addCookies([neighbour])
   await devices.getByRole('button', { name: 'Sign out', exact: true }).first().click()
   await expect(page).toHaveURL(`${origin}/login`)
   expect((await me(page)).status).toBe(401)
+  const jar = await host.context.cookies()
+  expect(jar.find((c) => c.name === `board_session_${port}`)).toBeUndefined()
+  expect(jar.find((c) => c.name === neighbour.name)?.value).toBe(neighbour.value)
   // The old cookie is dead on the server, not just dropped by the browser.
   const api = await apiRequest.newContext({ baseURL: origin })
   const replay = await api.get('/api/me', {
-    headers: { accept: 'application/json', cookie: `board_session=${before}` },
+    headers: { accept: 'application/json', cookie: `board_session_${port}=${before}` },
   })
   expect(replay.status()).toBe(401)
   await api.dispose()

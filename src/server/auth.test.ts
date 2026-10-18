@@ -8,7 +8,8 @@ import { beforeAll, describe, expect, it } from 'vitest'
 // at a throwaway directory before either is imported.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-'))
 process.env.DATA_DIR = tmp
-const { readAuthMode, readPublicEntrance } = await import('./config')
+const { config, readAuthMode, readPublicEntrance } = await import('./config')
+const { sessionCookieName } = await import('./credentials')
 const { localSite, publicSite } = await import('./entrance')
 
 const PUBLIC = 'devbox.example-tailnet.ts.net'
@@ -56,7 +57,7 @@ const devOff = readAuthMode({ BOARD_ENV: 'development', AUTH: 'off', DEV_HUMAN: 
 const test = readAuthMode({ BOARD_ENV: 'test' })
 
 const req = (headers: Record<string, string> = {}) => new Request('http://localhost/api/me', { headers })
-const cookie = (value: string) => ({ cookie: `theme=dark; board_session=${value}` })
+const cookie = (value: string) => ({ cookie: `theme=dark; ${sessionCookieName(config.port)}=${value}` })
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` })
 
 describe('with sign-in on (production, and development without AUTH=off)', () => {

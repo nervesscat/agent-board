@@ -59,7 +59,7 @@ test('a write with the session cookie from another origin gets 403 and changes n
   for (const origin of ['https://evil.example', `http://localhost:${port + 1}`, 'null']) {
     const name = `cross-site ${origin}`
     const res = await request.post('/api/projects', {
-      headers: { Cookie: 'board_session=stolen', Origin: origin },
+      headers: { Cookie: `board_session_${port}=stolen`, Origin: origin },
       data: { name },
     })
     expect(res.status(), origin).toBe(403)
@@ -67,12 +67,12 @@ test('a write with the session cookie from another origin gets 403 and changes n
   }
   // From the board's own origin, from an agent (no Origin), or without the cookie, it goes through.
   const own = await request.post('/api/projects', {
-    headers: { Cookie: 'board_session=mine', Origin: baseURL },
+    headers: { Cookie: `board_session_${port}=mine`, Origin: baseURL },
     data: { name: 'same origin write' },
   })
   expect(own.status()).toBe(201)
   const agent = await request.post('/api/projects', {
-    headers: { Cookie: 'board_session=mine' },
+    headers: { Cookie: `board_session_${port}=mine` },
     data: { name: 'write without an Origin' },
   })
   expect(agent.status()).toBe(201)

@@ -9,7 +9,7 @@ import {
 import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { hashSecret, newSecret, SESSION_COOKIE, sessionOf } from './credentials'
+import { hashSecret, newSecret, sessionCookieName, sessionOf } from './credentials'
 import { LOCAL_RP_ID, type SignInSite } from './entrance'
 import { HttpError } from './http'
 
@@ -128,17 +128,20 @@ function createSession(passkeyId: number): NewSession {
   return { token, expiresAt }
 }
 
-/** The Set-Cookie of a new session: HttpOnly, SameSite=Lax, Secure on an https origin. */
-export function sessionCookie(site: SignInSite, session: NewSession): string {
+/**
+ * The Set-Cookie of a new session of the board on `port`: HttpOnly, SameSite=Lax, Secure on an https
+ * origin.
+ */
+export function sessionCookie(site: SignInSite, port: number, session: NewSession): string {
   const maxAge = Math.max(0, Math.floor((Date.parse(session.expiresAt) - Date.now()) / 1000))
   const secure = site.origin.startsWith('https:') ? '; Secure' : ''
-  return `${SESSION_COOKIE}=${session.token}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`
+  return `${sessionCookieName(port)}=${session.token}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`
 }
 
-/** The Set-Cookie that drops the session cookie. */
-export function clearedCookie(site: SignInSite): string {
+/** The Set-Cookie that drops the session cookie of the board on `port`. */
+export function clearedCookie(site: SignInSite, port: number): string {
   const secure = site.origin.startsWith('https:') ? '; Secure' : ''
-  return `${SESSION_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`
+  return `${sessionCookieName(port)}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`
 }
 
 /** Ends the session of this cookie value, if there is one. */

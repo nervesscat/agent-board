@@ -74,7 +74,7 @@ describe('the Host', () => {
         `x.${PUBLIC}`,
         '',
       ]) {
-        const verdict = guardRequest(request({ host, cookie: 'board_session=local-ok' }), cfg)
+        const verdict = guardRequest(request({ host, cookie: 'board_session_47100=local-ok' }), cfg)
         expect(verdict, `${host}`).toMatchObject({ allow: false, status: 403 })
       }
     expect(guardRequest(request({}), on)).toMatchObject({ allow: false, status: 403 })
@@ -95,7 +95,7 @@ describe('Tailscale Funnel', () => {
   it('is refused in every mode, with or without a session, whatever the peer', () => {
     const extras: Record<string, string>[] = [
       {},
-      { cookie: 'board_session=public-ok' },
+      { cookie: 'board_session_47100=public-ok' },
       { authorization: 'Bearer some-agent-token' },
       { host: PUBLIC },
     ]
@@ -182,7 +182,7 @@ describe('a write with the session cookie', () => {
       request(
         {
           host: 'localhost:47100',
-          cookie: 'theme=dark; board_session=local-ok',
+          cookie: 'theme=dark; board_session_47100=local-ok',
           ...(origin === null ? {} : { origin }),
           ...extra,
         },
@@ -231,10 +231,21 @@ describe('a write with the session cookie', () => {
       expect(write(method, 'https://evil.example'), method).toEqual({ allow: true, entrance: null })
   })
 
+  it("is only this board's cookie: a board on another port of localhost has its own", () => {
+    const write = (cookie: string) =>
+      guardRequest(
+        request({ host: 'localhost:47100', cookie, origin: 'https://evil.example' }, { method: 'POST' }),
+        on,
+      )
+    expect(write('board_session_47100=local-ok')).toMatchObject({ allow: false, status: 403 })
+    expect(write('board_session_47101=x; board_session_47100=local-ok')).toMatchObject({ allow: false })
+    expect(write('board_session_47101=x')).toEqual({ allow: true, entrance: null })
+  })
+
   it('is checked with sign-in off too, against its own port', () => {
     const test = (origin: string) =>
       guardRequest(
-        request({ host: '127.0.0.1:47131', cookie: 'board_session=x', origin }, { method: 'POST' }),
+        request({ host: '127.0.0.1:47131', cookie: 'board_session_47131=x', origin }, { method: 'POST' }),
         off,
       )
     expect(test('https://evil.example')).toMatchObject({ allow: false, status: 403 })

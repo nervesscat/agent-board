@@ -18,6 +18,8 @@ const PUBLIC = 'devbox.example-tailnet.ts.net'
 const PUBLIC_ORIGIN = `https://${PUBLIC}`
 process.env.PUBLIC_ORIGIN = PUBLIC_ORIGIN
 const LOCAL_ORIGIN = 'http://localhost:47100'
+/** The session cookie of the board on 47100 (credentials.ts sessionCookieName). */
+const COOKIE = 'board_session_47100'
 
 /** What `tailscale serve` adds to a request from a tailnet user. */
 const SERVE = {
@@ -32,10 +34,12 @@ type Via = 'host' | 'tailnet' | 'lan'
 let serve: (request: Request) => Promise<Response>
 let dbm: typeof import('#/db')
 let hashSecret: typeof import('./credentials').hashSecret
+let safeNext: typeof import('./authPages').safeNext
 
 beforeAll(async () => {
   const { admit, rememberActor } = await import('./auth')
   const { signInPage } = await import('./authPages')
+  safeNext = (await import('./authPages')).safeNext
   const { api } = await import('./api')
   const { api: guard } = await import('./http')
   dbm = await import('#/db')
@@ -76,7 +80,7 @@ function send(method: string, target: string, o: Send = {}): Promise<Response> {
     accept: o.html ? 'text/html' : 'application/json',
     ...(via === 'tailnet' ? SERVE : {}),
     ...(o.body !== undefined ? { 'content-type': 'application/json' } : {}),
-    ...(o.cookie ? { cookie: `theme=dark; board_session=${o.cookie}` } : {}),
+    ...(o.cookie ? { cookie: `theme=dark; ${COOKIE}=${o.cookie}` } : {}),
     ...(o.token ? { authorization: `Bearer ${o.token}` } : {}),
     ...o.headers,
   }
@@ -95,7 +99,7 @@ const json = async <T = any>(res: Response | Promise<Response>): Promise<T> => (
 /** The session cookie a response sets, its value and attributes. */
 function setCookie(res: Response) {
   const header = res.headers.get('set-cookie') ?? ''
-  const value = /^board_session=([^;]*)/.exec(header)?.[1] ?? null
+  const value = new RegExp(`^${COOKIE}=([^;]*)`).exec(header)?.[1] ?? null
   return { header, value }
 }
 
@@ -275,6 +279,53 @@ describe('signing in on this machine', () => {
     expect(on.headers.get('location')).toBe('/settings')
   })
 
+  it('never sends the browser to another site with a tab, a line break or a dot segment in next', async () => {
+    // The URL parser drops tabs and line breaks: `/<tab>/evil.example/x` is `//evil.example/x`.
+    for (const next of [
+      '/%09/evil.example/x',
+      '/%0A/evil.example',
+      '/%0D/evil.example',
+      '/%2E//evil.example',
+    ]) {
+      const on = await send('GET', `/login?next=${next}`, { html: true, cookie: hostSession })
+      expect(on.status, next).toBe(302)
+      expect(on.headers.get('location'), next).toBe('/')
+      const page = await (await send('GET', `/login?next=${next}`, { html: true })).text()
+      expect(page, next).toContain('data-next="/"')
+    }
+  })
+
+  it('keeps a path of this origin for next, and nothing else', () => {
+    expect(safeNext('/settings?x=1#y')).toBe('/settings?x=1#y')
+    expect(safeNext('/projects/1')).toBe('/projects/1')
+    // Percent-encoded where a Location header needs it, still the same path.
+    expect(safeNext('/projects/ü')).toBe('/projects/%C3%BC')
+    // Still encoded as it came: a path segment called `%09`, on this origin.
+    expect(safeNext('/%09/evil.example')).toBe('/%09/evil.example')
+    for (const next of [
+      null,
+      '',
+      'settings',
+      'https://evil.example',
+      'javascript:alert(1)',
+      '//evil.example/x',
+      '/\\evil.example',
+      '/\\/evil.example',
+      '\\\\evil.example',
+      '/\t/evil.example/x',
+      '/\n/evil.example',
+      '/\r/evil.example',
+      '\t//evil.example',
+      '/./\\evil.example',
+      '/.//evil.example',
+      '/..//evil.example',
+      '/\u0000/evil.example',
+      '/\u00a0/evil.example',
+      '/settings?q=a b',
+    ])
+      expect(safeNext(next), JSON.stringify(next)).toBe('/')
+  })
+
   it('signs in with the passkey, and signing out ends the session on the server', async () => {
     const res = await login(host, 'host', LOCAL_ORIGIN)
     expect(res.status).toBe(200)
@@ -286,7 +337,7 @@ describe('signing in on this machine', () => {
     })
     const out = await send('POST', '/api/auth/logout', { cookie: session, body: {} })
     expect(out.status).toBe(200)
-    expect(out.headers.get('set-cookie')).toMatch(/^board_session=; Path=\/; Max-Age=0/)
+    expect(out.headers.get('set-cookie')).toMatch(new RegExp(`^${COOKIE}=; Path=/; Max-Age=0`))
     expect((await send('GET', '/api/me', { cookie: session })).status).toBe(401)
     expect(
       dbm.db.$client.prepare('select 1 from sessions where token_hash = ?').get(hashSecret(session)),
@@ -513,6 +564,20 @@ describe('agent tokens', () => {
     expect((await send('GET', '/api/me', { headers: { authorization: 'Bearer' } })).status).toBe(401)
   })
 
+  it('refuses a bare Bearer with 401 even with a valid session cookie, on REST and /api/mcp', async () => {
+    expect((await send('GET', '/api/me', { cookie: hostSession })).status).toBe(200)
+    for (const authorization of ['Bearer', 'bearer', 'BEARER ', 'Bearer\t']) {
+      const me = await send('GET', '/api/me', { cookie: hostSession, headers: { authorization } })
+      expect(me.status, authorization).toBe(401)
+      const mcp = await send('POST', '/api/mcp', {
+        cookie: hostSession,
+        headers: { authorization, accept: 'application/json, text/event-stream' },
+        body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'whoami', arguments: {} } },
+      })
+      expect(mcp.status, authorization).toBe(401)
+    }
+  })
+
   it('keeps no token in plain text', () => {
     const columns = (
       dbm.db.$client.prepare('pragma table_info(agent_tokens)').all() as { name: string }[]
@@ -588,6 +653,25 @@ describe('the devices section', () => {
     expect((await send('DELETE', `/api/auth/sessions/${mine.id}`, { cookie: hostSession })).status).toBe(204)
     expect((await send('GET', '/api/me', { cookie: other })).status).toBe(401)
     expect((await send('GET', '/api/me', { cookie: hostSession })).status).toBe(200)
+  })
+
+  it('keeps its session cookie apart from a board on another port of localhost', async () => {
+    // Browsers keep one cookie jar for every port of localhost: a copy of the board on 47101 names its
+    // cookie for its port, so this board neither reads nor overwrites nor clears it.
+    const res = await login(host, 'host', LOCAL_ORIGIN)
+    expect(res.headers.get('set-cookie')).toMatch(new RegExp(`^${COOKIE}=[^;]+;`))
+    const session = setCookie(res).value!
+    const other = { cookie: `board_session_47101=${session}` }
+    expect((await send('GET', '/api/me', { headers: other })).status).toBe(401)
+    expect((await send('GET', '/api/me', { headers: { cookie: `board_session=${session}` } })).status).toBe(
+      401,
+    )
+    const out = await send('POST', '/api/auth/logout', {
+      headers: { cookie: `board_session_47101=x; ${COOKIE}=${session}` },
+      body: {},
+    })
+    expect(out.headers.get('set-cookie')).toMatch(new RegExp(`^${COOKIE}=; Path=/; Max-Age=0`))
+    expect(out.headers.get('set-cookie')).not.toMatch(/board_session_47101/)
   })
 
   it('refuses a write with the session cookie from a page of another origin', async () => {
