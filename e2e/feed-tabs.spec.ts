@@ -118,7 +118,18 @@ test('a link to a post in Agents opens that tab', async ({ page, api, agent }) =
   )
   await page.goto(`/projects/${t.projectId}/features/${t.id}#post-${step.id}`)
   await expect(tab(page, 'Agents')).toHaveAttribute('aria-selected', 'true')
-  await expect(page.locator(`#post-${step.id}`)).toBeInViewport()
+  // It is also the summary's stand-in, on top of Main: the link lands on the post itself, in Agents,
+  // and marks it, not the card the tab took away.
+  const shown = page.locator(`#post-${step.id}`)
+  await expect(shown).toHaveCount(1)
+  await expect(shown).toHaveAttribute('data-revealed', '')
+  await expect(page.locator('[data-revealed]')).toHaveCount(1)
+  await expect(shown).toBeInViewport()
+
+  // Back on Main, the stand-in is there, but it is not the post a link lands on.
+  await tab(page, 'Main').click()
+  await expect(page.getByRole('article', { name: 'Summary' })).toContainText('Deep in agents.')
+  await expect(page.locator(`#post-${step.id}`)).toHaveCount(0)
 })
 
 test('the summary takes replies like a post: shown on its card, opened by a link, answered from it', async ({

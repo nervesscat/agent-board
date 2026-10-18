@@ -412,7 +412,7 @@ test("a tile links to its ticket, a lane's to the top-level ticket, and a thread
   await gallery(page, project.id)
   await tile(page, 'lane-shot.png').getByRole('link', { name: 'Open thread' }).click()
   await expect(page).toHaveURL(new RegExp(`/features/${t.id}#post-${lanePost.id}$`))
-  await feedDrawn(page)
+  // An agent's progress post is in the Agents tab, which the link opens; the long feed is in Main.
   const shown = page.locator(`#post-${lanePost.id}`)
   await expect(shown).toHaveAttribute('data-revealed', '')
   await expect(page.locator('[data-revealed]')).toHaveCount(1)
