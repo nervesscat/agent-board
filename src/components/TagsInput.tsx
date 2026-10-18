@@ -182,11 +182,12 @@ export function TagsInput({
               key={tag}
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
+              onClick={(e) => {
                 onChange([...value, tag])
                 // The chip goes once added: from the keyboard, the focus it had goes back to the text
-                // rather than to the page, so the field is not left.
-                input.current?.focus()
+                // rather than to the page, so the field is not left. A mouse press never gave it the
+                // focus, which stays where it was (in the title being typed, say).
+                if (document.activeElement === e.currentTarget) input.current?.focus()
               }}
               aria-label={`Add tag ${tag}`}
               className="inline-flex max-w-full items-center gap-0.5 rounded-md border border-dashed px-1.5 py-0.5 text-xs break-all text-muted-foreground hover:border-solid hover:text-foreground"
