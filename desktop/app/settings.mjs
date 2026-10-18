@@ -142,26 +142,60 @@ export function expandPath(p, home) {
   return path.resolve(home, p)
 }
 
+const LOOPBACKS = ['127.0.0.1', '::1']
+
 /**
  * Whether nothing listens on `port` on either loopback. The window opens `localhost`, which may reach
- * [::1] first, so a server there and not on 127.0.0.1 would take the window's requests.
+ * [::1] first, so a server there and not on 127.0.0.1 would take the window's requests. A program on
+ * every interface (`[::]` or `0.0.0.0`) answers on loopback too, yet Windows still lets 127.0.0.1 be
+ * bound beside it: so each loopback is both bound and connected to, and either one taken is busy.
+ * Nothing is bound off loopback, which would ask the firewall.
  * @param {number} port
  */
 export async function isPortFree(port) {
-  for (const host of ['127.0.0.1', '::1']) {
-    const free = await new Promise((/** @type {(free: boolean) => void} */ resolve) => {
-      const probe = net.createServer()
-      probe.once('error', (/** @type {NodeJS.ErrnoException} */ e) =>
-        // No IPv6 on this machine: nothing can hold [::1] either.
-        resolve(e.code === 'EADDRNOTAVAIL' || e.code === 'EAFNOSUPPORT'),
-      )
-      probe.once('listening', () => probe.close(() => resolve(true)))
-      probe.listen(port, host)
-    })
-    if (!free) return false
-  }
+  // The connections first: the bind probes listen for a moment, and must not answer them.
+  if (!(await Promise.all(LOOPBACKS.map((host) => refuses(port, host)))).every(Boolean)) return false
+  for (const host of LOOPBACKS) if (!(await canBind(port, host))) return false
   return true
 }
+
+/**
+ * @param {number} port
+ * @param {string} host
+ * @returns {Promise<boolean>}
+ */
+const canBind = (port, host) =>
+  new Promise((resolve) => {
+    const probe = net.createServer()
+    probe.once('error', (/** @type {NodeJS.ErrnoException} */ e) =>
+      // No IPv6 on this machine: nothing can hold [::1] either.
+      resolve(e.code === 'EADDRNOTAVAIL' || e.code === 'EAFNOSUPPORT'),
+    )
+    probe.once('listening', () => probe.close(() => resolve(true)))
+    probe.listen(port, host)
+  })
+
+/**
+ * Whether a connection to `host:port` is refused (or cannot be made), rather than taken by a listener.
+ * @param {number} port
+ * @param {string} host
+ * @returns {Promise<boolean>}
+ */
+const refuses = (port, host) =>
+  new Promise((resolve) => {
+    const socket = net.connect({ port, host })
+    socket.setTimeout(2000)
+    socket.once('connect', () => {
+      socket.destroy()
+      resolve(false)
+    })
+    // Nothing answered in time: no listener accepts there.
+    socket.once('timeout', () => {
+      socket.destroy()
+      resolve(true)
+    })
+    socket.once('error', () => resolve(true))
+  })
 
 /**
  * What the busy-port dialog says.

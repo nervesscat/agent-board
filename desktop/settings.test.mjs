@@ -200,12 +200,13 @@ describe('isPortFree', () => {
   afterEach(async () => {
     await Promise.all(servers.splice(0).map((s) => new Promise((r) => s.close(r))))
   })
-  /** Listens on `host`, on a port the system picks unless one is given. */
-  const listen = (/** @type {string} */ host, port = 0) =>
+  /** Listens on `host` (every interface when it is left out, as `listen(port)` does), on a port the
+   *  system picks unless one is given. */
+  const listen = (/** @type {string | undefined} */ host, port = 0) =>
     new Promise((/** @type {(port: number) => void} */ resolve, reject) => {
       const s = net.createServer()
       s.once('error', reject)
-      s.listen(port, host, () => {
+      s.listen({ port, host }, () => {
         servers.push(s)
         resolve(/** @type {net.AddressInfo} */ (s.address()).port)
       })
@@ -223,6 +224,18 @@ describe('isPortFree', () => {
 
   it('is false while something listens on [::1] only', async () => {
     expect(await isPortFree(await listen('::1'))).toBe(false)
+  })
+
+  it('is false while something listens on every interface, as listen(port) does ([::])', async () => {
+    expect(await isPortFree(await listen(undefined))).toBe(false)
+  })
+
+  it('is false while something listens on [::] explicitly', async () => {
+    expect(await isPortFree(await listen('::'))).toBe(false)
+  })
+
+  it('is false while something listens on 0.0.0.0', async () => {
+    expect(await isPortFree(await listen('0.0.0.0'))).toBe(false)
   })
 })
 
