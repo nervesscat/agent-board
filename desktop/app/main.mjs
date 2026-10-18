@@ -3,6 +3,7 @@
 // running for the agents; Quit stops it and frees its port. README: "Install".
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -31,9 +32,24 @@ const OPEN_SETTINGS = 'Open the settings file'
 const OPEN_LOGS = 'Open the logs folder'
 const OPEN_HOME = 'Open the app folder'
 
+/** @param {unknown} err */
+function errorText(err) {
+  return err instanceof Error ? err.message : String(err)
+}
+
 // The window's profile (the gate's cookie, the cache) goes with the config, and so does the
-// single-instance lock: one app per folder.
-app.setPath('userData', path.join(home, 'electron'))
+// single-instance lock: one app per folder. A folder that cannot be made (AGENT_BOARD_HOME on a missing
+// drive, or naming a file) would fail the lock as if another copy held it: it is reported instead,
+// from a throwaway profile.
+/** @type {unknown} */
+let homeError = null
+try {
+  fs.mkdirSync(path.join(home, 'electron'), { recursive: true })
+  app.setPath('userData', path.join(home, 'electron'))
+} catch (err) {
+  homeError = err
+  app.setPath('userData', fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-profile-')))
+}
 
 /** @type {import('./settings.mjs').Settings} */
 let settings
@@ -49,7 +65,19 @@ let failed = false
 // The end of the server's error output, for the dialog when it stops.
 let serverErr = ''
 
-if (!app.requestSingleInstanceLock()) {
+if (homeError) {
+  void app
+    .whenReady()
+    .then(() =>
+      fatal(
+        'The board cannot start.',
+        `The app's folder ${home} cannot be used: ${errorText(homeError)}\n\n` +
+          'Set AGENT_BOARD_HOME to a folder that can be written, or remove it to use the default.',
+        home,
+        OPEN_HOME,
+      ),
+    )
+} else if (!app.requestSingleInstanceLock()) {
   // Another copy runs: it shows its window (second-instance, below), and this one goes.
   app.quit()
 } else {
@@ -69,9 +97,6 @@ if (!app.requestSingleInstanceLock()) {
     .then(start)
     .catch((/** @type {unknown} */ err) => fatal('The board cannot start.', errorText(err), home, OPEN_HOME))
 }
-
-/** @param {unknown} err */
-const errorText = (err) => (err instanceof Error ? err.message : String(err))
 
 async function start() {
   try {
