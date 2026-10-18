@@ -267,6 +267,10 @@ function createWindow() {
     webPreferences: { contextIsolation: true, sandbox: true },
   })
   win.once('ready-to-show', () => win?.show())
+  // Closed for good (once the app is failing or quitting): nothing may show it again.
+  win.on('closed', () => {
+    win = null
+  })
   win.on('close', (event) => {
     if (quitting) return
     event.preventDefault()
@@ -285,7 +289,7 @@ function createWindow() {
 }
 
 function showWindow() {
-  if (!win) return
+  if (!win || win.isDestroyed()) return
   if (win.isMinimized()) win.restore()
   win.show()
   win.focus()
