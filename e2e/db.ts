@@ -34,8 +34,14 @@ export function startedAt(ticketId: number, at: string) {
 
 /** Dates an upload `days` back (it was made just now). */
 export function uploadedDaysAgo(attachmentId: number, days: number) {
-  const at = new Date(Date.now() - days * 86_400_000).toISOString()
-  inDatabase((db) => db.prepare('update attachments set "createdAt" = ? where id = ?').run(at, attachmentId))
+  uploadedAt(attachmentId, new Date(Date.now() - days * 86_400_000))
+}
+
+/** Dates an upload at `at`. */
+export function uploadedAt(attachmentId: number, at: Date) {
+  inDatabase((db) =>
+    db.prepare('update attachments set "createdAt" = ? where id = ?').run(at.toISOString(), attachmentId),
+  )
 }
 
 /**

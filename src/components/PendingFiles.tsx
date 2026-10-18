@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { galleryItem } from '#/components/Gallery'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, upload } from '#/lib/api'
+import { fileSize } from '#/lib/format'
 import { cn } from '#/lib/utils'
 
 /**
@@ -100,7 +101,7 @@ export function PendingFiles({
                     aria-label="uploading"
                   />
                 ) : (
-                  <span className="shrink-0 text-muted-foreground">{formatSize(f.size)}</span>
+                  <span className="shrink-0 text-muted-foreground">{fileSize(f.size)}</span>
                 )}
               </button>
               <Tip content="Remove">
@@ -120,9 +121,6 @@ export function PendingFiles({
     </>
   )
 }
-
-const formatSize = (n: number) =>
-  n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`
 
 /**
  * Paste and drag-and-drop for an attachment form: spread `props` on the form and give
