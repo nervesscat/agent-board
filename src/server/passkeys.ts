@@ -144,8 +144,10 @@ export function clearedCookie(site: SignInSite, port: number): string {
   return `${sessionCookieName(port)}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${secure}`
 }
 
-/** Ends the session of this cookie value, if there is one. */
-export function endSession(token: string) {
+/** Ends the session of this cookie value, if there is one. Before setup there is none to end: 409. */
+export function endSession(token: string | null) {
+  if (!hasAccount()) throw SETUP_FIRST()
+  if (!token) return
   db.delete(schema.sessions)
     .where(eq(schema.sessions.tokenHash, hashSecret(token)))
     .run()

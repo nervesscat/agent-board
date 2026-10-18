@@ -151,6 +151,11 @@ describe('first boot: no account yet', () => {
       .values({ tokenHash: hashSecret('early-token'), name: 'early', expiresAt: '2099-01-01T00:00:00.000Z' })
       .run()
     expect((await send('GET', '/api/projects', { token: 'early-token' })).status).toBe(409)
+    // Signing out too: there is nothing to sign out of yet.
+    const out = await send('POST', '/api/auth/logout', { cookie: 'made-up', body: {} })
+    expect(out.status).toBe(409)
+    expect(await out.json()).toEqual({ error: expect.stringMatching(/^setup required/), code: 'setup' })
+    expect(out.headers.get('set-cookie')).toBeNull()
     expect(await json(send('GET', '/api/health'))).toEqual({ ok: true })
     // Through the tailnet the same, and /api/health is not open there.
     expect((await send('GET', '/', { via: 'tailnet', html: true })).headers.get('location')).toBe('/setup')

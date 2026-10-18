@@ -87,8 +87,7 @@ export function authRoutes(api: ApiRouter) {
   })
   api.post('/api/auth/logout', ({ request }) => {
     const site = siteOrRefuse(request)
-    const token = sessionToken(request)
-    if (token) passkeys.endSession(token)
+    passkeys.endSession(sessionToken(request))
     return Response.json(
       { ok: true },
       { headers: { 'set-cookie': passkeys.clearedCookie(site, config.port) } },
