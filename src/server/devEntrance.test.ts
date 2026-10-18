@@ -3,15 +3,20 @@ import http, { type IncomingMessage } from 'node:http'
 import net from 'node:net'
 import path from 'node:path'
 
+import Database from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { createServer, type ViteDevServer } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { hashSecret } from './credentials'
 import { dropForwarding, entranceGuard, nodeHeaders } from './devEntrance'
 
 /**
  * The guard in front of `vite dev`'s own surface, on a real Vite dev server with the plugin vite.config.ts
  * uses: /@vite/client, /@fs, modules under /src, public/ files, files asked for as assets,
- * /__open-in-editor and the hot-reload WebSocket. The gate is an edge fake of passkey-gate's /auth.
+ * /__open-in-editor and the hot-reload WebSocket. Who is signed in comes from a board database of its
+ * own, migrated as the board migrates it, with sessions and tokens written into it.
  */
 
 const PUBLIC = 'devbox.example-tailnet.ts.net'
@@ -48,6 +53,34 @@ const SERVE = {
   'x-forwarded-host': PUBLIC,
   'x-forwarded-proto': 'https',
   'tailscale-user-login': 'someone@example.com',
+}
+
+// --- the board's database: a session on each origin, an expired one, and agent tokens ---
+
+const dataDir = path.join(root, 'data')
+fs.mkdirSync(dataDir)
+{
+  const sqlite = new Database(path.join(dataDir, 'board.db'))
+  migrate(drizzle(sqlite), { migrationsFolder: path.resolve('drizzle') })
+  const future = '2099-01-01T00:00:00.000Z'
+  sqlite.prepare(`insert into account (id, name, user_handle) values (1, 'Enrique', 'AAAA')`).run()
+  const passkey = sqlite.prepare(
+    `insert into passkeys (credential_id, public_key, rp_id, name) values (?, 'AAAA', ?, ?)`,
+  )
+  const session = sqlite.prepare(
+    'insert into sessions (token_hash, passkey_id, expires_at, last_seen_at) values (?, ?, ?, ?)',
+  )
+  const phone = Number(passkey.run('phone', PUBLIC, 'Phone').lastInsertRowid)
+  const desktop = Number(passkey.run('desktop', 'localhost', 'Desktop').lastInsertRowid)
+  session.run(hashSecret('public-ok'), phone, future, future)
+  session.run(hashSecret('public-expired'), phone, '2026-01-01T00:00:00.000Z', future)
+  session.run(hashSecret('local-ok'), desktop, future, future)
+  const token = sqlite.prepare(
+    'insert into agent_tokens (token_hash, name, expires_at, revoked_at) values (?, ?, ?, ?)',
+  )
+  token.run(hashSecret('agent-ok'), 'claude', future, null)
+  token.run(hashSecret('agent-revoked'), 'old', future, '2026-01-01T00:00:00.000Z')
+  sqlite.close()
 }
 
 const freePort = () =>
@@ -97,24 +130,6 @@ function upgrade(port: number, headers: Record<string, string>) {
   })
 }
 
-// --- the public gate: an edge fake of passkey-gate's /auth ---
-
-const gateAsked: { cookie: string | null; authorization: string | null }[] = []
-const gate = http.createServer((req, res) => {
-  const cookie = req.headers.cookie ?? null
-  const authorization = req.headers.authorization ?? null
-  gateAsked.push({ cookie, authorization })
-  if (
-    req.url === '/auth' &&
-    (cookie === 'gate_session=public-ok' || authorization === 'Bearer gate_public_token')
-  ) {
-    res.writeHead(200, { 'x-gate-device': 'public-phone' })
-    return res.end()
-  }
-  res.writeHead(401, { 'content-type': 'application/json' })
-  res.end('{"error":"sign in"}')
-})
-
 const servers: ViteDevServer[] = []
 async function vite(env: Record<string, string>, allowedHosts: string[]) {
   const port = await freePort()
@@ -135,44 +150,29 @@ async function vite(env: Record<string, string>, allowedHosts: string[]) {
   return port
 }
 
-/** A free port above 10080 for the gate: the board asks it with fetch, which refuses its blocked ports. */
-async function listenAboveBlocked(server: net.Server): Promise<number> {
-  for (;;) {
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    const { port } = server.address() as net.AddressInfo
-    if (port > 10080) return port
-    await new Promise((resolve) => server.close(resolve))
-  }
-}
-
 let on: number
 let off: number
 beforeAll(async () => {
-  const keys = {
-    PUBLIC_ORIGIN: `https://${PUBLIC}`,
-    PUBLIC_GATE_URL: `https://${PUBLIC}:8443`,
-    PUBLIC_GATE_AUTH_URL: `http://127.0.0.1:${await listenAboveBlocked(gate)}`,
-  }
+  const keys = { PUBLIC_ORIGIN: `https://${PUBLIC}`, DATA_DIR: dataDir }
   // The live board: production, the entrance configured, its host allowed as vite.config.ts allows it.
   on = await vite({ ...keys, BOARD_ENV: 'production' }, [PUBLIC])
-  // A gate-off board with the same keys (ignored), as test mode or a preview would have them.
+  // A board without sign-in with the same keys (ignored), as test mode or a preview would have them.
   off = await vite({ ...keys, BOARD_ENV: 'test' }, [])
 }, 60_000)
 
 afterAll(async () => {
   for (const server of servers) await server.close()
-  await new Promise((resolve) => gate.close(resolve))
   fs.rmSync(root, { recursive: true, force: true })
 })
 
-describe('vite dev with the gate on, through the tailnet entrance', () => {
+describe('vite dev with sign-in on, through the tailnet entrance', () => {
   const ways = (port: number) => ({
     'the public host': { host: PUBLIC },
     'a forged localhost Host': { host: `localhost:${port}`, ...SERVE },
     'a forged 127.0.0.1 Host': { host: `127.0.0.1:${port}`, ...SERVE },
   })
 
-  it("serves none of Vite's own files without the public gate's yes, whatever Host it claims", async () => {
+  it("serves none of Vite's own files without a session of the public origin, whatever Host it claims", async () => {
     for (const [way, headers] of Object.entries(ways(on)))
       for (const { target, headers: extra, mark } of [
         ...surface,
@@ -185,19 +185,28 @@ describe('vite dev with the gate on, through the tailnet entrance', () => {
       }
   })
 
-  it("sends a browser to the public gate's login, back to the same path on the public origin", async () => {
+  it("sends a browser to the board's own login on the public origin, back to the same path", async () => {
     const res = await send(on, '/src/secret.ts?x=1', { host: PUBLIC, ...SERVE, accept: 'text/html' })
     expect(res.status).toBe(302)
-    expect(res.location).toBe(
-      `https://${PUBLIC}:8443/login?rd=https%3A%2F%2Fdevbox.example-tailnet.ts.net%2Fsrc%2Fsecret.ts%3Fx%3D1`,
-    )
+    expect(res.location).toBe('/login?next=%2Fsrc%2Fsecret.ts%3Fx%3D1')
     expect(res.body).not.toContain('MARK-SOURCE')
   })
 
-  it("serves them with the public gate's session or token: the app loads through the entrance", async () => {
+  it('lets the sign-in pages and their endpoints through to the board, and nothing else', async () => {
+    // No board behind this Vite: what the guard passes on, Vite answers with a 404 itself.
+    for (const target of ['/login?next=%2F', '/setup', '/enroll?code=x', '/api/auth/login/options'])
+      expect((await send(on, target, { host: PUBLIC, ...SERVE })).status, target).toBe(404)
+    for (const target of ['/login/../src/secret.ts', '/api/auth/passkeys', '/login.ts', '/@fs/login']) {
+      const res = await send(on, target, { host: PUBLIC, ...SERVE })
+      expect(res.status, target).toBe(401)
+      expect(res.body).not.toContain('MARK-SOURCE')
+    }
+  })
+
+  it('serves them with a session of the public origin or an agent token: the app loads through the entrance', async () => {
     const credentials: Record<string, string>[] = [
-      { cookie: 'gate_session=public-ok' },
-      { authorization: 'Bearer gate_public_token' },
+      { cookie: 'theme=dark; board_session=public-ok' },
+      { authorization: 'Bearer agent-ok' },
     ]
     for (const credential of credentials)
       for (const { target, headers: extra, mark } of surface) {
@@ -207,16 +216,26 @@ describe('vite dev with the gate on, through the tailnet entrance', () => {
       }
   })
 
-  it('refuses a session of the localhost gate there', async () => {
-    const res = await send(on, '/@vite/client', { host: PUBLIC, ...SERVE, cookie: 'gate_session=local-ok' })
-    expect(res.status).toBe(401)
+  it('refuses a session of localhost there, an expired one, and a revoked or unknown token', async () => {
+    for (const credential of [
+      { cookie: 'board_session=local-ok' },
+      { cookie: 'board_session=public-expired' },
+      { cookie: 'board_session=made-up' },
+      { cookie: 'gate_session=public-ok' },
+      { authorization: 'Bearer agent-revoked' },
+      { authorization: 'Bearer made-up' },
+      { authorization: 'Bearer made-up', cookie: 'board_session=public-ok' },
+    ] as Record<string, string>[]) {
+      const res = await send(on, '/@vite/client', { host: PUBLIC, ...SERVE, ...credential })
+      expect(res.status, JSON.stringify(credential)).toBe(401)
+    }
   })
 
   it('opens no WebSocket through it, signed in or not', async () => {
     for (const headers of [
       { host: PUBLIC },
       { host: `localhost:${on}`, ...SERVE },
-      { host: PUBLIC, ...SERVE, cookie: 'gate_session=public-ok' },
+      { host: PUBLIC, ...SERVE, cookie: 'board_session=public-ok' },
     ])
       expect(await upgrade(on, headers), JSON.stringify(headers)).toBe('HTTP/1.1 403 Forbidden')
     // The hot reload of a browser on this machine still connects.
@@ -227,7 +246,7 @@ describe('vite dev with the gate on, through the tailnet entrance', () => {
     const res = await send(on, '/@vite/client', {
       host: PUBLIC,
       ...SERVE,
-      cookie: 'gate_session=public-ok',
+      cookie: 'board_session=public-ok',
       'tailscale-funnel-request': '?1',
     })
     expect(res.status).toBe(403)
@@ -238,15 +257,13 @@ describe('vite dev with the gate on, through the tailnet entrance', () => {
   })
 })
 
-describe('vite dev with the gate on, straight to the board on this machine', () => {
-  it('serves as before, without asking the gate', async () => {
-    const asked = gateAsked.length
+describe('vite dev with sign-in on, straight to the board on this machine', () => {
+  it('serves as before, without a session', async () => {
     for (const { target, headers: extra, mark } of surface) {
       const res = await send(on, target, { host: `127.0.0.1:${on}`, ...extra })
       expect(res.status, target).toBe(200)
       expect(res.body, target).toContain(mark)
     }
-    expect(gateAsked).toHaveLength(asked)
   })
 
   it('refuses any Host but loopback and the public name, before Vite answers', async () => {
@@ -261,13 +278,13 @@ describe('vite dev with the gate on, straight to the board on this machine', () 
   })
 })
 
-describe('vite dev with the gate off', () => {
+describe('vite dev with sign-in off', () => {
   it('refuses every request a proxy forwarded, whatever its Host, on every path; direct ones are served', async () => {
     const forwarded: Record<string, string>[] = [
       { host: `localhost:${off}`, ...SERVE },
       { host: `127.0.0.1:${off}`, 'x-forwarded-for': '100.101.102.103' },
       { host: `localhost:${off}`, 'tailscale-user-login': 'someone@example.com' },
-      { host: `localhost:${off}`, ...SERVE, cookie: 'gate_session=public-ok' },
+      { host: `localhost:${off}`, ...SERVE, cookie: 'board_session=public-ok' },
     ]
     for (const headers of forwarded)
       for (const { target, headers: extra, mark } of surface) {
@@ -286,7 +303,7 @@ describe('vite dev with the gate off', () => {
 })
 
 describe('the plugin', () => {
-  it('stops vite dev on a tailnet entrance only half configured', async () => {
+  it('stops vite dev on a PUBLIC_ORIGIN it cannot trust', async () => {
     await expect(
       createServer({
         configFile: false,
@@ -295,9 +312,9 @@ describe('the plugin', () => {
         logLevel: 'silent',
         appType: 'custom',
         server: { middlewareMode: true, watch: null },
-        plugins: [entranceGuard({ env: () => ({ PUBLIC_ORIGIN: `https://${PUBLIC}` }) })],
+        plugins: [entranceGuard({ env: () => ({ PUBLIC_ORIGIN: `http://${PUBLIC}` }) })],
       }),
-    ).rejects.toThrow(/^agent-board refuses to start: the tailnet entrance takes/)
+    ).rejects.toThrow(/^agent-board refuses to start: PUBLIC_ORIGIN must be/)
   })
 
   it('drops forwarded headers a peer that is not loopback sent, raw headers included', () => {

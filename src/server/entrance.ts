@@ -1,7 +1,8 @@
-import { type PublicEntrance, readAuthMode, readPort, readServedEntrance } from './config.ts'
+import { expandPath, type PublicEntrance, readAuthMode, readPort, readServedEntrance } from './config.ts'
+import { SESSION_COOKIE } from './credentials.ts'
 
 /**
- * The guard in front of every request, before the gate is asked anything: pages, /api/* and /api/mcp
+ * The guard in front of every request, before anyone's sign-in is checked: pages, /api/* and /api/mcp
  * (src/start.ts), and under `vite dev` Vite's own files and its hot-reload socket (devEntrance.ts).
  * README: "Using it from other devices".
  *
@@ -9,9 +10,10 @@ import { type PublicEntrance, readAuthMode, readPort, readServedEntrance } from 
  * - The Host must be loopback (localhost, 127.0.0.1 or [::1], any port) or the configured public host.
  * - A request for the public host, or one a proxy on this machine forwarded (`tailscale serve` adds
  *   X-Forwarded-* and, for a tailnet user, Tailscale-User-*), came through the tailnet entrance: refused
- *   while the gate is off or no entrance is configured, else answered by the public gate alone. Those
- *   headers count only from a loopback peer: from any other they are ignored, as if absent.
- * - A write that carries the gate's session cookie must come from one of the board's own origins: a
+ *   while sign-in is off or no entrance is configured, else signed in on the public origin alone (its
+ *   own passkeys and sessions). Those headers count only from a loopback peer: from any other they are
+ *   ignored, as if absent.
+ * - A write that carries the board's session cookie must come from one of the board's own origins: a
  *   page on another port of localhost gets that cookie too.
  */
 
@@ -30,12 +32,14 @@ export interface GuardRequest {
 }
 
 export interface GuardConfig {
-  /** The gate is off (test, development with AUTH=off): nothing is answered through a proxy. */
-  gateOff: boolean
+  /** Sign-in is off (test, development with AUTH=off): nothing is answered through a proxy. */
+  authOff: boolean
   /** The board's own port (PORT): its loopback origins are http://localhost:<port> and the like. */
   port: number
-  /** The tailnet entrance it serves: null when none is configured, and always while the gate is off. */
+  /** The tailnet entrance it serves: null when none is configured, and always while sign-in is off. */
   entrance: PublicEntrance | null
+  /** DATA_DIR: where the board's database is, which `vite dev` reads sessions and tokens from. */
+  dataDir: string
 }
 
 /** Allowed, with the entrance it came through (null: straight to the board on this machine), or refused. */
@@ -45,7 +49,12 @@ export type Verdict =
 
 /** The guard's settings from the board's environment, as config.ts reads them. Throws StartupError. */
 export function guardConfig(e: Record<string, string | undefined>): GuardConfig {
-  return { gateOff: readAuthMode(e).off, port: readPort(e), entrance: readServedEntrance(e) }
+  return {
+    authOff: readAuthMode(e).off,
+    port: readPort(e),
+    entrance: readServedEntrance(e),
+    dataDir: expandPath(e.DATA_DIR || './data'),
+  }
 }
 
 /** A loopback address, or none known: then forwarded headers count, which only ever refuses more. */
@@ -95,14 +104,15 @@ export function boardOrigins(cfg: GuardConfig): string[] {
 const READS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /**
- * A write a page of another origin may have sent with the human's session: it carries the gate's
- * cookie and an Origin that is not one of the board's. No Origin (agents, curl) or a token is not one.
+ * A write a page of another origin may have sent with the human's session: it carries the board's
+ * session cookie and an Origin that is not one of the board's. No Origin (agents, curl) or a token is
+ * not one.
  */
 function crossSiteWrite(req: GuardRequest, cfg: GuardConfig): string | null {
   if (READS.has(req.method.toUpperCase())) return null
   const origin = req.headers.get('origin')
   if (origin === null || isBearer(req.headers.get('authorization'))) return null
-  if (!(req.headers.get('cookie') ?? '').includes('gate_session=')) return null
+  if (!(req.headers.get('cookie') ?? '').includes(`${SESSION_COOKIE}=`)) return null
   return boardOrigins(cfg).includes(origin) ? null : origin
 }
 
@@ -118,8 +128,8 @@ export function guardRequest(req: GuardRequest, cfg: GuardConfig): Verdict {
   if (!hostOf(host, cfg.entrance))
     return refuse(403, `the board does not answer for the host ${JSON.stringify(host ?? '')}`)
   const through = cameThroughEntrance(req, cfg.entrance)
-  if (through && cfg.gateOff)
-    return refuse(403, 'the gate is off: this board answers on this machine only, never through a proxy')
+  if (through && cfg.authOff)
+    return refuse(403, 'sign-in is off: this board answers on this machine only, never through a proxy')
   if (through && !cfg.entrance)
     return refuse(
       403,
@@ -129,31 +139,56 @@ export function guardRequest(req: GuardRequest, cfg: GuardConfig): Verdict {
   if (foreign !== null)
     return refuse(
       403,
-      `a write with the gate's cookie from ${JSON.stringify(foreign)}, not one of the board's origins`,
+      `a write with the board's session cookie from ${JSON.stringify(foreign)}, not one of the board's origins`,
     )
   return { allow: true, entrance: through ? cfg.entrance : null }
 }
 
-/** Where a request signs in, and where the board asks who it is. */
-export interface GateRoute {
-  /** The gate as the browser reaches it: its /login. */
-  loginUrl: string
-  /** The gate as the board reaches it: its /auth. */
-  authUrl: string
-  /** The board's origin as the browser used it: where the login sends it back (`rd`). */
-  boardUrl: string
+/**
+ * Where a request signs in: the WebAuthn RP ID its passkeys are bound to, and the origin its browser
+ * uses. On this machine that is localhost (WebAuthn takes no IP address, so 127.0.0.1 and [::1] are sent
+ * there); through the tailnet entrance it is the public host and PUBLIC_ORIGIN.
+ */
+export interface SignInSite {
+  rpId: string
+  origin: string
 }
 
-/** The public gate: the login and the origin on the tailnet name, /auth on this machine. */
-export const publicRoute = (entrance: PublicEntrance): GateRoute => ({
-  loginUrl: entrance.gateUrl,
-  authUrl: entrance.gateAuthUrl,
-  boardUrl: entrance.origin,
+/** The RP ID of the passkeys made on this machine. */
+export const LOCAL_RP_ID = 'localhost'
+
+export const localSite = (port: number): SignInSite => ({
+  rpId: LOCAL_RP_ID,
+  origin: `http://${LOCAL_RP_ID}:${port}`,
 })
 
-/** The gate's login, sending the browser back to the same page on the board's origin it used. */
-export const loginLocation = (route: GateRoute, pathAndSearch: string) =>
-  `${route.loginUrl}/login?rd=${encodeURIComponent(`${route.boardUrl}${pathAndSearch}`)}`
+export const publicSite = (entrance: PublicEntrance): SignInSite => ({
+  rpId: entrance.host,
+  origin: entrance.origin,
+})
+
+/** The pages that sign a browser in, served without a session (authPages.ts). */
+export const SIGN_IN_PAGES = new Set(['/setup', '/login', '/enroll'])
+
+/** The endpoints those pages call before anyone is signed in (authApi.ts). */
+export const SIGN_IN_API = new Set([
+  '/api/auth/setup/options',
+  '/api/auth/setup/verify',
+  '/api/auth/login/options',
+  '/api/auth/login/verify',
+  '/api/auth/enrol/options',
+  '/api/auth/enrol/verify',
+  '/api/auth/logout',
+])
+
+/** A path answered without a session, on either origin: the sign-in pages and their endpoints. */
+export const isSignInPath = (pathname: string) => SIGN_IN_PAGES.has(pathname) || SIGN_IN_API.has(pathname)
+
+/**
+ * The board's own login, on the origin the browser used (a relative Location: no forwarded host ever
+ * names it), coming back to the same page after.
+ */
+export const loginLocation = (pathAndSearch: string) => `/login?next=${encodeURIComponent(pathAndSearch)}`
 
 /** A page the browser navigates to, as opposed to an API call: the one a login redirect helps. */
 export const wantsHtml = (method: string | undefined, accept: string | null) =>

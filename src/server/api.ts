@@ -16,6 +16,7 @@ import * as agents from './agents'
 import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
+import { authRoutes } from './authApi'
 import { cleanupReport } from './cleanup'
 import { DeleteItems, deleteLeftovers } from './cleanupActions'
 import { authMode } from './config'
@@ -112,6 +113,8 @@ api.get('/api/me', ({ request, actor }) =>
 )
 // Every name the board has seen sign in, with whether it is an agent or a human.
 api.get('/api/actors', () => json(listActors()))
+// Signing in with passkeys, signing out, and the devices section (authApi.ts).
+authRoutes(api)
 
 // --- connecting agents: board settings, and the skill each CLI installs ---
 api.get('/api/agent-setup', () => json(agents.agentSetup()))

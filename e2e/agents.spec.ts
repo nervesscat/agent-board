@@ -123,7 +123,7 @@ async function runShownLine(
     .getByRole('tab', { name: shell === 'bash' ? 'bash / zsh' : 'PowerShell' })
     .first()
     .click()
-  await page.getByLabel('Gate token').fill('gate_e2e')
+  await page.getByLabel('Agent token').fill('gate_e2e')
   await expect(line(shell, 'gate_e2e')).toBeVisible()
   const text = (await entry.locator('pre').textContent())!
   const scratch = fs.mkdtempSync(path.join(e2eEnv().root, 'shell '))
@@ -298,7 +298,7 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await expect(entry.getByRole('button', { name: 'Copy' })).toBeVisible()
     await page.getByRole('tab', { name: 'PowerShell' }).first().click()
     await expect(line('powershell')).toBeVisible()
-    await page.getByLabel('Gate token').fill('gate_e2e')
+    await page.getByLabel('Agent token').fill('gate_e2e')
     await expect(line('powershell', 'gate_e2e')).toBeVisible()
 
     // What the line does, run as shown: the bundle extracted into the folder checked. Checked again, it
@@ -375,7 +375,7 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await page.getByRole('tab', { name: 'PowerShell' }).first().click()
     await expect(line('powershell')).toBeVisible()
     await expect(page.getByRole('tab', { name: 'PowerShell' })).toHaveCount(2)
-    await page.getByLabel('Gate token').fill('gate_e2e')
+    await page.getByLabel('Agent token').fill('gate_e2e')
     await expect(line('powershell', 'gate_e2e')).toBeVisible()
     await expect(
       page.getByText(/replacing files of the same name and keeping the rest/),

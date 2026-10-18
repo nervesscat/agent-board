@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Copy, ExternalLink } from 'lucide-react'
+import { Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { z } from 'zod'
 
@@ -21,7 +21,7 @@ export const Route = createFileRoute('/agents')({
   validateSearch: z.object({ shell: z.enum(SHELLS).optional().catch(undefined) }),
 })
 
-type Setup = { boardUrl: string; gateUrl: string; settings: Settings }
+type Setup = { boardUrl: string; settings: Settings }
 
 function ConnectAgents() {
   const { data: setup } = useQuery({
@@ -65,7 +65,7 @@ function ConnectAgents() {
       <AgentPicker value={client} onChange={setClient} />
 
       <div className="space-y-2">
-        <Label htmlFor="token">Gate token</Label>
+        <Label htmlFor="token">Agent token</Label>
         <div className="flex items-center gap-2">
           <Input
             id="token"
@@ -73,20 +73,12 @@ function ConnectAgents() {
             autoComplete="off"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="gate_… (fills in the commands below; not saved)"
+            placeholder="token (fills in the commands below; not saved)"
             className="max-w-md font-mono text-xs"
           />
-          <a
-            href={`${setup.gateUrl}/devices`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground underline hover:text-foreground"
-          >
-            Mint one <ExternalLink className="size-3" />
-          </a>
         </div>
         <p className="text-xs text-muted-foreground">
-          Mint one token per agent: its name is the agent&apos;s name on the board (claude, codex, …).
+          One token per agent: its name is the agent&apos;s name on the board (claude, codex, …).
         </p>
       </div>
 
