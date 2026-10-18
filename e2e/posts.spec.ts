@@ -3,7 +3,7 @@ import type { Locator, Page } from '@playwright/test'
 import type { Attachment, CommentRow } from '#/lib/api'
 import { AGENT } from './env'
 import { png } from './files'
-import { expect, expectTooltip, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, openFeedTab, test } from './fixtures'
 
 /** How much of it shows: its opacity times every ancestor's, where hover and focus reveal it. */
 const shown = (l: Locator) =>
@@ -267,6 +267,8 @@ test('the progress toggle flips a post both ways, with its own icon for each', a
     agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'Wired up the parser.' } }),
   )
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  // A progress post: in the agents' tab.
+  await openFeedTab(page, 'Agents')
   const post = page.getByRole('article')
   const chip = authorRow(post).getByText('progress', { exact: true })
   await expect(chip).toBeVisible()
@@ -336,6 +338,7 @@ test('a lane post on its parent keeps only the reply toggle, in the row under it
   await ok(agent.post(`/api/tickets/${lane.id}/updates`, { data: { body: 'Done in the lane.' } }))
   await page.goto(`/projects/${project.id}/features/${parent.id}`)
   await page.getByText('include lane posts').click()
+  await openFeedTab(page, 'Agents')
 
   const post = page.getByRole('article').filter({ hasText: 'Done in the lane.' })
   await expect(authorRow(post).getByRole('link', { name: 'One part' })).toBeVisible()
@@ -359,6 +362,7 @@ test('the reply toggle shows the count, opens the thread right under its row and
   )
   await ok(agent.post('/api/comments', { data: { parentType: 'update', parentId: id, body: 'The reply.' } }))
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  await openFeedTab(page, 'Agents')
   const post = page.getByRole('article')
   const actions = post.getByRole('group', { name: 'Post actions' })
 
@@ -502,6 +506,7 @@ test("hovering a reply or the thread's Reply box shows the reply's actions, not 
   for (const body of ['First reply.', 'Second reply.', 'Third reply.'])
     await ok(agent.post('/api/comments', { data: { parentType: 'update', parentId: id, body } }))
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  await openFeedTab(page, 'Agents')
   const post = page.getByRole('article')
   const actions = post.getByRole('group', { name: 'Post actions' })
   await actions.getByRole('button', { name: '3 replies', exact: true }).click()

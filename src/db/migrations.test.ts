@@ -370,7 +370,7 @@ describe('0029_ticket_pr_link', () => {
     const rows = () => ({
       tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[],
       tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
-      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
+      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[],
     })
     const before = rows()
     expect(before.tickets).toHaveLength(3)
@@ -387,10 +387,105 @@ describe('0029_ticket_pr_link', () => {
     // Every other column is what it was (toEqual leaves an undefined column out of the comparison).
     expect(after.tickets.map((t) => ({ ...t, pr_id: undefined }))).toEqual(before.tickets)
     expect(after.tasks).toEqual(before.tasks)
-    expect(after.updates).toEqual(before.updates)
+    // A later migration adds the posts' tab and summary columns: the rest of each post is what it was.
+    expect(after.updates.map(({ tab: _t, summary: _s, summary_change: _c, ...rest }) => rest)).toEqual(
+      before.updates,
+    )
     expect(sqlite.prepare('SELECT parent_id FROM tickets WHERE id = ?').get(lane)).toEqual({
       parent_id: feature,
     })
+    sqlite.close()
+  })
+})
+
+describe('0030_post_tabs_and_summary', () => {
+  it('sorts every existing post into a tab of the feed by the rules a new post goes by, and changes nothing else', () => {
+    const sqlite = databaseAt('0029_ticket_pr_link')
+    const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
+    const ticket = Number(
+      sqlite
+        .prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (?, 't', 'enrique')")
+        .run(project).lastInsertRowid,
+    )
+    const actor = sqlite.prepare("INSERT INTO actors (name, kind, last_seen_at) VALUES (?, ?, '2026-10-01')")
+    actor.run('enrique', 'human')
+    actor.run('claude', 'agent')
+    const insert = sqlite.prepare(
+      `INSERT INTO updates (ticket_id, author, via, body, progress, handoff, decision, createdAt, edited_at)
+       VALUES (@ticket, @author, @via, @body, @progress, @handoff, @decision, @at, @edited)`,
+    )
+    const post = (p: {
+      author: string
+      via?: string
+      progress: number
+      handoff?: number
+      decision?: string
+    }) =>
+      Number(
+        insert.run({
+          ticket,
+          via: '',
+          handoff: 0,
+          decision: null,
+          body: `by ${p.author}`,
+          at: '2026-10-10T10:00:00.000Z',
+          edited: null,
+          ...p,
+        }).lastInsertRowid,
+      )
+    const progress = post({ author: 'claude', progress: 1 })
+    const persona = post({ author: 'spec', via: 'claude', progress: 0 })
+    const question = post({ author: 'claude', progress: 0 })
+    const human = post({ author: 'enrique', progress: 1 })
+    const humanNote = post({ author: 'enrique', progress: 1, handoff: 1 })
+    const agentNote = post({ author: 'claude', progress: 1, handoff: 1 })
+    const card = post({
+      author: 'spec',
+      via: 'claude',
+      progress: 0,
+      decision: '[{"label":"a"},{"label":"b"}]',
+    })
+    // An author the board never saw sign in counts as an agent, as the hand-off check reads it.
+    const unknown = post({ author: 'codex', progress: 1 })
+    // A post's files are kept: a rebuild of the table would cascade into them.
+    sqlite
+      .prepare(
+        "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
+      )
+      .run(progress)
+    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all()
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const tab = (id: number) =>
+      (sqlite.prepare('SELECT tab FROM updates WHERE id = ?').get(id) as { tab: string }).tab
+    expect({
+      progress: tab(progress),
+      persona: tab(persona),
+      question: tab(question),
+      human: tab(human),
+      humanNote: tab(humanNote),
+      agentNote: tab(agentNote),
+      card: tab(card),
+      unknown: tab(unknown),
+    }).toEqual({
+      progress: 'agents',
+      persona: 'agents',
+      question: 'main',
+      human: 'main',
+      humanNote: 'agents',
+      agentNote: 'agents',
+      card: 'main',
+      unknown: 'agents',
+    })
+    // Every other column reads as it did; no post is a summary.
+    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    expect(after.map(({ tab: _t, summary: _s, summary_change: _c, ...rest }) => rest)).toEqual(before)
+    expect(after.every((u) => u.summary === 0 && u.summary_change === '')).toBe(true)
+    expect(sqlite.prepare('SELECT update_id FROM attachments').all()).toEqual([{ update_id: progress }])
+    expect(() => sqlite.prepare("UPDATE updates SET tab = 'other' WHERE id = ?").run(progress)).toThrow(
+      /CHECK constraint/,
+    )
     sqlite.close()
   })
 })

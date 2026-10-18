@@ -28,7 +28,15 @@ const facts = (over: Partial<HandoffFacts> = {}): HandoffFacts => ({
   previews: [{ url: 'http://localhost:47101', running: true }],
   lastCommitAt: COMMIT_AT,
   since: '2026-01-09T09:00:00.000Z',
-  posts: [{ author: 'claude', progress: true, handoff: false, createdAt: '2026-01-10T13:00:00.000Z' }],
+  posts: [
+    {
+      author: 'claude',
+      progress: false,
+      handoff: false,
+      summary: true,
+      createdAt: '2026-01-10T13:00:00.000Z',
+    },
+  ],
   humans: ['enrique'],
   ...over,
 })
@@ -148,20 +156,62 @@ describe('handoffOf', () => {
     ).toEqual([])
   })
 
-  it('no_handoff_post: only an agent progress post after the last commit counts', async () => {
+  it('no_handoff_post: only a summary an agent wrote after the last commit counts', async () => {
     const { handoffOf } = await import('./handoff')
+    const check = (over: Partial<HandoffFacts>) =>
+      handoffOf(facts(over)).checks.find((c) => c.code === 'no_handoff_post')!
     const codes = (over: Partial<HandoffFacts>) => handoffOf(facts(over)).missing.map((m) => m.code)
+    const summary = (author: string, createdAt: string) => ({
+      author,
+      progress: false,
+      handoff: false,
+      summary: true,
+      createdAt,
+    })
     const post = (author: string, createdAt: string, extra: Partial<HandoffFacts['posts'][number]> = {}) => ({
       author,
       progress: true,
       handoff: false,
+      summary: false,
       createdAt,
       ...extra,
     })
+    expect(check({})).toEqual({
+      code: 'no_handoff_post',
+      label: 'Summary',
+      ok: true,
+      text: 'Summary updated by claude after the last commit',
+    })
     expect(codes({ posts: [] })).toEqual(['no_handoff_post'])
-    // Before the last commit.
+    // Written before the last commit, or by the human.
+    expect(codes({ posts: [summary('claude', '2026-01-10T11:00:00.000Z')] })).toEqual(['no_handoff_post'])
+    expect(codes({ posts: [summary('enrique', '2026-01-10T13:00:00.000Z')] })).toEqual(['no_handoff_post'])
+    // Any version after the commit counts, an older one before it too.
+    expect(
+      codes({
+        posts: [
+          summary('enrique', '2026-01-10T14:00:00.000Z'),
+          summary('claude', '2026-01-10T13:00:00.000Z'),
+        ],
+      }),
+    ).toEqual([])
+    // Once there is a summary only the summary counts: a progress post after the commit does not.
+    expect(
+      codes({
+        posts: [post('claude', '2026-01-10T13:00:00.000Z'), summary('claude', '2026-01-10T11:00:00.000Z')],
+      }),
+    ).toEqual(['no_handoff_post'])
+    expect(check({ posts: [summary('claude', '2026-01-10T11:00:00.000Z')] }).text).toBe(
+      'No summary since the last commit',
+    )
+
+    // A ticket whose summary was never written: an agent's progress post after the last commit stands in for it.
+    expect(check({ posts: [post('claude', '2026-01-10T13:00:00.000Z')] })).toMatchObject({
+      ok: true,
+      text: 'No summary yet; progress post by claude after the last commit',
+    })
+    // Before the last commit; the human's, a discussion post, a resume note do not.
     expect(codes({ posts: [post('claude', '2026-01-10T11:00:00.000Z')] })).toEqual(['no_handoff_post'])
-    // The human's, a discussion post, a resume note.
     expect(codes({ posts: [post('enrique', '2026-01-10T13:00:00.000Z')] })).toEqual(['no_handoff_post'])
     expect(codes({ posts: [post('claude', '2026-01-10T13:00:00.000Z', { progress: false })] })).toEqual([
       'no_handoff_post',
@@ -171,13 +221,14 @@ describe('handoffOf', () => {
     ])
     // Without a branch, since work started.
     const noBranch = { branch: '', lastCommitAt: null, push: { state: 'none' as const, ahead: 0 } }
-    const before = handoffOf(facts({ ...noBranch, posts: [post('claude', '2026-01-09T08:00:00.000Z')] }))
-    expect(before.missing.map((m) => m.code)).toContain('no_handoff_post')
+    const before = handoffOf(facts({ ...noBranch, posts: [summary('claude', '2026-01-09T08:00:00.000Z')] }))
     expect(before.missing.find((m) => m.code === 'no_handoff_post')!.text).toBe(
-      'No progress post since work started',
+      'No summary since work started',
     )
-    const after = handoffOf(facts({ ...noBranch, posts: [post('claude', '2026-01-09T10:00:00.000Z')] }))
+    const after = handoffOf(facts({ ...noBranch, posts: [summary('claude', '2026-01-09T10:00:00.000Z')] }))
     expect(after.missing.map((m) => m.code)).not.toContain('no_handoff_post')
+    const fallback = handoffOf(facts({ ...noBranch, posts: [post('claude', '2026-01-09T10:00:00.000Z')] }))
+    expect(fallback.missing.map((m) => m.code)).not.toContain('no_handoff_post')
   })
 
   it('checks_unknown: only when CI is failing or still running', async () => {
@@ -271,10 +322,11 @@ describe('moving a ticket to review', () => {
     // Not blocked: it is in review.
     expect(first.status).toBe('review')
 
-    // The human's post does not count; the agent's does. Then the branch is pushed, a PR set, and a
+    // The human's summary does not count; the agent's does. Then the branch is pushed, a PR set, and a
     // preview that answers registered.
-    features.postUpdate(t.id, 'looks fine?', [], 'enrique')
-    features.postUpdate(t.id, 'PR #12, preview at …', [], 'claude')
+    features.setSummary(t.id, { body: 'looks fine?' }, 'enrique')
+    expect(codes((await needs.ticketView(t.id)).handoff)).toContain('no_handoff_post')
+    features.setSummary(t.id, { body: 'PR #12, preview at …', change: 'the hand-off' }, 'claude')
     git('push', '-q', 'origin', 'feat/handoff')
     await fetchRepo(repo, { force: true })
     features.addWorkspace(t.id, { name: 'wt', branch: 'feat/handoff', previewUrl }, 'claude')
@@ -337,7 +389,7 @@ describe('moving a ticket to review', () => {
     expect(merged.handoff!.checks[0]).toMatchObject({ code: 'not_merged', ok: true, text: 'PR #12 merged' })
   }, 30_000)
 
-  it('with the default phases: Implementation is met once they are ticked too, and ticks never undo the post', async () => {
+  it('with the default phases: Implementation is met once they are ticked too, and ticks never undo the summary', async () => {
     const { db, schema } = await import('#/db')
     const features = await import('./features')
     const needs = await import('./needs')
@@ -372,7 +424,7 @@ describe('moving a ticket to review', () => {
     // The rest of the hand-off done, not ticked: pushed above, the PR, a preview that runs, the post.
     features.addWorkspace(t.id, { name: 'wt', branch: 'feat/phases', previewUrl }, 'claude')
     await needs.changeTicket(t.id, { prNumber: 13 }, 'claude', { agent: true })
-    features.postUpdate(t.id, 'Hand-off: PR #13, preview at …', [], 'claude')
+    features.setSummary(t.id, { body: 'Hand-off: PR #13, preview at …' }, 'claude')
     // The board ticks nothing on its own.
     expect(ticks()).toEqual({
       Implementation: true,
@@ -392,7 +444,7 @@ describe('moving a ticket to review', () => {
       { code: 'tasks_open', text: '3 of 8 tasks done' },
     ])
 
-    // Each phase ticked: a tick is not a commit, so the post made before them still counts.
+    // Each phase ticked: a tick is not a commit, so the summary written before them still counts.
     for (const phase of ['Pushed', 'PR', 'CI', 'Preview', 'Hand-off post'])
       features.updateTask(task(phase).id, { done: true }, 'claude')
     const view = await needs.ticketView(t.id)

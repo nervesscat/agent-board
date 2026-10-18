@@ -9,6 +9,7 @@ import {
   SKILLS_TRACKING,
   STAGE_COLORS,
   STAGE_KINDS,
+  FEED_TABS,
 } from '#/lib/constants'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
@@ -69,6 +70,8 @@ const AgentName = z.string().min(1).max(40)
 // Checked for http(s) where it is stored; null or '' clears it.
 const PreviewUrl = z.string().max(500).nullable()
 const TaskText = z.string().min(1).max(500)
+// The tab of a ticket's feed a post goes to (main or agents); left out, the board picks it (features.tabOf).
+const Tab = z.enum(FEED_TABS)
 // A task blocked on the human, and what they must do (a reason only with blocked: true).
 const TaskBlocked = {
   blocked: z.boolean().optional(),
@@ -554,7 +557,8 @@ api.delete('/api/workspaces/:id', ({ params, actor }) => {
   return json({ ok: true })
 })
 
-// A post on the ticket; `progress` (default true, as agents post) marks a step of the work.
+// A post on the ticket; `progress` (default true, as agents post) marks a step of the work; `tab`
+// (main or agents) says which tab of the feed it goes to, else the board picks it.
 api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
@@ -563,6 +567,7 @@ api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
       attachmentIds: z.array(z.number().int()).default([]),
       as: AgentName.optional(),
       progress: z.boolean().default(true),
+      tab: Tab.optional(),
     }),
   )
   if (body.as) agentOnly(request)
@@ -570,10 +575,34 @@ api.post('/api/tickets/:id/updates', async ({ request, params, actor }) => {
     features.postUpdate(id(params), body.body, body.attachmentIds, actor, {
       as: body.as,
       progress: body.progress,
+      tab: body.tab,
     }),
     201,
   )
 })
+// The ticket's summary, at the top of the feed's main tab: each write is a new version (change: what
+// changed, one line, from the second on); GET has every version, newest first. `as` is agents only.
+api.put('/api/tickets/:id/summary', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      body: z.string().min(1).max(50_000),
+      change: z.string().max(features.MAX_SUMMARY_CHANGE).optional(),
+      attachmentIds: z.array(z.number().int()).default([]),
+      as: AgentName.optional(),
+    }),
+  )
+  if (body.as) agentOnly(request)
+  return json(features.setSummary(id(params), body, actor))
+})
+api.get('/api/tickets/:id/summary', async ({ request, params }) =>
+  json(
+    await forAgent(request, {
+      summary: features.getTicketFull(id(params)).summary,
+      versions: features.summaryHistory(id(params)),
+    }),
+  ),
+)
 // A decision for the human: the question (body) and 2 to 5 options; blocks the ticket unless block: false.
 api.post('/api/tickets/:id/decisions', async ({ request, params, actor }) => {
   const body = await readJson(
@@ -592,6 +621,7 @@ api.post('/api/tickets/:id/decisions', async ({ request, params, actor }) => {
         .max(5),
       as: AgentName.optional(),
       block: z.boolean().default(true),
+      tab: Tab.optional(),
     }),
   )
   if (body.as) agentOnly(request)
@@ -623,7 +653,12 @@ api.post('/api/updates/:id/decision/relay', async ({ request, params, actor }) =
 api.patch('/api/updates/:id', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({ body: z.string().min(1).max(50_000).optional(), progress: z.boolean().optional() }),
+    z.object({
+      body: z.string().min(1).max(50_000).optional(),
+      progress: z.boolean().optional(),
+      // Moves the post to that tab of the ticket's feed.
+      tab: Tab.optional(),
+    }),
   )
   return json(features.editPost(id(params), body, actor, { human: !isAgent(request) }))
 })
@@ -656,6 +691,8 @@ api.post('/api/comments', async ({ request, actor }) => {
       body: z.string().min(1).max(20_000),
       attachmentIds: z.array(z.number().int()).optional(),
       as: AgentName.optional(),
+      // On a ticket without replyTo: the tab of its feed the post goes to.
+      tab: Tab.optional(),
     }),
   )
   if (body.as) agentOnly(request)

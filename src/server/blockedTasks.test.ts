@@ -414,7 +414,15 @@ describe('what the tag leaves alone', () => {
       previews: [{ url: 'http://localhost:47101', running: true }],
       lastCommitAt: null,
       since: '2026-01-01T00:00:00.000Z',
-      posts: [{ author: 'claude', progress: true, handoff: false, createdAt: '2026-01-02T00:00:00.000Z' }],
+      posts: [
+        {
+          author: 'claude',
+          progress: false,
+          handoff: false,
+          summary: true,
+          createdAt: '2026-01-02T00:00:00.000Z',
+        },
+      ],
       humans: [],
     })
     expect(handoff.missing.map((m) => m.code)).toContain('tasks_open')

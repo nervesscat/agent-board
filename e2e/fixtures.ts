@@ -50,6 +50,13 @@ export const section = (scope: Page | Locator, title: string) => {
   })
 }
 
+/** Opens that tab of a ticket's feed (Main, open on arrival, or Agents, the agents' working record). */
+export const openFeedTab = (page: Page, name: 'Main' | 'Agents') =>
+  page
+    .getByRole('tablist', { name: 'Feed' })
+    .getByRole('tab', { name: new RegExp(`^${name}`) })
+    .click()
+
 /** The tooltip showing now: the app's shared tooltip, open (one shows at a time). */
 export const tooltip = (page: Page) => page.locator('[data-slot="tooltip-content"][data-open]')
 
