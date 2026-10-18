@@ -2,9 +2,9 @@ import type { Project } from '#/lib/api'
 import { e2eEnv } from './env'
 import { expect, ok, test } from './fixtures'
 
-// The guard in front of every request (src/server/entrance.ts), on the built board in test mode: the
-// gate is off, so it answers on loopback only and never through a proxy such as `tailscale serve`, and
-// a write that carries the gate's cookie only from the board's own origins.
+// The guard in front of every request (src/server/entrance.ts), on the built board in test mode: sign-in
+// is off, so it answers on loopback only and never through a proxy such as `tailscale serve`, and a
+// write that carries the board's session cookie only from the board's own origins.
 
 const { port, baseURL } = e2eEnv()
 
@@ -52,14 +52,14 @@ test('requests on this machine work: by name and by address', async ({ request }
   expect(await (await request.get('/api/health')).json()).toEqual({ ok: true })
 })
 
-test("a write with the gate's cookie from another origin gets 403 and changes nothing", async ({
+test('a write with the session cookie from another origin gets 403 and changes nothing', async ({
   request,
   human,
 }) => {
   for (const origin of ['https://evil.example', `http://localhost:${port + 1}`, 'null']) {
     const name = `cross-site ${origin}`
     const res = await request.post('/api/projects', {
-      headers: { Cookie: 'gate_session=stolen', Origin: origin },
+      headers: { Cookie: 'board_session=stolen', Origin: origin },
       data: { name },
     })
     expect(res.status(), origin).toBe(403)
@@ -67,12 +67,12 @@ test("a write with the gate's cookie from another origin gets 403 and changes no
   }
   // From the board's own origin, from an agent (no Origin), or without the cookie, it goes through.
   const own = await request.post('/api/projects', {
-    headers: { Cookie: 'gate_session=mine', Origin: baseURL },
+    headers: { Cookie: 'board_session=mine', Origin: baseURL },
     data: { name: 'same origin write' },
   })
   expect(own.status()).toBe(201)
   const agent = await request.post('/api/projects', {
-    headers: { Cookie: 'gate_session=mine' },
+    headers: { Cookie: 'board_session=mine' },
     data: { name: 'write without an Origin' },
   })
   expect(agent.status()).toBe(201)

@@ -35,6 +35,9 @@ const CHALLENGE_MS = 5 * 60_000
 export const CHALLENGES_MAX = 1000
 
 const DAY_MS = 24 * 60 * 60_000
+// EdDSA, ES256, RS256: what passkeys use. Named here, the library does not probe the runtime for
+// post-quantum ones (an experimental Web Crypto call that warns on every start).
+const ALGORITHMS = [-8, -7, -257]
 
 type Purpose = 'setup' | 'login' | 'enrol'
 interface Pending {
@@ -194,6 +197,7 @@ const registration = (site: SignInSite, account: { name: string; userHandle: str
     attestationType: 'none',
     excludeCredentials: exclude ? passkeysOf(site.rpId) : [],
     authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+    supportedAlgorithmIDs: ALGORITHMS,
   })
 
 async function verifyNewPasskey(
@@ -210,6 +214,7 @@ async function verifyNewPasskey(
       expectedOrigin: site.origin,
       expectedRPID: site.rpId,
       requireUserVerification: false,
+      supportedAlgorithmIDs: ALGORITHMS,
     })
   } catch (err) {
     throw new HttpError(400, `the passkey was not accepted: ${err instanceof Error ? err.message : err}`)
@@ -411,6 +416,15 @@ export function listSessions(currentToken: string | null) {
     .orderBy(asc(schema.sessions.id))
     .all()
     .map(({ tokenHash, ...s }) => ({ ...s, current: tokenHash === current }))
+}
+
+export type PasskeyRow = ReturnType<typeof listPasskeys>[number]
+export type SessionRow = ReturnType<typeof listSessions>[number]
+
+/** A new one-time link to enrol another device: on the tailnet name when the entrance is on, and here. */
+export interface EnrolLink {
+  expiresAt: string
+  links: { where: 'tailnet' | 'this machine'; url: string }[]
 }
 
 export function revokeSession(id: number) {

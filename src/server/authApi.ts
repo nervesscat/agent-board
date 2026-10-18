@@ -94,11 +94,14 @@ export function authRoutes(api: ApiRouter) {
     const { code, expiresAt } = passkeys.createEnrolCode()
     const entrance = servedEntrance()
     const at = (origin: string) => `${origin}/enroll?code=${encodeURIComponent(code)}`
-    const links = [
-      ...(entrance ? [{ where: 'tailnet' as const, url: at(entrance.origin) }] : []),
-      { where: 'this machine' as const, url: at(localSite(config.port).origin) },
-    ]
-    return Response.json({ expiresAt, links }, { status: 201 })
+    const link: passkeys.EnrolLink = {
+      expiresAt,
+      links: [
+        ...(entrance ? [{ where: 'tailnet' as const, url: at(entrance.origin) }] : []),
+        { where: 'this machine' as const, url: at(localSite(config.port).origin) },
+      ],
+    }
+    return Response.json(link, { status: 201 })
   })
   api.post('/api/auth/enrol/options', async ({ request }) => {
     const site = siteOrRefuse(request)
