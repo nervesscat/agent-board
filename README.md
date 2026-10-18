@@ -122,6 +122,8 @@ PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net
 `PUBLIC_ORIGIN` is the board as your devices open it, and its host the name their passkeys are for.
 The board refuses to start with a value it cannot trust (http, a port, a path, a wildcard or an IP).
 Then `pnpm start`. `pnpm tailnet` prints the value for this machine.
+An earlier setup's `GATE_URL`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` lines are no longer read:
+delete them.
 
 **2. `tailscale serve`**: `pnpm tailnet` prints the command for this machine, its URL and how to stop.
 It only reads (`tailscale status`, `serve status`, `funnel status`, `version`) and never runs `serve`

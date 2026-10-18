@@ -501,7 +501,9 @@ export function needsInstall(dir: string) {
 }
 
 // The live board's tailnet entrance: a preview stays on this machine (README: "Using it from other devices").
-const ENTRANCE_KEYS = /^PUBLIC_ORIGIN$/
+// PUBLIC_GATE_URL, PUBLIC_GATE_AUTH_URL and TAILNET_HOST are the earlier entrance's names, which a
+// preview of an older branch still reads (and refuses to start on, given only some of them).
+const ENTRANCE_KEYS = /^(PUBLIC_ORIGIN|PUBLIC_GATE_URL|PUBLIC_GATE_AUTH_URL|TAILNET_HOST)$/
 
 /** The environment of what runs in the worktree: none of the live board's own settings. */
 function worktreeEnv(): NodeJS.ProcessEnv {

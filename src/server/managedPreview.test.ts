@@ -274,7 +274,14 @@ describe('a preview the board runs', () => {
   })
 
   it("leaves the board's tailnet entrance out of what it builds and runs: a preview stays on loopback", async () => {
-    const entrance = { PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net' }
+    // With the earlier entrance's names a leftover `.env` may still carry: a preview of an older
+    // branch reads them.
+    const entrance = {
+      PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net',
+      PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net/gate',
+      PUBLIC_GATE_AUTH_URL: 'https://devbox.example-tailnet.ts.net/auth',
+      TAILNET_HOST: 'devbox.example-tailnet.ts.net',
+    }
     for (const [key, value] of Object.entries(entrance)) vi.stubEnv(key, value)
     try {
       const fake = useFake()
