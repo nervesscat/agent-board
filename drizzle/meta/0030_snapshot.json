@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "eb8d67c9-4e38-4c12-9edb-93dd6fe9a878",
+  "id": "2caebce1-4d81-4d3a-80ff-e44c1e0755f9",
   "prevId": "f4cef623-0439-44c5-abdc-8e0aa5962ec5",
   "tables": {
     "activity": {
@@ -69,9 +69,7 @@
       "indexes": {
         "activity_created": {
           "name": "activity_created",
-          "columns": [
-            "createdAt"
-          ],
+          "columns": ["createdAt"],
           "isUnique": false
         }
       },
@@ -80,12 +78,8 @@
           "name": "activity_project_id_projects_id_fk",
           "tableFrom": "activity",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -199,10 +193,7 @@
       "indexes": {
         "agents_project_name": {
           "name": "agents_project_name",
-          "columns": [
-            "project_id",
-            "name"
-          ],
+          "columns": ["project_id", "name"],
           "isUnique": true
         }
       },
@@ -211,12 +202,8 @@
           "name": "agents_project_id_projects_id_fk",
           "tableFrom": "agents",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -224,12 +211,8 @@
           "name": "agents_avatar_id_attachments_id_fk",
           "tableFrom": "agents",
           "tableTo": "attachments",
-          "columnsFrom": [
-            "avatar_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["avatar_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -326,12 +309,8 @@
           "name": "attachments_update_id_updates_id_fk",
           "tableFrom": "attachments",
           "tableTo": "updates",
-          "columnsFrom": [
-            "update_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["update_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -339,12 +318,8 @@
           "name": "attachments_comment_id_comments_id_fk",
           "tableFrom": "attachments",
           "tableTo": "comments",
-          "columnsFrom": [
-            "comment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["comment_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -352,12 +327,8 @@
           "name": "attachments_ticket_id_tickets_id_fk",
           "tableFrom": "attachments",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -365,12 +336,8 @@
           "name": "attachments_report_id_reports_id_fk",
           "tableFrom": "attachments",
           "tableTo": "reports",
-          "columnsFrom": [
-            "report_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["report_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -451,10 +418,7 @@
       "indexes": {
         "comments_parent": {
           "name": "comments_parent",
-          "columns": [
-            "parent_type",
-            "parent_id"
-          ],
+          "columns": ["parent_type", "parent_id"],
           "isUnique": false
         }
       },
@@ -488,12 +452,8 @@
           "name": "origin_looks_repo_id_repos_id_fk",
           "tableFrom": "origin_looks",
           "tableTo": "repos",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["repo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -552,10 +512,7 @@
       "indexes": {
         "origin_ref_moves_repo_seen": {
           "name": "origin_ref_moves_repo_seen",
-          "columns": [
-            "repo_id",
-            "seenAt"
-          ],
+          "columns": ["repo_id", "seenAt"],
           "isUnique": false
         }
       },
@@ -564,12 +521,8 @@
           "name": "origin_ref_moves_repo_id_repos_id_fk",
           "tableFrom": "origin_ref_moves",
           "tableTo": "repos",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["repo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -617,22 +570,15 @@
           "name": "origin_refs_repo_id_repos_id_fk",
           "tableFrom": "origin_refs",
           "tableTo": "repos",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["repo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "origin_refs_repo_id_ref_pk": {
-          "columns": [
-            "repo_id",
-            "ref"
-          ],
+          "columns": ["repo_id", "ref"],
           "name": "origin_refs_repo_id_ref_pk"
         }
       },
@@ -678,14 +624,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "tag_suggestions": {
-          "name": "tag_suggestions",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[\"Bug\",\"UI\",\"Implementation\",\"Report\"]'"
         }
       },
       "indexes": {},
@@ -886,17 +824,12 @@
       "indexes": {
         "prs_project_number": {
           "name": "prs_project_number",
-          "columns": [
-            "project_id",
-            "number"
-          ],
+          "columns": ["project_id", "number"],
           "isUnique": false
         },
         "prs_repo": {
           "name": "prs_repo",
-          "columns": [
-            "repo_id"
-          ],
+          "columns": ["repo_id"],
           "isUnique": false
         }
       },
@@ -905,12 +838,8 @@
           "name": "prs_project_id_projects_id_fk",
           "tableFrom": "prs",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -918,12 +847,8 @@
           "name": "prs_repo_id_repos_id_fk",
           "tableFrom": "prs",
           "tableTo": "repos",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["repo_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1045,12 +970,8 @@
           "name": "report_settings_project_id_projects_id_fk",
           "tableFrom": "report_settings",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1156,10 +1077,7 @@
       "indexes": {
         "report_settings_changes_project": {
           "name": "report_settings_changes_project",
-          "columns": [
-            "project_id",
-            "createdAt"
-          ],
+          "columns": ["project_id", "createdAt"],
           "isUnique": false
         }
       },
@@ -1168,12 +1086,8 @@
           "name": "report_settings_changes_project_id_projects_id_fk",
           "tableFrom": "report_settings_changes",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1240,10 +1154,7 @@
       "indexes": {
         "reports_project_period": {
           "name": "reports_project_period",
-          "columns": [
-            "project_id",
-            "period"
-          ],
+          "columns": ["project_id", "period"],
           "isUnique": false
         }
       },
@@ -1252,12 +1163,8 @@
           "name": "reports_project_id_projects_id_fk",
           "tableFrom": "reports",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1327,12 +1234,8 @@
           "name": "repos_project_id_projects_id_fk",
           "tableFrom": "repos",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1429,10 +1332,7 @@
       "indexes": {
         "review_results_pr": {
           "name": "review_results_pr",
-          "columns": [
-            "project_id",
-            "pr_number"
-          ],
+          "columns": ["project_id", "pr_number"],
           "isUnique": false
         }
       },
@@ -1441,12 +1341,8 @@
           "name": "review_results_project_id_projects_id_fk",
           "tableFrom": "review_results",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1454,12 +1350,8 @@
           "name": "review_results_repo_id_repos_id_fk",
           "tableFrom": "review_results",
           "tableTo": "repos",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["repo_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1550,10 +1442,7 @@
       "indexes": {
         "stages_project_key": {
           "name": "stages_project_key",
-          "columns": [
-            "project_id",
-            "key"
-          ],
+          "columns": ["project_id", "key"],
           "isUnique": true
         }
       },
@@ -1562,12 +1451,8 @@
           "name": "stages_project_id_projects_id_fk",
           "tableFrom": "stages",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1643,9 +1528,7 @@
       "indexes": {
         "tasks_parent": {
           "name": "tasks_parent",
-          "columns": [
-            "parent_id"
-          ],
+          "columns": ["parent_id"],
           "isUnique": false
         }
       },
@@ -1654,12 +1537,8 @@
           "name": "tasks_ticket_id_tickets_id_fk",
           "tableFrom": "tasks",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1667,12 +1546,8 @@
           "name": "tasks_parent_id_tasks_id_fk",
           "tableFrom": "tasks",
           "tableTo": "tasks",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1702,9 +1577,7 @@
       "indexes": {
         "ticket_needs_needs": {
           "name": "ticket_needs_needs",
-          "columns": [
-            "needs_id"
-          ],
+          "columns": ["needs_id"],
           "isUnique": false
         }
       },
@@ -1713,12 +1586,8 @@
           "name": "ticket_needs_ticket_id_tickets_id_fk",
           "tableFrom": "ticket_needs",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1726,22 +1595,15 @@
           "name": "ticket_needs_needs_id_tickets_id_fk",
           "tableFrom": "ticket_needs",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "needs_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["needs_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "ticket_needs_ticket_id_needs_id_pk": {
-          "columns": [
-            "ticket_id",
-            "needs_id"
-          ],
+          "columns": ["ticket_id", "needs_id"],
           "name": "ticket_needs_ticket_id_needs_id_pk"
         }
       },
@@ -1965,9 +1827,7 @@
       "indexes": {
         "tickets_parent": {
           "name": "tickets_parent",
-          "columns": [
-            "parent_id"
-          ],
+          "columns": ["parent_id"],
           "isUnique": false
         }
       },
@@ -1976,12 +1836,8 @@
           "name": "tickets_project_id_projects_id_fk",
           "tableFrom": "tickets",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1989,12 +1845,8 @@
           "name": "tickets_repo_id_repos_id_fk",
           "tableFrom": "tickets",
           "tableTo": "repos",
-          "columnsFrom": [
-            "repo_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["repo_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2002,12 +1854,8 @@
           "name": "tickets_parent_id_tickets_id_fk",
           "tableFrom": "tickets",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2015,12 +1863,8 @@
           "name": "tickets_pr_id_prs_id_fk",
           "tableFrom": "tickets",
           "tableTo": "prs",
-          "columnsFrom": [
-            "pr_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["pr_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2134,6 +1978,30 @@
           "autoincrement": false,
           "default": "''"
         },
+        "tab": {
+          "name": "tab",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'main'"
+        },
+        "summary": {
+          "name": "summary",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "summary_change": {
+          "name": "summary_change",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "text",
@@ -2156,19 +2024,20 @@
           "name": "updates_ticket_id_tickets_id_fk",
           "tableFrom": "updates",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "updates_tab": {
+          "name": "updates_tab",
+          "value": "\"updates\".\"tab\" IN ('main', 'agents')"
+        }
+      }
     },
     "workspaces": {
       "name": "workspaces",
@@ -2241,12 +2110,8 @@
           "name": "workspaces_ticket_id_tickets_id_fk",
           "tableFrom": "workspaces",
           "tableTo": "tickets",
-          "columnsFrom": [
-            "ticket_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ticket_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

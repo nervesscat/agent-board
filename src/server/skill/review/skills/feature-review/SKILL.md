@@ -323,6 +323,15 @@ else, for a PR, the `ticket` that `list_prs` names for it (the feature ticket th
 the PR's own ticket), else the ticket whose `branch` is the target branch. No ticket: run as usual
 and skip this section.
 
+Where posts go: a ticket's feed has two tabs. Agents is the agents' working record: every phase
+post and the review's result post below go there (posted `as` an agent or as progress, the board
+puts them there). Main is the human's and stays short and to the point: their posts, decision
+cards, questions to them, and the ticket's summary on top. The review never writes the summary
+and never posts a new hand-off: whoever hands the ticket off rewrites the summary
+(`set_ticket_summary`) with the review's verdict in one line. When the human posted on the ticket
+and the review answers them, it replies under their post, never with a new top-level post: the
+plan first, then the result with its proofs.
+
 1. **The project's agents brief the phases.** `get_project` → `agents`. For each phase, when the
    project has an agent with that name (`spec`, `env`, `verify`, `hunt`, `refute`, `merge`)
    and instructions, spawn a general-purpose subagent whose prompt is that agent's `instructions`
@@ -332,7 +341,10 @@ and skip this section.
 2. **Each phase reports on the ticket as its agent**: `post_update` with `as: <agent name>` and
    `progress: true`, a few lines (what it established, counts, anything unavailable) and its
    evidence in `files` (screenshots from `WORKDIR/shots/`, the phase's own file). Never paste
-   hunt notes; the refute phase's verdict table is the findings' record.
+   hunt notes; the refute phase's verdict table is the findings' record. These posts go to the
+   ticket's Agents tab, the agents' working record, out of the human's way: a phase never writes
+   to Main (no summary, no new top-level post for the human), and the ticket's summary is the
+   job of whoever hands the ticket off.
 3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket (the
    interpretations as options, the spec's assumption marked recommended). If Phase 1 already asked
    the human this question in the chat, step 3 never asks it again, whatever the human did. If they
@@ -349,7 +361,8 @@ and skip this section.
 4. **The result** goes to the board. For a PR: `post_review_result` (the verdict, `summary.md` as
    `summaryMd`, the commit SHA, the three checks and the counts, `repoId` when the project has
    several repos), which also posts the summary on the PR's ticket. For a branch with no PR yet: a `post_update` on the ticket with the verdict line
-   and `summary.md`. Never post it to GitHub unless `post` was given.
+   and `summary.md` (it goes to Agents; the verdict's one line goes in the ticket's summary when
+   the ticket is handed off). Never post it to GitHub unless `post` was given.
 
 ## Delegation
 

@@ -107,10 +107,27 @@ http_headers = { Authorization = "Bearer gate_…" }
    earlier results); **Done when**; **Return** (the exact shape of the answer).
 5. **Report as you go** with `post_update`: short markdown, what you did and what is next, and
    attach evidence with `files` (absolute paths to screenshots, recordings, logs on this machine —
-   the board copies them). One update per meaningful step, not per keystroke. A ticket has one
-   feed of **posts**: `post_update` adds one marked as progress (lane summaries and the Daily view
-   pick those out); questions and answers are posts too, not marked. `edit_post` / `delete_post`
-   change what you posted.
+   the board copies them). One update per meaningful step, not per keystroke. A ticket's feed of
+   **posts** has two tabs, and the board puts each post in one (its `tab`, `main` or `agents`):
+   - **Agents** is your working record: progress posts (`post_update` marks one as progress; lane
+     summaries and the Daily view pick those out), anything posted `as` one of the project's
+     agents (the spec, the builder, the runner, the review phases), the resume note's versions.
+   - **Main** is the human's, and stays short and to the point: their posts with your replies
+     under them, decision cards, your questions to them (`comment` on the ticket, not progress),
+     and the ticket's **summary** on top.
+
+   `tab` on `post_update`, `comment` and `ask_decision` puts a post in the other one when the
+   default is wrong (a proof the human must see goes in the summary instead); `edit_post` with
+   `tab` moves one. `edit_post` / `delete_post` change what you posted. A lane's posts show in its
+   parent's tabs the same way (its working posts under Agents, its summary and questions under
+   Main).
+   **The summary** (`set_ticket_summary`) is the one post at the top of Main: what the change
+   does, where it stands now, each review round's verdict in one line, the PR, the preview and what
+   to try there, and the proofs (screenshots, recordings) as `files`. Rewrite it to the current
+   state whenever that changes, instead of adding posts for the human: each write is a new version
+   (`change` says in one line what changed, required from the second), the board keeps every
+   earlier one behind "history" (`get_ticket_summary`), and every write reaches the human like a
+   new post. Until one is written, the ticket's newest progress post stands in for it.
    **Previews:** when the change can be tried (a page, an API), have a preview the human can open
    before anything is merged, and post its link with what to try. Say that what the human posts
    there stays in a copy of the data. Keep it running while the ticket is in review.
@@ -141,7 +158,11 @@ http_headers = { Authorization = "Bearer gate_…" }
    never off loopback, never the live board.
 
 6. **Ask and answer**: `comment` on the ticket adds a post to its feed; `comment` on a post
-   (`parentType: update`, the post's id) or on a review result replies under it. When you cannot
+   (`parentType: update`, the post's id, or `replyTo` on the ticket) or on a review result
+   replies under it. **When the human posts on a ticket you work, answer under their post, never
+   with a new top-level post**: first a reply with your plan, then, once done, a reply with the
+   result and its proofs (files, the preview link). A reply brings their post back to the top of
+   Main. When you cannot
    continue without an answer, also move the ticket to `blocked` (back to `in_progress` once
    answered). When only one step waits on the human and the rest can go on, tag that task blocked
    instead (step 3). When the answer is a choice between clear options (an approach, a trade-off, a scope
@@ -182,18 +203,20 @@ http_headers = { Authorization = "Bearer gate_…" }
    6. **Preview running**: `start_preview` on the workspace and wait for `running` (for a repo the
       board cannot build, start one the project's way and `set_preview`; see Previews above).
       Required whenever the change can be tried; when it cannot (docs only, a script), say why in
-      the hand-off post.
-   7. Hand-off post (`post_update`): the PR link, **the preview link and what to try there**, how it
-      was tested, the e2e result (the run's summary, or its report when something failed) and
-      screenshots of what changed for a UI change. Then tick Hand-off post: a tick is not a commit,
-      so the post still counts.
+      the summary.
+   7. The summary, up to date (`set_ticket_summary`, not a new hand-off post): the PR link, **the
+      preview link and what to try there**, how it was tested, the e2e result (the run's summary, or
+      its report when something failed), each review round's verdict, and screenshots of what
+      changed for a UI change in `files`. Then tick Hand-off post: a tick is not a commit, so the
+      summary still counts.
    8. Resume note if the ticket stays open past the session (step 9).
 
    `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
    each a `code` and a `text` (`tasks_open`: Implementation, the ticket's tasks and subtasks, its
    phases and their steps, the hand-off phases included: missing while it has none, or while some
    of them, its lanes' included, are open; the other checks still verify each fact themselves; `no_pr`, `not_pushed`, `no_preview`,
-   `no_handoff_post`: no progress post of yours since the branch's last commit, `checks_unknown`:
+   `no_handoff_post`: no summary written by an agent since the branch's last commit (on a ticket
+   that never had a summary, an agent's progress post since then still counts), `checks_unknown`:
    the PR's CI is failing or still running). The move goes through anyway: fix each one.
    `handoff.checks` lists every item with `ok`, first `not_merged` (Merged: the PR merged on
    GitHub, or the branch merged into its base), which is never in `missing`: merging is the
@@ -228,7 +251,8 @@ http_headers = { Authorization = "Bearer gate_…" }
    `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
    blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that
    another agent can continue without asking. It is the ticket's one current "Where we left off"
-   note, shown at the top of its page; each version is also posted to its feed as a handoff. Then
+   note, shown at the top of its page; each version is also posted to its feed (the Agents tab) as
+   a handoff. Then
    the project's report, if it keeps one (step 10); `daily_report` shows what everyone else did that
    day.
 10. **Reports**: a project can ask for one report per period, every workday or once a week
@@ -255,7 +279,8 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 
 - `claim_ticket` with `as: <its name>`, brief a subagent with the agent's instructions plus the
   ticket's, and post that work with `post_update` / `comment` using `as: <its name>`. It shows
-  under the agent's name, via your token name.
+  under the agent's name, via your token name, in the ticket's Agents tab; what the human must
+  read goes in the summary (`set_ticket_summary`, `as` too) or a reply under their post.
 - Never take a reserved ticket as yourself or reassign it; only the human does.
 - A persona never answers a decision (step 6): the human answers the card, or the orchestrator relays
   their answer from the chat.

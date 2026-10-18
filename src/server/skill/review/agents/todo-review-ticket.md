@@ -175,7 +175,12 @@ is no diff yet). Then:
   gets the project's default phases first (`add_tasks` with the names from `get_project` →
   `defaultPhases`).
 - Post its result on the ticket `as: spec` (`post_update`, `progress: true`): the intent, the
-  criteria, the open questions.
+  criteria, the open questions. Posts made `as` one of the project's agents go to the ticket's
+  Agents tab, the agents' working record; the human's tab, Main, gets only the summary (step 7),
+  decision cards, your questions to them and your replies under their posts. Keep it that way.
+- When the ticket has posts by the human that ask for something, answer each under that post
+  (`comment` with `replyTo` = its id), never with a new top-level post: a reply with the plan now,
+  and a reply with the result and its proofs once it is built (step 7).
 - A **decisive** open question (the answer changes what counts as correct): `ask_decision` with the
   readings as options and the spec's assumption recommended. If building on the assumption is cheap
   to undo, keep going on it and say so in the post; otherwise stop: `BLOCKER: decision`. The card
@@ -308,11 +313,13 @@ untick the phases the new work redoes first.
 5. The preview: `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
    project's way and `set_preview`. When the change cannot be tried (docs, a script), say why in
-   the post instead.
+   the summary instead.
    The preview's build is a heavy run: take `LOCK` (holder `#<TICKET> preview <ISO time>`) before
    `start_preview` or the project's start, and release it once the preview runs or has failed.
    Tick Preview once it runs; when the change cannot be tried, remove the Preview phase instead.
-6. The hand-off post (`post_update`, `progress: true`): the PR link, the preview link and exactly
+6. The ticket's summary (`set_ticket_summary`, not a new hand-off post), the one post the human
+   reads on top of Main, short and to the point: what the change does and its current state, each
+   review round's verdict in one line, the PR link, the preview link and exactly
    what to try there, how it was tested (the checks and the e2e
    summary; for mid and high the review's verdict and counts, for low the builder's evidence per
    criterion), any fake used at an edge and any contract hit you judged legitimate, with the
@@ -321,9 +328,13 @@ untick the phases the new work redoes first.
    review depth ran and why: the depth, and the measure that put the change there (lines and files,
    the classes that decided it), or that the human chose it (`DEPTH`). For low it names the gate's
    results and no review depth.
-   Then tick Hand-off post: a tick is not a commit, so the post still counts.
+   When a summary is already there (an earlier round, a rework), rewrite it to the state now, with
+   `change` saying in one line what changed; the board keeps the earlier versions. Then the result
+   reply under each of the human's posts you answered with a plan (step 2), with its proofs.
+   Then tick Hand-off post: a tick is not a commit, so the summary still counts.
 7. `update_ticket` to `review`, and read `handoff.missing` in its answer: fix every item it lists
-   and check again. `no_preview` may stay only when the post says why.
+   and check again (`no_handoff_post`: no summary written since the last commit). `no_preview` may
+   stay only when the summary says why.
 
 ## Review depth
 

@@ -70,8 +70,9 @@ Then:
   The list includes lanes (`parentId` set); `parentId: null` narrows it to top-level tickets,
   `parentId: <id>` to one ticket's lanes.
 - `get_ticket` and read it in full. Its `updates` are the ticket's feed of posts (`progress`
-  marks steps of the work; the rest is discussion), each with `thread`: how many replies and who
-  spoke last. `list_comments` (`parentType: update`, the post's id) reads a post's replies. On a lane,
+  marks steps of the work; the rest is discussion), each with `tab` (`main` or `agents`, below)
+  and `thread`: how many replies and who spoke last. `summary` is the ticket's summary, the
+  hand-off the human reads first. `list_comments` (`parentType: update`, the post's id) reads a post's replies. On a lane,
   `ancestors` names the tickets above it: `get_ticket` the parent too for the bigger picture, but
   the lane's own instructions are your brief.
 - `claim_ticket` with the `branch` you will use: it assigns you and moves it to `in_progress`.
@@ -104,8 +105,8 @@ Lanes of a ticket you are working are yours to create (next section).
 ## 3. While working
 
 - `set_task_done` as each step finishes, and each hand-off phase as you finish it (Pushed after
-  the push, PR once it is open, CI once it is green, Preview once it runs, Hand-off post once it is
-  posted); the board ticks none itself. On a rework, untick the phases the new work redoes and tick
+  the push, PR once it is open, CI once it is green, Preview once it runs, Hand-off post once the
+  summary is up to date); the board ticks none itself. On a rework, untick the phases the new work redoes and tick
   them again as you redo each. A phase with steps is done exactly when all its steps are: ticking
   or unticking a phase does the same to its steps, ticking its last open step ticks it, unticking a
   step unticks it. When the plan changes, `update_task` rewords a task and `remove_task` drops one
@@ -156,8 +157,28 @@ Lanes of a ticket you are working are yours to create (next section).
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are
   fine, the board reads them through `/mnt/c/…`.
-- **Previews:** when the change can be tried (a page, an API), give the human a preview and
-  `post_update` its link with what to try; say that what they post there stays in the copy. Keep
+- **Where posts go.** A ticket's feed has two tabs, and the board puts each post in one (`tab`):
+  - **Agents**, your working record: progress posts, anything posted `as` one of the project's
+    agents (spec, builder, runner, the review phases), the resume note's versions.
+  - **Main**, the human's: their posts with your replies under them, decision cards, your
+    questions to them (`comment` on the ticket, not progress), and the summary on top.
+
+  Keep Main short and to the point: the human reads it, the working record stays in Agents.
+  `tab` on `post_update`, `comment` or `ask_decision` overrides the default; `edit_post` with
+  `tab` moves a post. A lane's posts go to its parent's tabs the same way.
+
+- **The summary** (`set_ticket_summary`): the one post at the top of Main, for the human. What the
+  change does, where it stands now, each review round's verdict in one line, the PR, the preview
+  and what to try there, and the proofs (screenshots, recordings) in `files`. Rewrite it to the
+  current state whenever that changes, never a new hand-off post: each write is a new version,
+  `change` says in one line what changed (required from the second version on), the board keeps
+  every earlier one behind "history" (`get_ticket_summary`), and each write reaches the human like
+  a new post. Until one is written, the newest agent progress post stands in for it.
+- **Answering the human's post:** reply under it (`comment` with `replyTo` = its id), never with a
+  new top-level post: first a reply with your plan, then, once done, a reply with the result and
+  its proofs. A reply brings their post back to the top of Main.
+- **Previews:** when the change can be tried (a page, an API), give the human a preview and put
+  its link with what to try in the summary; say that what they post there stays in the copy. Keep
   it running while the ticket is in `review`.
   - A branch of the board itself: the board runs it. `add_workspace` with your worktree's `path`
     and `branch` (a worktree next to the main checkout, `../agent-board-<branch>`), then
@@ -260,11 +281,12 @@ the ticket as its item is done:
    `managedPreview` is `running` (`failed`: read the log lines and fix). For a repo the board cannot
    build, start one the project's way and `set_preview` (see Previews in
    [While working](#3-while-working)). Required whenever the change can be tried; when it cannot
-   (docs only, a script), say why in the hand-off post.
-7. Hand-off post (`post_update`): the PR link, **the preview link and what to try there**, how it
-   was tested, the e2e result (its summary, or its report when something failed) and, for a UI
-   change, screenshots of what changed, in `files`. Then tick Hand-off post: a tick is not a
-   commit, so the post still counts.
+   (docs only, a script), say why in the summary.
+7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
+   preview link and what to try there**, how it was tested, the e2e result (its summary, or its
+   report when something failed), each review round's verdict and, for a UI change, screenshots of
+   what changed, in `files`. Then tick Hand-off post: a tick is not a commit, so the summary still
+   counts.
 8. Resume note if the ticket stays open past the session (`set_resume_note`, see
    [End of session](#5-end-of-session)).
 
@@ -272,7 +294,8 @@ the ticket as its item is done:
 each a `code` with a `text`: `tasks_open` (Implementation, the ticket's tasks and subtasks, its
 phases and their steps, the hand-off phases included: missing while it has none, or while some of
 them, its lanes' included, are open; the other checks still verify each fact themselves), `no_pr`, `not_pushed`, `no_preview`,
-`no_handoff_post` (no progress post of yours since the branch's last commit), `checks_unknown` (the
+`no_handoff_post` (no summary written by an agent since the branch's last commit; on a ticket that
+never had a summary, an agent's progress post since then still counts), `checks_unknown` (the
 PR's CI is failing or still running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
 the ticket is in review, and its page shows it as a Hand-off card.
 
@@ -280,8 +303,8 @@ After that:
 
 1. `done` is the human's call unless the project instructions say otherwise.
 2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
-   board flags a ticket that is further along than its lanes. Say in the hand-off post which lanes
-   it covers.
+   board flags a ticket that is further along than its lanes. Say in the summary which lanes it
+   covers.
 3. Dropping work: `status: cancelled`, with a comment saying why. Cancelled lanes' tasks leave the
    parent's progress.
 4. Clean up your lane before it goes to `done` (or when the human moves it there): see
@@ -311,8 +334,9 @@ After that:
    **How to resume:** branch, worktree, commands, preview, gotchas
    ```
 
-   It replaces the ticket's previous note and is posted to its feed as a handoff, so the older ones
-   stay readable. The ticket page shows it at the top as "Resume here"; a ticket that carries over
+   It replaces the ticket's previous note and is posted to its feed (the Agents tab) as a handoff,
+   so the older ones stay readable. It is for whoever works the ticket next; the human's hand-off
+   is the summary. The ticket page shows it at the top as "Resume here"; a ticket that carries over
    to the next day without one shows "no handoff".
 
 2. `daily_report` with your `projectId` shows what else happened in the project today.
@@ -410,7 +434,8 @@ Nothing here touches a ticket in any other stage, even when its branch looks mer
 - A ticket assigned to one is reserved for it (`reserved: true`; `get_ticket` → `agent` has its
   instructions). `claim_ticket` with `as: <its name>`, brief a subagent with the agent's
   instructions plus the ticket's, and post its work with `post_update` and `comment` using
-  `as: <its name>`: it shows under the agent's name, via you.
+  `as: <its name>`: it shows under the agent's name, via you, in the Agents tab. What the human
+  must read goes in the summary (`set_ticket_summary`, `as` too) or in a reply under their post.
 - Never take a reserved ticket as yourself, reassign it, or work it without the agent's
   instructions. Only the human reassigns it.
 - `list_my_threads` also returns threads waiting on an agent (someone @mentioned it, or replied
@@ -451,7 +476,9 @@ Without those skills, or for one ticket, orchestrate by hand:
    known (the worktree and branch, what earlier steps returned: subagents share nothing else),
    done when (with the checklist from [Hand off](#4-hand-off), as it stands) and what to return;
    post what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`,
-   its evidence in `files`); tick the tasks it finished; go where its notes say next.
+   its evidence in `files`: it goes to the Agents tab); when it changes where the ticket stands for
+   the human (a review round's verdict, the PR, the preview), rewrite the summary; tick the tasks
+   it finished; go where its notes say next.
 3. A call that is the human's (two valid behaviours, a finding that keeps coming back, ship as is
    or not) → `ask_decision`. In a session with the human, ask them in the chat as well, with the
    card's options (AskUserQuestion in Claude Code, or the client's equivalent); once they answer
@@ -460,7 +487,7 @@ Without those skills, or for one ticket, orchestrate by hand:
    ticket, and never answers a decision.
 4. Hand off as in [Hand off](#4-hand-off), with the last review's summary as the PR's tests. Check
    every item of the checklist yourself before moving the ticket to `review` (`get_ticket`: `push`,
-   `pr`, the workspace's `managedPreview` `running`, the hand-off post): a subagent saying it is
+   `pr`, the workspace's `managedPreview` `running`, the `summary` up to date): a subagent saying it is
    done is not enough.
 
 Never two builders on one branch; when no agent's notes fit a step, ask in a post rather than

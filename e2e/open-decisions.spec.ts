@@ -35,6 +35,13 @@ const rows = (page: Page) => page.locator('ol > li:has(> time)')
 const expectFeed = (page: Page, bodies: string[]) =>
   expect(rows(page)).toHaveText(bodies.map((b) => new RegExp(b.replace(/[.?]/g, '\\$&'))))
 
+/** Opens that tab of the feed. */
+const openTab = (page: Page, name: 'Main' | 'Agents') =>
+  page
+    .getByRole('tablist', { name: 'Feed' })
+    .getByRole('tab', { name: new RegExp(`^${name}`) })
+    .click()
+
 /** Picks an option on a decision card and decides it. */
 async function decide(page: Page, question: string) {
   const card = page
@@ -59,18 +66,16 @@ test('an open decision is the first post of the feed, however old, with its own 
   await postAt(human, t.id, 'A note since.', 0, false)
 
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
-  await expectFeed(page, [
-    'Should the cache go?',
-    'A note since.',
-    'A step after it.',
-    'Before the question.',
-  ])
+  // Main has the human's posts and the card; the agent's progress post is in Agents.
+  await expectFeed(page, ['Should the cache go?', 'A note since.', 'Before the question.'])
   const first = rows(page).first()
   await expect(first.getByRole('group', { name: 'Decision' })).toContainText('Your decision is needed')
   // Its legend says when it was asked, as any row's does, and it sits on the rail like them.
   await expect(first.locator('> time')).toHaveAttribute('datetime', question.at!)
   await expect(first.locator('> time')).toContainText('2 days ago')
   await expect(first.locator('> div').first().locator('span')).toHaveCount(2)
+  await openTab(page, 'Agents')
+  await expectFeed(page, ['A step after it.'])
 
   // The rest keep the API's order, which leaves the question where it falls in time.
   const updates = (await api.getTicket(t.id)).updates
@@ -95,14 +100,16 @@ test('several open decisions all come first, newest first, and each goes back to
   await postAt(agent, t.id, 'The latest step.')
 
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
-  await expectFeed(page, ['Which port?', 'Which parser?', 'The latest step.', 'Between them.'])
+  await expectFeed(page, ['Which port?', 'Which parser?', 'Between them.'])
 
   // Decided, the newer one drops back to its day; the other still waits on top. No reload.
   await decide(page, 'Which port?')
-  await expectFeed(page, ['Which parser?', 'The latest step.', 'Which port?', 'Between them.'])
+  await expectFeed(page, ['Which parser?', 'Which port?', 'Between them.'])
 
   await decide(page, 'Which parser?')
-  await expectFeed(page, ['The latest step.', 'Which port?', 'Between them.', 'Which parser?'])
+  await expectFeed(page, ['Which port?', 'Between them.', 'Which parser?'])
+  await openTab(page, 'Agents')
+  await expectFeed(page, ['The latest step.'])
   expect((await api.getTicket(t.id)).status).toBe('in_progress')
 })
 
@@ -122,17 +129,19 @@ test("a lane's open decision comes first when lane posts are included, and is no
   await postAt(human, parent.id, 'Parent note.', 0, false)
 
   await page.goto(`/projects/${project.id}/features/${parent.id}`)
-  await expectFeed(page, ['Parent note.', 'Parent step.'])
+  await expectFeed(page, ['Parent note.'])
   await expect(page.getByRole('group', { name: 'Decision' })).toHaveCount(0)
 
   await page.getByText('include lane posts').click()
-  await expectFeed(page, ['Split the lane?', 'Parent note.', 'Parent step.'])
+  await expectFeed(page, ['Split the lane?', 'Parent note.'])
   const first = rows(page).first()
   await expect(first.getByRole('group', { name: 'Decision' })).toContainText('Your decision is needed')
   await expect(first.getByRole('link', { name: 'One part' })).toBeVisible()
 
   await page.getByText('include lane posts').click()
-  await expectFeed(page, ['Parent note.', 'Parent step.'])
+  await expectFeed(page, ['Parent note.'])
+  await openTab(page, 'Agents')
+  await expectFeed(page, ['Parent step.'])
 })
 
 test('a question written as a plain post keeps its place in time', async ({ page, api, human, agent }) => {
@@ -141,5 +150,7 @@ test('a question written as a plain post keeps its place in time', async ({ page
   await postAt(agent, t.id, 'Moved on since.')
 
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
-  await expectFeed(page, ['Moved on since.', 'Should the export stay?'])
+  await expectFeed(page, ['Should the export stay?'])
+  await openTab(page, 'Agents')
+  await expectFeed(page, ['Moved on since.'])
 })

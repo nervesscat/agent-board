@@ -54,6 +54,58 @@ test('no sideways scroll at 390px on Home, Repositories, the PR queue, the board
   expect(await scrollsSideways(page)).toBe(false)
 })
 
+test("a ticket's feed tabs, a long summary with its history open and long lane chips fit 390px", async ({
+  page,
+  api,
+  human,
+  agent,
+  project,
+}) => {
+  const t = await api.ticket({ title: 'Feed on a phone', status: 'in_progress' })
+  const lane = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: {
+        title: 'A lane whose title goes on and on so its chip has to be cut rather than widen the page',
+        parentId: t.id,
+      },
+    }),
+  )
+  const long =
+    'A summary with a `long_inline_code_identifier_that_does_not_break_easily` and https://example.com/a/very/long/path/that/goes/on/and/on'
+  await ok(agent.put(`/api/tickets/${t.id}/summary`, { data: { body: long } }))
+  await ok(
+    agent.put(`/api/tickets/${t.id}/summary`, {
+      data: { body: `${long}, again`, change: 'a change line that is long enough to wrap on a phone screen' },
+    }),
+  )
+  await ok(agent.put(`/api/tickets/${lane.id}/summary`, { data: { body: 'The lane is done.' } }))
+  await ok(agent.post(`/api/tickets/${lane.id}/updates`, { data: { body: 'Lane progress.' } }))
+  await ok(agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'Progress of the ticket.' } }))
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const summary = page.getByRole('article', { name: 'Summary' })
+  await expect(summary).toContainText('again')
+  await summary.getByRole('button', { name: 'history (1)' }).click()
+  await expect(summary.getByRole('list', { name: 'Earlier versions' })).toBeVisible()
+  // Its reply box, open.
+  await summary
+    .getByRole('group', { name: 'Summary actions' })
+    .first()
+    .getByRole('button', { name: 'reply' })
+    .tap()
+  await expect(summary.getByRole('textbox', { name: 'Reply' })).toBeVisible()
+  await page.getByText('include lane posts').click()
+  await expect(page.getByText('The lane is done.')).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+
+  const tabs = page.getByRole('tablist', { name: 'Feed' })
+  await tabs.getByRole('tab', { name: /^Agents/ }).tap()
+  await expect(page.getByText('Lane progress.', { exact: true })).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
+  const box = (await tabs.boundingBox())!
+  expect(box.x + box.width).toBeLessThanOrEqual(390)
+})
+
 test('no sideways scroll at 390px on the Overview, Daily (with a report), Previews, Cleanup and Agents pages', async ({
   page,
   api,

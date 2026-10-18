@@ -1,5 +1,5 @@
 import { listActors } from './actors'
-import type { getTicketWithPush } from './features'
+import { type getTicketWithPush, summaryStandIn } from './features'
 import { lastCommitAt } from './git'
 import { isLocalUrl, previewState } from './preview'
 import type { CiState } from './prs'
@@ -8,8 +8,8 @@ import { ticketRepo } from './repos'
 
 /**
  * What a ticket handed to review still lacks: the parts of the hand-off the board can see for itself
- * (the implementation's tasks all done, a PR, the branch on origin, a preview that runs, a hand-off post
- * after the last commit, CI that is not red). Warnings only: moving to review is never refused for them.
+ * (the implementation's tasks all done, a PR, the branch on origin, a preview that runs, the ticket's
+ * summary written after the last commit, CI that is not red). Warnings only: moving to review is never refused for them.
  * Above them, whether the branch is merged yet: merging is the human's step, so it is listed but never
  * missing.
  */
@@ -55,11 +55,11 @@ export interface HandoffFacts {
   previews: { url: string; running: boolean }[]
   /** When the branch's last commit was made; null without a branch, or when git cannot tell. */
   lastCommitAt: string | null
-  /** What a hand-off post must come after when there is no commit to go by: when work last started. */
+  /** What the summary must come after when there is no commit to go by: when work last started. */
   since: string
-  /** The ticket's own posts. */
-  posts: { author: string; progress: boolean; handoff: boolean; createdAt: string }[]
-  /** The names the human signs in under: their posts are not hand-offs. */
+  /** The ticket's own posts; `summary` marks the versions of its summary. */
+  posts: { author: string; progress: boolean; handoff: boolean; summary: boolean; createdAt: string }[]
+  /** The names the human signs in under: what they write is not a hand-off. */
   humans: string[]
 }
 
@@ -129,19 +129,21 @@ export function handoffOf(f: HandoffFacts): Handoff {
       ? `Running at ${running.url}`
       : f.previews.length
         ? 'Preview not running'
-        : 'No preview: none started, or say in the hand-off post why it cannot be tried',
+        : 'No preview: none started, or say in the summary why it cannot be tried',
   )
 
   const after = f.lastCommitAt ?? f.since
-  const post = f.posts.find(
-    (u) => u.progress && !u.handoff && !f.humans.includes(u.author) && time(u.createdAt) >= time(after),
-  )
   const since = f.lastCommitAt ? 'the last commit' : 'work started'
+  const handoff = handoffPost(f, after)
   check(
     'no_handoff_post',
-    'Hand-off post',
-    Boolean(post),
-    post ? `Posted by ${post.author} after ${since}` : `No progress post since ${since}`,
+    'Summary',
+    Boolean(handoff),
+    handoff
+      ? handoff.summary
+        ? `Summary updated by ${handoff.author} after ${since}`
+        : `No summary yet; progress post by ${handoff.author} after ${since}`
+      : `No summary since ${since}`,
   )
 
   const ci = f.pr?.ci
@@ -157,6 +159,19 @@ export function handoffOf(f: HandoffFacts): Handoff {
   // Merging is the human's step: a branch not merged yet is pending, not something the hand-off lacks.
   const missing = checks.filter((c) => !c.ok && c.code !== 'not_merged')
   return { missing: missing.map(({ code, text }) => ({ code, text })), checks }
+}
+
+/**
+ * What hands the ticket off after `after`: a version of its summary written by an agent then. A ticket
+ * whose summary was never written goes by what stood for one before there were summaries (the post
+ * summaryStandIn picks): any progress post by an agent after `after`, a resume note's versions aside.
+ * Once a summary exists only the summary counts.
+ */
+function handoffPost(f: HandoffFacts, after: string) {
+  const fresh = (u: HandoffFacts['posts'][number]) =>
+    !f.humans.includes(u.author) && time(u.createdAt) >= time(after)
+  if (f.posts.some((u) => u.summary)) return f.posts.find((u) => u.summary && fresh(u))
+  return summaryStandIn(f.posts.filter(fresh), f.humans)
 }
 
 type TicketWithPush = Awaited<ReturnType<typeof getTicketWithPush>>
