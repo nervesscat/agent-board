@@ -18,7 +18,8 @@ with MCP `cleanup_delete` (worktrees and branches on origin stay the human's).
 - REST under `/api/*` and an MCP server at `/api/mcp` for the agents. `AGENTS.md` is what they read.
 
 Ports are deliberately unusual so nothing collides with a project you are running:
-**47100** (board) and **47110** (gate). Both are overridable in `.env`.
+**47100** (board) and **47110** (gate). Both are overridable in `.env`. For your other devices there is
+a second gate on **47111** (Using it from other devices, below).
 
 ## First run
 
@@ -63,6 +64,7 @@ gate cookie work unchanged. `pnpm start` inside WSL starts it; after a change he
 pnpm start          # stop the board, install, start it in the background with hot reload, wait until it answers
 pnpm start --fg     # the same in the foreground; logs to the terminal
 pnpm stop           # stop it
+pnpm tailnet        # the tailscale serve commands that open it to your other devices (below); reads only
 ```
 
 There is one board, run from the main checkout with `vite dev` on the real data in `data/`, so code
@@ -73,6 +75,99 @@ the board itself happens in worktrees, never in the main checkout (Development, 
 
 The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
 starting after a reboot.
+
+## Using it from other devices
+
+The board opens on your phone, tablet or another computer through your tailnet: HTTPS on this
+machine's Tailscale name, `https://<machine>.<tailnet>.ts.net/`, signed in with a passkey-gate of its
+own for that name. On this machine `tailscale serve` takes 443 to the board (`http://127.0.0.1:47100`)
+and 8443 to that public gate (`http://127.0.0.1:47111`). Nothing else changes: `HOST` stays
+`127.0.0.1`, `localhost` works as before, and agents here keep `http://localhost:47100/api/mcp`. It is
+off until all of the steps below are done.
+
+**Before you start**
+
+- Tailscale on this machine and on each device, signed in to the same tailnet.
+- MagicDNS and HTTPS certificates turned on in the Tailscale admin console (DNS page). The machine
+  and tailnet names then appear in a public certificate log.
+- Tailnet access rules (ACLs or grants) that let only your own devices reach this machine on 443 and 8443.
+
+**1. `.env`** (the board's; docker compose reads `TAILNET_HOST` from the same file):
+
+```
+PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net
+PUBLIC_GATE_URL=https://<machine>.<tailnet>.ts.net:8443
+PUBLIC_GATE_AUTH_URL=http://127.0.0.1:47111
+TAILNET_HOST=<machine>.<tailnet>.ts.net
+```
+
+`PUBLIC_ORIGIN` is the board as your devices open it, `PUBLIC_GATE_URL` the public gate as their
+browser reaches it, `PUBLIC_GATE_AUTH_URL` where the board asks that gate about each request. All three
+or none: the board refuses to start with only some of them, or with a value it cannot trust (a port or
+a path on `PUBLIC_ORIGIN`, a wildcard, a gate on another host, a `PUBLIC_GATE_AUTH_URL` off loopback or
+on the localhost gate's port). Then `pnpm start`. `pnpm tailnet` prints the values for this machine.
+
+**2. The public gate**, the same `../passkey-gate` image as the localhost gate, on `127.0.0.1:47111`,
+with passkeys, sessions and tokens of its own (a passkey is for one name: the localhost gate's do not
+work there):
+
+```powershell
+docker compose -f docker-compose.gate.yml --profile tailnet up -d --build
+docker compose -f docker-compose.gate.yml logs gate-public    # its first enrollment link
+```
+
+**3. `tailscale serve`**: `pnpm tailnet` prints the commands for this machine, its URL and how to stop.
+It only reads (`tailscale status`, `serve status`, `funnel status`, `version`) and never runs `serve`
+itself; it refuses while Funnel is on, for any port but the board's (`PORT`), and for a board that
+answers without its gate.
+
+```
+tailscale serve --bg --https=443 http://127.0.0.1:47100
+tailscale serve --bg --https=8443 http://127.0.0.1:47111
+```
+
+**4. A passkey on the public name**: open the first enrollment link from step 2
+(`https://<machine>.<tailnet>.ts.net:8443/enroll?code=…`, valid 15 minutes) on the device, and enroll.
+For another device, or once that link has expired:
+`docker compose -f docker-compose.gate.yml exec gate-public python -m gate enroll-link`.
+
+**5. Open `https://<machine>.<tailnet>.ts.net/`**: the board sends you to the public gate's login and
+back to the page you asked for.
+
+**Agents on other devices**: mint a token on the public gate's Devices page,
+`https://<machine>.<tailnet>.ts.net:8443/devices` (its name is the agent's), and connect to
+`https://<machine>.<tailnet>.ts.net/api/mcp` (REST: `/api/*` on the same origin) with
+`Authorization: Bearer gate_…`. A token works only on its own gate's origin: one minted on
+`localhost:47110` is refused through the tailnet, and the other way round.
+
+**Stopping it**:
+
+```
+tailscale serve --https=443 off
+tailscale serve --https=8443 off        # or tailscale serve reset, which clears every handler
+docker compose -f docker-compose.gate.yml --profile tailnet stop gate-public
+```
+
+Remove the three `PUBLIC_*` keys from `.env` (then `pnpm start`) to close it on the board's side too.
+
+**What holds**
+
+- Your tailnet only, never Funnel: the board refuses every request Tailscale marks as Funnel
+  (`Tailscale-Funnel-Request`), signed in or not, and `pnpm tailnet` refuses while Funnel is on.
+- The gate on every request from the network: through `tailscale serve` nothing answers without a
+  session or token of the public gate. That is every page, `/api/*`, `/api/mcp`, `/api/health` (public
+  on `localhost` only) and Vite's own files (`/@vite/*`, `/@fs/*`, `/src/*`, `public/` files); no
+  WebSocket opens there (hot reload is for this machine's browsers). A `Tailscale-User-*` header is
+  never a sign-in.
+- Only the board's own hosts: a request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` (any
+  port) or the `PUBLIC_ORIGIN` host gets a 403, and a write carrying the gate's cookie must come from
+  `http://localhost:<PORT>`, `http://127.0.0.1:<PORT>`, `http://[::1]:<PORT>` or `PUBLIC_ORIGIN`.
+- Previews stay on this machine: board-run previews never get the `PUBLIC_*` keys (nor `TAILNET_HOST`),
+  `pnpm dev` copies get them empty, and a board with its gate off (test mode, `AUTH=off`) ignores them
+  and refuses every request a proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`). Their
+  `http://127.0.0.1:<port>` links do not open on other devices.
+- `HOST` stays `127.0.0.1`, and both gates publish on `127.0.0.1` only (`docker-compose.gate.yml`):
+  nothing listens off this machine but Tailscale.
 
 ## Test mode
 
@@ -102,6 +197,10 @@ them stops it with a clear error and a non-zero exit:
   `BOARD_ENV=production` (or unset) is refused;
 - with the gate off, the board only listens on loopback (`HOST` 127.0.0.1, ::1 or localhost; the built
   server's default, every interface, is refused) and never on 47100, the live board's port;
+- with the gate off, the board ignores `PUBLIC_ORIGIN`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` (it
+  says so as it starts) and answers a 403 to any request a proxy forwarded (`X-Forwarded-*`,
+  `Forwarded`, `Tailscale-*`), Vite's own files included; in every mode, a tailnet entrance only half
+  configured (Using it from other devices, above) stops the start;
 - `X-Test-Actor` is only read in test; in production and development it changes nothing;
 - `pnpm start` runs the board as production even from a shell with another `BOARD_ENV`;
 - with the gate off, the server prints `AUTH OFF: <mode>, signed in as <name>, do not expose this` on

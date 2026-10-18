@@ -38,8 +38,13 @@ export function readClaudeTimeout(raw: string | undefined): number {
   return ms
 }
 
+type Env = Record<string, string | undefined>
+
+/** PORT: where the board listens (47100 by default). Its loopback origins are on this port. */
+export const readPort = (e: Env) => Number(e.PORT || '47100')
+
 export const config = {
-  port: Number(env('PORT', '47100')),
+  port: readPort(process.env),
   boardUrl: env('BOARD_URL', 'http://localhost:47100').replace(/\/$/, ''),
   gateUrl: env('GATE_URL', 'http://localhost:47110').replace(/\/$/, ''),
   dataDir: expandPath(env('DATA_DIR', './data')),
@@ -137,3 +142,107 @@ export function builtServerBind(e: Record<string, string | undefined>) {
 export const authOffBanner = (auth: AuthMode, name: string) =>
   `AUTH OFF: ${auth.boardEnv}, signed in as ${name}, do not expose this` +
   (auth.boardEnv === 'test' ? ' (X-Test-Actor: human:<name> or agent:<name> picks another caller)' : '')
+
+// --- the tailnet entrance: the board on this machine's tailnet name, through `tailscale serve`. ---
+// README: "Using it from other devices". Off unless all three keys are set, and never with the gate off.
+
+/** The settings of the tailnet entrance: all three, or none. */
+export const ENTRANCE_KEYS = ['PUBLIC_ORIGIN', 'PUBLIC_GATE_URL', 'PUBLIC_GATE_AUTH_URL'] as const
+
+export interface PublicEntrance {
+  /** PUBLIC_ORIGIN: the board as other devices open it, `https://<machine>.<tailnet>.ts.net`. */
+  origin: string
+  /** Its host name, lower case: the one Host besides loopback the board answers for. */
+  host: string
+  /** PUBLIC_GATE_URL: the public gate as the browser reaches it, on the same host (`https://<host>:8443`). */
+  gateUrl: string
+  /** PUBLIC_GATE_AUTH_URL: where the board asks that gate about each request, on this machine. */
+  gateAuthUrl: string
+}
+
+// A host name of two labels or more, the last one starting with a letter: no wildcard, no IP literal.
+const HOST_NAME =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+const LOOPBACK_URL_HOSTS = new Set(['127.0.0.1', '[::1]', 'localhost'])
+
+const parseUrl = (raw: string) => {
+  try {
+    return new URL(raw)
+  } catch {
+    return null
+  }
+}
+/** `raw` is exactly an origin (scheme, host, port), a trailing slash and case aside: no path, no user. */
+const isOrigin = (raw: string, url: URL) => raw.replace(/\/$/, '').toLowerCase() === url.origin
+const portOf = (url: URL) => url.port || (url.protocol === 'https:' ? '443' : '80')
+
+/**
+ * PUBLIC_ORIGIN, PUBLIC_GATE_URL and PUBLIC_GATE_AUTH_URL: the board on this machine's tailnet name and
+ * its own passkey-gate there. Null when none is set: the board then answers on loopback only. Throws on
+ * a half configuration and on anything it cannot trust: a wildcard, a port or a path on the board's
+ * origin, a gate on another host, a /auth off this machine or the localhost gate's.
+ */
+export function readPublicEntrance(e: Env): PublicEntrance | null {
+  const values = ENTRANCE_KEYS.map((key) => e[key]?.trim() ?? '')
+  const set = ENTRANCE_KEYS.filter((_, i) => values[i])
+  if (!set.length) return null
+  const [origin, gate, auth] = values as [string, string, string]
+  if (set.length < ENTRANCE_KEYS.length)
+    throw new StartupError(
+      `the tailnet entrance takes ${ENTRANCE_KEYS.join(', ')} together, or none of them: ` +
+        `${set.join(' and ')} ${set.length > 1 ? 'are' : 'is'} set, ` +
+        `${ENTRANCE_KEYS.filter((key) => !set.includes(key)).join(' and ')} not`,
+    )
+  const board = parseUrl(origin)
+  if (
+    board?.protocol !== 'https:' ||
+    board.port ||
+    !isOrigin(origin, board) ||
+    !HOST_NAME.test(board.hostname)
+  )
+    throw new StartupError(
+      'PUBLIC_ORIGIN must be https://<machine>.<tailnet>.ts.net: https, a host name (no IP, no wildcard), ' +
+        `no port and no path; got "${origin}"`,
+    )
+  const host = board.hostname
+  const gateUrl = parseUrl(gate)
+  if (
+    gateUrl?.protocol !== 'https:' ||
+    !isOrigin(gate, gateUrl) ||
+    gateUrl.hostname !== host ||
+    gateUrl.origin === board.origin
+  )
+    throw new StartupError(
+      `PUBLIC_GATE_URL must be https://${host}:<port>: the public gate on the board's host, on a port of ` +
+        `its own (8443 with tailscale serve), no path; got "${gate}"`,
+    )
+  const authUrl = parseUrl(auth)
+  if (authUrl?.protocol !== 'http:' || !isOrigin(auth, authUrl) || !LOOPBACK_URL_HOSTS.has(authUrl.hostname))
+    throw new StartupError(
+      'PUBLIC_GATE_AUTH_URL must be http://127.0.0.1:<port>: the public gate on this machine, on loopback ' +
+        `(127.0.0.1, [::1] or localhost), no path; got "${auth}"`,
+    )
+  const local = parseUrl(e.GATE_URL || 'http://localhost:47110')
+  if (local && LOOPBACK_URL_HOSTS.has(local.hostname) && portOf(local) === portOf(authUrl))
+    throw new StartupError(
+      `PUBLIC_GATE_AUTH_URL (${auth}) is the localhost gate of GATE_URL: the tailnet entrance needs a gate ` +
+        'of its own (docker-compose.gate.yml, profile tailnet, on 127.0.0.1:47111)',
+    )
+  return { origin: board.origin, host, gateUrl: gateUrl.origin, gateAuthUrl: authUrl.origin }
+}
+
+/** The entrance a board with these settings serves: none while the gate is off, whatever the keys say. */
+export function readServedEntrance(e: Env): PublicEntrance | null {
+  const entrance = readPublicEntrance(e)
+  return entrance && !readAuthMode(e).off ? entrance : null
+}
+
+let served: PublicEntrance | null | undefined
+/** The entrance this process serves, read once; the startup check has already refused a bad one. */
+export const servedEntrance = () =>
+  served === undefined ? (served = readServedEntrance(process.env)) : served
+
+/** Said as a gate-off board starts with the entrance's keys set: it never answers through it. */
+export const entranceIgnored = (auth: AuthMode) =>
+  `the gate is off (${auth.boardEnv}), so PUBLIC_ORIGIN, PUBLIC_GATE_URL and PUBLIC_GATE_AUTH_URL are ` +
+  'ignored: this board answers on loopback only, never through the tailnet'

@@ -11,6 +11,7 @@
     "build": "vite build",
     "start": "node scripts/start.mjs",
     "stop": "node scripts/start.mjs --stop",
+    "tailnet": "node scripts/tailnet.mjs",
     "move-uploads": "node scripts/move-uploads-to-s3.mjs",
     "generate-routes": "tsr generate",
     "typecheck": "tsc --noEmit",
