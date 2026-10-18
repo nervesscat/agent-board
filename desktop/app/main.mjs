@@ -27,6 +27,9 @@ const boardDir = app.isPackaged
   ? path.join(process.resourcesPath, 'board')
   : path.resolve(here, '..', '.stage', 'board')
 const READY_MS = 60_000
+const OPEN_SETTINGS = 'Open the settings file'
+const OPEN_LOGS = 'Open the logs folder'
+const OPEN_HOME = 'Open the app folder'
 
 // The window's profile (the gate's cookie, the cache) goes with the config, and so does the
 // single-instance lock: one app per folder.
@@ -41,6 +44,8 @@ let win = null
 /** @type {Tray | null} */
 let tray = null
 let quitting = false
+// A failure is being shown: the first one only.
+let failed = false
 // The end of the server's error output, for the dialog when it stops.
 let serverErr = ''
 
@@ -57,18 +62,44 @@ if (!app.requestSingleInstanceLock()) {
     event.preventDefault()
     void stopServer().then(() => app.quit())
   })
-  void app.whenReady().then(start)
+  // Whatever start() did not see coming still ends in a dialog, never in a process with no window
+  // that holds the single-instance lock.
+  void app
+    .whenReady()
+    .then(start)
+    .catch((/** @type {unknown} */ err) => fatal('The board cannot start.', errorText(err), home, OPEN_HOME))
 }
+
+/** @param {unknown} err */
+const errorText = (err) => (err instanceof Error ? err.message : String(err))
 
 async function start() {
   try {
     settings = resolveSettings({ env: process.env, file: readConfigFile(home), home })
   } catch (err) {
-    if (!(err instanceof SettingsError)) throw err
-    return fatal('The board’s settings are not valid.', err.message, configFile)
+    if (err instanceof SettingsError)
+      return fatal('The board’s settings are not valid.', err.message, configFile, OPEN_SETTINGS)
+    // The app's folder, or its config.env, cannot be read or written.
+    return fatal('The board cannot start.', `${errorText(err)}\n\nThe app's folder: ${home}`, home, OPEN_HOME)
   }
   if (!(await isPortFree(settings.port)))
-    return fatal('The board cannot start.', portBusyMessage(settings.port, configFile), configFile)
+    return fatal(
+      'The board cannot start.',
+      portBusyMessage(settings.port, configFile),
+      configFile,
+      OPEN_SETTINGS,
+    )
+  try {
+    fs.mkdirSync(path.join(settings.dataDir, 'logs'), { recursive: true })
+  } catch (err) {
+    return fatal(
+      'The board cannot start.',
+      `Its data folder ${settings.dataDir} cannot be used: ${errorText(err)}\n\n` +
+        `Set another DATA_DIR in ${configFile}, or in the environment, and start the app again.`,
+      configFile,
+      OPEN_SETTINGS,
+    )
+  }
   startServer()
   if (!(await waitUntilUp())) return
   console.log(`agent-board desktop: the board answers on ${settings.url}`)
@@ -78,9 +109,18 @@ async function start() {
 
 function startServer() {
   const logs = path.join(settings.dataDir, 'logs')
-  fs.mkdirSync(logs, { recursive: true })
   const out = fs.createWriteStream(path.join(logs, 'board.out.log'), { flags: 'a' })
   const err = fs.createWriteStream(path.join(logs, 'board.err.log'), { flags: 'a' })
+  // The server's output goes on to the app's own too, for whoever started it from a terminal. Nobody
+  // may be reading that (started from the Start menu, or its reader gone), and a log file may refuse a
+  // write: neither is a reason to fail, and the server's stderr still reaches the dialog.
+  for (const stream of /** @type {import('node:stream').Writable[]} */ ([
+    process.stdout,
+    process.stderr,
+    out,
+    err,
+  ]))
+    stream.on('error', () => {})
   // Electron's own executable as Node: the staged better-sqlite3 is built for its ABI.
   server = spawn(process.execPath, [path.join(boardDir, '.output', 'server', 'index.mjs')], {
     // The migrations are read from ./drizzle (src/db/index.ts).
@@ -89,9 +129,6 @@ function startServer() {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   })
-  // The server's output goes on to the app's own too, for whoever started it from a terminal; nobody
-  // may be reading it (started from the Start menu, or its reader gone), which is no reason to fail.
-  for (const stream of [process.stdout, process.stderr]) stream.on('error', () => {})
   server.stdout?.on('data', (chunk) => {
     out.write(chunk)
     process.stdout.write(chunk)
@@ -102,11 +139,16 @@ function startServer() {
     serverErr = tail(serverErr + String(chunk), 4000)
   })
   const proc = server
+  // It could not be started at all (its folder gone, say): no 'exit' follows.
+  proc.on('error', (e) => {
+    if (server === proc) server = null
+    if (!quitting) void fatal('The board cannot start.', `${errorText(e)}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
+  })
   proc.on('exit', (code) => {
     if (server === proc) server = null
     if (quitting) return
     const detail = `It exited${code === null ? '' : ` with code ${code}`}.\n\n${tail(serverErr) || '(no output)'}`
-    void fatal('The board stopped.', `${detail}\n\nLogs: ${logs}`, logs)
+    void fatal('The board stopped.', `${detail}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
   })
 }
 
@@ -124,12 +166,11 @@ async function waitUntilUp() {
     await new Promise((r) => setTimeout(r, 250))
   }
   const logs = path.join(settings.dataDir, 'logs')
-  quitting = true
-  await stopServer()
   await fatal(
     'The board did not start.',
     `It did not answer on ${health} within a minute.\n\nLogs: ${logs}`,
     logs,
+    OPEN_LOGS,
   )
   return false
 }
@@ -147,26 +188,33 @@ async function stopServer() {
 
 /**
  * Says what went wrong in a dialog (and on stderr), offers to open the file or folder to fix it, and
- * ends the app.
+ * ends the app, stopping the board first if it runs. Only the first failure is shown.
  * @param {string} message
  * @param {string} detail
  * @param {string} target
+ * @param {string} open The button that opens `target`.
  */
-async function fatal(message, detail, target) {
+async function fatal(message, detail, target, open) {
+  if (failed) return
+  failed = true
+  quitting = true
   console.error(`agent-board desktop: ${message} ${detail}`)
-  const isFile = path.extname(target) !== ''
-  const { response } = await dialog.showMessageBox({
-    type: 'error',
-    title: app.getName(),
-    message,
-    detail,
-    buttons: [isFile ? 'Open the settings file' : 'Open the logs folder', 'Quit'],
-    defaultId: 1,
-    cancelId: 1,
-    noLink: true,
-  })
-  if (response === 0) await shell.openPath(target)
-  app.exit(1)
+  try {
+    await stopServer()
+    const { response } = await dialog.showMessageBox({
+      type: 'error',
+      title: app.getName(),
+      message,
+      detail,
+      buttons: [open, 'Quit'],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true,
+    })
+    if (response === 0) await shell.openPath(target)
+  } finally {
+    app.exit(1)
+  }
 }
 
 const icon = () => nativeImage.createFromPath(path.join(here, 'icon.png'))

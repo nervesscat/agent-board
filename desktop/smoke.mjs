@@ -3,6 +3,7 @@
 //
 //   pnpm desktop:smoke [--app desktop/dist/win-unpacked] [--port 8240]
 //                      [--screenshot window.png] [--busy-screenshot dialog.png]
+//                      [--data-dir-screenshot dialog.png]
 //
 // It copies the unpacked app to a temporary folder outside the repo and runs it there with its own
 // AGENT_BOARD_HOME and DATA_DIR, so no pnpm, node, source or live data is involved, then checks that:
@@ -11,7 +12,8 @@
 //   - a second launch exits and brings the first window back;
 //   - Quit stops the server and frees the port;
 //   - the config file's PORT and DATA_DIR are used when the environment sets none;
-//   - a busy port is reported (in a dialog, and on stderr, where this reads it).
+//   - a busy port, on loopback or on every interface, is reported (in a dialog, and on stderr, where
+//     this reads it), and so is a DATA_DIR that cannot be used.
 //
 // The passkey-gate the board asks is the one thing stood in for: a loopback server that signs in
 // any browser through /login and answers /auth for its cookie and a fixed token, as the gate does.
@@ -38,6 +40,7 @@ const appSrc = path.resolve(arg('--app', path.join(root, 'desktop', 'dist', 'win
 const port = Number(arg('--port', '8240'))
 const screenshot = arg('--screenshot', '')
 const busyScreenshot = arg('--busy-screenshot', '')
+const dataDirScreenshot = arg('--data-dir-screenshot', '')
 const TOKEN = 'gate_smoke'
 const SESSION = 'gate_session=smoke'
 
@@ -227,27 +230,34 @@ try {
   check(await quit(app), 'Quit ends the app')
   check(await isPortFree(port2), `the port :${port2} is free after Quit`)
 
-  // 4. A busy port: reported, not a silent crash.
-  console.log(`\n4. :${port} busy`)
-  const blocker = net.createServer()
-  await new Promise((resolve) => blocker.listen(port, '127.0.0.1', () => resolve(null)))
-  const busy = spawn(exe, [], {
-    env: appEnv({ PORT: String(port), DATA_DIR: dataDir }),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  let said = ''
-  busy.stderr.on('data', (d) => (said += d))
-  const until = Date.now() + 30_000
-  while (Date.now() < until && !said.includes(`Port ${port} is already in use`) && busy.exitCode === null)
-    await sleep(200)
-  check(said.includes(`Port ${port} is already in use`), 'the busy port is reported')
-  if (busyScreenshot && process.platform === 'win32' && busy.pid && busy.exitCode === null) {
-    await sleep(1500)
-    captureWindow(busy.pid, busyScreenshot)
+  // 4. A busy port: reported, not a silent crash; on loopback, or on every interface, which also
+  // answers the window's localhost.
+  for (const [name, host] of /** @type {const} */ ([
+    ['4. busy on 127.0.0.1', '127.0.0.1'],
+    ['5. busy on every interface, as listen(port) does', undefined],
+  ])) {
+    console.log(`\n${name}, :${port}`)
+    const blocker = net.createServer()
+    await new Promise((resolve) => blocker.listen({ port, host }, () => resolve(null)))
+    await expectDialog(
+      { PORT: String(port), DATA_DIR: dataDir },
+      `Port ${port} is already in use`,
+      'the busy port is reported',
+      host ? busyScreenshot : '',
+    )
+    await new Promise((resolve) => blocker.close(() => resolve(null)))
   }
-  check(busy.exitCode === null, 'the app waits on its dialog instead of crashing')
-  if (busy.pid) spawnSync('taskkill', ['/PID', String(busy.pid), '/T', '/F'], { stdio: 'ignore' })
-  blocker.close()
+
+  // 6. A data folder that cannot be used (a file in its place): reported, not a process with no window.
+  console.log('\n6. DATA_DIR names a file')
+  const notAFolder = path.join(tmp, 'not-a-folder')
+  fs.writeFileSync(notAFolder, '')
+  await expectDialog(
+    { PORT: String(port), DATA_DIR: notAFolder },
+    `Its data folder ${notAFolder} cannot be used`,
+    'the unusable data folder is reported',
+    dataDirScreenshot,
+  )
 } catch (err) {
   console.error(err)
   failed = true
@@ -267,6 +277,33 @@ try {
 
 console.log(failed ? '\nsmoke test FAILED' : '\nsmoke test passed')
 process.exit(failed ? 1 : 0)
+
+/**
+ * Starts the app with `extra` and expects it to report `text` (in its dialog, and on stderr, where this
+ * reads it), waiting on that dialog rather than ending or running without a window; then ends it.
+ * @param {Record<string, string>} extra
+ * @param {string} text
+ * @param {string} what
+ * @param {string} shot Where to save the dialog as a PNG, or ''.
+ */
+async function expectDialog(extra, text, what, shot) {
+  const proc = spawn(exe, [], { env: appEnv(extra), stdio: ['ignore', 'pipe', 'pipe'] })
+  let said = ''
+  proc.stderr.on('data', (d) => (said += d))
+  const until = Date.now() + 30_000
+  while (Date.now() < until && !said.includes(text) && proc.exitCode === null) await sleep(200)
+  check(said.includes(text), what)
+  if (shot && process.platform === 'win32' && proc.pid && proc.exitCode === null) {
+    await sleep(1500)
+    captureWindow(proc.pid, shot)
+  }
+  check(proc.exitCode === null, 'the app waits on its dialog instead of ending')
+  if (proc.pid) spawnSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
+  await Promise.race([
+    new Promise((r) => (proc.exitCode !== null ? r(null) : proc.once('exit', r))),
+    sleep(10_000),
+  ])
+}
 
 /** Saves the window `pid` shows (the busy-port dialog) as a PNG, through Win32's PrintWindow. */
 /** @param {number} pid @param {string} file */

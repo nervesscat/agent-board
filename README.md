@@ -535,13 +535,14 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   applies only migrations dated after the last one applied, so one merged with an older `when`
   would be skipped on every existing database without an error.
 - **Desktop app** (`pnpm desktop:smoke`, after `pnpm desktop:package`; `--app <folder>`, `--port`,
-  `--screenshot <png>`, `--busy-screenshot <png>`): copies the unpacked app (or `--app`, an installed
-  one) to a temp folder and runs it there with its own settings folder and data, the
-  passkey-gate stood in for by a loopback server that signs anyone in. It checks that the board
-  answers `/api/health` and the window shows it, that a project made through the API survives a
+  `--screenshot <png>`, `--busy-screenshot <png>`, `--data-dir-screenshot <png>`): copies the
+  unpacked app (or `--app`, an installed one) to a temp folder and runs it there with its own settings
+  folder and data, the passkey-gate stood in for by a loopback server that signs anyone in. It checks
+  that the board answers `/api/health` and the window shows it, that a project made through the API survives a
   restart, that a second launch brings the first window back, that Quit frees the port, that
-  `config.env`'s `PORT` and `DATA_DIR` are used, and that a busy port is reported. It never runs on
-  47100 or the live `data/`.
+  `config.env`'s `PORT` and `DATA_DIR` are used, and that a busy port (on loopback or on every
+  interface) and a `DATA_DIR` that cannot be used are reported. It never runs on 47100 or the live
+  `data/`.
 - **CI** (`.github/workflows/ci.yml`, on pull requests and pushes to `main`): install, typecheck,
   lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
   Playwright report and traces are uploaded as the `playwright-report` artifact. A second job, on
