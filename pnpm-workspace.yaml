@@ -1,6 +1,8 @@
 allowBuilds:
   better-sqlite3: true
-  electron: true
+  # Listed as having a build, yet electron runs nothing as it installs: its binary is fetched when
+  # the package is first required, as desktop/package.mjs does.
+  electron: false
   # Squirrel.Windows only; the installer is NSIS.
   electron-winstaller: false
   esbuild: true

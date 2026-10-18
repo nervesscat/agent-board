@@ -23,8 +23,10 @@ const require = createRequire(import.meta.url)
 const stage = path.join(root, 'desktop', '.stage', 'board')
 const dist = path.join(root, 'desktop', 'dist')
 const electronVersion = require('electron/package.json').version
-const electronDist = path.join(path.dirname(require.resolve('electron/package.json')), 'dist')
-const electronExe = path.join(electronDist, process.platform === 'win32' ? 'electron.exe' : 'electron')
+// The electron package has no install script: requiring it is what fetches its binary when it is missing
+// (a fresh install), and gives its path. The packed app is that same folder.
+const electronExe = /** @type {string} */ (require('electron'))
+const electronDist = path.dirname(electronExe)
 const brand = JSON.parse(fs.readFileSync(path.join(root, 'desktop', 'app', 'package.json'), 'utf8'))
 
 /** @param {string} message @returns {never} */
