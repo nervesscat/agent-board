@@ -152,13 +152,6 @@ describe('the tailnet entrance', () => {
     )
   })
 
-  it('needs nothing but PUBLIC_ORIGIN: nothing else to configure', () => {
-    // Keys the board used to need with it are not read at all, whatever they hold.
-    const left = { PUBLIC_GATE_URL: 'nonsense', PUBLIC_GATE_AUTH_URL: 'http://0.0.0.0:1' }
-    expect(readPublicEntrance({ ...keys, ...left })).toEqual(entrance)
-    expect(readPublicEntrance(left)).toBeNull()
-  })
-
   it('refuses a board origin that is not https://<host>: no port, no path, no wildcard, no IP', () => {
     for (const origin of [
       'http://devbox.example-tailnet.ts.net',

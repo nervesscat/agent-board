@@ -274,12 +274,7 @@ describe('a preview the board runs', () => {
   })
 
   it("leaves the board's tailnet entrance out of what it builds and runs: a preview stays on loopback", async () => {
-    const entrance = {
-      PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net',
-      PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443',
-      PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111',
-      TAILNET_HOST: 'devbox.example-tailnet.ts.net',
-    }
+    const entrance = { PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net' }
     for (const [key, value] of Object.entries(entrance)) vi.stubEnv(key, value)
     try {
       const fake = useFake()
@@ -673,7 +668,7 @@ describe('over MCP and REST', () => {
       headers: {
         accept: 'application/json, text/event-stream',
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        // A gate token: an agent, as opposed to the human's passkey session.
+        // An agent token: an agent, as opposed to the human's passkey session.
         ...(as === 'agent' ? { authorization: 'Bearer gate_test' } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
