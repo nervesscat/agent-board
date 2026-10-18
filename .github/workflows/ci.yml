@@ -79,7 +79,7 @@ jobs:
         run: pnpm desktop:package
 
       - name: Smoke-test the unpacked app
-        run: pnpm desktop:smoke --port 8240 --screenshot desktop/dist/smoke/window.png --busy-screenshot desktop/dist/smoke/busy-port.png --data-dir-screenshot desktop/dist/smoke/data-dir.png
+        run: pnpm desktop:smoke --port 8240 --screenshot desktop/dist/smoke/window.png --busy-screenshot desktop/dist/smoke/busy-port.png --data-dir-screenshot desktop/dist/smoke/data-dir.png --app-folder-screenshot desktop/dist/smoke/app-folder.png
 
       - name: Install it, smoke-test the installed app, uninstall it
         shell: pwsh

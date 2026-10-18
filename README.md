@@ -120,8 +120,9 @@ them just the same. Managed previews of a board worktree also need `pnpm` and `n
 
 **When it cannot start**, it says so in a dialog instead of closing: a busy port (another board,
 such as `pnpm start` from a checkout, also wants 47100) offers to open `config.env`, to set another
-`PORT` there, or stop the other one; a board that fails to start shows the end of its log and offers
-the logs folder.
+`PORT` there, or stop the other one; a data folder or app folder that cannot be used (a `DATA_DIR`
+or `AGENT_BOARD_HOME` on a missing drive, say) names it and what to change; a board that fails to
+start shows the end of its log and offers the logs folder.
 
 **Signing in.** The window signs in the way the board does in a browser (First run, above), with the
 passkey prompt in the window. Where that prompt cannot show in the window, Open in browser in the
@@ -535,14 +536,16 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   applies only migrations dated after the last one applied, so one merged with an older `when`
   would be skipped on every existing database without an error.
 - **Desktop app** (`pnpm desktop:smoke`, after `pnpm desktop:package`; `--app <folder>`, `--port`,
-  `--screenshot <png>`, `--busy-screenshot <png>`, `--data-dir-screenshot <png>`): copies the
+  `--screenshot <png>`, `--busy-screenshot <png>`, `--data-dir-screenshot <png>`,
+  `--app-folder-screenshot <png>`): copies the
   unpacked app (or `--app`, an installed one) to a temp folder and runs it there with its own settings
   folder and data, the passkey-gate stood in for by a loopback server that signs anyone in. It checks
   that the board answers `/api/health` and the window shows it, that a project made through the API survives a
   restart, that a second launch brings the first window back, that Quit frees the port, that
-  `config.env`'s `PORT` and `DATA_DIR` are used, and that a busy port (on loopback or on every
-  interface) and a `DATA_DIR` that cannot be used are reported. It never runs on 47100 or the live
-  `data/`.
+  `config.env`'s `PORT` and `DATA_DIR` are used, that a busy port (on loopback or on every
+  interface) and a `DATA_DIR` or `AGENT_BOARD_HOME` that cannot be used are reported in a dialog that
+  ends the app, and that a second launch after a failure is harmless. It never runs on 47100 or the
+  live `data/`.
 - **CI** (`.github/workflows/ci.yml`, on pull requests and pushes to `main`): install, typecheck,
   lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
   Playwright report and traces are uploaded as the `playwright-report` artifact. A second job, on
