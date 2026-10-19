@@ -372,9 +372,14 @@ export function listPasskeys() {
       rpId: schema.passkeys.rpId,
       createdAt: schema.passkeys.createdAt,
       lastUsedAt: schema.passkeys.lastUsedAt,
-      sessions: sql<number>`(select count(*) from ${schema.sessions} where ${schema.sessions.passkeyId} = ${schema.passkeys.id} and ${schema.sessions.expiresAt} > ${nowIso()})`,
+      sessions: sql<number>`count(${schema.sessions.id})`,
     })
     .from(schema.passkeys)
+    .leftJoin(
+      schema.sessions,
+      and(eq(schema.sessions.passkeyId, schema.passkeys.id), gt(schema.sessions.expiresAt, nowIso())),
+    )
+    .groupBy(schema.passkeys.id)
     .orderBy(asc(schema.passkeys.id))
     .all()
 }
