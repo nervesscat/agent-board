@@ -601,6 +601,102 @@ describe('agent tokens', () => {
   })
 })
 
+describe('the agent tokens the board issues', () => {
+  const DAY = 86_400_000
+  const mint = (o: Send, name: unknown = 'claude') =>
+    send('POST', '/api/agent-tokens', { ...o, body: { name } })
+
+  it('are made by the signed-in human only, the token itself in that answer alone', async () => {
+    expect((await mint({})).status).toBe(401)
+    const agent = await mint({ token: 'agent-token-claude' })
+    expect(agent.status).toBe(403)
+    expect(await agent.json()).toEqual({ error: 'only the human makes agent tokens' })
+    const before = dbm.db.select().from(dbm.schema.agentTokens).all().length
+
+    const res = await mint({ cookie: hostSession }, ' opencode ')
+    expect(res.status).toBe(201)
+    const made = await res.json()
+    expect(made).toEqual({
+      id: expect.any(Number),
+      name: 'opencode',
+      token: expect.stringMatching(/^[\w-]{43}$/),
+      createdAt: expect.any(String),
+      expiresAt: expect.any(String),
+    })
+    expect(dbm.db.select().from(dbm.schema.agentTokens).all().length).toBe(before + 1)
+    // The board keeps its hash only, and the token signs that agent in.
+    expect(JSON.stringify(dbm.db.$client.prepare('select * from agent_tokens').all())).not.toContain(
+      made.token,
+    )
+    expect(await json(send('GET', '/api/me', { token: made.token }))).toMatchObject({
+      actor: 'opencode',
+      agent: true,
+    })
+    // What the install lines download, with it.
+    for (const target of ['/api/agent-setup/skill?client=opencode', '/api/agent-setup/review-skills'])
+      expect((await send('GET', target, { token: made.token })).status, target).toBe(200)
+    // Each press makes another one.
+    const again = await json(mint({ cookie: hostSession }, 'opencode'))
+    expect(again.token).not.toBe(made.token)
+  })
+
+  it("takes a name that can be an agent's on the board, never the human's", async () => {
+    for (const name of ['', '   ', 'two words', '-dash', 'a/b', 'x'.repeat(41), 7, null]) {
+      const res = await mint({ cookie: hostSession }, name)
+      expect(res.status, JSON.stringify(name)).toBe(400)
+    }
+    for (const name of ['Enrique', 'enrique']) {
+      const res = await mint({ cookie: hostSession }, name)
+      expect(res.status, name).toBe(409)
+      expect((await res.json()).error).toMatch(/human's name/)
+    }
+    expect((await mint({ cookie: hostSession }, 'review-bot_2.x')).status).toBe(201)
+  })
+
+  it("expires a year after it is made, outliving the human's session", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const made = await json(mint({ cookie: hostSession }, 'codex'))
+    expect(Date.parse(made.expiresAt) - Date.parse(made.createdAt)).toBe(365 * DAY)
+    vi.setSystemTime(Date.now() + 91 * DAY)
+    // The session the token was made with is over; the token is not.
+    expect((await send('GET', '/api/me', { cookie: hostSession })).status).toBe(401)
+    expect((await send('GET', '/api/me', { token: made.token })).status).toBe(200)
+    vi.setSystemTime(Date.parse(made.expiresAt) - 60_000)
+    expect((await send('GET', '/api/me', { token: made.token })).status).toBe(200)
+    vi.setSystemTime(Date.parse(made.expiresAt) + 1)
+    expect((await send('GET', '/api/me', { token: made.token })).status).toBe(401)
+  })
+
+  it('lists name, made, last used and expiry, never a token, and Revoke ends one at its next request', async () => {
+    for (const o of [{}, { token: 'agent-token-claude' }]) {
+      expect((await send('GET', '/api/agent-tokens', o)).status).toBe(o.token ? 403 : 401)
+      expect((await send('DELETE', '/api/agent-tokens/1', o)).status).toBe(o.token ? 403 : 401)
+    }
+    const made = await json(mint({ cookie: hostSession }, 'revokee'))
+    await send('GET', '/api/me', { token: made.token })
+    const list = await json<any[]>(send('GET', '/api/agent-tokens', { cookie: hostSession }))
+    const row = list.find((t) => t.id === made.id)
+    expect(row).toEqual({
+      id: made.id,
+      name: 'revokee',
+      createdAt: made.createdAt,
+      lastUsedAt: expect.any(String),
+      expiresAt: made.expiresAt,
+    })
+    for (const t of list) expect(Object.keys(t).sort()).toEqual(Object.keys(row).sort())
+    expect(JSON.stringify(list)).not.toContain(made.token)
+    expect(JSON.stringify(list)).not.toMatch(/hash/i)
+
+    expect((await send('DELETE', `/api/agent-tokens/${made.id}`, { cookie: hostSession })).status).toBe(204)
+    const res = await send('GET', '/api/me', { token: made.token })
+    expect(res.status).toBe(401)
+    expect(
+      (await json<any[]>(send('GET', '/api/agent-tokens', { cookie: hostSession }))).map((t) => t.id),
+    ).not.toContain(made.id)
+    expect((await send('DELETE', `/api/agent-tokens/${made.id}`, { cookie: hostSession })).status).toBe(404)
+  })
+})
+
 describe('the devices section', () => {
   it('lists passkeys and sessions to the human only', async () => {
     for (const target of ['/api/auth/passkeys', '/api/auth/sessions']) {
