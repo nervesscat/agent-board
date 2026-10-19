@@ -90,8 +90,26 @@ jobs:
           if (-not (Test-Path "$dir/agent-board.exe")) { throw "the installer put no agent-board.exe in $dir" }
           pnpm desktop:smoke --app $dir --port 8250
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # The uninstaller Windows itself runs: the install's per-user uninstall entry, else one in the folder.
+          $entry = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq 'CrossBoard' } | Select-Object -First 1
+          $uninstaller = $null
+          $uninstallArgs = @('/S')
+          if ($entry -and $entry.UninstallString -match '^"([^"]+)"\s*(.*)$') {
+            $uninstaller = $Matches[1]
+            if ($Matches[2]) { $uninstallArgs = @($Matches[2] -split '\s+') + '/S' }
+          }
+          if (-not $uninstaller -or -not (Test-Path $uninstaller)) {
+            $uninstaller = (Get-ChildItem $dir -Filter 'Uninstall*.exe' | Select-Object -First 1).FullName
+          }
+          if (-not $uninstaller) {
+            Write-Host "uninstall entry: $($entry | Format-List | Out-String)"
+            Get-ChildItem $dir | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+            throw "no uninstaller found for $dir"
+          }
+          Write-Host "uninstalling with $uninstaller $($uninstallArgs -join ' ')"
           # The uninstaller hands over to a copy of itself and returns at once.
-          Start-Process -Wait -FilePath "$dir/Uninstall CrossBoard.exe" -ArgumentList '/S'
+          Start-Process -Wait -FilePath $uninstaller -ArgumentList $uninstallArgs
           for ($i = 0; $i -lt 60 -and (Test-Path "$dir/agent-board.exe"); $i++) { Start-Sleep 1 }
           if (Test-Path "$dir/agent-board.exe") { throw "the uninstaller left $dir/agent-board.exe" }
 

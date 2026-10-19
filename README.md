@@ -129,8 +129,8 @@ passkey prompt in the window. Where that prompt cannot show in the window, Open 
 tray opens the board in your default browser, where you sign in and use it as usual (the window and
 the browser keep separate sign-ins).
 
-**Uninstalling.** Settings, Apps, CrossBoard, Uninstall (or `Uninstall CrossBoard.exe` in the install
-folder). It leaves `%LOCALAPPDATA%\agent-board` alone: delete that folder to remove the data and the
+**Uninstalling.** Settings, Apps, CrossBoard, Uninstall: Windows runs the uninstaller the installer
+registered there. It leaves `%LOCALAPPDATA%\agent-board` alone: delete that folder to remove the data and the
 settings too.
 
 ## Using it from other devices
