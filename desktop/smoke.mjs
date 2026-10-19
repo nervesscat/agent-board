@@ -4,6 +4,7 @@
 //   pnpm desktop:smoke [--app desktop/dist/win-unpacked] [--port 8240]
 //                      [--screenshot window.png] [--busy-screenshot dialog.png]
 //                      [--data-dir-screenshot dialog.png] [--app-folder-screenshot dialog.png]
+//                      [--unwritable-screenshot dialog.png]
 //
 // It copies the unpacked app to a temporary folder outside the repo and runs it there with its own
 // AGENT_BOARD_HOME and DATA_DIR, so no pnpm, node, source or live data is involved, then checks that:
@@ -13,8 +14,8 @@
 //   - Quit stops the server and frees the port;
 //   - the config file's PORT and DATA_DIR are used when the environment sets none;
 //   - a busy port, on loopback or on every interface, is reported (in a dialog, and on stderr, where
-//     this reads it), and so are a DATA_DIR and an AGENT_BOARD_HOME that cannot be used; closing the
-//     dialog ends the app with exit 1;
+//     this reads it), and so are a DATA_DIR and an AGENT_BOARD_HOME that cannot be made or
+//     written; closing the dialog ends the app with exit 1;
 //   - a second launch after a failure, its window closed, raises nothing in the first copy.
 //
 // The passkey-gate the board asks is the one thing stood in for: a loopback server that signs in
@@ -44,6 +45,7 @@ const screenshot = arg('--screenshot', '')
 const busyScreenshot = arg('--busy-screenshot', '')
 const dataDirScreenshot = arg('--data-dir-screenshot', '')
 const appFolderScreenshot = arg('--app-folder-screenshot', '')
+const unwritableScreenshot = arg('--unwritable-screenshot', '')
 const TOKEN = 'gate_smoke'
 const SESSION = 'gate_session=smoke'
 
@@ -277,6 +279,30 @@ try {
       'the unusable app folder is reported',
       shot,
     )
+  }
+
+  // 8b. An app folder that exists, its electron folder too, but that refuses writes (a deny-write ACL).
+  if (process.platform === 'win32') {
+    console.log('\n8b. the app folder refuses writes')
+    const lockedHome = path.join(tmp, 'locked-home')
+    const lockedProfile = path.join(lockedHome, 'electron')
+    fs.mkdirSync(lockedProfile, { recursive: true })
+    const who = `${os.userInfo().username}`
+    const denied = spawnSync('icacls', [lockedProfile, '/deny', `${who}:(OI)(CI)(W)`], { encoding: 'utf8' })
+    check(
+      denied.status === 0,
+      `writes to ${lockedProfile} are denied (${denied.stdout.trim().split(/\r?\n/)[0]})`,
+    )
+    try {
+      await expectDialog(
+        { PORT: String(port), DATA_DIR: dataDir, AGENT_BOARD_HOME: lockedHome },
+        `The app's folder ${lockedHome} cannot be used`,
+        'the app folder that refuses writes is reported',
+        unwritableScreenshot,
+      )
+    } finally {
+      spawnSync('icacls', [lockedProfile, '/remove:d', who], { stdio: 'ignore' })
+    }
   }
 
   // 9. A failure shown, its window closed, then a second launch: nothing more goes wrong.
