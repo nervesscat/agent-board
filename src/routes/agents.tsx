@@ -73,6 +73,7 @@ function ConnectAgents() {
         }}
       />
 
+      {/* Keyed by the CLI: another CLI's field is a new one, and a press of the old one hands over nothing. */}
       <GenerateCommands key={client} defaultName={client} token={made} onToken={setMade} />
 
       <section className="space-y-2">

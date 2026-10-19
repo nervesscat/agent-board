@@ -45,10 +45,8 @@ export function GenerateCommands({
   const valid = AGENT_TOKEN_NAME.test(name.trim())
   const mint = useMutation({
     mutationFn: () => post<NewAgentToken>('/api/agent-tokens', { name: name.trim() }),
-    onSuccess: (made) => {
-      onToken(made)
-      qc.invalidateQueries({ queryKey: TOKENS })
-    },
+    // The list shows a new token whatever happens to this field.
+    onSettled: () => qc.invalidateQueries({ queryKey: TOKENS }),
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
@@ -58,7 +56,9 @@ export function GenerateCommands({
         className="flex items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (valid) mint.mutate()
+          // Handed over only while this field is still on the page: a token that answers after the
+          // page moved to another agent (which remounts it) never fills that agent's commands.
+          if (valid) mint.mutate(undefined, { onSuccess: onToken })
         }}
       >
         <Input

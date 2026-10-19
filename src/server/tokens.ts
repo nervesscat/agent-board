@@ -2,7 +2,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { AGENT_TOKEN_DAYS } from '#/lib/agents'
-import { isHumanName } from './actors'
+import { listActors } from './actors'
 import { hashSecret, newSecret } from './credentials'
 import { HttpError } from './http'
 import { getAccount } from './passkeys'
@@ -26,9 +26,17 @@ export interface NewAgentToken {
   expiresAt: string
 }
 
-/** A new token for the agent `name`, valid for AGENT_TOKEN_DAYS from `now`. Never a human's name. */
+/** A new token for the agent `name`, valid for AGENT_TOKEN_DAYS from `now`. Never a human's name, in any case. */
 export function mintAgentToken(name: string, now = new Date()): NewAgentToken {
-  if (getAccount()?.name === name || isHumanName(name))
+  // Told apart without case, as project agents' names are (projectAgents.ts).
+  const n = name.toLowerCase()
+  const humans = [
+    getAccount()?.name,
+    ...listActors()
+      .filter((a) => a.kind === 'human')
+      .map((a) => a.name),
+  ]
+  if (humans.some((h) => h?.toLowerCase() === n))
     throw new HttpError(409, `${name} is the human's name on the board: pick the agent's own`)
   const token = newSecret()
   const createdAt = now.toISOString()

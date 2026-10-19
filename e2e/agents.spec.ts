@@ -137,6 +137,54 @@ test('Generate commands makes a token per agent, fills it into every command, li
   await expect(page.locator('main')).not.toContainText(/gate_|gate token|passkey gate/i)
 })
 
+test("a token that answers after the page moved to another CLI never fills that CLI's commands", async ({
+  page,
+  human,
+}) => {
+  const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+  const shown = (text: string) => page.getByText(text, { exact: true })
+  // The POST is held until the page has moved on to Codex.
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  let reached!: () => void
+  const atBoard = new Promise<void>((r) => (reached = r))
+  await page.route('**/api/agent-tokens', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    reached()
+    await held
+    await route.continue()
+  })
+
+  await page.goto('/agents?shell=bash')
+  await page.getByRole('tab', { name: AGENTS.claude.label }).click()
+  await expect(page.getByLabel('Agent name')).toHaveValue('claude')
+  const answered = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/agent-tokens' && r.request().method() === 'POST',
+  )
+  await page.getByRole('button', { name: 'Generate commands' }).click()
+  await atBoard
+  await page.getByRole('tab', { name: AGENTS.codex.label }).click()
+  await expect(page.getByLabel('Agent name')).toHaveValue('codex')
+  release()
+  const made = (await (await answered).json()) as { name: string; token: string }
+  expect(made.name).toBe('claude')
+
+  // The board made claude's token (the list shows it), but Codex's commands still wait for their own.
+  await expect(
+    page
+      .getByRole('list', { name: 'Agent tokens' })
+      .getByRole('listitem')
+      .filter({ hasText: 'claude' })
+      .first(),
+  ).toBeVisible()
+  await expect(shown(mcpSetup('codex', boardUrl, '').text)).toBeVisible()
+  await expect(shown(skillInstall('codex', 'bash', boardUrl, ''))).toBeVisible()
+  await expect(shown(reviewSkillsInstall('bash', boardUrl, ''))).toBeVisible()
+  await expect(page.getByLabel('Agent name')).toHaveValue('codex')
+  await expect(page.getByText(made.token)).toHaveCount(0)
+  await expect(page.getByRole('status').filter({ hasText: 'shown this once' })).toHaveCount(0)
+})
+
 /**
  * Does what an install line does: extracts the served bundle into `claude`, replacing the files of the
  * same name and keeping the rest.

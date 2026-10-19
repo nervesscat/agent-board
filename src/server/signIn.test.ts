@@ -653,6 +653,23 @@ describe('the agent tokens the board issues', () => {
     expect((await mint({ cookie: hostSession }, 'review-bot_2.x')).status).toBe(201)
   })
 
+  it("refuses the account's name in any case, with no other human known to the board", async () => {
+    const { actors } = dbm.schema
+    const { eq } = await import('drizzle-orm')
+    const humans = dbm.db.select().from(actors).where(eq(actors.kind, 'human')).all()
+    dbm.db.delete(actors).where(eq(actors.kind, 'human')).run()
+    try {
+      expect(dbm.db.select().from(actors).where(eq(actors.kind, 'human')).all()).toEqual([])
+      for (const name of ['ENRIQUE', 'enrique', 'eNrIqUe', 'Enrique']) {
+        const res = await mint({ cookie: hostSession }, name)
+        expect(res.status, name).toBe(409)
+        expect((await res.json()).error).toMatch(/human's name/)
+      }
+    } finally {
+      if (humans.length) dbm.db.insert(actors).values(humans).onConflictDoNothing().run()
+    }
+  })
+
   it("expires a year after it is made, outliving the human's session", async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     const made = await json(mint({ cookie: hostSession }, 'codex'))
