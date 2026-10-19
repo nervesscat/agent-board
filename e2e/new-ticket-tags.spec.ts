@@ -446,6 +446,29 @@ test('a press on the Tags label mid-word keeps the word whole', async ({ page, p
   expect(row!.tags).toEqual(['Frontend'])
 })
 
+test('a suggested tag clicked while typing the title leaves the typing in the title', async ({
+  page,
+  project,
+  human,
+}) => {
+  await page.goto(`/projects/${project.id}/features`)
+  const { dialog, input, chips } = await openDialog(page)
+  const title = dialog.getByLabel('Title')
+  await title.click()
+  await page.keyboard.type('Crash on ')
+  await dialog.getByRole('button', { name: 'Add tag Bug' }).click()
+  await expect(chips).toHaveText(['Bug'])
+  await expect(title).toBeFocused()
+  await page.keyboard.type('save')
+  await expect(title).toHaveValue('Crash on save')
+  await expect(input).toHaveValue('')
+  await expect(chips).toHaveText(['Bug'])
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+  const [row] = await rows(human, project.id)
+  expect(row).toMatchObject({ title: 'Crash on save', tags: ['Bug'] })
+})
+
 test('a press near the edge of Create with a word still typed creates the ticket', async ({
   page,
   project,

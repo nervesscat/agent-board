@@ -29,7 +29,16 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
-import { Fragment, type ReactNode, createContext, useContext, useEffect, useRef, useState } from 'react'
+import {
+  Fragment,
+  type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { toast } from 'sonner'
 
 import { Actor, useActorKinds } from '#/components/Actor'
@@ -51,6 +60,7 @@ import { PrState } from '#/components/PrState'
 import { type FeedTab, RESUME_TEMPLATE } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
+import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
 import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostTools'
@@ -114,6 +124,7 @@ import {
 } from '#/lib/lanes'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
+import { addTags, overTagLimits } from '#/lib/tags'
 import { type StepList, columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
 
@@ -157,6 +168,8 @@ function TicketPage() {
     qc.invalidateQueries({ queryKey: key })
     qc.invalidateQueries({ queryKey: ticketsKey(id) })
     qc.invalidateQueries({ queryKey: ['ticket-git', ticketId] })
+    // The tags the project's tickets carry, offered under every tags field.
+    qc.invalidateQueries({ queryKey: ['project', id] })
   }
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const update = useMutation({
@@ -327,7 +340,7 @@ function TicketPage() {
               opened by <Actor name={t.createdBy} /> {ago(t.createdAt)}
             </span>
             <span>updated {ago(t.updatedAt)}</span>
-            <InlineTags key={t.id} t={t} onSave={(tags) => update.mutate({ tags })} />
+            <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -517,36 +530,66 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
   )
 }
 
-/** The tags, edited where they are: comma separated, Enter or leaving the field saves, Esc cancels. */
-function InlineTags({ t, onSave }: { t: TicketFull; onSave: (tags: string[]) => void }) {
+/**
+ * The tags, edited where they are as chips (`TagsInput`), with the project's suggestions and used tags
+ * offered under them. Enter on an empty text or leaving the field and its chips saves, Esc cancels.
+ */
+function InlineTags({
+  t,
+  projectId,
+  onSave,
+}: {
+  t: TicketFull
+  projectId: string
+  onSave: (tags: string[]) => void
+}) {
   const [editing, setEditing] = useState(false)
-  const [value, setValue] = useState('')
+  const [value, setValue] = useState<string[]>([])
+  const [text, setText] = useState('')
+  const choices = useTagChoices(projectId, value)
+  const focusText = useCallback((el: HTMLDivElement | null) => el?.querySelector('input')?.focus(), [])
   const done = (save: boolean) => {
     setEditing(false)
-    const tags = value
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean)
-    if (save && tags.join('\n') !== t.tags.join('\n')) onSave(tags)
+    const tags = addTags(value, text)
+    const over = overTagLimits(tags)
+    // Tags the server would refuse are not sent: the ticket keeps the ones it has.
+    if (save && !over.tooMany && !over.tooLong && tags.join('\n') !== t.tags.join('\n')) onSave(tags)
   }
   if (editing)
     return (
-      <Input
-        aria-label="Tags, comma separated"
-        autoFocus
-        value={value}
-        placeholder="High, Forms"
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={() => done(true)}
+      <div
+        className="w-full max-w-sm min-w-0 space-y-1"
+        ref={focusText}
+        onBlur={(e) => {
+          // Leaving for another window keeps the edit; leaving the field and its chips ends it.
+          if (!document.hasFocus() || e.currentTarget.contains(e.relatedTarget as Node | null)) return
+          done(true)
+        }}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') done(true)
+          if (e.defaultPrevented || e.nativeEvent.isComposing) return
+          // Enter in the text saves; Enter on a suggested chip is the chip's own, and adds its tag.
+          if (e.key === 'Enter' && e.target instanceof HTMLInputElement && !text.trim()) {
+            e.preventDefault()
+            done(true)
+          }
           if (e.key === 'Escape') done(false)
         }}
-        className="h-6 w-56 text-xs"
-      />
+      >
+        <TagsInput
+          aria-label="Tags, comma separated"
+          value={value}
+          onChange={setValue}
+          text={text}
+          onTextChange={setText}
+          placeholder="High, Forms"
+          choices={choices}
+          className="min-h-6 text-xs md:text-xs"
+        />
+      </div>
     )
   const open = () => {
-    setValue(t.tags.join(', '))
+    setValue(t.tags)
+    setText('')
     setEditing(true)
   }
   return t.tags.length > 0 ? (

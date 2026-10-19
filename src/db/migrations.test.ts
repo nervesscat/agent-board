@@ -489,3 +489,46 @@ describe('0030_post_tabs_and_summary', () => {
     sqlite.close()
   })
 })
+
+describe('0031_project_tag_suggestions', () => {
+  it('gives every project the default suggestions and keeps its rows and theirs', () => {
+    const sqlite = databaseAt('0030_post_tabs_and_summary')
+    const project = Number(
+      sqlite
+        .prepare('INSERT INTO projects (name, instructions, default_phases) VALUES (?, ?, ?)')
+        .run('tags', 'Run the tests.', JSON.stringify(['Build'])).lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by, tags) VALUES (?, ?, ?, ?)')
+        .run(project, 'Fix the form', 'claude', JSON.stringify(['Forms'])).lastInsertRowid,
+    )
+    sqlite.prepare('INSERT INTO tasks (ticket_id, text) VALUES (?, ?)').run(ticket, 'Repro it')
+    sqlite
+      .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+      .run(ticket, 'claude', 'Started.')
+    const counts = () =>
+      ['projects', 'stages', 'tickets', 'tasks', 'updates'].map(
+        (table) => (sqlite.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+      )
+    const before = counts()
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(counts()).toEqual(before)
+    expect(
+      sqlite
+        .prepare('SELECT name, instructions, default_phases, tag_suggestions FROM projects WHERE id = ?')
+        .get(project),
+    ).toEqual({
+      name: 'tags',
+      instructions: 'Run the tests.',
+      default_phases: JSON.stringify(['Build']),
+      tag_suggestions: JSON.stringify(['Bug', 'UI', 'Implementation', 'Report']),
+    })
+    expect(sqlite.prepare('SELECT tags FROM tickets WHERE id = ?').get(ticket)).toEqual({
+      tags: JSON.stringify(['Forms']),
+    })
+    sqlite.close()
+  })
+})

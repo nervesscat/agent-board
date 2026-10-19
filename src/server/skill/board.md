@@ -131,6 +131,11 @@ Lanes of a ticket you are working are yours to create (next section).
   `Medium`, `Low`, `Cosmetic`), an area or a kind, one or two words in Title Case. Reuse the words
   sibling lanes already carry, and keep them out of the title (no `[High] …`). `update_ticket`
   with `tags` replaces the list; `list_tickets` takes `tag` to filter.
+- Tag every ticket too with the module it touches, a short name (`Auth`, `Board`, `MCP`). Check
+  `get_project`'s `tagSuggestions` and `usedTags` (or the tags `list_tickets` returns) first and
+  reuse an existing tag in its casing rather than a new spelling. `set_tag_suggestions`
+  (`projectId`, `tags`) replaces the project's suggestions, when the human asks or to add a module
+  its tickets keep touching.
 - `add_workspace` for every worktree, sub-branch or sandbox where code runs (name, branch, path),
   on the ticket or lane whose code it holds, as soon as you open it; `remove_workspace` when it is
   gone. No exceptions for short-lived worktrees: the registered workspaces are the cleanup list, and
