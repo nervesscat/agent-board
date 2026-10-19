@@ -10,7 +10,9 @@ import {
   CONFIG_FILE,
   CONFIG_TEMPLATE,
   DEFAULT_PORT,
+  ensureWritableDir,
   isPortFree,
+  nearestFolder,
   parseConfig,
   portBusyMessage,
   readConfigFile,
@@ -259,5 +261,75 @@ describe('tail', () => {
     expect(end.length).toBeLessThanOrEqual(50)
     expect(end.endsWith('line 99')).toBe(true)
     expect(end.startsWith('line ')).toBe(true)
+  })
+})
+
+describe('ensureWritableDir', () => {
+  /** @type {string[]} */
+  const dirs = []
+  afterEach(() => {
+    for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true })
+  })
+  const tmp = () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-writable-'))
+    dirs.push(d)
+    return d
+  }
+
+  it('makes a missing folder and leaves nothing of its check in it', () => {
+    const dir = path.join(tmp(), 'a', 'electron')
+    ensureWritableDir(dir)
+    expect(fs.statSync(dir).isDirectory()).toBe(true)
+    expect(fs.readdirSync(dir)).toEqual([])
+  })
+
+  it('throws for a folder that cannot be made, under a file', () => {
+    const file = path.join(tmp(), 'file')
+    fs.writeFileSync(file, '')
+    expect(() => ensureWritableDir(path.join(file, 'electron'))).toThrow()
+  })
+})
+
+describe('nearestFolder', () => {
+  /** @type {string[]} */
+  const dirs = []
+  afterEach(() => {
+    for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true })
+  })
+  const tmp = () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-nearest-'))
+    dirs.push(d)
+    return d
+  }
+
+  it('is the folder itself when it exists', () => {
+    const dir = tmp()
+    expect(nearestFolder(dir)).toBe(dir)
+  })
+
+  it('is the closest existing parent of a folder not made yet', () => {
+    const dir = tmp()
+    expect(nearestFolder(path.join(dir, 'a', 'b', 'agent-board'))).toBe(dir)
+  })
+
+  it('is the folder a file is in, never the file', () => {
+    const dir = tmp()
+    fs.writeFileSync(path.join(dir, 'home'), '')
+    expect(nearestFolder(path.join(dir, 'home'))).toBe(dir)
+    expect(nearestFolder(path.join(dir, 'home', 'electron'))).toBe(dir)
+  })
+
+  it('is null when nothing on the way exists, as on a missing drive', () => {
+    expect(nearestFolder(path.resolve('/q/agent-board'), () => undefined)).toBeNull()
+  })
+
+  it('looks further up past a folder it cannot read', () => {
+    const top = path.resolve('/')
+    /** @param {string} p */
+    const stat = (p) => {
+      if (p === top) return /** @type {fs.Stats} */ ({ isDirectory: () => true })
+      throw Object.assign(new Error('denied'), { code: 'EPERM' })
+    }
+    expect(nearestFolder(path.join(top, 'locked', 'agent-board'), stat)).toBe(top)
   })
 })

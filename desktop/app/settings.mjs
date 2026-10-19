@@ -73,6 +73,41 @@ export const CONFIG_TEMPLATE = `# The board's settings, read each time the app s
 `
 
 /**
+ * Makes `dir` if it is missing and checks that a file can be written in it, throwing why not. A
+ * folder that exists but refuses writes (a deny-write ACL, a read-only share) is as unusable as one
+ * that cannot be made.
+ * @param {string} dir
+ */
+export function ensureWritableDir(dir) {
+  fs.mkdirSync(dir, { recursive: true })
+  const probe = path.join(dir, `.write-probe-${process.pid}`)
+  fs.writeFileSync(probe, '')
+  fs.rmSync(probe, { force: true })
+}
+
+/**
+ * The nearest folder at or above `p` that exists: `p` itself when it is a folder, else the closest
+ * parent that is one. Never a file. Null when nothing on the way exists (a missing drive).
+ * @param {string} p
+ * @param {(p: string) => fs.Stats | undefined} stat Stands in for the file system in tests.
+ * @returns {string | null}
+ */
+export function nearestFolder(p, stat = (q) => fs.statSync(q, { throwIfNoEntry: false })) {
+  for (let dir = path.resolve(p); ; ) {
+    let found
+    try {
+      found = stat(dir)
+    } catch {
+      found = undefined // unreadable: look further up
+    }
+    if (found?.isDirectory()) return dir
+    const parent = path.dirname(dir)
+    if (parent === dir) return null
+    dir = parent
+  }
+}
+
+/**
  * The config file's values, written from the template the first time so there is one to edit.
  * @param {string} home
  */

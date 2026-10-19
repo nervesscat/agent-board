@@ -12,7 +12,9 @@ import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'elec
 import {
   appHome,
   CONFIG_FILE,
+  ensureWritableDir,
   isPortFree,
+  nearestFolder,
   portBusyMessage,
   readConfigFile,
   resolveSettings,
@@ -38,13 +40,13 @@ function errorText(err) {
 }
 
 // The window's profile (the gate's cookie, the cache) goes with the config, and so does the
-// single-instance lock: one app per folder. A folder that cannot be made (AGENT_BOARD_HOME on a missing
-// drive, or naming a file) would fail the lock as if another copy held it: it is reported instead,
-// from a throwaway profile.
+// single-instance lock: one app per folder. A folder that cannot be made or written (AGENT_BOARD_HOME on
+// a missing drive or naming a file, a deny-write ACL) would fail the lock as if another copy held it:
+// it is reported instead, from a throwaway profile.
 /** @type {unknown} */
 let homeError = null
 try {
-  fs.mkdirSync(path.join(home, 'electron'), { recursive: true })
+  ensureWritableDir(path.join(home, 'electron'))
   app.setPath('userData', path.join(home, 'electron'))
 } catch (err) {
   homeError = err
@@ -73,7 +75,7 @@ if (homeError) {
         'The board cannot start.',
         `The app's folder ${home} cannot be used: ${errorText(homeError)}\n\n` +
           'Set AGENT_BOARD_HOME to a folder that can be written, or remove it to use the default.',
-        home,
+        nearestFolder(home),
         OPEN_HOME,
       ),
     )
@@ -95,7 +97,9 @@ if (homeError) {
   void app
     .whenReady()
     .then(start)
-    .catch((/** @type {unknown} */ err) => fatal('The board cannot start.', errorText(err), home, OPEN_HOME))
+    .catch((/** @type {unknown} */ err) =>
+      fatal('The board cannot start.', errorText(err), nearestFolder(home), OPEN_HOME),
+    )
 }
 
 async function start() {
@@ -105,7 +109,12 @@ async function start() {
     if (err instanceof SettingsError)
       return fatal('The board’s settings are not valid.', err.message, configFile, OPEN_SETTINGS)
     // The app's folder, or its config.env, cannot be read or written.
-    return fatal('The board cannot start.', `${errorText(err)}\n\nThe app's folder: ${home}`, home, OPEN_HOME)
+    return fatal(
+      'The board cannot start.',
+      `${errorText(err)}\n\nThe app's folder: ${home}`,
+      nearestFolder(home),
+      OPEN_HOME,
+    )
   }
   if (!(await isPortFree(settings.port)))
     return fatal(
@@ -216,7 +225,7 @@ async function stopServer() {
  * ends the app, stopping the board first if it runs. Only the first failure is shown.
  * @param {string} message
  * @param {string} detail
- * @param {string} target
+ * @param {string | null} target Null when there is nothing to open: the dialog offers Quit alone.
  * @param {string} open The button that opens `target`.
  */
 async function fatal(message, detail, target, open) {
@@ -231,12 +240,12 @@ async function fatal(message, detail, target, open) {
       title: app.getName(),
       message,
       detail,
-      buttons: [open, 'Quit'],
-      defaultId: 1,
-      cancelId: 1,
+      buttons: target ? [open, 'Quit'] : ['Quit'],
+      defaultId: target ? 1 : 0,
+      cancelId: target ? 1 : 0,
       noLink: true,
     })
-    if (response === 0) await shell.openPath(target)
+    if (target && response === 0) await shell.openPath(target)
   } finally {
     app.exit(1)
   }
