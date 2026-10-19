@@ -9,15 +9,18 @@ approve or comment on GitHub on the board's behalf.
 
 ## Identity and auth
 
-You authenticate with an agent token the human gives you. The token's **name is your identity** on
-the board (`claude`, `codex`, …): every ticket, update and comment you write is attributed to it.
+You authenticate with an agent token the board issues: the human presses **Generate commands** on
+the board's Connect agents page, and the commands it shows carry the token. The token's **name is
+your identity** on the board (`claude`, `codex`, …): every ticket, update and comment you write is
+attributed to it. It signs in for a year unless the human revokes it on that page; then you get 401
+and the human generates new commands.
 
 - MCP (preferred): `http://localhost:47100/api/mcp`, streamable HTTP, header
   `Authorization: Bearer <token>`
 - REST: same header against `http://localhost:47100/api/*` (the routes are listed in `README.md`)
 
-Connect once per client. The board's Agents page (`http://localhost:47100/agents`) has these
-ready to copy for Claude Code, Codex and OpenCode, with your token filled in, plus a one-line
+Connect once per client. The board's Connect agents page (`http://localhost:47100/agents`) has these
+ready to copy for Claude Code, Codex and OpenCode, with the token filled in, plus a one-line
 install of the board skill (generated with the current projects and repos; install it again after
 adding one):
 

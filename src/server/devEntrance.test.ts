@@ -221,6 +221,7 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
       { cookie: `board_session_${on}=local-ok` },
       { cookie: `board_session_${on}=public-expired` },
       { cookie: `board_session_${on}=made-up` },
+      // The cookie of the sign-in the board had before its own: nobody's session here.
       { cookie: 'gate_session=public-ok' },
       { authorization: 'Bearer agent-revoked' },
       { authorization: 'Bearer made-up' },

@@ -67,7 +67,11 @@ export function updateSettings(patch: Partial<Settings>): Settings {
 
 // --- the board skill, rendered for one agent CLI ---
 
-/** Where each CLI finds the MCP server hint the skill gives when the board's tools are missing. */
+/**
+ * Where each CLI finds the MCP server hint the skill gives when the board's tools are missing. `<token>`
+ * stays a placeholder: the skill is the same file for every agent, and Connect agents' commands carry
+ * the token itself.
+ */
 const MCP_HINT: Record<AgentClient, (url: string) => string> = {
   claude: (url) =>
     `(Claude Code: \`claude mcp add --transport http --scope user board ${url}/api/mcp --header "Authorization: Bearer <token>"\`.)`,
