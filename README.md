@@ -111,8 +111,8 @@ them just the same. Managed previews of a board worktree also need `pnpm` and `n
   with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
   like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and the tailnet
   entrance's `PUBLIC_ORIGIN` (Using it from other devices, below); any other key of `.env` works too.
-  A variable set in the environment wins over the file. `BOARD_ENV` and `HOST` are not settings: the app always runs production on
-  `127.0.0.1`.
+  A variable set in the environment wins over the file. `BOARD_ENV` and `HOST` are not settings: the
+  app always runs production on `127.0.0.1`.
 - `electron\`: the window's browser profile (its sign-in, its cache).
 
 `AGENT_BOARD_HOME` in the environment moves all three elsewhere (the smoke test runs its copy that way).
