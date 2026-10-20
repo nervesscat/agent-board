@@ -45,7 +45,7 @@ describe('parseConfig', () => {
       '',
       'PORT=8250',
       '  CLAUDE_BIN = C:\\tools\\claude.exe  ',
-      'export GATE_URL=http://localhost:47110',
+      'export PUBLIC_ORIGIN=https://box.example.ts.net',
       `DATA_DIR="D:\\board data"`,
       "QUOTED='# not a comment'",
       'TRAILING=value # a comment',
@@ -54,7 +54,7 @@ describe('parseConfig', () => {
     expect(parseConfig(text)).toEqual({
       PORT: '8250',
       CLAUDE_BIN: 'C:\\tools\\claude.exe',
-      GATE_URL: 'http://localhost:47110',
+      PUBLIC_ORIGIN: 'https://box.example.ts.net',
       DATA_DIR: 'D:\\board data',
       QUOTED: '# not a comment',
       TRAILING: 'value',

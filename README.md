@@ -109,10 +109,9 @@ them just the same. Managed previews of a board worktree also need `pnpm` and `n
   is in a checkout.
 - `config.env`: the settings, `KEY=value` as in `.env`, read at each start. The first start writes it
   with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
-  like; a relative path is under `%LOCALAPPDATA%\agent-board`), `GATE_URL`, `CLAUDE_BIN`, and the
-  tailnet entrance's `PUBLIC_ORIGIN`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` (Using it from
-  other devices, below); any other key of `.env` works too. A variable set in the environment wins
-  over the file. `BOARD_ENV` and `HOST` are not settings: the app always runs production on
+  like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and the tailnet
+  entrance's `PUBLIC_ORIGIN` (Using it from other devices, below); any other key of `.env` works too.
+  A variable set in the environment wins over the file. `BOARD_ENV` and `HOST` are not settings: the app always runs production on
   `127.0.0.1`.
 - `electron\`: the window's browser profile (its sign-in, its cache).
 

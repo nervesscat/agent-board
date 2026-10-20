@@ -60,16 +60,11 @@ export const CONFIG_TEMPLATE = `# The board's settings, read each time the app s
 # Where the database, uploads and logs live (default: the data folder next to this file).
 # DATA_DIR=
 
-# The passkey-gate the board asks who is signed in.
-# GATE_URL=http://localhost:47110
-
 # The Claude Code CLI that writes generated reports (default: claude on PATH).
 # CLAUDE_BIN=
 
-# The tailnet entrance for your other devices: all three or none (README: "Using it from other devices").
+# The tailnet entrance for your other devices (README: "Using it from other devices").
 # PUBLIC_ORIGIN=
-# PUBLIC_GATE_URL=
-# PUBLIC_GATE_AUTH_URL=
 `
 
 /**
@@ -136,7 +131,7 @@ export function readConfigFile(home) {
 /**
  * The port, the data folder and the server's environment: the environment wins over the config file,
  * which wins over the defaults (port 47100, `<home>/data`). The board always runs as production on
- * 127.0.0.1, whatever either says: it always asks the gate, and AUTH=off is refused as it starts.
+ * 127.0.0.1, whatever either says: it always signs in with a passkey, and AUTH=off is refused as it starts.
  * @param {{ env: Env, file: Record<string, string>, home: string }} input
  * @returns {Settings}
  */
@@ -160,7 +155,7 @@ export function resolveSettings({ env, file, home }) {
     PORT: String(port),
     NITRO_PORT: String(port),
     DATA_DIR: dataDir,
-    // Where the gate sends the browser back after sign-in: the window's own origin.
+    // Where sign-in sends the browser back: the window's own origin.
     BOARD_URL: pick('BOARD_URL') || url,
   }
   for (const key of ['DEV_HUMAN', 'TEST_HUMAN', 'BOARD_DATA_COPY']) delete serverEnv[key]
