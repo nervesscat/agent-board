@@ -1,9 +1,12 @@
 import { type IncomingMessage, type ServerResponse, STATUS_CODES } from 'node:http'
+import path from 'node:path'
 import type { Duplex } from 'node:stream'
 
+import Database from 'better-sqlite3'
 import type { Plugin } from 'vite'
 
 import { StartupError } from './config.ts'
+import { signedIn } from './credentials.ts'
 import {
   type GuardConfig,
   guardConfig,
@@ -11,20 +14,23 @@ import {
   type HeaderLookup,
   isForwardingHeader,
   isLoopbackPeer,
+  isSignInPath,
   loginLocation,
-  publicRoute,
   wantsHtml,
 } from './entrance.ts'
-import { gateCaller } from './gate.ts'
 
 /**
  * `vite dev`, which runs the board, answers some requests itself before Nitro hands one to the board's
  * middleware (src/start.ts): /@vite/*, /@fs/*, /@id/*, modules under /src and /node_modules, the
  * public/ files, any file of the repo asked for as an asset, /__open-in-editor, and the hot-reload
  * WebSocket. This puts the guard of entrance.ts in front of all of it, ahead of Nitro's and Vite's own
- * middlewares: through the tailnet entrance nothing is served without the public gate's yes, and no
+ * middlewares: through the tailnet entrance nothing is served without a session of the public origin
+ * (or an agent token), but the sign-in pages and their endpoints, which the board answers itself; and no
  * WebSocket opens (the board has none; hot reload is for this machine's browsers). A request straight to
  * the board on this machine is served as before, once its Host (and a cookie write's Origin) passes.
+ *
+ * Who is signed in is read from the board's database (credentials.ts), opened here in Vite's process,
+ * never written: the board itself runs in Nitro's.
  */
 
 /**
@@ -71,9 +77,44 @@ const pathAndSearch = (url: string | undefined) => {
   return `${u.pathname}${u.search}`
 }
 
-/** The connect middleware: the guard, then for the tailnet entrance the public gate. */
-export function entranceMiddleware(cfg: GuardConfig) {
-  return async function entranceGuardMiddleware(
+export interface SignInCheck {
+  /** Whether these headers sign someone in on the public origin `rpId`. */
+  signedIn(headers: HeaderLookup, rpId: string): boolean
+  close(): void
+}
+
+/**
+ * Sign-ins read from the database in `dataDir` of the board on `port` (its session cookie's name): opened
+ * on the first question, and again after a failure (before the board's first start there is no database
+ * yet, and then nobody is signed in).
+ */
+export function databaseSignIn(dataDir: string, port: number): SignInCheck {
+  let sqlite: Database.Database | null = null
+  const close = () => {
+    sqlite?.close()
+    sqlite = null
+  }
+  return {
+    signedIn(headers, rpId) {
+      try {
+        sqlite ??= new Database(path.join(dataDir, 'board.db'), { fileMustExist: true })
+        return signedIn(sqlite, headers, rpId, port)
+      } catch (err) {
+        console.error(
+          'agent-board: cannot read sign-ins from the database:',
+          err instanceof Error ? err.message : err,
+        )
+        close()
+        return false
+      }
+    },
+    close,
+  }
+}
+
+/** The connect middleware: the guard, then for the tailnet entrance a session of the public origin. */
+export function entranceMiddleware(cfg: GuardConfig, check: SignInCheck) {
+  return function entranceGuardMiddleware(
     req: IncomingMessage,
     res: ServerResponse,
     next: (err?: unknown) => void,
@@ -85,10 +126,11 @@ export function entranceMiddleware(cfg: GuardConfig) {
       if (!verdict.allow) return answer(res, verdict.status, { error: verdict.error })
       if (!isLoopbackPeer(peer)) dropForwarding(req)
       if (!verdict.entrance) return next()
-      const route = publicRoute(verdict.entrance)
-      if (await gateCaller(route.authUrl, headers)) return next()
+      // The board's own sign-in pages and endpoints: it answers them, and they hold none of Vite's files.
+      if (isSignInPath(new URL(req.url ?? '/', 'http://localhost').pathname)) return next()
+      if (check.signedIn(headers, verdict.entrance.host)) return next()
       if (wantsHtml(req.method, headers.get('accept'))) {
-        res.writeHead(302, { location: loginLocation(route, pathAndSearch(req.url)) })
+        res.writeHead(302, { location: loginLocation(pathAndSearch(req.url)) })
         return res.end()
       }
       return answer(res, 401, { error: 'sign in' })
@@ -144,8 +186,10 @@ export function entranceGuard(options: { env?: () => Record<string, string | und
           if (err instanceof StartupError) throw new Error(`agent-board refuses to start: ${err.message}`)
           throw err
         }
-        server.middlewares.use(entranceMiddleware(cfg))
+        const check = databaseSignIn(cfg.dataDir, cfg.port)
+        server.middlewares.use(entranceMiddleware(cfg, check))
         server.httpServer?.prependListener('upgrade', entranceUpgradeGuard(cfg))
+        server.httpServer?.once('close', check.close)
       },
     },
   }

@@ -23,7 +23,7 @@ import * as uploads from './uploads'
 
 /**
  * The same board, as MCP tools. Stateless streamable HTTP: one server per request, closed over the
- * actor the gate identified and whether it is an agent, so every write is attributed to the agent's
+ * actor the board signed in and whether it is an agent, so every write is attributed to the agent's
  * token name and the tools that only an agent may call can refuse a human.
  */
 
@@ -60,7 +60,7 @@ The project's agents: get_project lists them (agents: name, instructions, delega
 
 When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.
 
-Keep the board out of the repo. The board, trazic, habits and any other personal tracking tool are private to the human: never mention them, their tool names, their URLs (localhost:47100, 47110) or a board ticket, task or project ("#12", "ticket 12", "per the board") in code comments, docs, READMEs, changelogs, config, commit messages, branch names, PR titles or descriptions, or issues, and never link or screenshot the board there. Describe the change and its reason in the repo's own terms; if the PR needs something from the ticket, restate it instead of pointing at it. Board updates and comments may talk about the repo, branches and PRs freely.`
+Keep the board out of the repo. The board, trazic, habits and any other personal tracking tool are private to the human: never mention them, their tool names, their URLs (localhost:47100) or a board ticket, task or project ("#12", "ticket 12", "per the board") in code comments, docs, READMEs, changelogs, config, commit messages, branch names, PR titles or descriptions, or issues, and never link or screenshot the board there. Describe the change and its reason in the repo's own terms; if the PR needs something from the ticket, restate it instead of pointing at it. Board updates and comments may talk about the repo, branches and PRs freely.`
 
 const STATUS =
   'a stage key from get_project, a stage name, or a kind (open, active, blocked, review, done, cancelled; todo and in_progress also work): the first stage of that kind'
@@ -128,7 +128,7 @@ function buildServer(actor: string, agent: boolean) {
     server.registerTool(name, { description, inputSchema: shape }, cb)
   }
 
-  tool('whoami', 'The name the board knows you by (your gate token name).', {}, () => ({ actor }))
+  tool('whoami', 'The name the board knows you by (your agent token name).', {}, () => ({ actor }))
 
   // projects
   tool(
@@ -411,7 +411,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'start_preview',
-    "Have the board build and run a branch of the board itself as a preview, from the workspace's worktree (its registered path: a git worktree next to the repo's main checkout, never the main checkout). In the background: pnpm install when the lockfile changed, pnpm build, a fresh copy of the live data, then the built server on a free port from 47101 without the passkey gate; once it answers the workspace's previewUrl is set. Returns at once with status building; get_ticket (the workspace's managedPreview) follows it to running, or failed with the last log lines. One per workspace; at most as many at once, board-wide, as the human's preview limit allows (8 by default): a start beyond it is refused with the limit, a restart of a running one is not. restart: true stops a running one first and builds again.",
+    "Have the board build and run a branch of the board itself as a preview, from the workspace's worktree (its registered path: a git worktree next to the repo's main checkout, never the main checkout). In the background: pnpm install when the lockfile changed, pnpm build, a fresh copy of the live data, then the built server on a free port from 47101 with sign-in off; once it answers the workspace's previewUrl is set. Returns at once with status building; get_ticket (the workspace's managedPreview) follows it to running, or failed with the last log lines. One per workspace; at most as many at once, board-wide, as the human's preview limit allows (8 by default): a start beyond it is refused with the limit, a restart of a running one is not. restart: true stops a running one first and builds again.",
     {
       workspaceId: z.number().int(),
       restart: z.boolean().default(false).describe('stop the running preview first and build again'),

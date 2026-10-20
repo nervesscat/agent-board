@@ -1,3 +1,5 @@
+import path from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import type { PublicEntrance } from './config'
@@ -9,22 +11,20 @@ import {
   guardRequest,
   hostOf,
   isLoopbackPeer,
+  isSignInPath,
+  localSite,
   loginLocation,
-  publicRoute,
+  publicSite,
 } from './entrance'
 
 const PUBLIC = 'devbox.example-tailnet.ts.net'
-const entrance: PublicEntrance = {
-  origin: `https://${PUBLIC}`,
-  host: PUBLIC,
-  gateUrl: `https://${PUBLIC}:8443`,
-  gateAuthUrl: 'http://127.0.0.1:47111',
-}
+const entrance: PublicEntrance = { origin: `https://${PUBLIC}`, host: PUBLIC }
+const dataDir = '/srv/board/data'
 
-/** The live board with the entrance, the same without it, and a gate-off board (test mode). */
-const on: GuardConfig = { gateOff: false, port: 47100, entrance }
-const plain: GuardConfig = { gateOff: false, port: 47100, entrance: null }
-const off: GuardConfig = { gateOff: true, port: 47131, entrance: null }
+/** The live board with the entrance, the same without it, and a board without sign-in (test mode). */
+const on: GuardConfig = { authOff: false, port: 47100, entrance, dataDir }
+const plain: GuardConfig = { authOff: false, port: 47100, entrance: null, dataDir }
+const off: GuardConfig = { authOff: true, port: 47131, entrance: null, dataDir }
 
 const request = (headers: Record<string, string>, opts: { method?: string; peer?: string | null } = {}) => ({
   method: opts.method ?? 'GET',
@@ -74,7 +74,7 @@ describe('the Host', () => {
         `x.${PUBLIC}`,
         '',
       ]) {
-        const verdict = guardRequest(request({ host, cookie: 'gate_session=local-ok' }), cfg)
+        const verdict = guardRequest(request({ host, cookie: 'board_session_47100=local-ok' }), cfg)
         expect(verdict, `${host}`).toMatchObject({ allow: false, status: 403 })
       }
     expect(guardRequest(request({}), on)).toMatchObject({ allow: false, status: 403 })
@@ -95,8 +95,8 @@ describe('Tailscale Funnel', () => {
   it('is refused in every mode, with or without a session, whatever the peer', () => {
     const extras: Record<string, string>[] = [
       {},
-      { cookie: 'gate_session=public-ok' },
-      { authorization: 'Bearer gate_public_token' },
+      { cookie: 'board_session_47100=public-ok' },
+      { authorization: 'Bearer some-agent-token' },
       { host: PUBLIC },
     ]
     for (const cfg of [on, plain, off])
@@ -132,7 +132,7 @@ describe('a request through the tailnet entrance', () => {
       }
   })
 
-  it('is refused while the gate is off, whatever its Host, on every path', () => {
+  it('is refused while sign-in is off, whatever its Host, on every path', () => {
     for (const extra of [...each, SERVE])
       for (const host of ['localhost:47131', '127.0.0.1:47131', '[::1]:47131']) {
         const verdict = guardRequest(request({ host, ...extra }), off)
@@ -176,13 +176,13 @@ describe('a request through the tailnet entrance', () => {
   })
 })
 
-describe('a write with the gate cookie', () => {
+describe('a write with the session cookie', () => {
   const write = (method: string, origin: string | null, extra: Record<string, string> = {}, cfg = on) =>
     guardRequest(
       request(
         {
           host: 'localhost:47100',
-          cookie: 'theme=dark; gate_session=local-ok',
+          cookie: 'theme=dark; board_session_47100=local-ok',
           ...(origin === null ? {} : { origin }),
           ...extra,
         },
@@ -221,7 +221,7 @@ describe('a write with the gate cookie', () => {
 
   it('passes without an Origin (agents, curl), with a token, without the cookie, and for reads', () => {
     expect(write('POST', null)).toEqual({ allow: true, entrance: null })
-    expect(write('POST', 'https://evil.example', { authorization: 'Bearer gate_local_token' })).toEqual({
+    expect(write('POST', 'https://evil.example', { authorization: 'Bearer some-agent-token' })).toEqual({
       allow: true,
       entrance: null,
     })
@@ -231,10 +231,21 @@ describe('a write with the gate cookie', () => {
       expect(write(method, 'https://evil.example'), method).toEqual({ allow: true, entrance: null })
   })
 
-  it('is checked with the gate off too, against its own port', () => {
+  it("is only this board's cookie: a board on another port of localhost has its own", () => {
+    const write = (cookie: string) =>
+      guardRequest(
+        request({ host: 'localhost:47100', cookie, origin: 'https://evil.example' }, { method: 'POST' }),
+        on,
+      )
+    expect(write('board_session_47100=local-ok')).toMatchObject({ allow: false, status: 403 })
+    expect(write('board_session_47101=x; board_session_47100=local-ok')).toMatchObject({ allow: false })
+    expect(write('board_session_47101=x')).toEqual({ allow: true, entrance: null })
+  })
+
+  it('is checked with sign-in off too, against its own port', () => {
     const test = (origin: string) =>
       guardRequest(
-        request({ host: '127.0.0.1:47131', cookie: 'gate_session=x', origin }, { method: 'POST' }),
+        request({ host: '127.0.0.1:47131', cookie: 'board_session_47131=x', origin }, { method: 'POST' }),
         off,
       )
     expect(test('https://evil.example')).toMatchObject({ allow: false, status: 403 })
@@ -243,34 +254,56 @@ describe('a write with the gate cookie', () => {
   })
 })
 
-describe('the login of the public gate', () => {
-  it('is on the public gate, back to the same page on the public origin', () => {
-    expect(loginLocation(publicRoute(entrance), '/projects/1?x=1')).toBe(
-      `https://${PUBLIC}:8443/login?rd=https%3A%2F%2Fdevbox.example-tailnet.ts.net%2Fprojects%2F1%3Fx%3D1`,
-    )
-    expect(publicRoute(entrance)).toEqual({
-      loginUrl: `https://${PUBLIC}:8443`,
-      authUrl: 'http://127.0.0.1:47111',
-      boardUrl: `https://${PUBLIC}`,
-    })
+describe('where a request signs in', () => {
+  it('is localhost on this machine, the public host and origin through the entrance', () => {
+    expect(localSite(47264)).toEqual({ rpId: 'localhost', origin: 'http://localhost:47264' })
+    expect(publicSite(entrance)).toEqual({ rpId: PUBLIC, origin: `https://${PUBLIC}` })
+  })
+
+  it("is the board's own /login, relative, back to the same page after", () => {
+    expect(loginLocation('/projects/1?x=1')).toBe('/login?next=%2Fprojects%2F1%3Fx%3D1')
+  })
+
+  it('opens only the sign-in pages and their endpoints without a session', () => {
+    for (const path of ['/setup', '/login', '/enroll', '/api/auth/login/options', '/api/auth/logout'])
+      expect(isSignInPath(path), path).toBe(true)
+    for (const path of [
+      '/',
+      '/login/',
+      '/setup.ts',
+      '/api/auth/passkeys',
+      '/api/auth/sessions',
+      '/api/auth/enrol-links',
+      '/api/me',
+      '/@vite/client',
+      '/src/server/auth.ts',
+    ])
+      expect(isSignInPath(path), path).toBe(false)
   })
 })
 
 describe('guardConfig', () => {
-  const keys = {
-    PUBLIC_ORIGIN: `https://${PUBLIC}`,
-    PUBLIC_GATE_URL: `https://${PUBLIC}:8443`,
-    PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111',
-  }
+  const keys = { PUBLIC_ORIGIN: `https://${PUBLIC}`, DATA_DIR: dataDir }
 
-  it("is the board's: its port, its mode, and the entrance only with the gate on", () => {
-    expect(guardConfig({ ...keys, PORT: '47264' })).toEqual({ gateOff: false, port: 47264, entrance })
+  it("is the board's: its port, its mode, its data, and the entrance only with sign-in on", () => {
+    expect(guardConfig({ ...keys, PORT: '47264' })).toEqual({
+      authOff: false,
+      port: 47264,
+      entrance,
+      dataDir: path.resolve(dataDir),
+    })
     expect(guardConfig({ ...keys, BOARD_ENV: 'test', PORT: '47131' })).toEqual({
-      gateOff: true,
+      authOff: true,
       port: 47131,
       entrance: null,
+      dataDir: path.resolve(dataDir),
     })
-    expect(guardConfig({})).toEqual({ gateOff: false, port: 47100, entrance: null })
-    expect(() => guardConfig({ PUBLIC_ORIGIN: keys.PUBLIC_ORIGIN })).toThrow(/together, or none/)
+    expect(guardConfig({})).toEqual({
+      authOff: false,
+      port: 47100,
+      entrance: null,
+      dataDir: path.resolve('data'),
+    })
+    expect(() => guardConfig({ PUBLIC_ORIGIN: 'http://devbox' })).toThrow(/PUBLIC_ORIGIN must be/)
   })
 })

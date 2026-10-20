@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test'
 import { HUMAN, e2eEnv } from './e2e/env'
 
 /**
- * The e2e suite drives a built board in test mode (README: "Test mode"): no passkey gate, on a free
+ * The e2e suite drives a built board in test mode (README: "Test mode"): sign-in off, on a free
  * loopback port above 47140, with its data in a throwaway folder. The build goes to .output-e2e, never
  * .output, so running this in the main checkout leaves the live board's build alone. E2E_SKIP_BUILD=1
  * reuses the last .output-e2e (CI builds it in the step before).

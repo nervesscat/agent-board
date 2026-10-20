@@ -1,4 +1,7 @@
-/** JSON client for /api. The gate cookie does the auth; a 401 on a page means the session is gone. */
+/**
+ * JSON client for /api. The board's session cookie does the auth; a 401 on a page means the session is
+ * gone, and the reload lands on /login.
+ */
 
 import type {
   Attachment,
@@ -126,6 +129,8 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
       data && typeof data === 'object' && 'code' in data && typeof data.code === 'string'
         ? data.code
         : undefined
+    // The board has no account yet (its data was replaced under the page): the reload lands on /setup.
+    if (res.status === 409 && code === 'setup') window.location.reload()
     throw new ApiError(message, res.status, code)
   }
   return data as T
@@ -159,7 +164,7 @@ export function errorMessage(err: unknown, fallback = 'something went wrong'): s
 
 // --- payload shapes the server composes ---
 
-/** `/api/me`: who you are, and whether this board runs without the passkey gate (never the live one). */
+/** `/api/me`: who you are, and whether this board runs with sign-in off (never the live one). */
 export interface Me {
   actor: string
   agent: boolean

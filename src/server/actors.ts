@@ -43,7 +43,7 @@ export function isHumanName(name: string): boolean {
   )
 }
 
-/** The human the board saw sign in most recently: who a request is in development with the gate off. */
+/** The human the board saw sign in most recently: who a request is in development with sign-in off. */
 export function lastHuman(): string | null {
   return (
     db

@@ -48,7 +48,7 @@ const tailnet = (over = {}) => ({
   ...over,
 })
 
-/** The board: a stand-in answering /api/me with the given status (401 with its gate, 200 without). */
+/** The board: a stand-in answering /api/me with the given status (401 with its sign-in, 200 without). */
 async function board(status) {
   const server = http.createServer((req, res) => {
     res.writeHead(req.url === '/api/me' ? status : 404, { 'content-type': 'application/json' })
@@ -137,39 +137,38 @@ const onlyReads = (calls) => {
   expect(calls.some((c) => c[0] === 'serve' && c[1] !== 'status')).toBe(false)
 }
 
-const entrance = (gatePort = 47111) => ({
-  PUBLIC_ORIGIN: `https://${NAME}`,
-  PUBLIC_GATE_URL: `https://${NAME}:8443`,
-  PUBLIC_GATE_AUTH_URL: `http://127.0.0.1:${gatePort}`,
-})
+const entrance = () => ({ PUBLIC_ORIGIN: `https://${NAME}` })
 
-let gated
+let signingIn
 beforeAll(async () => {
-  gated = await board(401)
+  signingIn = await board(401)
 })
-afterAll(() => gated.close())
+afterAll(() => signingIn.close())
 
 // Each run starts node for the helper and once more per tailscale read: slow on a busy machine.
 const slow = { timeout: 60_000 }
 
 describe('pnpm tailnet', slow, () => {
-  it('prints the serve commands, the URL and how to stop, and only reads', async () => {
-    const port = portOf(gated)
-    const res = await run([], { dotenv: { PORT: port, ...entrance(47111) } })
+  it('prints the serve command, the URL and how to stop, and only reads', async () => {
+    const port = portOf(signingIn)
+    const res = await run([], { dotenv: { PORT: port, ...entrance() } })
     expect(res.code, res.stderr).toBe(0)
     const lines = res.stdout.split(/\r?\n/).map((l) => l.trim())
     expect(lines).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}`)
-    expect(lines).toContain('tailscale serve --bg --https=8443 http://127.0.0.1:47111')
     expect(res.stdout).toContain(`https://${NAME}/`)
     expect(lines).toContain('tailscale serve --https=443 off')
-    expect(lines).toContain('tailscale serve --https=8443 off')
+    // The board signs other devices in itself: nothing else goes on the tailnet.
+    expect(lines.filter((l) => l.startsWith('tailscale serve'))).toEqual([
+      `tailscale serve --bg --https=443 http://127.0.0.1:${port}`,
+      'tailscale serve --https=443 off',
+    ])
     expect(res.stderr).toBe('')
     onlyReads(res.calls)
     expect(res.calls).toEqual(READS)
   })
 
-  it("takes the public gate's port from PUBLIC_GATE_AUTH_URL, and the board's port as --port or --target", async () => {
-    const port = portOf(gated)
+  it("takes the board's port as --port or --target", async () => {
+    const port = portOf(signingIn)
     for (const args of [
       [],
       ['--port', String(port)],
@@ -177,98 +176,55 @@ describe('pnpm tailnet', slow, () => {
       ['--target', `http://127.0.0.1:${port}`],
       [`http://localhost:${port}`],
     ]) {
-      const res = await run(args, { dotenv: { PORT: port, ...entrance(47262) } })
+      const res = await run(args, { dotenv: { PORT: port, ...entrance() } })
       expect(res.code, `${args} ${res.stderr}`).toBe(0)
       expect(res.stdout).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
-      expect(res.stdout).toContain('tailscale serve --bg --https=8443 http://127.0.0.1:47262\n')
       onlyReads(res.calls)
     }
   })
 
   it('reads .env as the board does: an inline comment is not part of a value, quoted or not', async () => {
-    const port = portOf(gated)
+    const port = portOf(signingIn)
     for (const [what, over] of [
-      [
-        'PUBLIC_GATE_AUTH_URL with a comment',
-        { PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111 # the public gate' },
-      ],
-      [
-        'PUBLIC_GATE_AUTH_URL quoted, with a comment',
-        { PUBLIC_GATE_AUTH_URL: '"http://127.0.0.1:47111" # note' },
-      ],
-      [
-        'PUBLIC_ORIGIN and PUBLIC_GATE_URL with a comment',
-        { PUBLIC_ORIGIN: `https://${NAME} # the board`, PUBLIC_GATE_URL: `https://${NAME}:8443 # the gate` },
-      ],
+      ['PUBLIC_ORIGIN with a comment', { PUBLIC_ORIGIN: `https://${NAME} # the board` }],
+      ['PUBLIC_ORIGIN quoted, with a comment', { PUBLIC_ORIGIN: `"https://${NAME}" # note` }],
     ]) {
-      const res = await run([], { dotenv: { PORT: port, ...entrance(), ...over } })
+      const res = await run([], { dotenv: { PORT: port, ...over } })
       expect(res.code, `${what}: ${res.stderr}`).toBe(0)
       expect(res.stdout, what).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
-      expect(res.stdout, what).toContain('tailscale serve --bg --https=8443 http://127.0.0.1:47111\n')
-      // The board reads these values bare, so nothing is missing: no "set PUBLIC_…" warning, no other.
+      // The board reads the value bare, so nothing is missing: no "set PUBLIC_ORIGIN" warning, no other.
       expect(res.stderr, what).toBe('')
       onlyReads(res.calls)
     }
   })
 
   it('expands ${NAME} and $NAME in .env as the board does, from a line above or below, LF or CRLF', async () => {
-    const port = portOf(gated)
+    const port = portOf(signingIn)
     for (const eol of ['\n', '\r\n'])
-      for (const [what, dotenv, gatePort] of [
+      for (const [what, dotenv] of [
         [
-          'PUBLIC_GATE_AUTH_URL from ${PUBLIC_GATE_PORT} above it',
-          {
-            PORT: port,
-            PUBLIC_GATE_PORT: 47111,
-            ...entrance(),
-            PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:${PUBLIC_GATE_PORT}',
-          },
-          47111,
+          'PUBLIC_ORIGIN from ${TAILNET_TEST_HOST} above it',
+          { PORT: port, TAILNET_TEST_HOST: NAME, PUBLIC_ORIGIN: 'https://${TAILNET_TEST_HOST}' },
         ],
         [
-          'PUBLIC_GATE_AUTH_URL from $PUBLIC_GATE_PORT below it',
-          {
-            PORT: port,
-            ...entrance(),
-            PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:$PUBLIC_GATE_PORT',
-            PUBLIC_GATE_PORT: 47262,
-          },
-          47262,
-        ],
-        [
-          'PUBLIC_ORIGIN and PUBLIC_GATE_URL from ${TAILNET_HOST} below them',
-          {
-            PORT: port,
-            ...entrance(),
-            PUBLIC_ORIGIN: 'https://${TAILNET_HOST}',
-            PUBLIC_GATE_URL: 'https://${TAILNET_HOST}:8443',
-            TAILNET_HOST: NAME,
-          },
-          47111,
+          'PUBLIC_ORIGIN from $TAILNET_TEST_HOST below it',
+          { PORT: port, PUBLIC_ORIGIN: 'https://$TAILNET_TEST_HOST', TAILNET_TEST_HOST: NAME },
         ],
       ]) {
         const label = `${what}, ${JSON.stringify(eol)}`
         const res = await run([], { dotenv, eol })
-        // The board serves these as this machine's entrance...
-        expect(boardEntrance(res.dir), label).toEqual({
-          origin: `https://${NAME}`,
-          host: NAME,
-          gateUrl: `https://${NAME}:8443`,
-          gateAuthUrl: `http://127.0.0.1:${gatePort}`,
-        })
-        // ...and the helper reads them so: the serve commands, and nothing to set.
+        // The board serves it as this machine's entrance...
+        expect(boardEntrance(res.dir), label).toEqual({ origin: `https://${NAME}`, host: NAME })
+        // ...and the helper reads it so: the serve command, and nothing to set.
         expect(res.code, `${label}: ${res.stderr}`).toBe(0)
         expect(res.stdout, label).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
-        expect(res.stdout, label).toContain(
-          `tailscale serve --bg --https=8443 http://127.0.0.1:${gatePort}\n`,
-        )
         expect(res.stderr, label).toBe('')
         onlyReads(res.calls)
       }
   })
 
   it("reads .env as Vite's loadEnv, the board's loader, does: references, quotes, comments, the shell", async () => {
-    const port = portOf(gated)
+    const port = portOf(signingIn)
     const shell = { TAILNET_TEST_SHELL_NAME: 'shell', PORT: String(await freePort()) }
     await withShell(shell, async () => {
       const res = await run([], {
@@ -276,29 +232,15 @@ describe('pnpm tailnet', slow, () => {
           PORT: port,
           // A braced reference to a key further down, and one to a name defined nowhere (empty).
           PUBLIC_ORIGIN: 'https://${TAILNET_TEST_HOST}${TAILNET_TEST_UNDEFINED}',
-          // Single-quoted, with a bare reference.
-          PUBLIC_GATE_URL: "'https://$TAILNET_TEST_HOST:8443'",
-          // A comment after a quoted value.
-          PUBLIC_GATE_AUTH_URL: '"http://127.0.0.1:${TAILNET_TEST_GATE_PORT}" # the public gate',
-          // A name from the shell.
-          TAILNET_HOST: '$TAILNET_TEST_SHELL_NAME.example-tailnet.ts.net',
-          TAILNET_TEST_HOST: 'old.example-tailnet.ts.net',
-          TAILNET_TEST_GATE_PORT: 47262,
+          // Single-quoted, with a bare reference to a name from the shell, and a comment after it.
+          TAILNET_TEST_HOST: "'$TAILNET_TEST_SHELL_NAME.example-tailnet.ts.net' # from the shell",
         },
       })
       const vite = loadEnv('development', res.dir, '')
-      expect(vite).toMatchObject({
-        PUBLIC_ORIGIN: 'https://old.example-tailnet.ts.net',
-        PUBLIC_GATE_URL: 'https://old.example-tailnet.ts.net:8443',
-        PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47262',
-        TAILNET_HOST: 'shell.example-tailnet.ts.net',
-      })
+      expect(vite).toMatchObject({ PUBLIC_ORIGIN: 'https://shell.example-tailnet.ts.net' })
       expect(res.code, res.stderr).toBe(0)
-      // The values the helper read, as it prints them, are loadEnv's...
-      expect(res.stdout).toContain(`tailscale serve --bg --https=8443 ${vite.PUBLIC_GATE_AUTH_URL}\n`)
+      // The value the helper read, as it prints it, is loadEnv's...
       expect(res.stderr).toContain(`.env has PUBLIC_ORIGIN=${vite.PUBLIC_ORIGIN}: set`)
-      expect(res.stderr).toContain(`.env has PUBLIC_GATE_URL=${vite.PUBLIC_GATE_URL}: set`)
-      expect(res.stderr).toContain(`TAILNET_HOST=${vite.TAILNET_HOST} in .env is not this machine's name`)
       // ...but a name .env defines keeps .env's value: loadEnv takes the shell's PORT, while pnpm start runs
       // the board on .env's (scripts/start.mjs), and that is the one to serve.
       expect(vite.PORT).toBe(shell.PORT)
@@ -307,46 +249,25 @@ describe('pnpm tailnet', slow, () => {
     })
   })
 
-  it('reads PUBLIC_ORIGIN and PUBLIC_GATE_URL as the board does: trimmed, any case, a trailing slash aside', async () => {
-    const port = portOf(gated)
+  it('reads PUBLIC_ORIGIN as the board does: trimmed, any case, a trailing slash aside', async () => {
+    const port = portOf(signingIn)
     for (const [what, over] of [
-      [
-        'an upper-case host',
-        {
-          PUBLIC_ORIGIN: 'https://DEVBOX.example-tailnet.ts.net',
-          PUBLIC_GATE_URL: 'https://DEVBOX.example-tailnet.ts.net:8443',
-        },
-      ],
-      [
-        'an upper-case scheme and host',
-        {
-          PUBLIC_ORIGIN: 'HTTPS://DevBox.Example-Tailnet.TS.NET',
-          PUBLIC_GATE_URL: 'HTTPS://DEVBOX.EXAMPLE-TAILNET.TS.NET:8443',
-        },
-      ],
-      [
-        'quoted, with spaces inside the quotes',
-        { PUBLIC_ORIGIN: `" https://${NAME} "`, PUBLIC_GATE_URL: `"  https://${NAME}:8443/  "` },
-      ],
+      ['an upper-case host', { PUBLIC_ORIGIN: 'https://DEVBOX.example-tailnet.ts.net' }],
+      ['an upper-case scheme and host', { PUBLIC_ORIGIN: 'HTTPS://DevBox.Example-Tailnet.TS.NET' }],
+      ['quoted, with spaces and a slash inside the quotes', { PUBLIC_ORIGIN: `"  https://${NAME}/  "` }],
     ]) {
-      const res = await run([], { dotenv: { PORT: port, ...entrance(), ...over } })
-      // The board takes these as this machine's entrance...
-      expect(boardEntrance(res.dir), what).toEqual({
-        origin: `https://${NAME}`,
-        host: NAME,
-        gateUrl: `https://${NAME}:8443`,
-        gateAuthUrl: 'http://127.0.0.1:47111',
-      })
+      const res = await run([], { dotenv: { PORT: port, ...over } })
+      // The board takes it as this machine's entrance...
+      expect(boardEntrance(res.dir), what).toEqual({ origin: `https://${NAME}`, host: NAME })
       // ...so there is nothing to set.
       expect(res.code, `${what}: ${res.stderr}`).toBe(0)
       expect(res.stdout, what).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
-      expect(res.stdout, what).toContain('tailscale serve --bg --https=8443 http://127.0.0.1:47111\n')
       expect(res.stderr, what).toBe('')
       onlyReads(res.calls)
     }
     // Another host: the warning names it as the board reads it.
     const other = await run([], {
-      dotenv: { PORT: port, ...entrance(), PUBLIC_ORIGIN: '" HTTPS://OLD.example-tailnet.ts.net/ "' },
+      dotenv: { PORT: port, PUBLIC_ORIGIN: '" HTTPS://OLD.example-tailnet.ts.net/ "' },
     })
     expect(other.code).toBe(0)
     expect(other.stderr).toContain(
@@ -355,16 +276,13 @@ describe('pnpm tailnet', slow, () => {
   })
 
   it('warns when .env does not name this machine, and still prints', async () => {
-    const port = portOf(gated)
-    const res = await run([], { dotenv: { PORT: port, TAILNET_HOST: 'other.example-tailnet.ts.net' } })
+    const port = portOf(signingIn)
+    const res = await run([], { dotenv: { PORT: port } })
     expect(res.code).toBe(0)
     expect(res.stderr).toContain(`.env has no PUBLIC_ORIGIN: set PUBLIC_ORIGIN=https://${NAME}`)
-    expect(res.stderr).toContain(`set PUBLIC_GATE_URL=https://${NAME}:8443`)
-    expect(res.stderr).toContain('set PUBLIC_GATE_AUTH_URL=http://127.0.0.1:47111')
-    expect(res.stderr).toContain(`set TAILNET_HOST=${NAME}`)
-    expect(res.stdout).toContain('tailscale serve --bg --https=8443 http://127.0.0.1:47111')
+    expect(res.stdout).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}`)
     const wrong = await run([], {
-      dotenv: { PORT: port, ...entrance(), PUBLIC_ORIGIN: 'https://old.example-tailnet.ts.net' },
+      dotenv: { PORT: port, PUBLIC_ORIGIN: 'https://old.example-tailnet.ts.net' },
     })
     expect(wrong.stderr).toContain(
       `.env has PUBLIC_ORIGIN=https://old.example-tailnet.ts.net: set PUBLIC_ORIGIN=https://${NAME}`,
@@ -380,7 +298,7 @@ describe('pnpm tailnet', slow, () => {
   })
 
   it('says what a handler already on 443 serves, and that the command replaces it', async () => {
-    const port = portOf(gated)
+    const port = portOf(signingIn)
     const serve = { Web: { [`${NAME}:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:3000' } } } } }
     const res = await run([], {
       dotenv: { PORT: port, ...entrance() },
@@ -389,11 +307,32 @@ describe('pnpm tailnet', slow, () => {
     expect(res.code).toBe(0)
     expect(res.stderr).toContain('443 serves http://127.0.0.1:3000 now: the command below replaces it')
   })
+
+  it('names what else the tailnet name serves, which the board does not need, and how to stop it', async () => {
+    const port = portOf(signingIn)
+    const serve = {
+      Web: {
+        [`${NAME}:443`]: { Handlers: { '/': { Proxy: `http://127.0.0.1:${port}` } } },
+        [`${NAME}:8443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:47111' } } },
+      },
+    }
+    const res = await run([], {
+      dotenv: { PORT: port, ...entrance() },
+      state: tailnet({ 'serve status --json': serve }),
+    })
+    expect(res.code).toBe(0)
+    expect(res.stderr).toContain(
+      '8443 serves http://127.0.0.1:47111 too: the board needs only 443 (tailscale serve --https=8443 off)',
+    )
+    // 443 already serves the board: nothing to replace there.
+    expect(res.stderr).not.toContain('replaces it')
+    onlyReads(res.calls)
+  })
 })
 
 describe('pnpm tailnet refuses', slow, () => {
   it('while Funnel is on, at the top level or in a foreground session, and runs no serve', async () => {
-    const port = portOf(gated)
+    const port = portOf(signingIn)
     for (const state of [
       tailnet({ 'serve status --json': { AllowFunnel: { [`${NAME}:443`]: true } } }),
       tailnet({
@@ -419,7 +358,7 @@ describe('pnpm tailnet refuses', slow, () => {
   })
 
   it('a port other than the board’s, or a target not on loopback, before asking Tailscale anything', async () => {
-    const port = portOf(gated)
+    const port = portOf(signingIn)
     for (const args of [
       ['--port', String(port + 1)],
       [`--port=${port + 1}`],
@@ -444,18 +383,7 @@ describe('pnpm tailnet refuses', slow, () => {
     expect(preview.calls).toEqual([])
   })
 
-  it('a public gate that is not on loopback', async () => {
-    const res = await run([], {
-      dotenv: { PORT: portOf(gated), ...entrance(), PUBLIC_GATE_AUTH_URL: 'http://192.168.1.20:47111' },
-    })
-    expect(res.code).toBe(1)
-    expect(res.stderr).toContain(
-      'PUBLIC_GATE_AUTH_URL in .env (http://192.168.1.20:47111) is not on loopback',
-    )
-    expect(res.calls).toEqual([])
-  })
-
-  it('a board that answers /api/me without signing in: its gate is off', async () => {
+  it('a board that answers /api/me without signing in: its sign-in is off', async () => {
     const open = await board(200)
     try {
       const res = await run([], { dotenv: { PORT: portOf(open), ...entrance() } })
@@ -469,7 +397,7 @@ describe('pnpm tailnet refuses', slow, () => {
   })
 
   it('without Tailscale, signed out, or without a tailnet name', async () => {
-    const port = portOf(gated)
+    const port = portOf(signingIn)
     const missing = await run([], { dotenv: { PORT: port }, bin: path.join(tmp, 'no-such-tailscale') })
     expect(missing.code).toBe(1)
     expect(missing.stderr).toContain('Tailscale is not installed here')

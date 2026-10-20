@@ -56,7 +56,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 /**
  * The board-wide pages, on the right of the top bar. Under `md` they fold into a menu: between `sm` and
- * `md` the lockup, the gate-off badge, the project switcher and the four links do not fit on one row.
+ * `md` the lockup, the auth-off badge, the project switcher and the four links do not fit on one row.
  */
 const PAGES = [
   { to: '/repositories', label: 'Repositories' },
@@ -111,12 +111,12 @@ function App() {
   )
 }
 
-/** Outside production the gate can be off: say so, so no screenshot is ever taken for the live board. */
+/** Outside production sign-in can be off: say so, so no screenshot is ever taken for the live board. */
 function AuthOffBadge() {
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
   if (!me?.authOff) return null
   return (
-    <Tip content={`BOARD_ENV=${me.boardEnv}, no passkey gate: signed in as ${me.actor}. Not the live board.`}>
+    <Tip content={`BOARD_ENV=${me.boardEnv}, sign-in off: signed in as ${me.actor}. Not the live board.`}>
       <Badge variant="destructive" className="shrink-0 uppercase">
         {me.boardEnv === 'test' ? 'test mode' : 'auth off'}
       </Badge>

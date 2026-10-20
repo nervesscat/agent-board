@@ -452,7 +452,7 @@ test('the author sits on the line of the text around it: "opened by", the "by" o
 
   for (const { ticket, name, title } of [
     // A bot glyph, as in the ticket's screenshot.
-    { ticket: byAgent, name: 'claude', title: /agent, gate token/ },
+    { ticket: byAgent, name: 'claude', title: /agent, signed in with a token/ },
     // A person glyph, and the admin badge after the name.
     { ticket: byHuman, name: 'enrique', title: /signed in with a passkey/ },
   ]) {
@@ -517,7 +517,7 @@ test('an author in the header of a post or a reply stays centred on it, on a pho
     await expect(page.getByText('A reply from a project agent.')).toBeVisible()
 
     for (const [what, header, title] of [
-      ['post by claude', authorRow(article('From the agent itself.')), /agent, gate token/],
+      ['post by claude', authorRow(article('From the agent itself.')), /agent, signed in with a token/],
       [
         `post by ${as}`,
         authorRow(article('From one of the project agents.')),

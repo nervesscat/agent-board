@@ -8,7 +8,7 @@
 //   pnpm stop           # just stop it
 //
 // Logs: data/logs/board.out.log and data/logs/board.err.log. It always runs as production, so it
-// always asks the gate, whatever BOARD_ENV or AUTH the shell has (AUTH=off is refused at startup).
+// always requires sign-in, whatever BOARD_ENV or AUTH the shell has (AUTH=off is refused at startup).
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -82,7 +82,7 @@ async function stop() {
   if (listeners().length) fail(`something still listens on :${port}; stop it and run this again`)
 }
 
-/** The board always asks the gate, whatever BOARD_ENV or AUTH the shell running this has. */
+/** The board always requires sign-in, whatever BOARD_ENV or AUTH the shell running this has. */
 function boardEnv() {
   const e = { ...process.env, BOARD_ENV: 'production', PORT: String(port), HOST: host }
   for (const key of ['AUTH', 'DEV_HUMAN', 'TEST_HUMAN', 'BOARD_DATA_COPY']) delete e[key]
@@ -102,7 +102,7 @@ const vite = [
 async function waitUp() {
   for (let i = 0; i < 120; i++) {
     try {
-      // The gate answers 401 before anyone signs in; any answer means the board is up.
+      // The board sends a browser to /setup or /login before anyone signs in; any answer means it is up.
       await fetch(`http://${host}:${port}/`, { signal: AbortSignal.timeout(2000) })
       return true
     } catch {

@@ -7,7 +7,7 @@
 //
 //   pnpm dev            # the first free port from 47101, or DEV_PORT
 //   pnpm dev --fresh    # start over from a copy of the live data
-//   AUTH=off pnpm dev   # without the passkey gate: every request is the human (README: "Test mode")
+//   AUTH=off pnpm dev   # with sign-in off: every request is the human (README: "Test mode")
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import net from 'node:net'
@@ -72,7 +72,7 @@ if (!fs.existsSync(path.join(dev, 'board.db')) && fs.existsSync(path.join(live, 
 
 console.log(`Preview: http://localhost:${port} (a copy of the board's data, in ${path.join(root, dev)})`)
 // PORT has to be set here: the PORT in .env would otherwise win over --port. BOARD_ENV is always
-// development, whatever the shell says; AUTH (off turns the gate off) comes through as it is.
+// development, whatever the shell says; AUTH (off turns sign-in off) comes through as it is.
 // BOARD_DATA_COPY keeps the copy from deleting files in an S3 bucket it shares with the live board.
 // The tailnet entrance is the board's alone: set empty here, a copy of the board's .env cannot turn it
 // on (the environment wins over .env), so the copy answers on loopback only.
@@ -87,8 +87,6 @@ const child = spawn(`pnpm exec vite dev --port ${port} --strictPort`, {
     DATA_DIR: `./${dev}`,
     BOARD_DATA_COPY: '1',
     PUBLIC_ORIGIN: '',
-    PUBLIC_GATE_URL: '',
-    PUBLIC_GATE_AUTH_URL: '',
   },
 })
 child.on('exit', (code) => process.exit(code ?? 0))
