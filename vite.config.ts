@@ -114,8 +114,11 @@ export default defineConfig(({ mode }) => ({
   ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
   server: {
     // The board writes its database, uploads and logs under data/ all the time; none of it is code. Nor
-    // is what the benchmark keeps in .bench/ (its builds, copies of the data and results).
-    watch: { ignored: ['**/data/**', '**/.output*/**', '**/.bench/**'] },
+    // is what the benchmark keeps in .bench/ (its builds, copies of the data and results), nor the desktop
+    // app's staged board and installer (desktop/.stage, desktop/dist).
+    watch: {
+      ignored: ['**/data/**', '**/.output*/**', '**/.bench/**', '**/desktop/.stage/**', '**/desktop/dist/**'],
+    },
     allowedHosts: allowedHosts(mode),
   },
 }))

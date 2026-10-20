@@ -20,3 +20,7 @@ blob-report
 
 # benchmark (pnpm bench): builds, copies of the data, logs and results
 .bench
+
+# the desktop app (pnpm desktop:package): the staged board and the installer
+desktop/.stage
+desktop/dist
