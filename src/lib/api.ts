@@ -22,6 +22,7 @@ import type { ReportList, ReportPeriod, ReportSettingsView, ReportView } from '#
 import type { ReportsOverview } from '#/server/reportsOverview'
 import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
 import type { WorkspacePreview, summaryHistory } from '#/server/features'
+import type { BranchTicket } from '#/server/branches'
 import type { CleanupReport } from '#/server/cleanup'
 import type { DeleteItem, DeleteKind, DeleteResult } from '#/server/cleanupActions'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
@@ -44,6 +45,7 @@ export type Project = ProjectFull
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
 export type {
+  BranchTicket,
   CarryOver,
   DirListing,
   Gallery,
