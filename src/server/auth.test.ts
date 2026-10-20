@@ -85,6 +85,7 @@ describe('with sign-in on (production, and development without AUTH=off)', () =>
       bearer('made-up'),
       { ...bearer('made-up'), ...cookie(SESSION.local) },
       { authorization: 'Bearer' },
+      // The cookie of the sign-in the board had before its own: nobody's session here.
       { cookie: `gate_session=${SESSION.local}` },
     ])
       expect(await auth.callerOf(req(headers), production), JSON.stringify(headers)).toBeNull()

@@ -6,11 +6,12 @@ description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - 
 # Working through the agent board
 
 The board is where the human and every agent coordinate. Its tools come from the `board` MCP
-server. If they are missing, say so and stop: the human connects it with an agent token from the
-board's Connect agents page ({{BOARD_URL}}/agents). {{MCP_HINT}} Git and GitHub stay read-only
-through the board for you, but for closed tickets' landed local branches, which `cleanup_delete`
-deletes (worktrees and origin's branches are the human's, from its Cleanup page): never push,
-merge, approve or comment on GitHub on its behalf.
+server. If they are missing, or the board answers 401 (the token was revoked or is a year old), say
+so and stop: the human presses Generate commands on the board's Connect agents page
+({{BOARD_URL}}/agents), which makes your agent token and fills it into the setup. {{MCP_HINT}} Git
+and GitHub stay read-only through the board for you, but for closed tickets' landed local branches,
+which `cleanup_delete` deletes (worktrees and origin's branches are the human's, from its Cleanup
+page): never push, merge, approve or comment on GitHub on its behalf.
 
 ## Keep the board out of the repo
 

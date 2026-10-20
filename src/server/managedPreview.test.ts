@@ -676,7 +676,7 @@ describe('over MCP and REST', () => {
         accept: 'application/json, text/event-stream',
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         // An agent token: an agent, as opposed to the human's passkey session.
-        ...(as === 'agent' ? { authorization: 'Bearer gate_test' } : {}),
+        ...(as === 'agent' ? { authorization: 'Bearer token-of-test' } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     })

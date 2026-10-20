@@ -4,7 +4,8 @@ import path from 'node:path'
 
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
-import { repoClaudeDir, reviewSkillsInstall } from '#/lib/agents'
+import { AGENTS, mcpSetup, repoClaudeDir, reviewSkillsInstall, skillInstall } from '#/lib/agents'
+import { AGENT_CLIENTS } from '#/lib/constants'
 import type { Project } from '#/lib/api'
 import { inDatabase } from './db'
 import { e2eEnv } from './env'
@@ -62,6 +63,128 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   expect(hydration).toEqual([])
 })
 
+test('Generate commands makes a token per agent, fills it into every command, lists it and revokes it', async ({
+  page,
+  human,
+  project,
+}) => {
+  const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+  const mints: string[] = []
+  page.on('request', (r) => {
+    if (new URL(r.url()).pathname === '/api/agent-tokens' && r.method() === 'POST') mints.push(r.url())
+  })
+  const shown = (text: string) => page.getByText(text, { exact: true })
+  const tokens = page.getByRole('list', { name: 'Agent tokens' })
+
+  await page.goto('/agents?shell=bash')
+  await expect(page.getByRole('heading', { name: 'Connect agents' })).toBeVisible()
+  // Nothing is made on load, and there is no field to paste a token into.
+  await expect(page.getByLabel('Agent token', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Makes a token for this agent')).toContainText('1 year')
+  await expect(page.getByText('Makes a token for this agent')).toContainText('shown only once')
+  await expect(page.locator('main')).not.toContainText(/gate_|gate token|passkey gate/i)
+
+  for (const client of AGENT_CLIENTS) {
+    await page.getByRole('tab', { name: AGENTS[client].label }).click()
+    // The commands carry the placeholder until Generate commands is pressed, named after the CLI.
+    await expect(shown(mcpSetup(client, boardUrl, '').text)).toBeVisible()
+    await expect(page.getByLabel('Agent name')).toHaveValue(client)
+    const made = await generateCommands(page)
+    expect(made.name).toBe(client)
+    await expect(page.getByRole('status').filter({ hasText: 'shown this once' })).toContainText(client)
+    await expect(shown(mcpSetup(client, boardUrl, made.token).text)).toBeVisible()
+    await expect(shown(skillInstall(client, 'bash', boardUrl, made.token))).toBeVisible()
+    await expect(shown(reviewSkillsInstall('bash', boardUrl, made.token))).toBeVisible()
+    await page.getByRole('tab', { name: 'PowerShell' }).first().click()
+    await expect(shown(skillInstall(client, 'powershell', boardUrl, made.token))).toBeVisible()
+    await expect(shown(reviewSkillsInstall('powershell', boardUrl, made.token))).toBeVisible()
+    await page.getByRole('tab', { name: 'bash / zsh' }).first().click()
+    await expect(tokens.getByRole('listitem').filter({ hasText: client }).first()).toContainText('never used')
+  }
+  expect(mints).toHaveLength(AGENT_CLIENTS.length)
+
+  // Renamed: the token is that name's, and so is its row.
+  const renamed = await generateCommands(page, 'review-bot')
+  expect(renamed.name).toBe('review-bot')
+  await expect(shown(mcpSetup('opencode', boardUrl, renamed.token).text)).toBeVisible()
+  const row = tokens.getByRole('listitem').filter({ hasText: 'review-bot' })
+  await expect(row).toContainText('expires')
+  await expect(tokens).not.toContainText(renamed.token)
+  // A name no agent can go by is not sent.
+  await page.getByLabel('Agent name').fill('two words')
+  await expect(page.getByRole('button', { name: 'Generate commands' })).toBeDisabled()
+
+  // Revoked: gone from the list here and on the board.
+  await row.getByRole('button', { name: /^Revoke review-bot/ }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke' }).click()
+  await expect(row).toHaveCount(0)
+  const left = await ok<{ name: string }[]>(human.get('/api/agent-tokens'))
+  expect(left.map((t) => t.name)).not.toContain('review-bot')
+  expect(JSON.stringify(left)).not.toContain(renamed.token)
+
+  // Shown once: a reload brings the placeholder back and makes nothing.
+  await page.reload()
+  await expect(page.getByText(/Bearer <token>/).first()).toBeVisible()
+  await expect(page.getByText(renamed.token)).toHaveCount(0)
+  expect(mints).toHaveLength(AGENT_CLIENTS.length + 1)
+
+  // A project's Agents page makes one for the review skills' lines.
+  await page.goto(`/projects/${project.id}/agents?shell=bash`)
+  await expect(page.getByLabel('Agent name')).toHaveValue('claude')
+  await expect(shown(reviewSkillsInstall('bash', boardUrl, ''))).toBeVisible()
+  const forReviews = await generateCommands(page)
+  await expect(shown(reviewSkillsInstall('bash', boardUrl, forReviews.token))).toBeVisible()
+  await expect(page.locator('main')).not.toContainText(/gate_|gate token|passkey gate/i)
+})
+
+test("a token that answers after the page moved to another CLI never fills that CLI's commands", async ({
+  page,
+  human,
+}) => {
+  const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+  const shown = (text: string) => page.getByText(text, { exact: true })
+  // The POST is held until the page has moved on to Codex.
+  let release!: () => void
+  const held = new Promise<void>((r) => (release = r))
+  let reached!: () => void
+  const atBoard = new Promise<void>((r) => (reached = r))
+  await page.route('**/api/agent-tokens', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue()
+    reached()
+    await held
+    await route.continue()
+  })
+
+  await page.goto('/agents?shell=bash')
+  await page.getByRole('tab', { name: AGENTS.claude.label }).click()
+  await expect(page.getByLabel('Agent name')).toHaveValue('claude')
+  const answered = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/agent-tokens' && r.request().method() === 'POST',
+  )
+  await page.getByRole('button', { name: 'Generate commands' }).click()
+  await atBoard
+  await page.getByRole('tab', { name: AGENTS.codex.label }).click()
+  await expect(page.getByLabel('Agent name')).toHaveValue('codex')
+  release()
+  const made = (await (await answered).json()) as { name: string; token: string }
+  expect(made.name).toBe('claude')
+
+  // The board made claude's token (the list shows it), but Codex's commands still wait for their own.
+  await expect(
+    page
+      .getByRole('list', { name: 'Agent tokens' })
+      .getByRole('listitem')
+      .filter({ hasText: 'claude' })
+      .first(),
+  ).toBeVisible()
+  await expect(shown(mcpSetup('codex', boardUrl, '').text)).toBeVisible()
+  await expect(shown(skillInstall('codex', 'bash', boardUrl, ''))).toBeVisible()
+  await expect(shown(reviewSkillsInstall('bash', boardUrl, ''))).toBeVisible()
+  await expect(page.getByLabel('Agent name')).toHaveValue('codex')
+  await expect(page.getByText(made.token)).toHaveCount(0)
+  await expect(page.getByRole('status').filter({ hasText: 'shown this once' })).toHaveCount(0)
+})
+
 /**
  * Does what an install line does: extracts the served bundle into `claude`, replacing the files of the
  * same name and keeping the rest.
@@ -108,6 +231,21 @@ function emptyHome() {
 }
 
 /**
+ * Presses Generate commands (after naming the agent `name`, when given) and returns the token the board
+ * made: the commands on the page carry it from then on.
+ */
+async function generateCommands(page: Page, name?: string): Promise<{ name: string; token: string }> {
+  if (name !== undefined) await page.getByLabel('Agent name').fill(name)
+  const minted = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/agent-tokens' && r.request().method() === 'POST',
+  )
+  await page.getByRole('button', { name: 'Generate commands' }).click()
+  const res = await minted
+  expect(res.status()).toBe(201)
+  return (await res.json()) as { name: string; token: string }
+}
+
+/**
  * Runs the install line `entry` shows, with a token in it: the PowerShell one on Windows (with Windows'
  * own tar first, as a PowerShell terminal finds it), the bash one elsewhere. Run only once the entry shows
  * the line `line` builds for the folder checked, and with a home and a temp folder of its own, so that a
@@ -123,8 +261,8 @@ async function runShownLine(
     .getByRole('tab', { name: shell === 'bash' ? 'bash / zsh' : 'PowerShell' })
     .first()
     .click()
-  await page.getByLabel('Agent token').fill('token_e2e')
-  await expect(line(shell, 'token_e2e')).toBeVisible()
+  const { token } = await generateCommands(page)
+  await expect(line(shell, token)).toBeVisible()
   const text = (await entry.locator('pre').textContent())!
   const scratch = fs.mkdtempSync(path.join(e2eEnv().root, 'shell '))
   if (shell === 'bash') {
@@ -298,8 +436,8 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await expect(entry.getByRole('button', { name: 'Copy' })).toBeVisible()
     await page.getByRole('tab', { name: 'PowerShell' }).first().click()
     await expect(line('powershell')).toBeVisible()
-    await page.getByLabel('Agent token').fill('token_e2e')
-    await expect(line('powershell', 'token_e2e')).toBeVisible()
+    const { token } = await generateCommands(page)
+    await expect(line('powershell', token)).toBeVisible()
 
     // What the line does, run as shown: the bundle extracted into the folder checked. Checked again, it
     // is up to date and its own skill is still there.
@@ -375,8 +513,8 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await page.getByRole('tab', { name: 'PowerShell' }).first().click()
     await expect(line('powershell')).toBeVisible()
     await expect(page.getByRole('tab', { name: 'PowerShell' })).toHaveCount(2)
-    await page.getByLabel('Agent token').fill('token_e2e')
-    await expect(line('powershell', 'token_e2e')).toBeVisible()
+    const { token } = await generateCommands(page)
+    await expect(line('powershell', token)).toBeVisible()
     await expect(
       page.getByText(/replacing files of the same name and keeping the rest/),
       'the list says what the line does',

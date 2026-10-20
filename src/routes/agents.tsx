@@ -5,15 +5,15 @@ import { useEffect, useState } from 'react'
 import { z } from 'zod'
 
 import { AgentPicker, CopyBlock, copyText } from '#/components/AgentPicker'
+import { AgentTokenList, GenerateCommands } from '#/components/AgentTokens'
 import { Button } from '#/components/ui/button'
-import { Input } from '#/components/ui/input'
-import { Label } from '#/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { ReviewSkills, useShell } from '#/components/ReviewSkills'
 import { AGENTS, SHELLS, type Shell, mcpSetup, skillInstall } from '#/lib/agents'
 import { errorMessage, get } from '#/lib/api'
 import type { AgentClient } from '#/lib/constants'
 import type { Settings } from '#/server/agents'
+import type { NewAgentToken } from '#/server/tokens'
 
 // ?shell= is the shell the install lines are for (none: the one this browser remembers, else bash).
 export const Route = createFileRoute('/agents')({
@@ -30,8 +30,9 @@ function ConnectAgents() {
   })
   const [client, setClient] = useState<AgentClient | null>(null)
   const [shell, pickShell] = useShell()
-  // The token only fills in the commands on this page; it is never saved or sent anywhere.
-  const [token, setToken] = useState('')
+  // The token "Generate commands" made: shown once, in the commands on this page, never stored here.
+  const [made, setMade] = useState<NewAgentToken | null>(null)
+  const token = made?.token ?? ''
   useEffect(() => {
     if (setup && !client) setClient(setup.settings.defaultAgent)
   }, [setup, client])
@@ -46,15 +47,16 @@ function ConnectAgents() {
   })
   if (!setup || !client) return null
   const agent = AGENTS[client]
-  const mcp = mcpSetup(client, setup.boardUrl, token.trim())
+  const mcp = mcpSetup(client, setup.boardUrl, token)
   return (
     <div className="max-w-3xl space-y-6">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Connect agents</h1>
         <p className="text-sm text-muted-foreground">
-          Two steps per agent CLI: connect the board&apos;s MCP server, then install the board skill. The
-          skill is one file for every repo: it carries the table of projects and repos from the board, so
-          install it again after adding a repo or project. The default CLI is set in{' '}
+          Two steps per agent CLI: connect the board&apos;s MCP server, then install the board skill. Generate
+          commands first: it makes the agent&apos;s token and puts it in every command below. The skill is one
+          file for every repo: it carries the table of projects and repos from the board, so install it again
+          after adding a repo or project. The default CLI is set in{' '}
           <Link to="/settings" className="underline hover:text-foreground">
             Settings
           </Link>
@@ -62,25 +64,17 @@ function ConnectAgents() {
         </p>
       </div>
 
-      <AgentPicker value={client} onChange={setClient} />
+      <AgentPicker
+        value={client}
+        onChange={(c) => {
+          // A token is one agent's: another CLI starts again from its own name, with no token.
+          setClient(c)
+          setMade(null)
+        }}
+      />
 
-      <div className="space-y-2">
-        <Label htmlFor="token">Agent token</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="token"
-            type="password"
-            autoComplete="off"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="token (fills in the commands below; not saved)"
-            className="max-w-md font-mono text-xs"
-          />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          One token per agent: its name is the agent&apos;s name on the board (claude, codex, …).
-        </p>
-      </div>
+      {/* Keyed by the CLI: another CLI's field is a new one, and a press of the old one hands over nothing. */}
+      <GenerateCommands key={client} defaultName={client} token={made} onToken={setMade} />
 
       <section className="space-y-2">
         <h2 className="text-sm font-medium">1. Connect the MCP server</h2>
@@ -117,7 +111,7 @@ function ConnectAgents() {
           {client === 'opencode' &&
             ' OpenCode also reads ~/.claude/skills: skip this if Claude Code has it already.'}
         </p>
-        <CopyBlock text={skillInstall(client, shell, setup.boardUrl, token.trim())} />
+        <CopyBlock text={skillInstall(client, shell, setup.boardUrl, token)} />
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -145,6 +139,8 @@ function ConnectAgents() {
         <h2 className="text-sm font-medium">3. Install the review skills (Claude Code)</h2>
         <ReviewSkills boardUrl={setup.boardUrl} token={token} shell={shell} onShellChange={pickShell} />
       </section>
+
+      <AgentTokenList />
     </div>
   )
 }
