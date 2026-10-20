@@ -187,7 +187,7 @@ function Row({
       className={`grid grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)] ${lane ? 'max-md:ml-4 max-md:border-l-2' : ''}`}
     >
       <div
-        className={`relative min-w-0 pr-4 md:border-r ${lane ? 'py-2' : 'py-3.5'}`}
+        className={`relative flex min-w-0 flex-col justify-center pr-4 md:border-r ${lane ? 'py-2' : 'py-3.5'}`}
         style={{ paddingLeft: indent }}
       >
         {lane && (
@@ -262,7 +262,7 @@ function Track({ groups, lane }: { groups: StepGroup[]; lane: boolean }) {
   return (
     <div
       ref={ref}
-      className={`relative flex items-center overflow-x-auto overscroll-x-contain [scrollbar-width:thin] ${lane ? 'px-5 pt-5 pb-2' : 'px-5 pt-6.5 pb-3'}`}
+      className={`relative flex items-start overflow-x-auto overscroll-x-contain [scrollbar-width:thin] ${lane ? 'px-5 pt-5 pb-2' : 'px-5 pt-6.5 pb-3'}`}
     >
       {groups.map((g) => {
         const steps = (
