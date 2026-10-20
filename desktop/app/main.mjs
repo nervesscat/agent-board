@@ -39,7 +39,7 @@ function errorText(err) {
   return err instanceof Error ? err.message : String(err)
 }
 
-// The window's profile (the gate's cookie, the cache) goes with the config, and so does the
+// The window's profile (its sign-in, the cache) goes with the config, and so does the
 // single-instance lock: one app per folder. A folder that cannot be made or written (AGENT_BOARD_HOME on
 // a missing drive or naming a file, a deny-write ACL) would fail the lock as if another copy held it:
 // it is reported instead, from a throwaway profile.
@@ -253,13 +253,13 @@ async function fatal(message, detail, target, open) {
 
 const icon = () => nativeImage.createFromPath(path.join(here, 'icon.png'))
 
-/** Origins the window navigates to itself: the board and the gate's sign-in. Others open in the browser. */
+/**
+ * Whether the window navigates to a URL itself: the board's own pages, its sign-in (`/setup`, `/login`)
+ * among them. Anything else opens in the browser.
+ */
 function ownOrigin(/** @type {string} */ url) {
-  const origins = [settings.url, settings.serverEnv.GATE_URL || 'http://localhost:47110'].map(
-    (u) => new URL(u).origin,
-  )
   try {
-    return origins.includes(new URL(url).origin)
+    return new URL(url).origin === new URL(settings.url).origin
   } catch {
     return false
   }

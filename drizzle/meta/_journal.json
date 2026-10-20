@@ -218,6 +218,20 @@
       "when": 1792214129867,
       "tag": "0030_post_tabs_and_summary",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1792285128930,
+      "tag": "0031_project_tag_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792387484420,
+      "tag": "0032_passkey_sign_in",
+      "breakpoints": true
     }
   ]
 }

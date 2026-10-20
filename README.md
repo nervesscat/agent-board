@@ -13,32 +13,61 @@ with MCP `cleanup_delete` (worktrees and branches on origin stay the human's).
 
 - TanStack Start (Router + Query + server routes), shadcn (base-nova), Tailwind 4
 - SQLite via Drizzle in `data/board.db`; uploads in `data/uploads/`
-- Identity from a local [passkey-gate](../passkey-gate): the browser's passkey session cookie,
-  or a `Bearer gate_…` token for agents. The board keeps no users of its own.
+- Its own sign-in: passkeys (WebAuthn) for the human, one account, made on first boot; a
+  `Bearer <token>` agent token for each agent (Signing in, below). No other service is needed.
 - REST under `/api/*` and an MCP server at `/api/mcp` for the agents. `AGENTS.md` is what they read.
 
-Ports are deliberately unusual so nothing collides with a project you are running:
-**47100** (board) and **47110** (gate). Both are overridable in `.env`. For your other devices there is
-a second gate on **47111** (Using it from other devices, below).
+The port is deliberately unusual so nothing collides with a project you are running: **47100**,
+overridable in `.env`.
 
 ## First run
 
 ```powershell
-# 1. the gate, once (builds ../passkey-gate; prints an enrollment link in the log)
-docker compose -f docker-compose.gate.yml up -d --build
-docker compose -f docker-compose.gate.yml logs gate
-#    open the link, enroll your passkey. Later: /devices to mint agent tokens (name = agent name)
-
-# 2. the board
 cp .env.example .env
-pnpm start             # starts the board on http://localhost:47100 (hot reload), the gate login first
+pnpm start             # starts the board on http://localhost:47100 (hot reload)
 ```
+
+Open `http://localhost:47100/` on this machine: with no account yet the board sends you to `/setup`.
+Give your name (filled in with the name the board knew you by, if any) and create a passkey; you are
+signed in. Setup works once, and only on this machine.
 
 Add a repository (path of a local checkout) and the project it belongs to, pick the project in the
 top bar, and you are on. A project can hold several repos; its modules show them all together.
 
-Agents: mint a token per agent on `http://localhost:47110/devices` and follow `AGENTS.md`
-(`claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer gate_…"`).
+Agents: each one connects with an agent token (its name is the agent's name on the board) and
+follows `AGENTS.md`. Connect agents (`/agents`) makes the token: pick the CLI, press **Generate
+commands**, and copy the MCP setup and skill install lines, which carry it
+(`claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer <token>"`).
+
+## Signing in
+
+- **The human** signs in with a passkey at `/login`, the board's own page. A session is an HttpOnly,
+  SameSite=Lax cookie (Secure over HTTPS) that lasts 90 days; Settings, Devices has **Sign out**,
+  which ends it on the server. Without a session a page goes to `/login` and comes back after; an API
+  call gets 401.
+- **First boot**: until the account exists, every page goes to `/setup` and every call (but
+  `/api/health`) gets 409 `setup required`. `/setup` answers only a browser on this machine, straight
+  to the board (not through `tailscale serve`, not from another machine): elsewhere it says to finish
+  setup on the host.
+- **A passkey belongs to one address.** Passkeys are bound to the name the browser used: those made on
+  `localhost` sign in on this machine, those made on the tailnet name (Using it from other devices,
+  below) sign in there, and a passkey or session of one is never taken on the other. WebAuthn takes
+  no IP address, so the sign-in pages move a browser on `127.0.0.1` to `localhost`.
+- **Another device**: Settings, Devices, **Add a device** makes a one-time link (15 minutes, used once)
+  only the signed-in human can make; open it on the device and create its passkey there.
+- **Devices** (Settings) lists the passkeys and the sessions they opened, each revocable. Revoking a
+  passkey signs its browsers out at their next request; the last passkey of this machine cannot be
+  revoked, so you are never locked out.
+- **Agents** send `Authorization: Bearer <token>` on REST and `/api/mcp`. The board issues the tokens:
+  **Generate commands** on Connect agents (and on a project's Agents page, for the review skills)
+  makes one, named after the CLI unless you type another name, and fills it into every command on the
+  page. Only the signed-in human makes, lists and revokes them. The board keeps only a hash of each
+  token, with its name (the agent's name on the board), when it was made and last used, and when it
+  expires (a year after it was made) or was revoked, so a token is shown once and each press makes a
+  new one. Connect agents lists them with **Revoke**; an unknown, revoked or expired token gets 401.
+
+Nothing secret is kept in plain text: sessions, enrolment links and tokens are stored as SHA-256
+hashes in `data/board.db`.
 
 ## Running it from WSL (projects, git, gh and claude live there)
 
@@ -54,8 +83,8 @@ curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh au
 ```
 
 Repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
-the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and the
-gate cookie work unchanged. `pnpm start` inside WSL starts it; after a change here,
+the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and its
+passkeys work unchanged. `pnpm start` inside WSL starts it; after a change here,
 `git -C ~/agent-board pull` puts it live (and `pnpm start` again when dependencies or migrations changed).
 
 ## Running the board
@@ -64,7 +93,7 @@ gate cookie work unchanged. `pnpm start` inside WSL starts it; after a change he
 pnpm start          # stop the board, install, start it in the background with hot reload, wait until it answers
 pnpm start --fg     # the same in the foreground; logs to the terminal
 pnpm stop           # stop it
-pnpm tailnet        # the tailscale serve commands that open it to your other devices (below); reads only
+pnpm tailnet        # the tailscale serve command that opens it to your other devices (below); reads only
 ```
 
 There is one board, run from the main checkout with `vite dev` on the real data in `data/`, so code
@@ -72,9 +101,6 @@ saved there is live at once: `git pull` on `main` is how changes go live. A pull
 dependencies or adds a migration needs `pnpm start` again (migrations apply as it starts). Work on
 the board itself happens in worktrees, never in the main checkout (Development, below). Logs:
 `data/logs/board.out.log`, `board.err.log`.
-
-The gate comes up with Docker Desktop at sign-in (`restart: unless-stopped`); only the board needs
-starting after a reboot.
 
 ## Install
 
@@ -123,10 +149,12 @@ such as `pnpm start` from a checkout, also wants 47100) offers to open `config.e
 or `AGENT_BOARD_HOME` on a missing drive, say) names it and what to change; a board that fails to
 start shows the end of its log and offers the logs folder.
 
-**Signing in.** The window signs in the way the board does in a browser (First run, above), with the
-passkey prompt in the window. Where that prompt cannot show in the window, Open in browser in the
-tray opens the board in your default browser, where you sign in and use it as usual (the window and
-the browser keep separate sign-ins).
+**Signing in.** The window signs in with the board's own passkeys, as a browser does (First run and
+Signing in, above): on a fresh data folder it opens on `/setup`, where you give your name and create
+the passkey; after that, `/login`. Both are the board's own pages, with the passkey prompt in the
+window. Where that prompt cannot show in the window, Open in browser in the tray opens the board in
+your default browser, where you sign in and use it as usual (the window and the browser keep separate
+sessions).
 
 **Uninstalling.** Settings, Apps, CrossBoard, Uninstall: Windows runs the uninstaller the installer
 registered there. It leaves `%LOCALAPPDATA%\agent-board` alone: delete that folder to remove the data and the
@@ -135,110 +163,92 @@ settings too.
 ## Using it from other devices
 
 The board opens on your phone, tablet or another computer through your tailnet: HTTPS on this
-machine's Tailscale name, `https://<machine>.<tailnet>.ts.net/`, signed in with a passkey-gate of its
-own for that name. On this machine `tailscale serve` takes 443 to the board (`http://127.0.0.1:47100`)
-and 8443 to that public gate (`http://127.0.0.1:47111`). Nothing else changes: `HOST` stays
-`127.0.0.1`, `localhost` works as before, and agents here keep `http://localhost:47100/api/mcp`. It is
-off until all of the steps below are done.
+machine's Tailscale name, `https://<machine>.<tailnet>.ts.net/`, where each device signs in with a
+passkey of its own for that name (Signing in, above). On this machine `tailscale serve` takes 443 to
+the board (`http://127.0.0.1:47100`). Nothing else changes: `HOST` stays `127.0.0.1`, `localhost` works
+as before, and agents here keep `http://localhost:47100/api/mcp`. It is off until the steps below are
+done.
 
 **Before you start**
 
 - Tailscale on this machine and on each device, signed in to the same tailnet.
 - MagicDNS and HTTPS certificates turned on in the Tailscale admin console (DNS page). The machine
   and tailnet names then appear in a public certificate log.
-- Tailnet access rules (ACLs or grants) that let only your own devices reach this machine on 443 and 8443.
+- Tailnet access rules (ACLs or grants) that let only your own devices reach this machine on 443.
 
-**1. `.env`** (the board's; docker compose reads `TAILNET_HOST` from the same file):
+**1. `.env`**:
 
 ```
 PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net
-PUBLIC_GATE_URL=https://<machine>.<tailnet>.ts.net:8443
-PUBLIC_GATE_AUTH_URL=http://127.0.0.1:47111
-TAILNET_HOST=<machine>.<tailnet>.ts.net
 ```
 
-`PUBLIC_ORIGIN` is the board as your devices open it, `PUBLIC_GATE_URL` the public gate as their
-browser reaches it, `PUBLIC_GATE_AUTH_URL` where the board asks that gate about each request. All three
-or none: the board refuses to start with only some of them, or with a value it cannot trust (a port or
-a path on `PUBLIC_ORIGIN`, a wildcard, a gate on another host, a `PUBLIC_GATE_AUTH_URL` off loopback or
-on the localhost gate's port). Then `pnpm start`. `pnpm tailnet` prints the values for this machine.
+`PUBLIC_ORIGIN` is the board as your devices open it, and its host the name their passkeys are for.
+The board refuses to start with a value it cannot trust (http, a port, a path, a wildcard or an IP).
+Then `pnpm start`. `pnpm tailnet` prints the value for this machine.
+An earlier setup's `GATE_URL`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` lines are no longer read:
+delete them.
 
-**2. The public gate**, the same `../passkey-gate` image as the localhost gate, on `127.0.0.1:47111`,
-with passkeys, sessions and tokens of its own (a passkey is for one name: the localhost gate's do not
-work there):
-
-```powershell
-docker compose -f docker-compose.gate.yml --profile tailnet up -d --build
-docker compose -f docker-compose.gate.yml logs gate-public    # its first enrollment link
-```
-
-**3. `tailscale serve`**: `pnpm tailnet` prints the commands for this machine, its URL and how to stop.
+**2. `tailscale serve`**: `pnpm tailnet` prints the command for this machine, its URL and how to stop.
 It only reads (`tailscale status`, `serve status`, `funnel status`, `version`) and never runs `serve`
 itself; it refuses while Funnel is on, for any port but the board's (`PORT`), and for a board that
-answers without its gate.
+answers without signing in. It also names anything else this machine serves on its tailnet name.
 
 ```
 tailscale serve --bg --https=443 http://127.0.0.1:47100
-tailscale serve --bg --https=8443 http://127.0.0.1:47111
 ```
 
-**4. A passkey on the public name**: open the first enrollment link from step 2
-(`https://<machine>.<tailnet>.ts.net:8443/enroll?code=…`, valid 15 minutes) on the device, and enroll.
-For another device, or once that link has expired:
-`docker compose -f docker-compose.gate.yml exec gate-public python -m gate enroll-link`.
+**3. A passkey for each device**: on this machine, Settings, Devices, **Add a device**, and open the
+tailnet link (`https://<machine>.<tailnet>.ts.net/enroll?code=…`, valid 15 minutes, used once) on the
+device; create its passkey there. It is signed in at once.
 
-**5. Open `https://<machine>.<tailnet>.ts.net/`**: the board sends you to the public gate's login and
-back to the page you asked for.
+**4. Open `https://<machine>.<tailnet>.ts.net/`**: without a session the board sends you to its own
+`/login` there and back to the page you asked for.
 
-**Agents on other devices**: mint a token on the public gate's Devices page,
-`https://<machine>.<tailnet>.ts.net:8443/devices` (its name is the agent's), and connect to
-`https://<machine>.<tailnet>.ts.net/api/mcp` (REST: `/api/*` on the same origin) with
-`Authorization: Bearer gate_…`. A token works only on its own gate's origin: one minted on
-`localhost:47110` is refused through the tailnet, and the other way round.
+**Agents on other devices** connect to `https://<machine>.<tailnet>.ts.net/api/mcp` (REST: `/api/*` on
+the same origin) with their agent token: a token works on both addresses.
 
 **Stopping it**:
 
 ```
-tailscale serve --https=443 off
-tailscale serve --https=8443 off        # or tailscale serve reset, which clears every handler
-docker compose -f docker-compose.gate.yml --profile tailnet stop gate-public
+tailscale serve --https=443 off        # or tailscale serve reset, which clears every handler
 ```
 
-Remove the three `PUBLIC_*` keys from `.env` (then `pnpm start`) to close it on the board's side too.
+Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board's side too.
 
 **What holds**
 
 - Your tailnet only, never Funnel: the board refuses every request Tailscale marks as Funnel
   (`Tailscale-Funnel-Request`), signed in or not, and `pnpm tailnet` refuses while Funnel is on.
-- The gate on every request from the network: through `tailscale serve` nothing answers without a
-  session or token of the public gate. That is every page, `/api/*`, `/api/mcp`, `/api/health` (public
-  on `localhost` only) and Vite's own files (`/@vite/*`, `/@fs/*`, `/src/*`, `public/` files); no
-  WebSocket opens there (hot reload is for this machine's browsers). A `Tailscale-User-*` header is
-  never a sign-in.
+- Sign-in on every request from the network: through `tailscale serve` nothing answers without a
+  session of the tailnet name or an agent token, but the sign-in pages (`/login`, `/enroll`, `/setup`,
+  which only says to finish on the host) and their `/api/auth/*` calls. That is every page, `/api/*`,
+  `/api/mcp`, `/api/health` (public on `localhost` only) and Vite's own files (`/@vite/*`, `/@fs/*`,
+  `/src/*`, `public/` files); no WebSocket opens there (hot reload is for this machine's browsers). A
+  `Tailscale-User-*` header is never a sign-in.
 - Only the board's own hosts: a request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` (any
-  port) or the `PUBLIC_ORIGIN` host gets a 403, and a write carrying the gate's cookie must come from
+  port) or the `PUBLIC_ORIGIN` host gets a 403, and a write carrying the session cookie must come from
   `http://localhost:<PORT>`, `http://127.0.0.1:<PORT>`, `http://[::1]:<PORT>` or `PUBLIC_ORIGIN`.
-- Previews stay on this machine: board-run previews never get the `PUBLIC_*` keys (nor `TAILNET_HOST`),
-  `pnpm dev` copies get them empty, and a board with its gate off (test mode, `AUTH=off`) ignores them
-  and refuses every request a proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`). Their
-  `http://127.0.0.1:<port>` links do not open on other devices.
-- `HOST` stays `127.0.0.1`, and both gates publish on `127.0.0.1` only (`docker-compose.gate.yml`):
-  nothing listens off this machine but Tailscale.
+- Previews stay on this machine: board-run previews never get `PUBLIC_ORIGIN`, `pnpm dev` copies get it
+  empty, and a board with sign-in off (test mode, `AUTH=off`) ignores it and refuses every request a
+  proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`). Their `http://127.0.0.1:<port>` links
+  do not open on other devices.
+- `HOST` stays `127.0.0.1`: nothing listens off this machine but Tailscale.
 
 ## Test mode
 
-`BOARD_ENV` says what a running board is, and so whether it asks the gate:
+`BOARD_ENV` says what a running board is, and so whether anyone signs in:
 
-| `BOARD_ENV`                | Who calls                                                                                                                                                                                   |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `production` (unset too)   | The gate, always, as above. The board (`pnpm start`) always runs this way, whatever the shell says.                                                                                         |
-| `development` (`pnpm dev`) | The gate, unless `AUTH=off`: then every request is the human, named `DEV_HUMAN` (by default the human the board last saw sign in, else `human`), with no login redirect.                    |
-| `test` (CI, Playwright)    | Nobody asks the gate. A request says who it is with `X-Test-Actor: human:<name>` or `agent:<name>` (REST and `/api/mcp` alike); without it, it is the human `TEST_HUMAN` (default `human`). |
+| `BOARD_ENV`                | Who calls                                                                                                                                                                              |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `production` (unset too)   | Whoever signed in, always, as above. The board (`pnpm start`) always runs this way, whatever the shell says.                                                                           |
+| `development` (`pnpm dev`) | Whoever signed in, unless `AUTH=off`: then every request is the human, named `DEV_HUMAN` (by default the human the board last saw sign in, else `human`), with no login redirect.      |
+| `test` (CI, Playwright)    | Nobody signs in. A request says who it is with `X-Test-Actor: human:<name>` or `agent:<name>` (REST and `/api/mcp` alike); without it, it is the human `TEST_HUMAN` (default `human`). |
 
 `agent:` callers are agents for every human-only check (403 on the project's agents, stages,
 settings, archive, decisions…), so both sides can be tested. The decision relay is the reverse: an
 agent-only route, so a human gets 403 and a call with `as` is refused, and a test sends `agent:` with
-no `as` for it. To try a branch without the gate:
+no `as` for it. With sign-in off the sign-in pages go to `/` and `/api/auth/*` answers 409. To try a
+branch without signing in:
 
 ```
 AUTH=off pnpm dev                       # in a worktree: a preview on the first free port from 47101, with a copy of the data
@@ -251,15 +261,15 @@ them stops it with a clear error and a non-zero exit:
 
 - an unknown `BOARD_ENV`, or `AUTH` other than `on` / `off`, is refused; `AUTH=off` with
   `BOARD_ENV=production` (or unset) is refused;
-- with the gate off, the board only listens on loopback (`HOST` 127.0.0.1, ::1 or localhost; the built
+- with sign-in off, the board only listens on loopback (`HOST` 127.0.0.1, ::1 or localhost; the built
   server's default, every interface, is refused) and never on 47100, the live board's port;
-- with the gate off, the board ignores `PUBLIC_ORIGIN`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` (it
-  says so as it starts) and answers a 403 to any request a proxy forwarded (`X-Forwarded-*`,
-  `Forwarded`, `Tailscale-*`), Vite's own files included; in every mode, a tailnet entrance only half
-  configured (Using it from other devices, above) stops the start;
+- with sign-in off, the board ignores `PUBLIC_ORIGIN` (it says so as it starts) and answers a 403 to
+  any request a proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`), Vite's own files
+  included; in every mode, a `PUBLIC_ORIGIN` it cannot trust (Using it from other devices, above)
+  stops the start;
 - `X-Test-Actor` is only read in test; in production and development it changes nothing;
 - `pnpm start` runs the board as production even from a shell with another `BOARD_ENV`;
-- with the gate off, the server prints `AUTH OFF: <mode>, signed in as <name>, do not expose this` on
+- with sign-in off, the server prints `AUTH OFF: <mode>, signed in as <name>, do not expose this` on
   stderr as it starts, and the top bar shows a red **test mode** / **auth off** badge (`/api/me` says
   `authOff`), so a screenshot is never taken for the live board.
 
@@ -347,6 +357,16 @@ are written through to `data/cache`, and any file an agent is handed (MCP, or RE
 fetched there first if it has gone; copies nobody opened for 30 days leave the cache. While MinIO is
 down, uploads fail with a clear error and cached files still open.
 
+## Tags
+
+Tickets and lanes carry short tags the human filters by (`?tag=` on the Board and the List, in any
+casing). Agents tag each ticket with the module it touches, a short name (`Auth`, `Board`, `MCP`),
+reusing an existing tag's casing rather than a new spelling: `get_project` (and GET
+`/api/projects/:id`) returns the project's `tagSuggestions` and `usedTags` (the tags its tickets
+carry, most used first, in the casing to reuse). The suggestions are offered as chips under every
+ticket's tags field; the human edits them on the project's Settings page, and an agent with the MCP
+tool `set_tag_suggestions` (`projectId`, `tags`) or PATCH `/api/projects/:id` `{tagSuggestions}`.
+
 ## Cleanup
 
 A project's Cleanup page (MCP `cleanup_report`) lists what its finished tickets left behind:
@@ -419,18 +439,27 @@ to GitHub.
 
 ## REST API
 
-All routes need the gate cookie or `Authorization: Bearer gate_…`; JSON in and out. `actor` is
-the gate device or token name.
+All routes need the board's session cookie or `Authorization: Bearer <token>` (Signing in, above),
+but `/api/health` on this machine and the sign-in calls; JSON in and out. `actor` is the account's
+name, or the agent token's.
 
 | Method       | Path                                                                                                          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | GET          | `/api/me`                                                                                                     | who you are `{actor, agent, boardEnv, authOff}`; `authOff` outside production only (see Test mode)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| GET          | `/api/agent-setup` · `/api/agent-setup/skill?client=claude\|codex\|opencode`                                  | board and gate URLs for the Connect agents page · the board skill as a SKILL.md with today's projects and repos                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| POST         | `/api/auth/setup/options` · `/api/auth/setup/verify`                                                          | first boot: the account (`{name}`) and its first passkey (`{device, response}`); only straight from this machine, only while there is no account (409 after, 403 elsewhere); sets the session cookie                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| POST         | `/api/auth/login/options` · `/api/auth/login/verify` · `/api/auth/logout`                                     | sign in with a passkey of the origin used (`{response}`), setting the session cookie · end this session on the server                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| POST         | `/api/auth/enrol-links`                                                                                       | a one-time link for another device `{expiresAt, links[]}` (15 minutes, used once; on the tailnet name and on this machine); the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| POST         | `/api/auth/enrol/options` · `/api/auth/enrol/verify`                                                          | that device's passkey (`{code}`, then `{code, device, response}`), on the RP ID of the origin used; sets the session cookie                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| GET/DELETE   | `/api/auth/passkeys` · `/api/auth/passkeys/:id`                                                               | the passkeys `{name, rpId, createdAt, lastUsedAt, sessions}` · revoke one and end its sessions (409 for the last one of this machine); the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| GET/DELETE   | `/api/auth/sessions` · `/api/auth/sessions/:id`                                                               | the live sessions `{passkey, rpId, createdAt, lastSeenAt, expiresAt, current}` · end one; the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| POST         | `/api/agent-tokens`                                                                                           | a new agent token `{name}` (the agent's name on the board, never the human's; 409 for it): `{id, name, token, createdAt, expiresAt}`, the token in this answer only; it signs in for a year; the human's (an agent gets 403)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| GET/DELETE   | `/api/agent-tokens` · `/api/agent-tokens/:id`                                                                 | the tokens not revoked `{id, name, createdAt, lastUsedAt, expiresAt}`, never a token or its hash · revoke one: its next request gets 401; the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| GET          | `/api/agent-setup` · `/api/agent-setup/skill?client=claude\|codex\|opencode`                                  | the board's URL for the Connect agents page · the board skill as a SKILL.md with today's projects and repos                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | GET          | `/api/agent-setup/review-skills` · `?list`                                                                    | the feature-review, review-queue and todo-review skills with their agents, as a tar to extract into `~/.claude` · the paths it holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | GET          | `/api/agent-setup/review-skills/status` · `?projectId=`                                                       | whether those files are installed as served: `{files, global, repos[]}`. `global` is the user-wide `~/.claude` of the machine the board runs on (`CLAUDE_HOME`): `{path, installTo, status, files[]}`, where `installTo` is the folder its install line targets when `CLAUDE_HOME` names one other than `~/.claude`, else null (the line installs into `~/.claude`). Each of `repos` is a repo's own `.claude` (every repo, or the project's) with its project, `repoPath`, `status` and `files[]`. A `status` is `none` (no copy; a repo then uses `~/.claude`), `current`, `outdated` or `unreachable`; each file is `{path, status}`                                                                                                          |
 | GET          | `/api/agent-setup/review-skills/diff?path=&repoId=`                                                           | one of those files as installed against as served, line endings aside, as git shows it: `{path, status, installed, unreadable, header, hunks[]}`. `path` must be one of the bundle's (else 400/404); `repoId` reads that repo's `.claude`, none `~/.claude` (409 if it can't be read). Old side: the installed copy (`/dev/null` when `missing`); new: the served one. `unreadable`: why a copy there can't be read. Read-only                                                                                                                                                                                                                                                                                                                   |
 | GET/PATCH    | `/api/settings` `{defaultAgent, previewLimit, skillsTracking}`                                                | board-wide preferences (PATCH is the human's only); `previewLimit`: how many previews the board runs at once, 1 to 32, 8 by default; `skillsTracking`: the copy of the review skills the Agents pages show, `global` (`~/.claude`, the default) or `repo` (each repo's own)                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| GET/POST     | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                                                        | projects with their `repos[]`, `stages[]` and `agents[]`; `instructions` is the agents' briefing; `defaultPhases`: a new ticket's phases (GET: the list in effect, built in Implementation, Pushed, PR, CI, Preview, Hand-off post; PATCH a list, `[]` for none, null for the built-in; the human's)                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| GET/POST     | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                                                        | projects with their `repos[]`, `stages[]` and `agents[]`; `instructions` is the agents' briefing; `defaultPhases`: a new ticket's phases (GET: the list in effect, built in Implementation, Pushed, PR, CI, Preview, Hand-off post; PATCH a list, `[]` for none, null for the built-in; the human's); `tagSuggestions`: the tags offered under a ticket's tags field (Bug, UI, Implementation, Report until changed; PATCH a list, trimmed, repeats in any casing dropped, `[]` for none; MCP `set_tag_suggestions`); GET's `usedTags`: the tags the project's tickets carry, most used first, in the casing to reuse                                                                                                                            |
 | GET/POST     | `/api/projects/:id/agents` · PATCH/DELETE `/api/agents/:id`                                                   | the project's agents `{name, instructions, delegation, avatarId}` (writes are the human's); a ticket assigned to one is reserved                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | POST         | `/api/projects/:id/agents/defaults`                                                                           | adds the default agents the project lacks (spec, builder, runner, env, verify, hunt, refute, merge), each with instructions and delegation notes; the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | GET/POST     | `/api/projects/:id/stages` · PATCH/DELETE `/api/projects/:id/stages/:stageId`                                 | board columns `{name, kind, color}`; DELETE takes `?moveTo=<key>` when it has tickets (`&force=1` into a done stage past needs not merged)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -497,7 +526,7 @@ the gate device or token name.
 
 ```
 pnpm dev             # in a worktree: a copy on the first free port from 47101 with its own data (data/dev, a copy of the board's; --fresh copies again); refused in the main checkout
-AUTH=off pnpm dev    # the same without the passkey gate: you are the human (Test mode, above)
+AUTH=off pnpm dev    # the same with sign-in off: you are the human (Test mode, above)
 pnpm typecheck       # tsc
 pnpm lint            # oxlint
 pnpm format          # prettier
@@ -538,9 +567,10 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   `--screenshot <png>`, `--busy-screenshot <png>`, `--data-dir-screenshot <png>`,
   `--app-folder-screenshot <png>`, `--unwritable-screenshot <png>`): copies the unpacked app (or
   `--app`, an installed one) to a temp folder and runs it there with its own settings folder and
-  data, the passkey-gate stood in for by a loopback server that signs anyone in. It checks that the
-  board answers `/api/health` and the window shows it, that a project made through the API survives
-  a restart, that a second launch brings the first window back, that Quit frees the port, that
+  data, the platform's passkeys stood in for by Chromium's virtual authenticator. It checks that the
+  board answers `/api/health`, that the window opens on `/setup` on the fresh data and setup signs it
+  in, that the signed-in window makes an agent token, that a project made through the API with it
+  survives a restart (the window still signed in), that a second launch brings the first window back, that Quit frees the port, that
   `config.env`'s `PORT` and `DATA_DIR` are used, that a busy port (on loopback or on every interface)
   and a `DATA_DIR` or `AGENT_BOARD_HOME` that cannot be made or written are reported in a dialog
   that ends the app, and that a second launch after a failure is harmless. It never runs on 47100

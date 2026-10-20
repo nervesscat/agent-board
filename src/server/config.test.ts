@@ -21,7 +21,7 @@ import {
 const safe = { host: '127.0.0.1', port: 47131 }
 
 describe('readAuthMode', () => {
-  it('is production, with the gate, when BOARD_ENV is unset or empty', () => {
+  it('is production, with sign-in, when BOARD_ENV is unset or empty', () => {
     expect(readAuthMode({})).toEqual({ boardEnv: 'production', off: false, human: null })
     expect(readAuthMode({ BOARD_ENV: '' })).toEqual({ boardEnv: 'production', off: false, human: null })
     expect(readAuthMode({ BOARD_ENV: 'production', AUTH: 'on' }).off).toBe(false)
@@ -30,7 +30,9 @@ describe('readAuthMode', () => {
   it('refuses AUTH=off in production, however it is spelled', () => {
     for (const env of [{ AUTH: 'off' }, { BOARD_ENV: 'production', AUTH: 'off' }, { AUTH: ' OFF ' }])
       expect(() => readAuthMode(env)).toThrow(StartupError)
-    expect(() => readAuthMode({ AUTH: 'off' })).toThrow(/AUTH=off is refused with BOARD_ENV=production/)
+    expect(() => readAuthMode({ AUTH: 'off' })).toThrow(
+      'AUTH=off is refused with BOARD_ENV=production: the live board always requires sign-in',
+    )
   })
 
   it('refuses an unknown BOARD_ENV or AUTH', () => {
@@ -40,7 +42,7 @@ describe('readAuthMode', () => {
     expect(() => readAuthMode({ AUTH: '0' })).toThrow(StartupError)
   })
 
-  it('keeps the gate in development unless AUTH=off', () => {
+  it('keeps sign-in in development unless AUTH=off', () => {
     expect(readAuthMode({ BOARD_ENV: 'development' })).toEqual({
       boardEnv: 'development',
       off: false,
@@ -57,7 +59,7 @@ describe('readAuthMode', () => {
     )
   })
 
-  it('never asks the gate in test, with the human named by TEST_HUMAN or `human`', () => {
+  it('never signs anyone in in test, with the human named by TEST_HUMAN or `human`', () => {
     expect(readAuthMode({ BOARD_ENV: 'test' })).toEqual({ boardEnv: 'test', off: true, human: 'human' })
     expect(readAuthMode({ BOARD_ENV: 'test', AUTH: 'on', TEST_HUMAN: 'qa' })).toEqual({
       boardEnv: 'test',
@@ -71,7 +73,7 @@ describe('checkBind', () => {
   const test = readAuthMode({ BOARD_ENV: 'test' })
   const devOff = readAuthMode({ BOARD_ENV: 'development', AUTH: 'off' })
 
-  it('lets a gate-off board listen on loopback, on any port but the live one', () => {
+  it('lets a board without sign-in listen on loopback, on any port but the live one', () => {
     for (const auth of [test, devOff])
       for (const host of ['127.0.0.1', '::1', '[::1]', 'localhost', 'LOCALHOST'])
         expect(() => checkBind(auth, { host, port: 47131 })).not.toThrow()
@@ -81,6 +83,9 @@ describe('checkBind', () => {
     for (const auth of [test, devOff])
       for (const host of [undefined, '', '0.0.0.0', '::', '192.168.1.20', 'board.example.com', '127.0.0.2'])
         expect(() => checkBind(auth, { host, port: 47131 })).toThrow(/only listens on loopback/)
+    expect(() => checkBind(test, { host: '0.0.0.0', port: 47131 })).toThrow(
+      /^sign-in is off \(BOARD_ENV=test\), so the board only listens on loopback/,
+    )
   })
 
   it("refuses the live board's port", () => {
@@ -89,7 +94,7 @@ describe('checkBind', () => {
       expect(() => checkBind(auth, { ...safe, port: 47100 })).toThrow(/live board's port/)
   })
 
-  it('leaves a board with the gate alone, wherever it listens', () => {
+  it('leaves a board with sign-in alone, wherever it listens', () => {
     for (const env of [{}, { BOARD_ENV: 'development' }])
       for (const bind of [
         { host: undefined, port: 47100 },
@@ -105,14 +110,14 @@ describe('builtServerBind', () => {
     expect(
       builtServerBind({ NITRO_HOST: '0.0.0.0', HOST: '127.0.0.1', NITRO_PORT: '47100', PORT: '1' }),
     ).toEqual({ host: '0.0.0.0', port: 47100 })
-    // No HOST: Nitro listens on every interface, which a gate-off board refuses.
+    // No HOST: Nitro listens on every interface, which a board without sign-in refuses.
     expect(builtServerBind({ PORT: '47131' })).toEqual({ host: undefined, port: 47131 })
     expect(builtServerBind({})).toEqual({ host: undefined, port: 3000 })
   })
 })
 
 describe('authOffBanner', () => {
-  it('says the gate is off, who you are and not to expose it', () => {
+  it('says sign-in is off, who you are and not to expose it', () => {
     expect(authOffBanner(readAuthMode({ BOARD_ENV: 'development', AUTH: 'off' }), 'enrique')).toBe(
       'AUTH OFF: development, signed in as enrique, do not expose this',
     )
@@ -131,54 +136,19 @@ describe('readPort', () => {
 })
 
 describe('the tailnet entrance', () => {
-  const keys = {
-    PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net',
-    PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443',
-    PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111',
-  }
-  const entrance = {
-    origin: 'https://devbox.example-tailnet.ts.net',
-    host: 'devbox.example-tailnet.ts.net',
-    gateUrl: 'https://devbox.example-tailnet.ts.net:8443',
-    gateAuthUrl: 'http://127.0.0.1:47111',
-  }
+  const keys = { PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net' }
+  const entrance = { origin: 'https://devbox.example-tailnet.ts.net', host: 'devbox.example-tailnet.ts.net' }
 
-  it('is off when none of its keys is set', () => {
+  it('is off when PUBLIC_ORIGIN is not set', () => {
     expect(readPublicEntrance({})).toBeNull()
-    expect(
-      readPublicEntrance({ PUBLIC_ORIGIN: '', PUBLIC_GATE_URL: ' ', PUBLIC_GATE_AUTH_URL: undefined }),
-    ).toBeNull()
+    expect(readPublicEntrance({ PUBLIC_ORIGIN: ' ' })).toBeNull()
     expect(readServedEntrance({})).toBeNull()
   })
 
-  it('reads all three, as origins', () => {
+  it('reads PUBLIC_ORIGIN as an origin, and its host as the public host', () => {
     expect(readPublicEntrance(keys)).toEqual(entrance)
-    expect(
-      readPublicEntrance({
-        PUBLIC_ORIGIN: ' https://DevBox.Example-Tailnet.ts.net/ ',
-        PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443/',
-        PUBLIC_GATE_AUTH_URL: 'http://[::1]:47111/',
-      }),
-    ).toEqual({ ...entrance, gateAuthUrl: 'http://[::1]:47111' })
-    expect(readPublicEntrance({ ...keys, PUBLIC_GATE_AUTH_URL: 'http://localhost:47111' })).toEqual({
-      ...entrance,
-      gateAuthUrl: 'http://localhost:47111',
-    })
-  })
-
-  it('takes all three or none: a half configuration stops the start', () => {
-    const names = Object.keys(keys) as (keyof typeof keys)[]
-    for (const left of names) {
-      const one = { [left]: keys[left] }
-      expect(() => readPublicEntrance(one)).toThrow(StartupError)
-      const two = { ...keys, [left]: '' }
-      expect(() => readPublicEntrance(two)).toThrow(/together, or none of them/)
-    }
-    expect(() => readPublicEntrance({ PUBLIC_ORIGIN: keys.PUBLIC_ORIGIN })).toThrow(
-      'PUBLIC_ORIGIN is set, PUBLIC_GATE_URL and PUBLIC_GATE_AUTH_URL not',
-    )
-    expect(() => readPublicEntrance({ ...keys, PUBLIC_GATE_URL: '' })).toThrow(
-      'PUBLIC_ORIGIN and PUBLIC_GATE_AUTH_URL are set, PUBLIC_GATE_URL not',
+    expect(readPublicEntrance({ PUBLIC_ORIGIN: ' https://DevBox.Example-Tailnet.ts.net/ ' })).toEqual(
+      entrance,
     )
   })
 
@@ -201,82 +171,31 @@ describe('the tailnet entrance', () => {
       'https://<machine>.<tailnet>.ts.net',
       'devbox.example-tailnet.ts.net',
     ])
-      expect(() => readPublicEntrance({ ...keys, PUBLIC_ORIGIN: origin }), origin).toThrow(
+      expect(() => readPublicEntrance({ PUBLIC_ORIGIN: origin }), origin).toThrow(
         /^PUBLIC_ORIGIN must be https:\/\/<machine>\.<tailnet>\.ts\.net/,
       )
   })
 
-  it("refuses a public gate on another host, on the board's own origin, over http or with a path", () => {
-    for (const gate of [
-      'https://other.example-tailnet.ts.net:8443',
-      'https://example-tailnet.ts.net:8443',
-      'https://devbox.example-tailnet.ts.net',
-      'https://devbox.example-tailnet.ts.net:443',
-      'http://devbox.example-tailnet.ts.net:8443',
-      'https://devbox.example-tailnet.ts.net:8443/login',
-      'https://*.example-tailnet.ts.net:8443',
-      'https://127.0.0.1:8443',
-    ])
-      expect(() => readPublicEntrance({ ...keys, PUBLIC_GATE_URL: gate }), gate).toThrow(
-        /^PUBLIC_GATE_URL must be https:\/\/devbox\.example-tailnet\.ts\.net:<port>/,
-      )
-  })
-
-  it('asks the public gate over loopback http only', () => {
-    for (const auth of [
-      'http://192.168.1.20:47111',
-      'http://100.101.102.103:47111',
-      'http://devbox.example-tailnet.ts.net:47111',
-      'https://127.0.0.1:47111',
-      'http://127.0.0.2:47111',
-      'http://0.0.0.0:47111',
-      'http://[::]:47111',
-      'http://127.0.0.1:47111/auth',
-      'http://user:secret@127.0.0.1:47111',
-      '127.0.0.1:47111',
-    ])
-      expect(() => readPublicEntrance({ ...keys, PUBLIC_GATE_AUTH_URL: auth }), auth).toThrow(
-        /^PUBLIC_GATE_AUTH_URL must be http:\/\/127\.0\.0\.1:<port>/,
-      )
-  })
-
-  it('refuses the localhost gate for the public one: each origin has a gate of its own', () => {
-    for (const auth of ['http://127.0.0.1:47110', 'http://localhost:47110', 'http://[::1]:47110'])
-      expect(() => readPublicEntrance({ ...keys, PUBLIC_GATE_AUTH_URL: auth }), auth).toThrow(
-        /is the localhost gate of GATE_URL/,
-      )
-    const gate = { GATE_URL: 'http://localhost:47263' }
-    expect(() =>
-      readPublicEntrance({ ...keys, ...gate, PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47263' }),
-    ).toThrow(/localhost gate/)
-    expect(readPublicEntrance({ ...keys, ...gate, PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47262' })).toEqual({
-      ...entrance,
-      gateAuthUrl: 'http://127.0.0.1:47262',
-    })
-  })
-
-  it('is served with the gate on, in production and in development', () => {
+  it('is served with sign-in on, in production and in development', () => {
     expect(readServedEntrance(keys)).toEqual(entrance)
     expect(readServedEntrance({ ...keys, BOARD_ENV: 'production', AUTH: 'on' })).toEqual(entrance)
     expect(readServedEntrance({ ...keys, BOARD_ENV: 'development' })).toEqual(entrance)
   })
 
-  it('is ignored with the gate off (test, development with AUTH=off), and says so', () => {
+  it('is ignored with sign-in off (test, development with AUTH=off), and says so', () => {
     for (const env of [{ BOARD_ENV: 'test' }, { BOARD_ENV: 'development', AUTH: 'off' }]) {
       expect(readServedEntrance({ ...keys, ...env })).toBeNull()
       expect(entranceIgnored(readAuthMode(env))).toMatch(
-        new RegExp(
-          `^the gate is off \\(${env.BOARD_ENV}\\), so PUBLIC_ORIGIN.* are ignored: .*loopback only`,
-        ),
+        new RegExp(`^sign-in is off \\(${env.BOARD_ENV}\\), so PUBLIC_ORIGIN is ignored: .*loopback only`),
       )
     }
-    // Ignored, but still checked: a half configuration stops a gate-off board too.
-    expect(() => readServedEntrance({ BOARD_ENV: 'test', PUBLIC_ORIGIN: keys.PUBLIC_ORIGIN })).toThrow(
+    // Ignored, but still checked: a PUBLIC_ORIGIN it cannot trust stops a board without sign-in too.
+    expect(() => readServedEntrance({ BOARD_ENV: 'test', PUBLIC_ORIGIN: 'http://devbox' })).toThrow(
       StartupError,
     )
   })
 
-  it('does not change who answers, or where a gate-off board may listen', () => {
+  it('does not change who answers, or where a board without sign-in may listen', () => {
     expect(readAuthMode({ ...keys })).toEqual({ boardEnv: 'production', off: false, human: null })
     expect(() => readAuthMode({ ...keys, AUTH: 'off' })).toThrow(/AUTH=off is refused/)
     const test = readAuthMode({ ...keys, BOARD_ENV: 'test' })
@@ -295,17 +214,12 @@ describe('servedEntrance', () => {
   afterEach(() => vi.unstubAllEnvs())
 
   it("is the process's entrance, read from its environment", async () => {
-    const keys = {
-      PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net',
-      PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443',
-      PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111',
-    }
+    const keys = { PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net' }
     expect(await load({ ...keys, BOARD_ENV: 'production', AUTH: '' })).toMatchObject({
       host: 'devbox.example-tailnet.ts.net',
     })
     expect(await load({ ...keys, BOARD_ENV: 'test' })).toBeNull()
-    const none = { PUBLIC_ORIGIN: '', PUBLIC_GATE_URL: '', PUBLIC_GATE_AUTH_URL: '' }
-    expect(await load({ ...none, BOARD_ENV: 'production' })).toBeNull()
+    expect(await load({ PUBLIC_ORIGIN: '', BOARD_ENV: 'production' })).toBeNull()
   })
 })
 

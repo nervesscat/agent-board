@@ -11,11 +11,13 @@ import {
   STAGE_KINDS,
   FEED_TABS,
 } from '#/lib/constants'
+import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
 import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
+import { authRoutes } from './authApi'
 import { cleanupReport } from './cleanup'
 import { DeleteItems, deleteLeftovers } from './cleanupActions'
 import { authMode } from './config'
@@ -54,6 +56,7 @@ import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import * as tokens from './tokens'
 import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
 import * as uploads from './uploads'
@@ -112,6 +115,32 @@ api.get('/api/me', ({ request, actor }) =>
 )
 // Every name the board has seen sign in, with whether it is an agent or a human.
 api.get('/api/actors', () => json(listActors()))
+// Signing in with passkeys, signing out, and the devices section (authApi.ts).
+authRoutes(api)
+
+// --- the agent tokens Connect agents makes, lists and revokes (tokens.ts): the human's alone ---
+const TokenName = z
+  .string()
+  .trim()
+  .regex(AGENT_TOKEN_NAME, 'name: a letter or digit, then letters, digits, ".", "_" or "-", 40 at most')
+const tokensHumanOnly = (request: Request, what: string) => {
+  if (isAgent(request)) throw new HttpError(403, `only the human ${what}`)
+}
+// The token itself is in this answer only: the board keeps its hash.
+api.post('/api/agent-tokens', async ({ request }) => {
+  tokensHumanOnly(request, 'makes agent tokens')
+  const { name } = await readJson(request, z.object({ name: TokenName }))
+  return json(tokens.mintAgentToken(name), 201)
+})
+api.get('/api/agent-tokens', ({ request }) => {
+  tokensHumanOnly(request, 'lists agent tokens')
+  return json(tokens.listAgentTokens())
+})
+api.delete('/api/agent-tokens/:id', ({ request, params }) => {
+  tokensHumanOnly(request, 'revokes agent tokens')
+  tokens.revokeAgentToken(id(params))
+  return new Response(null, { status: 204 })
+})
 
 // --- connecting agents: board settings, and the skill each CLI installs ---
 api.get('/api/agent-setup', () => json(agents.agentSetup()))
@@ -180,6 +209,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       name: z.string().min(1).max(100).optional(),
       instructions: Instructions.optional(),
       defaultPhases: DefaultPhases.optional(),
+      tagSuggestions: projects.TagSuggestions.optional(),
     }),
   )
   // They shape every new ticket of the project: agents change the phases of a ticket instead.

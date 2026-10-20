@@ -155,7 +155,7 @@ export function resolveSettings({ env, file, home }) {
     PORT: String(port),
     NITRO_PORT: String(port),
     DATA_DIR: dataDir,
-    // Where sign-in sends the browser back: the window's own origin.
+    // The board's address in what it hands agents (Connect agents): the window's own origin.
     BOARD_URL: pick('BOARD_URL') || url,
   }
   for (const key of ['DEV_HUMAN', 'TEST_HUMAN', 'BOARD_DATA_COPY']) delete serverEnv[key]

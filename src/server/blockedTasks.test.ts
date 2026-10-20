@@ -294,7 +294,7 @@ describe('the blocked tag on a task', () => {
   it('an agent sets and clears it over REST as the human does', async () => {
     const t = ticket('agent', ['a'])
     const a = byText(t.id, 'a')
-    const asAgent = { authorization: 'Bearer gate_test' }
+    const asAgent = { authorization: 'Bearer token-of-test' }
     const me = (await (await call('GET', '/api/me', undefined, asAgent)).json()) as { agent: boolean }
     expect(me.agent).toBe(true)
     const set = await call(

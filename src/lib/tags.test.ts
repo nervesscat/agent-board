@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { addTags, MAX_TAG_LENGTH, MAX_TAGS, normalizeTag, overTagLimits, tagTooLong } from './tags'
+import {
+  addTags,
+  cleanSuggestions,
+  MAX_TAG_LENGTH,
+  MAX_TAGS,
+  normalizeTag,
+  overTagLimits,
+  tagChoices,
+  tagTooLong,
+  usedTags,
+} from './tags'
 
 describe('addTags', () => {
   it('adds each comma-separated part, trimmed, in order', () => {
@@ -78,5 +88,44 @@ describe('tagTooLong', () => {
   it('is over 40 characters, by length', () => {
     expect(tagTooLong('x'.repeat(40))).toBe(false)
     expect(tagTooLong('x'.repeat(41))).toBe(true)
+  })
+})
+
+describe('usedTags', () => {
+  it('lists each tag once, most used first, in the casing used most', () => {
+    expect(usedTags([['Forms', 'ui'], ['UI', 'Login'], ['UI'], ['forms']])).toEqual(['UI', 'Forms', 'Login'])
+  })
+
+  it('keeps the first casing seen on a tie, and the first tag seen on an equal count', () => {
+    expect(usedTags([['api'], ['API'], ['Docs']])).toEqual(['api', 'Docs'])
+    expect(usedTags([])).toEqual([])
+  })
+})
+
+describe('tagChoices', () => {
+  it('offers the suggestions, then the used tags, each once in any casing', () => {
+    expect(tagChoices(['Bug', 'UI'], ['Forms', 'bug'], [])).toEqual(['bug', 'UI', 'Forms'])
+  })
+
+  it('offers a suggestion in the casing the tickets already use', () => {
+    expect(tagChoices(['UI'], ['ui'], [])).toEqual(['ui'])
+  })
+
+  it('leaves out the tags already added, in any casing', () => {
+    expect(tagChoices(['Bug', 'UI'], ['Forms'], ['ui', 'FORMS'])).toEqual(['Bug'])
+  })
+})
+
+describe('cleanSuggestions', () => {
+  it('trims, joins whitespace runs, and drops blanks and repeats in any casing', () => {
+    expect(cleanSuggestions([' Bug ', 'login   form', '', ' ', 'BUG', 'UI'])).toEqual([
+      'Bug',
+      'login form',
+      'UI',
+    ])
+  })
+
+  it('keeps an empty list empty', () => {
+    expect(cleanSuggestions([])).toEqual([])
   })
 })

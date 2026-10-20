@@ -14,7 +14,7 @@ const AGENTS = ['claude', 'codex', 'opencode', 'gemini', 'cursor', 'agent', 'bot
 /** Only for names the board has never seen sign in (e.g. history from before it started keeping track). */
 const guess = (name: string): Kind => (AGENTS.some((a) => name.toLowerCase().includes(a)) ? 'agent' : 'human')
 
-/** How each name signs in: a gate token is an agent, the browser's passkey session is a human. */
+/** How each name signs in: an agent token is an agent, the browser's passkey session is a human. */
 export function useActorKinds() {
   const { data } = useQuery({
     queryKey: ['actors'],
@@ -56,7 +56,11 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
   const Icon = kind === 'agent' ? Bot : User
   return (
     <Tip
-      content={kind === 'agent' ? `${name} (agent, gate token)` : `${name} (you, signed in with a passkey)`}
+      content={
+        kind === 'agent'
+          ? `${name} (agent, signed in with a token)`
+          : `${name} (you, signed in with a passkey)`
+      }
     >
       <span className={`inline-flex items-baseline gap-1 font-medium ${className}`}>
         <Picture>

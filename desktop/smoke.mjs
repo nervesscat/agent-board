@@ -8,7 +8,8 @@
 //
 // It copies the unpacked app to a temporary folder outside the repo and runs it there with its own
 // AGENT_BOARD_HOME and DATA_DIR, so no pnpm, node, source or live data is involved, then checks that:
-//   - the board answers /api/health and the window shows it (signed in through a stand-in gate);
+//   - the board answers /api/health, the window opens on /setup on fresh data, setup signs it in with
+//     a passkey, and the signed-in window makes an agent token for the API calls below;
 //   - a project made through the API survives a restart (migrations, the Electron-ABI driver);
 //   - a second launch exits and brings the first window back;
 //   - Quit stops the server and frees the port;
@@ -18,11 +19,10 @@
 //     written; closing the dialog ends the app with exit 1;
 //   - a second launch after a failure, its window closed, raises nothing in the first copy.
 //
-// The passkey-gate the board asks is the one thing stood in for: a loopback server that signs in
-// any browser through /login and answers /auth for its cookie and a fixed token, as the gate does.
+// The platform's passkeys are the one thing stood in for: Chromium's virtual authenticator (CDP
+// WebAuthn) in the window, which says yes at once.
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
-import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -46,8 +46,8 @@ const busyScreenshot = arg('--busy-screenshot', '')
 const dataDirScreenshot = arg('--data-dir-screenshot', '')
 const appFolderScreenshot = arg('--app-folder-screenshot', '')
 const unwritableScreenshot = arg('--unwritable-screenshot', '')
-const TOKEN = 'gate_smoke'
-const SESSION = 'gate_session=smoke'
+/** The agent token the signed-in window makes in step 1, for the API calls after it. */
+let token = ''
 
 const sleep = (/** @type {number} */ ms) => new Promise((r) => setTimeout(r, ms))
 let failed = false
@@ -76,41 +76,11 @@ console.log(`copying the app to ${appDir}`)
 fs.cpSync(appSrc, appDir, { recursive: true })
 const exe = path.join(appDir, process.platform === 'win32' ? 'agent-board.exe' : 'agent-board')
 
-// --- the stand-in gate, on both loopbacks so `localhost` reaches it whichever one it tries ---
-const gate = http.createServer((req, res) => {
-  const url = new URL(req.url ?? '/', 'http://localhost')
-  if (url.pathname === '/login') {
-    res.writeHead(302, {
-      'set-cookie': `${SESSION}; Path=/; HttpOnly`,
-      location: url.searchParams.get('rd') ?? '/',
-    })
-    return res.end()
-  }
-  if (url.pathname === '/auth') {
-    const who =
-      req.headers.authorization === `Bearer ${TOKEN}`
-        ? 'smoke-agent'
-        : (req.headers.cookie ?? '').includes(SESSION)
-          ? 'smoke-human'
-          : null
-    res.writeHead(who ? 200 : 401, who ? { 'x-gate-device': who } : {})
-    return res.end()
-  }
-  res.writeHead(404).end()
-})
-await new Promise((resolve) => gate.listen(0, '127.0.0.1', () => resolve(null)))
-const gatePort = /** @type {net.AddressInfo} */ (gate.address()).port
-const gate6 = http.createServer((req, res) => gate.emit('request', req, res))
-await new Promise((resolve) => {
-  gate6.once('error', resolve) // no IPv6 here: 127.0.0.1 is enough
-  gate6.listen(gatePort, '::1', () => resolve(null))
-})
-
 /** The environment of a run: everything but what the app decides itself, and `extra`. */
 /** @param {Record<string, string>} extra */
 function appEnv(extra) {
   /** @type {Record<string, string | undefined>} */
-  const env = { ...process.env, AGENT_BOARD_HOME: home, GATE_URL: `http://localhost:${gatePort}`, ...extra }
+  const env = { ...process.env, AGENT_BOARD_HOME: home, ...extra }
   for (const key of ['ELECTRON_RUN_AS_NODE', 'PORT', 'DATA_DIR', 'BOARD_ENV', 'AUTH', 'BOARD_URL'])
     if (!(key in extra)) delete env[key]
   return env
@@ -137,7 +107,7 @@ async function waitHealthy(p, ms = 90_000) {
 const api = (p, route, init = {}) =>
   fetch(`http://127.0.0.1:${p}${route}`, {
     ...init,
-    headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json', ...init.headers },
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', ...init.headers },
   })
 
 /** @param {Record<string, string | undefined>} env */
@@ -172,13 +142,45 @@ try {
   console.log(`\n1. start on :${port} with DATA_DIR=${dataDir}`)
   let app = await launch(appEnv({ PORT: String(port), DATA_DIR: dataDir }))
   check(await waitHealthy(port), `/api/health answers 200 on :${port}`)
+  const before = await fetch(`http://127.0.0.1:${port}/api/projects`, {
+    headers: { accept: 'application/json' },
+  })
+  check(before.status === 409, `with no account yet the API answers 409 setup required (${before.status})`)
   const win = await app.firstWindow()
-  await win.waitForURL(`http://localhost:${port}/**`, { timeout: 30_000 })
+  // The window's passkeys: a virtual platform authenticator that says yes at once.
+  const cdp = await app.context().newCDPSession(win)
+  await cdp.send('WebAuthn.enable')
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  })
+  await win.waitForURL(`http://localhost:${port}/setup`, { timeout: 30_000 })
+  check(true, `the window opens on the board's own setup page (${win.url()})`)
+  await win.getByLabel('Your name on the board').fill('Smoke')
+  await win.getByLabel('This device').fill('Smoke window')
+  await win.getByRole('button', { name: 'Create passkey' }).click()
+  await win.waitForURL(`http://localhost:${port}/`, { timeout: 30_000 })
   await win.waitForLoadState('networkidle')
   check(
     (await win.title()) === 'CrossBoard',
-    `the window shows the board (${win.url()}, "${await win.title()}")`,
+    `setup signs the window in and it shows the board (${win.url()}, "${await win.title()}")`,
   )
+  const made = await win.evaluate(async () => {
+    const res = await fetch('/api/agent-tokens', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'smoke-agent' }),
+    })
+    return { status: res.status, body: res.ok ? await res.json() : null }
+  })
+  token = made.body?.token ?? ''
+  check(made.status === 201 && token !== '', `the signed-in window makes an agent token (${made.status})`)
   const created = await api(port, '/api/projects', {
     method: 'POST',
     body: JSON.stringify({ name: projectName }),
@@ -216,6 +218,9 @@ try {
   console.log('\n2. restart on the same data')
   app = await launch(appEnv({ PORT: String(port), DATA_DIR: dataDir }))
   check(await waitHealthy(port), `/api/health answers 200 again`)
+  const win2 = await app.firstWindow()
+  await win2.waitForURL(`http://localhost:${port}/`, { timeout: 30_000 })
+  check(true, `the window is still signed in after the restart (${win2.url()})`)
   const projects = await (await api(port, '/api/projects')).json()
   check(
     Array.isArray(projects) && projects.some((p) => p.name === projectName),
@@ -340,8 +345,6 @@ try {
   console.error(err)
   failed = true
 } finally {
-  gate.close()
-  gate6.close()
   // The app's processes are gone; their files may take a moment to let go on Windows.
   for (let i = 0; i < 10; i++) {
     try {

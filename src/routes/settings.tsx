@@ -3,8 +3,9 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
 import { AgentPicker } from '#/components/AgentPicker'
+import { Devices } from '#/components/Devices'
 import { PreviewLimitEditor } from '#/components/Preview'
-import { errorMessage, get, patch } from '#/lib/api'
+import { errorMessage, get, type Me, patch } from '#/lib/api'
 import type { Settings } from '#/server/agents'
 
 export const Route = createFileRoute('/settings')({ component: BoardSettings })
@@ -13,6 +14,7 @@ export const Route = createFileRoute('/settings')({ component: BoardSettings })
 function BoardSettings() {
   const qc = useQueryClient()
   const { data } = useQuery({ queryKey: ['settings'], queryFn: () => get<Settings>('/api/settings') })
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
   const save = useMutation({
     mutationFn: (p: Partial<Settings>) => patch<Settings>('/api/settings', p),
     onSuccess: (s) => {
@@ -46,6 +48,8 @@ function BoardSettings() {
         </p>
         <PreviewLimitEditor key={data.previewLimit} id="settings-preview-limit" limit={data.previewLimit} />
       </section>
+      {/* With sign-in off (test mode, AUTH=off) there are no passkeys to show. */}
+      {me && !me.authOff && !me.agent && <Devices />}
     </div>
   )
 }
