@@ -749,6 +749,73 @@ test('a PR to review lands on its card with the queue already loaded and a filte
   await reviewFromCachedQueue(page, project)
 })
 
+test('a second link to a PR in the same visit, after the reader picked a filter that hides it, shows it again', async ({
+  page,
+  project,
+  human,
+}) => {
+  const target = seedPr(project, {
+    title: 'Linked twice',
+    waitingOn: 'others',
+    stage: 'reviewed',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  })
+  for (let i = 0; i < 12; i++)
+    seedPr(project, { title: `Mine too ${i}`, waitingOn: 'others', stage: 'reviewed' })
+  // A PR to review whose review result links back to the first one.
+  const other = seedPr(project, { title: 'Points back' })
+  await ok<Row>(
+    human.post(`/api/projects/${project.id}/reviews/results`, {
+      data: {
+        prNumber: other.number,
+        sha: 'abcdef1234567',
+        verdict: 'SHIP',
+        summaryMd: `Goes with [the first one](#pr-${target.id}).`,
+      },
+    }),
+  )
+  // Read under the review result too, which hides the queue from assistive tech while it is open.
+  const tab = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`), includeHidden: true })
+  const card = page.locator(`#pr-${target.id}`)
+
+  await page.goto(`/projects/${project.id}/prs#pr-${target.id}`)
+  await expect(page).toHaveURL(new RegExp(`filter=others#pr-${target.id}$`))
+  await expectRevealed(page, card, topBar(page))
+  await expectMarkGone(page)
+  // A stage the reader picks while the link stays is theirs: the list read again does not undo it.
+  await tab('Done').click()
+  await expect(tab('Done')).toHaveAttribute('aria-selected', 'true')
+  const reread = page.waitForResponse((r) => r.url().includes(`/api/projects/${project.id}/prs?refresh=1`))
+  await page.getByRole('button', { name: 'Refresh' }).click()
+  await reread
+  await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled()
+  await expect(tab('Done')).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(new RegExp(`filter=others#pr-${target.id}$`))
+  // A filter the reader picks hides the PR, and the link's anchor goes with it.
+  await tab('To review').click()
+  await expect(page).toHaveURL(new RegExp(`/prs\\?filter=me$`))
+  await expect(card).toHaveCount(0)
+  await tab('Pending').click()
+  await page.locator(`#pr-${other.id}`).getByRole('link', { name: 'SHIP' }).click()
+  await expect(resultDialog(page)).toContainText('Goes with the first one')
+
+  // The same link again, in the same visit: its stage and the filter that shows it, then the card.
+  await recordMarks(page)
+  await resultDialog(page).getByRole('link', { name: 'the first one' }).click()
+  await expect(page).toHaveURL(new RegExp(`filter=others.*#pr-${target.id}$`))
+  await expect(tab('Waiting on others')).toHaveAttribute('aria-selected', 'true')
+  await expect(tab('Reviewed')).toHaveAttribute('aria-selected', 'true')
+  // The review result stays open over it, so the card is only checked to be marked and in view.
+  await expect(card).toHaveAttribute('data-revealed', '')
+  await expect(page.locator('[data-revealed]')).toHaveCount(1)
+  await expect(card).toBeInViewport()
+  await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
+  await expectMarkGone(page)
+  expect((await marks(page)).map((m) => m.id)).toEqual([`pr-${target.id}`])
+  // Shown for this visit, not remembered.
+  expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('me')
+})
+
 test('Forward to a PR the reader scrolled away from returns to where they left it, under a filter remembered since', async ({
   page,
   project,

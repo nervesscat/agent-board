@@ -122,7 +122,13 @@ function PrQueue() {
   const tabFor = useRef<string | null>(null)
   const switchedFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!anchor || !linked) return
+    // The anchor gone (a filter the reader picks drops it), the same link followed again is a new one.
+    if (!anchor) {
+      tabFor.current = null
+      switchedFor.current = null
+      return
+    }
+    if (!linked) return
     if (tabFor.current !== anchor.hash) {
       tabFor.current = anchor.hash
       setTab(linked.status)
