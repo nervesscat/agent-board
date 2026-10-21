@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process'
+import { type ExecFileOptions, execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -16,7 +16,28 @@ import { HttpError } from './http'
  * `gh auth status`, both reads).
  */
 
-const run = promisify(execFile)
+const execFileAsync = promisify(execFile)
+
+/**
+ * A command run in `cwd` failed to start because that folder is gone: Node reports a missing `cwd` as
+ * the binary's own `spawn git ENOENT`, which would read as git (or gh) not being installed
+ * (`toolProblem`). This says what is really missing instead; null for any other failure.
+ */
+export function folderGone(err: unknown, cwd: string): HttpError | null {
+  const e = err as { code?: unknown; syscall?: unknown } | null
+  if (!e || e.code !== 'ENOENT' || typeof e.syscall !== 'string' || !e.syscall.startsWith('spawn'))
+    return null
+  if (fs.existsSync(cwd)) return null
+  return new HttpError(409, `${cwd} does not exist: the repo's folder was moved or deleted`)
+}
+
+async function run(file: string, args: string[], opts: ExecFileOptions & { cwd: string }) {
+  try {
+    return await execFileAsync(file, args, { ...opts, encoding: 'utf8' })
+  } catch (err) {
+    throw folderGone(err, opts.cwd) ?? err
+  }
+}
 
 async function git(cwd: string, args: string[]): Promise<string> {
   const { stdout } = await run('git', args, { cwd, windowsHide: true, maxBuffer: 8 * 1024 * 1024 })

@@ -26,22 +26,28 @@ let states: Record<number, 'OPEN' | 'CLOSED' | 'MERGED'> = {}
 let holdNext = new Map<string, Promise<void>>()
 // How many searches each checkout has had.
 let searches = new Map<string, number>()
-vi.mock('./git', async (original) => ({
-  ...(await original<typeof import('./git')>()),
-  listMyPrs: async (repoPath: string) => {
-    searches.set(repoPath, (searches.get(repoPath) ?? 0) + 1)
-    const hold = holdNext.get(repoPath)
-    holdNext.delete(repoPath)
-    if (hold) await hold
-    if (ghMissing)
-      throw Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT', syscall: 'spawn gh', path: 'gh' })
-    if (failing.has(repoPath)) throw new Error(`gh pr list failed in ${repoPath}`)
-    return foundIn[repoPath] ?? found
-  },
-  currentGithubLogin: async () => 'enrique',
-  prMerged: async () => false,
-  prStateOf: async (_repoPath: string, number: number) => states[number] ?? null,
-}))
+// Checkouts searched with the real gh, as the board runs it.
+let realGh = new Set<string>()
+vi.mock('./git', async (original) => {
+  const real = await original<typeof import('./git')>()
+  return {
+    ...real,
+    listMyPrs: async (repoPath: string, opts: { mergedSince: string }) => {
+      if (realGh.has(repoPath)) return real.listMyPrs(repoPath, opts)
+      searches.set(repoPath, (searches.get(repoPath) ?? 0) + 1)
+      const hold = holdNext.get(repoPath)
+      holdNext.delete(repoPath)
+      if (hold) await hold
+      if (ghMissing)
+        throw Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT', syscall: 'spawn gh', path: 'gh' })
+      if (failing.has(repoPath)) throw new Error(`gh pr list failed in ${repoPath}`)
+      return foundIn[repoPath] ?? found
+    },
+    currentGithubLogin: async () => 'enrique',
+    prMerged: async () => false,
+    prStateOf: async (_repoPath: string, number: number) => states[number] ?? null,
+  }
+})
 
 afterEach(() => {
   found = []
@@ -50,6 +56,7 @@ afterEach(() => {
   ghMissing = false
   holdNext = new Map()
   searches = new Map()
+  realGh = new Set()
   states = {}
   vi.useRealTimers()
 })
@@ -528,6 +535,29 @@ describe('the queue', () => {
     expect(queue.map((p) => `${p.number}:${p.status}`).sort()).toEqual(['50:pending', '51:done'])
     failing = new Set(['/r/ok', '/r/broken'])
     await expect(prs.listPrs(projectId, { refresh: true })).rejects.toThrow('gh pr list failed')
+  })
+  it('says a repo folder that is gone is gone, not that gh is missing', async () => {
+    const { db, schema } = await import('#/db')
+    const host = await import('./hostTools')
+    const gone = path.join(tmp, 'moved-away')
+    const projectId = db.insert(schema.projects).values({ name: 'folder gone' }).returning().get().id
+    db.insert(schema.repos)
+      .values({ projectId, name: 'app', repoPath: gone, baseBranch: 'main', githubRepo: 'acme/app' })
+      .run()
+    // gh is found and signed in; the repo's checkout was moved or deleted after it was added.
+    realGh = new Set([gone])
+    host.setHostTools(host.hostToolsWith({}))
+    try {
+      const refresh = prs.listPrs(projectId, { refresh: true })
+      await expect(refresh).rejects.toThrow(`${gone} does not exist: the repo's folder was moved or deleted`)
+      await expect(refresh).rejects.toMatchObject({ status: 409 })
+      await expect(refresh).rejects.not.toThrow(/not found|install|ENOENT/)
+      // Before any check ran, the same.
+      host.setHostTools(null)
+      await expect(prs.listPrs(projectId, { refresh: true })).rejects.toThrow(`${gone} does not exist`)
+    } finally {
+      host.setHostTools(null)
+    }
   })
   it('says gh is missing or signed out, and the fix, instead of what the spawn said', async () => {
     const { db, schema } = await import('#/db')
