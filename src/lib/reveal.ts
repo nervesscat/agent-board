@@ -48,6 +48,12 @@ let moved: string | undefined
 
 const returned = (action: string | undefined) => action === 'BACK' || action === 'FORWARD' || action === 'GO'
 
+/**
+ * Whether the history last moved back to an entry (Back, Forward) rather than by a link: read while
+ * rendering the entry it moved to.
+ */
+export const cameBack = () => returned(moved)
+
 /** What followHistory reads of the router. */
 type Followed = Pick<AnyRouter, 'latestLocation' | 'stores'> & { history: RouterHistory }
 

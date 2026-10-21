@@ -816,6 +816,73 @@ test('a second link to a PR in the same visit, after the reader picked a filter 
   expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('me')
 })
 
+test('Back or Forward to a link to a PR, after the reader picked a stage, keeps their stage and marks nothing', async ({
+  page,
+  project,
+  human,
+}) => {
+  const target = seedPr(project, { title: 'Linked once', stage: 'reviewed' })
+  // A PR to review whose review result links to the first one.
+  const other = seedPr(project, { title: 'Points to it' })
+  await ok<Row>(
+    human.post(`/api/projects/${project.id}/reviews/results`, {
+      data: {
+        prNumber: other.number,
+        sha: 'abcdef1234567',
+        verdict: 'SHIP',
+        summaryMd: `Goes with [the linked one](#pr-${target.id}).`,
+      },
+    }),
+  )
+  // Read under the review result too, which hides the queue from assistive tech while it is open.
+  const tab = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`), includeHidden: true })
+  const card = page.locator(`#pr-${target.id}`)
+  const unmarked = async () => {
+    await page.waitForTimeout(1_000)
+    expect(await marks(page)).toEqual([])
+    await expect(page.locator('[data-revealed]')).toHaveCount(0)
+  }
+
+  await page.goto(`/projects/${project.id}/prs#pr-${target.id}`)
+  await expectRevealed(page, card, topBar(page))
+  await expect(tab('Reviewed')).toHaveAttribute('aria-selected', 'true')
+  await expectMarkGone(page)
+  // Another stage picked, then a review result opened from it: a step without the anchor.
+  await tab('Pending').click()
+  await page.locator(`#pr-${other.id}`).getByRole('link', { name: 'SHIP' }).click()
+  await expect(resultDialog(page)).toContainText('Goes with the linked one')
+  await expect(page).not.toHaveURL(/#/)
+
+  // Back where the reader was: the stage they picked, nothing marked.
+  await recordMarks(page)
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`#pr-${target.id}$`))
+  await expect(resultDialog(page)).toHaveCount(0)
+  await unmarked()
+  await expect(tab('Pending')).toHaveAttribute('aria-selected', 'true')
+
+  // The link in the review result followed: a new arrival, its stage and the card marked.
+  await page.goForward()
+  await expect(resultDialog(page)).toContainText('Goes with the linked one')
+  await resultDialog(page).getByRole('link', { name: 'the linked one' }).click()
+  await expect(page).toHaveURL(new RegExp(`#pr-${target.id}$`))
+  await expect(tab('Reviewed')).toHaveAttribute('aria-selected', 'true')
+  await expect(card).toHaveAttribute('data-revealed', '')
+  await expectMarkGone(page)
+  // Back to the review result, closed there, another stage picked, and Forward to the link again.
+  await page.goBack()
+  await expect(page).not.toHaveURL(/#/)
+  await resultDialog(page).getByRole('button', { name: 'Close' }).click()
+  await expect(resultDialog(page)).toHaveCount(0)
+  await tab('Done').click()
+  await expect(tab('Done')).toHaveAttribute('aria-selected', 'true')
+  await recordMarks(page)
+  await page.goForward()
+  await expect(page).toHaveURL(new RegExp(`#pr-${target.id}$`))
+  await unmarked()
+  await expect(tab('Done')).toHaveAttribute('aria-selected', 'true')
+})
+
 test('Forward to a PR the reader scrolled away from returns to where they left it, under a filter remembered since', async ({
   page,
   project,

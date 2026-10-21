@@ -27,7 +27,7 @@ import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 import { recall, remember, useRestoreRemembered } from '#/lib/remembered'
-import { anchorId, useAnchor, useReveal } from '#/lib/reveal'
+import { anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 
 const FILTER_KEYS = ['me', 'others'] as const
 type Filter = (typeof FILTER_KEYS)[number]
@@ -121,14 +121,22 @@ function PrQueue() {
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('pending')
   const tabFor = useRef<string | null>(null)
   const switchedFor = useRef<string | null>(null)
+  // The anchor this page last showed: undefined before its first.
+  const lastAnchor = useRef<string | null | undefined>(undefined)
+  const back = cameBack()
   useEffect(() => {
-    // The anchor gone (a filter the reader picks drops it), the same link followed again is a new one.
-    if (!anchor) {
-      tabFor.current = null
-      switchedFor.current = null
-      return
+    const hash = anchor?.hash ?? null
+    if (lastAnchor.current !== hash) {
+      // Another anchor, or one back after it was gone (a filter the reader picks, a review result
+      // opened, drop it): a link followed to it is a new one, even to the same PR. Back or Forward to
+      // it is the reader returning to where they were, stage and filter as they left them; only as
+      // the page first shows is there nothing of theirs to keep.
+      const returning = back && lastAnchor.current !== undefined
+      lastAnchor.current = hash
+      tabFor.current = returning ? hash : null
+      switchedFor.current = returning ? hash : null
     }
-    if (!linked) return
+    if (!anchor || !linked) return
     if (tabFor.current !== anchor.hash) {
       tabFor.current = anchor.hash
       setTab(linked.status)
@@ -137,7 +145,7 @@ function PrQueue() {
       switchedFor.current = anchor.hash
       if (!inFilter(linked, staying)) showFilter(linked.waitingOn)
     }
-  }, [anchor, linked, staying])
+  }, [anchor, linked, staying, back])
   const suffix = FILTERS.find((f) => f.key === filter)!.label.toLowerCase()
 
   return (
