@@ -12,7 +12,7 @@ import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type BranchTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/branches'
 import { useStages } from '#/lib/project'
-import { type StageLike, stageBadge, stageOf } from '#/lib/stages'
+import { STAGE_DOT, type StageLike, stageBadge, stageOf } from '#/lib/stages'
 
 const FILTERS = ['all', 'blocked', 'review'] as const
 type Filter = (typeof FILTERS)[number]
@@ -181,7 +181,7 @@ function Row({
 }) {
   const { row, stage, groups } = branch
   const { done, total } = stepCounts(groups)
-  const indent = lane ? 34 + lane.depth * 14 : 16
+  const indent = lane ? 40 + lane.depth * 14 : 16
   return (
     <div
       className={`grid grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)] ${lane ? 'max-md:ml-4 max-md:border-l-2' : ''}`}
@@ -191,20 +191,7 @@ function Row({
         style={{ paddingLeft: indent }}
       >
         {lane && (
-          <>
-            <span
-              aria-hidden
-              className="absolute top-0 bottom-1/2 w-2 rounded-bl-md border-b border-l border-muted-foreground/30 max-md:hidden"
-              style={{ left: indent - 14 }}
-            />
-            {!lane.last && (
-              <span
-                aria-hidden
-                className="absolute top-1/2 bottom-0 border-l border-muted-foreground/30 max-md:hidden"
-                style={{ left: indent - 14 }}
-              />
-            )}
-          </>
+          <LaneLink spine={indent - 20} last={lane.last} dot={STAGE_DOT[stage.color] ?? STAGE_DOT.gray} />
         )}
         <Link
           to="/projects/$id/features/$ticketId"
@@ -262,7 +249,7 @@ function Track({ groups, lane }: { groups: StepGroup[]; lane: boolean }) {
   return (
     <div
       ref={ref}
-      className={`relative flex items-start overflow-x-auto overscroll-x-contain [scrollbar-width:thin] ${lane ? 'px-5 pt-5 pb-2' : 'px-5 pt-6.5 pb-3'}`}
+      className={`scroll-rail relative flex items-start overflow-x-auto overscroll-x-contain ${lane ? 'px-5 pt-5 pb-2' : 'px-5 pt-6.5 pb-3'}`}
     >
       {groups.map((g) => {
         const steps = (
@@ -284,6 +271,30 @@ function Track({ groups, lane }: { groups: StepGroup[]; lane: boolean }) {
         )
       })}
     </div>
+  )
+}
+
+/**
+ * The tree line from a ticket down to its lane: a soft spine that curves into a small node on the
+ * lane's title line (11px above the head's middle), the node in the lane's stage colour; the spine
+ * carries on past every lane but the last.
+ */
+function LaneLink({ spine, last, dot }: { spine: number; last: boolean; dot: string }) {
+  const line = 'border-muted-foreground/30'
+  return (
+    <span aria-hidden className="max-md:hidden">
+      <span
+        className={`absolute top-0 bottom-[calc(50%+11px)] w-2.5 rounded-bl-[10px] border-b border-l ${line}`}
+        style={{ left: spine }}
+      />
+      {!last && (
+        <span className={`absolute top-[calc(50%-11px)] bottom-0 border-l ${line}`} style={{ left: spine }} />
+      )}
+      <span
+        className={`absolute top-[calc(50%-11px)] size-1.5 -translate-y-1/2 rounded-full ring-[3px] ring-card ${dot}`}
+        style={{ left: spine + 10 }}
+      />
+    </span>
   )
 }
 
