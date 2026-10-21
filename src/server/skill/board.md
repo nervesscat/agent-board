@@ -158,7 +158,8 @@ Lanes of a ticket you are working are yours to create (next section).
   it shows in their Needs you. Each ticket must be top-level, in a done or cancelled stage and not
   archived yet, or the whole request is refused with each failing ticket and why. Only the human's
   Archive answer archives them (in their name, lanes included; or yours relayed with
-  `answer_decision` after asking them in the chat); Keep leaves them. Never try to archive any
+  `answer_decision` after asking them in the chat); Keep leaves them. The card is never edited:
+  ask again instead. Never try to archive any
   other way.
 - `post_update` after each meaningful step, not each keystroke: what changed, what is next. It
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.

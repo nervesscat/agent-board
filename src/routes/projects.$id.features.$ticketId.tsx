@@ -2232,7 +2232,9 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
  * answer the orchestrator relayed from the chat shows the words the human said there, as they were.
  */
 /** What answering a card returns that the card reads: an archive request's result, null on any other card. */
-type DecideResult = { archive: { archived: number[]; skipped: { id: number; why: string }[] } | null }
+type DecideResult = {
+  archive: { archived: number[]; already: number[]; skipped: { id: number; why: string }[] } | null
+}
 
 function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   const options = u.decision!
@@ -2250,7 +2252,8 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
       setPicked(null)
       setNote('')
       onChange()
-      // An agent's archive request answered Archive: what came off the board, and what could not.
+      // An agent's archive request answered Archive: what came off the board, and what could not. Those
+      // archived already are as asked: the reply under the card lists them, no toast.
       const ids = (list: number[]) => list.map((id) => `#${id}`).join(', ')
       if (res.archive?.archived.length)
         toast.success(`Archived ${ids(res.archive.archived)}: off the board, under Archived`)

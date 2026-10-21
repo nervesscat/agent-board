@@ -242,7 +242,8 @@ http_headers = { Authorization = "Bearer <token>" }
    names each failing ticket and why. Nothing is archived until the human answers Archive on the
    board (or the orchestrator relays their chat answer with `answer_decision`, after asking them):
    then each ticket still finished is archived in the human's name, lanes with it, and the activity
-   says which agent asked. Keep changes nothing.
+   says which agent asked. Keep changes nothing. The card's body is never edited (409): ask again
+   instead.
 
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,

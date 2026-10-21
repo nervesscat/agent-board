@@ -540,7 +540,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'edit_post',
-    'Change a post you made on a ticket (its body, whether it is progress, or its tab of the feed: tab main or agents moves it), or a reply (kind reply: its body). Edits show as edited. A version of the summary is never edited: write a new one with set_ticket_summary.',
+    'Change a post you made on a ticket (its body, whether it is progress, or its tab of the feed: tab main or agents moves it), or a reply (kind reply: its body). Edits show as edited. A version of the summary is never edited: write a new one with set_ticket_summary. Nor is the body of a request_archive card: ask again instead.',
     {
       kind: z.enum(['post', 'reply']).default('post'),
       id: z

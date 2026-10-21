@@ -290,7 +290,7 @@ describe('answering a request', () => {
     for (const id of [a.id, lane.id, b.id]) expect(features.getTicket(id).archivedAt).toBeNull()
 
     const answered = features.decide(card.id, 0, '', HUMAN)
-    expect(answered.archive).toEqual({ archived: [a.id, b.id], skipped: [] })
+    expect(answered.archive).toEqual({ archived: [a.id, b.id], already: [], skipped: [] })
     for (const id of [a.id, lane.id, b.id])
       expect(features.getTicket(id)).toMatchObject({ archivedAt: expect.any(String), archivedBy: HUMAN })
     expect(features.getTicket(a.id).status).toBe('done')
@@ -347,7 +347,11 @@ describe('answering a request', () => {
     expect(features.getTicket(t.id).archivedAt).toBeNull()
 
     const row = relay({ option: 0, words: 'yes, archive it' })
-    expect(row).toMatchObject({ decidedBy: '', relayedBy: AGENT, archive: { archived: [t.id], skipped: [] } })
+    expect(row).toMatchObject({
+      decidedBy: '',
+      relayedBy: AGENT,
+      archive: { archived: [t.id], already: [], skipped: [] },
+    })
     expect(features.getTicket(t.id)).toMatchObject({ archivedAt: expect.any(String), archivedBy: HUMAN })
     expect(activity(pid)).toContainEqual(
       expect.objectContaining({
@@ -359,7 +363,7 @@ describe('answering a request', () => {
     expect(refusal(() => relay({ option: 0, words: 'again' }))).toMatchObject({ status: 409 })
   })
 
-  it('skips a ticket that is no longer finished or already archived, archives the rest, and says so', () => {
+  it('skips a ticket no longer finished, counts one archived meanwhile as archived, and says so', () => {
     const reopened = features.createTicket(pid, { title: 'reopened', status: 'done' }, HUMAN)
     const archived = features.createTicket(pid, { title: 'archived meanwhile', status: 'done' }, HUMAN)
     const still = features.createTicket(pid, { title: 'still done', status: 'done' }, HUMAN)
@@ -370,18 +374,20 @@ describe('answering a request', () => {
     const answered = features.decide(card.id, 0, '', HUMAN)
     expect(answered.archive).toEqual({
       archived: [still.id],
+      already: [archived.id],
       skipped: [
         {
           id: reopened.id,
           why: `#${reopened.id} is in In progress; only done or cancelled tickets are archived`,
         },
-        { id: archived.id, why: `#${archived.id} is already archived` },
       ],
     })
     expect(features.getTicket(reopened.id)).toMatchObject({ archivedAt: null, status: 'in_progress' })
     expect(features.getTicket(still.id).archivedBy).toBe(HUMAN)
     expect(features.getPost(card.id).decidedOption).toBe(0)
-    expect(replies(card.id).at(-1)!.body).toContain(`Not archived: #${reopened.id} is in In progress`)
+    expect(replies(card.id).at(-1)!.body).toBe(
+      `Decided: **Archive**\n\nArchived #${still.id}.\n\nAlready archived: #${archived.id}.\n\nNot archived: #${reopened.id} is in In progress; only done or cancelled tickets are archived.`,
+    )
   })
 
   it('an ordinary card with an Archive option archives nothing', () => {
@@ -394,6 +400,99 @@ describe('answering a request', () => {
     expect(card.archiveTickets).toBeNull()
     expect(features.decide(card.id, 0, '', HUMAN).archive).toBeNull()
     expect(features.getTicket(t.id).archivedAt).toBeNull()
+  })
+
+  it('every Archive archives: a ticket restored since goes back, one still archived is not an error', () => {
+    const a = features.createTicket(pid, { title: 'restored since', status: 'done' }, HUMAN)
+    const b = features.createTicket(pid, { title: 'still archived', status: 'done' }, HUMAN)
+    const card = features.requestArchive([a.id, b.id], {}, AGENT)
+    expect(features.decide(card.id, 0, '', HUMAN).archive).toEqual({
+      archived: [a.id, b.id],
+      already: [],
+      skipped: [],
+    })
+    const archivedAt = features.getTicket(b.id).archivedAt
+    features.restoreTicket(a.id, HUMAN)
+    expect(features.getTicket(a.id).archivedAt).toBeNull()
+
+    const again = features.decide(card.id, 0, '', HUMAN)
+    expect(again.archive).toEqual({ archived: [a.id], already: [b.id], skipped: [] })
+    expect(features.getTicket(a.id)).toMatchObject({ archivedAt: expect.any(String), archivedBy: HUMAN })
+    expect(features.getTicket(b.id).archivedAt).toBe(archivedAt)
+    expect(replies(card.id).at(-1)!.body).toBe(
+      `Changed the decision to: **Archive**\n\nArchived #${a.id}.\n\nAlready archived: #${b.id}.`,
+    )
+  })
+
+  it('the human’s Archive after a relayed Archive reports the tickets as archived already, not as an error', () => {
+    const t = features.createTicket(pid, { title: 'relayed then picked', status: 'done' }, HUMAN)
+    const card = features.requestArchive([t.id], {}, AGENT)
+    features.relayDecision(card.id, { option: 0, words: 'archive it' }, AGENT, { agent: true })
+    const archivedAt = features.getTicket(t.id).archivedAt
+    expect(archivedAt).not.toBeNull()
+
+    const picked = features.decide(card.id, 0, '', HUMAN)
+    expect(picked.archive).toEqual({ archived: [], already: [t.id], skipped: [] })
+    expect(features.getPost(card.id)).toMatchObject({ decidedOption: 0, decidedBy: HUMAN, relayedBy: '' })
+    expect(features.getTicket(t.id).archivedAt).toBe(archivedAt)
+    expect(
+      replies(card.id)
+        .map((r) => r.body)
+        .join('\n'),
+    ).not.toContain('Not archived')
+    expect(replies(card.id).at(-1)!.body).toBe(
+      `Changed the decision to: **Archive**\n\nAlready archived: #${t.id}.`,
+    )
+  })
+})
+
+describe('the card stays as asked', () => {
+  let pid: number
+  beforeAll(() => {
+    pid = newProject('card-stays')
+  })
+
+  it('refuses editing its body over REST, to the agent and the human, and Archive archives just the named tickets', async () => {
+    const a = features.createTicket(pid, { title: 'a', status: 'done' }, HUMAN)
+    const b = features.createTicket(pid, { title: 'b', status: 'done' }, HUMAN)
+    const asked = await call('POST', `/api/projects/${pid}/tickets/archive-request`, {
+      ticketIds: [a.id, b.id],
+    })
+    expect(asked.status).toBe(201)
+    const body = asked.body.body as string
+
+    for (const as of ['agent', 'human'] as const) {
+      const edit = await call('PATCH', `/api/updates/${asked.body.id}`, { body: `Archive #${a.id}?` }, as)
+      expect(edit.status, as).toBe(409)
+      expect(edit.body.error).toContain("an archive request's card names the tickets it archives")
+    }
+    // Moving it to another tab of the feed leaves its words as they were.
+    expect((await call('PATCH', `/api/updates/${asked.body.id}`, { tab: 'agents' })).status).toBe(200)
+    expect(features.getPost(asked.body.id)).toMatchObject({
+      body,
+      editedAt: null,
+      archiveTickets: [a.id, b.id],
+    })
+
+    const answered = await call('PUT', `/api/updates/${asked.body.id}/decision`, { option: 0 }, 'human')
+    expect(answered.body.archive).toEqual({ archived: [a.id, b.id], already: [], skipped: [] })
+  })
+
+  it('refuses editing its body over MCP, and Archive archives just the named tickets', async () => {
+    const a = features.createTicket(pid, { title: 'mcp a', status: 'done' }, HUMAN)
+    const b = features.createTicket(pid, { title: 'mcp b', status: 'cancelled' }, HUMAN)
+    const other = features.createTicket(pid, { title: 'not named', status: 'done' }, HUMAN)
+    const card = await tool('request_archive', { ticketIds: [a.id, b.id] })
+    const edit = await tool('edit_post', { id: card.id, body: `Archive #${other.id}?` })
+    expect(edit.error).toContain("an archive request's card names the tickets it archives")
+    expect(features.getPost(card.id).body).toBe(card.body)
+
+    expect(features.decide(card.id, 0, '', HUMAN).archive).toEqual({
+      archived: [a.id, b.id],
+      already: [],
+      skipped: [],
+    })
+    expect(features.getTicket(other.id).archivedAt).toBeNull()
   })
 })
 
@@ -416,7 +515,7 @@ describe('an agent cannot archive without the human', () => {
     // The human's answer is what archives.
     const answered = await call('PUT', `/api/updates/${asked.body.id}/decision`, { option: 0 }, 'human')
     expect(answered.status).toBe(200)
-    expect(answered.body.archive).toEqual({ archived: [t.id], skipped: [] })
+    expect(answered.body.archive).toEqual({ archived: [t.id], already: [], skipped: [] })
     expect(features.getTicket(t.id).archivedBy).toBe(HUMAN)
   })
 })
