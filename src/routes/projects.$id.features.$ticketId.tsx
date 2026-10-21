@@ -2384,8 +2384,12 @@ function Previews({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
   })
   const rows = candidates
     .map((w, i) => ({ w, query: previews[i]! }))
-    // A worktree shows only once the board says it could run it, or ran it before.
-    .filter(({ w, query: { data } }) => w.previewUrl || data?.managed || data?.cannotStart === null)
+    // A worktree shows only once the board says it could run it (or could once a missing tool is
+    // installed, which it then says), or ran it before.
+    .filter(
+      ({ w, query: { data } }) =>
+        w.previewUrl || data?.managed || data?.cannotStart === null || data?.toolProblem,
+    )
   if (!rows.length) return null
   return (
     <section className="rounded-lg border p-3" aria-label="Preview">
@@ -2447,6 +2451,11 @@ function PreviewRow({
         </Tip>
       )}
       {m && <ManagedLine m={m} workspaceId={w.id} />}
+      {data?.toolProblem && (
+        <p className="text-xs text-destructive [overflow-wrap:anywhere]">
+          Cannot start a preview: {data.toolProblem}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
           <span className="inline-flex min-w-0 items-center gap-1 font-mono">

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 
 import { CrossBoardMark } from '#/components/CrossBoardMark'
 import { Gallery } from '#/components/Gallery'
+import { HostToolsBanner } from '#/components/HostToolsBanner'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
 import { Badge } from '#/components/ui/badge'
@@ -101,6 +102,7 @@ function App() {
           <PagesMenu />
         </nav>
       </header>
+      <HostToolsBanner />
       <ReportDueBanner />
       <main className="mx-auto w-full max-w-7xl px-4 py-6">
         <Outlet />

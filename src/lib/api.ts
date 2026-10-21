@@ -29,6 +29,7 @@ import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
 import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { Handoff } from '#/server/handoff'
+import type { HostTool, HostTools } from '#/server/hostTools'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { PreviewState } from '#/server/preview'
 import type { LinkStopped, StopAll } from '#/server/linkPreview'
@@ -51,6 +52,8 @@ export type {
   Gallery,
   GalleryFile,
   Handoff,
+  HostTool,
+  HostTools,
   ManagedPreview,
   PreviewState,
   ProjectAgent,
