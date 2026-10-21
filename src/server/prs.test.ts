@@ -991,7 +991,7 @@ describe('PR tickets over the API', () => {
         method,
         headers: {
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-          ...(as === 'agent' ? { authorization: 'Bearer gate_test' } : {}),
+          ...(as === 'agent' ? { authorization: 'Bearer token-of-test' } : {}),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       }),

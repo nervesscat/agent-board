@@ -12,11 +12,10 @@ import {
 
 /**
  * Runs once as the server starts, before it accepts a request: refuses a BOARD_ENV / AUTH it cannot
- * honour safely, a gate-off board on anything but loopback or on the live board's port, and a tailnet
- * entrance only half configured (PUBLIC_ORIGIN, PUBLIC_GATE_URL, PUBLIC_GATE_AUTH_URL: all or none),
- * then says loudly when the gate is off, and that a gate-off board ignores the entrance. Under `vite dev`
- * Vite owns the address, so vite.config.ts checks it before it listens; this still refuses a bad
- * BOARD_ENV / AUTH or entrance there and prints the banner.
+ * honour safely, a board without sign-in on anything but loopback or on the live board's port, and a
+ * PUBLIC_ORIGIN it cannot trust, then says loudly when sign-in is off, and that such a board ignores the
+ * entrance. Under `vite dev` Vite owns the address, so vite.config.ts checks it before it listens; this
+ * still refuses a bad BOARD_ENV / AUTH or entrance there and prints the banner.
  */
 export default definePlugin(() => {
   try {

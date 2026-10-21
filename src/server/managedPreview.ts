@@ -501,6 +501,8 @@ export function needsInstall(dir: string) {
 }
 
 // The live board's tailnet entrance: a preview stays on this machine (README: "Using it from other devices").
+// PUBLIC_GATE_URL, PUBLIC_GATE_AUTH_URL and TAILNET_HOST are the earlier entrance's names, which a
+// preview of an older branch still reads (and refuses to start on, given only some of them).
 const ENTRANCE_KEYS = /^(PUBLIC_ORIGIN|PUBLIC_GATE_URL|PUBLIC_GATE_AUTH_URL|TAILNET_HOST)$/
 
 /** The environment of what runs in the worktree: none of the live board's own settings. */
@@ -523,7 +525,17 @@ const WATCHDOG = `data:text/javascript,${encodeURIComponent(
   'const p=Number(process.env.PREVIEW_PARENT_PID);if(p)setInterval(()=>{try{process.kill(p,0)}catch(e){if(e.code==="ESRCH")process.exit(0)}},2000).unref()',
 )}`
 
-/** The preview's server: a development board without the gate, on loopback, on its own data copy. */
+/**
+ * The Node that runs a preview's build: this board's own, but in the desktop app (README: "Install"),
+ * where the board runs under Electron's Node, the `node` on PATH that `pnpm build` used: the worktree's
+ * better-sqlite3 is built for Node's ABI, not Electron's.
+ */
+export const previewNode = (
+  electron: string | undefined = process.versions.electron,
+  execPath = process.execPath,
+) => (electron ? 'node' : execPath)
+
+/** The preview's server: a development board with sign-in off, on loopback, on its own data copy. */
 export function serverEnv(port: number, dataDir: string): NodeJS.ProcessEnv {
   return {
     ...worktreeEnv(),
@@ -570,7 +582,7 @@ async function run(e: Entry) {
   if (!current(e)) return
   if (!port) return fail(e, `no free port between ${PORTS.from} and ${PORTS.to}`, null)
   const url = `http://127.0.0.1:${port}`
-  const proc = runner.spawn(process.execPath, ['--import', WATCHDOG, '.output/server/index.mjs'], {
+  const proc = runner.spawn(previewNode(), ['--import', WATCHDOG, '.output/server/index.mjs'], {
     cwd: e.path,
     env: serverEnv(port, e.dataDir),
     log: e.logs.server,

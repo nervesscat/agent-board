@@ -537,9 +537,9 @@ describe('0031_project_tag_suggestions', () => {
   })
 })
 
-describe('0032_archive_requests', () => {
+describe('0033_archive_requests', () => {
   it('adds the archive request column without rebuilding the posts, so they and their files stay', () => {
-    const sqlite = databaseAt('0031_project_tag_suggestions')
+    const sqlite = databaseAt('0032_passkey_sign_in')
     const project = Number(
       sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('archive').lastInsertRowid,
     )

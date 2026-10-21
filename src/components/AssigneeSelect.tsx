@@ -17,8 +17,8 @@ import { useProjectAgents } from '#/lib/project'
 const NONE = '__none__'
 
 /**
- * Who a ticket goes to. One of the project's agents reserves it for that agent; a connected agent (a
- * gate token) or nobody leaves it shared, for any agent to pick up or take over.
+ * Who a ticket goes to. One of the project's agents reserves it for that agent; a connected agent (an
+ * agent token) or nobody leaves it shared, for any agent to pick up or take over.
  */
 export function AssigneeSelect({
   id,

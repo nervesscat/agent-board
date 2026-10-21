@@ -245,8 +245,8 @@ async function call(method: string, pathname: string, as: 'human' | 'agent' = 'h
   )
   const request = new Request(`http://localhost${pathname}`, {
     method,
-    // A gate token: an agent, as opposed to the human's passkey session.
-    headers: as === 'agent' ? { authorization: 'Bearer gate_test' } : {},
+    // An agent token: an agent, as opposed to the human's passkey session.
+    headers: as === 'agent' ? { authorization: 'Bearer token-of-test' } : {},
   })
   const res = await handle({ request, actor: as === 'agent' ? 'claude' : 'enrique' })
   return { status: res.status, body: (await res.json()) as any }

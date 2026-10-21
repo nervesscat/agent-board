@@ -43,7 +43,7 @@ const DATASETS = ['live-copy', 'generated']
 const HELP = `pnpm bench [options]            measure a checkout (this one by default)
 pnpm bench compare <before.json> <after.json> [--out <file.md>]
 
-Builds the target checkout into .bench/build/, starts the build in test mode (no passkey gate,
+Builds the target checkout into .bench/build/, starts the build in test mode (sign-in off,
 127.0.0.1, a free port from 47200, never 47100) on a copy of the data, and measures:
   server   p50/p95 latency of the hot endpoints, SQL statements and child processes per request
   mcp      size (chars, bytes) and latency of the main MCP tool results, as an agent
@@ -285,8 +285,8 @@ const results = {
   server: {
     mode:
       settings.server === 'dev'
-        ? 'vite dev, BOARD_ENV=test (no passkey gate)'
-        : 'production build, BOARD_ENV=test (no passkey gate)',
+        ? 'vite dev, BOARD_ENV=test (sign-in off)'
+        : 'production build, BOARD_ENV=test (sign-in off)',
     host: '127.0.0.1',
     ports: [],
   },

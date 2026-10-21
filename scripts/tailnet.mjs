@@ -9,7 +9,7 @@
 //
 // It refuses while Tailscale Funnel is on (that is the internet, not your tailnet), a target that is
 // not the board on loopback (PORT in .env, 47100 by default: never a preview or a pnpm dev copy), and
-// a board that answers /api/me without signing in (its gate is off). TAILSCALE_BIN names the CLI to
+// a board that answers /api/me without signing in (its sign-in is off). TAILSCALE_BIN names the CLI to
 // ask (default `tailscale`; a .mjs or .js file runs with node).
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
@@ -70,8 +70,8 @@ function expandValue(value, shell, values) {
 }
 
 /**
- * PUBLIC_ORIGIN or PUBLIC_GATE_URL as the board takes it (readPublicEntrance in src/server/config.ts):
- * trimmed, without a trailing slash, in lower case.
+ * PUBLIC_ORIGIN as the board takes it (readPublicEntrance in src/server/config.ts): trimmed, without a
+ * trailing slash, in lower case.
  */
 const originOf = (raw) => raw?.trim().replace(/\/$/, '').toLowerCase()
 
@@ -160,7 +160,7 @@ function servedAt(config, name, port) {
   return handler?.Proxy ?? handler?.Path ?? handler?.Text ?? null
 }
 
-/** Whether the board answers /api/me without credentials: 200 (gate off), another status, or null. */
+/** Whether the board answers /api/me without credentials: 200 (sign-in off), another status, or null. */
 function meStatus(port) {
   return new Promise((resolve) => {
     const req = http.get({ host: '127.0.0.1', port, path: '/api/me', timeout: 3000 }, (res) => {
@@ -188,17 +188,6 @@ if (args.target !== undefined) {
   if (target.pathname !== '/' || target.search || target.hash || target.username || target.password)
     fail(`${args.target}: the target is the board's origin, with no path`)
 }
-let gatePort = 47111
-if (dotenv.PUBLIC_GATE_AUTH_URL) {
-  const gate = parseUrl(dotenv.PUBLIC_GATE_AUTH_URL)
-  if (!gate || gate.protocol !== 'http:' || !LOOPBACK.has(gate.hostname))
-    fail(
-      `PUBLIC_GATE_AUTH_URL in .env (${dotenv.PUBLIC_GATE_AUTH_URL}) is not on loopback: the public gate ` +
-        'listens on 127.0.0.1 (docker-compose.gate.yml), and only that goes on the tailnet',
-    )
-  gatePort = portOf(gate)
-}
-
 // --- Tailscale on this machine: its name, and no Funnel anywhere ---
 const version = mustRead(() => tailscale('version'))
   .split(/\r?\n/)[0]
@@ -229,12 +218,12 @@ if (open.length) {
   )
 }
 
-// --- the board itself: only with its gate ---
+// --- the board itself: only with its sign-in on ---
 const me = await meStatus(boardPort)
 if (me === 200)
   fail(
-    `The board on 127.0.0.1:${boardPort} answers /api/me without signing in: its gate is off (AUTH=off or ` +
-      'test mode). Only the board with its gate goes on the tailnet (pnpm start).',
+    `The board on 127.0.0.1:${boardPort} answers /api/me without signing in: its sign-in is off (AUTH=off or ` +
+      'test mode). Only the board with its sign-in goes on the tailnet (pnpm start).',
   )
 
 const url = `https://${name}`
@@ -242,40 +231,33 @@ const warnings = []
 if (me === null) warnings.push(`nothing answers on 127.0.0.1:${boardPort} yet: start the board (pnpm start)`)
 if (!status.CertDomains?.includes(name))
   warnings.push(`no HTTPS certificate for ${name}: turn on HTTPS certificates in the Tailscale admin console`)
-const want = {
-  PUBLIC_ORIGIN: url,
-  PUBLIC_GATE_URL: `${url}:8443`,
-  PUBLIC_GATE_AUTH_URL: `http://127.0.0.1:${gatePort}`,
-}
-for (const [key, value] of Object.entries(want)) {
-  const have = originOf(dotenv[key])
-  if (key === 'PUBLIC_GATE_AUTH_URL' ? !have : have !== value)
-    warnings.push(`.env has ${have ? `${key}=${have}` : `no ${key}`}: set ${key}=${value}, then pnpm start`)
-}
-if (dotenv.TAILNET_HOST && dotenv.TAILNET_HOST !== name)
+const have = originOf(dotenv.PUBLIC_ORIGIN)
+if (have !== url)
   warnings.push(
-    `TAILNET_HOST=${dotenv.TAILNET_HOST} in .env is not this machine's name: set TAILNET_HOST=${name} for the public gate`,
+    `.env has ${have ? `PUBLIC_ORIGIN=${have}` : 'no PUBLIC_ORIGIN'}: set PUBLIC_ORIGIN=${url}, then pnpm start`,
   )
-for (const [port, target] of [
-  [443, `http://127.0.0.1:${boardPort}`],
-  [8443, `http://127.0.0.1:${gatePort}`],
-]) {
-  const now = servedAt(serve, name, port)
-  if (now && now.replace(/\/$/, '') !== target)
-    warnings.push(`${port} serves ${now} now: the command below replaces it`)
+const now = servedAt(serve, name, 443)
+if (now && now.replace(/\/$/, '') !== `http://127.0.0.1:${boardPort}`)
+  warnings.push(`443 serves ${now} now: the command below replaces it`)
+// What else this machine serves on its tailnet name, which the board does not need (an older setup put
+// a sign-in service of its own on 8443).
+for (const hostPort of Object.keys(serve?.Web ?? {})) {
+  const [host, port] = [hostPort.slice(0, hostPort.lastIndexOf(':')), hostPort.split(':').pop()]
+  if (host === name && port !== '443')
+    warnings.push(
+      `${port} serves ${servedAt(serve, name, port) ?? 'something'} too: the board needs only 443 (tailscale serve --https=${port} off)`,
+    )
 }
 
 console.log(`${version ? `Tailscale ${version}; ` : ''}this machine is ${name} on your tailnet.
 
-Run these on this machine to open the board to your tailnet (never Funnel):
+Run this on this machine to open the board to your tailnet (never Funnel):
 
   tailscale serve --bg --https=443 http://127.0.0.1:${boardPort}
-  tailscale serve --bg --https=8443 http://127.0.0.1:${gatePort}
 
-Then open ${url}/ on your other devices.
+Then open ${url}/ on your other devices, and add each one with a link from the board (Settings, Devices).
 
 To stop:
 
-  tailscale serve --https=443 off
-  tailscale serve --https=8443 off`)
+  tailscale serve --https=443 off`)
 if (warnings.length) console.warn(`\nBefore that:\n${warnings.map((w) => `  - ${w}`).join('\n')}`)

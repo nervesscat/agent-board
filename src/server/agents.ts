@@ -67,10 +67,14 @@ export function updateSettings(patch: Partial<Settings>): Settings {
 
 // --- the board skill, rendered for one agent CLI ---
 
-/** Where each CLI finds the MCP server hint the skill gives when the board's tools are missing. */
+/**
+ * Where each CLI finds the MCP server hint the skill gives when the board's tools are missing. `<token>`
+ * stays a placeholder: the skill is the same file for every agent, and Connect agents' commands carry
+ * the token itself.
+ */
 const MCP_HINT: Record<AgentClient, (url: string) => string> = {
   claude: (url) =>
-    `(Claude Code: \`claude mcp add --transport http --scope user board ${url}/api/mcp --header "Authorization: Bearer gate_…"\`.)`,
+    `(Claude Code: \`claude mcp add --transport http --scope user board ${url}/api/mcp --header "Authorization: Bearer <token>"\`.)`,
   codex: () => '(Codex: a `[mcp_servers.board]` entry in `~/.codex/config.toml`.)',
   opencode: () => '(OpenCode: an `mcp.board` entry in `~/.config/opencode/opencode.json`.)',
 }
@@ -110,7 +114,7 @@ export function renderSkill(client: AgentClient): string {
 
 /** What the Connect agents page builds its commands from. */
 export function agentSetup() {
-  return { boardUrl: config.boardUrl, gateUrl: config.gateUrl, settings: getSettings() }
+  return { boardUrl: config.boardUrl, settings: getSettings() }
 }
 
 // --- the review skills: feature-review, review-queue, todo-review and their agents, installed as one tar ---

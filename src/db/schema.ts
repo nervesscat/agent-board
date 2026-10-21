@@ -491,12 +491,80 @@ export const settings = sqliteTable('settings', {
   value: text({ mode: 'json' }).notNull(),
 })
 
-// Who each name on the board is, learned from how it signs in: a gate token is an agent, a passkey
+// Who each name on the board is, learned from how it signs in: an agent token is an agent, a passkey
 // session in the browser is a human. Every author field elsewhere is just the name.
 export const actors = sqliteTable('actors', {
   name: text().primaryKey(),
   kind: text().$type<'agent' | 'human'>().notNull(),
   lastSeenAt: text('last_seen_at').notNull(),
+})
+
+// --- signing in (src/server/passkeys.ts, credentials.ts; README: "Signing in") ---
+
+// The human who signs in to the board: one row, created by /setup on this machine at first boot.
+// userHandle is the WebAuthn user id every passkey of the account is registered under.
+export const account = sqliteTable(
+  'account',
+  {
+    id: integer().primaryKey(),
+    name: text().notNull(),
+    userHandle: text('user_handle').notNull(),
+    createdAt: now(),
+  },
+  (t) => [check('account_one_row', sql`${t.id} = 1`)],
+)
+
+// The account's passkeys. A passkey is bound to the RP ID it was made on: localhost on this machine,
+// the tailnet name through the entrance; it signs in there and nowhere else. The public key is the
+// COSE key, base64url.
+export const passkeys = sqliteTable('passkeys', {
+  id: id(),
+  credentialId: text('credential_id').notNull().unique(),
+  publicKey: text('public_key').notNull(),
+  counter: integer().notNull().default(0),
+  transports: text({ mode: 'json' }).$type<string[]>().notNull().default([]),
+  rpId: text('rp_id').notNull(),
+  name: text().notNull(),
+  createdAt: now(),
+  lastUsedAt: text('last_used_at'),
+})
+
+// A browser signed in with a passkey: only the hash of its cookie is kept. Revoking the passkey ends it.
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    id: id(),
+    tokenHash: text('token_hash').notNull().unique(),
+    passkeyId: integer('passkey_id')
+      .notNull()
+      .references(() => passkeys.id, { onDelete: 'cascade' }),
+    createdAt: now(),
+    expiresAt: text('expires_at').notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
+  },
+  (t) => [index('sessions_passkey').on(t.passkeyId)],
+)
+
+// One-time links the signed-in human makes to enrol another device's passkey: hashed, short-lived,
+// used once.
+export const enrolCodes = sqliteTable('enrol_codes', {
+  id: id(),
+  codeHash: text('code_hash').notNull().unique(),
+  createdAt: now(),
+  expiresAt: text('expires_at').notNull(),
+  usedAt: text('used_at'),
+})
+
+// The tokens agents sign in with (`Authorization: Bearer <token>`): only the hash is kept, and the
+// name is the agent's name on the board.
+export const agentTokens = sqliteTable('agent_tokens', {
+  id: id(),
+  tokenHash: text('token_hash').notNull().unique(),
+  name: text().notNull(),
+  createdAt: now(),
+  lastUsedAt: text('last_used_at'),
+  expiresAt: text('expires_at').notNull(),
+  revokedAt: text('revoked_at'),
 })
 
 export type Activity = typeof activity.$inferSelect
@@ -517,3 +585,6 @@ export type Report = typeof reports.$inferSelect
 export type ReportSettingsChange = typeof reportSettingsChanges.$inferSelect
 export type OriginRef = typeof originRefs.$inferSelect
 export type OriginRefMove = typeof originRefMoves.$inferSelect
+export type Passkey = typeof passkeys.$inferSelect
+export type Session = typeof sessions.$inferSelect
+export type AgentToken = typeof agentTokens.$inferSelect
