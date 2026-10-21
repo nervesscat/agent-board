@@ -9,7 +9,7 @@ import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles
 import { RichEditor } from '#/components/RichEditor'
 import { StatusSelect } from '#/components/StatusSelect'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
-import { TasksInput } from '#/components/TasksInput'
+import { ListInput } from '#/components/ListInput'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -201,7 +201,7 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
           </div>
           <div className="space-y-2">
             <Label htmlFor="tasks">Initial tasks</Label>
-            <TasksInput
+            <ListInput
               id="tasks"
               value={tasks}
               onChange={setTasks}
