@@ -184,6 +184,92 @@
   }
 }
 
+/*
+ * .scroll-rail: a sideways scroller (the Roadmap's timelines) with a slimmer pill that sits inset
+ * from the row's edges, faint until the row is hovered, stronger on the thumb, the brand colour while
+ * dragged. Same split as above: Chromium takes the ::-webkit-scrollbar rules, so scrollbar-width and
+ * scrollbar-color only go to browsers without them (setting either turns the webkit rules off).
+ * Where scroll-driven animations exist, the side the row overflows to fades out; a row that fits has
+ * no scroll timeline, so it gets no fade. The bottom strip with the scrollbar stays unfaded.
+ */
+@property --rail-fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --rail-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+.scroll-rail {
+  --rail-thumb: color-mix(in oklch, var(--muted-foreground) 18%, transparent);
+}
+.scroll-rail:hover,
+.scroll-rail:focus-within {
+  --rail-thumb: var(--scrollbar-thumb);
+}
+.scroll-rail::-webkit-scrollbar {
+  height: 8px;
+}
+.scroll-rail::-webkit-scrollbar-track {
+  background: transparent;
+  margin-inline: 1.25rem;
+}
+.scroll-rail::-webkit-scrollbar-thumb {
+  background-color: var(--rail-thumb);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 9999px;
+}
+.scroll-rail::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+.scroll-rail::-webkit-scrollbar-thumb:active {
+  background-color: var(--brand);
+}
+@supports not selector(::-webkit-scrollbar) {
+  .scroll-rail {
+    scrollbar-width: thin;
+    scrollbar-color: var(--rail-thumb) transparent;
+  }
+}
+@keyframes rail-fade-start {
+  0% {
+    --rail-fade-start: 0px;
+  }
+  6%,
+  100% {
+    --rail-fade-start: 1.5rem;
+  }
+}
+@keyframes rail-fade-end {
+  0%,
+  94% {
+    --rail-fade-end: 1.5rem;
+  }
+  100% {
+    --rail-fade-end: 0px;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .scroll-rail {
+    mask-image:
+      linear-gradient(
+        to right,
+        transparent,
+        #000 var(--rail-fade-start),
+        #000 calc(100% - var(--rail-fade-end)),
+        transparent
+      ),
+      linear-gradient(to top, #000 8px, transparent 8px);
+    animation:
+      rail-fade-start linear both,
+      rail-fade-end linear both;
+    animation-timeline: scroll(self inline);
+  }
+}
+
 /* Inline code in rendered markdown and the editor: the typography plugin wraps it in literal
    backticks, which read as part of the text (a path shows as `F:…`). A tinted chip instead; code
    blocks keep their own look. */
