@@ -8,6 +8,7 @@ import {
   Home,
   Images,
   KanbanSquare,
+  Milestone,
   MonitorPlay,
   Settings,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ const MODULES = [
   { to: '/projects/$id', label: 'Overview', icon: Home, exact: true },
   { to: '/projects/$id/prs', label: 'PR queue', icon: GitPullRequest },
   { to: '/projects/$id/features', label: 'Ongoing features', icon: KanbanSquare },
+  { to: '/projects/$id/roadmap', label: 'Roadmap', icon: Milestone },
   { to: '/projects/$id/previews', label: 'Previews', icon: MonitorPlay },
   { to: '/projects/$id/gallery', label: 'Gallery', icon: Images },
   { to: '/projects/$id/agents', label: 'Agents', icon: Bot },

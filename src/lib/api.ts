@@ -1,4 +1,7 @@
-/** JSON client for /api. The gate cookie does the auth; a 401 on a page means the session is gone. */
+/**
+ * JSON client for /api. The board's session cookie does the auth; a 401 on a page means the session is
+ * gone, and the reload lands on /login.
+ */
 
 import type {
   Attachment,
@@ -19,6 +22,7 @@ import type { ReportList, ReportPeriod, ReportSettingsView, ReportView } from '#
 import type { ReportsOverview } from '#/server/reportsOverview'
 import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
 import type { WorkspacePreview, summaryHistory } from '#/server/features'
+import type { RoadmapTicket } from '#/server/roadmap'
 import type { CleanupReport } from '#/server/cleanup'
 import type { DeleteItem, DeleteKind, DeleteResult } from '#/server/cleanupActions'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
@@ -41,6 +45,7 @@ export type Project = ProjectFull
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
 export type {
+  RoadmapTicket,
   CarryOver,
   DirListing,
   Gallery,
@@ -126,6 +131,8 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
       data && typeof data === 'object' && 'code' in data && typeof data.code === 'string'
         ? data.code
         : undefined
+    // The board has no account yet (its data was replaced under the page): the reload lands on /setup.
+    if (res.status === 409 && code === 'setup') window.location.reload()
     throw new ApiError(message, res.status, code)
   }
   return data as T
@@ -159,7 +166,7 @@ export function errorMessage(err: unknown, fallback = 'something went wrong'): s
 
 // --- payload shapes the server composes ---
 
-/** `/api/me`: who you are, and whether this board runs without the passkey gate (never the live one). */
+/** `/api/me`: who you are, and whether this board runs with sign-in off (never the live one). */
 export interface Me {
   actor: string
   agent: boolean

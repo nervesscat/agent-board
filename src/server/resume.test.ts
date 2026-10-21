@@ -242,7 +242,7 @@ describe('reads of the resume note', () => {
       new Request(`http://board${url}`, {
         method,
         headers: {
-          ...(agent ? { authorization: 'Bearer gate_x' } : {}),
+          ...(agent ? { authorization: 'Bearer token-of-x' } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),

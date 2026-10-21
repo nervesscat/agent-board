@@ -41,7 +41,7 @@ earned.
    environment (`NODE_ENV === 'test'`, `process.env.CI`, `X-Test-Actor` in product code); mock the
    module under change or the call that is the feature; disable a lint or type rule; add `|| true`
    or `continue-on-error`. A builder that did any of these has not finished.
-3. **Fakes only at the edges the project already fakes** (external APIs, the clock, the gate in
+3. **Fakes only at the edges the project already fakes** (external APIs, the clock, sign-in in
    its test mode), and the hand-off says which.
 4. **A subagent saying "done" or "tests pass" is a claim.** You re-run the checks yourself and read
    the diff yourself before every review and before hand-off.

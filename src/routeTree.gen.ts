@@ -24,6 +24,7 @@ import { Route as ProjectsIdGalleryRouteImport } from './routes/projects.$id.gal
 import { Route as ProjectsIdPreviewsRouteImport } from './routes/projects.$id.previews'
 import { Route as ProjectsIdPrsRouteImport } from './routes/projects.$id.prs'
 import { Route as ProjectsIdReviewsRouteImport } from './routes/projects.$id.reviews'
+import { Route as ProjectsIdRoadmapRouteImport } from './routes/projects.$id.roadmap'
 import { Route as ProjectsIdSettingsRouteImport } from './routes/projects.$id.settings'
 import { Route as ProjectsIdFeaturesIndexRouteImport } from './routes/projects.$id.features.index'
 import { Route as ProjectsIdFeaturesTicketIdRouteImport } from './routes/projects.$id.features.$ticketId'
@@ -103,6 +104,11 @@ const ProjectsIdReviewsRoute = ProjectsIdReviewsRouteImport.update({
   path: '/reviews',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
+const ProjectsIdRoadmapRoute = ProjectsIdRoadmapRouteImport.update({
+  id: '/roadmap',
+  path: '/roadmap',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 const ProjectsIdSettingsRoute = ProjectsIdSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -135,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
+  '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id/': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -154,6 +161,7 @@ export interface FileRoutesByTo {
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
+  '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -175,6 +183,7 @@ export interface FileRoutesById {
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
+  '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id/': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -197,6 +206,7 @@ export interface FileRouteTypes {
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/reviews'
+    | '/projects/$id/roadmap'
     | '/projects/$id/settings'
     | '/projects/$id/'
     | '/projects/$id/features/$ticketId'
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/reviews'
+    | '/projects/$id/roadmap'
     | '/projects/$id/settings'
     | '/projects/$id'
     | '/projects/$id/features/$ticketId'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/reviews'
+    | '/projects/$id/roadmap'
     | '/projects/$id/settings'
     | '/projects/$id/'
     | '/projects/$id/features/$ticketId'
@@ -359,6 +371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdReviewsRouteImport
       parentRoute: typeof ProjectsIdRoute
     }
+    '/projects/$id/roadmap': {
+      id: '/projects/$id/roadmap'
+      path: '/roadmap'
+      fullPath: '/projects/$id/roadmap'
+      preLoaderRoute: typeof ProjectsIdRoadmapRouteImport
+      parentRoute: typeof ProjectsIdRoute
+    }
     '/projects/$id/settings': {
       id: '/projects/$id/settings'
       path: '/settings'
@@ -391,6 +410,7 @@ interface ProjectsIdRouteChildren {
   ProjectsIdPreviewsRoute: typeof ProjectsIdPreviewsRoute
   ProjectsIdPrsRoute: typeof ProjectsIdPrsRoute
   ProjectsIdReviewsRoute: typeof ProjectsIdReviewsRoute
+  ProjectsIdRoadmapRoute: typeof ProjectsIdRoadmapRoute
   ProjectsIdSettingsRoute: typeof ProjectsIdSettingsRoute
   ProjectsIdIndexRoute: typeof ProjectsIdIndexRoute
   ProjectsIdFeaturesTicketIdRoute: typeof ProjectsIdFeaturesTicketIdRoute
@@ -405,6 +425,7 @@ const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
   ProjectsIdPreviewsRoute: ProjectsIdPreviewsRoute,
   ProjectsIdPrsRoute: ProjectsIdPrsRoute,
   ProjectsIdReviewsRoute: ProjectsIdReviewsRoute,
+  ProjectsIdRoadmapRoute: ProjectsIdRoadmapRoute,
   ProjectsIdSettingsRoute: ProjectsIdSettingsRoute,
   ProjectsIdIndexRoute: ProjectsIdIndexRoute,
   ProjectsIdFeaturesTicketIdRoute: ProjectsIdFeaturesTicketIdRoute,
@@ -427,13 +448,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

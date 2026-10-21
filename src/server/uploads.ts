@@ -85,7 +85,7 @@ export const attachmentUrl = (a: Pick<schema.Attachment, 'id'>) => `/api/uploads
 
 /**
  * An attachment as the board hands it out: the URL for the browser and the file on this machine for
- * agents, which cannot fetch the URL without the gate. A board inside WSL also gives the path a
+ * agents, which cannot fetch the URL without signing in. A board inside WSL also gives the path a
  * Windows agent can open.
  */
 export function attachmentView(a: schema.Attachment, distro = process.env.WSL_DISTRO_NAME) {

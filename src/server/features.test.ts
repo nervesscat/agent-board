@@ -1288,7 +1288,7 @@ describe('the archive', () => {
       api.handle(
         new Request(`http://board${path}`, {
           method: 'POST',
-          headers: { authorization: 'Bearer gate_x', 'content-type': 'application/json' },
+          headers: { authorization: 'Bearer token-of-x', 'content-type': 'application/json' },
           body: body === undefined ? undefined : JSON.stringify(body),
         }),
         'claude',
