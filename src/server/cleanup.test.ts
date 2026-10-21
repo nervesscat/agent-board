@@ -726,4 +726,29 @@ describe('cleanupReport never calls a branch safe that is not', () => {
     expect(r.repos).toEqual([expect.objectContaining({ name: 'nope', error: expect.any(String) })])
     expect(safe(r, t.id) ?? false).toBe(false)
   })
+
+  it('says git is not installed, and the fix, when the PATH has no git', async () => {
+    const { db, schema } = await import('#/db')
+    const dir = at('no-git')
+    fs.mkdirSync(dir)
+    const projectId = db.insert(schema.projects).values({ name: 'no-git' }).returning().get().id
+    db.insert(schema.repos).values({ projectId, name: 'nogit', repoPath: dir, baseBranch: 'main' }).run()
+    const t = await ticket(projectId, { title: 'gone', branch: 'feat/z', status: 'done' })
+    const empty = at('empty-path')
+    fs.mkdirSync(empty)
+    const PATH = process.env.PATH
+    process.env.PATH = empty
+    let r: CleanupReport
+    try {
+      r = await report(projectId)
+    } finally {
+      process.env.PATH = PATH
+    }
+    const error = r.repos[0]!.error!
+    expect(error).toMatch(
+      /^git was not found on the board's PATH: install git \(https:\/\/git-scm\.com\/downloads\)/,
+    )
+    expect(error).not.toMatch(/ENOENT/)
+    expect(safe(r, t.id) ?? false).toBe(false)
+  })
 })

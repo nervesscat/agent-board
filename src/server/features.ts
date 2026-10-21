@@ -16,7 +16,13 @@ import { branchHead, NO_BRANCH } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
-import { cannotStart, forgetPreview, managedPreview, stopPreviewsFor } from './managedPreview'
+import {
+  cannotStart,
+  forgetPreview,
+  managedPreview,
+  previewToolProblem,
+  stopPreviewsFor,
+} from './managedPreview'
 import { previewState, previewUrl, type PreviewState } from './preview'
 import { cancelSupersededPrTickets, prTicketStage } from './prTickets'
 import { prForTicket, prStatus, refreshPrsInBackground, withMergeCheck } from './prs'
@@ -1331,13 +1337,23 @@ export function setWorkspacePreview(id: number, value: string | null, actor: str
  * Whether the workspace's preview answers right now (checked on this machine, cached a few seconds;
  * `running: false` without a link), the preview the board runs from it (`managed`, null when it never
  * ran one), and `cannotStart`: why the board would refuse to start one, null when it would.
+ * `toolProblem` is set when that is a tool missing on this machine (pnpm or node): the workspace could
+ * run one once it is fixed, so the Preview card shows it with the reason.
  */
 export async function workspacePreview(id: number) {
   const ws = getWorkspace(id)
   const state: PreviewState = ws.previewUrl
     ? await previewState(ws.previewUrl)
     : { running: false, checkedAt: new Date().toISOString() }
-  return { ...state, url: ws.previewUrl, managed: managedPreview(id), cannotStart: cannotStart(id) }
+  const refused = cannotStart(id)
+  const tools = previewToolProblem()
+  return {
+    ...state,
+    url: ws.previewUrl,
+    managed: managedPreview(id),
+    cannotStart: refused,
+    toolProblem: refused !== null && refused === tools ? tools : null,
+  }
 }
 
 export type WorkspacePreview = Awaited<ReturnType<typeof workspacePreview>>

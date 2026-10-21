@@ -99,7 +99,11 @@ export default defineConfig(({ mode }) => ({
     entranceGuard(),
     apiIsNeverAnAsset(),
     nitro({
-      plugins: ['./src/server/startup.ts', './src/server/plugins/uploadSweep.ts'],
+      plugins: [
+        './src/server/startup.ts',
+        './src/server/plugins/uploadSweep.ts',
+        './src/server/plugins/hostTools.ts',
+      ],
       // Loaded from node_modules, not bundled: its certificate code (@peculiar/x509, tsyringe) needs
       // reflect-metadata to run first, an order bundling breaks.
       traceDeps: ['@simplewebauthn/server'],

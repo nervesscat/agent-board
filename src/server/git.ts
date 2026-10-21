@@ -12,7 +12,8 @@ import { HttpError } from './http'
  * on the Cleanup page and the server checked again that the work landed (`cleanupActions.ts`). Every
  * other command here is a read, but for `fetchOrigin`, which only refreshes the checkout's copy of
  * origin's branches: the allowlist below is the whole vocabulary, and nothing else in the codebase
- * spawns `git` or `gh`.
+ * spawns `git` or `gh` but the check of the host's tools (`hostTools.ts`: `--version` and
+ * `gh auth status`, both reads).
  */
 
 const run = promisify(execFile)

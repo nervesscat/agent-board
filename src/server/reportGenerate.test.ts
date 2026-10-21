@@ -248,17 +248,24 @@ describe('one generation at a time', () => {
     expect(gen.generationState(p).period).toBeNull()
   })
 
-  it('fails when claude cannot be run at all', async () => {
+  it('fails when claude is not found, saying so and how to set CLAUDE_BIN', async () => {
     const now = at('2026-10-06', '16:00')
     const { p } = tracked({ now })
     happened(p, at('2026-10-06', '10:00'), 'work')
     const bin = config.claudeBin
-    config.claudeBin = path.join(tmp, 'no-such-claude')
+    const missing = path.join(tmp, 'no-such-claude')
+    config.claudeBin = missing
     try {
-      expect(await errorOf(gen.generateReport(p, {}, now))).toMatchObject({
-        status: 502,
-        message: expect.stringMatching(/^could not run claude/),
-      })
+      const err = await errorOf(gen.generateReport(p, {}, now))
+      expect(err).toMatchObject({ status: 502 })
+      expect(err.message).toBe(
+        `claude was not found: CLAUDE_BIN is ${missing}: install Claude Code ` +
+          '(https://docs.claude.com/en/docs/claude-code/setup), or set CLAUDE_BIN in .env (config.env for ' +
+          'the desktop app) to its full path, then restart the board',
+      )
+      expect(err.message).not.toMatch(/ENOENT|spawn/)
+      // The Daily page shows the same where the Generate button shows its error.
+      expect(gen.generationState(p).error?.message).toBe(err.message)
     } finally {
       config.claudeBin = bin
     }

@@ -1,6 +1,7 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 
 import { config } from './config'
+import { toolProblem } from './hostTools'
 import { HttpError } from './http'
 
 const WIN = process.platform === 'win32'
@@ -12,8 +13,8 @@ const ERROR_TAIL = 500
 /**
  * One run of the `claude` CLI in print mode: `config.claudeBin` with `config.claudeArgs` first, then
  * `-p --output-format text`, the prompt written to its stdin (never an argument, so its size is not
- * bounded by the command line). Resolves with what it printed; rejects (502) when it cannot start,
- * exits non-zero or outlives `timeoutMs` (`config.claudeTimeoutMs` by default), killed then with
+ * bounded by the command line). Resolves with what it printed; rejects (502) when it cannot start (one
+ * not found says so and how to fix `CLAUDE_BIN`), exits non-zero or outlives `timeoutMs` (`config.claudeTimeoutMs` by default), killed then with
  * whatever it started.
  */
 export function runClaude(
@@ -43,7 +44,13 @@ export function runClaude(
       timeoutMs,
     )
 
-    child.on('error', (e) => fail(`could not run claude (${config.claudeBin}): ${e.message}`))
+    child.on('error', (e) =>
+      fail(
+        (e as NodeJS.ErrnoException).code === 'ENOENT'
+          ? toolProblem('claude', e)!
+          : `could not run claude (${config.claudeBin}): ${e.message}`,
+      ),
+    )
     child.stdout.on('data', (chunk: Buffer) => {
       outSize += chunk.length
       if (outSize > MAX_OUTPUT) fail('claude printed more than a report: stopped it')

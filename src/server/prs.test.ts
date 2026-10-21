@@ -19,6 +19,8 @@ process.env.DATA_DIR = tmp
 let found: MyGhPr[] = []
 let foundIn: Record<string, MyGhPr[]> = {}
 let failing = new Set<string>()
+// gh is not on the PATH: every search fails the way Node's spawn does.
+let ghMissing = false
 let states: Record<number, 'OPEN' | 'CLOSED' | 'MERGED'> = {}
 // A checkout whose next search waits for its promise, once: a test holds one refresh's read while another runs.
 let holdNext = new Map<string, Promise<void>>()
@@ -31,6 +33,8 @@ vi.mock('./git', async (original) => ({
     const hold = holdNext.get(repoPath)
     holdNext.delete(repoPath)
     if (hold) await hold
+    if (ghMissing)
+      throw Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT', syscall: 'spawn gh', path: 'gh' })
     if (failing.has(repoPath)) throw new Error(`gh pr list failed in ${repoPath}`)
     return foundIn[repoPath] ?? found
   },
@@ -43,6 +47,7 @@ afterEach(() => {
   found = []
   foundIn = {}
   failing = new Set()
+  ghMissing = false
   holdNext = new Map()
   searches = new Map()
   states = {}
@@ -523,6 +528,45 @@ describe('the queue', () => {
     expect(queue.map((p) => `${p.number}:${p.status}`).sort()).toEqual(['50:pending', '51:done'])
     failing = new Set(['/r/ok', '/r/broken'])
     await expect(prs.listPrs(projectId, { refresh: true })).rejects.toThrow('gh pr list failed')
+  })
+  it('says gh is missing or signed out, and the fix, instead of what the spawn said', async () => {
+    const { db, schema } = await import('#/db')
+    const host = await import('./hostTools')
+    const projectId = db.insert(schema.projects).values({ name: 'no gh' }).returning().get().id
+    db.insert(schema.repos)
+      .values({ projectId, name: 'app', repoPath: '/r/no-gh', baseBranch: 'main', githubRepo: 'acme/app' })
+      .run()
+    // Missing, before any check ran: the spawn's ENOENT says so.
+    ghMissing = true
+    const missing = prs.listPrs(projectId, { refresh: true })
+    await expect(missing).rejects.toMatchObject({ status: 502 })
+    await expect(missing).rejects.toThrow(
+      /gh was not found on the board's PATH: install the GitHub CLI \(https:\/\/cli\.github\.com\)/,
+    )
+    await expect(missing).rejects.not.toThrow(/ENOENT/)
+    // The same over REST, as the PR page shows it.
+    const { api } = await import('./api')
+    const { api: guard } = await import('./http')
+    const handle = guard(({ request, actor }: { request: Request; actor: string }) =>
+      api.handle(request, actor),
+    )
+    const res = await handle({
+      request: new Request(`http://localhost/api/projects/${projectId}/prs?refresh=1`),
+      actor: 'enrique',
+    })
+    expect(res.status).toBe(502)
+    expect(((await res.json()) as { error: string }).error).toMatch(/^gh was not found.*gh auth login/)
+    // Signed out, as the last check found: the searches fail with gh's own words, the error says sign in.
+    ghMissing = false
+    failing = new Set(['/r/no-gh'])
+    host.setHostTools(host.hostToolsWith({ gh: { path: '/usr/bin/gh', version: '2.0.0', signedIn: false } }))
+    try {
+      await expect(prs.listPrs(projectId, { refresh: true })).rejects.toThrow(
+        'gh is not signed in: run gh auth login on this machine, then Check again',
+      )
+    } finally {
+      host.setHostTools(null)
+    }
   })
   it('says which PR to merge first when the ticket of a PR needs another ticket with an open PR', async () => {
     const { db, schema } = await import('#/db')

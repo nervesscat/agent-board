@@ -1,0 +1,285 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+
+import type { HostTool, HostTools } from './hostTools'
+
+// The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
+// claude is the tests' stand-in (e2e/fake-claude.mjs), run through node, as the e2e board runs it.
+const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-host-tools-')))
+process.env.DATA_DIR = path.join(tmp, 'data')
+const FAKE_CLAUDE = fileURLToPath(new URL('../../e2e/fake-claude.mjs', import.meta.url))
+process.env.CLAUDE_BIN = process.execPath
+process.env.CLAUDE_ARGS = JSON.stringify([FAKE_CLAUDE])
+
+const WIN = process.platform === 'win32'
+
+let host: typeof import('./hostTools')
+beforeAll(async () => {
+  host = await import('./hostTools')
+})
+afterEach(() => host.setHostTools(null))
+
+let dirs = 0
+/** A fresh folder of fake tools: each prints `<name> version <v>`; `authFails` has `gh auth status` exit 1. */
+function shims(tools: Record<string, string>, opts: { authFails?: boolean; dirName?: string } = {}) {
+  const dir = path.join(tmp, opts.dirName ?? `shims-${++dirs}`)
+  fs.mkdirSync(dir, { recursive: true })
+  for (const [name, version] of Object.entries(tools)) {
+    const auth = opts.authFails ? 1 : 0
+    if (WIN)
+      fs.writeFileSync(
+        path.join(dir, `${name}.cmd`),
+        `@echo off\r\nif "%1"=="auth" exit /b ${auth}\r\necho ${name} version ${version}\r\n`,
+      )
+    else {
+      const file = path.join(dir, name)
+      fs.writeFileSync(
+        file,
+        `#!/bin/sh\nif [ "$1" = "auth" ]; then exit ${auth}; fi\necho "${name} version ${version}"\n`,
+      )
+      fs.chmodSync(file, 0o755)
+    }
+  }
+  return dir
+}
+
+/** The server's env with only `PATH` as given (whatever case the platform keeps it in). */
+function envWith(PATH: string): NodeJS.ProcessEnv {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== 'PATH'))
+  return { ...env, PATH }
+}
+
+const byName = (r: HostTools) =>
+  Object.fromEntries(r.tools.map((t) => [t.name, t])) as Record<string, HostTool>
+
+describe('the check', () => {
+  it('finds the tools on the PATH it is given, with their version, and gh signed out when auth status fails', async () => {
+    const dir = shims({ git: '9.9.9', gh: '8.8.8' }, { authFails: true })
+    const r = await host.probeHostTools({ env: envWith(dir), claudeBin: 'claude', claudeArgs: [] })
+    const t = byName(r)
+    expect(Date.parse(r.checkedAt)).not.toBeNaN()
+    expect(r.tools.map((x) => x.name)).toEqual(['git', 'gh', 'claude', 'node', 'pnpm'])
+    expect(t.git).toMatchObject({ found: true, version: '9.9.9', ok: true, problem: null, fix: null })
+    expect(path.dirname(t.git!.path!)).toBe(dir)
+    expect(t.gh).toMatchObject({ found: true, version: '8.8.8', signedIn: false, ok: false })
+    expect(t.gh!.fix).toMatch(/gh auth login/)
+    for (const name of ['claude', 'node', 'pnpm'])
+      expect(t[name]).toMatchObject({ found: false, path: null, version: null, ok: false })
+    expect(t.git).not.toHaveProperty('signedIn')
+  })
+
+  it('has gh signed in when auth status succeeds', async () => {
+    const dir = shims({ gh: '2.1.0' })
+    const r = await host.probeHostTools({ env: envWith(dir), claudeBin: 'claude', claudeArgs: [] })
+    expect(byName(r).gh).toMatchObject({ found: true, version: '2.1.0', signedIn: true, ok: true })
+  })
+
+  it('finds a Windows tool by its PATHEXT extension: pnpm.cmd is pnpm', () => {
+    const dir = path.join(tmp, 'pathext')
+    fs.mkdirSync(dir)
+    fs.writeFileSync(path.join(dir, 'pnpm.cmd'), '@echo 9.1.0\r\n')
+    fs.writeFileSync(path.join(dir, 'git'), '')
+    const lookup = {
+      env: { PATH: `${tmp};${dir}`, PATHEXT: '.COM;.EXE;.BAT;.CMD' },
+      platform: 'win32' as const,
+    }
+    expect(host.resolveTool('pnpm', lookup)).toBe(path.join(dir, 'pnpm.cmd'))
+    // Without a runnable extension, Windows would not run it: not found.
+    expect(host.resolveTool('git', lookup)).toBeNull()
+    expect(host.resolveTool('pnpm.cmd', lookup)).toBe(path.join(dir, 'pnpm.cmd'))
+  })
+
+  it.runIf(WIN)(
+    'runs a .cmd shim through the shell and reads its version, from a folder with a space',
+    async () => {
+      const dir = shims({ pnpm: '9.12.3' }, { dirName: 'only pnpm' })
+      const r = await host.probeHostTools({ env: envWith(dir), claudeBin: 'claude', claudeArgs: [] })
+      expect(byName(r).pnpm).toMatchObject({ found: true, version: '9.12.3', ok: true })
+      expect(byName(r).pnpm!.path).toBe(path.join(dir, 'pnpm.cmd'))
+    },
+  )
+
+  it('looks claude up from CLAUDE_BIN: a missing path is not found and the fix names CLAUDE_BIN', async () => {
+    const missing = path.join(tmp, 'nope', WIN ? 'claude.exe' : 'claude')
+    const r = await host.probeHostTools({ env: envWith(''), claudeBin: missing, claudeArgs: [] })
+    const claude = byName(r).claude!
+    expect(claude).toMatchObject({
+      found: false,
+      ok: false,
+      problem: `claude was not found: CLAUDE_BIN is ${missing}`,
+    })
+    expect(claude.fix).toMatch(/CLAUDE_BIN in \.env \(config\.env for the desktop app\)/)
+  })
+
+  it('runs claude as CLAUDE_BIN with CLAUDE_ARGS first: a name on PATH, found even when it prints no version', async () => {
+    const started = Date.now()
+    const r = await host.probeHostTools({
+      env: envWith(path.dirname(process.execPath)),
+      claudeBin: 'node',
+      claudeArgs: [FAKE_CLAUDE],
+    })
+    expect(byName(r).claude).toMatchObject({ found: true, version: null, ok: true })
+    expect(byName(r).node).toMatchObject({ found: true, version: process.versions.node, ok: true })
+    expect(Date.now() - started).toBeLessThan(host.PROBE_TIMEOUT_MS)
+  })
+
+  it('stops waiting for a probe that hangs: the tool is still found, without a version', async () => {
+    const started = Date.now()
+    const r = await host.probeHostTools({
+      env: envWith(''),
+      claudeBin: process.execPath,
+      claudeArgs: ['-e', 'setInterval(() => {}, 1000)', '--'],
+      timeoutMs: 500,
+    })
+    expect(byName(r).claude).toMatchObject({ found: true, version: null, ok: true })
+    expect(Date.now() - started).toBeLessThan(5_000)
+  })
+})
+
+describe('what each tool breaks and how to fix it', () => {
+  it('says it for a missing tool of each kind, and for gh signed out', () => {
+    const missing = (name: Parameters<typeof host.toolEntry>[0]) =>
+      host.toolEntry(name, { path: null }, '/opt/claude')
+    expect(missing('git')).toMatchObject({
+      breaks: 'ticket branch and commit status, merged checks and cleanup',
+      problem: "git was not found on the board's PATH",
+      fix: expect.stringContaining('install git (https://git-scm.com/downloads)'),
+    })
+    expect(missing('gh')).toMatchObject({
+      breaks: 'the PR queue, CI status and PR tickets',
+      signedIn: null,
+      fix: expect.stringMatching(
+        /install the GitHub CLI \(https:\/\/cli\.github\.com\) and run gh auth login/,
+      ),
+    })
+    expect(missing('claude')).toMatchObject({
+      breaks: 'generated reports and agents',
+      problem: 'claude was not found: CLAUDE_BIN is /opt/claude',
+      fix: expect.stringMatching(/install Claude Code \(https:.*\), or set CLAUDE_BIN/),
+    })
+    expect(missing('node')).toMatchObject({
+      breaks: 'managed previews',
+      fix: expect.stringContaining('install Node.js (https://nodejs.org)'),
+    })
+    expect(missing('pnpm')).toMatchObject({
+      breaks: 'managed previews',
+      fix: expect.stringContaining('corepack enable pnpm'),
+    })
+    expect(host.toolEntry('gh', { path: '/usr/bin/gh', version: '2.0.0', signedIn: false })).toMatchObject({
+      found: true,
+      ok: false,
+      problem: 'gh is not signed in',
+      fix: 'run gh auth login on this machine, then Check again',
+    })
+    expect(host.toolEntry('gh', { path: '/usr/bin/gh', version: '2.0.0', signedIn: true })).toMatchObject({
+      ok: true,
+      problem: null,
+      fix: null,
+    })
+  })
+
+  it("gives a feature the problem in one line: from the last check, or from a spawn's ENOENT", () => {
+    expect(host.toolProblem('gh')).toBeNull()
+    const enoent = Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT', syscall: 'spawn git' })
+    expect(host.toolProblem('git', enoent)).toMatch(/^git was not found on the board's PATH: install git/)
+    expect(host.toolProblem('git', new Error('fatal: not a git repository'))).toBeNull()
+    host.setHostTools(host.hostToolsWith({ pnpm: { path: null } }))
+    expect(host.toolProblem('pnpm')).toMatch(
+      /^pnpm was not found on the board's PATH: run corepack enable pnpm/,
+    )
+    expect(host.toolProblem('node')).toBeNull()
+  })
+})
+
+describe('over REST and MCP', () => {
+  async function call(method: string, pathname: string, body?: unknown, as: 'human' | 'agent' = 'human') {
+    const { api } = await import('./api')
+    const { api: guard } = await import('./http')
+    const handle = guard(({ request, actor }: { request: Request; actor: string }) =>
+      api.handle(request, actor),
+    )
+    const request = new Request(`http://localhost${pathname}`, {
+      method,
+      headers: {
+        accept: 'application/json, text/event-stream',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        // A gate token: an agent, as opposed to the human's passkey session.
+        ...(as === 'agent' ? { authorization: 'Bearer gate_test' } : {}),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    return handle({ request, actor: as === 'agent' ? 'claude' : 'enrique' })
+  }
+
+  it('GET answers the last check (waiting for the first), POST checks again; health stays { ok: true }', async () => {
+    const first = (await (await call('GET', '/api/host-tools', undefined, 'agent')).json()) as HostTools
+    expect(first.tools.map((t) => t.name)).toEqual(['git', 'gh', 'claude', 'node', 'pnpm'])
+    // The board's own stand-in claude, from CLAUDE_BIN and CLAUDE_ARGS.
+    expect(first.tools.find((t) => t.name === 'claude')).toMatchObject({
+      found: true,
+      path: process.execPath,
+    })
+    const again = (await (await call('GET', '/api/host-tools')).json()) as HostTools
+    expect(again.checkedAt).toBe(first.checkedAt)
+    const res = await call('POST', '/api/host-tools/check')
+    expect(res.status).toBe(200)
+    const checked = (await res.json()) as HostTools
+    expect(Date.parse(checked.checkedAt)).toBeGreaterThanOrEqual(Date.parse(first.checkedAt))
+    expect(checked.checkedAt).not.toBe(first.checkedAt)
+    expect(host.hostTools()?.checkedAt).toBe(checked.checkedAt)
+    expect(await (await call('GET', '/api/health')).json()).toEqual({ ok: true })
+  }, 30_000)
+
+  it("get_project holds the last check: each tool's state, and the problem and fix of one missing", async () => {
+    const { db, schema } = await import('#/db')
+    const projectId = db.insert(schema.projects).values({ name: 'tools' }).returning().get().id
+    host.setHostTools(host.hostToolsWith({ gh: { path: null } }))
+    const res = await call(
+      'POST',
+      '/api/mcp',
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/call',
+        params: { name: 'get_project', arguments: { projectId } },
+      },
+      'agent',
+    )
+    const { result } = (await res.json()) as { result: { content: { text: string }[] } }
+    const project = JSON.parse(result.content[0]!.text) as {
+      hostTools: { tools: Record<string, unknown>[] }
+    }
+    expect(project.hostTools.tools).toHaveLength(5)
+    expect(project.hostTools.tools.find((t) => t.name === 'gh')).toEqual({
+      name: 'gh',
+      found: false,
+      version: null,
+      signedIn: null,
+      ok: false,
+      breaks: 'the PR queue, CI status and PR tickets',
+      problem: "gh was not found on the board's PATH",
+      fix: expect.stringContaining('https://cli.github.com'),
+    })
+    expect(project.hostTools.tools.find((t) => t.name === 'git')).toEqual({
+      name: 'git',
+      found: true,
+      version: '1.0.0',
+      ok: true,
+    })
+    // The tool says what it holds.
+    const list = await call('POST', '/api/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/list' }, 'agent')
+    const { result: tools } = (await list.json()) as {
+      result: { tools: { name: string; description: string }[] }
+    }
+    expect(tools.tools.find((t) => t.name === 'get_project')!.description).toMatch(
+      /hostTools \(the board's last check of the tools on its machine/,
+    )
+    // REST reads the same.
+    const rest = (await (await call('GET', `/api/projects/${projectId}`)).json()) as typeof project
+    expect(rest.hostTools.tools).toHaveLength(5)
+  })
+})

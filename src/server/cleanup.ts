@@ -25,6 +25,7 @@ import {
   type Refs,
   type Worktree,
 } from './git'
+import { toolProblem } from './hostTools'
 import { stoppableLinkPort } from './linkPreview'
 import { activePreviews, type ManagedPreview } from './managedPreview'
 import { getProject } from './projects'
@@ -78,7 +79,9 @@ async function listing(repoPath: string, recent: boolean): Promise<RepoGit> {
   if (refs.status === 'fulfilled' && worktrees.status === 'fulfilled')
     return { refs: refs.value, worktrees: worktrees.value, error: null }
   const failed = [refs, worktrees].find((r) => r.status === 'rejected') as PromiseRejectedResult
-  return { ...none, error: `git cannot read ${repoPath}: ${gitSaid(failed.reason)}` }
+  // git missing says so and how to fix it, not the spawn's ENOENT.
+  const missing = toolProblem('git', failed.reason)
+  return { ...none, error: missing ?? `git cannot read ${repoPath}: ${gitSaid(failed.reason)}` }
 }
 
 /**

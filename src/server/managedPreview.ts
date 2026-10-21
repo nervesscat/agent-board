@@ -10,6 +10,7 @@ import { db, schema } from '#/db'
 import { readPreviewLimit } from '#/lib/constants'
 import { logActivity } from './activity'
 import { authMode, config, uploadsDir } from './config'
+import { toolProblem } from './hostTools'
 import { HttpError, notFound } from './http'
 import { checkPreview } from './preview'
 import { ticketRepo } from './repos'
@@ -390,6 +391,12 @@ function clearUrl(workspaceId: number, url: string) {
     .run()
 }
 
+/**
+ * Why no preview can start on this machine, as the last check of its tools found: a build runs pnpm,
+ * which needs node on the PATH. Null when both were found (or no check ended yet).
+ */
+export const previewToolProblem = () => toolProblem('pnpm') ?? toolProblem('node')
+
 /** Whether a start would be refused before anything runs; null when it may start. */
 export function cannotStart(workspaceId: number): string | null {
   if (authMode().boardEnv === 'development')
@@ -402,6 +409,8 @@ export function cannotStart(workspaceId: number): string | null {
   const target = previewTarget(ws, ticketRepo(ticket))
   if (!target.ok) return target.reason
   if ([...removing].some((at) => at(target.path))) return 'its worktree is being removed'
+  const tools = previewToolProblem()
+  if (tools) return tools
   const other = [...all().values()].find(
     (e) => e.workspaceId !== workspaceId && isActive(e) && norm(e.path) === norm(target.path),
   )
