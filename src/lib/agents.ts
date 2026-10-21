@@ -31,8 +31,17 @@ export type Shell = (typeof SHELLS)[number]
 /** The shell picked last, remembered in this browser (`useShell` in ReviewSkills). */
 export const SHELL_KEY = 'agents.shell'
 
-/** Stands in for the token until one is pasted on the page. */
-export const TOKEN_PLACEHOLDER = 'gate_…'
+/** Stands in for the token until "Generate commands" makes one on the page. */
+export const TOKEN_PLACEHOLDER = '<token>'
+
+/** How long an agent token the board issues signs in: a year from when it is made. */
+export const AGENT_TOKEN_DAYS = 365
+
+/**
+ * An agent token's name, which is the agent's name on the board: a letter or digit, then letters,
+ * digits, `.`, `_` or `-`, 40 at most (as a project agent's name).
+ */
+export const AGENT_TOKEN_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/
 
 /** How the CLI learns about the board's MCP server: a command to run, or config to add to a file. */
 export function mcpSetup(client: AgentClient, boardUrl: string, token: string) {

@@ -23,6 +23,7 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Tip } from '#/components/ui/tooltip'
+import { GenerateCommands } from '#/components/AgentTokens'
 import { ReviewSkills, useShell } from '#/components/ReviewSkills'
 import { RichEditor } from '#/components/RichEditor'
 import { SHELLS } from '#/lib/agents'
@@ -30,6 +31,7 @@ import { del, errorMessage, get, patch, post, type ProjectAgent, type TicketRow,
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { useProject } from '#/lib/project'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
+import type { NewAgentToken } from '#/server/tokens'
 
 // ?shell= is the shell the review skills' install line is for (see useShell).
 export const Route = createFileRoute('/projects/$id/agents')({
@@ -87,6 +89,8 @@ function DefaultAgents({ projectId, agents }: { projectId: string; agents: Proje
     queryFn: () => get<{ boardUrl: string }>('/api/agent-setup'),
   })
   const [shell, pickShell] = useShell()
+  // The token "Generate commands" made for the install lines: shown once, never stored here.
+  const [made, setMade] = useState<NewAgentToken | null>(null)
   const have = new Set(agents.map((a) => a.name.toLowerCase()))
   const missing = DEFAULT_AGENT_NAMES.filter((n) => !have.has(n))
   const add = useMutation({
@@ -128,9 +132,11 @@ function DefaultAgents({ projectId, agents }: { projectId: string; agents: Proje
           <span className="shrink-0 text-xs text-muted-foreground">All added</span>
         )}
       </div>
+      {setup && <GenerateCommands defaultName="claude" token={made} onToken={setMade} />}
       {setup && (
         <ReviewSkills
           boardUrl={setup.boardUrl}
+          token={made?.token}
           shell={shell}
           onShellChange={pickShell}
           projectId={projectId}

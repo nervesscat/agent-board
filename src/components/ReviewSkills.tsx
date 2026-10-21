@@ -9,7 +9,14 @@ import { SkillFileDiffDialog } from '#/components/SkillFileDiff'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
-import { SHELLS, SHELL_KEY, type Shell, repoClaudeDir, reviewSkillsInstall } from '#/lib/agents'
+import {
+  SHELLS,
+  SHELL_KEY,
+  type Shell,
+  TOKEN_PLACEHOLDER,
+  repoClaudeDir,
+  reviewSkillsInstall,
+} from '#/lib/agents'
 import { errorMessage, get, patch } from '#/lib/api'
 import type { SkillsTracking } from '#/lib/constants'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
@@ -41,9 +48,10 @@ export function useShell() {
 
 /**
  * The one-line install of the feature-review, review-queue and todo-review skills and their agents, which run the
- * default agents' cycle, for the page's shell (`useShell`). Without a token the line carries the
- * placeholder to replace. Below it, whether the copy the board tracks (a board-wide setting) is current:
- * the one in `~/.claude` on the board's machine, or each repo's own (every repo, or `projectId`'s).
+ * default agents' cycle, for the page's shell (`useShell`), with the token the page's "Generate commands"
+ * made (`GenerateCommands`); until then the line carries the placeholder. Below it, whether the copy the
+ * board tracks (a board-wide setting) is current: the one in `~/.claude` on the board's machine, or each
+ * repo's own (every repo, or `projectId`'s).
  */
 export function ReviewSkills({
   boardUrl,
@@ -75,7 +83,8 @@ export function ReviewSkills({
           {!token && (
             <>
               {' '}
-              Put your token in place of <code className="rounded bg-muted px-1">gate_…</code>.
+              Generate commands to put the agent&apos;s token in place of{' '}
+              <code className="rounded bg-muted px-1">{TOKEN_PLACEHOLDER}</code>.
             </>
           )}
         </p>

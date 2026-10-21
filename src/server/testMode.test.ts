@@ -39,7 +39,7 @@ async function call(method: string, pathname: string, testActor?: string, body?:
 }
 
 describe('test mode through the API router', () => {
-  it('says who you are and that the gate is off', async () => {
+  it('says who you are and that sign-in is off', async () => {
     expect(await (await call('GET', '/api/me', 'agent:builder')).json()).toEqual({
       actor: 'builder',
       agent: true,
@@ -47,6 +47,17 @@ describe('test mode through the API router', () => {
       authOff: true,
     })
     expect(await (await call('GET', '/api/me')).json()).toMatchObject({ actor: 'human', agent: false })
+  })
+
+  it('has no passkeys to sign in with: the sign-in endpoints say sign-in is off', async () => {
+    for (const path of ['/api/auth/login/options', '/api/auth/setup/options', '/api/auth/enrol-links']) {
+      const res = await call('POST', path, 'human:qa', { name: 'qa' })
+      expect(res.status, path).toBe(409)
+      expect(await res.json()).toEqual({
+        error: 'sign-in is off on this board (BOARD_ENV=test)',
+        code: 'auth-off',
+      })
+    }
   })
 
   it("refuses an agent: caller the project's agents, and lets a human: one write them", async () => {

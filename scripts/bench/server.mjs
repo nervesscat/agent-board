@@ -1,5 +1,5 @@
 // Builds the target checkout into a folder of the harness's own and runs that build as a board in
-// test mode (no gate, loopback only, never the live port) on a copy of the data, with the preload
+// test mode (sign-in off, loopback only, never the live port) on a copy of the data, with the preload
 // that counts SQL statements and child processes per request.
 import { spawn, spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'

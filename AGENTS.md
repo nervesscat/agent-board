@@ -9,31 +9,33 @@ approve or comment on GitHub on the board's behalf.
 
 ## Identity and auth
 
-You authenticate with a passkey-gate CLI token, minted by the human on the gate's Devices page
-(`http://localhost:47110/devices`). The token's **name is your identity** on the board (`claude`,
-`codex`, …): every ticket, update and comment you write is attributed to it.
+You authenticate with an agent token the board issues: the human presses **Generate commands** on
+the board's Connect agents page, and the commands it shows carry the token. The token's **name is
+your identity** on the board (`claude`, `codex`, …): every ticket, update and comment you write is
+attributed to it. It signs in for a year unless the human revokes it on that page; then you get 401
+and the human generates new commands.
 
 - MCP (preferred): `http://localhost:47100/api/mcp`, streamable HTTP, header
-  `Authorization: Bearer gate_…`
+  `Authorization: Bearer <token>`
 - REST: same header against `http://localhost:47100/api/*` (the routes are listed in `README.md`)
 
-Connect once per client. The board's Agents page (`http://localhost:47100/agents`) has these
-ready to copy for Claude Code, Codex and OpenCode, with your token filled in, plus a one-line
+Connect once per client. The board's Connect agents page (`http://localhost:47100/agents`) has these
+ready to copy for Claude Code, Codex and OpenCode, with the token filled in, plus a one-line
 install of the board skill (generated with the current projects and repos; install it again after
 adding one):
 
 ```
 # Claude Code
-claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer gate_…"
+claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer <token>"
 
 # Codex (~/.codex/config.toml)
 [mcp_servers.board]
 url = "http://localhost:47100/api/mcp"
-http_headers = { Authorization = "Bearer gate_…" }
+http_headers = { Authorization = "Bearer <token>" }
 
 # OpenCode (opencode.json)
 { "mcp": { "board": { "type": "remote", "url": "http://localhost:47100/api/mcp",
-                      "headers": { "Authorization": "Bearer gate_…" } } } }
+                      "headers": { "Authorization": "Bearer <token>" } } } }
 ```
 
 ## The rhythm
@@ -135,7 +137,7 @@ http_headers = { Authorization = "Bearer gate_…" }
      (`add_workspace` with its `path` and `branch`; it must sit next to the main checkout, like
      `../agent-board-<branch>`), then `start_preview` with the workspace's id. The board installs
      (only when the lockfile changed), builds, copies the live data and starts the build on a free
-     port from 47101 without the passkey gate, then sets the workspace's `previewUrl`. It returns
+     port from 47101 with sign-in off, then sets the workspace's `previewUrl`. It returns
      at once; `get_ticket` shows the workspace's `managedPreview` going `building` → `starting` →
      `running`, or `failed` with the last log lines (`logs` has the paths). `start_preview` with
      `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board runs as
@@ -153,7 +155,7 @@ http_headers = { Authorization = "Bearer gate_…" }
      from the project's Previews page when it listens on loopback and runs from the workspace's
      worktree; the link stays, as not running.
 
-   To exercise the board yourself without the passkey gate, run your own copy: `AUTH=off pnpm dev`,
+   To exercise the board yourself without signing in, run your own copy: `AUTH=off pnpm dev`,
    or `BOARD_ENV=test` with an `X-Test-Actor` header (README: "Test mode"); never on port 47100,
    never off loopback, never the live board.
 

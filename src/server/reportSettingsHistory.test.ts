@@ -52,7 +52,7 @@ async function rest(method: string, pathname: string, as: 'human' | 'agent' = 'h
   const res = await handle(
     new Request(`http://localhost${pathname}`, {
       method,
-      headers: as === 'agent' ? { authorization: 'Bearer gate_test' } : {},
+      headers: as === 'agent' ? { authorization: 'Bearer token-of-test' } : {},
     }),
   )
   return { status: res.status, body: (await res.json()) as any }
