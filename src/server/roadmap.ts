@@ -1,15 +1,15 @@
 import { asc, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import type { StepTask } from '#/lib/branches'
+import type { StepTask } from '#/lib/roadmap'
 import { listTickets, laneTree } from './features'
 import { kindOf, listStages } from './stages'
 
-/** The kinds of stage a top-level ticket is in to show on the branch view: being worked or waiting. */
+/** The kinds of stage a top-level ticket is in to show on the roadmap: being worked or waiting. */
 const SHOWN = new Set(['active', 'blocked', 'review'])
 
-/** One branch on the view: a ticket or a lane, with its tasks in tree order. */
-export type BranchRow = {
+/** One row on the roadmap: a ticket or a lane, with its tasks in tree order. */
+export type RoadmapRow = {
   id: number
   title: string
   assignee: string
@@ -20,14 +20,14 @@ export type BranchRow = {
 }
 
 /** A top-level ticket with its lanes (theirs too, nearest first, each with its depth under it). */
-export type BranchTicket = BranchRow & { lanes: (BranchRow & { depth: number })[] }
+export type RoadmapTicket = RoadmapRow & { lanes: (RoadmapRow & { depth: number })[] }
 
 /**
- * The project's branch view: every top-level ticket in an active, blocked or review stage (archived and
+ * The project's roadmap: every top-level ticket in an active, blocked or review stage (archived and
  * PR tickets left out), last updated first, each with its tasks and its lanes' that are not cancelled.
  * Read-only, one pass over the project.
  */
-export function branchView(projectId: number): BranchTicket[] {
+export function roadmap(projectId: number): RoadmapTicket[] {
   const stages = listStages(projectId)
   const all = listTickets(projectId)
   const roots = all.filter((t) => t.parentId === null && SHOWN.has(kindOf(stages, t.status)))
@@ -68,7 +68,7 @@ export function branchView(projectId: number): BranchTicket[] {
         blockedReason,
       }))
   }
-  const row = (t: (typeof all)[number]): BranchRow => ({
+  const row = (t: (typeof all)[number]): RoadmapRow => ({
     id: t.id,
     title: t.title,
     assignee: t.assignee,

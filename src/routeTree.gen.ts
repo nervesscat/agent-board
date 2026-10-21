@@ -18,13 +18,13 @@ import { Route as ApiSplatRouteImport } from './routes/api/$'
 import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
 import { Route as ProjectsIdIndexRouteImport } from './routes/projects.$id.index'
 import { Route as ProjectsIdAgentsRouteImport } from './routes/projects.$id.agents'
-import { Route as ProjectsIdBranchesRouteImport } from './routes/projects.$id.branches'
 import { Route as ProjectsIdCleanupRouteImport } from './routes/projects.$id.cleanup'
 import { Route as ProjectsIdDailyRouteImport } from './routes/projects.$id.daily'
 import { Route as ProjectsIdGalleryRouteImport } from './routes/projects.$id.gallery'
 import { Route as ProjectsIdPreviewsRouteImport } from './routes/projects.$id.previews'
 import { Route as ProjectsIdPrsRouteImport } from './routes/projects.$id.prs'
 import { Route as ProjectsIdReviewsRouteImport } from './routes/projects.$id.reviews'
+import { Route as ProjectsIdRoadmapRouteImport } from './routes/projects.$id.roadmap'
 import { Route as ProjectsIdSettingsRouteImport } from './routes/projects.$id.settings'
 import { Route as ProjectsIdFeaturesIndexRouteImport } from './routes/projects.$id.features.index'
 import { Route as ProjectsIdFeaturesTicketIdRouteImport } from './routes/projects.$id.features.$ticketId'
@@ -74,11 +74,6 @@ const ProjectsIdAgentsRoute = ProjectsIdAgentsRouteImport.update({
   path: '/agents',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
-const ProjectsIdBranchesRoute = ProjectsIdBranchesRouteImport.update({
-  id: '/branches',
-  path: '/branches',
-  getParentRoute: () => ProjectsIdRoute,
-} as any)
 const ProjectsIdCleanupRoute = ProjectsIdCleanupRouteImport.update({
   id: '/cleanup',
   path: '/cleanup',
@@ -109,6 +104,11 @@ const ProjectsIdReviewsRoute = ProjectsIdReviewsRouteImport.update({
   path: '/reviews',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
+const ProjectsIdRoadmapRoute = ProjectsIdRoadmapRouteImport.update({
+  id: '/roadmap',
+  path: '/roadmap',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 const ProjectsIdSettingsRoute = ProjectsIdSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -135,13 +135,13 @@ export interface FileRoutesByFullPath {
   '/api/$': typeof ApiSplatRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/projects/$id/agents': typeof ProjectsIdAgentsRoute
-  '/projects/$id/branches': typeof ProjectsIdBranchesRoute
   '/projects/$id/cleanup': typeof ProjectsIdCleanupRoute
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
+  '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id/': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -155,13 +155,13 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/api/$': typeof ApiSplatRoute
   '/projects/$id/agents': typeof ProjectsIdAgentsRoute
-  '/projects/$id/branches': typeof ProjectsIdBranchesRoute
   '/projects/$id/cleanup': typeof ProjectsIdCleanupRoute
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
+  '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -177,13 +177,13 @@ export interface FileRoutesById {
   '/api/$': typeof ApiSplatRoute
   '/projects/$id': typeof ProjectsIdRouteWithChildren
   '/projects/$id/agents': typeof ProjectsIdAgentsRoute
-  '/projects/$id/branches': typeof ProjectsIdBranchesRoute
   '/projects/$id/cleanup': typeof ProjectsIdCleanupRoute
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
+  '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id/': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -200,13 +200,13 @@ export interface FileRouteTypes {
     | '/api/$'
     | '/projects/$id'
     | '/projects/$id/agents'
-    | '/projects/$id/branches'
     | '/projects/$id/cleanup'
     | '/projects/$id/daily'
     | '/projects/$id/gallery'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/reviews'
+    | '/projects/$id/roadmap'
     | '/projects/$id/settings'
     | '/projects/$id/'
     | '/projects/$id/features/$ticketId'
@@ -220,13 +220,13 @@ export interface FileRouteTypes {
     | '/settings'
     | '/api/$'
     | '/projects/$id/agents'
-    | '/projects/$id/branches'
     | '/projects/$id/cleanup'
     | '/projects/$id/daily'
     | '/projects/$id/gallery'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/reviews'
+    | '/projects/$id/roadmap'
     | '/projects/$id/settings'
     | '/projects/$id'
     | '/projects/$id/features/$ticketId'
@@ -241,13 +241,13 @@ export interface FileRouteTypes {
     | '/api/$'
     | '/projects/$id'
     | '/projects/$id/agents'
-    | '/projects/$id/branches'
     | '/projects/$id/cleanup'
     | '/projects/$id/daily'
     | '/projects/$id/gallery'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/reviews'
+    | '/projects/$id/roadmap'
     | '/projects/$id/settings'
     | '/projects/$id/'
     | '/projects/$id/features/$ticketId'
@@ -329,13 +329,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdAgentsRouteImport
       parentRoute: typeof ProjectsIdRoute
     }
-    '/projects/$id/branches': {
-      id: '/projects/$id/branches'
-      path: '/branches'
-      fullPath: '/projects/$id/branches'
-      preLoaderRoute: typeof ProjectsIdBranchesRouteImport
-      parentRoute: typeof ProjectsIdRoute
-    }
     '/projects/$id/cleanup': {
       id: '/projects/$id/cleanup'
       path: '/cleanup'
@@ -378,6 +371,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdReviewsRouteImport
       parentRoute: typeof ProjectsIdRoute
     }
+    '/projects/$id/roadmap': {
+      id: '/projects/$id/roadmap'
+      path: '/roadmap'
+      fullPath: '/projects/$id/roadmap'
+      preLoaderRoute: typeof ProjectsIdRoadmapRouteImport
+      parentRoute: typeof ProjectsIdRoute
+    }
     '/projects/$id/settings': {
       id: '/projects/$id/settings'
       path: '/settings'
@@ -404,13 +404,13 @@ declare module '@tanstack/react-router' {
 
 interface ProjectsIdRouteChildren {
   ProjectsIdAgentsRoute: typeof ProjectsIdAgentsRoute
-  ProjectsIdBranchesRoute: typeof ProjectsIdBranchesRoute
   ProjectsIdCleanupRoute: typeof ProjectsIdCleanupRoute
   ProjectsIdDailyRoute: typeof ProjectsIdDailyRoute
   ProjectsIdGalleryRoute: typeof ProjectsIdGalleryRoute
   ProjectsIdPreviewsRoute: typeof ProjectsIdPreviewsRoute
   ProjectsIdPrsRoute: typeof ProjectsIdPrsRoute
   ProjectsIdReviewsRoute: typeof ProjectsIdReviewsRoute
+  ProjectsIdRoadmapRoute: typeof ProjectsIdRoadmapRoute
   ProjectsIdSettingsRoute: typeof ProjectsIdSettingsRoute
   ProjectsIdIndexRoute: typeof ProjectsIdIndexRoute
   ProjectsIdFeaturesTicketIdRoute: typeof ProjectsIdFeaturesTicketIdRoute
@@ -419,13 +419,13 @@ interface ProjectsIdRouteChildren {
 
 const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
   ProjectsIdAgentsRoute: ProjectsIdAgentsRoute,
-  ProjectsIdBranchesRoute: ProjectsIdBranchesRoute,
   ProjectsIdCleanupRoute: ProjectsIdCleanupRoute,
   ProjectsIdDailyRoute: ProjectsIdDailyRoute,
   ProjectsIdGalleryRoute: ProjectsIdGalleryRoute,
   ProjectsIdPreviewsRoute: ProjectsIdPreviewsRoute,
   ProjectsIdPrsRoute: ProjectsIdPrsRoute,
   ProjectsIdReviewsRoute: ProjectsIdReviewsRoute,
+  ProjectsIdRoadmapRoute: ProjectsIdRoadmapRoute,
   ProjectsIdSettingsRoute: ProjectsIdSettingsRoute,
   ProjectsIdIndexRoute: ProjectsIdIndexRoute,
   ProjectsIdFeaturesTicketIdRoute: ProjectsIdFeaturesTicketIdRoute,
@@ -448,13 +448,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

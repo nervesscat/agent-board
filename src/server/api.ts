@@ -14,7 +14,7 @@ import {
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
-import { branchView } from './branches'
+import { roadmap } from './roadmap'
 import { addDefaultAgents } from './defaultAgents'
 import { listActors } from './actors'
 import { isAgent } from './auth'
@@ -797,9 +797,9 @@ api.get('/api/uploads/:id', async ({ request, params }) => {
 // The project's gallery: the files on its tickets, newest first by default, a page at a time. ?type=image,pdf (kinds,
 // comma-separated), ?from=&to= (local days, inclusive), ?sort= (an order of GALLERY_SORTS), ?archived=include, ?cursor= (the
 // last page's next), ?limit= (60 by default, 200 at most).
-// The branch view: the top-level tickets being worked, blocked or in review, each with its tasks and its
+// The roadmap: the top-level tickets being worked, blocked or in review, each with its tasks and its
 // lanes' (not cancelled), read-only.
-api.get('/api/projects/:id/branches', async ({ params }) => json(branchView(id(params))))
+api.get('/api/projects/:id/roadmap', async ({ params }) => json(roadmap(id(params))))
 
 api.get('/api/projects/:id/gallery', async ({ request, params, url }) => {
   const q = url.searchParams

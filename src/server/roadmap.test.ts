@@ -5,15 +5,15 @@ import path from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-branches-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-roadmap-'))
 process.env.DATA_DIR = tmp
 
 let features: typeof import('./features')
-let branches: typeof import('./branches')
+let roadmapModule: typeof import('./roadmap')
 let projectId: number
 beforeAll(async () => {
   features = await import('./features')
-  branches = await import('./branches')
+  roadmapModule = await import('./roadmap')
   const { db, schema } = await import('#/db')
   projectId = db.insert(schema.projects).values({ name: 'p' }).returning().get().id
   db.insert(schema.repos).values({ projectId, name: 'api', repoPath: '/r/api', baseBranch: 'main' }).run()
@@ -26,7 +26,7 @@ const ticket = (title: string, status: string, more: { parentId?: number } = {})
     'claude',
   )
 
-describe('branchView', () => {
+describe('roadmap', () => {
   it('lists the tickets being worked, blocked or in review, with their tasks and lanes', () => {
     const worked = ticket('worked', 'in_progress')
     const lane = ticket('lane', 'in_progress', { parentId: worked.id })
@@ -37,7 +37,7 @@ describe('branchView', () => {
     ticket('todo', 'todo')
     ticket('done', 'done')
 
-    const view = branches.branchView(projectId)
+    const view = roadmapModule.roadmap(projectId)
     expect(view.map((t) => t.id).sort()).toEqual([worked.id, waiting.id, reviewed.id].sort())
     const row = view.find((t) => t.id === worked.id)!
     expect(row.tasks.map((t) => t.text)).toEqual(['Implementation', 'A', 'B', 'Pushed'])
@@ -50,10 +50,7 @@ describe('branchView', () => {
 
   it('answers on the API', async () => {
     const { api } = await import('./api')
-    const res = await api.handle(
-      new Request(`http://localhost/api/projects/${projectId}/branches`),
-      'enrique',
-    )
+    const res = await api.handle(new Request(`http://localhost/api/projects/${projectId}/roadmap`), 'enrique')
     expect(res?.status).toBe(200)
     expect(Array.isArray(await res!.json())).toBe(true)
   })

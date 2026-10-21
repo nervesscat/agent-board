@@ -9,8 +9,8 @@ import { ChipTabs } from '#/components/Chips'
 import { Empty } from '#/components/Empty'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { errorMessage, get, type BranchTicket } from '#/lib/api'
-import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/branches'
+import { errorMessage, get, type RoadmapTicket } from '#/lib/api'
+import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
 import { useStages } from '#/lib/project'
 import { STAGE_DOT, type StageLike, stageBadge, stageOf } from '#/lib/stages'
 
@@ -18,34 +18,35 @@ const FILTERS = ['all', 'blocked', 'review'] as const
 type Filter = (typeof FILTERS)[number]
 
 // ?show= is the filter picked: every ticket, those with something blocked, or those in review.
-export const Route = createFileRoute('/projects/$id/branches')({
-  component: BranchView,
+export const Route = createFileRoute('/projects/$id/roadmap')({
+  component: Roadmap,
   validateSearch: z.object({ show: z.enum(FILTERS).optional().catch(undefined) }),
 })
 
-type Lane = BranchTicket['lanes'][number]
+type Lane = RoadmapTicket['lanes'][number]
 /** A ticket or a lane as the view draws it: its stage and its timeline worked out. */
-type Branch = { row: BranchTicket | Lane; stage: StageLike; groups: StepGroup[] }
+type RoadmapItem = { row: RoadmapTicket | Lane; stage: StageLike; groups: StepGroup[] }
 
-const hasState = (b: Branch, state: StepState) => b.groups.some((g) => g.steps.some((s) => s.state === state))
-const isBlocked = (b: Branch) => b.stage.kind === 'blocked' || hasState(b, 'blocked')
+const hasState = (b: RoadmapItem, state: StepState) =>
+  b.groups.some((g) => g.steps.some((s) => s.state === state))
+const isBlocked = (b: RoadmapItem) => b.stage.kind === 'blocked' || hasState(b, 'blocked')
 
-function BranchView() {
+function Roadmap() {
   const { id } = Route.useParams()
   const { show = 'all' } = Route.useSearch()
   const navigate = Route.useNavigate()
   const stages = useStages(id)
   const { data, isLoading, error } = useQuery({
-    queryKey: ['branches', id],
-    queryFn: () => get<BranchTicket[]>(`/api/projects/${id}/branches`),
+    queryKey: ['roadmap', id],
+    queryFn: () => get<RoadmapTicket[]>(`/api/projects/${id}/roadmap`),
     refetchInterval: 10_000,
   })
-  const branch = (row: BranchTicket | Lane): Branch => ({
+  const item = (row: RoadmapTicket | Lane): RoadmapItem => ({
     row,
     stage: stageOf(stages, row.status),
     groups: timeline(row.tasks),
   })
-  const tickets = (data ?? []).map((t) => ({ ...branch(t), lanes: t.lanes.map(branch) }))
+  const tickets = (data ?? []).map((t) => ({ ...item(t), lanes: t.lanes.map(item) }))
   const blocked = tickets.filter((t) => isBlocked(t) || t.lanes.some(isBlocked))
   const review = tickets.filter((t) => t.stage.kind === 'review')
   const shown = show === 'blocked' ? blocked : show === 'review' ? review : tickets
@@ -54,7 +55,7 @@ function BranchView() {
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Branch view</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Roadmap</h1>
           <p className="text-sm text-muted-foreground">
             Every ticket being worked, side by side: what is done, what is being worked now and what comes
             next, for the ticket and each of its lanes.
@@ -93,7 +94,7 @@ function BranchView() {
               : 'No ticket is waiting for review.'}
         </Empty>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card" data-testid="branch-view">
+        <div className="overflow-hidden rounded-lg border bg-card" data-testid="roadmap">
           {shown.map((t) => (
             <TicketRows key={t.row.id} projectId={id} ticket={t} lanes={t.lanes} />
           ))}
@@ -137,11 +138,19 @@ function Legend() {
 }
 
 /** One ticket's row and, under it, a thinner row per lane; the lanes fold away. */
-function TicketRows({ projectId, ticket, lanes }: { projectId: string; ticket: Branch; lanes: Branch[] }) {
+function TicketRows({
+  projectId,
+  ticket,
+  lanes,
+}: {
+  projectId: string
+  ticket: RoadmapItem
+  lanes: RoadmapItem[]
+}) {
   const [open, setOpen] = useState(true)
   return (
     <section className="border-b last:border-b-0" aria-label={`#${ticket.row.id} ${ticket.row.title}`}>
-      <Row projectId={projectId} branch={ticket}>
+      <Row projectId={projectId} item={ticket}>
         {lanes.length > 0 && (
           <button
             type="button"
@@ -159,7 +168,7 @@ function TicketRows({ projectId, ticket, lanes }: { projectId: string; ticket: B
           <Row
             key={lane.row.id}
             projectId={projectId}
-            branch={lane}
+            item={lane}
             lane={{ depth: 'depth' in lane.row ? lane.row.depth : 0, last: i === lanes.length - 1 }}
           />
         ))}
@@ -169,17 +178,17 @@ function TicketRows({ projectId, ticket, lanes }: { projectId: string; ticket: B
 
 function Row({
   projectId,
-  branch,
+  item,
   lane,
   children,
 }: {
   projectId: string
-  branch: Branch
+  item: RoadmapItem
   /** Set on a lane's row: how deep it sits under the ticket, and whether it is the last one. */
   lane?: { depth: number; last: boolean }
   children?: React.ReactNode
 }) {
-  const { row, stage, groups } = branch
+  const { row, stage, groups } = item
   const { done, total } = stepCounts(groups)
   const indent = lane ? 40 + lane.depth * 14 : 16
   return (
@@ -312,7 +321,7 @@ const LABEL: Record<StepState, string> = {
 }
 
 function StepItem({ step, first, lane }: { step: Step; first: boolean; lane: boolean }) {
-  // The line into a step is solid up to where the branch is, dashed after.
+  // The line into a step is solid up to where the ticket is, dashed after.
   const reached = step.state === 'done' || step.state === 'now' || step.state === 'blocked'
   const tip = step.blocked && step.blockedReason ? `${step.text}: ${step.blockedReason}` : step.text
   return (

@@ -185,7 +185,7 @@
 }
 
 /*
- * .scroll-rail: a sideways scroller (the Branch view's timelines) with a slimmer pill that sits inset
+ * .scroll-rail: a sideways scroller (the Roadmap's timelines) with a slimmer pill that sits inset
  * from the row's edges, faint until the row is hovered, stronger on the thumb, the brand colour while
  * dragged. Same split as above: Chromium takes the ::-webkit-scrollbar rules, so scrollbar-width and
  * scrollbar-color only go to browsers without them (setting either turns the webkit rules off).
