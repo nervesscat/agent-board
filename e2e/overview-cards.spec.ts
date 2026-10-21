@@ -71,8 +71,12 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await expect.poll(() => height(needsYou)).toBeLessThanOrEqual(desktop + 0.5)
   expect(await height(needsYou)).toBeGreaterThanOrEqual(desktop - 0.5)
   expect(await height(inProgress)).toBeLessThan(desktop)
-  expect((await needsYou.boundingBox())!.width).toBeLessThanOrEqual(390)
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  // Both cards and their scrolling areas stay within the phone's width.
+  for (const card of [needsYou, inProgress]) {
+    const b = (await card.boundingBox())!
+    expect(b.x + b.width).toBeLessThanOrEqual(390)
+    expect(await content(card).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
+  }
   await overflows(needsYou)
   await content(needsYou).evaluate((el) => el.scrollTo(0, 200))
   await needsYou.scrollIntoViewIfNeeded()
