@@ -152,7 +152,13 @@ Lanes of a ticket you are working are yours to create (next section).
 - The archive: the human takes finished tickets (done or cancelled) off the board, their lanes with
   them; `archivedAt` / `archivedBy` show it. `list_tickets` leaves them out unless `archived` is
   `"include"` (with the rest) or `"only"`; `get_ticket` still opens them. Only the human archives
-  and restores.
+  and restores. You may ask: `request_archive` with one ticket id or a list posts the human one
+  decision card ("Archive #12, #15?", Archive / Keep) on the first ticket, without blocking it, and
+  it shows in their Needs you. Each ticket must be top-level, in a done or cancelled stage and not
+  archived yet, or the whole request is refused with each failing ticket and why. Only the human's
+  Archive answer archives them (in their name, lanes included; or yours relayed with
+  `answer_decision` after asking them in the chat); Keep leaves them. Never try to archive any
+  other way.
 - `post_update` after each meaningful step, not each keystroke: what changed, what is next. It
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are

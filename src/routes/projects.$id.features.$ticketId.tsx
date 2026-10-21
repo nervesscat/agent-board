@@ -2231,6 +2231,9 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
  * one (and an optional note) answers it; once decided the choice stays marked and can be changed. An
  * answer the orchestrator relayed from the chat shows the words the human said there, as they were.
  */
+/** What answering a card returns that the card reads: an archive request's result, null on any other card. */
+type DecideResult = { archive: { archived: number[]; skipped: { id: number; why: string }[] } | null }
+
 function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   const options = u.decision!
   const decided = u.decidedOption !== null && u.decidedAt !== null
@@ -2241,12 +2244,18 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   const [note, setNote] = useState('')
   const choosing = !decided || changing
   const decide = useMutation({
-    mutationFn: () => put(`/api/updates/${u.id}/decision`, { option: picked, note }),
-    onSuccess: () => {
+    mutationFn: () => put<DecideResult>(`/api/updates/${u.id}/decision`, { option: picked, note }),
+    onSuccess: (res) => {
       setChanging(false)
       setPicked(null)
       setNote('')
       onChange()
+      // An agent's archive request answered Archive: what came off the board, and what could not.
+      const ids = (list: number[]) => list.map((id) => `#${id}`).join(', ')
+      if (res.archive?.archived.length)
+        toast.success(`Archived ${ids(res.archive.archived)}: off the board, under Archived`)
+      if (res.archive?.skipped.length)
+        toast.error(`Not archived: ${res.archive.skipped.map((s) => s.why).join('; ')}`)
     },
     onError: (err) => toast.error(errorMessage(err)),
   })

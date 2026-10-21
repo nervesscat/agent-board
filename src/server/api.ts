@@ -424,6 +424,7 @@ api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
 // Assigns the ticket to the caller (or, with `as`, to the project agent the caller works it as) and starts
 // it; 409 when it is reserved for another of the project's agents.
 // The archive is the human's, like the board's layout: finished tickets come off the board, lanes with them.
+// An agent can only ask for it (archive-request, below), and the human confirms.
 const humanArchive = (request: Request) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human archives and restores tickets')
 }
@@ -441,6 +442,19 @@ api.post('/api/tickets/:id/archive', ({ request, params, actor }) => {
 api.post('/api/tickets/:id/restore', ({ request, params, actor }) => {
   humanArchive(request)
   return json(features.restoreTicket(id(params), actor))
+})
+// An agent asks the human to archive finished top-level tickets of the project: a decision card (Archive /
+// Keep) on the first one; they are archived only once the human answers Archive.
+api.post('/api/projects/:id/tickets/archive-request', async ({ request, params, actor }) => {
+  if (!isAgent(request)) throw new HttpError(403, 'the human archives tickets directly; agents ask here')
+  const body = await readJson(
+    request,
+    z.object({
+      ticketIds: z.array(z.number().int()).min(1).max(features.MAX_ARCHIVE_REQUEST),
+      as: AgentName.optional(),
+    }),
+  )
+  return json(features.requestArchive(body.ticketIds, { as: body.as, projectId: id(params) }, actor), 201)
 })
 api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   const body = await readJson(

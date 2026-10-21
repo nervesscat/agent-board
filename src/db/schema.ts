@@ -285,6 +285,9 @@ export const updates = sqliteTable(
     // it, and the words as the human gave them. Both '' on a decision the human made on the board.
     relayedBy: text('relayed_by').notNull().default(''),
     relayedText: text('relayed_text').notNull().default(''),
+    // On a decision an agent posted to have tickets archived (features.requestArchive): the top-level tickets
+    // it names. Answering its Archive option archives those still finished then. Null on any other post.
+    archiveTickets: text('archive_tickets', { mode: 'json' }).$type<number[] | null>(),
     // The tab of the ticket's feed it shows in (FEED_TABS): picked when it is posted, moved only on purpose.
     tab: text().$type<FeedTab>().notNull().default('main'),
     // A version of the ticket's summary: the newest is the summary, the older ones its history. Never a
