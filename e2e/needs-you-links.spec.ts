@@ -788,6 +788,8 @@ async function leaveOverview(
   remembered: Record<string, string>,
   link: Locator,
 ) {
+  // Needs you scrolls within a card of its own height, so a short window makes the page the longer.
+  await page.setViewportSize({ width: 1280, height: 360 })
   await overview(page, project)
   await page.evaluate((r) => Object.entries(r).forEach(([k, v]) => localStorage.setItem(k, v)), remembered)
   await overview(page, project)

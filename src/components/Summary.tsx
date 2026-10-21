@@ -26,6 +26,7 @@ import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
 import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
+import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { threadAnchor } from '#/lib/anchors'
@@ -117,6 +118,7 @@ function Section({
   count,
   extra,
   className = '',
+  scroll = false,
   children,
 }: {
   icon: typeof Inbox
@@ -125,10 +127,12 @@ function Section({
   /** After the count: what among them needs attention. */
   extra?: ReactNode
   className?: string
+  /** A fixed height (a cap on a phone) with the content scrolling under the header. */
+  scroll?: boolean
   children: ReactNode
 }) {
   return (
-    <Card size="sm" className={className}>
+    <Card size="sm" className={cn(scroll && 'max-h-[28rem] lg:h-[28rem]', className)}>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           <Icon className="size-4 text-muted-foreground" /> {title}
@@ -140,7 +144,12 @@ function Section({
           {extra}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">{children}</CardContent>
+      <CardContent
+        data-scroll={scroll ? '' : undefined}
+        className={cn('space-y-3', scroll && 'min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2')}
+      >
+        {children}
+      </CardContent>
     </Card>
   )
 }
@@ -254,7 +263,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
   const { decisions, prs, threads, reviews, blockedTasks, total } = p.needsYou
   const pid = String(p.project.id)
   return (
-    <Section icon={Inbox} title="Needs you" count={total}>
+    <Section icon={Inbox} title="Needs you" count={total} scroll>
       {!total ? (
         <Quiet>Nothing waiting on you.</Quiet>
       ) : (
@@ -416,7 +425,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
 function InProgress({ p }: { p: ProjectSummary }) {
   const items = p.inProgress
   return (
-    <Section icon={Play} title="In progress" count={items.length}>
+    <Section icon={Play} title="In progress" count={items.length} scroll>
       {!items.length ? (
         <Quiet>Nothing in progress.</Quiet>
       ) : (
