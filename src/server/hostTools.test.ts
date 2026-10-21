@@ -53,6 +53,66 @@ function envWith(PATH: string): NodeJS.ProcessEnv {
   return { ...env, PATH }
 }
 
+/** One line echoed by a .cmd file: cmd's special characters escaped, an empty line as `echo.`. */
+const cmdEcho = (line: string) => (line ? `echo ${line.replace(/[\^&<>|]/g, '^$&')}` : 'echo.')
+
+/**
+ * A fake gh whose `gh auth status` exits with `exit` and prints `said` to stderr, after the request log
+ * `debug` when it runs with GH_DEBUG=api (as gh does).
+ */
+function fakeGh(auth: { exit: number; said: string[]; debug?: string[] }) {
+  const dir = path.join(tmp, `gh-${++dirs}`)
+  fs.mkdirSync(dir, { recursive: true })
+  const debug = auth.debug ?? []
+  if (WIN)
+    fs.writeFileSync(
+      path.join(dir, 'gh.cmd'),
+      [
+        '@echo off',
+        'if "%1"=="auth" goto auth',
+        'echo gh version 2.98.0',
+        'exit /b 0',
+        ':auth',
+        'if not "%GH_DEBUG%"=="api" goto said',
+        ...debug.map((l) => `${cmdEcho(l)} 1>&2`),
+        ':said',
+        ...auth.said.map((l) => `${cmdEcho(l)} 1>&2`),
+        `exit /b ${auth.exit}`,
+        '',
+      ].join('\r\n'),
+    )
+  else {
+    const file = path.join(dir, 'gh')
+    fs.writeFileSync(
+      file,
+      [
+        '#!/bin/sh',
+        'if [ "$1" != "auth" ]; then echo "gh version 2.98.0"; exit 0; fi',
+        `if [ "$GH_DEBUG" = "api" ]; then cat >&2 <<'DEBUG'`,
+        ...debug,
+        'DEBUG',
+        'fi',
+        "cat >&2 <<'SAID'",
+        ...auth.said,
+        'SAID',
+        `exit ${auth.exit}`,
+        '',
+      ].join('\n'),
+    )
+    fs.chmodSync(file, 0o755)
+  }
+  return dir
+}
+
+// What gh 2.98 prints for an account it cannot confirm, whether GitHub rejected the token or was unreachable.
+const FAILED_LOG_IN = [
+  'github.com',
+  '  X Failed to log in to github.com account octocat (keyring)',
+  '  - Active account: true',
+  '  - The token in keyring is invalid.',
+  '  - To re-authenticate, run: gh auth refresh -h github.com',
+]
+
 const byName = (r: HostTools) =>
   Object.fromEntries(r.tools.map((t) => [t.name, t])) as Record<string, HostTool>
 
@@ -76,6 +136,63 @@ describe('the check', () => {
     const dir = shims({ gh: '2.1.0' })
     const r = await host.probeHostTools({ env: envWith(dir), claudeBin: 'claude', claudeArgs: [] })
     expect(byName(r).gh).toMatchObject({ found: true, version: '2.1.0', signedIn: true, ok: true })
+  })
+
+  it('has gh signed in unknown, and fine, when github.com cannot be reached', async () => {
+    // HTTPS_PROXY on a host that does not resolve: the request log shows the request and no answer.
+    const offline = fakeGh({
+      exit: 1,
+      debug: [
+        '* Request at 2026-10-21 06:26:10.96 -0600 CST',
+        '* Request to https://api.github.com/',
+        '> GET / HTTP/1.1',
+        '> Host: api.github.com',
+        '',
+        '* proxyconnect tcp: dial tcp: lookup nonexistent.invalid: no such host',
+        '* Request took 30.2686ms',
+      ],
+      said: FAILED_LOG_IN,
+    })
+    const r = await host.probeHostTools({ env: envWith(offline), claudeBin: 'claude', claudeArgs: [] })
+    expect(byName(r).gh).toMatchObject({ found: true, signedIn: null, ok: true, problem: null, fix: null })
+  })
+
+  it('has gh signed out when it has no account, or GitHub rejects its token', async () => {
+    const none = fakeGh({
+      exit: 1,
+      said: ['You are not logged into any GitHub hosts. To log in, run: gh auth login'],
+    })
+    const rejected = fakeGh({
+      exit: 1,
+      debug: [
+        '* Request to https://api.github.com/graphql',
+        '> POST /graphql HTTP/1.1',
+        '',
+        '< HTTP/2.0 401 Unauthorized',
+        '< Content-Type: application/json; charset=utf-8',
+      ],
+      said: FAILED_LOG_IN,
+    })
+    for (const dir of [none, rejected]) {
+      const r = await host.probeHostTools({ env: envWith(dir), claudeBin: 'claude', claudeArgs: [] })
+      expect(byName(r).gh).toMatchObject({ signedIn: false, ok: false, problem: 'gh is not signed in' })
+    }
+  })
+
+  it('reads whether gh is signed in from its exit and what it printed', () => {
+    expect(host.ghSignedIn(0, '')).toBe(true)
+    expect(host.ghSignedIn(null, '')).toBeNull()
+    expect(host.ghSignedIn(1, '')).toBe(false)
+    expect(host.ghSignedIn(1, FAILED_LOG_IN.join('\n'))).toBe(false)
+    // Without the request log (a gh that ignores GH_DEBUG), by the network error it names.
+    expect(
+      host.ghSignedIn(1, 'error connecting to api.github.com\ncheck your internet connection'),
+    ).toBeNull()
+    // Windows line ends.
+    expect(
+      host.ghSignedIn(1, '* Request to https://api.github.com/\r\n< HTTP/2.0 401 Unauthorized\r\n'),
+    ).toBe(false)
+    expect(host.ghSignedIn(1, '* Request to https://api.github.com/\r\n* i/o timeout\r\n')).toBeNull()
   })
 
   it('finds a Windows tool by its PATHEXT extension: pnpm.cmd is pnpm', () => {

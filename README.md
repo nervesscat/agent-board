@@ -172,7 +172,9 @@ and again from the warning's **Check again** (`POST /api/host-tools/check`). Whi
 `gh` is signed out, every page shows a warning naming it, what it breaks and the fix; each can be
 dismissed until the next check finds it still missing. The PR queue, previews, the Cleanup page and
 report generation say the same where they fail, and agents read it as `hostTools` on `get_project`.
-A tool installed into a folder that was not on the board's PATH needs a restart of the board.
+A tool installed into a folder that was not on the board's PATH needs a restart of the board. When
+github.com cannot be reached, `gh auth status` fails as for a rejected token; the check tells the two
+apart by whether GitHub answered, and leaves `signedIn` unknown (`null`, not a problem) when it did not.
 
 ## Using it from other devices
 

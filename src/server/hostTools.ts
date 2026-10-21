@@ -25,7 +25,10 @@ export interface HostTool {
   path: string | null
   /** The version it printed, when it printed one in time; null otherwise. */
   version: string | null
-  /** gh only: whether `gh auth status` succeeded; null when not found or it did not answer in time. */
+  /**
+   * gh only: whether `gh auth status` succeeded; null when not found, when it did not answer in time,
+   * or when it could not reach GitHub to tell (`ghSignedIn`).
+   */
   signedIn?: boolean | null
   /** Neither missing nor (gh) signed out. */
   ok: boolean
@@ -168,7 +171,11 @@ interface ProbeRun {
   /** null when it could not start or did not end in time. */
   code: number | null
   stdout: string
+  stderr: string
 }
+
+/** What a probe keeps of each stream: a version line or gh's account report fit many times over. */
+const KEEP = 64 * 1024
 
 /**
  * Runs `file args` with stdin closed and collects what it prints, for at most `timeoutMs`: then it is
@@ -192,15 +199,16 @@ function runProbe(
           })
         : spawn(file, args, { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     } catch {
-      return resolve({ code: null, stdout: '' })
+      return resolve({ code: null, stdout: '', stderr: '' })
     }
     let stdout = ''
+    let stderr = ''
     let done = false
     const finish = (code: number | null) => {
       if (done) return
       done = true
       clearTimeout(timer)
-      resolve({ code, stdout })
+      resolve({ code, stdout, stderr })
     }
     const timer = setTimeout(() => {
       killTree(child.pid)
@@ -208,10 +216,13 @@ function runProbe(
     }, timeoutMs)
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => {
-      if (stdout.length < 64 * 1024) stdout += chunk
+      if (stdout.length < KEEP) stdout += chunk
     })
-    // Read and dropped: a full stderr pipe would stall the probe.
-    child.stderr.resume()
+    // Read to the end past what is kept: a full stderr pipe would stall the probe.
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk: string) => {
+      if (stderr.length < KEEP) stderr += chunk
+    })
     child.on('error', () => finish(null))
     child.on('close', (code) => finish(code))
   })
@@ -231,6 +242,27 @@ function killTree(pid: number | undefined) {
 /** The first version number in what a tool printed: `git version 2.45.1` gives 2.45.1. */
 export function parseVersion(out: string): string | null {
   return /\d+\.\d+(?:\.\d+)*/.exec(out)?.[0] ?? null
+}
+
+/** gh's own words, or Go's, for a request that never reached GitHub. */
+const UNREACHABLE =
+  /error connecting to|dial tcp|proxyconnect|no such host|connection refused|connection reset|network is unreachable|i\/o timeout|TLS handshake timeout|timed out/i
+
+/**
+ * Whether gh is signed in, from how `gh auth status` ended and what it printed (both streams) with
+ * `GH_DEBUG=api`, which logs each request it makes and each answer it gets. Exit 0 is signed in. A
+ * non-zero exit is signed out when gh has no account ("You are not logged into any GitHub hosts") or
+ * when GitHub answered its check (a token it rejects gets an HTTP 401). When GitHub could not be
+ * reached (offline, a proxy or DNS failure) gh says the same "Failed to log in ... The token is
+ * invalid" as for a rejected token, but nothing is known of the token: null, as for no answer in time.
+ */
+export function ghSignedIn(code: number | null, output: string): boolean | null {
+  if (code === null) return null
+  if (code === 0) return true
+  if (/not logged in(to)? any github hosts/i.test(output)) return false
+  if (/^< HTTP\/\S+ \d{3}/m.test(output)) return false
+  // Asked GitHub and got nothing back; older gh without the request log names the network error.
+  return /^\* Request to /m.test(output) || UNREACHABLE.test(output) ? null : false
 }
 
 export interface CheckOptions extends Lookup {
@@ -253,14 +285,16 @@ export async function probeHostTools(opts: CheckOptions = {}): Promise<HostTools
       const args = name === 'claude' ? [...claudeArgs, '--version'] : ['--version']
       const [version, auth] = await Promise.all([
         runProbe(file, args, run),
-        name === 'gh' ? runProbe(file, ['auth', 'status'], run) : null,
+        name === 'gh'
+          ? runProbe(file, ['auth', 'status'], { ...run, env: { ...env, GH_DEBUG: 'api' } })
+          : null,
       ])
       return toolEntry(
         name,
         {
           path: file,
           version: version.code === 0 ? parseVersion(version.stdout) : null,
-          signedIn: auth ? (auth.code === null ? null : auth.code === 0) : undefined,
+          signedIn: auth ? ghSignedIn(auth.code, auth.stdout + auth.stderr) : undefined,
         },
         claudeBin,
       )
