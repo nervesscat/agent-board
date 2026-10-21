@@ -2,6 +2,29 @@
 
 What it is and its API: `README.md`. How agents work through a running board: `AGENTS.md`.
 
+## Branches and releases
+
+- **`dev`** is GitHub's default branch: work branches start from `origin/dev` and their PRs go into
+  `dev`.
+- **`main`** is production: what the board in this checkout runs. A release is a PR from `dev` into
+  `main`, merged once it is checked (Checks, below).
+- **Putting a release live:** `pnpm stop`, `git pull` on `main` here, `pnpm start` (it installs and
+  applies migrations as it starts). `data/` is kept across versions.
+- **Development** happens in worktrees, with previews (Running it, below).
+
+## Sign-in
+
+The human has a passkey account, made once at `/setup` on this machine, then `/login` (README:
+"Signing in"). Agents never sign in: each uses a token the board issues (Agents page, **Generate
+commands**), sent as `Authorization: Bearer <token>`.
+
+## Desktop app
+
+The installer (`pnpm desktop:package`, README: "Install") is the packaged production board for other
+machines. It installs per user, without admin rights; its data and `config.env` live in
+`%LOCALAPPDATA%gent-board` and are kept on uninstall and on upgrade (install a newer build over
+it). It needs `git`, `gh` (signed in) and `claude` on `PATH`; `node` and `pnpm` only for previews.
+
 ## Running it
 
 There is one board: `pnpm start` runs it from this main checkout on port 47100 (from `.env`), with
