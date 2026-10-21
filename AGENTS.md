@@ -232,7 +232,15 @@ http_headers = { Authorization = "Bearer gate_…" }
    ticket tagged `PR`, a PR review, also moves it to `done`): read it, never set it, and ask in the
    thread before touching an approved or disapproved lane. Archiving is the human's too:
    `archivedAt` set means the ticket (and its lanes) is finished and off the board; `list_tickets`
-   leaves those out unless `archived: "include"` or `"only"`.
+   leaves those out unless `archived: "include"` or `"only"`. An agent may ask for it, never do it:
+   `request_archive` (MCP; REST `POST /api/projects/:id/tickets/archive-request` `{ticketIds, as?}`)
+   posts one decision card, "Archive #12, #15?" with Archive and Keep, on the first ticket named
+   (it does not block). It shows in Needs you. Only top-level tickets in a `done` or `cancelled`
+   stage that are not archived yet can be named; any other refuses the whole request, and the error
+   names each failing ticket and why. Nothing is archived until the human answers Archive on the
+   board (or the orchestrator relays their chat answer with `answer_decision`, after asking them):
+   then each ticket still finished is archived in the human's name, lanes with it, and the activity
+   says which agent asked. Keep changes nothing.
 
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
