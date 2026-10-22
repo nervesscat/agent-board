@@ -1,7 +1,7 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 
 import { config } from './config'
-import { toolProblem } from './hostTools'
+import { hostTools, toolProblem } from './hostTools'
 import { HttpError } from './http'
 
 const WIN = process.platform === 'win32'
@@ -45,11 +45,7 @@ export function runClaude(
     )
 
     child.on('error', (e) =>
-      fail(
-        (e as NodeJS.ErrnoException).code === 'ENOENT'
-          ? toolProblem('claude', e)!
-          : `could not run claude (${config.claudeBin}): ${e.message}`,
-      ),
+      fail(((e as NodeJS.ErrnoException).code === 'ENOENT' && toolProblem('claude', e)) || cannotRun(e)),
     )
     child.stdout.on('data', (chunk: Buffer) => {
       outSize += chunk.length
@@ -74,6 +70,22 @@ export function runClaude(
     child.stdin.on('error', () => {})
     child.stdin.end(prompt, 'utf8')
   })
+}
+
+/**
+ * A start that failed with claude not missing: the last check found it, yet the spawn did not start
+ * it. Found as a batch shim (`claude.cmd`) is the usual cause on Windows, which the board starts
+ * without a shell and so cannot run: that says so and how to point CLAUDE_BIN at the program itself.
+ */
+function cannotRun(e: Error): string {
+  const said = `could not run claude (${config.claudeBin}): ${e.message}`
+  const found = hostTools()?.tools.find((t) => t.name === 'claude')?.path
+  if (!found || !/\.(cmd|bat)$/i.test(found)) return said
+  return (
+    `${said}: claude was found as ${found}, a batch shim the board cannot start directly; ` +
+    "set CLAUDE_BIN in .env (config.env for the desktop app) to the full path of claude's .exe, " +
+    'then restart the board'
+  )
 }
 
 function killTree(child: ChildProcess) {
