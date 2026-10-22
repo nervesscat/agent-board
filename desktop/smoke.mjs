@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Smoke test of the packaged desktop app (after `pnpm desktop:package`), locally and in CI:
 //
-//   pnpm desktop:smoke [--app desktop/dist/win-unpacked] [--port 8240]
+//   pnpm desktop:smoke [--app desktop/dist/win-unpacked | linux-unpacked] [--port 8240]
 //                      [--screenshot window.png] [--busy-screenshot dialog.png]
 //                      [--data-dir-screenshot dialog.png] [--app-folder-screenshot dialog.png]
 //                      [--unwritable-screenshot dialog.png]
@@ -17,7 +17,13 @@
 //   - a busy port, on loopback or on every interface, is reported (in a dialog, and on stderr, where
 //     this reads it), and so are a DATA_DIR and an AGENT_BOARD_HOME that cannot be made or
 //     written; closing the dialog ends the app with exit 1;
-//   - a second launch after a failure, its window closed, raises nothing in the first copy.
+//   - a second launch after a failure, its window closed, raises nothing in the first copy;
+//   - on Linux: the server gets the login shell's PATH (from a .bashrc in a stand-in home), Start at
+//     login writes and removes the autostart entry, and closing the window with no tray host ends the
+//     app and its server (with one, it hides the window). Run it under a display (`xvfb-run -a`).
+//
+// On Linux the dialogs are checked through stderr and the app is then killed (no window is closed
+// through the window system), and the missing-drive case is Windows only.
 //
 // The platform's passkeys are the one thing stood in for: Chromium's virtual authenticator (CDP
 // WebAuthn) in the window, which says yes at once.
@@ -30,16 +36,20 @@ import { fileURLToPath } from 'node:url'
 
 import { _electron as electron } from '@playwright/test'
 
-import { isPortFree } from './app/settings.mjs'
+import { isPortFree, trayHostPresent } from './app/settings.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const WIN = process.platform === 'win32'
+const LINUX = process.platform === 'linux'
 const args = process.argv.slice(2)
 /** @param {string} name @param {string} fallback */
 const arg = (name, fallback) => {
   const i = args.indexOf(name)
   return i >= 0 && args[i + 1] ? args[i + 1] : fallback
 }
-const appSrc = path.resolve(arg('--app', path.join(root, 'desktop', 'dist', 'win-unpacked')))
+const appSrc = path.resolve(
+  arg('--app', path.join(root, 'desktop', 'dist', WIN ? 'win-unpacked' : 'linux-unpacked')),
+)
 const port = Number(arg('--port', '8240'))
 const screenshot = arg('--screenshot', '')
 const busyScreenshot = arg('--busy-screenshot', '')
@@ -74,14 +84,29 @@ const home = path.join(tmp, 'home')
 const dataDir = path.join(tmp, 'data')
 console.log(`copying the app to ${appDir}`)
 fs.cpSync(appSrc, appDir, { recursive: true })
-const exe = path.join(appDir, process.platform === 'win32' ? 'agent-board.exe' : 'agent-board')
+const exe = path.join(appDir, WIN ? 'agent-board.exe' : 'agent-board')
+// Linux: the XDG config folder of every run, where Start at login writes, never the user's own.
+const xdgConfig = path.join(tmp, 'xdg-config')
 
 /** The environment of a run: everything but what the app decides itself, and `extra`. */
 /** @param {Record<string, string>} extra */
 function appEnv(extra) {
   /** @type {Record<string, string | undefined>} */
-  const env = { ...process.env, AGENT_BOARD_HOME: home, ...extra }
-  for (const key of ['ELECTRON_RUN_AS_NODE', 'PORT', 'DATA_DIR', 'BOARD_ENV', 'AUTH', 'BOARD_URL'])
+  const env = {
+    ...process.env,
+    AGENT_BOARD_HOME: home,
+    ...(WIN ? {} : { XDG_CONFIG_HOME: xdgConfig }),
+    ...extra,
+  }
+  for (const key of [
+    'ELECTRON_RUN_AS_NODE',
+    'PORT',
+    'DATA_DIR',
+    'BOARD_ENV',
+    'AUTH',
+    'BOARD_URL',
+    'APPIMAGE',
+  ])
     if (!(key in extra)) delete env[key]
   return env
 }
@@ -213,6 +238,7 @@ try {
 
   check(await quit(app), 'Quit ends the app')
   check(await isPortFree(port), `the port :${port} is free after Quit`)
+  if (LINUX) check(appProcesses().length === 0, `nothing of the app runs after Quit (${appProcesses()})`)
 
   // 2. Restart on the same data: the project is still there.
   console.log('\n2. restart on the same data')
@@ -308,10 +334,54 @@ try {
     } finally {
       spawnSync('icacls', [lockedProfile, '/remove:d', who], { stdio: 'ignore' })
     }
+  } else if (process.getuid?.() !== 0) {
+    // The same with the folder's write bits off (root writes through them, so not as root).
+    console.log('\n8b. the app folder refuses writes (chmod 555)')
+    const lockedHome = path.join(tmp, 'locked-home')
+    const lockedProfile = path.join(lockedHome, 'electron')
+    fs.mkdirSync(lockedProfile, { recursive: true })
+    fs.chmodSync(lockedProfile, 0o555)
+    try {
+      await expectDialog(
+        { PORT: String(port), DATA_DIR: dataDir, AGENT_BOARD_HOME: lockedHome },
+        `The app's folder ${lockedHome} cannot be used`,
+        'the app folder that refuses writes is reported',
+        '',
+      )
+    } finally {
+      fs.chmodSync(lockedProfile, 0o755)
+    }
   }
 
   // 9. A failure shown, its window closed, then a second launch: nothing more goes wrong.
-  if (process.platform === 'win32') {
+  if (LINUX) {
+    console.log('\n9. the board stops, its window is closed, and the app is launched again')
+    app = await launch(appEnv({ PORT: String(port), DATA_DIR: dataDir }))
+    let said = ''
+    app.process().stderr?.on('data', (d) => (said += d))
+    check(await waitHealthy(port), '/api/health answers 200')
+    await app.firstWindow()
+    const serverPid = boardServer()
+    check(serverPid > 0, `the board's server is found (${serverPid})`)
+    if (serverPid) process.kill(serverPid, 'SIGKILL')
+    for (const until = Date.now() + 20_000; Date.now() < until && !said.includes('The board stopped.'); )
+      await sleep(200)
+    check(said.includes('The board stopped.'), 'the stopped board is reported')
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close()).catch(() => {})
+    await sleep(1000)
+    const again = spawn(exe, [], { env: appEnv({ PORT: String(port), DATA_DIR: dataDir }), stdio: 'ignore' })
+    const code = await Promise.race([
+      new Promise((r) => again.once('exit', r)),
+      sleep(30_000).then(() => 'running'),
+    ])
+    if (code === 'running') again.kill()
+    check(code === 0, `the second launch exits (${code})`)
+    await sleep(1500)
+    check(!/Object has been destroyed|Uncaught Exception/.test(said), 'the first copy raises no error')
+    check(app.process().exitCode === null, 'the first copy still waits on its dialog')
+    await endApp(app.process())
+  }
+  if (WIN) {
     console.log('\n9. the board stops, its window is closed, and the app is launched again')
     app = await launch(appEnv({ PORT: String(port), DATA_DIR: dataDir }))
     let said = ''
@@ -341,6 +411,9 @@ try {
     check(windows === '1', `the first copy shows its dialog and nothing else (${windows} windows)`)
     check(await closesWithCode(app.process(), pid, 1), 'closing the dialog ends the app (exit 1)')
   }
+
+  // 10. Linux: the login shell's PATH for the server, Start at login, and closing the window.
+  if (LINUX) await linuxDesktop()
 } catch (err) {
   console.error(err)
   failed = true
@@ -376,8 +449,8 @@ async function expectDialog(extra, text, what, shot) {
   while (Date.now() < until && !said.includes(text) && proc.exitCode === null) await sleep(200)
   check(said.includes(text), what)
   check(proc.exitCode === null, `the app waits on its dialog instead of ending (${proc.exitCode})`)
-  if (process.platform !== 'win32' || !proc.pid) {
-    proc.kill()
+  if (!WIN || !proc.pid) {
+    await endApp(proc)
     return
   }
   await sleep(1500)
@@ -407,10 +480,124 @@ async function closesWithCode(proc, pid, code) {
 }
 
 /**
+ * Linux: a launch with a stand-in home whose .bashrc (read through .bash_profile, as the distributions'
+ * own skeletons do) alone puts a tools folder on PATH, from a bare PATH, as a launch from the desktop
+ * has: the server's PATH has that folder first. Then Start at login on and off, through the window's
+ * menu, and the window closed: with no tray host the app ends with its server, with one it hides.
+ */
+async function linuxDesktop() {
+  console.log('\n10. Linux: the login shell PATH, Start at login, closing the window')
+  const loginHome = path.join(tmp, 'login-home')
+  const tools = path.join(loginHome, 'tools')
+  fs.mkdirSync(tools, { recursive: true })
+  fs.writeFileSync(path.join(tools, 'gh'), '#!/bin/sh\necho stand-in gh\n', { mode: 0o755 })
+  fs.writeFileSync(path.join(loginHome, '.bash_profile'), '[ -f ~/.bashrc ] && . ~/.bashrc\n')
+  fs.writeFileSync(path.join(loginHome, '.bashrc'), 'echo "a greeting"\nexport PATH="$HOME/tools:$PATH"\n')
+  const shell = fs.existsSync('/bin/bash') ? '/bin/bash' : ''
+  const app = await launch(
+    appEnv({ PORT: String(port), DATA_DIR: dataDir, HOME: loginHome, SHELL: shell, PATH: '/usr/bin:/bin' }),
+  )
+  check(await waitHealthy(port), '/api/health answers 200')
+  await app.firstWindow()
+  const serverPid = boardServer()
+  const environ = serverPid ? fs.readFileSync(`/proc/${serverPid}/environ`, 'utf8').split('\0') : []
+  const serverPath = (environ.find((e) => e.startsWith('PATH=')) ?? '').slice('PATH='.length)
+  if (shell)
+    check(
+      serverPath.split(':')[0] === tools && serverPath.split(':').includes('/usr/bin'),
+      `the server runs with the login shell's PATH, ${tools} first (${serverPath})`,
+    )
+  else console.log(`     no /bin/bash: the server's PATH is ${serverPath}`)
+
+  const entry = path.join(xdgConfig, 'autostart', 'agent-board.desktop')
+  const toggle = () =>
+    app.evaluate(({ Menu }) => Menu.getApplicationMenu()?.getMenuItemById('start-at-login')?.click())
+  check(!fs.existsSync(entry), 'Start at login is off at first')
+  await toggle()
+  const text = fs.existsSync(entry) ? fs.readFileSync(entry, 'utf8') : ''
+  check(text.includes(`Exec=${exe}\n`), `Start at login writes ${entry}, starting ${exe}`)
+  await toggle()
+  check(!fs.existsSync(entry), 'turned off, the entry is gone')
+
+  const trayHost = await trayHostPresent()
+  const proc = app.process()
+  const exited = new Promise((r) => (proc.exitCode !== null ? r(null) : proc.once('exit', r)))
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close()).catch(() => {})
+  if (trayHost) {
+    await sleep(2000)
+    const visible = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.isVisible())
+    check(visible === false && (await health(port)) === 200, 'with a tray host, closing the window hides it')
+    check(await quit(app), 'Quit ends the app')
+  } else {
+    await Promise.race([exited, sleep(20_000)])
+    check(proc.exitCode !== null, `with no tray host, closing the window ends the app (${proc.exitCode})`)
+  }
+  check(await isPortFree(port), `the port :${port} is free`)
+  check(appProcesses().length === 0, `nothing of the app runs, its server neither (${appProcesses()})`)
+}
+
+/**
+ * Ends a copy of the app that waits on its dialog (Linux: killed, nothing closes it through the window
+ * system), with its children, and waits until it is gone.
+ * @param {import('node:child_process').ChildProcess} proc
+ */
+async function endApp(proc) {
+  const exited = new Promise((r) =>
+    proc.exitCode !== null || proc.signalCode ? r(null) : proc.once('exit', r),
+  )
+  proc.kill('SIGKILL')
+  await Promise.race([exited, sleep(10_000)])
+  for (const pid of appProcesses())
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // gone already
+    }
+  for (const until = Date.now() + 10_000; Date.now() < until && appProcesses().length; ) await sleep(200)
+}
+
+/**
+ * Linux: the processes this run's copy of the app is (its executable, the board's server among them).
+ * @returns {number[]}
+ */
+function appProcesses() {
+  if (!LINUX) return []
+  const real = fs.realpathSync(exe)
+  /** @type {number[]} */
+  const pids = []
+  for (const name of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(name)) continue
+    try {
+      // A process ends as it is read, or is not this user's.
+      if (fs.readlinkSync(`/proc/${name}/exe`).replace(/ \(deleted\)$/, '') === real) pids.push(Number(name))
+    } catch {
+      // gone, or not ours
+    }
+  }
+  return pids
+}
+
+/**
  * The board's server this run's copy of the app started (its executable running index.mjs), or 0.
  * Playwright's launch does not leave the app as the server's parent process.
  */
 function boardServer() {
+  if (LINUX) {
+    for (const pid of appProcesses()) {
+      try {
+        if (
+          fs
+            .readFileSync(`/proc/${pid}/cmdline`, 'utf8')
+            .split('\0')
+            .some((a) => a.endsWith('index.mjs'))
+        )
+          return pid
+      } catch {
+        // gone
+      }
+    }
+    return 0
+  }
   const res = spawnSync(
     'powershell',
     [
