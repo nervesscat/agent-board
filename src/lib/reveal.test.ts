@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { anchorId, parseAnchor } from './reveal'
+import { anchorId, cameBack, followHistory, parseAnchor } from './reveal'
 
 describe('parseAnchor', () => {
   it('names an element by its id', () => {
@@ -39,5 +39,59 @@ describe('anchorId', () => {
     expect(anchorId('post-', 'post')).toBeNull()
     expect(anchorId(null, 'post')).toBeNull()
     expect(anchorId(undefined, 'post')).toBeNull()
+  })
+})
+
+describe('followHistory', () => {
+  /** The browser's history, its replaceState patched as the router patches it to hear of each one. */
+  class BrowserHistory {
+    state: unknown = null
+    replaceState(state: unknown) {
+      this.state = state
+    }
+  }
+  const routerState = { __TSR_index: 0, key: 'k1', __TSR_key: 'k1' }
+
+  function follow() {
+    const history = new BrowserHistory()
+    const patched = vi.fn()
+    Object.assign(history, { replaceState: patched })
+    vi.stubGlobal('window', { history })
+    vi.stubGlobal('document', { dispatchEvent: () => true })
+    let hear: (move: { action: { type: string }; location: { state: unknown } }) => void = () => {}
+    const location = { href: '/prs', state: routerState }
+    followHistory({
+      history: { subscribe: (fn: typeof hear) => ((hear = fn), () => {}) },
+      latestLocation: location,
+      stores: { resolvedLocation: { get: () => location } },
+    } as never)
+    const move = (type: string) => hear({ action: { type }, location: { state: routerState } })
+    return { history, patched, move }
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('takes Back and Forward to an entry of the router for a return', () => {
+    const { history, move } = follow()
+    history.state = { __TSR_index: 2, key: 'k2', __TSR_key: 'k2' }
+    move('BACK')
+    expect(cameBack()).toBe(true)
+    move('GO')
+    expect(cameBack()).toBe(true)
+    move('PUSH')
+    expect(cameBack()).toBe(false)
+  })
+
+  it('takes a #link typed into the address bar, an entry with no state of the router, for an arrival', () => {
+    const { history, patched, move } = follow()
+    history.state = null
+    move('GO')
+    expect(cameBack()).toBe(false)
+    // The entry keeps the state the router made up for it, written past the router's patch, so a later
+    // Back or Forward to it is a return.
+    expect(history.state).toEqual(routerState)
+    expect(patched).not.toHaveBeenCalled()
+    move('BACK')
+    expect(cameBack()).toBe(true)
   })
 })

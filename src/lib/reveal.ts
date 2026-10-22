@@ -75,12 +75,27 @@ type Followed = Pick<AnyRouter, 'latestLocation' | 'stores'> & { history: Router
  */
 export function followHistory(router: Followed) {
   if (typeof window === 'undefined') return
-  router.history.subscribe(({ action }) => {
+  router.history.subscribe(({ action, location }) => {
     moved = action.type
+    if (madeByBrowser(action.type)) {
+      // A #link typed or pasted into the address bar (or followed past the router): the browser adds an
+      // entry of its own, with none of the router's state, and the router takes it for a step through
+      // the history. It is an arrival. The entry is given the state the router made up for it, through
+      // the browser's own replaceState (the router's would tell of a move), so a later Back or Forward
+      // to it is a return, to where the reader left it.
+      moved = 'PUSH'
+      Object.getPrototypeOf(window.history).replaceState.call(window.history, location.state, '')
+    }
     if (action.type !== 'REPLACE' && settled(router)) document.dispatchEvent(new Event('scroll'))
     // Back where the reader was, nothing is marked: not even what the step left marked.
     if (returned(moved)) unmark()
   })
+}
+
+/** Whether the history moved by popstate to an entry the router never wrote: one the browser made. */
+function madeByBrowser(action: string) {
+  const state = window.history.state as { __TSR_key?: unknown } | null
+  return returned(action) && !state?.__TSR_key
 }
 
 /**

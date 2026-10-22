@@ -883,6 +883,46 @@ test('Back or Forward to a link to a PR, after the reader picked a stage, keeps 
   await expect(tab('Done')).toHaveAttribute('aria-selected', 'true')
 })
 
+test('a link to a PR typed into the address bar after the reader picked a stage shows its stage and card', async ({
+  page,
+  project,
+}) => {
+  const target = seedPr(project, {
+    title: 'Typed in',
+    waitingOn: 'others',
+    stage: 'reviewed',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  })
+  for (let i = 0; i < 12; i++)
+    seedPr(project, { title: `Typed past ${i}`, waitingOn: 'others', stage: 'reviewed' })
+  const tab = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
+  const card = page.locator(`#pr-${target.id}`)
+
+  await page.goto(`/projects/${project.id}/prs`)
+  await expect(page.getByRole('heading', { level: 1, name: 'PR queue' })).toBeVisible()
+  await tab('Done').click()
+  await expect(tab('Done')).toHaveAttribute('aria-selected', 'true')
+  // The browser makes a new entry of the history for it, with no state of the router's: what the
+  // router reads as a step back through the history.
+  await page.evaluate(() => {
+    const states: unknown[] = []
+    ;(window as unknown as { popped: unknown[] }).popped = states
+    window.addEventListener('popstate', (e) => states.push(e.state))
+  })
+  await recordMarks(page)
+  await page.goto(`${page.url()}#pr-${target.id}`)
+  expect(await page.evaluate(() => (window as unknown as { popped: unknown[] }).popped)).toEqual([null])
+
+  // An arrival all the same: the PR's stage and the filter that shows it, then the card, marked once.
+  await expect(page).toHaveURL(new RegExp(`filter=others#pr-${target.id}$`))
+  await expect(tab('Waiting on others')).toHaveAttribute('aria-selected', 'true')
+  await expect(tab('Reviewed')).toHaveAttribute('aria-selected', 'true')
+  await expectRevealed(page, card, topBar(page))
+  await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
+  await expectMarkGone(page)
+  expect((await marks(page)).map((m) => m.id)).toEqual([`pr-${target.id}`])
+})
+
 /** A PR in Reviewed with a review result, its summary `md`. */
 async function pointingTo(
   human: APIRequestContext,
