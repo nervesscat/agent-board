@@ -74,7 +74,8 @@ case "${1:-}" in
   pacman) install pacman archlinux:latest 'agent-board-*.pacman' 9280 ;;
   appimage) install appimage debian:bookworm 'agent-board-*-x86_64.AppImage' 9290 ;;
   all)
-    for step in build deb rpm pacman appimage; do "$0" "$step"; done
+    # Through bash, so a checkout that lost the script's exec bit runs it all the same.
+    for step in build deb rpm pacman appimage; do bash "$0" "$step"; done
     ;;
   copy)
     out=$(cd "${2:?a folder to copy the packages to}" && { pwd -W 2>/dev/null || pwd; })
