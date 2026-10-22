@@ -10,7 +10,7 @@ import {
 } from '#/lib/constants'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
-import { isHumanName, listActors } from './actors'
+import { isHumanName, lastHuman, listActors } from './actors'
 import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
 import { branchHead, NO_BRANCH } from './git'
 import { HttpError, notFound } from './http'
@@ -833,7 +833,7 @@ export function deleteTicket(id: number, actor: string, opts: { keepLanes?: bool
   logActivity({ projectId: t.projectId, actor, kind: 'ticket', text: `deleted ticket #${id} ${t.title}` })
 }
 
-// --- archive (the human puts finished tickets away; their lanes go with them) ---
+// --- archive (the human puts finished tickets away, or answers an agent's request to; lanes go with them) ---
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
@@ -935,6 +935,136 @@ export function restoreTicket(id: number, actor: string) {
     refId: id,
   })
   return getTicket(id)
+}
+
+/** How many tickets one archive request names at most. */
+export const MAX_ARCHIVE_REQUEST = 50
+/** The options of an archive request's card, in order: answering the first archives. */
+const ARCHIVE_OPTIONS: schema.DecisionOption[] = [
+  { label: 'Archive', detail: 'Take them off the board, their lanes with them' },
+  { label: 'Keep', detail: 'Leave them where they are' },
+]
+
+/**
+ * Why `t` cannot be archived now, or null when it can: a top-level ticket in a done or cancelled stage,
+ * not archived yet. A lane goes with its ticket.
+ */
+function notArchivable(t: schema.Ticket, stages: schema.Stage[]): string | null {
+  if (t.archivedAt) return `#${t.id} is already archived`
+  if (t.parentId) {
+    const parent = db.select().from(schema.tickets).where(eq(schema.tickets.id, t.parentId)).get()
+    const kind = parent && kindOf(stages, parent.status)
+    if (parent && kind !== 'done' && kind !== 'cancelled')
+      return `#${t.id} is a lane of #${parent.id}, which is still open (${stageOf(stages, parent.status).name}): a lane is archived with its ticket`
+    return `#${t.id} is a lane: it is archived with its ticket #${t.parentId}, so ask for #${t.parentId} instead`
+  }
+  const stage = stageOf(stages, t.status)
+  if (stage.kind !== 'done' && stage.kind !== 'cancelled')
+    return `#${t.id} is in ${stage.name}; only done or cancelled tickets are archived`
+  return null
+}
+
+/**
+ * An agent's request to archive finished tickets: a decision card for the human, "Archive #12, #15?"
+ * with Archive and Keep, on the first ticket named (in its Main tab; it does not block). Nothing is
+ * archived until the human answers Archive (decide, or the orchestrator's relay of their chat answer).
+ * Every ticket must be in one project, top-level, in a done or cancelled stage and not archived yet; one
+ * that is not refuses the whole request, naming each failing ticket and why.
+ */
+export function requestArchive(
+  ticketIds: number[],
+  input: { as?: string; projectId?: number },
+  actor: string,
+) {
+  if (input.projectId !== undefined) getProject(input.projectId)
+  const ids = [...new Set(ticketIds)]
+  if (!ids.length || ids.length > MAX_ARCHIVE_REQUEST)
+    throw new HttpError(400, `name 1 to ${MAX_ARCHIVE_REQUEST} tickets to archive`)
+  const tickets = ids.map(getTicket)
+  const projectId = tickets[0]!.projectId
+  if (tickets.some((t) => t.projectId !== (input.projectId ?? projectId)))
+    throw new HttpError(
+      400,
+      input.projectId === undefined
+        ? 'an archive request names tickets of one project'
+        : `an archive request names tickets of project ${input.projectId} only`,
+    )
+  const stages = listStages(projectId)
+  const refused = tickets.map((t) => notArchivable(t, stages)).filter((why) => why !== null)
+  if (refused.length) throw new HttpError(409, `nothing was asked: ${refused.join('; ')}`)
+  const body = [
+    `Archive ${ids.map((id) => `#${id}`).join(', ')}?`,
+    '',
+    ...tickets.map((t) => `- #${t.id} ${t.title} (${stageOf(stages, t.status).name})`),
+    '',
+    'Archive takes them off the board, their lanes with them; any of them can be restored from the Archived tab.',
+  ].join('\n')
+  return postDecision(
+    ids[0]!,
+    { body, options: ARCHIVE_OPTIONS, as: input.as, block: false, tab: 'main' },
+    actor,
+    {
+      archiveTickets: ids,
+      did: `asked to archive ${tickets.map((t) => `#${t.id} ${t.title}`).join(', ')}`,
+    },
+  )
+}
+
+/**
+ * An archive request answered Archive: the tickets it names that can still be archived are, by `human`
+ * (who confirmed it), as archiveTicket does it, lanes and previews included; the activity says which
+ * agent asked (and who relayed the answer from the chat). One archived already (by an earlier Archive
+ * on this card, or by the human meanwhile) is as asked: `already`, not an error. The others (reopened,
+ * gone) are skipped, each with why.
+ */
+function archiveRequested(post: schema.Update, human: string, relayedBy = '') {
+  const archived: number[] = []
+  const already: number[] = []
+  const skipped: { id: number; why: string }[] = []
+  const at = new Date().toISOString()
+  for (const id of post.archiveTickets ?? []) {
+    const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, id)).get()
+    if (!t) {
+      skipped.push({ id, why: `#${id} no longer exists` })
+      continue
+    }
+    if (t.archivedAt) {
+      already.push(id)
+      continue
+    }
+    const why = notArchivable(t, listStages(t.projectId))
+    if (why) {
+      skipped.push({ id, why })
+      continue
+    }
+    const lanes = markArchived(t.projectId, [id], at, human)
+    archived.push(id)
+    logActivity({
+      projectId: t.projectId,
+      actor: human,
+      kind: 'ticket',
+      text: `archived ticket #${id} ${t.title}${lanes ? ` (with ${plural(lanes, 'lane')})` : ''}, as ${post.author} asked${relayedBy ? ` (answered in chat, relayed by ${relayedBy})` : ''}`,
+      refType: 'ticket',
+      refId: id,
+    })
+  }
+  if (archived.length) stopPreviewsFor(archived, 'the ticket was archived', human)
+  return { archived, already, skipped }
+}
+
+type ArchiveResult = ReturnType<typeof archiveRequested>
+
+/** What an answered archive request did, for the reply under its card. */
+function archiveWords(result: ArchiveResult | null) {
+  if (!result) return ''
+  const done = result.archived.length
+    ? `\n\nArchived ${result.archived.map((id) => `#${id}`).join(', ')}.`
+    : ''
+  const already = result.already.length
+    ? `\n\nAlready archived: ${result.already.map((id) => `#${id}`).join(', ')}.`
+    : ''
+  const not = result.skipped.length ? `\n\nNot archived: ${result.skipped.map((s) => s.why).join('; ')}.` : ''
+  return done + already + not
 }
 
 // --- tasks ---
@@ -1879,10 +2009,27 @@ export function removeTicketFile(ticketId: number, attachmentId: number, actor: 
  * answers to pick from (one may be recommended). With `block` (the default) the ticket moves to the
  * project's blocked stage until it is decided.
  */
-export function askDecision(
+export function askDecision(ticketId: number, input: DecisionInput, actor: string) {
+  return postDecision(ticketId, input, actor)
+}
+
+type DecisionInput = {
+  body: string
+  options: schema.DecisionOption[]
+  as?: string
+  block?: boolean
+  tab?: FeedTab
+}
+
+/**
+ * askDecision, and an archive request's card: `archiveTickets` are the tickets its first option archives,
+ * `did` the activity line (asked for a decision, by default).
+ */
+function postDecision(
   ticketId: number,
-  input: { body: string; options: schema.DecisionOption[]; as?: string; block?: boolean; tab?: FeedTab },
+  input: DecisionInput,
   actor: string,
+  extra: { archiveTickets?: number[]; did?: string } = {},
 ) {
   const options = input.options
     .map((o) => ({ ...o, label: o.label.trim(), detail: o.detail?.trim() || undefined }))
@@ -1898,7 +2045,7 @@ export function askDecision(
   })
   const row = db
     .update(schema.updates)
-    .set({ decision: options })
+    .set({ decision: options, archiveTickets: extra.archiveTickets ?? null })
     .where(eq(schema.updates.id, post.id))
     .returning()
     .get()!
@@ -1915,7 +2062,7 @@ export function askDecision(
     projectId: ticket.projectId,
     actor: post.author,
     kind: 'ticket',
-    text: `asked for a decision on #${ticketId} ${ticket.title}: ${firstLine(input.body, 80)}`,
+    text: extra.did ?? `asked for a decision on #${ticketId} ${ticket.title}: ${firstLine(input.body, 80)}`,
     refType: 'ticket',
     refId: ticketId,
   })
@@ -1947,9 +2094,13 @@ export function decide(postId: number, option: number, note: string, actor: stri
     .where(eq(schema.updates.id, postId))
     .returning()
     .get()!
-  const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}`
+  // An archive request answered Archive archives, every time it is: also when the answer changes to it,
+  // and again on a card already answered Archive (a ticket restored since goes back to the archive).
+  // Changing it to Keep restores nothing (the human restores from the Archived tab).
+  const archive = row.archiveTickets && option === 0 ? archiveRequested(row, actor) : null
+  const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}${archiveWords(archive)}`
   settleDecision(row, actor, words, `decided "${picked.label}"`)
-  return row
+  return { ...row, archive }
 }
 
 /**
@@ -1994,13 +2145,16 @@ export function relayDecision(
     .get()
   // Nothing matched: another answer landed between the read above and this write.
   if (!row) throw new HttpError(409, alreadyDecided, 'decided')
+  // The archive is the human's, never the relaying agent's: it goes to the human the board last saw sign in.
+  const archive =
+    row.archiveTickets && input.option === 0 ? archiveRequested(row, lastHuman() ?? 'human', actor) : null
   settleDecision(
     row,
     actor,
-    `Decided in chat: **${picked.label}**\n\n${words}`,
+    `Decided in chat: **${picked.label}**\n\n${words}${archiveWords(archive)}`,
     `relayed the decision "${picked.label}"`,
   )
-  return row
+  return { ...row, archive }
 }
 
 /**
@@ -2090,6 +2244,13 @@ export function editPost(
   if (patch.body === undefined && patch.progress === undefined && patch.tab === undefined)
     throw new HttpError(400, 'give the new body, progress or tab')
   if (patch.body !== undefined || patch.progress !== undefined) keepSummary(before)
+  // An archive request's card shows the tickets its Archive archives (archiveTickets): its words stay as
+  // they were posted, so the card can never name other tickets than the ones it archives.
+  if (patch.body !== undefined && before.archiveTickets)
+    throw new HttpError(
+      409,
+      "an archive request's card names the tickets it archives and is not edited: ask again with request_archive instead",
+    )
   const edited = patch.body !== undefined && patch.body !== before.body
   const row = db
     .update(schema.updates)

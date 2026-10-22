@@ -387,10 +387,11 @@ describe('0029_ticket_pr_link', () => {
     // Every other column is what it was (toEqual leaves an undefined column out of the comparison).
     expect(after.tickets.map((t) => ({ ...t, pr_id: undefined }))).toEqual(before.tickets)
     expect(after.tasks).toEqual(before.tasks)
-    // A later migration adds the posts' tab and summary columns: the rest of each post is what it was.
-    expect(after.updates.map(({ tab: _t, summary: _s, summary_change: _c, ...rest }) => rest)).toEqual(
-      before.updates,
-    )
+    // Later migrations add the posts' tab, summary and archive request columns: the rest of each post is
+    // what it was.
+    expect(
+      after.updates.map(({ tab: _t, summary: _s, summary_change: _c, archive_tickets: _a, ...rest }) => rest),
+    ).toEqual(before.updates)
     expect(sqlite.prepare('SELECT parent_id FROM tickets WHERE id = ?').get(lane)).toEqual({
       parent_id: feature,
     })
@@ -478,9 +479,12 @@ describe('0030_post_tabs_and_summary', () => {
       card: 'main',
       unknown: 'agents',
     })
-    // Every other column reads as it did; no post is a summary.
+    // Every other column reads as it did (a later migration adds the archive request one); no post is a
+    // summary.
     const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
-    expect(after.map(({ tab: _t, summary: _s, summary_change: _c, ...rest }) => rest)).toEqual(before)
+    expect(
+      after.map(({ tab: _t, summary: _s, summary_change: _c, archive_tickets: _a, ...rest }) => rest),
+    ).toEqual(before)
     expect(after.every((u) => u.summary === 0 && u.summary_change === '')).toBe(true)
     expect(sqlite.prepare('SELECT update_id FROM attachments').all()).toEqual([{ update_id: progress }])
     expect(() => sqlite.prepare("UPDATE updates SET tab = 'other' WHERE id = ?").run(progress)).toThrow(
@@ -529,6 +533,40 @@ describe('0031_project_tag_suggestions', () => {
     expect(sqlite.prepare('SELECT tags FROM tickets WHERE id = ?').get(ticket)).toEqual({
       tags: JSON.stringify(['Forms']),
     })
+    sqlite.close()
+  })
+})
+
+describe('0033_archive_requests', () => {
+  it('adds the archive request column without rebuilding the posts, so they and their files stay', () => {
+    const sqlite = databaseAt('0032_passkey_sign_in')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('archive').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'Shipped', 'claude').lastInsertRowid,
+    )
+    const card = Number(
+      sqlite
+        .prepare('INSERT INTO updates (ticket_id, author, body, decision) VALUES (?, ?, ?, ?)')
+        .run(ticket, 'claude', 'Which one?', JSON.stringify([{ label: 'A' }, { label: 'B' }]))
+        .lastInsertRowid,
+    )
+    sqlite
+      .prepare(
+        "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
+      )
+      .run(card)
+    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    expect(after.map(({ archive_tickets: _a, ...rest }) => rest)).toEqual(before)
+    expect(after.map((u) => u.archive_tickets)).toEqual([null])
+    expect(sqlite.prepare('SELECT update_id FROM attachments').all()).toEqual([{ update_id: card }])
     sqlite.close()
   })
 })
