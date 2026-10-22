@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { db, schema } from '#/db'
 import { MAX_TAG_LENGTH, cleanSuggestions, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
+import { hostToolsForAgents } from './hostTools'
 import { notFound } from './http'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
@@ -65,7 +66,8 @@ export function getProject(id: number) {
 /**
  * The project plus its repos, its stages in board order and its agents (name, picture, instructions):
  * what agents read before working on it. `usedTags` are the tags its tickets carry (archived and lanes
- * too), most used first, each once in the casing used most: the ones to reuse.
+ * too), most used first, each once in the casing used most: the ones to reuse. `hostTools` is the last
+ check of the tools on this machine the board runs (null before the first one ends).
  */
 export function getProjectFull(id: number) {
   return {
@@ -74,6 +76,7 @@ export function getProjectFull(id: number) {
     repos: listRepos(id),
     stages: listStages(id),
     agents: listAgents(id),
+    hostTools: hostToolsForAgents(),
   }
 }
 

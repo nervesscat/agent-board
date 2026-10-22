@@ -1,6 +1,7 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 
 import { config } from './config'
+import { hostTools, toolProblem } from './hostTools'
 import { HttpError } from './http'
 
 const WIN = process.platform === 'win32'
@@ -12,8 +13,8 @@ const ERROR_TAIL = 500
 /**
  * One run of the `claude` CLI in print mode: `config.claudeBin` with `config.claudeArgs` first, then
  * `-p --output-format text`, the prompt written to its stdin (never an argument, so its size is not
- * bounded by the command line). Resolves with what it printed; rejects (502) when it cannot start,
- * exits non-zero or outlives `timeoutMs` (`config.claudeTimeoutMs` by default), killed then with
+ * bounded by the command line). Resolves with what it printed; rejects (502) when it cannot start (one
+ * not found says so and how to fix `CLAUDE_BIN`), exits non-zero or outlives `timeoutMs` (`config.claudeTimeoutMs` by default), killed then with
  * whatever it started.
  */
 export function runClaude(
@@ -43,7 +44,9 @@ export function runClaude(
       timeoutMs,
     )
 
-    child.on('error', (e) => fail(`could not run claude (${config.claudeBin}): ${e.message}`))
+    child.on('error', (e) =>
+      fail(((e as NodeJS.ErrnoException).code === 'ENOENT' && toolProblem('claude', e)) || cannotRun(e)),
+    )
     child.stdout.on('data', (chunk: Buffer) => {
       outSize += chunk.length
       if (outSize > MAX_OUTPUT) fail('claude printed more than a report: stopped it')
@@ -67,6 +70,22 @@ export function runClaude(
     child.stdin.on('error', () => {})
     child.stdin.end(prompt, 'utf8')
   })
+}
+
+/**
+ * A start that failed with claude not missing: the last check found it, yet the spawn did not start
+ * it. Found as a batch shim (`claude.cmd`) is the usual cause on Windows, which the board starts
+ * without a shell and so cannot run: that says so and how to point CLAUDE_BIN at the program itself.
+ */
+function cannotRun(e: Error): string {
+  const said = `could not run claude (${config.claudeBin}): ${e.message}`
+  const found = hostTools()?.tools.find((t) => t.name === 'claude')?.path
+  if (!found || !/\.(cmd|bat)$/i.test(found)) return said
+  return (
+    `${said}: claude was found as ${found}, a batch shim the board cannot start directly; ` +
+    "set CLAUDE_BIN in .env (config.env for the desktop app) to the full path of claude's .exe, " +
+    'then restart the board'
+  )
 }
 
 function killTree(child: ChildProcess) {

@@ -1,18 +1,24 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { GhPr } from './git'
 
 // gh answers from fixtures: each `gh pr list` call is recorded, and answered by `answer`.
 let calls: string[][] = []
+let cwds: (string | undefined)[] = []
 let answer: (args: string[]) => GhPr[] = () => []
 vi.mock('node:child_process', () => ({
   execFile: (
     _cmd: string,
     args: string[],
-    _opts: unknown,
+    opts: { cwd?: string },
     cb: (err: Error | null, out?: { stdout: string; stderr: string }) => void,
   ) => {
     calls.push(args)
+    cwds.push(opts.cwd)
     try {
       cb(null, { stdout: JSON.stringify(answer(args)), stderr: '' })
     } catch (err) {
@@ -75,5 +81,85 @@ describe('listMyPrs', () => {
       return [pr(1)]
     }
     await expect(listMyPrs('/r/app', { mergedSince: '2026-09-22' })).rejects.toThrow('merged search failed')
+  })
+})
+
+describe('folderGone', () => {
+  // A spawn Node could not start in its cwd: Windows says ENOENT for any folder it cannot use.
+  const enoent = Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT', syscall: 'spawn git' })
+  let tmp: string
+  let folderGone: typeof import('./git').folderGone
+  beforeAll(async () => {
+    folderGone = (await import('./git')).folderGone
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-folder-gone-'))
+  })
+
+  it('says a missing folder does not exist', () => {
+    const gone = path.join(tmp, 'gone')
+    expect(folderGone(enoent, gone)?.message).toBe(
+      `${gone} does not exist: the repo's folder was moved or deleted`,
+    )
+    expect(folderGone(enoent, gone)?.status).toBe(409)
+  })
+
+  it('says a file at the repo path is not a folder, on any platform', () => {
+    const file = path.join(tmp, 'a-file')
+    fs.writeFileSync(file, '')
+    for (const code of ['ENOENT', 'ENOTDIR'])
+      expect(folderGone({ ...enoent, code }, file)?.message).toBe(
+        `${file} is not a folder: the repo's path names a file, not its checkout`,
+      )
+    // A folder under that file does not exist.
+    expect(folderGone(enoent, path.join(file, 'below'))?.message).toMatch(/does not exist/)
+  })
+
+  it('says a folder too long for Windows to start a program in is too long, and only on Windows', async () => {
+    const { cwdTooLong } = await import('./git')
+    const fits = 'C:\\' + 'x'.repeat(255)
+    expect(cwdTooLong(fits, 'win32')).toBeNull()
+    expect(cwdTooLong(fits + 'x', 'win32')?.message).toMatch(
+      /is too long a path for Windows to run git or gh in \(over 258 characters\): move the checkout/,
+    )
+    expect(cwdTooLong('/' + 'x'.repeat(400), 'linux')).toBeNull()
+  })
+
+  it('measures the folder a trailing separator or dot segments name, at the Windows limit', async () => {
+    const { cwdTooLong, startDir } = await import('./git')
+    const fits = 'C:\\' + 'x'.repeat(255)
+    const over = fits + 'x'
+    // As typed these are longer than the folder they name; the folder is what a command starts in.
+    const fitting = [
+      fits + '\\',
+      fits + '\\.',
+      `C:\\y\\..\\${'x'.repeat(255)}`,
+      `C:\\.\\${'x'.repeat(255)}\\`,
+    ]
+    for (const typed of fitting) {
+      expect(startDir(typed, 'win32')).toBe(fits)
+      expect(cwdTooLong(typed, 'win32')).toBeNull()
+    }
+    for (const typed of [over + '\\', over + '\\.', `C:\\y\\..\\${'x'.repeat(256)}`]) {
+      expect(startDir(typed, 'win32')).toBe(over)
+      expect(cwdTooLong(typed, 'win32')?.message).toBe(
+        `${typed} is too long a path for Windows to run git or gh in (over 258 characters): ` +
+          'move the checkout to a shorter path',
+      )
+    }
+  })
+
+  it('starts git and gh in the folder the check measured, not the path as typed', async () => {
+    const { repoNameWithOwner } = await import('./git')
+    const dir = path.join(tmp, 'resolved')
+    answer = () => ({ nameWithOwner: 'o/r' }) as unknown as GhPr[]
+    cwds = []
+    expect(await repoNameWithOwner(`${dir}${path.sep}.${path.sep}`)).toBe('o/r')
+    expect(await repoNameWithOwner(path.join(dir, 'sub') + `${path.sep}..${path.sep}`)).toBe('o/r')
+    expect(cwds).toEqual([dir, dir])
+  })
+
+  it('leaves a usable folder and any other failure alone', () => {
+    expect(folderGone(enoent, tmp)).toBeNull()
+    expect(folderGone(new Error('fatal: not a git repository'), path.join(tmp, 'gone'))).toBeNull()
+    expect(folderGone({ code: 'ENOENT', syscall: 'open' }, path.join(tmp, 'gone'))).toBeNull()
   })
 })

@@ -5,7 +5,15 @@ import path from 'node:path'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { deleteLocalBranch, listRefs, listWorktrees, originSymref } from './git'
+import {
+  commitsBrought,
+  deleteLocalBranch,
+  eachTrackedFile,
+  listRefs,
+  listWorktrees,
+  originSymref,
+  worktreeChanges,
+} from './git'
 
 // Real git on throwaway repos: the refs and worktrees the Cleanup page reads, and what it deletes.
 const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-refs-')))
@@ -110,4 +118,40 @@ describe('the refs the Cleanup page reads and deletes', () => {
       git('update-ref', '-d', 'refs/heads/refs/b1')
     }
   })
+})
+
+describe('a repo path typed with a trailing separator or dot segments', () => {
+  // Windows refuses a folder as it is given: 258 characters fit, 259 do not. A path that names a
+  // 258-character folder with a trailing separator or a `.` is longer as typed than the folder.
+  it.runIf(process.platform === 'win32')(
+    'starts git in the folder it names, at the Windows limit, and says what git says',
+    async () => {
+      let dir = path.join(tmp, 'limit')
+      while (dir.length < 258 - 41) dir = path.join(dir, 'x'.repeat(40))
+      dir = path.join(dir, 'y'.repeat(258 - dir.length - 1))
+      expect(dir).toHaveLength(258)
+      fs.mkdirSync(dir, { recursive: true })
+      const parent = path.dirname(dir)
+      for (const typed of [
+        dir + path.sep,
+        dir + path.sep + '.',
+        `${parent}${path.sep}.${path.sep}${path.basename(dir)}`,
+      ]) {
+        // Not a checkout: git starts there and says so, rather than a spawn that never started.
+        for (const read of [
+          () => worktreeChanges(typed),
+          () => eachTrackedFile(typed, ['f.txt'], () => {}),
+          () => commitsBrought(typed, 'HEAD', []),
+        ]) {
+          const err = (await read().then(
+            () => null,
+            (e: unknown) => e,
+          )) as { code?: unknown; message?: string; stderr?: string } | null
+          expect(err).not.toBeNull()
+          expect(err!.code).not.toBe('ENOENT')
+          expect(`${err!.message} ${err!.stderr ?? ''}`).toMatch(/not a git repository/i)
+        }
+      }
+    },
+  )
 })

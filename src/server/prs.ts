@@ -13,7 +13,8 @@ import {
   type GhCheck,
   type GhPr,
 } from './git'
-import { notFound } from './http'
+import { toolProblem } from './hostTools'
+import { HttpError, notFound } from './http'
 import { hasPreviews, stopPreviewsFor } from './managedPreview'
 import { getProject } from './projects'
 import { fetchStatus } from './push'
@@ -308,8 +309,9 @@ export function refreshPrs(projectId: number): Promise<void> {
 
 /**
  * Every repo of the project, refreshed side by side; the queue is their union. A repo gh cannot see
- * (no GitHub remote) is skipped, and one failing repo does not hide the others' PRs. Then the PRs' own
- * tickets follow, for every project, one without a GitHub repo included.
+ * (no GitHub remote) is skipped, and one failing repo does not hide the others' PRs. When every repo
+ * fails because gh is missing or signed out, the error says that and the fix, not what the spawn said.
+ * Then the PRs' own tickets follow, for every project, one without a GitHub repo included.
  */
 async function runRefresh(projectId: number) {
   getProject(projectId)
@@ -319,7 +321,10 @@ async function runRefresh(projectId: number) {
     r.status === 'rejected' ? [{ repo: repos[i]!, err: r.reason }] : [],
   )
   for (const f of failed) console.error(`PR refresh failed for ${f.repo.name}:`, f.err)
-  if (repos.length && failed.length === repos.length) throw failed[0]!.err
+  if (repos.length && failed.length === repos.length) {
+    const gh = toolProblem('gh', failed[0]!.err)
+    throw gh ? new HttpError(502, gh) : failed[0]!.err
+  }
   await syncPrTickets(
     projectId,
     results.flatMap((r) => (r.status === 'fulfilled' ? r.value : [])),

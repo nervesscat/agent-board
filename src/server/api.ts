@@ -27,6 +27,7 @@ import * as features from './features'
 import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
+import { checkHostTools, readyHostTools } from './hostTools'
 import { HttpError, intParam, readJson } from './http'
 import {
   isActive,
@@ -114,6 +115,10 @@ api.get('/api/health', () => json({ ok: true }))
 api.get('/api/me', ({ request, actor }) =>
   json({ actor, agent: isAgent(request), boardEnv: authMode().boardEnv, authOff: authMode().off }),
 )
+// The tools on this machine the board runs (git, gh, claude, node, pnpm): the last check, waiting for the
+// one the server started with when it has not ended yet; POST checks them again.
+api.get('/api/host-tools', async () => json(await readyHostTools()))
+api.post('/api/host-tools/check', async () => json(await checkHostTools()))
 // Every name the board has seen sign in, with whether it is an agent or a human.
 api.get('/api/actors', () => json(listActors()))
 // Signing in with passkeys, signing out, and the devices section (authApi.ts).

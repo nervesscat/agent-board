@@ -248,23 +248,82 @@ describe('one generation at a time', () => {
     expect(gen.generationState(p).period).toBeNull()
   })
 
-  it('fails when claude cannot be run at all', async () => {
+  it('fails when claude is not found, saying so and how to set CLAUDE_BIN', async () => {
     const now = at('2026-10-06', '16:00')
     const { p } = tracked({ now })
     happened(p, at('2026-10-06', '10:00'), 'work')
     const bin = config.claudeBin
-    config.claudeBin = path.join(tmp, 'no-such-claude')
+    const missing = path.join(tmp, 'no-such-claude')
+    config.claudeBin = missing
     try {
-      expect(await errorOf(gen.generateReport(p, {}, now))).toMatchObject({
-        status: 502,
-        message: expect.stringMatching(/^could not run claude/),
-      })
+      const err = await errorOf(gen.generateReport(p, {}, now))
+      expect(err).toMatchObject({ status: 502 })
+      expect(err.message).toBe(
+        `claude was not found: CLAUDE_BIN is ${missing}: install Claude Code ` +
+          '(https://docs.claude.com/en/docs/claude-code/setup), or set CLAUDE_BIN in .env (config.env for ' +
+          'the desktop app) to its full path, then restart the board',
+      )
+      expect(err.message).not.toMatch(/ENOENT|spawn/)
+      // The Daily page shows the same where the Generate button shows its error.
+      expect(gen.generationState(p).error?.message).toBe(err.message)
     } finally {
       config.claudeBin = bin
     }
     expect(gen.generationState(p).period).toBeNull()
   })
+
+  it('says what failed when the check found claude as a batch shim the spawn cannot start', async () => {
+    const now = at('2026-10-06', '16:00')
+    const { p } = tracked({ now })
+    happened(p, at('2026-10-06', '10:00'), 'work')
+    const host = await import('./hostTools')
+    // The check found claude.cmd on PATH for CLAUDE_BIN=claude; started without a shell, the name
+    // alone is ENOENT, though the found file is still where the check saw it.
+    const shim = path.join(tmp, 'claude.cmd')
+    fs.writeFileSync(shim, '@echo off\r\n')
+    fs.chmodSync(shim, 0o755)
+    host.setHostTools(host.hostToolsWith({ claude: { path: shim, version: '2.0.0' } }))
+    const bin = config.claudeBin
+    const missing = path.join(tmp, 'claude-not-started')
+    config.claudeBin = missing
+    try {
+      const err = await errorOf(gen.generateReport(p, {}, now))
+      expect(err).toMatchObject({ status: 502 })
+      expect(err.message).not.toBe('null')
+      expect(err.message).toMatch(new RegExp(`^could not run claude \\(${escapeRe(missing)}\\): `))
+      expect(err.message).toContain(`claude was found as ${shim}, a batch shim the board cannot start`)
+      expect(err.message).toContain(
+        "set CLAUDE_BIN in .env (config.env for the desktop app) to the full path of claude's .exe",
+      )
+      expect(gen.generationState(p).error?.message).toBe(err.message)
+    } finally {
+      config.claudeBin = bin
+      host.setHostTools(null)
+    }
+  })
+
+  it('says what failed when the check found claude where it still is and the spawn says ENOENT', async () => {
+    const now = at('2026-10-06', '16:00')
+    const { p } = tracked({ now })
+    happened(p, at('2026-10-06', '10:00'), 'work')
+    const host = await import('./hostTools')
+    host.setHostTools(host.hostToolsWith({ claude: { path: process.execPath, version: '2.0.0' } }))
+    const bin = config.claudeBin
+    const missing = path.join(tmp, 'claude-not-started')
+    config.claudeBin = missing
+    try {
+      const err = await errorOf(gen.generateReport(p, {}, now))
+      expect(err).toMatchObject({ status: 502 })
+      expect(err.message).not.toBe('null')
+      expect(err.message).toMatch(new RegExp(`^could not run claude \\(${escapeRe(missing)}\\): .*ENOENT`))
+    } finally {
+      config.claudeBin = bin
+      host.setHostTools(null)
+    }
+  })
 })
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 describe('the template check', () => {
   it('asks once more when the first answer misses the template, and keeps only the second', async () => {

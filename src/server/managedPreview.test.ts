@@ -541,6 +541,33 @@ describe('a preview the board runs', () => {
     const { ws: atMain } = ticketWithWorktree(main)
     expect(() => mp.startPreview(atMain.id, 'claude')).toThrow(/main checkout/)
   })
+
+  it('refuses while pnpm or node is missing on this machine, saying which and the fix, and runs nothing', async () => {
+    const r = useFake()
+    const host = await import('./hostTools')
+    const { ws } = ticketWithWorktree()
+    try {
+      host.setHostTools(host.hostToolsWith({ pnpm: { path: null } }))
+      const reason = mp.cannotStart(ws.id)
+      expect(reason).toMatch(/^pnpm was not found on the board's PATH: run corepack enable pnpm/)
+      expect(() => mp.startPreview(ws.id, 'claude')).toThrow(reason!)
+      // The Preview card shows the workspace with the reason, instead of hiding it.
+      expect(await features.workspacePreview(ws.id)).toMatchObject({
+        cannotStart: reason,
+        toolProblem: reason,
+      })
+      host.setHostTools(host.hostToolsWith({ node: { path: null } }))
+      expect(mp.cannotStart(ws.id)).toMatch(/^node was not found on the board's PATH: install Node\.js/)
+      expect(r.calls).toEqual([])
+      expect(mp.managedPreview(ws.id)).toBeNull()
+      // Once both are found again, it starts.
+      host.setHostTools(host.hostToolsWith({}))
+      expect(mp.cannotStart(ws.id)).toBeNull()
+      expect((await features.workspacePreview(ws.id)).toolProblem).toBeNull()
+    } finally {
+      host.setHostTools(null)
+    }
+  })
 })
 
 describe('stops by itself', () => {
