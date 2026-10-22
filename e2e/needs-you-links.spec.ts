@@ -928,8 +928,12 @@ for (const away of ['reloaded on a review result', 'left for the Overview'] as c
       await expect(resultDialog(page)).toHaveCount(0)
       await page.locator('aside nav').getByRole('link', { name: 'Overview' }).click()
       await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
+      // The router puts the URL in history before it draws the page: Back before the Overview is drawn
+      // only calls that off, and the queue never leaves.
+      await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
       await page.goBack()
       await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/prs$`))
+      await expect(page.getByRole('heading', { level: 1, name: 'PR queue' })).toBeVisible()
       // The queue drawn again, on the stage it starts on, which nobody picked.
       await expect(tab('Pending')).toHaveAttribute('aria-selected', 'true')
     }
