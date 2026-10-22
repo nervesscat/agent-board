@@ -1,5 +1,6 @@
 // What the desktop app runs the board with: its folder, its config file, the port and the data folder,
 // and the environment the built server starts in. No Electron here, so the tests run it under Node.
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
@@ -13,18 +14,60 @@ export const CONFIG_FILE = 'config.env'
 export class SettingsError extends Error {}
 
 /**
- * The app's own folder: its config file, the window's browser profile and, by default, the board's data.
- * `%LOCALAPPDATA%\agent-board` on Windows (`~/.local/share/agent-board` elsewhere); AGENT_BOARD_HOME
- * moves all of it, as a second copy of the app beside the installed one does (desktop/smoke.mjs).
+ * The app's own folder: its config file and the window's browser profile.
+ * `%LOCALAPPDATA%\agent-board` on Windows, `$XDG_CONFIG_HOME/agent-board` (`~/.config/agent-board`)
+ * elsewhere; AGENT_BOARD_HOME moves it, as a second copy of the app beside the installed one does
+ * (desktop/smoke.mjs). appFolders has the data folder beside it.
  * @param {Env} env
  */
 export function appHome(env, platform = process.platform, home = os.homedir()) {
-  if (env.AGENT_BOARD_HOME?.trim()) return path.resolve(env.AGENT_BOARD_HOME.trim())
-  const base =
-    platform === 'win32'
-      ? env.LOCALAPPDATA?.trim() || path.join(home, 'AppData', 'Local')
-      : env.XDG_DATA_HOME?.trim() || path.join(home, '.local', 'share')
-  return path.join(base, 'agent-board')
+  return appFolders(env, platform, home).config
+}
+
+/**
+ * @typedef {object} AppFolders
+ * @property {string} config The config file's folder (appHome).
+ * @property {string} profile The window's browser profile, and the single-instance lock with it.
+ * @property {string} data The folder the board's data folder (`data`) and a relative DATA_DIR are in.
+ */
+
+/**
+ * Where the app keeps its files. On Windows, all of it in `%LOCALAPPDATA%\agent-board`. Elsewhere as
+ * the XDG base directories say: the config file and the profile in `$XDG_CONFIG_HOME/agent-board`,
+ * the data in `$XDG_DATA_HOME/agent-board` (`~/.config`, `~/.local/share` when unset, or when not an
+ * absolute path, which the spec says to ignore). AGENT_BOARD_HOME puts all of it in one folder, on
+ * every platform.
+ * @param {Env} env
+ * @returns {AppFolders}
+ */
+export function appFolders(env, platform = process.platform, home = os.homedir()) {
+  if (env.AGENT_BOARD_HOME?.trim()) {
+    const one = path.resolve(env.AGENT_BOARD_HOME.trim())
+    return { config: one, profile: path.join(one, 'electron'), data: one }
+  }
+  if (platform === 'win32') {
+    const one = path.join(env.LOCALAPPDATA?.trim() || path.join(home, 'AppData', 'Local'), 'agent-board')
+    return { config: one, profile: path.join(one, 'electron'), data: one }
+  }
+  const config = path.posix.join(
+    xdgHome(env.XDG_CONFIG_HOME, path.posix.join(home, '.config')),
+    'agent-board',
+  )
+  const data = path.posix.join(
+    xdgHome(env.XDG_DATA_HOME, path.posix.join(home, '.local', 'share')),
+    'agent-board',
+  )
+  return { config, profile: path.posix.join(config, 'electron'), data }
+}
+
+/**
+ * An XDG base directory variable's value, or `fallback` when it is unset, blank or relative.
+ * @param {string | undefined} value
+ * @param {string} fallback
+ */
+const xdgHome = (value, fallback) => {
+  const v = value?.trim()
+  return v && path.posix.isAbsolute(v) ? v : fallback
 }
 
 /**
@@ -68,6 +111,19 @@ export const CONFIG_TEMPLATE = `# The board's settings, read each time the app s
 `
 
 /**
+ * The template for the platform: on Linux the data folder is not next to the file but under
+ * `$XDG_DATA_HOME/agent-board` (appFolders), which is where a relative DATA_DIR goes too.
+ * @param {string} dataHome appFolders' data folder.
+ */
+export function configTemplate(platform = process.platform, dataHome = '') {
+  if (platform === 'win32' || !dataHome) return CONFIG_TEMPLATE
+  return CONFIG_TEMPLATE.replace(
+    '(default: the data folder next to this file)',
+    `(default: ${path.posix.join(dataHome, 'data')}; a relative path is under ${dataHome})`,
+  )
+}
+
+/**
  * Makes `dir` if it is missing and checks that a file can be written in it, throwing why not. A
  * folder that exists but refuses writes (a deny-write ACL, a read-only share) is as unusable as one
  * that cannot be made.
@@ -105,12 +161,13 @@ export function nearestFolder(p, stat = (q) => fs.statSync(q, { throwIfNoEntry: 
 /**
  * The config file's values, written from the template the first time so there is one to edit.
  * @param {string} home
+ * @param {string} template What a new file says (configTemplate).
  */
-export function readConfigFile(home) {
+export function readConfigFile(home, template = CONFIG_TEMPLATE) {
   const file = path.join(home, CONFIG_FILE)
   if (!fs.existsSync(file)) {
     fs.mkdirSync(home, { recursive: true })
-    fs.writeFileSync(file, CONFIG_TEMPLATE)
+    fs.writeFileSync(file, template)
   }
   try {
     return parseConfig(fs.readFileSync(file, 'utf8'))
@@ -130,12 +187,13 @@ export function readConfigFile(home) {
 
 /**
  * The port, the data folder and the server's environment: the environment wins over the config file,
- * which wins over the defaults (port 47100, `<home>/data`). The board always runs as production on
+ * which wins over the defaults (port 47100, `<dataHome>/data`). The board always runs as production on
  * 127.0.0.1, whatever either says: it always signs in with a passkey, and AUTH=off is refused as it starts.
- * @param {{ env: Env, file: Record<string, string>, home: string }} input
+ * @param {{ env: Env, file: Record<string, string>, home: string, dataHome?: string }} input `dataHome`
+ *   is appFolders' data folder, where the data folder and a relative DATA_DIR are (`home` when left out).
  * @returns {Settings}
  */
-export function resolveSettings({ env, file, home }) {
+export function resolveSettings({ env, file, home, dataHome = home }) {
   /** @param {string} key */
   const pick = (key) => env[key]?.trim() || file[key]?.trim() || ''
   const rawPort = pick('PORT')
@@ -143,7 +201,7 @@ export function resolveSettings({ env, file, home }) {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new SettingsError(`PORT must be a whole number from 1 to 65535, got "${rawPort}"`)
   const rawData = pick('DATA_DIR')
-  const dataDir = rawData ? expandPath(rawData, home) : path.join(home, 'data')
+  const dataDir = rawData ? expandPath(rawData, dataHome) : path.join(dataHome, 'data')
   const url = `http://localhost:${port}`
   /** @type {Env} */
   const serverEnv = {
@@ -245,4 +303,257 @@ export function tail(text, max = 1500) {
   const cut = text.slice(-max)
   const nl = cut.indexOf('\n')
   return (nl >= 0 ? cut.slice(nl + 1) : cut).trim()
+}
+
+// Linux: what a launch from the desktop does not get on its own (README: "Install").
+
+const PATH_START = '__AGENT_BOARD_PATH_START__'
+const PATH_END = '__AGENT_BOARD_PATH_END__'
+export const LOGIN_SHELL_MS = 5000
+
+/**
+ * @typedef {object} RunResult
+ * @property {number | null} code Null when it did not end on its own (timed out, or not started).
+ * @property {string} stdout
+ */
+/** @typedef {(command: string, args: string[], opts: { timeoutMs: number, env: Env }) => Promise<RunResult>} Runner */
+
+/**
+ * Runs a command to its end, or until `timeoutMs` passes, whatever it or what it started does: it gets
+ * no input, its stdout is kept (a megabyte at most), its stderr dropped, and on the timeout its whole
+ * process group is killed and the answer given at once, not when its output closes.
+ * @type {Runner}
+ */
+export const runCapture = (command, args, { timeoutMs, env }) =>
+  new Promise((resolve) => {
+    /** @type {import('node:child_process').ChildProcess | undefined} */
+    let proc
+    let stdout = ''
+    let done = false
+    /** @param {number | null} code */
+    const finish = (code) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      resolve({ code, stdout })
+    }
+    const timer = setTimeout(() => {
+      try {
+        if (proc?.pid) process.kill(process.platform === 'win32' ? proc.pid : -proc.pid, 'SIGKILL')
+      } catch {
+        // already gone
+      }
+      finish(null)
+    }, timeoutMs)
+    try {
+      proc = spawn(command, args, {
+        env,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        detached: process.platform !== 'win32',
+        windowsHide: true,
+      })
+    } catch {
+      return finish(null)
+    }
+    proc.stdout?.on('data', (chunk) => {
+      if (stdout.length < 1_000_000) stdout += chunk
+    })
+    proc.once('error', () => finish(null))
+    proc.once('close', (code) => finish(code))
+  })
+
+/**
+ * The PATH a login shell printed between the markers, as its entries; null when the output has no
+ * such PATH (the shell failed before it, or is not one that takes `-ilc`). Whatever a profile prints
+ * around it (a banner, a greeting) is left out, and so is any entry that is not an absolute path.
+ * @param {string} stdout
+ * @returns {string[] | null}
+ */
+export function parseShellPath(stdout) {
+  const start = stdout.lastIndexOf(PATH_START)
+  if (start < 0) return null
+  const end = stdout.indexOf(PATH_END, start)
+  if (end < 0) return null
+  const entries = stdout
+    .slice(start + PATH_START.length, end)
+    .split(':')
+    .filter((e) => path.posix.isAbsolute(e) && !/[\r\n\0]/.test(e))
+  return entries.length ? entries : null
+}
+
+/**
+ * PATH lists joined in order, each folder once (where it first appears).
+ * @param {(string | undefined)[]} lists Each one a `:`-separated PATH.
+ */
+export function mergePath(...lists) {
+  /** @type {string[]} */
+  const out = []
+  for (const list of lists)
+    for (const entry of (list ?? '').split(':')) if (entry && !out.includes(entry)) out.push(entry)
+  return out.join(':')
+}
+
+/** Where tools a user installs for themselves go, under their home, whatever their profile says. */
+export const USER_BINS = ['.local/bin', 'bin', '.local/share/pnpm', '.local/share/mise/shims', '.volta/bin']
+
+/**
+ * The PATH the board's server starts with on Linux: what the user's login shell (`$SHELL`, else
+ * /bin/sh), run interactive and login, puts on PATH (so `.profile`, `.bashrc`, `.zshrc`, mise or nvm
+ * apply, as in a terminal), then `inherited` (what the app was started with), then the user bin folders
+ * that exist. A launch from the desktop gets no shell's PATH, and the board runs git, gh, claude, node
+ * and pnpm from it. A shell that fails, hangs past `timeoutMs` or prints no PATH leaves `inherited` and
+ * those folders.
+ * @param {{ env: Env, inherited?: string, home?: string, run?: Runner, timeoutMs?: number,
+ *   exists?: (p: string) => boolean }} input
+ */
+export async function loginShellPath({
+  env,
+  inherited = env.PATH,
+  home = os.homedir(),
+  run = runCapture,
+  timeoutMs = LOGIN_SHELL_MS,
+  exists = fs.existsSync,
+}) {
+  const given = env.SHELL?.trim()
+  const shell = given && path.posix.isAbsolute(given) ? given : '/bin/sh'
+  const script = `printf '\\n%s%s%s\\n' '${PATH_START}' "$PATH" '${PATH_END}'`
+  /** @type {string[] | null} */
+  let login = null
+  try {
+    const res = await run(shell, ['-ilc', script], { timeoutMs, env })
+    if (res.code === 0) login = parseShellPath(res.stdout)
+  } catch {
+    // no shell to run: the inherited PATH
+  }
+  const userBins = USER_BINS.map((b) => path.posix.join(home, b)).filter((b) => exists(b))
+  return mergePath((login ?? []).join(':'), inherited, userBins.join(':'))
+}
+
+/**
+ * The server's environment with the PATH it runs with: on Linux the login shell's in front of the one
+ * set (loginShellPath); elsewhere as it is.
+ * @param {Env} serverEnv
+ * @param {(input: { env: Env, inherited?: string }) => Promise<string>} resolvePath
+ * @returns {Promise<Env>}
+ */
+export async function withLoginPath(serverEnv, platform = process.platform, resolvePath = loginShellPath) {
+  if (platform !== 'linux') return serverEnv
+  return { ...serverEnv, PATH: await resolvePath({ env: serverEnv, inherited: serverEnv.PATH }) }
+}
+
+const SNI_WATCHER = 'org.kde.StatusNotifierWatcher'
+/** @type {[string, string[]][]} */
+const SNI_ASKS = [
+  [
+    'gdbus',
+    [
+      'call',
+      '--session',
+      '--dest',
+      'org.freedesktop.DBus',
+      '--object-path',
+      '/org/freedesktop/DBus',
+      '--method',
+      'org.freedesktop.DBus.NameHasOwner',
+      SNI_WATCHER,
+    ],
+  ],
+  [
+    'dbus-send',
+    [
+      '--session',
+      '--print-reply',
+      '--dest=org.freedesktop.DBus',
+      '/org/freedesktop/DBus',
+      'org.freedesktop.DBus.NameHasOwner',
+      `string:${SNI_WATCHER}`,
+    ],
+  ],
+]
+
+/**
+ * Whether a tray host (a StatusNotifierItem watcher: waybar's tray module, KDE's panel, GNOME's
+ * AppIndicator extension) is on the session bus, asked through gdbus (GLib's, there wherever GTK is)
+ * or else dbus-send. No session bus, or neither tool answering: no tray host.
+ * @param {Runner} run
+ * @param {Env} env
+ */
+export async function trayHostPresent(run = runCapture, env = process.env) {
+  for (const [command, args] of SNI_ASKS) {
+    const res = await run(command, args, { timeoutMs: 2000, env }).catch(() => null)
+    if (res?.code === 0) return /\btrue\b/.test(res.stdout)
+  }
+  return false
+}
+
+/**
+ * What closing the window does: hide it, the board running on, where the tray icon brings it back
+ * (always on Windows; on Linux while a tray host shows the icon); else quit, so the app never runs on
+ * with no way back to it.
+ * @param {boolean} trayHost
+ * @returns {'hide' | 'quit'}
+ */
+export const closeAction = (trayHost, platform = process.platform) =>
+  platform === 'win32' || trayHost ? 'hide' : 'quit'
+
+/**
+ * The autostart entry's file: `$XDG_CONFIG_HOME/autostart/agent-board.desktop` (`~/.config/autostart`).
+ * @param {Env} env
+ */
+export const autostartFile = (env, home = os.homedir()) =>
+  path.posix.join(
+    xdgHome(env.XDG_CONFIG_HOME, path.posix.join(home, '.config')),
+    'autostart',
+    'agent-board.desktop',
+  )
+
+/**
+ * What starting at login runs: the AppImage itself when the app runs from one (the executable is in a
+ * mount that goes when it quits), else the app's executable.
+ * @param {Env} env
+ * @param {string} execPath
+ */
+export const autostartExec = (env, execPath) => {
+  const image = env.APPIMAGE?.trim()
+  return image && path.posix.isAbsolute(image) ? image : execPath
+}
+
+/**
+ * One argument of a desktop entry's Exec, quoted as the spec says when it has to be: in double quotes,
+ * with `"`, `` ` ``, `$` and `\` escaped, then every `\` doubled again (the string escape the file's
+ * values take before the quoting); `%` doubled either way.
+ * @param {string} arg
+ */
+export function desktopExecArg(arg) {
+  const value = arg.replace(/%/g, '%%')
+  if (!/[\s"'\\><~|&;$*?#()`]/.test(value)) return value
+  return `"${value.replace(/(["`$\\])/g, '\\$1')}"`.replace(/\\/g, '\\\\')
+}
+
+/**
+ * The autostart entry: starts `exec` at login.
+ * @param {{ exec: string, name: string }} input
+ */
+export const autostartEntry = ({ exec, name }) =>
+  [
+    '[Desktop Entry]',
+    'Type=Application',
+    `Name=${name.replace(/[\r\n]/g, ' ')}`,
+    'Comment=Starts the board at login',
+    `Exec=${desktopExecArg(exec)}`,
+    'Icon=agent-board',
+    'Terminal=false',
+    'X-GNOME-Autostart-enabled=true',
+    '',
+  ].join('\n')
+
+/**
+ * Turns starting at login on (writes the entry) or off (removes it).
+ * @param {boolean} on
+ * @param {{ file: string, exec: string, name: string }} entry
+ */
+export function setAutostart(on, { file, exec, name }) {
+  if (!on) return fs.rmSync(file, { force: true })
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, autostartEntry({ exec, name }))
 }

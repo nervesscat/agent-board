@@ -6,19 +6,33 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  appFolders,
   appHome,
+  autostartEntry,
+  autostartExec,
+  autostartFile,
+  closeAction,
   CONFIG_FILE,
   CONFIG_TEMPLATE,
+  configTemplate,
   DEFAULT_PORT,
+  desktopExecArg,
   ensureWritableDir,
   isPortFree,
+  loginShellPath,
+  mergePath,
   nearestFolder,
   parseConfig,
+  parseShellPath,
   portBusyMessage,
   readConfigFile,
   resolveSettings,
+  runCapture,
+  setAutostart,
   SettingsError,
   tail,
+  trayHostPresent,
+  withLoginPath,
 } from './app/settings.mjs'
 
 const home = path.resolve(os.tmpdir(), 'agent-board-home')
@@ -35,6 +49,67 @@ describe('appHome', () => {
 
   it('is moved whole by AGENT_BOARD_HOME', () => {
     expect(appHome({ AGENT_BOARD_HOME: home, LOCALAPPDATA: '/elsewhere' }, 'win32')).toBe(home)
+  })
+
+  it('is agent-board in ~/.config on Linux', () => {
+    expect(appHome({}, 'linux', '/home/me')).toBe('/home/me/.config/agent-board')
+  })
+})
+
+describe('appFolders', () => {
+  it('keeps everything in %LOCALAPPDATA%\\agent-board on Windows', () => {
+    const local = path.resolve(os.tmpdir(), 'Local')
+    const one = path.join(local, 'agent-board')
+    expect(appFolders({ LOCALAPPDATA: local, XDG_CONFIG_HOME: '/x' }, 'win32')).toEqual({
+      config: one,
+      profile: path.join(one, 'electron'),
+      data: one,
+    })
+  })
+
+  it('follows the XDG defaults on Linux: config and profile in ~/.config, data in ~/.local/share', () => {
+    expect(appFolders({}, 'linux', '/home/me')).toEqual({
+      config: '/home/me/.config/agent-board',
+      profile: '/home/me/.config/agent-board/electron',
+      data: '/home/me/.local/share/agent-board',
+    })
+  })
+
+  it('follows XDG_CONFIG_HOME and XDG_DATA_HOME on Linux', () => {
+    expect(appFolders({ XDG_CONFIG_HOME: '/cfg', XDG_DATA_HOME: ' /dat ' }, 'linux', '/home/me')).toEqual({
+      config: '/cfg/agent-board',
+      profile: '/cfg/agent-board/electron',
+      data: '/dat/agent-board',
+    })
+  })
+
+  it('ignores relative and blank XDG values, as the spec says', () => {
+    expect(appFolders({ XDG_CONFIG_HOME: 'cfg', XDG_DATA_HOME: '  ' }, 'linux', '/home/me')).toEqual({
+      config: '/home/me/.config/agent-board',
+      profile: '/home/me/.config/agent-board/electron',
+      data: '/home/me/.local/share/agent-board',
+    })
+  })
+
+  it('puts all of it in AGENT_BOARD_HOME on Linux too', () => {
+    expect(appFolders({ AGENT_BOARD_HOME: home, XDG_CONFIG_HOME: '/cfg' }, 'linux', '/home/me')).toEqual({
+      config: home,
+      profile: path.join(home, 'electron'),
+      data: home,
+    })
+  })
+})
+
+describe('configTemplate', () => {
+  it('is the template as it is on Windows', () => {
+    expect(configTemplate('win32', 'C:\\data')).toBe(CONFIG_TEMPLATE)
+  })
+
+  it('names the data folder on Linux, and still reads as no settings', () => {
+    const text = configTemplate('linux', '/home/me/.local/share/agent-board')
+    expect(text).toContain('/home/me/.local/share/agent-board/data')
+    expect(text).not.toContain('next to this file')
+    expect(parseConfig(text)).toEqual({})
   })
 })
 
@@ -128,6 +203,14 @@ describe('resolveSettings', () => {
     )
     expect(resolveSettings({ env: {}, file: { DATA_DIR: '~/board' }, home }).dataDir).toBe(
       path.join(os.homedir(), 'board'),
+    )
+  })
+
+  it('puts the data folder and a relative DATA_DIR under the data home when it is apart (Linux)', () => {
+    const dataHome = path.resolve(os.tmpdir(), 'share', 'agent-board')
+    expect(resolveSettings({ env: {}, file: {}, home, dataHome }).dataDir).toBe(path.join(dataHome, 'data'))
+    expect(resolveSettings({ env: {}, file: { DATA_DIR: 'boards/main' }, home, dataHome }).dataDir).toBe(
+      path.join(dataHome, 'boards', 'main'),
     )
   })
 
@@ -331,5 +414,314 @@ describe('nearestFolder', () => {
       throw Object.assign(new Error('denied'), { code: 'EPERM' })
     }
     expect(nearestFolder(path.join(top, 'locked', 'agent-board'), stat)).toBe(top)
+  })
+})
+
+/** What a login shell prints for `-ilc`: `before`, then the PATH between the markers, then `after`. */
+const shellSays = (/** @type {string} */ p, before = '', after = '') =>
+  `${before}\n__AGENT_BOARD_PATH_START__${p}__AGENT_BOARD_PATH_END__\n${after}`
+
+/**
+ * A runner that answers as `answer` says and keeps what it was asked.
+ * @param {(command: string, args: string[]) => import('./app/settings.mjs').RunResult | Promise<import('./app/settings.mjs').RunResult>} answer
+ */
+const fakeRunner = (answer) => {
+  /** @type {{ command: string, args: string[], timeoutMs: number }[]} */
+  const calls = []
+  /** @type {import('./app/settings.mjs').Runner} */
+  const run = async (command, args, { timeoutMs }) => {
+    calls.push({ command, args, timeoutMs })
+    return answer(command, args)
+  }
+  return { run, calls }
+}
+
+describe('parseShellPath', () => {
+  it('reads the PATH between the markers, whatever the profile printed around it', () => {
+    const out = shellSays('/home/u/.local/share/mise/shims:/usr/bin', 'Welcome!\x1b[0m\n', 'bye')
+    expect(parseShellPath(out)).toEqual(['/home/u/.local/share/mise/shims', '/usr/bin'])
+  })
+
+  it('takes the last marked PATH, past a banner that echoes the markers', () => {
+    expect(parseShellPath(shellSays('/b', shellSays('/a')))).toEqual(['/b'])
+  })
+
+  it('leaves out entries that are not absolute paths', () => {
+    expect(parseShellPath(shellSays('relative::/usr/bin:.'))).toEqual(['/usr/bin'])
+  })
+
+  it('is null without the markers, or with nothing usable between them', () => {
+    expect(parseShellPath('garbage\n/usr/bin\n')).toBeNull()
+    expect(parseShellPath('__AGENT_BOARD_PATH_START__/usr/bin')).toBeNull()
+    expect(parseShellPath(shellSays('nope'))).toBeNull()
+  })
+})
+
+describe('mergePath', () => {
+  it('keeps the order and each folder once', () => {
+    expect(mergePath('/a:/b', '/b:/c:', undefined, '/a:/d')).toBe('/a:/b:/c:/d')
+  })
+})
+
+describe('loginShellPath', () => {
+  const none = () => false
+
+  it('runs $SHELL interactive and login, and puts its PATH before the inherited one, once each', async () => {
+    const { run, calls } = fakeRunner(() => ({
+      code: 0,
+      stdout: shellSays('/home/u/tools:/usr/local/bin:/usr/bin', 'motd'),
+    }))
+    const p = await loginShellPath({
+      env: { SHELL: '/usr/bin/zsh', PATH: '/usr/bin:/bin' },
+      home: '/home/u',
+      run,
+      exists: none,
+    })
+    expect(p).toBe('/home/u/tools:/usr/local/bin:/usr/bin:/bin')
+    expect(calls).toHaveLength(1)
+    expect(calls[0].command).toBe('/usr/bin/zsh')
+    expect(calls[0].args[0]).toBe('-ilc')
+    expect(calls[0].args[1]).toContain('"$PATH"')
+    expect(calls[0].timeoutMs).toBeGreaterThan(0)
+    expect(calls[0].timeoutMs).toBeLessThanOrEqual(10_000)
+  })
+
+  it('uses /bin/sh without SHELL, or with one that is not an absolute path', async () => {
+    for (const SHELL of [undefined, '', 'zsh']) {
+      const { run, calls } = fakeRunner(() => ({ code: 0, stdout: shellSays('/x') }))
+      await loginShellPath({ env: { SHELL, PATH: '/usr/bin' }, home: '/home/u', run, exists: none })
+      expect(calls[0].command).toBe('/bin/sh')
+    }
+  })
+
+  it('leaves the inherited PATH and the user bins that exist when the shell fails', async () => {
+    const { run } = fakeRunner(() => ({ code: 1, stdout: shellSays('/should/not/use') }))
+    const p = await loginShellPath({
+      env: { SHELL: '/bin/bash', PATH: '/usr/bin:/bin' },
+      home: '/home/u',
+      run,
+      exists: (b) => b === '/home/u/.local/bin',
+    })
+    expect(p).toBe('/usr/bin:/bin:/home/u/.local/bin')
+  })
+
+  it('leaves the inherited PATH when the shell times out, cannot be run, or prints garbage', async () => {
+    const answers = [
+      () => ({ code: null, stdout: '' }),
+      () => Promise.reject(new Error('ENOENT')),
+      () => ({ code: 0, stdout: 'oh-my-zsh update? [Y/n]' }),
+    ]
+    for (const answer of answers) {
+      const { run } = fakeRunner(answer)
+      const p = await loginShellPath({
+        env: { SHELL: '/bin/zsh', PATH: '/usr/bin' },
+        home: '/h',
+        run,
+        exists: none,
+      })
+      expect(p).toBe('/usr/bin')
+    }
+  })
+
+  it('returns within its timeout from a shell that hangs, with the inherited PATH', async () => {
+    // The real runner, on a "shell" that never ends: Node itself, waiting forever.
+    const hang = process.execPath
+    const started = Date.now()
+    const p = await loginShellPath({
+      env: { SHELL: hang, PATH: '/usr/bin' },
+      home: '/h',
+      timeoutMs: 500,
+      exists: none,
+      run: (_command, _args, opts) => runCapture(hang, ['-e', 'setInterval(() => {}, 1000)'], opts),
+    })
+    expect(p).toBe('/usr/bin')
+    expect(Date.now() - started).toBeLessThan(3000)
+  })
+
+  it.runIf(process.platform === 'linux' && fs.existsSync('/bin/bash'))(
+    'finds what a real bash login reads from .bashrc (through .bash_profile)',
+    async () => {
+      const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-shell-'))
+      try {
+        fs.writeFileSync(path.join(fake, '.bash_profile'), '[ -f ~/.bashrc ] && . ~/.bashrc\n')
+        fs.writeFileSync(
+          path.join(fake, '.bashrc'),
+          `echo hello from bashrc\nexport PATH="$HOME/tools:$PATH"\n`,
+        )
+        const p = await loginShellPath({
+          env: { SHELL: '/bin/bash', HOME: fake, PATH: '/usr/bin:/bin' },
+          home: fake,
+        })
+        expect(p.split(':')[0]).toBe(path.join(fake, 'tools'))
+        expect(p.split(':')).toContain('/usr/bin')
+      } finally {
+        fs.rmSync(fake, { recursive: true, force: true })
+      }
+    },
+  )
+})
+
+describe('runCapture', () => {
+  it('gives the exit code and the output of a command that ends', async () => {
+    const res = await runCapture(process.execPath, ['-e', 'console.log("hi"); process.exit(3)'], {
+      timeoutMs: 10_000,
+      env: process.env,
+    })
+    expect(res).toEqual({ code: 3, stdout: 'hi\n' })
+  })
+
+  it('answers null for a command that cannot be started', async () => {
+    const res = await runCapture(path.join(os.tmpdir(), 'no-such-shell'), [], {
+      timeoutMs: 5000,
+      env: process.env,
+    })
+    expect(res.code).toBeNull()
+  })
+
+  it.runIf(process.platform !== 'win32')(
+    'answers at the timeout even while something it started holds its output open, and kills that too',
+    async () => {
+      const marker = path.join(os.tmpdir(), `agent-board-grandchild-${process.pid}`)
+      const script = `require('child_process').spawn(process.execPath, ['-e', 'require("fs").writeFileSync(${JSON.stringify(marker)}, String(process.pid)); setInterval(() => {}, 1000)'], { stdio: 'inherit' }); setInterval(() => {}, 1000)`
+      const started = Date.now()
+      const res = await runCapture(process.execPath, ['-e', script], { timeoutMs: 1500, env: process.env })
+      expect(res.code).toBeNull()
+      expect(Date.now() - started).toBeLessThan(4000)
+      await new Promise((r) => setTimeout(r, 300))
+      const pid = Number(fs.readFileSync(marker, 'utf8'))
+      fs.rmSync(marker, { force: true })
+      // Gone, or a zombie waiting for whatever reaps orphans here (in a container, maybe nothing).
+      const state = () => {
+        try {
+          return fs.readFileSync(`/proc/${pid}/stat`, 'utf8').replace(/^.*\) /s, '')[0]
+        } catch {
+          return 'gone'
+        }
+      }
+      expect(['gone', 'Z', 'X']).toContain(state())
+    },
+  )
+})
+
+describe('withLoginPath', () => {
+  const resolvePath = async (/** @type {{ inherited?: string }} */ { inherited }) =>
+    `/home/u/tools:${inherited ?? ''}`
+
+  it('gives the server the login shell PATH on Linux', async () => {
+    const env = { PATH: '/usr/bin', PORT: '47100' }
+    expect(await withLoginPath(env, 'linux', resolvePath)).toEqual({
+      PATH: '/home/u/tools:/usr/bin',
+      PORT: '47100',
+    })
+  })
+
+  it('leaves the PATH as it is on Windows', async () => {
+    const env = { PATH: 'C:\\Windows', PORT: '47100' }
+    expect(await withLoginPath(env, 'win32', resolvePath)).toBe(env)
+  })
+
+  it('puts the login dirs into the PATH resolveSettings gives the server', async () => {
+    const s = resolveSettings({ env: { PATH: '/usr/bin' }, file: {}, home })
+    const { run } = fakeRunner(() => ({ code: 0, stdout: shellSays('/home/u/tools:/usr/bin') }))
+    const env = await withLoginPath(s.serverEnv, 'linux', (input) =>
+      loginShellPath({ ...input, home: '/home/u', run, exists: () => false }),
+    )
+    expect(env.PATH).toBe('/home/u/tools:/usr/bin')
+    expect(env.BOARD_ENV).toBe('production')
+  })
+})
+
+describe('trayHostPresent', () => {
+  it('is true when gdbus says the StatusNotifierWatcher has an owner', async () => {
+    const { run, calls } = fakeRunner(() => ({ code: 0, stdout: '(true,)\n' }))
+    expect(await trayHostPresent(run, {})).toBe(true)
+    expect(calls[0].command).toBe('gdbus')
+    expect(calls[0].args).toContain('org.kde.StatusNotifierWatcher')
+  })
+
+  it('is false when it has none', async () => {
+    const { run } = fakeRunner(() => ({ code: 0, stdout: '(false,)\n' }))
+    expect(await trayHostPresent(run, {})).toBe(false)
+  })
+
+  it('asks dbus-send when there is no gdbus', async () => {
+    const { run, calls } = fakeRunner((command) =>
+      command === 'gdbus'
+        ? { code: null, stdout: '' }
+        : { code: 0, stdout: 'method return time=1 sender=org.freedesktop.DBus\n   boolean true\n' },
+    )
+    expect(await trayHostPresent(run, {})).toBe(true)
+    expect(calls.map((c) => c.command)).toEqual(['gdbus', 'dbus-send'])
+  })
+
+  it('is false with no session bus (both fail)', async () => {
+    const { run } = fakeRunner(() => ({ code: 1, stdout: '' }))
+    expect(await trayHostPresent(run, {})).toBe(false)
+  })
+})
+
+describe('closeAction', () => {
+  it('hides the window on Windows, tray host or not', () => {
+    expect(closeAction(false, 'win32')).toBe('hide')
+  })
+
+  it('hides it on Linux while a tray host shows the icon, and quits without one', () => {
+    expect(closeAction(true, 'linux')).toBe('hide')
+    expect(closeAction(false, 'linux')).toBe('quit')
+  })
+})
+
+describe('autostart', () => {
+  it('is ~/.config/autostart/agent-board.desktop, or under an absolute XDG_CONFIG_HOME', () => {
+    expect(autostartFile({}, '/home/me')).toBe('/home/me/.config/autostart/agent-board.desktop')
+    expect(autostartFile({ XDG_CONFIG_HOME: '/cfg' }, '/home/me')).toBe('/cfg/autostart/agent-board.desktop')
+    expect(autostartFile({ XDG_CONFIG_HOME: 'cfg' }, '/home/me')).toBe(
+      '/home/me/.config/autostart/agent-board.desktop',
+    )
+  })
+
+  it('runs the AppImage when the app runs from one, else the executable', () => {
+    const exe = '/tmp/.mount_agentXYZ/agent-board'
+    expect(autostartExec({ APPIMAGE: '/home/me/Apps/agent-board-0.1.0-x86_64.AppImage' }, exe)).toBe(
+      '/home/me/Apps/agent-board-0.1.0-x86_64.AppImage',
+    )
+    expect(autostartExec({}, '/opt/CrossBoard/agent-board')).toBe('/opt/CrossBoard/agent-board')
+    expect(autostartExec({ APPIMAGE: 'relative.AppImage' }, exe)).toBe(exe)
+  })
+
+  it('writes an entry that starts it at login', () => {
+    const text = autostartEntry({ exec: '/opt/CrossBoard/agent-board', name: 'CrossBoard' })
+    expect(text.split('\n')).toEqual(
+      expect.arrayContaining([
+        '[Desktop Entry]',
+        'Type=Application',
+        'Name=CrossBoard',
+        'Exec=/opt/CrossBoard/agent-board',
+        'Icon=agent-board',
+        'Terminal=false',
+      ]),
+    )
+  })
+
+  it('quotes an Exec that needs it, as the desktop entry spec says', () => {
+    expect(desktopExecArg('/opt/CrossBoard/agent-board')).toBe('/opt/CrossBoard/agent-board')
+    expect(desktopExecArg('/home/me/My Apps/a.AppImage')).toBe('"/home/me/My Apps/a.AppImage"')
+    expect(desktopExecArg('/home/me/$x/"a"')).toBe('"/home/me/\\\\$x/\\\\"a\\\\""')
+    expect(desktopExecArg('/home/me/100%/a')).toBe('/home/me/100%%/a')
+  })
+
+  it('is written when turned on and removed when turned off', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-autostart-'))
+    try {
+      const file = path.join(dir, 'autostart', 'agent-board.desktop')
+      const entry = { file, exec: '/opt/CrossBoard/agent-board', name: 'CrossBoard' }
+      setAutostart(true, entry)
+      expect(fs.readFileSync(file, 'utf8')).toContain('Exec=/opt/CrossBoard/agent-board')
+      setAutostart(false, entry)
+      expect(fs.existsSync(file)).toBe(false)
+      setAutostart(false, entry)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
