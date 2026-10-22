@@ -1,3 +1,7 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { GhPr } from './git'
@@ -75,5 +79,51 @@ describe('listMyPrs', () => {
       return [pr(1)]
     }
     await expect(listMyPrs('/r/app', { mergedSince: '2026-09-22' })).rejects.toThrow('merged search failed')
+  })
+})
+
+describe('folderGone', () => {
+  // A spawn Node could not start in its cwd: Windows says ENOENT for any folder it cannot use.
+  const enoent = Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT', syscall: 'spawn git' })
+  let tmp: string
+  let folderGone: typeof import('./git').folderGone
+  beforeAll(async () => {
+    folderGone = (await import('./git')).folderGone
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-folder-gone-'))
+  })
+
+  it('says a missing folder does not exist', () => {
+    const gone = path.join(tmp, 'gone')
+    expect(folderGone(enoent, gone)?.message).toBe(
+      `${gone} does not exist: the repo's folder was moved or deleted`,
+    )
+    expect(folderGone(enoent, gone)?.status).toBe(409)
+  })
+
+  it('says a file at the repo path is not a folder, on any platform', () => {
+    const file = path.join(tmp, 'a-file')
+    fs.writeFileSync(file, '')
+    for (const code of ['ENOENT', 'ENOTDIR'])
+      expect(folderGone({ ...enoent, code }, file)?.message).toBe(
+        `${file} is not a folder: the repo's path names a file, not its checkout`,
+      )
+    // A folder under that file does not exist.
+    expect(folderGone(enoent, path.join(file, 'below'))?.message).toMatch(/does not exist/)
+  })
+
+  it('says a folder too long for Windows to start a program in is too long, and only on Windows', async () => {
+    const { cwdTooLong } = await import('./git')
+    const fits = 'C:\\' + 'x'.repeat(255)
+    expect(cwdTooLong(fits, 'win32')).toBeNull()
+    expect(cwdTooLong(fits + 'x', 'win32')?.message).toMatch(
+      /is too long a path for Windows to run git or gh in \(over 258 characters\): move the checkout/,
+    )
+    expect(cwdTooLong('/' + 'x'.repeat(400), 'linux')).toBeNull()
+  })
+
+  it('leaves a usable folder and any other failure alone', () => {
+    expect(folderGone(enoent, tmp)).toBeNull()
+    expect(folderGone(new Error('fatal: not a git repository'), path.join(tmp, 'gone'))).toBeNull()
+    expect(folderGone({ code: 'ENOENT', syscall: 'open' }, path.join(tmp, 'gone'))).toBeNull()
   })
 })

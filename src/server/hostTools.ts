@@ -377,12 +377,14 @@ const notFound = (err: unknown) => {
 /**
  * What is wrong with a tool and the fix, in one line, for a feature that needs it: from the last check,
  * or from `err` when it is a spawn that found no binary (the check may be older than the change). Null
- * when neither says anything is wrong.
+ * when neither says anything is wrong. A spawn's ENOENT does not blame a tool the last check found
+ * where it still is: Node says the same of a folder it could not start the binary in.
  */
 export function toolProblem(name: ToolName, err?: unknown): string | null {
   const entry = kept.last?.tools.find((t) => t.name === name)
   if (entry && !entry.ok) return `${entry.problem}: ${entry.fix}`
   if (err !== undefined && notFound(err)) {
+    if (entry?.path && isRunnable(entry.path, process.platform === 'win32')) return null
     const missing = toolEntry(name, { path: null })
     return `${missing.problem}: ${missing.fix}`
   }

@@ -559,6 +559,21 @@ describe('the queue', () => {
       host.setHostTools(null)
     }
   })
+  it('says a file at the repo path is not a folder, not that gh is missing', async () => {
+    const { db, schema } = await import('#/db')
+    const file = path.join(tmp, 'a-file-not-a-checkout')
+    fs.writeFileSync(file, '')
+    const projectId = db.insert(schema.projects).values({ name: 'file repo' }).returning().get().id
+    db.insert(schema.repos)
+      .values({ projectId, name: 'app', repoPath: file, baseBranch: 'main', githubRepo: 'acme/app' })
+      .run()
+    // The spawn cannot start in a file: Windows reports it as gh's own ENOENT, before any check ran.
+    realGh = new Set([file])
+    const refresh = prs.listPrs(projectId, { refresh: true })
+    await expect(refresh).rejects.toThrow(`${file} is not a folder`)
+    await expect(refresh).rejects.toMatchObject({ status: 409 })
+    await expect(refresh).rejects.not.toThrow(/not found|install|ENOENT/)
+  })
   it('says gh is missing or signed out, and the fix, instead of what the spawn said', async () => {
     const { db, schema } = await import('#/db')
     const host = await import('./hostTools')

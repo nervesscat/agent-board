@@ -382,6 +382,18 @@ describe('what each tool breaks and how to fix it', () => {
     )
     expect(host.toolProblem('node')).toBeNull()
   })
+
+  it('does not blame a tool for an ENOENT when the last check found it where it still is', () => {
+    const enoent = Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT', syscall: 'spawn git' })
+    const dir = shims({ git: '2.45.1' })
+    const git = path.join(dir, WIN ? 'git.cmd' : 'git')
+    host.setHostTools(host.hostToolsWith({ git: { path: git, version: '2.45.1' } }))
+    // Node says the same of a folder it could not start git in: not git's fault.
+    expect(host.toolProblem('git', enoent)).toBeNull()
+    // Gone from where the check found it since: missing after all.
+    fs.rmSync(git)
+    expect(host.toolProblem('git', enoent)).toMatch(/^git was not found on the board's PATH: install git/)
+  })
 })
 
 describe('over REST and MCP', () => {

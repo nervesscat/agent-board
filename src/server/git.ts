@@ -18,20 +18,62 @@ import { HttpError } from './http'
 
 const execFileAsync = promisify(execFile)
 
+/** The longest folder Windows starts a program in: `cwd`, its closing `\` and the NUL fit MAX_PATH (260). */
+const WIN_MAX_CWD = 258
+
 /**
- * A command run in `cwd` failed to start because that folder is gone: Node reports a missing `cwd` as
- * the binary's own `spawn git ENOENT`, which would read as git (or gh) not being installed
- * (`toolProblem`). This says what is really missing instead; null for any other failure.
+ * A folder too long for Windows to start a program in. Node does not refuse one: the spawn fails as
+ * `spawn git ENOENT`, which would read as git (or gh) not being installed, and its pipes then throw
+ * ENOTCONN where nothing can catch it, which takes the server down. So no command here starts in one.
+ */
+export function cwdTooLong(cwd: string, platform: NodeJS.Platform = process.platform): HttpError | null {
+  if (platform !== 'win32' || path.win32.resolve(cwd).length <= WIN_MAX_CWD) return null
+  return new HttpError(
+    409,
+    `${cwd} is too long a path for Windows to run git or gh in (over ${WIN_MAX_CWD} characters): ` +
+      'move the checkout to a shorter path',
+  )
+}
+
+function assertCwdFits(cwd: string) {
+  const tooLong = cwdTooLong(cwd)
+  if (tooLong) throw tooLong
+}
+
+/**
+ * A command run in `cwd` failed to start because of that folder: Node reports a `cwd` it cannot start
+ * the binary in (gone, or a file in its place) as the binary's own `spawn git ENOENT` (ENOTDIR for a
+ * file on POSIX), which would read as git (or gh) not being installed (`toolProblem`). This says what
+ * is really wrong with the folder instead; null for any other failure, or when the folder is fine.
  */
 export function folderGone(err: unknown, cwd: string): HttpError | null {
   const e = err as { code?: unknown; syscall?: unknown } | null
-  if (!e || e.code !== 'ENOENT' || typeof e.syscall !== 'string' || !e.syscall.startsWith('spawn'))
-    return null
-  if (fs.existsSync(cwd)) return null
-  return new HttpError(409, `${cwd} does not exist: the repo's folder was moved or deleted`)
+  // POSIX names a file in the folder's place ENOTDIR; Windows says ENOENT of every folder it cannot use.
+  if (!e || (e.code !== 'ENOENT' && e.code !== 'ENOTDIR')) return null
+  if (typeof e.syscall !== 'string' || !e.syscall.startsWith('spawn')) return null
+  const cannotOpen = (code: unknown) =>
+    new HttpError(409, `${cwd} cannot be opened (${String(code)}): check the repo's folder`)
+  let stat: fs.Stats
+  try {
+    stat = fs.statSync(cwd)
+  } catch (statErr) {
+    const code = (statErr as { code?: unknown }).code
+    if (code === 'ENOENT' || code === 'ENOTDIR')
+      return new HttpError(409, `${cwd} does not exist: the repo's folder was moved or deleted`)
+    return cannotOpen(code)
+  }
+  if (!stat.isDirectory())
+    return new HttpError(409, `${cwd} is not a folder: the repo's path names a file, not its checkout`)
+  try {
+    fs.opendirSync(cwd).closeSync()
+  } catch (openErr) {
+    return cannotOpen((openErr as { code?: unknown }).code)
+  }
+  return null
 }
 
 async function run(file: string, args: string[], opts: ExecFileOptions & { cwd: string }) {
+  assertCwdFits(opts.cwd)
   try {
     return await execFileAsync(file, args, { ...opts, encoding: 'utf8' })
   } catch (err) {
@@ -501,6 +543,7 @@ async function markedChanges(worktreePath: string): Promise<string[]> {
     else changed.push(m)
   }
   if (hashed.length) {
+    assertCwdFits(worktreePath)
     // `--stdin-paths` reads a path a line, and unquotes one that starts with a quote.
     const line = (p: string) =>
       p.startsWith('"') || /[\n\r]/.test(p)
@@ -562,6 +605,8 @@ export async function eachTrackedFile(
  */
 function gitEntries(cwd: string, args: string[], each: (entry: Buffer) => void): Promise<void> {
   return new Promise((resolve, reject) => {
+    const tooLong = cwdTooLong(cwd)
+    if (tooLong) return reject(tooLong)
     const child = spawn('git', args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     // Bytes, as git wrote them: a name need not be UTF-8.
     let rest: Buffer = Buffer.alloc(0)
@@ -630,6 +675,7 @@ export async function commitsBrought(
   tip: string,
   before: string[],
 ): Promise<CommitLines[]> {
+  assertCwdFits(repoPath)
   const out = await new Promise<string>((resolve, reject) => {
     const child = execFile(
       'git',
