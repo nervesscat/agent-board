@@ -85,7 +85,11 @@ case "$format" in
     # What the AppImage does not carry and a desktop has: GTK 3, NSS, GBM, ALSA and the like.
     case "$ID" in
       debian | ubuntu)
-        apt-get install -y -qq libgtk-3-0 libnss3 libgbm1 libasound2 libxss1 libxtst6 libnotify4           libsecret-1-0 >/dev/null
+        # ALSA's library is libasound2t64 since Ubuntu 24.04 and Debian 13 (the 64-bit time_t
+        # transition), libasound2 before; whichever this release has.
+        asound=libasound2t64
+        apt-cache show "$asound" >/dev/null 2>&1 || asound=libasound2
+        apt-get install -y -qq libgtk-3-0 libnss3 libgbm1 "$asound" libxss1 libxtst6 libnotify4           libsecret-1-0 >/dev/null
         ;;
       fedora) dnf install -y -q gtk3 nss mesa-libgbm alsa-lib libXScrnSaver libnotify >/dev/null ;;
       arch) pacman -S --noconfirm --needed gtk3 nss mesa alsa-lib libxss libnotify >/dev/null ;;
