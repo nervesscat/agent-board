@@ -14,11 +14,13 @@ import {
   closeAction,
   CONFIG_FILE,
   CONFIG_TEMPLATE,
+  configPathEntries,
   configTemplate,
   DEFAULT_PORT,
   desktopExecArg,
   ensureWritableDir,
   isPortFree,
+  LOGIN_SHELL_MS,
   loginShellPath,
   mergePath,
   nearestFolder,
@@ -109,6 +111,7 @@ describe('configTemplate', () => {
     const text = configTemplate('linux', '/home/me/.local/share/agent-board')
     expect(text).toContain('/home/me/.local/share/agent-board/data')
     expect(text).not.toContain('next to this file')
+    expect(text).toContain('but for PATH')
     expect(parseConfig(text)).toEqual({})
   })
 })
@@ -559,6 +562,33 @@ describe('loginShellPath', () => {
       }
     },
   )
+
+  it.runIf(process.platform === 'linux' && fs.existsSync('/bin/bash'))(
+    'takes the PATH of a real bash whose .bashrc leaves a job in the background, at once, and leaves the job running',
+    async () => {
+      const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-shell-'))
+      const pidFile = path.join(fake, 'job.pid')
+      try {
+        fs.writeFileSync(path.join(fake, '.bash_profile'), '[ -f ~/.bashrc ] && . ~/.bashrc\n')
+        fs.writeFileSync(
+          path.join(fake, '.bashrc'),
+          `export PATH="$HOME/tools:$PATH"\nsleep 30 &\necho $! > ${JSON.stringify(pidFile)}\n`,
+        )
+        const started = Date.now()
+        const p = await loginShellPath({
+          env: { SHELL: '/bin/bash', HOME: fake, PATH: '/usr/bin:/bin' },
+          home: fake,
+        })
+        expect(Date.now() - started).toBeLessThan(LOGIN_SHELL_MS / 2)
+        expect(p.split(':')[0]).toBe(path.join(fake, 'tools'))
+        const pid = Number(fs.readFileSync(pidFile, 'utf8'))
+        expect(() => process.kill(pid, 0)).not.toThrow()
+        process.kill(pid, 'SIGKILL')
+      } finally {
+        fs.rmSync(fake, { recursive: true, force: true })
+      }
+    },
+  )
 })
 
 describe('runCapture', () => {
@@ -577,6 +607,31 @@ describe('runCapture', () => {
     })
     expect(res.code).toBeNull()
   })
+
+  it.runIf(process.platform !== 'win32')(
+    'answers when the command exits, with its code and output, while a background child it left holds its output open, and leaves that child alone',
+    async () => {
+      const marker = path.join(os.tmpdir(), `agent-board-bg-child-${process.pid}`)
+      // The parent prints, starts a child that keeps its stdout and runs on, and exits 0 at once.
+      const script = `const c = require('child_process').spawn(process.execPath, ['-e', 'require("fs").writeFileSync(${JSON.stringify(marker)}, String(process.pid)); setTimeout(() => {}, 30000)'], { stdio: ['ignore', 'inherit', 'ignore'] }); c.unref(); console.log('printed'); setTimeout(() => process.exit(0), 200)`
+      const started = Date.now()
+      const res = await runCapture(process.execPath, ['-e', script], { timeoutMs: 5000, env: process.env })
+      expect(res).toEqual({ code: 0, stdout: 'printed\n' })
+      expect(Date.now() - started).toBeLessThan(2500)
+      const pid = Number(fs.readFileSync(marker, 'utf8'))
+      fs.rmSync(marker, { force: true })
+      try {
+        // Still running: process.kill(pid, 0) throws for a process that is gone.
+        expect(() => process.kill(pid, 0)).not.toThrow()
+      } finally {
+        try {
+          process.kill(pid, 'SIGKILL')
+        } catch {
+          // already gone
+        }
+      }
+    },
+  )
 
   it.runIf(process.platform !== 'win32')(
     'answers at the timeout even while something it started holds its output open, and kills that too',
@@ -609,7 +664,7 @@ describe('withLoginPath', () => {
 
   it('gives the server the login shell PATH on Linux', async () => {
     const env = { PATH: '/usr/bin', PORT: '47100' }
-    expect(await withLoginPath(env, 'linux', resolvePath)).toEqual({
+    expect(await withLoginPath(env, { platform: 'linux', resolvePath })).toEqual({
       PATH: '/home/u/tools:/usr/bin',
       PORT: '47100',
     })
@@ -617,17 +672,50 @@ describe('withLoginPath', () => {
 
   it('leaves the PATH as it is on Windows', async () => {
     const env = { PATH: 'C:\\Windows', PORT: '47100' }
-    expect(await withLoginPath(env, 'win32', resolvePath)).toBe(env)
+    expect(await withLoginPath(env, { platform: 'win32', resolvePath })).toBe(env)
+    expect(await withLoginPath(env, { configPath: 'C:\\tools', platform: 'win32', resolvePath })).toBe(env)
   })
 
   it('puts the login dirs into the PATH resolveSettings gives the server', async () => {
     const s = resolveSettings({ env: { PATH: '/usr/bin' }, file: {}, home })
     const { run } = fakeRunner(() => ({ code: 0, stdout: shellSays('/home/u/tools:/usr/bin') }))
-    const env = await withLoginPath(s.serverEnv, 'linux', (input) =>
-      loginShellPath({ ...input, home: '/home/u', run, exists: () => false }),
-    )
+    const env = await withLoginPath(s.serverEnv, {
+      configPath: s.configPath,
+      platform: 'linux',
+      resolvePath: (input) => loginShellPath({ ...input, home: '/home/u', run, exists: () => false }),
+    })
     expect(env.PATH).toBe('/home/u/tools:/usr/bin')
     expect(env.BOARD_ENV).toBe('production')
+  })
+
+  it('puts the PATH of the config file first on Linux, though the app was started with a PATH of its own', async () => {
+    const s = resolveSettings({
+      env: { PATH: '/usr/bin:/bin' },
+      file: { PATH: '~/claude-bin:/opt/tools/bin:$PATH:relative/bin' },
+      home,
+    })
+    // The environment's PATH is the one the settings carry, as for every other key...
+    expect(s.serverEnv.PATH).toBe('/usr/bin:/bin')
+    const { run } = fakeRunner(() => ({ code: 0, stdout: shellSays('/home/u/.cargo/bin:/usr/bin:/bin') }))
+    const env = await withLoginPath(s.serverEnv, {
+      configPath: s.configPath,
+      home: '/home/u',
+      platform: 'linux',
+      resolvePath: (input) => loginShellPath({ ...input, home: '/home/u', run, exists: () => false }),
+    })
+    // ...and the file's folders still come first in the server's, before the login shell's.
+    expect(env.PATH).toBe('/home/u/claude-bin:/opt/tools/bin:/home/u/.cargo/bin:/usr/bin:/bin')
+  })
+})
+
+describe('configPathEntries', () => {
+  it('expands ~ to the home folder and leaves out $PATH and relative folders', () => {
+    expect(configPathEntries('~:~/bin: /opt/x :$PATH:rel:', '/home/u')).toEqual([
+      '/home/u',
+      '/home/u/bin',
+      '/opt/x',
+    ])
+    expect(configPathEntries('', '/home/u')).toEqual([])
   })
 })
 

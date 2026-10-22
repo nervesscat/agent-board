@@ -139,7 +139,10 @@ async function start() {
     )
   }
   // Linux: the login shell's PATH for the server, looked up while the port is checked.
-  const [free, serverEnv] = await Promise.all([isPortFree(settings.port), withLoginPath(settings.serverEnv)])
+  const [free, serverEnv] = await Promise.all([
+    isPortFree(settings.port),
+    withLoginPath(settings.serverEnv, { configPath: settings.configPath }),
+  ])
   settings.serverEnv = serverEnv
   if (!free)
     return fatal(

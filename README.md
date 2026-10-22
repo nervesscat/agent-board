@@ -219,7 +219,9 @@ setup included, counts as in a terminal), puts it in front of the `PATH` it was 
 `~/.local/bin`, `~/bin`, `~/.local/share/pnpm`, `~/.local/share/mise/shims` and `~/.volta/bin` where
 they exist, and starts the board with that. A shell that fails, prints no `PATH` or takes more than 5
 seconds is skipped. A tool set up only in a non-login, non-interactive file is not found: put it on
-`PATH` in one of those, or set `PATH` (or `CLAUDE_BIN`) in `config.env`.
+`PATH` in one of those, or set `PATH` (or `CLAUDE_BIN`) in `config.env`. The folders of a `PATH` set in
+`config.env` (`~/` for the home folder; `$PATH` is not expanded there, and is not needed) go first,
+in front of the login shell's, even when the app was started with a `PATH` of its own.
 
 **Tray, and closing the window.** The tray icon is a StatusNotifierItem: KDE shows it, GNOME with the
 AppIndicator extension, and on Hyprland (Omarchy) waybar's `tray` module (add `"tray"` to a

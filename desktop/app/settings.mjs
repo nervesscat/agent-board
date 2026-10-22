@@ -112,12 +112,16 @@ export const CONFIG_TEMPLATE = `# The board's settings, read each time the app s
 
 /**
  * The template for the platform: on Linux the data folder is not next to the file but under
- * `$XDG_DATA_HOME/agent-board` (appFolders), which is where a relative DATA_DIR goes too.
+ * `$XDG_DATA_HOME/agent-board` (appFolders), which is where a relative DATA_DIR goes too, and a PATH
+ * in the file goes in front of the environment's (withLoginPath).
  * @param {string} dataHome appFolders' data folder.
  */
 export function configTemplate(platform = process.platform, dataHome = '') {
   if (platform === 'win32' || !dataHome) return CONFIG_TEMPLATE
   return CONFIG_TEMPLATE.replace(
+    'wins over this file.',
+    `wins over this file, but for PATH:\n# the folders of a PATH set here go first in the board's PATH (README: "Linux").`,
+  ).replace(
     '(default: the data folder next to this file)',
     `(default: ${path.posix.join(dataHome, 'data')}; a relative path is under ${dataHome})`,
   )
@@ -183,6 +187,8 @@ export function readConfigFile(home, template = CONFIG_TEMPLATE) {
  * @property {string} dataDir
  * @property {string} url The board as the window opens it.
  * @property {Env} serverEnv The environment the built server starts in.
+ * @property {string} configPath The config file's PATH ('' when it sets none): on Linux its folders go
+ *   first in the server's PATH, whatever the environment's is (withLoginPath).
  */
 
 /**
@@ -217,7 +223,7 @@ export function resolveSettings({ env, file, home, dataHome = home }) {
     BOARD_URL: pick('BOARD_URL') || url,
   }
   for (const key of ['DEV_HUMAN', 'TEST_HUMAN', 'BOARD_DATA_COPY']) delete serverEnv[key]
-  return { port, dataDir, url, serverEnv }
+  return { port, dataDir, url, serverEnv, configPath: file.PATH?.trim() ?? '' }
 }
 
 /**
@@ -318,10 +324,16 @@ export const LOGIN_SHELL_MS = 5000
  */
 /** @typedef {(command: string, args: string[], opts: { timeoutMs: number, env: Env }) => Promise<RunResult>} Runner */
 
+/** How long the output of a command that has exited may take to arrive once it has. */
+const OUTPUT_GRACE_MS = 250
+
 /**
- * Runs a command to its end, or until `timeoutMs` passes, whatever it or what it started does: it gets
- * no input, its stdout is kept (a megabyte at most), its stderr dropped, and on the timeout its whole
- * process group is killed and the answer given at once, not when its output closes.
+ * Runs a command to its end, or until `timeoutMs` passes: it gets no input, its stdout is kept (a
+ * megabyte at most), its stderr dropped. The answer comes when the command itself exits, with its
+ * code and what it printed (waiting at most a moment for the rest of its output), even while
+ * something it started in the background (a `.bashrc`'s `sleep 30 &`) still holds its output open;
+ * that is left running. On the timeout, the command still running, its whole process group is
+ * killed and the answer given at once.
  * @type {Runner}
  */
 export const runCapture = (command, args, { timeoutMs, env }) =>
@@ -330,11 +342,16 @@ export const runCapture = (command, args, { timeoutMs, env }) =>
     let proc
     let stdout = ''
     let done = false
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let grace
     /** @param {number | null} code */
     const finish = (code) => {
       if (done) return
       done = true
       clearTimeout(timer)
+      clearTimeout(grace)
+      // Stop reading a pipe a background child may hold open for ever; the child itself is left alone.
+      proc?.stdout?.destroy()
       resolve({ code, stdout })
     }
     const timer = setTimeout(() => {
@@ -359,6 +376,13 @@ export const runCapture = (command, args, { timeoutMs, env }) =>
       if (stdout.length < 1_000_000) stdout += chunk
     })
     proc.once('error', () => finish(null))
+    proc.once('exit', (code) => {
+      // It has exited: the timer no longer kills anything, and the answer waits only for its output.
+      clearTimeout(timer)
+      if (proc?.stdout?.readableEnded) return finish(code)
+      grace = setTimeout(() => finish(code), OUTPUT_GRACE_MS)
+      proc?.stdout?.once('end', () => finish(code))
+    })
     proc.once('close', (code) => finish(code))
   })
 
@@ -430,15 +454,35 @@ export async function loginShellPath({
 }
 
 /**
- * The server's environment with the PATH it runs with: on Linux the login shell's in front of the one
- * set (loginShellPath); elsewhere as it is.
+ * The folders of a PATH from the config file: `~` is the home folder, and anything that is not then an
+ * absolute path (a `$PATH`, which the file does not expand, or a relative folder) is left out.
+ * @param {string} list
+ * @param {string} home
+ */
+export function configPathEntries(list, home) {
+  return list
+    .split(':')
+    .map((e) => e.trim())
+    .map((e) => (e === '~' ? home : e.startsWith('~/') ? path.posix.join(home, e.slice(2)) : e))
+    .filter((e) => path.posix.isAbsolute(e))
+}
+
+/**
+ * The server's environment with the PATH it runs with: on Linux the config file's PATH folders first
+ * (`configPath`, as the README tells a user to set it), then the login shell's, then the one set
+ * (loginShellPath); elsewhere as it is.
  * @param {Env} serverEnv
- * @param {(input: { env: Env, inherited?: string }) => Promise<string>} resolvePath
+ * @param {{ configPath?: string, home?: string, platform?: NodeJS.Platform,
+ *   resolvePath?: (input: { env: Env, inherited?: string }) => Promise<string> }} [opts]
  * @returns {Promise<Env>}
  */
-export async function withLoginPath(serverEnv, platform = process.platform, resolvePath = loginShellPath) {
+export async function withLoginPath(
+  serverEnv,
+  { configPath = '', home = os.homedir(), platform = process.platform, resolvePath = loginShellPath } = {},
+) {
   if (platform !== 'linux') return serverEnv
-  return { ...serverEnv, PATH: await resolvePath({ env: serverEnv, inherited: serverEnv.PATH }) }
+  const found = await resolvePath({ env: serverEnv, inherited: serverEnv.PATH })
+  return { ...serverEnv, PATH: mergePath(configPathEntries(configPath, home).join(':'), found) }
 }
 
 const SNI_WATCHER = 'org.kde.StatusNotifierWatcher'
