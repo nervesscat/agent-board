@@ -26,8 +26,9 @@ export interface HostTool {
   /** The version it printed, when it printed one in time; null otherwise. */
   version: string | null
   /**
-   * gh only: whether `gh auth status` succeeded; null when not found, when it did not answer in time,
-   * or when it could not reach GitHub to tell (`ghSignedIn`).
+   * gh only: whether `gh auth status` succeeded for the active github.com account (`GH_AUTH_STATUS`);
+   * null when not found, when it did not answer in time, or when it could not reach GitHub to tell
+   * (`ghSignedIn`).
    */
   signedIn?: boolean | null
   /** Neither missing nor (gh) signed out. */
@@ -249,21 +250,29 @@ const UNREACHABLE =
   /error connecting to|dial tcp|proxyconnect|no such host|connection refused|connection reset|network is unreachable|i\/o timeout|TLS handshake timeout|timed out/i
 
 /**
- * Whether gh is signed in, from how `gh auth status` ended and what it printed (both streams) with
- * `GH_DEBUG=api`, which logs each request it makes and each answer it gets. Exit 0 is signed in. A
- * non-zero exit is signed out when gh has no account ("You are not logged into any GitHub hosts") or
- * when GitHub answered its check (a token it rejects gets an HTTP 401). When GitHub could not be
- * reached (offline, a proxy or DNS failure) gh says the same "Failed to log in ... The token is
- * invalid" as for a rejected token, but nothing is known of the token: null, as for no answer in time.
+ * Whether gh is signed in, from how `gh auth status` (`GH_AUTH_STATUS`) ended and what it printed (both
+ * streams) with `GH_DEBUG=api`, which logs each request it makes and each answer it gets. Exit 0 is
+ * signed in. A non-zero exit is signed out when gh has no account ("You are not logged into any
+ * accounts on github.com", or of older gh "... any GitHub hosts") or when GitHub answered its check
+ * (a token it rejects gets an HTTP 401). When GitHub could not be reached (offline, a proxy or DNS
+ * failure) gh says the same "Failed to log in ... The token is invalid" as for a rejected token, but
+ * nothing is known of the token: null, as for no answer in time.
  */
 export function ghSignedIn(code: number | null, output: string): boolean | null {
   if (code === null) return null
   if (code === 0) return true
-  if (/not logged in(to)? any github hosts/i.test(output)) return false
+  if (/not logged in(to)? any (github hosts|accounts on)/i.test(output)) return false
   if (/^< HTTP\/\S+ \d{3}/m.test(output)) return false
   // Asked GitHub and got nothing back; older gh without the request log names the network error.
   return /^\* Request to /m.test(output) || UNREACHABLE.test(output) ? null : false
 }
+
+/**
+ * The sign-in check: only the active account on github.com. A bare `gh auth status` checks every
+ * account on every host and fails when any does, so an expired token of an account not in use, or
+ * another host that cannot be reached, would read as signed out though the board's gh works.
+ */
+export const GH_AUTH_STATUS = ['auth', 'status', '--active', '--hostname', 'github.com']
 
 export interface CheckOptions extends Lookup {
   claudeBin?: string
@@ -285,9 +294,7 @@ export async function probeHostTools(opts: CheckOptions = {}): Promise<HostTools
       const args = name === 'claude' ? [...claudeArgs, '--version'] : ['--version']
       const [version, auth] = await Promise.all([
         runProbe(file, args, run),
-        name === 'gh'
-          ? runProbe(file, ['auth', 'status'], { ...run, env: { ...env, GH_DEBUG: 'api' } })
-          : null,
+        name === 'gh' ? runProbe(file, GH_AUTH_STATUS, { ...run, env: { ...env, GH_DEBUG: 'api' } }) : null,
       ])
       return toolEntry(
         name,

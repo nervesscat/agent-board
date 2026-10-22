@@ -179,6 +179,78 @@ describe('the check', () => {
     }
   })
 
+  it('checks only the active github.com account: a failing second account or host is not signed out', async () => {
+    // gh 2.98 with a working active account on github.com, a second github.com account with an expired
+    // token and another host: a bare `gh auth status` fails for the others; the active one alone passes.
+    const dir = path.join(tmp, `gh-${++dirs}`)
+    fs.mkdirSync(dir, { recursive: true })
+    const args = path.join(dir, 'args.txt')
+    const good = [
+      'github.com',
+      '  - Logged in to github.com account octocat (keyring)',
+      '  - Active account: true',
+    ]
+    const others = [
+      '  X Failed to log in to github.com account old-me (keyring)',
+      '  - Active account: false',
+      '  - The token in keyring is invalid.',
+      'ghe.example.com',
+      '  X Timeout trying to log in to ghe.example.com account octo (keyring)',
+      '  - Active account: true',
+    ]
+    if (WIN)
+      fs.writeFileSync(
+        path.join(dir, 'gh.cmd'),
+        [
+          '@echo off',
+          'if "%1"=="auth" goto auth',
+          'echo gh version 2.98.0',
+          'exit /b 0',
+          ':auth',
+          `echo %*> "${args}"`,
+          ...good.map(cmdEcho),
+          'set "A=%*"',
+          'if "%A:--active=%"=="%A%" goto all',
+          'if "%A:--hostname github.com=%"=="%A%" goto all',
+          'exit /b 0',
+          ':all',
+          ...others.map((l) => `${cmdEcho(l)} 1>&2`),
+          'exit /b 1',
+          '',
+        ].join('\r\n'),
+      )
+    else {
+      const file = path.join(dir, 'gh')
+      fs.writeFileSync(
+        file,
+        [
+          '#!/bin/sh',
+          'if [ "$1" != "auth" ]; then echo "gh version 2.98.0"; exit 0; fi',
+          `echo "$@" > '${args}'`,
+          "cat <<'GOOD'",
+          ...good,
+          'GOOD',
+          `if grep -q -- '--active' '${args}' && grep -q -- '--hostname github.com' '${args}'; then exit 0; fi`,
+          "cat >&2 <<'OTHERS'",
+          ...others,
+          'OTHERS',
+          'exit 1',
+          '',
+        ].join('\n'),
+      )
+      fs.chmodSync(file, 0o755)
+    }
+    const r = await host.probeHostTools({ env: envWith(dir), claudeBin: 'claude', claudeArgs: [] })
+    const said = fs.readFileSync(args, 'utf8').trim().split(/\s+/)
+    expect(said).toEqual(['auth', 'status', '--active', '--hostname', 'github.com'])
+    expect(byName(r).gh).toMatchObject({ found: true, signedIn: true, ok: true, problem: null })
+  })
+
+  it('has gh signed out when github.com has no account, though another host has one', () => {
+    // What gh 2.98 prints for `gh auth status --hostname github.com` with only another host signed in.
+    expect(host.ghSignedIn(1, 'You are not logged into any accounts on github.com\n')).toBe(false)
+  })
+
   it('reads whether gh is signed in from its exit and what it printed', () => {
     expect(host.ghSignedIn(0, '')).toBe(true)
     expect(host.ghSignedIn(null, '')).toBeNull()
