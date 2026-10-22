@@ -4,6 +4,7 @@ import { FolderGit2, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { ListInput } from '#/components/ListInput'
 import { Markdown } from '#/components/Markdown'
 import { RichEditor } from '#/components/RichEditor'
 import { StagesEditor } from '#/components/StagesEditor'
@@ -19,11 +20,11 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Label } from '#/components/ui/label'
-import { Textarea } from '#/components/ui/textarea'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { DEFAULT_TAG_SUGGESTIONS, cleanSuggestions } from '#/lib/tags'
+import { addTasks } from '#/lib/tasks'
 
 export const Route = createFileRoute('/projects/$id/settings')({ component: Settings })
 
@@ -72,27 +73,24 @@ function Settings() {
 
 const always = () => true
 
-/** The lines of a list typed one per line, trimmed, blank ones left out. */
-const lines = (text: string) =>
-  text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-
 /**
- * The top-level phases every new ticket of the project starts with, one per line: the list in effect
+ * The top-level phases every new ticket of the project starts with, in order: the list in effect
  * (the built-in one until it is changed). Emptying it seeds nothing; the built-in list can be had back.
  * Agents read it in `get_project` and change the phases per ticket.
  */
 function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[] }) {
   const qc = useQueryClient()
-  const [text, setText] = useState(saved.join('\n'))
-  const dirty = lines(text).join('\n') !== saved.join('\n')
+  const [items, setItems] = useState(saved)
+  const [text, setText] = useState('')
+  // What Save would store: the list with what is typed and not yet added.
+  const phases = addTasks(items, text)
+  const dirty = phases.join('\n') !== saved.join('\n')
   const save = useMutation({
     mutationFn: (defaultPhases: string[] | null) =>
       patch<{ defaultPhases: string[] }>(`/api/projects/${projectId}`, { defaultPhases }),
     onSuccess: async (row) => {
-      setText(row.defaultPhases.join('\n'))
+      setItems(row.defaultPhases)
+      setText('')
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
       toast.success('Saved')
     },
@@ -103,24 +101,34 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Default phases</h2>
         <p className="text-sm text-muted-foreground">
-          The top-level tasks every new ticket starts with, in order, one per line. The tasks given when it is
-          created go under the first; a lane starts without them. Agents tick each as they finish it, and
-          remove or reword the ones that do not fit. Leave it empty to start tickets with no tasks.
+          The top-level tasks every new ticket starts with, in order. The tasks given when it is created go
+          under the first; a lane starts without them. Agents tick each as they finish it, and remove or
+          reword the ones that do not fit. Leave it empty to start tickets with no tasks.
         </p>
       </div>
       <form
         className="space-y-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (dirty && !save.isPending) save.mutate(lines(text))
+          if (dirty && !save.isPending) save.mutate(phases)
         }}
       >
-        <Textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          aria-label="Default phases, one per line"
-          placeholder="No phases: new tickets start with no tasks."
-          className="font-mono"
+        {items.length === 0 && (
+          <p className="text-sm text-muted-foreground">No phases: new tickets start with no tasks.</p>
+        )}
+        <Label htmlFor="default-phases-new" className="sr-only">
+          New phase
+        </Label>
+        <ListInput
+          id="default-phases-new"
+          value={items}
+          onChange={setItems}
+          text={text}
+          onTextChange={setText}
+          label="Default phases"
+          placeholder="Add a phase"
+          addLabel="Add phase"
+          reorderable
         />
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
@@ -145,18 +153,22 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
 }
 
 /**
- * The tags offered as chips under every ticket's tags field, one per line, before the ones the
+ * The tags offered as chips under every ticket's tags field, before the ones the
  * project's tickets carry. Emptying it offers none of its own; the defaults can be had back.
  */
 function TagSuggestions({ projectId, saved }: { projectId: string; saved: string[] }) {
   const qc = useQueryClient()
-  const [text, setText] = useState(saved.join('\n'))
-  const dirty = cleanSuggestions(lines(text)).join('\n') !== saved.join('\n')
+  const [items, setItems] = useState(saved)
+  const [text, setText] = useState('')
+  // What Save would store: the list with what is typed and not yet added, trimmed, repeats left out.
+  const tags = cleanSuggestions(addTasks(items, text))
+  const dirty = tags.join('\n') !== saved.join('\n')
   const save = useMutation({
     mutationFn: (tagSuggestions: string[]) =>
       patch<{ tagSuggestions: string[] }>(`/api/projects/${projectId}`, { tagSuggestions }),
     onSuccess: async (row) => {
-      setText(row.tagSuggestions.join('\n'))
+      setItems(row.tagSuggestions)
+      setText('')
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
       toast.success('Saved')
     },
@@ -167,24 +179,33 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Tag suggestions</h2>
         <p className="text-sm text-muted-foreground">
-          The tags offered as chips under a ticket&apos;s tags, one per line, followed by the tags its tickets
-          already carry. Agents read them in <code className="rounded bg-muted px-1">get_project</code> and
-          reuse them. Leave it empty to offer only the tags in use.
+          The tags offered as chips under a ticket&apos;s tags, followed by the tags its tickets already
+          carry. Agents read them in <code className="rounded bg-muted px-1">get_project</code> and reuse
+          them. Leave it empty to offer only the tags in use.
         </p>
       </div>
       <form
         className="space-y-2"
         onSubmit={(e) => {
           e.preventDefault()
-          if (dirty && !save.isPending) save.mutate(cleanSuggestions(lines(text)))
+          if (dirty && !save.isPending) save.mutate(tags)
         }}
       >
-        <Textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          aria-label="Tag suggestions, one per line"
-          placeholder="No suggestions: only the tags in use are offered."
-          className="font-mono"
+        {items.length === 0 && (
+          <p className="text-sm text-muted-foreground">No suggestions: only the tags in use are offered.</p>
+        )}
+        <Label htmlFor="tag-suggestions-new" className="sr-only">
+          New tag
+        </Label>
+        <ListInput
+          id="tag-suggestions-new"
+          value={items}
+          onChange={setItems}
+          text={text}
+          onTextChange={setText}
+          label="Tag suggestions"
+          placeholder="Add a tag"
+          addLabel="Add tag"
         />
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
