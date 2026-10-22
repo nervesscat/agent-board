@@ -22,12 +22,21 @@ const execFileAsync = promisify(execFile)
 const WIN_MAX_CWD = 258
 
 /**
+ * The folder a command here starts in: `cwd` resolved, so a trailing separator or a `.` or `..` in a
+ * repo's path as it was typed never reaches Windows, which measures the folder as it is given. The
+ * length check measures this same path.
+ */
+export const startDir = (cwd: string, platform: NodeJS.Platform = process.platform): string =>
+  platform === 'win32' ? path.win32.resolve(cwd) : path.resolve(cwd)
+
+/**
  * A folder too long for Windows to start a program in. Node does not refuse one: the spawn fails as
  * `spawn git ENOENT`, which would read as git (or gh) not being installed, and its pipes then throw
- * ENOTCONN where nothing can catch it, which takes the server down. So no command here starts in one.
+ * ENOTCONN where nothing can catch it, which takes the server down. So no command here starts in one;
+ * each starts in `startDir(cwd)`, the path measured here.
  */
 export function cwdTooLong(cwd: string, platform: NodeJS.Platform = process.platform): HttpError | null {
-  if (platform !== 'win32' || path.win32.resolve(cwd).length <= WIN_MAX_CWD) return null
+  if (platform !== 'win32' || startDir(cwd, platform).length <= WIN_MAX_CWD) return null
   return new HttpError(
     409,
     `${cwd} is too long a path for Windows to run git or gh in (over ${WIN_MAX_CWD} characters): ` +
@@ -35,9 +44,11 @@ export function cwdTooLong(cwd: string, platform: NodeJS.Platform = process.plat
   )
 }
 
-function assertCwdFits(cwd: string) {
+/** The folder to start a command in (`startDir`), once it fits. */
+function assertCwdFits(cwd: string): string {
   const tooLong = cwdTooLong(cwd)
   if (tooLong) throw tooLong
+  return startDir(cwd)
 }
 
 /**
@@ -73,9 +84,9 @@ export function folderGone(err: unknown, cwd: string): HttpError | null {
 }
 
 async function run(file: string, args: string[], opts: ExecFileOptions & { cwd: string }) {
-  assertCwdFits(opts.cwd)
+  const cwd = assertCwdFits(opts.cwd)
   try {
-    return await execFileAsync(file, args, { ...opts, encoding: 'utf8' })
+    return await execFileAsync(file, args, { ...opts, cwd, encoding: 'utf8' })
   } catch (err) {
     throw folderGone(err, opts.cwd) ?? err
   }
@@ -543,7 +554,7 @@ async function markedChanges(worktreePath: string): Promise<string[]> {
     else changed.push(m)
   }
   if (hashed.length) {
-    assertCwdFits(worktreePath)
+    const cwd = assertCwdFits(worktreePath)
     // `--stdin-paths` reads a path a line, and unquotes one that starts with a quote.
     const line = (p: string) =>
       p.startsWith('"') || /[\n\r]/.test(p)
@@ -553,7 +564,7 @@ async function markedChanges(worktreePath: string): Promise<string[]> {
       const child = execFile(
         'git',
         ['hash-object', '--stdin-paths'],
-        { cwd: worktreePath, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
+        { cwd, windowsHide: true, maxBuffer: 8 * 1024 * 1024 },
         (err, stdout) => (err ? reject(err) : resolve(String(stdout))),
       )
       child.stdin?.end(hashed.map((m) => line(m.file)).join('\n') + '\n')
@@ -607,7 +618,11 @@ function gitEntries(cwd: string, args: string[], each: (entry: Buffer) => void):
   return new Promise((resolve, reject) => {
     const tooLong = cwdTooLong(cwd)
     if (tooLong) return reject(tooLong)
-    const child = spawn('git', args, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn('git', args, {
+      cwd: startDir(cwd),
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
     // Bytes, as git wrote them: a name need not be UTF-8.
     let rest: Buffer = Buffer.alloc(0)
     let stderr = ''
@@ -675,7 +690,7 @@ export async function commitsBrought(
   tip: string,
   before: string[],
 ): Promise<CommitLines[]> {
-  assertCwdFits(repoPath)
+  const cwd = assertCwdFits(repoPath)
   const out = await new Promise<string>((resolve, reject) => {
     const child = execFile(
       'git',
@@ -688,7 +703,7 @@ export async function commitsBrought(
         '--ignore-missing',
         '--stdin',
       ],
-      { cwd: repoPath, windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
+      { cwd, windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
       (err, stdout) => (err ? reject(err) : resolve(String(stdout))),
     )
     child.stdin?.end([tip, ...before.map((sha) => `^${sha}`)].join('\n') + '\n')

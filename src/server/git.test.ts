@@ -8,15 +8,17 @@ import type { GhPr } from './git'
 
 // gh answers from fixtures: each `gh pr list` call is recorded, and answered by `answer`.
 let calls: string[][] = []
+let cwds: (string | undefined)[] = []
 let answer: (args: string[]) => GhPr[] = () => []
 vi.mock('node:child_process', () => ({
   execFile: (
     _cmd: string,
     args: string[],
-    _opts: unknown,
+    opts: { cwd?: string },
     cb: (err: Error | null, out?: { stdout: string; stderr: string }) => void,
   ) => {
     calls.push(args)
+    cwds.push(opts.cwd)
     try {
       cb(null, { stdout: JSON.stringify(answer(args)), stderr: '' })
     } catch (err) {
@@ -119,6 +121,40 @@ describe('folderGone', () => {
       /is too long a path for Windows to run git or gh in \(over 258 characters\): move the checkout/,
     )
     expect(cwdTooLong('/' + 'x'.repeat(400), 'linux')).toBeNull()
+  })
+
+  it('measures the folder a trailing separator or dot segments name, at the Windows limit', async () => {
+    const { cwdTooLong, startDir } = await import('./git')
+    const fits = 'C:\\' + 'x'.repeat(255)
+    const over = fits + 'x'
+    // As typed these are longer than the folder they name; the folder is what a command starts in.
+    const fitting = [
+      fits + '\\',
+      fits + '\\.',
+      `C:\\y\\..\\${'x'.repeat(255)}`,
+      `C:\\.\\${'x'.repeat(255)}\\`,
+    ]
+    for (const typed of fitting) {
+      expect(startDir(typed, 'win32')).toBe(fits)
+      expect(cwdTooLong(typed, 'win32')).toBeNull()
+    }
+    for (const typed of [over + '\\', over + '\\.', `C:\\y\\..\\${'x'.repeat(256)}`]) {
+      expect(startDir(typed, 'win32')).toBe(over)
+      expect(cwdTooLong(typed, 'win32')?.message).toBe(
+        `${typed} is too long a path for Windows to run git or gh in (over 258 characters): ` +
+          'move the checkout to a shorter path',
+      )
+    }
+  })
+
+  it('starts git and gh in the folder the check measured, not the path as typed', async () => {
+    const { repoNameWithOwner } = await import('./git')
+    const dir = path.join(tmp, 'resolved')
+    answer = () => ({ nameWithOwner: 'o/r' }) as unknown as GhPr[]
+    cwds = []
+    expect(await repoNameWithOwner(`${dir}${path.sep}.${path.sep}`)).toBe('o/r')
+    expect(await repoNameWithOwner(path.join(dir, 'sub') + `${path.sep}..${path.sep}`)).toBe('o/r')
+    expect(cwds).toEqual([dir, dir])
   })
 
   it('leaves a usable folder and any other failure alone', () => {
