@@ -122,6 +122,7 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
+import { type AreaId, defaultLayout, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -140,6 +141,8 @@ function TicketPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const stages = useStages(id)
+  // Which sections show, in which column and order: the project's layout (the defaults until it loads).
+  const layout = useProject(id).data?.layout ?? defaultLayout()
   const setFilter = (f: LaneFilter) =>
     navigate({
       to: '/projects/$id/features/$ticketId',
@@ -298,6 +301,30 @@ function TicketPage() {
   const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
   const kind = stageOf(stages, t.status).kind
   const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
+  const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
+    // Keyed by ticket, so an open editor and its draft do not follow to the next one.
+    'ticket.resume': <ResumeNote key={t.id} t={t} onChange={invalidate} />,
+    'ticket.instructions': (
+      <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+    ),
+    'ticket.tasks': <Tasks t={t} onChange={invalidate} />,
+    'ticket.lanes': (
+      <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
+    ),
+    'ticket.activity': (
+      <ShownAnchor value={drawn ? anchor : null}>
+        {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
+        <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+      </ShownAnchor>
+    ),
+    'ticket.handoff': t.handoff && <HandoffCard handoff={t.handoff} git={git} pr={t.pr} />,
+    'ticket.preview': <Previews t={t} git={git} onChange={invalidate} />,
+    'ticket.details': <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />,
+    'ticket.branch': <BranchPanel t={t} git={git} />,
+    'ticket.workspaces': <WorkspacesPanel t={t} git={git} onChange={invalidate} />,
+  }
+  const main = shownIn(layout, 'ticket.main')
+  const side = shownIn(layout, 'ticket.side')
 
   return (
     <div className="flex flex-col gap-6">
@@ -434,29 +461,29 @@ function TicketPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      {/* One column when the layout leaves the other empty. */}
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-6',
+          main.length > 0 && side.length > 0 && 'lg:grid-cols-[minmax(0,1fr)_18rem]',
+        )}
+      >
         {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
               widen the page */}
-        <div className="min-w-0 space-y-6">
-          {/* Keyed by ticket, so an open editor and its draft do not follow to the next one; one key for
-                both, as siblings sharing a key would leave one of them behind on screen. */}
-          <Fragment key={t.id}>
-            <ResumeNote t={t} onChange={invalidate} />
-            <Instructions t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
-          </Fragment>
-          <Tasks t={t} onChange={invalidate} />
-          <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
-          <ShownAnchor value={drawn ? anchor : null}>
-            {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
-            <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
-          </ShownAnchor>
-        </div>
-        <aside className="min-w-0 space-y-4">
-          {t.handoff && <HandoffCard handoff={t.handoff} git={git} pr={t.pr} />}
-          <Previews t={t} git={git} onChange={invalidate} />
-          <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />
-          <GitPanel t={t} git={git} onChange={invalidate} />
-        </aside>
+        {main.length > 0 && (
+          <div data-ticket-column="main" className="min-w-0 space-y-6">
+            {main.map((s) => (
+              <Fragment key={s}>{sections[s]}</Fragment>
+            ))}
+          </div>
+        )}
+        {side.length > 0 && (
+          <aside data-ticket-column="side" className="min-w-0 space-y-4">
+            {side.map((s) => (
+              <Fragment key={s}>{sections[s]}</Fragment>
+            ))}
+          </aside>
+        )}
       </div>
     </div>
   )
@@ -2477,98 +2504,101 @@ function PreviewRow({
   )
 }
 
-function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
-  const onError = (err: unknown) => toast.error(errorMessage(err))
+/** Where a branch's head is: its last commit, how far from the base, how far it has gone. */
+function Info({ info }: { info: TicketGit['info'] }) {
+  return info.exists ? (
+    <div className="text-xs text-muted-foreground">
+      <span className="font-mono">{shortSha(info.sha!)}</span> {info.subject}
+      <div>
+        {info.ahead != null && (
+          <>
+            +{info.ahead} / −{info.behind} vs base ·{' '}
+          </>
+        )}
+        {ago(info.authoredAt)}
+      </div>
+      {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
+    </div>
+  ) : (
+    <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>
+  )
+}
+
+/** The ticket's branch: its git state and its PR. */
+function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
+  return (
+    <section className="rounded-lg border p-3">
+      <h2 className="mb-2 flex items-center text-sm font-medium">
+        Branch
+        {git?.repo && (
+          <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">{git.repo.name}</span>
+        )}
+      </h2>
+      {t.branch ? (
+        <>
+          <div className="inline-flex items-center gap-1 font-mono text-sm">
+            <GitBranch className="size-3.5" /> {t.branch}
+          </div>
+          <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
+          {git?.repo && (
+            <div className="flex min-w-0 items-center gap-1">
+              <PushBadge push={git.info.push} />
+              <RefreshPush projectId={t.projectId} className="-my-1" />
+            </div>
+          )}
+          {git && <Info info={git.info} />}
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">No branch yet: pick one above, or the agent sets it.</p>
+      )}
+      {t.pr && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          {t.pr.url ? (
+            <a
+              href={t.pr.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-medium hover:underline"
+            >
+              PR #{t.pr.number} <ExternalLink className="size-3 text-muted-foreground" />
+            </a>
+          ) : (
+            <span className="font-medium">PR #{t.pr.number}</span>
+          )}
+          {t.pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[t.pr.queue.status]}</span>}
+          {t.pr.latestReview && (
+            <ReviewResultButton
+              resultId={t.pr.latestReview.id}
+              className={`rounded bg-muted px-1 hover:underline ${t.pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
+              tip={t.pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
+            >
+              {t.pr.latestReview.verdict}
+            </ReviewResultButton>
+          )}
+        </div>
+      )}
+      {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
+    </section>
+  )
+}
+
+/** The worktrees, sub-branches and sandboxes opened for the ticket and its lanes. */
+function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/workspaces/${id}`),
     onSuccess: onChange,
-    onError,
+    onError: (err: unknown) => toast.error(errorMessage(err)),
   })
-  const Info = ({ info }: { info: TicketGit['info'] }) =>
-    info.exists ? (
-      <div className="text-xs text-muted-foreground">
-        <span className="font-mono">{shortSha(info.sha!)}</span> {info.subject}
-        <div>
-          {info.ahead != null && (
-            <>
-              +{info.ahead} / −{info.behind} vs base ·{' '}
-            </>
-          )}
-          {ago(info.authoredAt)}
-        </div>
-        {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
-      </div>
-    ) : (
-      <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>
-    )
   return (
-    <>
-      <section className="rounded-lg border p-3">
-        <h2 className="mb-2 flex items-center text-sm font-medium">
-          Branch
-          {git?.repo && (
-            <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
-              {git.repo.name}
-            </span>
-          )}
-        </h2>
-        {t.branch ? (
-          <>
-            <div className="inline-flex items-center gap-1 font-mono text-sm">
-              <GitBranch className="size-3.5" /> {t.branch}
-            </div>
-            <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
-            {git?.repo && (
-              <div className="flex min-w-0 items-center gap-1">
-                <PushBadge push={git.info.push} />
-                <RefreshPush projectId={t.projectId} className="-my-1" />
-              </div>
-            )}
-            {git && <Info info={git.info} />}
-          </>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            No branch yet: pick one above, or the agent sets it.
-          </p>
-        )}
-        {t.pr && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            {t.pr.url ? (
-              <a
-                href={t.pr.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-medium hover:underline"
-              >
-                PR #{t.pr.number} <ExternalLink className="size-3 text-muted-foreground" />
-              </a>
-            ) : (
-              <span className="font-medium">PR #{t.pr.number}</span>
-            )}
-            {t.pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[t.pr.queue.status]}</span>}
-            {t.pr.latestReview && (
-              <ReviewResultButton
-                resultId={t.pr.latestReview.id}
-                className={`rounded bg-muted px-1 hover:underline ${t.pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
-                tip={t.pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
-              >
-                {t.pr.latestReview.verdict}
-              </ReviewResultButton>
-            )}
-          </div>
-        )}
-        {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
-      </section>
-      <section className="rounded-lg border p-3">
-        <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
-        <p className="mb-2 text-xs text-muted-foreground">
-          Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
-          {t.lanes.length > 0 && ' and its lanes'}.
-        </p>
-        <ul className="space-y-2">
-          {(
-            git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))
-          ).map((w) => (
+    <section className="rounded-lg border p-3">
+      <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
+      <p className="mb-2 text-xs text-muted-foreground">
+        Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
+        {t.lanes.length > 0 && ' and its lanes'}.
+      </p>
+      <ul className="space-y-2">
+        {(git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))).map(
+          (w) => (
             <li key={w.id} className="group text-sm">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{w.name}</span>
@@ -2608,12 +2638,12 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
                 </Tip>
               )}
             </li>
-          ))}
-        </ul>
-        {t.workspaces.length === 0 && !git?.workspaces.length && (
-          <p className="text-xs text-muted-foreground">None yet.</p>
+          ),
         )}
-      </section>
-    </>
+      </ul>
+      {t.workspaces.length === 0 && !git?.workspaces.length && (
+        <p className="text-xs text-muted-foreground">None yet.</p>
+      )}
+    </section>
   )
 }

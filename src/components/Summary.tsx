@@ -30,6 +30,7 @@ import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { threadAnchor } from '#/lib/anchors'
+import type { AreaId } from '#/lib/layout'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
@@ -98,14 +99,37 @@ const headline = (p: ProjectSummary) =>
     .filter(Boolean)
     .join(' · ')
 
+/** Each card of the block; which show and in what order is the project's layout. */
+const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary }) => ReactNode> = {
+  'overview.needsYou': NeedsYou,
+  'overview.inProgress': InProgress,
+  'overview.doneToday': DoneToday,
+  'overview.next': Next,
+  'overview.carryingOver': CarryingOver,
+}
+
 function ProjectBlock({ p }: { p: ProjectSummary }) {
+  if (!p.project.overview.length)
+    return (
+      <Empty>
+        Every card of this overview is hidden.{' '}
+        <Link
+          to="/projects/$id/settings"
+          params={{ id: String(p.project.id) }}
+          hash="layout"
+          className="underline"
+        >
+          Show them again in the layout settings
+        </Link>
+        .
+      </Empty>
+    )
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <NeedsYou p={p} />
-      <InProgress p={p} />
-      <DoneToday p={p} />
-      <Next p={p} />
-      <CarryingOver p={p} />
+      {p.project.overview.map((card) => {
+        const Shown = CARDS[card]
+        return <Shown key={card} p={p} />
+      })}
     </div>
   )
 }
