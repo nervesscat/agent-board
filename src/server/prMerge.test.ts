@@ -194,6 +194,7 @@ const ghPr = (f: Fixture, over: Partial<MyGhPr> = {}): MyGhPr => ({
   mergedAt: null,
   reviews: [],
   reviewRequests: [],
+  comments: [],
   requested: false,
   assigned: false,
   ...over,

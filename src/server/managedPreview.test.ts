@@ -647,6 +647,7 @@ describe('stops by itself', () => {
       mergedAt,
       reviews: [],
       reviewRequests: [],
+      comments: [],
       requested: false,
       assigned: true,
     }) satisfies MyGhPr

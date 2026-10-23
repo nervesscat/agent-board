@@ -7,7 +7,7 @@ import { type Api, expect, ok, test } from './fixtures'
 const LINES = 60
 const TASKS = Array.from({ length: 40 }, (_, i) => `Task number ${i + 1}`)
 // A new ticket starts with the project's default phases, the typed tasks under the first.
-const PHASES = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Hand-off post']
+const PHASES = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged', 'Hand-off post']
 // As many as a ticket takes.
 const TAGS = Array.from({ length: 20 }, (_, i) => `Longer-tag-name-${i + 1}`)
 const FILES = 4

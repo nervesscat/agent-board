@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, inArray, or } from 'drizzle-orm'
+import { and, desc, eq, gt, gte, inArray, isNotNull, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import type { PrCheck } from '#/lib/constants'
@@ -13,6 +13,7 @@ import {
   type GhCheck,
   type GhPr,
 } from './git'
+import { reconcileProject } from './autoPhases'
 import { toolProblem } from './hostTools'
 import { HttpError, notFound } from './http'
 import { hasPreviews, stopPreviewsFor } from './managedPreview'
@@ -148,6 +149,30 @@ export function ciState(checks: PrCheck[]): CiState {
   if (checks.some((c) => c.state === 'pending')) return 'pending'
   return checks.some((c) => c.state === 'pass') ? 'passing' : 'none'
 }
+
+const LOCAL_GREEN = /^\s*CI run locally:\s*green\b/i
+const HEX = /\b[0-9a-f]{7,40}\b/gi
+
+/**
+ * The PR's head as a "CI run locally: green" comment names it, or null: a comment whose first line
+ * says so and that names a 7 to 40 character prefix of `headSha` (any author: agents comment with the
+ * human's account). A comment without a SHA, or naming another commit, does not count: CI ran on what
+ * it names, and a push past it needs a new run. While GitHub's own checks do not run, this is how a PR
+ * shows green.
+ */
+export function localGreenSha(comments: Pick<GhPr['comments'][number], 'body'>[], headSha: string) {
+  const head = headSha.toLowerCase()
+  const named = comments.some(
+    (c) =>
+      LOCAL_GREEN.test(c.body.split('\n', 1)[0]!) &&
+      [...c.body.matchAll(HEX)].some((m) => head.startsWith(m[0].toLowerCase())),
+  )
+  return named && head ? headSha : null
+}
+
+/** CI green on the PR's head: its checks pass, or a "CI run locally: green" comment names the head. */
+export const ciGreen = (pr: Pick<schema.Pr, 'checks' | 'headSha' | 'localCiSha'>) =>
+  ciState(pr.checks) === 'passing' || (pr.localCiSha !== null && pr.localCiSha === pr.headSha)
 
 /** Where a PR's merge state came from, so a reader can tell how much to trust it. */
 export interface MergeCheck {
@@ -331,6 +356,50 @@ async function runRefresh(projectId: number) {
   )
   lastRefresh.set(projectId, Date.now())
   followUnknowns(projectId)
+  // A PR opened, merged or closed, CI turning green or red: the tickets' automatic phases follow.
+  await reconcileProject(projectId).catch((err: unknown) =>
+    console.error(`ticking the automatic phases of project ${projectId} failed:`, err),
+  )
+}
+
+/**
+ * Whether the board knows the PRs of a repo: a refresh of its project went through since the board
+ * started, or the queue has rows of it from before. Until then a PR not found is not a PR missing.
+ */
+export const prsKnown = (projectId: number, repoId: number) =>
+  lastRefresh.has(projectId) ||
+  !!db.select({ id: schema.prs.id }).from(schema.prs).where(eq(schema.prs.repoId, repoId)).get()
+
+/**
+ * The queue's row of the PR a ticket was opened as, open or merged, for its automatic phases: the one
+ * it names with `prNumber`, else the newest open or merged one on its branch, in the ticket's repo.
+ * Unlike `prForTicket`, a merged PR found by the branch still counts. Null when there is none (a
+ * `prNumber` the queue never saw included); a PR closed without merging comes back as it is.
+ */
+export function autoPrRow(ticket: Pick<schema.Ticket, 'prNumber' | 'branch'>, repoId: number) {
+  if (ticket.prNumber)
+    return (
+      db
+        .select()
+        .from(schema.prs)
+        .where(and(eq(schema.prs.repoId, repoId), eq(schema.prs.number, ticket.prNumber)))
+        .get() ?? null
+    )
+  if (!ticket.branch) return null
+  return (
+    db
+      .select()
+      .from(schema.prs)
+      .where(
+        and(
+          eq(schema.prs.repoId, repoId),
+          eq(schema.prs.headRef, ticket.branch),
+          or(eq(schema.prs.open, true), isNotNull(schema.prs.mergedAt)),
+        ),
+      )
+      .orderBy(desc(schema.prs.updatedAt), desc(schema.prs.id))
+      .get() ?? null
+  )
 }
 
 /** A PR row a refresh changed: as it was stored, and as it is now. */
@@ -533,6 +602,7 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
       mergeable: pr.mergeable,
       mergeStateStatus: pr.mergeStateStatus,
       checks: prChecks(pr.statusCheckRollup),
+      localCiSha: localGreenSha(pr.comments, pr.headRefOid),
       updatedAt: pr.updatedAt,
       fetchedAt,
       open,
@@ -763,6 +833,8 @@ export function prForTicket(ticket: schema.Ticket) {
           status: prStatus(row),
           headSha: row.headSha,
           ...prState(row, githubMerge(row)),
+          // A "CI run locally: green" comment names the head: green, whatever GitHub's checks say.
+          localCi: row.localCiSha !== null && row.localCiSha === row.headSha,
         }
       : null,
     latestReview: r
