@@ -7,6 +7,7 @@ import type {
   Attachment,
   Comment,
   Repo,
+  RunConfig,
   ReportSettingsChange,
   ReviewResult,
   Task,
@@ -31,6 +32,8 @@ import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { Handoff } from '#/server/handoff'
 import type { HostTool, HostTools } from '#/server/hostTools'
 import type { ManagedPreview } from '#/server/managedPreview'
+import type { RunState } from '#/server/runs'
+import type { RunOutcome, TicketRun, TicketRuns, TicketRunsRepo } from '#/server/ticketRuns'
 import type { PreviewState } from '#/server/preview'
 import type { LinkStopped, StopAll } from '#/server/linkPreview'
 import type { ProjectPreview, ProjectPreviews } from '#/server/projectPreviews'
@@ -57,6 +60,12 @@ export type {
   ManagedPreview,
   PreviewState,
   ProjectAgent,
+  RunConfig,
+  RunOutcome,
+  RunState,
+  TicketRun,
+  TicketRuns,
+  TicketRunsRepo,
   LinkStopped,
   ProjectPreview,
   ProjectPreviews,
@@ -186,12 +195,26 @@ export interface SummaryHistory {
   versions: ReturnType<typeof summaryHistory>
 }
 
+export type GitInfo = BranchInfo & { reach: Reach | null; push: Push }
+
 export interface TicketGit {
+  /** The primary repo, its branch and base, and that branch's state. */
   repo: { id: number; name: string } | null
   branch: string
   baseBranch: string
-  info: BranchInfo & { reach: Reach | null; push: Push }
+  info: GitInfo
+  /** Every repo the ticket spans, the primary first, each with its branch, its state and its PR. */
+  repos: {
+    repo: { id: number; name: string }
+    primary: boolean
+    branch: string
+    baseBranch: string
+    info: GitInfo
+    pr: TicketFull['pr']
+  }[]
   workspaces: (Workspace & {
+    /** The repo it is a worktree of. */
+    repo: { id: number; name: string } | null
     info: BranchInfo & { reach: Reach | null; push: Push }
     worktree: Worktree | null
     lane: { id: number; title: string } | null
