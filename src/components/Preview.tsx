@@ -21,7 +21,7 @@ import { cn } from '#/lib/utils'
 import type { Settings } from '#/server/agents'
 
 /**
- * The pieces of a preview row, shared by a ticket's Preview card and the project's Previews page: the
+ * The pieces of a preview row, shared by a ticket's Runs card and the project's Previews page: the
  * link and the buttons, whether the link answers, and what the board's own preview is doing.
  */
 

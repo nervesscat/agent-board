@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { ListInput } from '#/components/ListInput'
 import { Markdown } from '#/components/Markdown'
 import { RichEditor } from '#/components/RichEditor'
+import { RunsSettings } from '#/components/RunsSettings'
 import { StagesEditor } from '#/components/StagesEditor'
 import {
   AlertDialog,
@@ -67,6 +68,7 @@ function Settings() {
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
       <StagesEditor projectId={id} />
+      <RunsSettings projectId={id} />
     </div>
   )
 }
