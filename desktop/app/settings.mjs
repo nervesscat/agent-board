@@ -332,8 +332,9 @@ const OUTPUT_GRACE_MS = 250
  * megabyte at most), its stderr dropped. The answer comes when the command itself exits, with its
  * code and what it printed (waiting at most a moment for the rest of its output), even while
  * something it started in the background (a `.bashrc`'s `sleep 30 &`) still holds its output open;
- * that is left running. On the timeout, the command still running, its whole process group is
- * killed and the answer given at once.
+ * that is left running, and what it prints later is read and dropped (a closed pipe would kill it on
+ * its next write), without keeping this process alive. On the timeout, the command still running,
+ * its whole process group is killed and the answer given at once.
  * @type {Runner}
  */
 export const runCapture = (command, args, { timeoutMs, env }) =>
@@ -344,14 +345,31 @@ export const runCapture = (command, args, { timeoutMs, env }) =>
     let done = false
     /** @type {ReturnType<typeof setTimeout> | undefined} */
     let grace
-    /** @param {number | null} code */
-    const finish = (code) => {
+    /** @param {Buffer | string} chunk */
+    const collect = (chunk) => {
+      if (stdout.length < 1_000_000) stdout += chunk
+    }
+    /**
+     * @param {number | null} code
+     * @param {boolean} [drain] The command has exited: keep draining the pipe for whatever it left in
+     *   the background, else close it.
+     */
+    const finish = (code, drain = false) => {
       if (done) return
       done = true
       clearTimeout(timer)
       clearTimeout(grace)
-      // Stop reading a pipe a background child may hold open for ever; the child itself is left alone.
-      proc?.stdout?.destroy()
+      const out = proc?.stdout
+      if (out && drain) {
+        // A background child may hold the pipe open for ever and print to it later: it is left alone,
+        // so its writes go on being read (and dropped) rather than failing on a closed pipe, and the
+        // pipe no longer keeps this process alive.
+        out.off('data', collect)
+        out.on('error', () => {})
+        out.resume()
+        // A child's piped stdout is a socket.
+        if ('unref' in out && typeof out.unref === 'function') out.unref()
+      } else out?.destroy()
       resolve({ code, stdout })
     }
     const timer = setTimeout(() => {
@@ -372,18 +390,16 @@ export const runCapture = (command, args, { timeoutMs, env }) =>
     } catch {
       return finish(null)
     }
-    proc.stdout?.on('data', (chunk) => {
-      if (stdout.length < 1_000_000) stdout += chunk
-    })
+    proc.stdout?.on('data', collect)
     proc.once('error', () => finish(null))
     proc.once('exit', (code) => {
       // It has exited: the timer no longer kills anything, and the answer waits only for its output.
       clearTimeout(timer)
-      if (proc?.stdout?.readableEnded) return finish(code)
-      grace = setTimeout(() => finish(code), OUTPUT_GRACE_MS)
-      proc?.stdout?.once('end', () => finish(code))
+      if (proc?.stdout?.readableEnded) return finish(code, true)
+      grace = setTimeout(() => finish(code, true), OUTPUT_GRACE_MS)
+      proc?.stdout?.once('end', () => finish(code, true))
     })
-    proc.once('close', (code) => finish(code))
+    proc.once('close', (code) => finish(code, true))
   })
 
 /**

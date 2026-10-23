@@ -589,7 +589,42 @@ describe('loginShellPath', () => {
       }
     },
   )
+
+  it.runIf(process.platform === 'linux' && fs.existsSync('/bin/bash'))(
+    'leaves a job from .bashrc that prints after the shell has exited to run on past that',
+    async () => {
+      const fake = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-shell-'))
+      const marker = path.join(fake, 'after-echo')
+      try {
+        fs.writeFileSync(path.join(fake, '.bash_profile'), '[ -f ~/.bashrc ] && . ~/.bashrc\n')
+        fs.writeFileSync(
+          path.join(fake, '.bashrc'),
+          `export PATH="$HOME/tools:$PATH"\n( sleep 1; echo tick; touch ${JSON.stringify(marker)} ) &\n`,
+        )
+        const p = await loginShellPath({
+          env: { SHELL: '/bin/bash', HOME: fake, PATH: '/usr/bin:/bin' },
+          home: fake,
+        })
+        expect(p.split(':')[0]).toBe(path.join(fake, 'tools'))
+        // The job prints to the shell's output a second later, then goes on; a closed pipe would end it there.
+        await waitFor(() => fs.existsSync(marker), 5000)
+        expect(fs.existsSync(marker)).toBe(true)
+      } finally {
+        fs.rmSync(fake, { recursive: true, force: true })
+      }
+    },
+  )
 })
+
+/**
+ * Polls until `check` holds or `ms` passes.
+ * @param {() => boolean} check
+ * @param {number} ms
+ */
+async function waitFor(check, ms) {
+  const end = Date.now() + ms
+  while (!check() && Date.now() < end) await new Promise((r) => setTimeout(r, 50))
+}
 
 describe('runCapture', () => {
   it('gives the exit code and the output of a command that ends', async () => {
@@ -629,6 +664,26 @@ describe('runCapture', () => {
         } catch {
           // already gone
         }
+      }
+    },
+  )
+
+  it.runIf(process.platform === 'linux' && fs.existsSync('/bin/sh'))(
+    'keeps reading for a background child that prints after the command has exited, so the child runs on',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-bg-print-'))
+      const marker = path.join(dir, 'after-echo')
+      try {
+        const script = `( sleep 1; echo tick; touch ${JSON.stringify(marker)} ) & echo printed`
+        const started = Date.now()
+        const res = await runCapture('/bin/sh', ['-c', script], { timeoutMs: 5000, env: process.env })
+        expect(res).toEqual({ code: 0, stdout: 'printed\n' })
+        expect(Date.now() - started).toBeLessThan(900)
+        // Its echo comes after the answer; on a closed pipe it would die there and never reach the touch.
+        await waitFor(() => fs.existsSync(marker), 5000)
+        expect(fs.existsSync(marker)).toBe(true)
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
       }
     },
   )
