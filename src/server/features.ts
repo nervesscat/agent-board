@@ -1546,7 +1546,8 @@ export async function ticketGit(id: number, repoGit: GitCache = gitCache({ recen
       return { ...info, reach, push: push.get(e.branch) ?? NO_PUSH }
     }),
   )
-  const [branch, ...wsState] = await Promise.all([
+  const [others, branch, ...wsState] = await Promise.all([
+    othersGit,
     (async () => {
       if (!repo) return { ...NO_BRANCH, reach: null, push: NO_PUSH }
       const [{ refs }, push] = await Promise.all([
@@ -1578,7 +1579,6 @@ export async function ticketGit(id: number, repoGit: GitCache = gitCache({ recen
       return { info: { ...info, reach, push: push.get(w.branch) ?? NO_PUSH }, worktree }
     }),
   ])
-  const others = await othersGit
   return {
     repo: repo ? { id: repo.id, name: repo.name } : null,
     branch: ticket.branch,
