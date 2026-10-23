@@ -194,8 +194,10 @@ entry in the applications menu and its icons):
 - **Any other, or no root:** the AppImage. `chmod +x agent-board-<version>-x86_64.AppImage` and run
   it. It brings Electron but not what Electron needs from the system (GTK 3, NSS, GBM, ALSA, which a
   desktop has), and needs FUSE 2 (`libfuse2` on Debian/Ubuntu, `fuse2` on Arch, `fuse-libs` on Fedora); without
-  it, `--appimage-extract` unpacks it into `squashfs-root/`, whose `agent-board` runs as it is. It
-  adds nothing to the menu by itself.
+  it, `--appimage-extract` unpacks it into `squashfs-root/`, and `squashfs-root/AppRun` starts it
+  (not `squashfs-root/agent-board`: `AppRun` adds `--no-sandbox` where the system blocks user
+  namespaces, as Ubuntu 24.04 does, and without it Electron stops at start). It adds nothing to the
+  menu by itself.
 
 None is signed, and none updates itself: install a newer one over it (the AppImage: replace the
 file), and the data stays.
