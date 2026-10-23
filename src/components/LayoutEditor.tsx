@@ -155,16 +155,16 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
         </p>
       </div>
       <div ref={root} className="grid gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
-        <Panel icon={PanelLeft} title="Menu" items={inArea(items, 'nav')}>
+        <Panel icon={PanelLeft} name="Menu" items={inArea(items, 'nav')}>
           {area('nav')}
         </Panel>
         <div className="min-w-0 space-y-4">
-          <Panel icon={LayoutDashboard} title="Overview" items={inArea(items, 'overview')}>
+          <Panel icon={LayoutDashboard} name="Overview" items={inArea(items, 'overview')}>
             {area('overview', true)}
           </Panel>
           <Panel
             icon={SquareKanban}
-            title="Ticket page"
+            name="Ticket page"
             items={[...inArea(items, 'ticket.main'), ...inArea(items, 'ticket.side')]}
           >
             {/* The ticket's title and controls stay where they are: a still bar above the columns. */}
@@ -213,12 +213,12 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
 /** One of the three pictures: a page's frame with its name and how many of its elements show. */
 function Panel({
   icon: Icon,
-  title,
+  name,
   items,
   children,
 }: {
   icon: typeof PanelLeft
-  title: string
+  name: string
   items: LayoutItem[]
   children: ReactNode
 }) {
@@ -227,7 +227,7 @@ function Panel({
     <div className="min-w-0 rounded-xl border bg-muted/30 p-3 shadow-xs">
       <div className="mb-2 flex items-center gap-2 px-0.5 text-xs font-medium text-muted-foreground">
         <Icon className="size-3.5" />
-        <span className="uppercase tracking-wide">{title}</span>
+        <span className="uppercase tracking-wide">{name}</span>
         <span className="ml-auto font-normal tabular-nums">
           {shown} of {items.length} shown
         </span>
