@@ -8,7 +8,8 @@ import { db, schema } from '#/db'
 import { logActivity } from './activity'
 import { authMode, config } from './config'
 import { HttpError, notFound } from './http'
-import { activePreviews, isActive, managedPreview, stopPreview, worktreeTarget } from './managedPreview'
+import { activePreviews, worktreeTarget } from './managedPreview'
+import { activeRuns, stopRun } from './runs'
 import { forgetPreviewState, isLocalUrl } from './preview'
 import { getProject } from './projects'
 import { ticketRepo } from './repos'
@@ -360,7 +361,7 @@ function linkTarget(ws: schema.Workspace, opts: { ownStopped?: boolean } = {}): 
   if (!ws.previewUrl) return refuse(409, 'the workspace has no preview link')
   if (authMode().boardEnv === 'development')
     return refuse(400, 'links are stopped by the live board (or a test-mode one), not by a preview')
-  if (!opts.ownStopped && isActive(managedPreview(ws.id)))
+  if (!opts.ownStopped && activeRuns().some((r) => r.workspaceId === ws.id && r.runType === 'preview'))
     return refuse(
       409,
       'the board runs this preview itself: stop it with the Stop of a preview the board runs',
@@ -563,13 +564,17 @@ export async function stopProjectLinksAndPreviews(projectId: number, actor: stri
     .where(inArray(schema.workspaces.ticketId, ticketIds))
     .all()
 
-  const managed = workspaces.filter((w) => isActive(managedPreview(w.id)))
+  // Every preview-type run the board builds or runs from them (a job has no link to stop).
+  const previews = activeRuns().filter((r) => r.runType === 'preview')
+  const managed = workspaces.filter((w) => previews.some((r) => r.workspaceId === w.id))
   await Promise.all(
-    managed.map(async (w) => {
-      const port = managedPreview(w.id)?.port ?? null
-      await stopPreview(w.id, `stopped by ${actor}`, actor)
-      result.stopped.push({ workspaceId: w.id, ticketId: w.ticketId, kind: 'managed', port })
-    }),
+    previews
+      .filter((r) => managed.some((w) => w.id === r.workspaceId))
+      .map(async (r) => {
+        const port = r.port
+        await stopRun(r.workspaceId, r.runId, `stopped by ${actor}`, actor)
+        result.stopped.push({ workspaceId: r.workspaceId, ticketId: r.ticketId, kind: 'managed', port })
+      }),
   )
   // Stopping a preview the board ran cleared the link that was its own; another link stays, judged as any.
   const relinked = managed.length

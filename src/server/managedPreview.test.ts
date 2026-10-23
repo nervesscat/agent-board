@@ -165,10 +165,10 @@ async function startRunning(id: number) {
   return mp.managedPreview(id)!
 }
 
-describe('previewTarget', () => {
+describe('worktreeTarget', () => {
   const repo = { repoPath: main }
   const boardRoot = worktree(path.join(repos, 'agent-board-self'))
-  const target = (p: string) => mp.previewTarget({ path: p }, repo, boardRoot)
+  const target = (p: string) => mp.worktreeTarget({ path: p }, repo, boardRoot)
 
   it('runs a worktree of the repo next to its main checkout', () => {
     const dir = worktree(path.join(repos, 'agent-board-feat'))
@@ -190,17 +190,17 @@ describe('previewTarget', () => {
       reason: expect.stringMatching(/does not exist/),
     })
     expect(target('agent-board-feat')).toMatchObject({ ok: false, reason: expect.stringMatching(/absolute/) })
-    expect(mp.previewTarget({ path: '' }, repo)).toMatchObject({
+    expect(mp.worktreeTarget({ path: '' }, repo)).toMatchObject({
       ok: false,
       reason: expect.stringMatching(/no local path/),
     })
-    expect(mp.previewTarget({ path: main }, null)).toMatchObject({
+    expect(mp.worktreeTarget({ path: main }, null)).toMatchObject({
       ok: false,
       reason: expect.stringMatching(/no repo/),
     })
   })
 
-  it("refuses a folder that is not one of the repo's worktrees, or not the board", () => {
+  it("refuses a folder that is not one of the repo's worktrees, and takes one whatever its package", () => {
     const plain = path.join(repos, 'plain')
     fs.mkdirSync(path.join(plain, '.git'), { recursive: true })
     expect(target(plain)).toMatchObject({ ok: false, reason: expect.stringMatching(/not a git worktree/) })
@@ -208,8 +208,9 @@ describe('previewTarget', () => {
     fs.mkdirSync(path.join(other, '.git'), { recursive: true })
     const foreign = worktree(path.join(repos, 'other-repo-wt'), { of: other })
     expect(target(foreign)).toMatchObject({ ok: false, reason: expect.stringMatching(/not a git worktree/) })
+    // Any repo the human configured runs for may run them: what its package is called does not matter.
     const app = worktree(path.join(repos, 'agent-board-app'), { name: 'some-app' })
-    expect(target(app)).toMatchObject({ ok: false, reason: expect.stringMatching(/own repo only/) })
+    expect(target(app)).toEqual({ ok: true, path: app })
   })
 })
 
