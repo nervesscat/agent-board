@@ -188,20 +188,24 @@ Lanes of a ticket you are working are yours to create (next section).
 - **Previews:** when the change can be tried (a page, an API), give the human a preview and put
   its link with what to try in the summary; say that what they post there stays in the copy. Keep
   it running while the ticket is in `review`.
-  - A branch of the board itself: the board runs it. `add_workspace` with your worktree's `path`
-    and `branch` (a worktree next to the main checkout, `../agent-board-<branch>`), then
-    `start_preview` with the `workspaceId`. It returns at once; `get_ticket` shows the workspace's
-    `managedPreview` (`building`, `starting`, `running` with its `url`, or `failed` with the last
-    log lines and the log paths). Do not run `pnpm dev` in your session for it: that dies with
-    your session. `start_preview` with `restart: true` rebuilds after more commits;
-    `stop_preview` stops it, and the board stops it by itself once the PR is merged or the
-    ticket is done, cancelled, archived or its workspace removed. The human's preview limit (8 by
-    default) caps how many the board runs at once; a start beyond it is refused with the limit.
-  - Anything else: start your branch from your worktree on a free port, with a copy of the data
+  - A repo with runs (the human configures them per repo in the project's settings: previews with
+    a link, jobs without; a checkout of the board has its `Preview`): the board runs them.
+    `add_workspace` with your worktree's `path` and `branch` (a worktree next to the main
+    checkout, `../<repo>-<branch>`; `repoId` for a repo other than the ticket's primary), then
+    `list_runs` and `start_run` by name (`all: true` for every run). It returns at once;
+    `list_runs` shows each run (`building`, `starting`, `running` with its `url`, or `failed` with
+    the last log lines and the log paths). You name a run, never a command: what runs is the
+    human's config. Do not run `pnpm dev` in your session for it: that dies with your session.
+    `start_run` with `restart: true` rebuilds after more commits; `stop_run` stops it, and the
+    board stops it by itself once the PR is merged or the ticket is done, cancelled, archived or
+    its workspace removed. `start_preview` / `stop_preview` still act on the first preview run.
+    The human's preview limit (8 by default) caps how many runs the board runs at once; a start
+    beyond it is refused with the limit.
+  - A repo with no runs: start your branch from your worktree on a free port, with a copy of the data
     rather than the real one (the project's `instructions` say how), then `set_preview` with the
     `workspaceId` and `previewUrl` once it answers (or `previewUrl` on `add_workspace` when it
-    already runs). The ticket page then shows a Preview card with an Open button and whether it
-    is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
+    already runs). The ticket page then shows it on its Runs card with an Open button and whether
+    it is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
     `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port
     the human uses day to day. The human may stop it from the Previews page when it listens on
     loopback and runs from the workspace's worktree; its link stays, as not running.
@@ -287,9 +291,9 @@ the ticket as its item is done:
    `update_ticket` with the PR's `prNumber`: the PR queue shows this ticket on the PR's card, and
    `get_ticket` the PR with its latest review. A PR ticket the board made for that PR is cancelled,
    with a post, and this ticket takes the PR over. (A PR on the ticket's branch links by itself.)
-6. **Preview running**: `start_preview` on the workspace, then `get_ticket` until its
-   `managedPreview` is `running` (`failed`: read the log lines and fix). For a repo the board cannot
-   build, start one the project's way and `set_preview` (see Previews in
+6. **Preview running**: `start_run` (or `start_preview`), then `list_runs` until it is `running`
+   (`failed`: read the log lines and fix). For a repo with no runs configured, start one the
+   project's way and `set_preview` (see Previews in
    [While working](#3-while-working)). Required whenever the change can be tried; when it cannot
    (docs only, a script), say why in the summary.
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
