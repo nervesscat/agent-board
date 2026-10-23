@@ -64,17 +64,30 @@ http_headers = { Authorization = "Bearer <token>" }
    day without one.
 3. **Break it down**: a new ticket starts with its project's default phases as its top-level
    tasks (`get_project` → `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR,
-   CI, Preview, Hand-off post). Tasks go two levels and no more: the concrete steps of the work go
-   under Implementation as its subtasks (`add_tasks` with `parentTaskId` = its id; a subtask takes
-   no subtasks). `set_task_done` as you finish each step, and tick each hand-off phase as you
-   finish it (step 7); on a rework, untick the phases the new work redoes and tick them again as
-   you redo each. When a phase does not fit, `remove_task` drops it (its steps go with it),
+   CI, Preview, Merged, Hand-off post). Tasks go two levels and no more: the concrete steps of the
+   work go under Implementation as its subtasks (`add_tasks` with `parentTaskId` = its id; a
+   subtask takes no subtasks). `set_task_done` as you finish each step. **The board ticks Pushed,
+   PR, CI, Preview and Merged itself**, from git, GitHub and the previews, and unticks one when its
+   fact stops holding:
+   - Pushed: the branch is on origin with every local commit (a new commit not pushed unticks it);
+   - PR: a PR for the ticket (its `prNumber`, else its branch) is open or merged;
+   - CI: the PR's GitHub checks are green on its head, or a PR comment whose first line is
+     `CI run locally: green on <sha>` names its head commit (a new push unticks it until it is
+     green again);
+   - Preview: one of the ticket's workspaces runs a preview, or its preview link answers;
+   - Merged: the PR is merged, or the branch was merged into its base.
+
+   Nobody ticks those by hand: `set_task_done` and `update_task` `done` on them are refused, and
+   `get_ticket` marks them `auto: true` (a top-level task with one of those names, in any case).
+   Hand-off post is yours: tick it once the summary is up to date (step 7), and on a rework untick
+   it until the summary is updated again. When a phase does not fit, `remove_task` drops it (its steps go with it),
    `update_task` rewords it, and `add_tasks` adds one (at the end). A lane starts without phases,
    since its parent carries the hand-off (`defaultPhases: true` on `create_ticket` seeds it
    anyway), and `defaultPhases: false` opts a ticket out. A ticket with no tasks (an older one, a
    lane, one opted out) gets its phases the same way: `add_tasks` with the names from
    `defaultPhases`, then its steps under the first. A phase with steps is done exactly when all its
-   steps are: ticking or unticking it does the same to its steps, and the steps' ticks settle it.
+   steps are: ticking or unticking it does the same to its steps, and the steps' ticks settle it
+   (a phase the board ticks follows its fact, not its steps).
    The progress bar the human sees counts tasks and subtasks alike, and together they are the
    hand-off's Implementation item (step 7).
    **A step that needs the human** (a credential, a manual action, a call only they can make): tag
@@ -87,6 +100,7 @@ http_headers = { Authorization = "Bearer <token>" }
    reaches and on a parent its last subtask ticks, too); `blocked: false` clears it once resolved.
    Tagging a done task reopens it. Move the whole ticket to `blocked` only when nothing else can go
    on (step 6).
+
 4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
    agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and
    `assignee`. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its
@@ -182,8 +196,8 @@ http_headers = { Authorization = "Bearer <token>" }
    ticket's worktree (checks, commit, push, preview), reply in the thread with what changed, and
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
    cursor is yours to hold, the board stores nothing per agent.
-7. **Hand off**: before `update_ticket` → `review`, every item, in order, ticking each hand-off
-   phase of the ticket as its item is done (the board ticks none itself):
+7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
+   PR, CI, Preview and Merged as their facts hold; Hand-off post is ticked by hand):
    1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
    2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
       project's instructions say how; here `pnpm test:e2e`).
@@ -203,7 +217,10 @@ http_headers = { Authorization = "Bearer <token>" }
       when you push with their account; GitHub never lets a PR's author be its requested reviewer,
       and the PR queue lists their own PRs under Waiting on others), and `update_ticket` with its
       `prNumber`: the PR queue then shows this ticket on the PR's card, with the PR and its latest
-      review. A PR ticket the board made for that PR is cancelled, with a post saying so.
+      review. A PR ticket the board made for that PR is cancelled, with a post saying so. While
+      GitHub's checks do not run, comment on the PR `CI run locally: green on <sha>` with the head
+      commit the checks of item 2 passed on (`gh pr comment`): that ticks CI. Comment again after
+      each push.
    6. **Preview running**: `start_preview` on the workspace and wait for `running` (for a repo the
       board cannot build, start one the project's way and `set_preview`; see Previews above).
       Required whenever the change can be tried; when it cannot (docs only, a script), say why in
@@ -217,11 +234,11 @@ http_headers = { Authorization = "Bearer <token>" }
 
    `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
    each a `code` and a `text` (`tasks_open`: Implementation, the ticket's tasks and subtasks, its
-   phases and their steps, the hand-off phases included: missing while it has none, or while some
-   of them, its lanes' included, are open; the other checks still verify each fact themselves; `no_pr`, `not_pushed`, `no_preview`,
+   phases and their steps, the hand-off phases included but Merged, which is the human's: missing
+   while it has none, or while some of them, its lanes' included, are open; the other checks still verify each fact themselves; `no_pr`, `not_pushed`, `no_preview`,
    `no_handoff_post`: no summary written by an agent since the branch's last commit (on a ticket
    that never had a summary, an agent's progress post since then still counts), `checks_unknown`:
-   the PR's CI is failing or still running). The move goes through anyway: fix each one.
+   the PR's CI is failing or still running, and no `CI run locally: green` comment names its head). The move goes through anyway: fix each one.
    `handoff.checks` lists every item with `ok`, first `not_merged` (Merged: the PR merged on
    GitHub, or the branch merged into its base), which is never in `missing`: merging is the
    human's. `get_ticket` returns the same `handoff`
