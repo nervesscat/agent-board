@@ -23,6 +23,7 @@ import {
   type StageKind,
   type FeedTab,
 } from '#/lib/constants'
+import type { RunType } from '#/lib/runs'
 
 export { COMMENT_PARENTS, STAGE_KINDS, type CommentParent, type StageColor, type StageKind }
 
@@ -101,8 +102,46 @@ export const repos = sqliteTable('repos', {
   repoPath: text('repo_path').notNull(),
   githubRepo: text('github_repo'),
   baseBranch: text('base_branch').notNull().default('main'),
+  // Whether the board gave it the default run once (a checkout of the board itself gets its preview):
+  // a run the human deleted is not given back.
+  runsSeeded: integer('runs_seeded', { mode: 'boolean' }).notNull().default(false),
   createdAt: now(),
 })
+
+// A run of a repo, as the human configures it in the project's settings: what the board starts from a
+// ticket's worktree of the repo (src/server/runs.ts). A preview answers on a port, a job has none.
+// Agents read these, never write them: the commands come from the human alone.
+export const runConfigs = sqliteTable(
+  'run_configs',
+  {
+    id: id(),
+    repoId: integer('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    type: text().$type<RunType>().notNull(),
+    // Each a whole command line run in the worktree; an empty install or build is skipped.
+    install: text().notNull().default(''),
+    build: text().notNull().default(''),
+    start: text().notNull().default(''),
+    // Set on its start command; `{port}` in a value is the port it was given.
+    env: text({ mode: 'json' }).$type<Record<string, string>>().notNull().default({}),
+    // A preview's fixed port (47101 to 47199); null takes the first free one. Always null on a job.
+    port: integer(),
+    // Where a preview answers once it is up ('' on a job).
+    healthPath: text('health_path').notNull().default(''),
+    // A fresh copy of the live data in <worktree>/data/preview, as DATA_DIR.
+    copyData: integer('copy_data', { mode: 'boolean' }).notNull().default(false),
+    position: integer().notNull().default(0),
+    createdBy: text('created_by').notNull().default(''),
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  (t) => [
+    uniqueIndex('run_configs_repo_name').on(t.repoId, t.name),
+    check('run_configs_type', sql`${t.type} IN ('preview', 'job')`),
+  ],
+)
 
 export const prs = sqliteTable(
   'prs',
@@ -224,6 +263,25 @@ export const ticketNeeds = sqliteTable(
   (t) => [primaryKey({ columns: [t.ticketId, t.needsId] }), index('ticket_needs_needs').on(t.needsId)],
 )
 
+// The repos a ticket's work spans, in order, each with its own branch, base and PR. The first is the
+// primary: the ticket's own repoId, branch, baseBranch and prNumber always say the same as it does.
+export const ticketRepos = sqliteTable(
+  'ticket_repos',
+  {
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    repoId: integer('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    branch: text().notNull().default(''),
+    baseBranch: text('base_branch').notNull().default('main'),
+    prNumber: integer('pr_number'),
+    position: integer().notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.ticketId, t.repoId] }), index('ticket_repos_repo').on(t.repoId)],
+)
+
 export const tasks = sqliteTable(
   'tasks',
   {
@@ -250,6 +308,8 @@ export const workspaces = sqliteTable('workspaces', {
     .notNull()
     .references(() => tickets.id, { onDelete: 'cascade' }),
   name: text().notNull(),
+  // The repo of the ticket its worktree is of; null is the ticket's primary repo.
+  repoId: integer('repo_id').references(() => repos.id, { onDelete: 'set null' }),
   branch: text().notNull().default(''),
   path: text().notNull().default(''),
   agent: text().notNull().default(''),
@@ -572,6 +632,8 @@ export type Project = typeof projects.$inferSelect
 export type Agent = typeof agents.$inferSelect
 export type Stage = typeof stages.$inferSelect
 export type Repo = typeof repos.$inferSelect
+export type RunConfig = typeof runConfigs.$inferSelect
+export type TicketRepo = typeof ticketRepos.$inferSelect
 export type Pr = typeof prs.$inferSelect
 export type Ticket = typeof tickets.$inferSelect
 export type Task = typeof tasks.$inferSelect

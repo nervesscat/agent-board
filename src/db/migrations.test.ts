@@ -570,3 +570,117 @@ describe('0033_archive_requests', () => {
     sqlite.close()
   })
 })
+
+describe('0034_multi_repo_tickets_and_runs', () => {
+  it("gives every ticket its repo as a one-repo list, and every workspace its ticket's repo, changing nothing else", () => {
+    const sqlite = databaseAt('0033_archive_requests')
+    const insertProject = sqlite.prepare('INSERT INTO projects (name) VALUES (?)')
+    const project = (name: string) => Number(insertProject.run(name).lastInsertRowid)
+    const two = project('two repos')
+    const none = project('no repos')
+    const repo = (projectId: number, name: string) =>
+      Number(
+        sqlite
+          .prepare('INSERT INTO repos (project_id, name, repo_path) VALUES (?, ?, ?)')
+          .run(projectId, name, `/code/${name}`).lastInsertRowid,
+      )
+    // Inserted out of name order: the project's first repo is the lowest name, as the board lists them.
+    const web = repo(two, 'web')
+    const api = repo(two, 'api')
+    const ticket = sqlite.prepare(
+      'INSERT INTO tickets (project_id, repo_id, parent_id, title, created_by, branch, base_branch, pr_number) VALUES (@project, @repo, @parent, @title, @by, @branch, @base, @pr)',
+    )
+    const add = (title: string, over: Record<string, unknown> = {}) =>
+      Number(
+        ticket.run({
+          project: two,
+          repo: null,
+          parent: null,
+          title,
+          by: 'claude',
+          branch: '',
+          base: 'main',
+          pr: null,
+          ...over,
+        }).lastInsertRowid,
+      )
+    const onWeb = add('on web', { repo: web, branch: 'feat/web', base: 'dev', pr: 12 })
+    const firstRepo = add('no repo given', { branch: 'feat/first' })
+    const lane = add('a lane', { repo: web, parent: onWeb, branch: 'lane/web', base: 'feat/web' })
+    const repoless = add('nowhere', { project: none, branch: 'feat/x' })
+    sqlite.prepare('INSERT INTO tasks (ticket_id, text) VALUES (?, ?)').run(onWeb, 'Implementation')
+    sqlite
+      .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+      .run(onWeb, 'claude', 'Started.')
+    const workspace = sqlite.prepare('INSERT INTO workspaces (ticket_id, name, path) VALUES (?, ?, ?)')
+    const wsWeb = Number(workspace.run(onWeb, 'wt', '/code/web-feat').lastInsertRowid)
+    const wsFirst = Number(workspace.run(firstRepo, 'wt', '/code/api-feat').lastInsertRowid)
+    const wsNone = Number(workspace.run(repoless, 'wt', '').lastInsertRowid)
+
+    const counts = () =>
+      ['projects', 'repos', 'tickets', 'tasks', 'updates', 'workspaces'].map(
+        (table) => (sqlite.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
+      )
+    const before = counts()
+    const tickets = () => sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()
+    const ticketsBefore = tickets()
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(counts()).toEqual(before)
+    // The tickets themselves are untouched, their repo, branch and PR included.
+    expect(tickets()).toEqual(ticketsBefore)
+    expect(
+      sqlite
+        .prepare(
+          'SELECT ticket_id, repo_id, branch, base_branch, pr_number, position FROM ticket_repos ORDER BY ticket_id',
+        )
+        .all(),
+    ).toEqual([
+      { ticket_id: onWeb, repo_id: web, branch: 'feat/web', base_branch: 'dev', pr_number: 12, position: 0 },
+      {
+        ticket_id: firstRepo,
+        repo_id: api,
+        branch: 'feat/first',
+        base_branch: 'main',
+        pr_number: null,
+        position: 0,
+      },
+      {
+        ticket_id: lane,
+        repo_id: web,
+        branch: 'lane/web',
+        base_branch: 'feat/web',
+        pr_number: null,
+        position: 0,
+      },
+    ])
+    expect(sqlite.prepare('SELECT id, repo_id FROM workspaces ORDER BY id').all()).toEqual([
+      { id: wsWeb, repo_id: web },
+      { id: wsFirst, repo_id: api },
+      { id: wsNone, repo_id: null },
+    ])
+    expect(sqlite.prepare('SELECT runs_seeded FROM repos').all()).toEqual([
+      { runs_seeded: 0 },
+      { runs_seeded: 0 },
+    ])
+    expect(sqlite.prepare('SELECT count(*) AS n FROM run_configs').get()).toEqual({ n: 0 })
+
+    // A repo deleted takes its ticket rows and run configs with it, and leaves its workspaces on the primary.
+    sqlite
+      .prepare("INSERT INTO run_configs (repo_id, name, type, start) VALUES (?, 'Preview', 'preview', 'x')")
+      .run(web)
+    sqlite.prepare('DELETE FROM repos WHERE id = ?').run(web)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM run_configs').get()).toEqual({ n: 0 })
+    expect(sqlite.prepare('SELECT ticket_id FROM ticket_repos ORDER BY ticket_id').all()).toEqual([
+      { ticket_id: firstRepo },
+    ])
+    expect(sqlite.prepare('SELECT repo_id FROM workspaces WHERE id = ?').get(wsWeb)).toEqual({
+      repo_id: null,
+    })
+    expect(() =>
+      sqlite.prepare("INSERT INTO run_configs (repo_id, name, type) VALUES (?, 'x', 'cron')").run(api),
+    ).toThrow(/CHECK constraint/)
+    sqlite.close()
+  })
+})
