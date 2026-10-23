@@ -6,6 +6,8 @@ import { assertRepo, repoNameWithOwner } from './git'
 import { HttpError, notFound } from './http'
 import { forgetPreview } from './managedPreview'
 import { createProject, getProject } from './projects'
+import { seedRepo } from './runConfig'
+import { forgetRepoRuns } from './runs'
 
 /** A local git checkout the board reads with git and gh. Every repo belongs to one project. */
 
@@ -80,6 +82,8 @@ export async function createRepo(
     refType: 'repo',
     refId: row.id,
   })
+  // A checkout of the board gets the board's own preview run.
+  seedRepo(row)
   return row
 }
 
@@ -130,6 +134,8 @@ export async function updateRepo(
 
 export function deleteRepo(id: number, actor: string) {
   const r = getRepo(id)
+  // What runs from its worktrees goes with it: its run configs and ticket rows go with the row.
+  forgetRepoRuns(id, actor)
   db.transaction(
     (tx) => {
       // The repo's PR rows go with it, and so do their tickets: a PR's own ticket is for its PR, and would read as a

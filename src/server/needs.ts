@@ -391,7 +391,7 @@ export async function changeTicket(
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   const subject = {
     ...before,
-    repoId: patch.repoId ?? before.repoId,
+    repoId: patch.repoId ?? patch.repos?.[0]?.repoId ?? before.repoId,
     baseBranch: patch.baseBranch || before.baseBranch,
     from: before.status,
   }
@@ -440,7 +440,10 @@ export async function newTicket(
   const { needs = [], defaultPhases, ...rest } = input
   const ids = checkNeeds({ id: null, projectId }, needs)
   if (ids.length && rest.status) {
-    const { repo, baseBranch } = features.placement(projectId, rest)
+    const { repo, baseBranch } = features.placement(projectId, {
+      ...rest,
+      repoId: rest.repoId ?? rest.repos?.[0]?.repoId,
+    })
     const to = resolveStage(listStages(projectId), rest.status).key
     await guardDone({ id: null, projectId, repoId: repo.id, baseBranch }, to, ids, opts)
   }

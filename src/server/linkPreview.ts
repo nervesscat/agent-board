@@ -12,7 +12,7 @@ import { activePreviews, worktreeTarget } from './managedPreview'
 import { activeRuns, stopRun } from './runs'
 import { forgetPreviewState, isLocalUrl } from './preview'
 import { getProject } from './projects'
-import { ticketRepo } from './repos'
+import { workspaceRepo } from './ticketRepos'
 
 /**
  * Stopping a link preview: a server an agent started itself from its worktree (`pnpm dev`, `vite dev`)
@@ -374,7 +374,7 @@ function linkTarget(ws: schema.Workspace, opts: { ownStopped?: boolean } = {}): 
   if (held) return refuse(409, `:${port} is a preview the board runs (workspace ${held.workspaceId})`)
   const ticket = db.select().from(schema.tickets).where(eq(schema.tickets.id, ws.ticketId)).get()
   if (!ticket) return refuse(409, 'the ticket is gone')
-  const target = worktreeTarget(ws, ticketRepo(ticket))
+  const target = worktreeTarget(ws, workspaceRepo(ws, ticket))
   if (!target.ok) return refuse(400, target.reason)
   return { ok: true, ws, ticket, port, worktree: target.path, roots: worktreeRoots(ws.path, target.path) }
 }
