@@ -4,6 +4,7 @@ import { FolderGit2, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { LayoutEditor } from '#/components/LayoutEditor'
 import { ListInput } from '#/components/ListInput'
 import { Markdown } from '#/components/Markdown'
 import { RichEditor } from '#/components/RichEditor'
@@ -67,6 +68,7 @@ function Settings() {
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
       <StagesEditor projectId={id} />
+      <LayoutEditor key={`layout-${id}`} projectId={id} saved={p.layout} />
     </div>
   )
 }
