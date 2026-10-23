@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, max, ne
 
 import { db, schema } from '#/db'
 import type { StageKind } from '#/lib/constants'
+import { mergeLayout, shownIn } from '#/lib/layout'
 import { stageColumn } from '#/lib/stages'
 import { dayBounds } from './activity'
 import { listActors } from './actors'
@@ -390,7 +391,12 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
   const column = nextStage ? stageColumn(top, nextStage.key) : []
 
   return {
-    project: { id: project.id, name: project.name },
+    // `overview`: the cards its Overview shows, in order (the project's layout), for Home too.
+    project: {
+      id: project.id,
+      name: project.name,
+      overview: shownIn(mergeLayout(project.layout), 'overview'),
+    },
     stages: stages.map(({ key, name, kind, color }) => ({ key, name, kind, color })),
     agents: listAgents(project.id).map((a) => ({ name: a.name, avatarUrl: a.avatarUrl })),
     needsYou: {

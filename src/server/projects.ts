@@ -2,6 +2,7 @@ import { asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
+import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
 import { MAX_TAG_LENGTH, cleanSuggestions, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
 import { hostToolsForAgents } from './hostTools'
@@ -24,9 +25,12 @@ export const BUILT_IN_PHASES: readonly string[] = [
   'Hand-off post',
 ]
 
-/** A project as it is handed out: `defaultPhases` is the list in effect, never null. */
-function withPhases<T extends { defaultPhases: string[] | null }>(p: T) {
-  return { ...p, defaultPhases: p.defaultPhases ?? [...BUILT_IN_PHASES] }
+/**
+ * A project as it is handed out: `defaultPhases` is the list in effect and `layout` the layout in
+ * effect (what was saved merged with the elements there are now), never null.
+ */
+function withPhases<T extends Pick<schema.Project, 'defaultPhases' | 'layout'>>(p: T) {
+  return { ...p, defaultPhases: p.defaultPhases ?? [...BUILT_IN_PHASES], layout: mergeLayout(p.layout) }
 }
 
 /** Projects with their repos and what they hold, for the top-bar menu and agents' `list_projects`. */
@@ -122,20 +126,40 @@ export const TagSuggestions = z
   .max(50)
 
 /**
+ * A project's layout as REST takes it: its elements in order, each with its area and whether it is
+ * hidden. Ids and areas are checked as it is merged, not here: an id or an area the board no longer
+ * knows is dropped or put back rather than refused. Null goes back to the defaults.
+ */
+export const LayoutBody = z
+  .array(
+    z.object({
+      id: z.string().max(100),
+      area: z.string().max(40),
+      hidden: z.boolean().optional(),
+    }),
+  )
+  .max(LAYOUT_ELEMENTS.length * LAYOUT_AREAS.length)
+  .nullable()
+
+/**
  * `defaultPhases`: the names trimmed, null for the built-in list again. `tagSuggestions`: trimmed,
- * blanks and repeats in any casing left out; [] stays empty.
+ * blanks and repeats in any casing left out; [] stays empty. `layout`: kept as it is in effect
+ * (`mergeLayout`: unknown ids dropped, locked elements shown), null for the defaults again.
  */
 export function updateProject(
   id: number,
-  patch: Partial<Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions'>>,
+  patch: Partial<
+    Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'layout'>
+  >,
   actor: string,
 ) {
   getProject(id)
-  const { defaultPhases, tagSuggestions, ...rest } = patch
+  const { defaultPhases, tagSuggestions, layout, ...rest } = patch
   const set = {
     ...rest,
     ...(defaultPhases !== undefined && { defaultPhases: defaultPhases?.map((name) => name.trim()) ?? null }),
     ...(tagSuggestions !== undefined && { tagSuggestions: cleanSuggestions(tagSuggestions) }),
+    ...(layout !== undefined && { layout: layout && mergeLayout(layout) }),
   }
   const row = db.update(schema.projects).set(set).where(eq(schema.projects.id, id)).returning().get()!
   logActivity({

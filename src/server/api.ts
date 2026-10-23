@@ -216,11 +216,15 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       instructions: Instructions.optional(),
       defaultPhases: DefaultPhases.optional(),
       tagSuggestions: projects.TagSuggestions.optional(),
+      layout: projects.LayoutBody.optional(),
     }),
   )
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
   if (body.defaultPhases !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's default phases")
+  // Which pages, cards and sections the human sees, and where: theirs to arrange.
+  if (body.layout !== undefined && isAgent(request))
+    throw new HttpError(403, "only the human sets the project's layout")
   return json(projects.updateProject(id(params), body, actor))
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
