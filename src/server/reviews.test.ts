@@ -26,11 +26,11 @@ describe('localPath', () => {
 describe('actors', () => {
   it('remembers how each name signed in; the last sign-in wins; built-ins fill the gaps', async () => {
     const { listActors, noteActor } = await import('./actors')
-    noteActor('claude-spark', 'agent')
+    noteActor('claude-acme', 'agent')
     noteActor('laptop', 'human')
     noteActor('laptop', 'human')
     const kinds = new Map(listActors().map((a) => [a.name, a.kind]))
-    expect(kinds.get('claude-spark')).toBe('agent')
+    expect(kinds.get('claude-acme')).toBe('agent')
     expect(kinds.get('laptop')).toBe('human')
     expect(kinds.get('claude')).toBe('agent')
     noteActor('laptop', 'agent')
