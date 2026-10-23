@@ -923,6 +923,62 @@ test('a link to a PR typed into the address bar after the reader picked a stage 
   expect((await marks(page)).map((m) => m.id)).toEqual([`pr-${target.id}`])
 })
 
+test('Back to where the page was opened, its #link changed before the page took over, marks nothing', async ({
+  page,
+  project,
+  api,
+  human,
+}) => {
+  const posts: number[] = []
+  const t = await longTicket(api, human, 'Linked while loading', 'in_progress', async (id) => {
+    for (const body of ['Opened on this one', 'Then on this one'])
+      posts.push(
+        (await ok<Row>(human.post(`/api/tickets/${id}/updates`, { data: { body, progress: false } }))).id,
+      )
+  })
+  const [first, second] = posts as [number, number]
+  // Opened from a page already up (a goto would wait for the page to be taken over).
+  await overview(page, project)
+  // The page's scripts held back: until they run, only the browser follows the URL's #link.
+  let release = () => {}
+  const released = new Promise<void>((r) => (release = r))
+  await page.route(
+    (url) => url.pathname.startsWith('/assets/') && url.pathname.endsWith('.js'),
+    async (route) => {
+      await released
+      await route.continue()
+    },
+  )
+  const href = `/projects/${project.id}/features/${t.id}#post-${first}`
+  await page.evaluate((h) => (location.href = h), href)
+  await page.waitForURL(new RegExp(`/features/${t.id}#post-${first}$`), { waitUntil: 'commit' })
+  await page.waitForFunction(() => document.readyState !== 'loading')
+  // A #link followed (typed, or clicked on the page) while the scripts load: a new entry of the history.
+  await page.evaluate((id) => (location.hash = `post-${id}`), second)
+  await expect(page).toHaveURL(new RegExp(`#post-${second}$`))
+  expect(
+    await page.evaluate(() => Object.keys(document.body).some((k) => k.startsWith('__reactFiber'))),
+  ).toBe(false)
+  release()
+  await page.waitForFunction(() => Object.keys(document.body).some((k) => k.startsWith('__reactFiber')))
+  await feedDrawn(page)
+  await expectRevealed(page, post(page, second))
+  await expectMarkGone(page)
+
+  // Back to the entry the page was opened on, then Forward: returns both, nothing marked.
+  await recordMarks(page)
+  await page.goBack()
+  await expect(page).toHaveURL(new RegExp(`#post-${first}$`))
+  await page.waitForTimeout(1_000)
+  expect(await marks(page)).toEqual([])
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
+  await page.goForward()
+  await expect(page).toHaveURL(new RegExp(`#post-${second}$`))
+  await page.waitForTimeout(1_000)
+  expect(await marks(page)).toEqual([])
+  await expect(page.locator('[data-revealed]')).toHaveCount(0)
+})
+
 /** A PR in Reviewed with a review result, its summary `md`. */
 async function pointingTo(
   human: APIRequestContext,

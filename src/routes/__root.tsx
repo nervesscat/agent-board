@@ -1,5 +1,12 @@
 import { type QueryClient, useQuery } from '@tanstack/react-query'
-import { HeadContent, Link, Outlet, Scripts, createRootRouteWithContext } from '@tanstack/react-router'
+import {
+  HeadContent,
+  Link,
+  Outlet,
+  ScriptOnce,
+  Scripts,
+  createRootRouteWithContext,
+} from '@tanstack/react-router'
 import { Menu } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -14,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover
 import { Toaster } from '#/components/ui/sonner'
 import { Tip, TooltipProvider } from '#/components/ui/tooltip'
 import { get, type Me } from '#/lib/api'
+import { KEY_ENTRIES } from '#/lib/reveal'
 import { followSystemTheme } from '#/lib/theme'
 import appCss from '#/styles.css?url'
 
@@ -46,6 +54,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Before the page's scripts load: see KEY_ENTRIES. */}
+        <ScriptOnce>{KEY_ENTRIES}</ScriptOnce>
       </head>
       <body className="min-h-dvh bg-background text-foreground antialiased">
         {children}

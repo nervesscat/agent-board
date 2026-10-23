@@ -75,6 +75,9 @@ type Followed = Pick<AnyRouter, 'latestLocation' | 'stores'> & { history: Router
  */
 export function followHistory(router: Followed) {
   if (typeof window === 'undefined') return
+  // From here on, an entry with none of the router's state is one the browser made while the router ran.
+  const keying = window as { stopKeyingEntries?: () => void }
+  keying.stopKeyingEntries?.()
   router.history.subscribe(({ action, location }) => {
     moved = action.type
     if (madeByBrowser(action.type)) {
@@ -92,11 +95,42 @@ export function followHistory(router: Followed) {
   })
 }
 
-/** Whether the history moved by popstate to an entry the router never wrote: one the browser made. */
+/**
+ * Whether the history moved by popstate to an entry the router never wrote: one the browser made while
+ * the router ran (those it made before are keyed by KEY_ENTRIES).
+ */
 function madeByBrowser(action: string) {
   const state = window.history.state as { __TSR_key?: unknown } | null
   return returned(action) && !state?.__TSR_key
 }
+
+/**
+ * Run inline in the page's head, before its scripts load: gives each entry of the history the page makes
+ * before the router starts the state the router gives the one it starts on, as the entry is made.
+ *
+ * A #link followed while the scripts load (typed into the address bar, or clicked on the page) makes an
+ * entry of the browser's own, and the router keys only the entry it starts on: Back to the one before
+ * would come to an entry with none of the router's state, which followHistory takes for a #link the
+ * browser followed while the router ran, an arrival. Keyed, Back to it is a return. followHistory stops
+ * the keying as the router starts, so an entry the browser makes after that is still told apart.
+ *
+ * A string, not a function's source: the bundler may wrap a function's inner ones in helpers of its own.
+ */
+export const KEY_ENTRIES = `(function () {
+  var history = window.history
+  function key() {
+    var state = history.state
+    if (state && (state.__TSR_key || state.key)) return
+    var k = (Math.random() + 1).toString(36).substring(7)
+    history.replaceState({ __TSR_index: 0, key: k, __TSR_key: k }, '')
+  }
+  key()
+  window.addEventListener('popstate', key)
+  window.stopKeyingEntries = function () {
+    window.removeEventListener('popstate', key)
+    delete window.stopKeyingEntries
+  }
+})()`
 
 /**
  * Whether the router has finished loading the entry the history is leaving. It has not heard of the

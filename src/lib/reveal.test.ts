@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { anchorId, cameBack, followHistory, parseAnchor } from './reveal'
+import { KEY_ENTRIES, anchorId, cameBack, followHistory, parseAnchor } from './reveal'
 
 describe('parseAnchor', () => {
   it('names an element by its id', () => {
@@ -93,5 +93,52 @@ describe('followHistory', () => {
     expect(patched).not.toHaveBeenCalled()
     move('BACK')
     expect(cameBack()).toBe(true)
+  })
+
+  it('takes Back to an entry the browser made before the router started for a return', () => {
+    // The page as the browser loads it: one entry, no state, and the head's script run on it.
+    const listeners = new Set<() => void>()
+    const history = new BrowserHistory()
+    const win = {
+      history,
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    }
+    new Function('window', KEY_ENTRIES)(win)
+    const opened = history.state as { __TSR_key: string }
+    expect(opened).toEqual({ __TSR_index: 0, key: opened.__TSR_key, __TSR_key: opened.__TSR_key })
+    // A #link followed while the scripts load: the browser's own entry, keyed as it is made.
+    const browserMakes = () => {
+      history.state = null
+      for (const fn of listeners) fn()
+    }
+    browserMakes()
+    const followed = history.state as { __TSR_key: string }
+    expect(followed.__TSR_key).toBeTruthy()
+    expect(followed.__TSR_key).not.toBe(opened.__TSR_key)
+
+    // The router starts on that entry, and from then on the browser's entries are left to followHistory.
+    vi.stubGlobal('window', win)
+    vi.stubGlobal('document', { dispatchEvent: () => true })
+    let hear: (move: { action: { type: string }; location: { state: unknown } }) => void = () => {}
+    const location = { href: '/prs', state: followed }
+    followHistory({
+      history: { subscribe: (fn: typeof hear) => ((hear = fn), () => {}) },
+      latestLocation: location,
+      stores: { resolvedLocation: { get: () => location } },
+    } as never)
+    expect(listeners.size).toBe(0)
+    expect('stopKeyingEntries' in win).toBe(false)
+
+    // Back to the entry the page was opened on: a return.
+    history.state = opened
+    hear({ action: { type: 'GO' }, location: { state: opened } })
+    expect(cameBack()).toBe(true)
+    // A #link typed into the address bar now: an arrival still.
+    browserMakes()
+    expect(history.state).toBeNull()
+    hear({ action: { type: 'GO' }, location: { state: routerState } })
+    expect(cameBack()).toBe(false)
+    expect(history.state).toEqual(routerState)
   })
 })
