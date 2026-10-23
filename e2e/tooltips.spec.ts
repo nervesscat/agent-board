@@ -844,7 +844,7 @@ test('a card dragged to another column moves, and leaves no tooltip behind', asy
   project,
 }) => {
   const t = await api.ticket({ title: 'Drag me', status: 'todo' })
-  const card = await board(page, project.id)
+  await board(page, project.id)
   await expectTooltip(card('todo', /Drag me/), 'Drag me')
   await card('todo', /Drag me/).dragTo(page.locator('[data-column="in_progress"]'))
   await expect(card('in_progress', /Drag me/)).toBeVisible()
@@ -920,4 +920,59 @@ test('no native title is left on the main pages', async ({ page, api, human, pro
     await page.waitForLoadState('networkidle')
     expect(await nativeTitles(page), url).toEqual([])
   }
+})
+
+test('scrolling closes an open tooltip, which never lengthens the page, and it opens again after', async ({
+  page,
+  api,
+  project,
+}) => {
+  for (let i = 1; i <= 14; i++) await api.ticket({ title: `Scrolled card ${i}`, status: 'todo' })
+  await page.setViewportSize({ width: 1000, height: 600 })
+  await board(page, project.id)
+  const column = page.locator('[data-column="todo"]')
+  await expect(column.getByRole('link')).toHaveCount(14)
+  // The column scrolls on its own: more cards than fit.
+  expect(await column.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+  const page0 = await page.evaluate(() => document.documentElement.scrollHeight)
+
+  // The last card in view, near the window's bottom edge.
+  const links = column.getByRole('link')
+  const last = await links.evaluateAll((els) => {
+    const bottom = window.innerHeight
+    return els.reduce((n, el, i) => (el.getBoundingClientRect().bottom <= bottom ? i : n), 0)
+  })
+  const low = links.nth(last)
+  await expectTooltip(low, /Scrolled card/)
+  // Positioned fixed: the page is no longer and has not scrolled with the tooltip open.
+  expect(
+    await tooltip(page).evaluate((el) => getComputedStyle(el.parentElement as HTMLElement).position),
+  ).toBe('fixed')
+  expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(page0)
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+  // The column scrolls under the still pointer: the tooltip closes, and stays closed.
+  await page.mouse.wheel(0, 300)
+  await expect.poll(() => column.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  await expect(anyTooltip(page)).toHaveCount(0)
+  await page.waitForTimeout(PAST_THE_DELAY)
+  await expect(anyTooltip(page)).toHaveCount(0)
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+  // Scrolling back up closes it too.
+  await page.mouse.wheel(0, -1000)
+  await expect.poll(() => column.evaluate((el) => el.scrollTop)).toBe(0)
+  await expectTooltip(links.nth(1), /Scrolled card/)
+  await page.mouse.wheel(0, 200)
+  await expect(anyTooltip(page)).toHaveCount(0)
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+  // Once scrolling stops, hover and keyboard focus open it again.
+  const again = links.nth(5)
+  await again.scrollIntoViewIfNeeded()
+  await expectTooltip(again, /Scrolled card/)
+  await page.mouse.move(0, 0)
+  await expect(tooltip(page)).toHaveCount(0)
+  await tabTo(again)
+  await expect(tooltip(page)).toBeVisible()
 })

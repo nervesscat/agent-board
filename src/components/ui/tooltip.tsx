@@ -7,8 +7,33 @@ function TooltipProvider({ delay = 0, ...props }: TooltipPrimitive.Provider.Prop
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delay={delay} {...props} />
 }
 
-function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+/**
+ * A tooltip that closes as soon as anything scrolls while it is open (a board column, a list, the
+ * page), the way a native title does: its trigger has moved from under it, and the bubble would float
+ * where the trigger was. The next hover or focus opens it again.
+ */
+function Tooltip({ actionsRef, onOpenChange, ...props }: TooltipPrimitive.Root.Props) {
+  const ownActions = React.useRef<TooltipPrimitive.Root.Actions | null>(null)
+  const actions = actionsRef ?? ownActions
+  const [open, setOpen] = React.useState(false)
+  React.useEffect(() => {
+    if (!open) return
+    const close = () => actions.current?.close()
+    // In the capture phase, a scroll of any element reaches the window, not only the page's own.
+    window.addEventListener('scroll', close, { capture: true, passive: true })
+    return () => window.removeEventListener('scroll', close, { capture: true })
+  }, [open, actions])
+  return (
+    <TooltipPrimitive.Root
+      data-slot="tooltip"
+      actionsRef={actions}
+      onOpenChange={(next, details) => {
+        setOpen(next)
+        onOpenChange?.(next, details)
+      }}
+      {...props}
+    />
+  )
 }
 
 function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
@@ -27,7 +52,9 @@ function TooltipContent({
   Pick<TooltipPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>) {
   return (
     <TooltipPrimitive.Portal>
+      {/* Fixed, so an open tooltip near an edge never makes the page longer or scroll it. */}
       <TooltipPrimitive.Positioner
+        positionMethod="fixed"
         align={align}
         alignOffset={alignOffset}
         side={side}
