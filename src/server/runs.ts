@@ -751,7 +751,7 @@ async function go(e: Entry, run: RunConfig) {
   if (e.dataDir) await fs.promises.rm(e.dataDir, { recursive: true, force: true })
   else await fs.promises.rm(path.dirname(e.logs.build), { recursive: true, force: true })
   await fs.promises.mkdir(path.dirname(e.logs.build), { recursive: true })
-  if (!e.dataDir) ownFolder(runsDirOf(e.path))
+  ownFolder(e.dataDir ?? runsDirOf(e.path))
   const env = worktreeEnv()
   const step = async (name: RunStep, command: string) => {
     // Stopped while it cleared the last run's data: nothing more starts.
@@ -777,7 +777,6 @@ async function go(e: Entry, run: RunConfig) {
     e.step = 'copy'
     await runner.copyData(e.dataDir)
     if (!current(e)) return
-    ownFolder(e.dataDir)
   }
 
   e.status = 'starting'
