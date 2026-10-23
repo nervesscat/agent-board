@@ -825,11 +825,22 @@ describe('autostart', () => {
 
   it('runs the AppImage when the app runs from one, else the executable', () => {
     const exe = '/tmp/.mount_agentXYZ/agent-board'
-    expect(autostartExec({ APPIMAGE: '/home/me/Apps/agent-board-0.1.0-x86_64.AppImage' }, exe)).toBe(
-      '/home/me/Apps/agent-board-0.1.0-x86_64.AppImage',
-    )
+    const image = '/home/me/Apps/agent-board-0.1.0-x86_64.AppImage'
+    expect(autostartExec({ APPIMAGE: image, APPDIR: '/tmp/.mount_agentXYZ' }, exe)).toBe(image)
+    expect(autostartExec({ APPIMAGE: image, APPDIR: '/tmp/.mount_agentXYZ/' }, exe)).toBe(image)
     expect(autostartExec({}, '/opt/CrossBoard/agent-board')).toBe('/opt/CrossBoard/agent-board')
-    expect(autostartExec({ APPIMAGE: 'relative.AppImage' }, exe)).toBe(exe)
+    expect(autostartExec({ APPIMAGE: 'relative.AppImage', APPDIR: '/tmp/.mount_agentXYZ' }, exe)).toBe(exe)
+    expect(autostartExec({ APPIMAGE: image, APPDIR: 'relative' }, exe)).toBe(exe)
+    expect(autostartExec({ APPIMAGE: image }, exe)).toBe(exe)
+  })
+
+  it('runs the installed executable when the APPIMAGE it sees belongs to another AppImage', () => {
+    // Started from a terminal another AppImage app opened: that image's APPIMAGE and APPDIR are inherited.
+    const env = { APPIMAGE: '/home/u/Applications/Other.AppImage', APPDIR: '/tmp/.mount_OtherAB' }
+    expect(autostartExec(env, '/opt/CrossBoard/agent-board')).toBe('/opt/CrossBoard/agent-board')
+    // A mount whose name only starts like the other's is not inside it.
+    expect(autostartExec(env, '/tmp/.mount_OtherABC/agent-board')).toBe('/tmp/.mount_OtherABC/agent-board')
+    expect(autostartExec(env, '/tmp/.mount_OtherAB')).toBe('/tmp/.mount_OtherAB')
   })
 
   it('writes an entry that starts it at login', () => {

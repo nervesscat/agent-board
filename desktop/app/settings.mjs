@@ -569,13 +569,18 @@ export const autostartFile = (env, home = os.homedir()) =>
 
 /**
  * What starting at login runs: the AppImage itself when the app runs from one (the executable is in a
- * mount that goes when it quits), else the app's executable.
+ * mount that goes when it quits), else the app's executable. It runs from one when the executable is
+ * inside `$APPDIR`, that image's mount: an installed app started from a terminal some other AppImage
+ * opened inherits that image's APPIMAGE and APPDIR, and must not start that one at login.
  * @param {Env} env
  * @param {string} execPath
  */
 export const autostartExec = (env, execPath) => {
   const image = env.APPIMAGE?.trim()
-  return image && path.posix.isAbsolute(image) ? image : execPath
+  const mount = env.APPDIR?.trim()
+  if (!image || !path.posix.isAbsolute(image) || !mount || !path.posix.isAbsolute(mount)) return execPath
+  const rel = path.posix.relative(path.posix.resolve(mount), path.posix.resolve(execPath))
+  return rel && !rel.startsWith('..') && !path.posix.isAbsolute(rel) ? image : execPath
 }
 
 /**
