@@ -1,0 +1,157 @@
+# Builds the desktop app on Windows and Linux and publishes both to the GitHub Release of the tag
+# (docs/releasing.md). Push a tag v<version>, the version of desktop/app/package.json, or run it by hand
+# (workflow_dispatch) on a commit whose version has no release yet. Each build job runs
+# `pnpm release --stage-only` (scripts/release.mjs): pnpm desktop:package, then every file copied to
+# desktop/dist/release under its versioned name and its stable one, the one
+# https://github.com/nervesscat/agent-board/releases/latest/download/<name> always points to.
+# The release is published only when both builds succeed, so it never goes out with a platform missing.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the installer (pnpm desktop:package) and stage it
+        run: pnpm release --stage-only
+
+      - name: Smoke-test the unpacked app
+        run: pnpm desktop:smoke --port 8240
+
+      - name: Check the stable name
+        shell: bash
+        run: test -f desktop/dist/release/agent-board-setup-x64.exe
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-windows
+          path: desktop/dist/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  # The Linux packages come with the Linux packaging change to desktop/package.mjs. On a commit without
+  # it, pnpm desktop:package stops here with "the installer is built on Windows (NSIS, x64)", this job
+  # fails, and no release is published (the publish job needs both builds).
+  linux:
+    name: Linux packages (AppImage, deb, rpm, pacman)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # rpmbuild for the .rpm, bsdtar for the pacman package, and what Electron needs to check the
+      # packed driver.
+      - name: Install the packaging tools
+        run: >-
+          sudo apt-get update && sudo apt-get install -y rpm libarchive-tools
+          libgtk-3-0t64 libnss3 libgbm1 libasound2t64 libxss1 libxtst6 libnotify4 libsecret-1-0
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the Linux packages (pnpm desktop:package) and stage them
+        run: |
+          if ! pnpm release --stage-only; then
+            {
+              echo '### Linux packages not built'
+              echo 'pnpm desktop:package failed on Linux. A commit without the Linux packaging change'
+              echo 'builds only the Windows installer: no release is published from this run.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: Check the stable names
+        run: |
+          test -f desktop/dist/release/agent-board-x86_64.AppImage
+          test -f desktop/dist/release/agent-board_amd64.deb
+          ls -l desktop/dist/release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-linux
+          path: desktop/dist/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish the GitHub Release
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The tag
+        id: tag
+        shell: bash
+        run: |
+          version=$(node -p "require('./desktop/app/package.json').version")
+          tag="v$version"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "::error::tag $GITHUB_REF_NAME is not v<version of desktop/app/package.json> ($tag)"
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          path: release
+          merge-multiple: true
+
+      - name: Create the release or add to it
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          ls -l release
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+          else
+            gh release create "$TAG" release/* --target "$GITHUB_SHA" --title "CrossBoard $VERSION" --generate-notes
+          fi
+          {
+            echo "### Released $TAG"
+            for f in agent-board-setup-x64.exe agent-board-x86_64.AppImage agent-board_amd64.deb agent-board.x86_64.rpm agent-board.pacman; do
+              if [ -f "release/$f" ]; then
+                echo "- https://github.com/$GH_REPO/releases/latest/download/$f"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
