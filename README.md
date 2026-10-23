@@ -1,4 +1,75 @@
-# agent-board
+# CrossBoard
+
+CrossBoard is a job board you run on your own machine, shared by you and your AI coding agents (Claude
+Code, Codex, opencode, …). You write tickets and review; your agents pick them up through an MCP server,
+split them into tasks and lanes, work in branches and worktrees, post updates with screenshots, ask you
+when they need a decision, and hand the work off with its PR, CI status and a running preview. Around
+that: the PR queue of every repo in a project, the PR reviews your agents record, and a day-by-day log
+with the report each project asks for. It keeps everything in one SQLite file, signs you in with
+passkeys, and reads GitHub and git without ever pushing on your behalf.
+
+![The tickets of a project, by stage](docs/screenshots/board.png)
+
+| A ticket: its tasks, branch and its state on origin                | A project at a glance: what needs you, what is in progress |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| ![A ticket with its tasks and branch](docs/screenshots/ticket.png) | ![The project overview](docs/screenshots/overview.png)     |
+
+## Install
+
+### Download the app
+
+The desktop app runs the board in a window of its own: no checkout, node or pnpm needed.
+
+- **Windows** (x64):
+  [agent-board-setup-x64.exe](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board-setup-x64.exe).
+  It installs for you alone, without admin rights. It is not code-signed yet, so SmartScreen may ask
+  once (More info, Run anyway).
+- **Linux** (x86_64):
+  [AppImage](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board-x86_64.AppImage),
+  [.deb](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board_amd64.deb).
+
+The [latest release](https://github.com/nervesscat/agent-board/releases/latest) has every package,
+and [docs/releasing.md](docs/releasing.md) lists them and how a release is made. The app needs `git`,
+`gh` (signed in with `gh auth login`) and, for generated reports, `claude` on your `PATH`. The desktop
+app, below, has the details: where it keeps its data and settings, and what to do when it cannot start.
+
+### From source
+
+With Node.js 24, pnpm (`corepack enable pnpm`), `git` and `gh`:
+
+```
+git clone https://github.com/nervesscat/agent-board.git
+cd agent-board
+pnpm install
+cp .env.example .env
+pnpm start             # the board on http://localhost:47100, in the background; pnpm stop stops it
+```
+
+## Quick start
+
+1. **Open the board**: the app opens it; from source, `http://localhost:47100/`.
+2. **Create your account**: the first visit goes to `/setup`. Give your name and create a passkey.
+3. **Add a repository** (the path of a local checkout) and the project it belongs to, then pick the
+   project in the top bar. A project can hold several repos.
+4. **Connect your agents**: on Connect agents (`/agents`) pick the CLI, press **Generate commands**, and run the lines it shows in
+   your terminal. They add the board's MCP server with a token of its own
+   (`claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer <token>"`)
+   and install the board skill.
+5. **Hand out work**: write a ticket, then ask your agent to "pick up a ticket". It claims it, posts
+   its progress on the ticket, and hands it off with its PR for you to review. `AGENTS.md` is what
+   agents follow.
+
+## Contributing, security and license
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): set up a checkout, the checks, and pull requests (into `dev`).
+- [SECURITY.md](SECURITY.md): report a vulnerability privately, never in a public issue.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): the Contributor Covenant.
+- [LICENSE](LICENSE): MIT.
+
+The rest of this README is the reference: how the board runs, signing in, the desktop app, other
+devices, test mode, previews, storage, the REST API, development and testing.
+
+## Overview
 
 A local job board shared by one developer and their AI agents (claude, codex, opencode, …).
 Per project (one or more repos): the PR queue of what you review and what you opened, each PR with
@@ -71,21 +142,22 @@ hashes in `data/board.db`.
 
 ## Running it from WSL (projects, git, gh and claude live there)
 
-Keep this checkout as the source of truth and run a clone inside the distro:
+When your projects, `git`, `gh` and `claude` live in WSL, run the board there, from a clone inside
+the distro:
 
 ```bash
 # inside WSL, once
-git clone /mnt/f/Programming/WebDev/agent-board ~/agent-board && cd ~/agent-board
+git clone https://github.com/nervesscat/agent-board.git ~/agent-board && cd ~/agent-board
 cp .env.example .env   # set CLAUDE_BIN=$HOME/.local/bin/claude
 corepack enable pnpm   # or: npm i -g pnpm
 pnpm install
 curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh auth login` likewise
 ```
 
-Repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
+Repo paths are then Linux paths (`/home/you/code/myapp`), the board spawns
 the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and its
-passkeys work unchanged. `pnpm start` inside WSL starts it; after a change here,
-`git -C ~/agent-board pull` puts it live (and `pnpm start` again when dependencies or migrations changed).
+passkeys work unchanged. `pnpm start` inside WSL starts it;
+`git -C ~/agent-board pull` puts a new version live (and `pnpm start` again when dependencies or migrations changed).
 
 ## Running the board
 
@@ -102,7 +174,7 @@ dependencies or adds a migration needs `pnpm start` again (migrations apply as i
 the board itself happens in worktrees, never in the main checkout (Development, below). Logs:
 `data/logs/board.out.log`, `board.err.log`.
 
-## Install
+## The desktop app
 
 The board also comes as a Windows app, CrossBoard: an installer that runs the built board in a
 window of its own, with no checkout, pnpm or node to run. From a checkout:
@@ -556,7 +628,7 @@ pnpm test:e2e        # Playwright against a built board in test mode (Testing, b
 pnpm check:migrations # the drizzle folder and its journal agree
 pnpm bench           # in a worktree: the benchmark (Benchmark, below)
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
-pnpm desktop:package # the Windows installer and the unpacked app in desktop/dist (Install, above)
+pnpm desktop:package # the Windows installer and the unpacked app in desktop/dist (The desktop app, above)
 pnpm desktop:smoke   # runs the unpacked app from a temp folder and checks it (Testing, below)
 ```
 

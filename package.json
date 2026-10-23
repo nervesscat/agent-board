@@ -1,6 +1,29 @@
 {
   "name": "agent-board",
   "private": true,
+  "description": "CrossBoard: a local job board shared by one developer and their AI coding agents (Claude Code, Codex, opencode), with tickets, PR queue, reviews, previews and daily reports.",
+  "keywords": [
+    "ai-agents",
+    "claude-code",
+    "mcp",
+    "kanban",
+    "job-board",
+    "code-review",
+    "pull-requests",
+    "developer-tools",
+    "tanstack-start",
+    "sqlite"
+  ],
+  "license": "MIT",
+  "author": "Enrique Madrid",
+  "homepage": "https://github.com/nervesscat/agent-board#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nervesscat/agent-board.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nervesscat/agent-board/issues"
+  },
   "type": "module",
   "packageManager": "pnpm@11.1.2",
   "imports": {
