@@ -10,7 +10,6 @@ import { beforeAll, describe, expect, it } from 'vitest'
 const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-')))
 process.env.DATA_DIR = path.join(tmp, 'data')
 
-let features: typeof import('./features')
 let dbm: typeof import('#/db')
 let projectId: number
 let otherProject: number
@@ -42,7 +41,6 @@ function checkout(name: string, branch: string) {
 }
 
 beforeAll(async () => {
-  features = await import('./features')
   dbm = await import('#/db')
   projectId = dbm.db.insert(dbm.schema.projects).values({ name: 'shop' }).returning().get().id
   otherProject = dbm.db.insert(dbm.schema.projects).values({ name: 'other' }).returning().get().id
