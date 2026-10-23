@@ -16,7 +16,7 @@ interface WorkspacePreview {
  * Only what needs no real build: whether the Preview card offers Start, and what the board refuses.
  * Starting one would install and build a whole board in the worktree, which this suite does not do.
  */
-test('the Preview card offers Start for a worktree of the repo, and the board refuses a path that is not one', async ({
+test('the Runs card offers Start for a worktree of the repo, and the board refuses a path that is not one', async ({
   page,
   project,
   human,

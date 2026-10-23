@@ -13,10 +13,14 @@ import { addRun } from './runs'
  */
 
 const git = (cwd: string, ...args: string[]) =>
-  execFileSync('git', ['-c', 'user.name=e2e', '-c', 'user.email=e2e@example.com', ...args], {
-    cwd,
-    encoding: 'utf8',
-  })
+  execFileSync(
+    'git',
+    ['-c', 'user.name=e2e', '-c', 'user.email=e2e@example.com', '-c', 'core.autocrlf=false', ...args],
+    {
+      cwd,
+      encoding: 'utf8',
+    },
+  )
 
 /** A repo of its own with main and `branch` (one commit on top), and a worktree of it next to it. */
 function scratchRepo(name: string, branch: string) {
