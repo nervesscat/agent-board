@@ -472,33 +472,48 @@ export function runToolProblem(run: Pick<RunConfig, 'install' | 'build' | 'start
 
 const article = (type: RunType) => (type === 'preview' ? 'a preview' : 'a job')
 
-/** Whether a start would be refused before anything runs; null when it may start. */
-export function cannotStartRun(workspaceId: number, runId: number): string | null {
+/**
+ * Why no run at all may start from the workspace, whatever the run: a preview board, a finished
+ * ticket, a path that is not a worktree of its repo the board may act on, one being removed. Null
+ * when runs may start there.
+ */
+export function workspaceCannotRun(workspaceId: number): string | null {
   if (authMode().boardEnv === 'development')
     return 'runs are started by the live board (or a test-mode one), not by a preview'
   const ws = getWorkspace(workspaceId)
-  const run = getRunConfig(runId)
   const ticket = ticketOf(ws.ticketId)
   if (ticket.archivedAt) return 'the ticket is archived'
   const kind = kindOf(listStages(ticket.projectId), ticket.status)
   if (kind === 'done' || kind === 'cancelled') return `the ticket is ${kind}`
   const repoId = workspaceRepoId(ws)
-  if (run.repoId !== repoId) return `${run.name} is a run of another repo than the workspace's`
-  const repo = db.select().from(schema.repos).where(eq(schema.repos.id, run.repoId)).get() ?? null
+  const repo = repoId
+    ? (db.select().from(schema.repos).where(eq(schema.repos.id, repoId)).get() ?? null)
+    : null
   const target = worktreeTarget(ws, repo)
   if (!target.ok) return target.reason
   if ([...kept.removing].some((at) => at(target.path))) return 'its worktree is being removed'
+  return null
+}
+
+/** Whether a start would be refused before anything runs; null when it may start. */
+export function cannotStartRun(workspaceId: number, runId: number): string | null {
+  const run = getRunConfig(runId)
+  const refused = workspaceCannotRun(workspaceId)
+  if (refused) return refused
+  const ws = getWorkspace(workspaceId)
+  if (run.repoId !== workspaceRepoId(ws)) return `${run.name} is a run of another repo than the workspace's`
   const tools = runToolProblem(run)
   if (tools) return tools
-  const here = (e: Entry) => isActive(e) && norm(e.path) === norm(target.path)
+  const target = real(ws.path)!
+  const here = (e: Entry) => isActive(e) && norm(e.path) === norm(target)
   const other = [...all().values()].find((e) => here(e) && e.runId === runId && e.workspaceId !== workspaceId)
   if (other)
-    return `workspace ${other.workspaceId} already runs ${article(run.type)} from ${target.path} (${run.name})`
+    return `workspace ${other.workspaceId} already runs ${article(run.type)} from ${target} (${run.name})`
   // Runs that copy the live data share its folder in the worktree.
   const copying = run.copyData
-    ? [...all().values()].find((e) => here(e) && e.runId !== runId && e.dataDir === dataDirOf(target.path))
+    ? [...all().values()].find((e) => here(e) && e.runId !== runId && e.dataDir === dataDirOf(target))
     : undefined
-  return copying ? `${copying.runName} already uses ${dataDirOf(target.path)}` : null
+  return copying ? `${copying.runName} already uses ${dataDirOf(target)}` : null
 }
 
 // --- start, stop ---

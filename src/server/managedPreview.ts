@@ -12,6 +12,7 @@ import {
   startRun,
   stopRun,
   type RunState,
+  workspaceCannotRun,
   workspaceRuns,
 } from './runs'
 
@@ -97,7 +98,8 @@ export function managedPreview(workspaceId: number): ManagedPreview | null {
 /** Whether a start would be refused before anything runs; null when it may start. */
 export function cannotStart(workspaceId: number): string | null {
   const run = previewRunOf(workspaceId)
-  return run ? cannotStartRun(workspaceId, run.id) : NO_PREVIEW_RUN
+  // What stands in the way of any run comes first: it says more than the missing run.
+  return run ? cannotStartRun(workspaceId, run.id) : (workspaceCannotRun(workspaceId) ?? NO_PREVIEW_RUN)
 }
 
 export function startPreview(workspaceId: number, actor: string, opts: { replacing?: boolean } = {}) {
