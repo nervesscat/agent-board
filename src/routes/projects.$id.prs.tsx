@@ -27,7 +27,7 @@ import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 import { recall, remember, useRestoreRemembered } from '#/lib/remembered'
-import { anchorId, useAnchor, useReveal } from '#/lib/reveal'
+import { anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 
 const FILTER_KEYS = ['me', 'others'] as const
 type Filter = (typeof FILTER_KEYS)[number]
@@ -79,12 +79,15 @@ function PrQueue() {
   const { data: project } = useProject(id)
   // The tab and the list both follow the URL, so the server's render and the browser's agree.
   const filter = picked ?? 'me'
+  // Whether the stage or the filter shown is one the reader picked, since a link last set the stage.
+  const picks = useRef(false)
   // Put in the URL for the reader (the remembered one, or the one that shows a linked PR): the link's
   // anchor stays. A filter the reader picks ends what the link had to show.
   const showFilter = (f: Filter) =>
     navigate({ search: (s) => ({ ...s, filter: f }), hash: true, replace: true })
   useRestoreRemembered(FILTER_KEY, picked, FILTER_KEYS, showFilter)
   const pickFilter = (f: Filter) => {
+    picks.current = true
     navigate({ search: (s) => ({ ...s, filter: f }), replace: true })
     remember(FILTER_KEY, f)
   }
@@ -119,19 +122,38 @@ function PrQueue() {
     staying !== null && (!linked || inFilter(linked, staying)) && (linkedId === null || data !== undefined)
   useReveal(anchor, { ready: settled })
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('pending')
+  const pickTab = (t: (typeof TABS)[number]['key']) => {
+    picks.current = true
+    setTab(t)
+  }
   const tabFor = useRef<string | null>(null)
   const switchedFor = useRef<string | null>(null)
+  // The anchor this page last showed.
+  const lastAnchor = useRef<string | null>(null)
+  const back = cameBack()
   useEffect(() => {
+    const hash = anchor?.hash ?? null
+    if (lastAnchor.current !== hash) {
+      // Another anchor, or one back after it was gone (a filter the reader picks, a review result
+      // opened, drop it): a link followed to it is a new one, even to the same PR. Back or Forward to
+      // it is the reader returning to where they were: what they picked since is kept. A stage
+      // only a link set, or the one the page starts on, is nobody's, and the PR's stage shows again.
+      const returning = back && picks.current
+      lastAnchor.current = hash
+      tabFor.current = returning ? hash : null
+      switchedFor.current = returning ? hash : null
+    }
     if (!anchor || !linked) return
     if (tabFor.current !== anchor.hash) {
       tabFor.current = anchor.hash
+      picks.current = false
       setTab(linked.status)
     }
     if (staying !== null && switchedFor.current !== anchor.hash) {
       switchedFor.current = anchor.hash
       if (!inFilter(linked, staying)) showFilter(linked.waitingOn)
     }
-  }, [anchor, linked, staying])
+  }, [anchor, linked, staying, back])
   const suffix = FILTERS.find((f) => f.key === filter)!.label.toLowerCase()
 
   return (
@@ -177,7 +199,7 @@ function PrQueue() {
         <ChipTabs
           chips={TABS.map((t) => ({ ...t, count: shown.filter((p) => p.status === t.key).length }))}
           value={tab}
-          onChange={setTab}
+          onChange={pickTab}
           // Four stages do not fit one row on a phone: there they take two rows of two, so every stage
           // and its count shows without the list or the page scrolling.
           listClassName="grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:inline-flex sm:w-fit sm:group-data-horizontal/tabs:h-8"
