@@ -56,7 +56,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         {/* KEY_ENTRIES before the stylesheet: a script in the head does not run until a stylesheet before
             it has loaded, and it must run as the page opens. A stylesheet from HeadContent would come
             first whatever the order here: it is given a precedence, and React puts those at the top of
-            the head. Without one, the link stays where it is written. */}
+            the head. Without one, the link stays where it is written. TanStack Start's own dev stylesheet
+            would come first too: vite.config.ts turns it off. */}
         <ScriptOnce>{KEY_ENTRIES}</ScriptOnce>
         <link rel="stylesheet" href={appCss} />
         <HeadContent />

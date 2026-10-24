@@ -116,7 +116,8 @@ function madeByBrowser(action: string) {
  * the keying as the router starts, so an entry the browser makes after that is still told apart.
  *
  * First, not after the stylesheet: a script in the head does not run until a stylesheet before it has
- * loaded, and a #link followed while it loads would make an entry before the first one was keyed.
+ * loaded, and a #link followed while it loads would make an entry before the first one was keyed. Under
+ * `vite dev` too: vite.config.ts keeps TanStack Start's dev stylesheet out of the head.
  *
  * A string, not a function's source: the bundler may wrap a function's inner ones in helpers of its own.
  */
