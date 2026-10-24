@@ -515,7 +515,10 @@ async function linuxDesktop() {
   check(!fs.existsSync(entry), 'Start at login is off at first')
   await toggle()
   const text = fs.existsSync(entry) ? fs.readFileSync(entry, 'utf8') : ''
-  check(text.includes(`Exec=${exe}\n`), `Start at login writes ${entry}, starting ${exe}`)
+  // An unpacked AppImage (install-test.sh) starts through its AppRun, which adds --no-sandbox where needed.
+  const appRun = path.join(appDir, 'AppRun')
+  const starts = fs.existsSync(appRun) ? appRun : exe
+  check(text.includes(`Exec=${starts}\n`), `Start at login writes ${entry}, starting ${starts}`)
   await toggle()
   check(!fs.existsSync(entry), 'turned off, the entry is gone')
 
