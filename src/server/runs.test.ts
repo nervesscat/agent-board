@@ -796,6 +796,37 @@ describe('a ticket that spans two repos', () => {
     expect(rows(u.id)).toEqual([back.id])
     expect(runs.cannotStartRun(tBack.id, backJob.id)).toMatch(/is not one of ticket \d+'s repos/)
   })
+
+  it("a repo moved away stops its runs for a ticket that stays and ran it as the project's first repo", async () => {
+    useFake()
+    const from = dbm.db.insert(dbm.schema.projects).values({ name: 'from-f' }).returning().get().id
+    const to = dbm.db.insert(dbm.schema.projects).values({ name: 'to-f' }).returning().get().id
+    const only = addRepo('aa-f', from)
+    const next = addRepo('bb-f', from)
+    const job = run(next, { name: 'Worker', type: 'job', start: 'python w.py', healthPath: '' })
+    const t = features.createTicket(
+      from,
+      { title: 'left without a repo', status: 'in_progress', repoId: only.id, branch: 'x' },
+      'claude',
+    )
+    // Its only repo goes: the ticket has no repo of its own and no rows, and runs the project's first.
+    expect((await call('DELETE', `/api/repos/${only.id}`)).status).toBe(200)
+    expect(features.getTicket(t.id).repoId).toBeNull()
+    const ws = features.addWorkspace(
+      t.id,
+      { name: 'bb', branch: 'x', path: worktree(next), repoId: next.id },
+      'claude',
+    )
+    const proc = (await running(ws.id, job.id)) && fake.calls.at(-1)!
+
+    const moved = await call('PATCH', `/api/repos/${next.id}`, { projectId: to }, 'agent')
+    expect(moved.status).toBe(200)
+    expect(features.getTicket(t.id).projectId).toBe(from)
+
+    await vi.waitFor(() => expect(fake.killed).toContain(proc.pid))
+    expect(state(ws.id, job.id)).toMatchObject({ status: 'stopped', reason: 'bb-f moved to project to-f' })
+    expect(runs.activeRuns()).toEqual([])
+  })
 })
 
 describe('over REST and MCP', () => {

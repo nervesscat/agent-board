@@ -181,6 +181,23 @@ export async function updateRepo(
         refId: id,
       })
   }
+  if (moved) {
+    // A ticket that stays can be running the repo without a row of it (one with no repo of its own
+    // runs the project's first): those runs stop too.
+    const stopped = new Set(left.filter((e) => e.repoId === id).map((e) => e.ticketId))
+    const staying = db
+      .select({ id: schema.tickets.id })
+      .from(schema.tickets)
+      .where(eq(schema.tickets.projectId, before.projectId))
+      .all()
+      .map((t) => t.id)
+      .filter((t) => !stopped.has(t))
+    if (staying.length)
+      stopRunsFor(staying, `${row.name} moved to project ${getProject(row.projectId).name}`, actor, {
+        repoId: id,
+        lanes: false,
+      })
+  }
   return row
 }
 
