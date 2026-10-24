@@ -104,8 +104,9 @@ the board itself happens in worktrees, never in the main checkout (Development, 
 
 ## Install
 
-The board also comes as a Windows app, CrossBoard: an installer that runs the built board in a
-window of its own, with no checkout, pnpm or node to run. From a checkout:
+The board also comes as a desktop app, CrossBoard, for Windows and Linux: an installer or package
+that runs the built board in a window of its own, with no checkout, pnpm or node to run. Each is
+built on its own platform (x64 only). From a checkout on Windows:
 
 ```
 pnpm install
@@ -113,7 +114,8 @@ pnpm desktop:package   # builds the board, then desktop/dist/agent-board-setup-<
 pnpm desktop:smoke     # runs the unpacked app from a temp folder on port 8240 and checks it (Testing, below)
 ```
 
-CI builds the installer on every pull request (the `agent-board-setup` artifact of the run).
+CI builds the installer on every pull request (the `agent-board-setup` artifact of the run). Linux:
+below (Linux). The rest of this section is the Windows app, and how both behave.
 
 **Installing.** Run `agent-board-setup-<version>.exe`. It installs for you alone, without admin rights,
 into `%LOCALAPPDATA%\Programs\agent-board`, adds CrossBoard to the Start menu and the desktop, and
@@ -160,6 +162,96 @@ sessions).
 registered there. It leaves `%LOCALAPPDATA%\agent-board` alone: delete that folder to remove the data and the
 settings too.
 
+### Linux
+
+The same app, packaged for Linux x64 in four forms: an AppImage (any distribution), a `.deb`
+(Debian, Ubuntu), an `.rpm` (Fedora, openSUSE) and a pacman package (Arch, Omarchy). It behaves as on
+Windows (above), with the differences below. Build them on Linux, from a checkout:
+
+```
+sudo apt install rpm libarchive-tools   # Debian/Ubuntu: rpmbuild for the .rpm, bsdtar for the pacman package
+pnpm install
+pnpm desktop:package   # desktop/dist/agent-board-<version>-x86_64.AppImage, agent-board_<version>_amd64.deb,
+                       # agent-board-<version>.x86_64.rpm, agent-board-<version>.pacman and linux-unpacked/
+pnpm desktop:smoke     # the unpacked app's smoke test; under a display, or xvfb-run -a pnpm desktop:smoke
+```
+
+(Fedora: `sudo dnf install rpm-build bsdtar`; Arch: `sudo pacman -S rpm-tools libarchive`.) The
+script prints the four packages' paths at the end. Only x64 is built: `--arch arm64` is refused.
+`desktop/linux/docker-test.sh all` builds them in a `node:24-bookworm` container instead, from what
+is committed, and installs and checks each in a container of its distribution (Docker only, Windows
+included). CI does the same on every pull request: the `desktop-linux` job keeps the four as the
+`agent-board-linux` artifact.
+
+**Installing**, by distribution (each pulls in what Electron needs from the distribution's own
+repositories, and installs the app in `/opt/CrossBoard` with `agent-board` on `PATH`, a CrossBoard
+entry in the applications menu and its icons):
+
+- **Debian, Ubuntu:** `sudo apt install ./agent-board_<version>_amd64.deb`
+- **Fedora:** `sudo dnf install ./agent-board-<version>.x86_64.rpm`; **openSUSE:**
+  `sudo zypper install ./agent-board-<version>.x86_64.rpm` (built for Fedora's names, untested there)
+- **Arch, Omarchy:** `sudo pacman -U ./agent-board-<version>.pacman`
+- **Any other, or no root:** the AppImage. `chmod +x agent-board-<version>-x86_64.AppImage` and run
+  it. It brings Electron but not what Electron needs from the system (GTK 3, NSS, GBM, ALSA, which a
+  desktop has), and needs FUSE 2 (`libfuse2` on Debian/Ubuntu, `fuse2` on Arch, `fuse-libs` on Fedora); without
+  it, `--appimage-extract` unpacks it into `squashfs-root/`, and `squashfs-root/AppRun` starts it
+  (not `squashfs-root/agent-board`: `AppRun` adds `--no-sandbox` where the system blocks user
+  namespaces, as Ubuntu 24.04 does, and without it Electron stops at start). It adds nothing to the
+  menu by itself.
+
+None is signed, and none updates itself: install a newer one over it (the AppImage: replace the
+file), and the data stays.
+
+**Data and settings** follow the XDG base directories (`XDG_CONFIG_HOME` and `XDG_DATA_HOME` when they
+are set to absolute paths):
+
+- `~/.config/agent-board/config.env`: the settings, as on Windows. A relative `DATA_DIR` is under
+  `~/.local/share/agent-board`.
+- `~/.config/agent-board/electron/`: the window's browser profile.
+- `~/.local/share/agent-board/data/`: the database, uploads and logs (`data/logs/board.out.log`,
+  `board.err.log`).
+
+`AGENT_BOARD_HOME` puts all three in one folder, as on Windows.
+
+**Prerequisites** are those of Windows: `git`, `gh` (signed in) and `claude`, and `pnpm` and `node`
+for managed previews. An app started from the applications menu, a launcher or autostart gets no
+shell's `PATH`, so at each start the app asks your login shell for it (`$SHELL -ilc`, `/bin/sh` without
+`SHELL`; so what `~/.profile`, `~/.bash_profile`, `~/.bashrc` or `~/.zshrc` add, mise, nvm or pnpm's
+setup included, counts as in a terminal), puts it in front of the `PATH` it was started with, adds
+`~/.local/bin`, `~/bin`, `~/.local/share/pnpm`, `~/.local/share/mise/shims` and `~/.volta/bin` where
+they exist, and starts the board with that. A shell that fails, prints no `PATH` or takes more than 5
+seconds is skipped. A tool set up only in a non-login, non-interactive file is not found: put it on
+`PATH` in one of those, or set `PATH` (or `CLAUDE_BIN`) in `config.env`. The folders of a `PATH` set in
+`config.env` (`~/` for the home folder; `$PATH` is not expanded there, and is not needed) go first,
+in front of the login shell's, even when the app was started with a `PATH` of its own.
+
+**Tray, and closing the window.** The tray icon is a StatusNotifierItem: KDE shows it, GNOME with the
+AppIndicator extension, and on Hyprland (Omarchy) waybar's `tray` module (add `"tray"` to a
+`modules-*` list in `~/.config/waybar/config.jsonc` if your bar has none). Closing the window hides it
+while a tray shows the icon, as on Windows; with no tray, nothing could bring the window back, so
+closing it quits the app and stops the board. Either way the window's own menu (press Alt) has Open in
+browser, Start at login and Quit. The app runs natively on Wayland in a Wayland session (Electron's
+default) and under X11 otherwise. Notifications go to your notification daemon (mako, swaync,
+GNOME's, KDE's). Links, Open in browser and previews open in the default browser (`xdg-open`).
+
+**Start at login** (tray menu or window menu; off at first) writes
+`~/.config/autostart/agent-board.desktop`, which starts the installed app, or the AppImage where it is
+when it was turned on (an unpacked one through its `squashfs-root/AppRun`); off removes it. Desktops
+that follow the autostart spec run it (GNOME, KDE, Xfce, and Hyprland started through uwsm, as Omarchy
+starts it, through systemd's `xdg-desktop-autostart.target`); for a Hyprland started otherwise, run the folder from an `exec-once`
+(e.g. `dex -a`), or put `exec-once = agent-board` in `hyprland.conf` instead.
+
+**Uninstalling:** `sudo apt remove agent-board`, `sudo dnf remove agent-board` (`zypper remove`), or
+`sudo pacman -R agent-board`; the AppImage: delete it. Settings and data stay: delete
+`~/.config/agent-board` and `~/.local/share/agent-board` (and the autostart entry, if on) to remove
+them too.
+
+**No Flatpak or Snap.** The board runs `git`, `gh`, `claude`, `node` and `pnpm` from your system in
+your repositories and worktrees, and builds and runs previews there. In Flatpak's sandbox every one of
+those would go through `flatpak-spawn --host` with `--talk-name=org.freedesktop.Flatpak` and the whole
+home folder opened, which leaves the sandbox nothing to keep out, and Flathub does not take apps that
+way. The packages above run it as any program you install.
+
 ## The tools it runs
 
 The board runs tools installed on its machine: `git` (ticket branch and commit status, merged checks,
@@ -167,7 +259,8 @@ cleanup), `gh` signed in with `gh auth login` (the PR queue, CI status, PR ticke
 (`CLAUDE_BIN` with `CLAUDE_ARGS`: generated reports, agents) and `node` with `pnpm` (managed
 previews). It looks for each on the PATH it was started with (on Windows with `PATHEXT`, so
 `pnpm.cmd` counts), and for `claude` at `CLAUDE_BIN`, never through a login shell: a program that
-starts the board with its own PATH gets the same answer it would. The check runs as the board starts
+starts the board with its own PATH gets the same answer it would. The desktop app on Linux starts it with your
+login shell's PATH (Linux, above), so the check sees what a terminal would. The check runs as the board starts
 and again from the warning's **Check again** (`POST /api/host-tools/check`). While one is missing, or
 `gh` is signed out, every page shows a warning naming it, what it breaks and the fix; each can be
 dismissed until the next check finds it still missing. The PR queue, previews, the Cleanup page and
@@ -459,7 +552,10 @@ to GitHub.
 
 All routes need the board's session cookie or `Authorization: Bearer <token>` (Signing in, above),
 but `/api/health` on this machine and the sign-in calls; JSON in and out. `actor` is the account's
-name, or the agent token's.
+name, or the agent token's. A backslash in a JSON string is written `\\`, so a Windows path is
+`"C:\\code\\repo"`; some shells and tools collapse `\\` to `\` before sending. Where that leaves a
+bad escape (`\c`) the board refuses the body (400 `body must be JSON: …`), but where it leaves a valid
+one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survives them.
 
 | Method       | Path                                                                                                          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -558,7 +654,7 @@ pnpm test:e2e        # Playwright against a built board in test mode (Testing, b
 pnpm check:migrations # the drizzle folder and its journal agree
 pnpm bench           # in a worktree: the benchmark (Benchmark, below)
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
-pnpm desktop:package # the Windows installer and the unpacked app in desktop/dist (Install, above)
+pnpm desktop:package # the installer or Linux packages and the unpacked app in desktop/dist (Install, above)
 pnpm desktop:smoke   # runs the unpacked app from a temp folder and checks it (Testing, below)
 ```
 
@@ -596,13 +692,23 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   survives a restart (the window still signed in), that a second launch brings the first window back, that Quit frees the port, that
   `config.env`'s `PORT` and `DATA_DIR` are used, that a busy port (on loopback or on every interface)
   and a `DATA_DIR` or `AGENT_BOARD_HOME` that cannot be made or written are reported in a dialog
-  that ends the app, and that a second launch after a failure is harmless. It never runs on 47100
-  or the live `data/`.
+  that ends the app, and that a second launch after a failure is harmless. On Linux (under a
+  display: `xvfb-run -a`) it also checks that nothing of the app runs after Quit, that the server
+  gets the login shell's PATH (a `.bashrc` in a stand-in home), that Start at login writes and removes
+  the autostart entry, and that closing the window with no tray host ends the app and its server; its
+  dialogs are checked on stderr, and the app is then killed. It never runs on 47100 or the live
+  `data/`. `desktop/linux/install-test.sh` checks an installed package in a throwaway container of its
+  distribution (the smoke test on the installed folder, the desktop entry and icons, the XDG folders,
+  the WM_CLASS, uninstalling), and `desktop/linux/docker-test.sh` runs the build and all of it in
+  Docker (Install, Linux).
 - **CI** (`.github/workflows/ci.yml`, on pull requests and pushes to `main`): install, typecheck,
   lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
   Playwright report and traces are uploaded as the `playwright-report` artifact. A second job, on
   `windows-latest`, builds the installer, runs the desktop smoke test on the unpacked app and on the
   app as the installer puts it (then uninstalls it), and uploads the installer as `agent-board-setup`.
+  A third, `desktop-linux` on `ubuntu-24.04`, builds the Linux packages, smoke-tests the unpacked app
+  under Xvfb, installs and checks the .deb in Debian, the .rpm in Fedora, the pacman package in Arch
+  and the AppImage in Ubuntu (containers), and uploads the four as `agent-board-linux`.
 
 ## Benchmark
 
