@@ -661,9 +661,17 @@ export function updateTicket(
   opts: { agent?: boolean } = {},
 ) {
   const before = getTicket(id)
-  const { repos: reposInput, ...fields } = patch
+  const { repos: reposGiven, ...fields } = patch
   patch = fields
   const reposBefore = ticketRepoList(before)
+  // A repoId alone naming another repo the ticket spans makes that one the primary, with its own
+  // branch, base and PR; the old primary stays as one of its other repos, with its own. Any other
+  // repoId replaces the primary's repo, keeping the ticket's branch.
+  const reposInput =
+    reposGiven ??
+    (fields.repoId != null && !before.prId && reposBefore.slice(1).some((e) => e.repoId === fields.repoId)
+      ? reposBefore.map((e) => ({ repoId: e.repoId }))
+      : undefined)
   let repos: ReturnType<typeof resolveTicketRepos> | null = null
   if (reposInput) {
     if (before.prId)

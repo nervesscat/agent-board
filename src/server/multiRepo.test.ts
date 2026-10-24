@@ -198,6 +198,44 @@ describe("a ticket's repos", () => {
     ])
   })
 
+  it('a repoId alone naming another repo of the ticket makes it the primary; the old primary stays with its own', async () => {
+    const t = (
+      await ticket({
+        repos: [
+          { repoId: front.id, branch: 'feat/front', prNumber: 5 },
+          { repoId: back.id, branch: 'feat/back', baseBranch: 'dev', prNumber: 12 },
+        ],
+      })
+    ).body
+    const res = await call('PATCH', `/api/tickets/${t.id}`, { repoId: back.id }, 'agent')
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ repoId: back.id, branch: 'feat/back', baseBranch: 'dev', prNumber: 12 })
+    expect((await call('GET', `/api/tickets/${t.id}`)).body.repos).toEqual([
+      { repoId: back.id, name: 'back', branch: 'feat/back', baseBranch: 'dev', prNumber: 12, primary: true },
+      {
+        repoId: front.id,
+        name: 'front',
+        branch: 'feat/front',
+        baseBranch: 'main',
+        prNumber: 5,
+        primary: false,
+      },
+    ])
+
+    // A field given with it still has the last word, for the new primary.
+    await call('PATCH', `/api/tickets/${t.id}`, { repoId: front.id, branch: 'feat/front-2' })
+    expect(repoRows(t.id)).toEqual([
+      [front.id, 'feat/front-2', 0],
+      [back.id, 'feat/back', 1],
+    ])
+
+    // A repo the ticket does not span still replaces the primary's repo, keeping the ticket's branch.
+    const solo = (await ticket({ repoId: front.id, branch: 'feat/solo', prNumber: 3 })).body
+    const replaced = await call('PATCH', `/api/tickets/${solo.id}`, { repoId: back.id })
+    expect(replaced.body).toMatchObject({ repoId: back.id, branch: 'feat/solo', prNumber: 3 })
+    expect(repoRows(solo.id)).toEqual([[back.id, 'feat/solo', 0]])
+  })
+
   it('deleting the primary repo makes the next one the primary, with its own branch, base and PR', async () => {
     const gone = dbm.db
       .insert(dbm.schema.repos)
@@ -330,6 +368,15 @@ describe('over MCP', () => {
     expect(repoRows(t.id)).toEqual([
       [back.id, 'feat/back', 0],
       [front.id, 'feat/front', 1],
+    ])
+
+    // repoId alone, naming the other repo: it becomes the primary, both keeping their branches.
+    const swapped = await tool('update_ticket', { ticketId: t.id, repoId: front.id })
+    expect(swapped.error).toBe(false)
+    expect(JSON.parse(swapped.text)).toMatchObject({ repoId: front.id, branch: 'feat/front' })
+    expect(repoRows(t.id)).toEqual([
+      [front.id, 'feat/front', 0],
+      [back.id, 'feat/back', 1],
     ])
   })
 })

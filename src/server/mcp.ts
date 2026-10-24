@@ -321,7 +321,13 @@ function buildServer(actor: string, agent: boolean) {
       assignee: z.string().optional(),
       branch: z.string().optional(),
       baseBranch: z.string().optional(),
-      repoId: z.number().int().optional(),
+      repoId: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          "the primary repo. One of the ticket's other repos becomes the primary with its own branch, baseBranch and prNumber, the old primary staying among its repos with its own; any other repo of the project replaces the primary's repo, keeping the ticket's branch. With repos, it picks the primary from that list.",
+        ),
       tags: z.array(z.string()).optional().describe(`replaces the whole list. ${TAGS}`),
       prNumber: z
         .number()
