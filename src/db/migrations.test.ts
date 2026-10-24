@@ -596,7 +596,7 @@ describe('0034_auto_phase_state', () => {
       prs: sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[],
     }
 
-    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    migrate(drizzle(sqlite), { migrationsFolder: migrationsUpTo('0034_auto_phase_state') })
 
     const tickets = sqlite.prepare('SELECT * FROM tickets').all() as Record<string, unknown>[]
     const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
@@ -605,6 +605,29 @@ describe('0034_auto_phase_state', () => {
     expect(tickets.map(({ merged_phase_checked: _m, ...rest }) => rest)).toEqual(before.tickets)
     expect(prs.map(({ local_ci_sha: _l, ...rest }) => rest)).toEqual(before.prs)
     expect(sqlite.prepare('SELECT * FROM tasks').all()).toEqual(before.tasks)
+    sqlite.close()
+  })
+})
+
+describe('0035_pr_left_as', () => {
+  it('leaves every stored PR without an answer from GitHub, rows kept', () => {
+    const sqlite = databaseAt('0034_auto_phase_state')
+    const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
+    const pr = sqlite.prepare(
+      `INSERT INTO prs (project_id, number, title, url, author, head_ref, base_ref, head_sha, updated_at, fetched_at, open, merged_at, closed_at)
+       VALUES (?, ?, 't', 'u', 'a', 'feat', 'main', 'abc', '2026-10-01', '2026-10-01', ?, ?, ?)`,
+    )
+    pr.run(project, 7, 1, null, null)
+    pr.run(project, 8, 0, '2026-10-02', '2026-10-02')
+    // Closed by an older refresh with no merge time: the case GitHub was never asked about.
+    pr.run(project, 9, 0, null, '2026-10-03')
+    const before = sqlite.prepare('SELECT * FROM prs').all()
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
+    expect(prs.map((p) => p.left_as)).toEqual([null, null, null])
+    expect(prs.map(({ left_as: _l, ...rest }) => rest)).toEqual(before)
     sqlite.close()
   })
 })
