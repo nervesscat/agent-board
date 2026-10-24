@@ -32,7 +32,7 @@ beforeAll(async () => {
     const request = new Request(`http://localhost${target}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
     const caller = await callerOf(request)
     return handle({ request, actor: caller!.name })

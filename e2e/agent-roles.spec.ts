@@ -130,7 +130,8 @@ test('Settings > Agents: each token with its role, the Orchestrator switch, its 
     await expectTooltip(toggle.locator('xpath=ancestor::label[1]'), /also changes the projects' instructions/)
     await toggle.click()
     await expect(toggle).toBeChecked()
-    await expect(badge(row, 'Orchestrator')).toBeVisible()
+    // The role badge itself: the switch's label reads Orchestrator too.
+    await expect(row.locator('span[data-role="orchestrator"]')).toHaveText('Orchestrator')
     const actors = await ok<ActorRow[]>(human.get('/api/actors'))
     expect(actors.find((a) => a.name === name)).toMatchObject({ role: 'orchestrator', parent: '' })
     expect(actors.find((a) => a.name === `${name}/helper`)).toMatchObject({ role: 'worker', parent: name })
