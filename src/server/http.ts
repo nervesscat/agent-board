@@ -13,13 +13,22 @@ export class HttpError extends Error {
 
 export const notFound = (what: string) => new HttpError(404, `${what} not found`)
 
-/** Parse and validate a JSON body; a bad body is a 400 with zod's message, which is safe to show. */
+/** Said after a bad escape, which is most often a shell or tool that collapsed `\\` to `\`. */
+const backslashHint = '; a backslash in a JSON string is written \\\\ (or \\u005c)'
+
+/**
+ * Parse and validate a JSON body; a bad body is a 400 with zod's message, which is safe to show. A
+ * body that is not JSON says the parser's reason, so a caller whose client mangled the text (a shell
+ * collapsing `\\` to `\`) sees where; it only echoes the caller's own body back to them.
+ */
 export async function readJson<T extends z.ZodType>(request: Request, schema: T): Promise<z.infer<T>> {
   let raw: unknown
   try {
     raw = await request.json()
-  } catch {
-    throw new HttpError(400, 'body must be JSON')
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    const hint = /\bescape/i.test(reason) ? backslashHint : ''
+    throw new HttpError(400, `body must be JSON: ${reason}${hint}`)
   }
   const parsed = schema.safeParse(raw)
   if (!parsed.success) throw new HttpError(400, z.prettifyError(parsed.error))
