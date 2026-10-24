@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Builds the Windows installer and the unpacked app: `pnpm desktop:package` (README: "Install").
+// Builds the installer(s) and the unpacked app for the platform it runs on: `pnpm desktop:package`
+// (README: "Install"). x64 only (`--arch x64` or `--arch=x64`, the default; anything else is refused).
 //
 //   1. builds the board into desktop/.stage/board/.output (never .output, which previews use);
 //   2. copies the migrations beside it (the server reads ./drizzle from its working folder);
@@ -8,7 +9,10 @@
 //      store, so rebuilding it in place would reach every other checkout too);
 //   4. checks the staged driver opens a database under Electron's Node;
 //   5. packs desktop/app with the stage through electron-builder into desktop/dist:
-//      agent-board-setup-<version>.exe (NSIS, per user) and win-unpacked/agent-board.exe.
+//      on Windows agent-board-setup-<version>.exe (NSIS, per user) and win-unpacked/agent-board.exe;
+//      on Linux agent-board-<version>-x86_64.AppImage, agent-board_<version>_amd64.deb,
+//      agent-board-<version>.x86_64.rpm, agent-board-<version>-x86_64.pacman (rpmbuild and bsdtar
+//      on PATH) and linux-unpacked/agent-board.
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
@@ -17,6 +21,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { build } from 'electron-builder'
+
+import { packageArch } from './packageArgs.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
@@ -47,7 +53,14 @@ function run(command, args, opts = {}) {
   if (res.status !== 0) fail(`${command} exited with ${res.status ?? res.signal}`)
 }
 
-if (process.platform !== 'win32') fail('the installer is built on Windows (NSIS, x64)')
+const WIN = process.platform === 'win32'
+if (!WIN && process.platform !== 'linux')
+  fail(`the app is packaged on Windows or Linux, not ${process.platform}`)
+const arch = packageArch(process.argv.slice(2))
+// The driver's probe (step 4) runs the staged binary under this machine's Electron, so the packed arch
+// is this machine's; arm64 is not built (README: "Install").
+if (arch !== 'x64') fail(`only x64 is packaged, not "${arch}"`)
+if (process.arch !== 'x64') fail(`this machine is ${process.arch}; the app is packaged on x64 only`)
 
 fs.rmSync(path.join(root, 'desktop', '.stage'), { recursive: true, force: true })
 fs.rmSync(dist, { recursive: true, force: true })
@@ -76,7 +89,7 @@ const prebuildInstall = createRequire(
 ).resolve('prebuild-install/bin.js')
 run(
   process.execPath,
-  [prebuildInstall, '--runtime', 'electron', '--target', electronVersion, '--arch', 'x64', '--verbose'],
+  [prebuildInstall, '--runtime', 'electron', '--target', electronVersion, '--arch', arch, '--verbose'],
   { cwd: driver },
 )
 
@@ -99,43 +112,139 @@ run(
 // from a copy outside the repo, whose package.json has none. The board's own come traced in the stage.
 const appCopy = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-desktop-'))
 fs.cpSync(path.join(root, 'desktop', 'app'), appCopy, { recursive: true })
-try {
-  await build({
-    projectDir: appCopy,
-    win: ['nsis'],
-    x64: true,
-    publish: 'never',
-    config: {
-      appId: 'dev.agent-board.desktop',
-      productName: brand.productName,
-      executableName: 'agent-board',
-      copyright: `Copyright © ${new Date().getFullYear()} ${brand.author}`,
-      electronVersion,
-      electronDist,
-      directories: { output: dist },
-      files: ['**/*'],
-      extraResources: [{ from: stage, to: 'board', filter: ['**/*'] }],
-      asar: true,
-      npmRebuild: false,
-      nodeGypRebuild: false,
-      win: {
-        icon: path.join(appCopy, 'icon.png'),
-        artifactName: 'agent-board-setup-${version}.${ext}',
-      },
-      nsis: {
-        oneClick: true,
-        perMachine: false,
-        runAfterFinish: true,
-        shortcutName: brand.productName,
-        uninstallDisplayName: brand.productName,
-        // The board's data and settings (%LOCALAPPDATA%\agent-board) outlive an uninstall.
-        deleteAppDataOnUninstall: false,
-      },
+const icon = path.join(appCopy, 'icon.png')
+/** @type {import('electron-builder').Configuration} */
+const common = {
+  appId: 'dev.agent-board.desktop',
+  productName: brand.productName,
+  executableName: 'agent-board',
+  copyright: `Copyright © ${new Date().getFullYear()} ${brand.author}`,
+  electronVersion,
+  electronDist,
+  directories: { output: dist },
+  files: ['**/*'],
+  extraResources: [{ from: stage, to: 'board', filter: ['**/*'] }],
+  asar: true,
+  npmRebuild: false,
+  nodeGypRebuild: false,
+}
+/** @type {Partial<import('electron-builder').CliOptions> & { config: import('electron-builder').Configuration }} */
+const windows = {
+  win: ['nsis'],
+  x64: true,
+  config: {
+    ...common,
+    win: {
+      icon,
+      artifactName: 'agent-board-setup-${version}.${ext}',
     },
-  })
+    nsis: {
+      oneClick: true,
+      perMachine: false,
+      runAfterFinish: true,
+      shortcutName: brand.productName,
+      uninstallDisplayName: brand.productName,
+      // The board's data and settings (%LOCALAPPDATA%\agent-board) outlive an uninstall.
+      deleteAppDataOnUninstall: false,
+    },
+  },
+}
+// What Electron needs from the system, by each distribution's names; the package managers install it.
+// electron-builder's own lists miss libgbm and ALSA, and Arch's names packages it no longer has.
+/** @type {Partial<import('electron-builder').CliOptions> & { config: import('electron-builder').Configuration }} */
+const linux = {
+  linux: ['AppImage', 'deb', 'rpm', 'pacman'],
+  x64: true,
+  config: {
+    ...common,
+    linux: {
+      // One per hicolor size, 16 to 256 px: desktop/app/icon.png (256) and smaller copies of it, made
+      // once with a Lanczos resize (from one file electron-builder installs only its own size).
+      icon: path.join(root, 'desktop', 'linux', 'icons'),
+      category: 'Development',
+      synopsis: 'The job board shared by one developer and their AI agents',
+      description: brand.description,
+      // The packages' maintainer and vendor: the author, by name (no address is invented here).
+      maintainer: brand.author,
+      vendor: brand.author,
+      // The desktop entry is agent-board.desktop, its StartupWMClass agent-board: package.json's
+      // desktopName, which Electron makes the window's Wayland app_id and X11 WM_CLASS.
+      syncDesktopName: true,
+      desktop: { entry: { Name: brand.productName, Keywords: 'agents;kanban;tickets;board;' } },
+    },
+    appImage: { artifactName: 'agent-board-${version}-${arch}.${ext}' },
+    deb: {
+      artifactName: 'agent-board_${version}_${arch}.${ext}',
+      depends: [
+        'libgtk-3-0',
+        'libnotify4',
+        'libnss3',
+        'libxss1',
+        'libxtst6',
+        'xdg-utils',
+        'libatspi2.0-0',
+        'libuuid1',
+        'libsecret-1-0',
+        'libgbm1',
+        'libasound2 | libasound2t64',
+      ],
+    },
+    rpm: {
+      artifactName: 'agent-board-${version}.${arch}.${ext}',
+      // The package owns its folders too, so that removing it leaves no empty /opt/CrossBoard behind.
+      fpm: ['--directories', '/opt/CrossBoard'],
+      depends: [
+        'gtk3',
+        'libnotify',
+        'nss',
+        'libXScrnSaver',
+        '(libXtst or libXtst6)',
+        'xdg-utils',
+        'at-spi2-core',
+        '(libuuid or libuuid1)',
+        'mesa-libgbm',
+        'alsa-lib',
+      ],
+    },
+    pacman: {
+      artifactName: 'agent-board-${version}.${ext}',
+      depends: [
+        'gtk3',
+        'libnotify',
+        'nss',
+        'libxss',
+        'libxtst',
+        'xdg-utils',
+        'at-spi2-core',
+        'util-linux-libs',
+        'libsecret',
+        'mesa',
+        'alsa-lib',
+      ],
+    },
+  },
+}
+try {
+  await build({ projectDir: appCopy, publish: 'never', ...(WIN ? windows : linux) })
 } finally {
   fs.rmSync(appCopy, { recursive: true, force: true })
 }
 
-console.log(`\nInstaller: ${path.join(dist, `agent-board-setup-${brand.version}.exe`)}`)
-console.log(`Unpacked:  ${path.join(dist, 'win-unpacked', 'agent-board.exe')}`)
+if (WIN) {
+  console.log(`\nInstaller: ${path.join(dist, `agent-board-setup-${brand.version}.exe`)}`)
+  console.log(`Unpacked:  ${path.join(dist, 'win-unpacked', 'agent-board.exe')}`)
+} else {
+  const v = brand.version
+  const made = [
+    ['AppImage:', `agent-board-${v}-x86_64.AppImage`],
+    ['deb:', `agent-board_${v}_amd64.deb`],
+    ['rpm:', `agent-board-${v}.x86_64.rpm`],
+    ['pacman:', `agent-board-${v}.pacman`],
+    ['Unpacked:', path.join('linux-unpacked', 'agent-board')],
+  ]
+  console.log('')
+  for (const [what, file] of made) {
+    if (!fs.existsSync(path.join(dist, file))) fail(`electron-builder made no ${file} in ${dist}`)
+    console.log(`${what.padEnd(10)} ${path.join(dist, file)}`)
+  }
+}
