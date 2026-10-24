@@ -228,3 +228,61 @@ test('the layout editor fits a phone: no sideways scroll, the columns one above 
   const side = await layout.getByRole('list', { name: 'Ticket page, side column' }).boundingBox()
   expect(side!.y).toBeGreaterThan(main!.y + main!.height - 1)
 })
+
+/** The ticket page's columns: their widths, and the width of the grid they sit in. */
+const columns = async (page: Page) => {
+  const grid = page.locator('[data-ticket-column]').first().locator('xpath=..')
+  return {
+    grid: (await grid.boundingBox())!.width,
+    main: page.locator('[data-ticket-column="main"]'),
+    side: page.locator('[data-ticket-column="side"]'),
+  }
+}
+
+test('a ticket column with nothing to show on this ticket is not drawn; the other takes the width', async ({
+  page,
+  project,
+  human,
+  api,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 })
+  const base = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
+  // Sent as is: the server checks it.
+  const arrange = (layout: unknown) => ok(human.patch(`/api/projects/${project.id}`, { data: { layout } }))
+  // A new ticket: no hand-off, no preview, still open.
+  const ticket = await api.ticket({ title: 'Nothing on the side' })
+  const url = `/projects/${project.id}/features/${ticket.id}`
+
+  // Details, Branch and Workspaces hidden: Hand-off and Preview are left there, with nothing to show.
+  const hidden = ['ticket.details', 'ticket.branch', 'ticket.workspaces']
+  await arrange(base.map((it) => (hidden.includes(it.id) ? { ...it, hidden: true } : it)))
+  await page.goto(url)
+  let { grid, main, side } = await columns(page)
+  await expect(main.getByRole('heading', { level: 2, name: 'Tasks' })).toBeVisible()
+  await expect(side).toHaveCount(0)
+  expect((await main.boundingBox())!.width).toBeCloseTo(grid, 0)
+
+  // Preview hidden too: Hand-off alone, still nothing.
+  await arrange(
+    base.map((it) => ([...hidden, 'ticket.preview'].includes(it.id) ? { ...it, hidden: true } : it)),
+  )
+  await page.reload()
+  ;({ grid, main, side } = await columns(page))
+  await expect(main.getByRole('heading', { level: 2, name: 'Tasks' })).toBeVisible()
+  await expect(side).toHaveCount(0)
+  expect((await main.boundingBox())!.width).toBeCloseTo(grid, 0)
+
+  // The other way: on a cancelled ticket, a main column left with only Resume here (shown on open
+  // tickets alone) is not drawn, and the side column takes the width.
+  await arrange(
+    base.map((it) =>
+      it.area === 'ticket.main' && it.id !== 'ticket.resume' ? { ...it, area: 'ticket.side' as const } : it,
+    ),
+  )
+  await ok(human.patch(`/api/tickets/${ticket.id}`, { data: { status: 'cancelled' } }))
+  await page.reload()
+  ;({ grid, main, side } = await columns(page))
+  await expect(side.getByRole('heading', { level: 2, name: 'Tasks' })).toBeVisible()
+  await expect(main).toHaveCount(0)
+  expect((await side.boundingBox())!.width).toBeCloseTo(grid, 0)
+})

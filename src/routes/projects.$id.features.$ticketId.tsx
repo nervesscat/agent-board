@@ -254,11 +254,14 @@ function TicketPage() {
     }
   }, [drawn, anchor, anchoredPost, laneFeed, t])
 
-  if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
-  if (!t) return null
   // Stepping to another ticket, the previous one stays on screen until the new one loads: its git state
   // may come first, and must not show under the previous ticket's branch.
-  const git = t.id === Number(ticketId) ? ticketGit : undefined
+  const git = t && t.id === Number(ticketId) ? ticketGit : undefined
+  // Here, not in the Preview card: with none to show the card is left out, and its column with it.
+  const previewRows = usePreviewRows(t, git)
+
+  if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
+  if (!t) return null
 
   /**
    * Record a verdict. Disapproving cancels the lane, which can drop it out of the filtered list, so
@@ -301,9 +304,13 @@ function TicketPage() {
   const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
   const kind = stageOf(stages, t.status).kind
   const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
+  // null: a section with nothing to show on this ticket. It is left out of its column, so a column
+  // with nothing left to show is not drawn and the other one takes the page's width.
   const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
-    // Keyed by ticket, so an open editor and its draft do not follow to the next one.
-    'ticket.resume': <ResumeNote key={t.id} t={t} onChange={invalidate} />,
+    // Keyed by ticket, so an open editor and its draft do not follow to the next one. Not on a
+    // ticket that is finished or archived.
+    'ticket.resume':
+      t.archivedAt || isClosed(kind) ? null : <ResumeNote key={t.id} t={t} onChange={invalidate} />,
     'ticket.instructions': (
       <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
     ),
@@ -317,14 +324,16 @@ function TicketPage() {
         <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
       </ShownAnchor>
     ),
-    'ticket.handoff': t.handoff && <HandoffCard handoff={t.handoff} git={git} pr={t.pr} />,
-    'ticket.preview': <Previews t={t} git={git} onChange={invalidate} />,
+    'ticket.handoff': t.handoff ? <HandoffCard handoff={t.handoff} git={git} pr={t.pr} /> : null,
+    'ticket.preview': previewRows.length ? (
+      <Previews projectId={t.projectId} rows={previewRows} onChange={invalidate} />
+    ) : null,
     'ticket.details': <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />,
     'ticket.branch': <BranchPanel t={t} git={git} />,
     'ticket.workspaces': <WorkspacesPanel t={t} git={git} onChange={invalidate} />,
   }
-  const main = shownIn(layout, 'ticket.main')
-  const side = shownIn(layout, 'ticket.side')
+  const main = shownIn(layout, 'ticket.main').filter((s) => sections[s] != null)
+  const side = shownIn(layout, 'ticket.side').filter((s) => sections[s] != null)
 
   return (
     <div className="flex flex-col gap-6">
@@ -787,8 +796,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
  * is. Edited like the instructions; an empty note starts from the template. On any other open ticket
  * a one-line button writes the first one.
  */
+/** Shown only on a ticket still open and not archived: the page leaves it out otherwise. */
 function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
-  const stages = useStages(t.projectId)
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState('')
   const r = t.resume
@@ -800,7 +809,6 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  if (t.archivedAt || isClosed(stageOf(stages, t.status).kind)) return null
   const open = () => {
     setNote(r.note || RESUME_TEMPLATE)
     setEditing(true)
@@ -2392,9 +2400,10 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
  * Where the ticket's work runs for the human to try: a row per workspace with a preview link, or one
  * the board can build and run a preview of (its own worktree on this machine).
  */
-function Previews({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+/** The ticket's previews the Preview card shows: none (or no ticket yet), and the page leaves the card out. */
+function usePreviewRows(t: TicketFull | undefined, git?: TicketGit) {
   const candidates = [
-    ...t.workspaces.filter((w) => w.previewUrl || w.path).map((w) => ({ ...w, lane: null })),
+    ...(t?.workspaces ?? []).filter((w) => w.previewUrl || w.path).map((w) => ({ ...w, lane: null })),
     // The lanes' come with the git state, tagged with their lane.
     ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
   ]
@@ -2417,7 +2426,18 @@ function Previews({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
       ({ w, query: { data } }) =>
         w.previewUrl || data?.managed || data?.cannotStart === null || data?.toolProblem,
     )
-  if (!rows.length) return null
+  return rows
+}
+
+function Previews({
+  projectId,
+  rows,
+  onChange,
+}: {
+  projectId: TicketFull['projectId']
+  rows: ReturnType<typeof usePreviewRows>
+  onChange: () => void
+}) {
   return (
     <section className="rounded-lg border p-3" aria-label="Preview">
       <h2 className="mb-2 text-sm font-medium">Preview</h2>
@@ -2428,7 +2448,7 @@ function Previews({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
             w={w}
             data={query.data}
             error={query.error}
-            projectId={t.projectId}
+            projectId={projectId}
             onChange={() => {
               void query.refetch()
               onChange()
