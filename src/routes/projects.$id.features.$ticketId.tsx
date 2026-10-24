@@ -507,15 +507,21 @@ function WorkTimelineCard({ t }: { t: TicketFull }) {
                     {clock(heartbeats[0]!.at)}
                   </li>
                 )}
+                {/* The row's parts sit in a div of their own: a <time> right under an <li> is the feed's post shape. */}
                 {shown.map((e) => (
-                  <li key={e.id} className="flex gap-2">
-                    <Tip content={stamp(e.at)}>
-                      <time dateTime={e.at} className="shrink-0 font-mono text-muted-foreground tabular-nums">
-                        {clock(e.at)}
-                      </time>
-                    </Tip>
-                    <span className="shrink-0 font-medium">{e.agent}</span>
-                    <span className="min-w-0 break-words">{eventSentence(e, stageName)}</span>
+                  <li key={e.id}>
+                    <div className="flex gap-2">
+                      <Tip content={stamp(e.at)}>
+                        <time
+                          dateTime={e.at}
+                          className="shrink-0 font-mono text-muted-foreground tabular-nums"
+                        >
+                          {clock(e.at)}
+                        </time>
+                      </Tip>
+                      <span className="shrink-0 font-medium">{e.agent}</span>
+                      <span className="min-w-0 break-words">{eventSentence(e, stageName)}</span>
+                    </div>
                   </li>
                 ))}
               </ol>
