@@ -141,6 +141,7 @@ function prRow(projectId: number, n: number, extra: Partial<PrRow> = {}): PrRow 
     closedAt: null,
     hold: false,
     holdNote: '',
+    localCiSha: null,
     status: 'pending',
     latestReview: null,
     tickets: [],

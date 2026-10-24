@@ -378,7 +378,7 @@ describe('the phases the board ticks', () => {
     const t = await created(p, { title: 'auto', tasks: ['CI', 'a'] })
     // A top-level task reworded into a name is one; a subtask of that name is not.
     await tool('add_tasks', { ticketId: t.id, tasks: ['  merged '] })
-    const read = (await call('GET', `/api/tickets/${t.id}`)).body as Ticket & { tasks: { auto: boolean }[] }
+    const read = (await call('GET', `/api/tickets/${t.id}`)).body as { tasks: (Row & { auto: boolean })[] }
     expect(read.tasks.map((x) => [x.text, x.parentId === null, x.auto])).toEqual([
       ['Implementation', true, false],
       ['CI', false, false],
