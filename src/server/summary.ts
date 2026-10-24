@@ -14,6 +14,7 @@ import { listRepos } from './repos'
 import { reportDueFor } from './reportDue'
 import { handoffStates } from './resume'
 import { listStages, type Stage } from './stages'
+import { stalledFor } from './workTimeline'
 
 /**
  * The one-glance picture of a project (or of every project): what waits on the human, what is in
@@ -235,6 +236,27 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         parent: parentOf(t),
       }
     })
+  // Active tickets and lanes nobody was heard from on for longer than the project allows (the work timeline).
+  const signals = stalledFor(tickets, now)
+  const stalled = tickets
+    .flatMap((t) => {
+      const s = signals.get(t.id)?.stalled
+      return s
+        ? [
+            {
+              ticketId: t.id,
+              title: t.title,
+              status: t.status,
+              assignee: t.assignee,
+              parent: parentOf(t),
+              lastSignalAt: s.since,
+              lastAgent: s.lastAgent,
+              minutes: s.minutes,
+            },
+          ]
+        : []
+    })
+    .sort((a, b) => Date.parse(a.lastSignalAt) - Date.parse(b.lastSignalAt))
   const reviews = tickets
     .filter((t) => kind(t.status) === 'review' && !t.approvedAt)
     .map((t) => ({
@@ -307,6 +329,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         // Calendar days since it started, 0 when it started today.
         days: Math.round((startOfToday - new Date(`${today(new Date(since))}T00:00:00`).getTime()) / DAY_MS),
         // Handed off for review, it waits on the human rather than on its own posts.
+        // Active and silent past the project's threshold (the work timeline's rule).
+        stalled: !!signals.get(t.id)?.stalled,
         stale:
           kind(t.status) !== 'review' &&
           now.getTime() - new Date(post?.createdAt ?? since).getTime() > STALE_MS,
@@ -399,7 +423,14 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       threads,
       reviews,
       blockedTasks,
-      total: decisions.length + prsToReview.length + threads.length + reviews.length + blockedTasks.length,
+      stalled,
+      total:
+        decisions.length +
+        prsToReview.length +
+        threads.length +
+        reviews.length +
+        blockedTasks.length +
+        stalled.length,
     },
     inProgress: progress.filter((t) => t.kind !== 'review'),
     doneToday: { tickets: doneTickets, prs: closedPrs, activity },
