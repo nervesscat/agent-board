@@ -17,7 +17,7 @@ test('a body written by hand with \\\\ separators adds the repo at exactly that 
   const body = `{"projectId":${project.id},"name":"${name}","repoPath":"${repoPath.replaceAll('\\', '\\\\')}"}`
   expect(body).toContain(String.raw`\\`)
   const created = await ok<Repo>(
-    human.post('/api/repos', { data: body, headers: { 'content-type': 'application/json' } }),
+    human.post('/api/repos', { data: Buffer.from(body), headers: { 'content-type': 'application/json' } }),
   )
   expect(created.repoPath).toBe(repoPath)
   const listed = await ok<Repo[]>(human.get('/api/repos'))
@@ -33,7 +33,8 @@ test('a body that is not JSON is refused with the reason and how a backslash is 
 }) => {
   // What is left of such a body once a shell collapses \\ to \: \c is no JSON escape.
   const res = await human.post('/api/repos', {
-    data: String.raw`{"projectId":${project.id},"repoPath":"C:\code\repo"}`,
+    // A Buffer goes as these bytes; a string that does not parse would be sent JSON-encoded instead.
+    data: Buffer.from(String.raw`{"projectId":${project.id},"repoPath":"C:\code\repo"}`),
     headers: { 'content-type': 'application/json' },
   })
   expect(res.status()).toBe(400)
