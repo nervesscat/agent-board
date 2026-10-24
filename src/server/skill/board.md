@@ -49,7 +49,12 @@ name or the GitHub slug, and both map to the same ids.
 
 Then:
 
-1. `whoami`: your name on the board (the agent token's name). Use it as the assignee.
+1. `whoami`: who the board knows you as: `name` (the agent token's name, or your sub-identity's),
+   `role` and `parent`. Use the name as the assignee. An `orchestrator` (the human makes a token one,
+   in Settings, Agents) also changes the projects' instructions (`set_project_instructions`); a
+   `worker` cannot: tell your orchestrator what should change. If you were briefed with an
+   `agentName` (`<orchestrator>/<you>`), pass it on **every** board call: it makes your posts,
+   claims and comments yours, as a worker under the orchestrator.
 2. `get_project` with your `projectId`, and check its `name` matches the table (if not, the table
    is stale: tell the human to copy the skill again from the board). Its `instructions` override
    your defaults for every repo in it. Its `stages` are the board's columns, each with a `key`, a
@@ -241,9 +246,13 @@ Every spawned agent and lane costs time: hand out only what is new, and only wha
      earlier results.
   4. Done when: the condition to stop at.
   5. Return: the exact shape of the answer.
-- A subagent never answers a decision (`answer_decision`). If its work needs the human's answer, it
-  asks (`ask_decision`) or returns the question in its result; you ask the human in the chat and
-  answer the card yourself.
+- Name every subagent on the board: its brief says to pass `agentName: "<your whoami name>/<its
+name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is filed under it, a
+  worker with you as its parent, instead of under you. A worker session started on its own sends
+  the header `X-Agent-Name: <token name>/<its name>` instead, or gets a worker token of its own.
+- A subagent never answers a decision (`answer_decision`), and one that passes `agentName` is
+  refused. If its work needs the human's answer, it asks (`ask_decision`) or returns the question in
+  its result; you ask the human in the chat and answer the card yourself.
 
 ### Watch for feedback
 
@@ -483,7 +492,8 @@ Without those skills, or for one ticket, orchestrate by hand:
 2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
    prompt is its `instructions`, the project's `instructions` and a brief in the five parts of
    [Delegating](#delegating): the step's goal from the ticket (`get_ticket`), its focus, what is
-   known (the worktree and branch, what earlier steps returned: subagents share nothing else),
+   known (the worktree and branch, what earlier steps returned, the `agentName` it passes on every
+   board call: subagents share nothing else),
    done when (with the checklist from [Hand off](#4-hand-off), as it stands) and what to return;
    post what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`,
    its evidence in `files`: it goes to the Agents tab); when it changes where the ticket stands for
@@ -523,8 +533,9 @@ when the project has several repos): the human reads it from its verdict on the 
 ticket's Branch card, and the summary is also a progress post on the PR's ticket. Never post the
 review to GitHub.
 
-`list_actors` gives every name that signs in to the board (the project's agents are in
-`get_project`); use those exact names for `assignee`.
+`list_actors` gives every name that signs in to the board, with its `role` (human, orchestrator,
+worker) and `parent` (the name a sub-identity works under); the project's agents are in
+`get_project`. Use those exact names for `assignee`.
 
 ## Style
 
