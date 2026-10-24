@@ -34,7 +34,7 @@ function age(ticketId: number, minutes: number) {
       ticketId,
     )
     db.prepare(
-      "update tickets set \"createdAt\" = strftime('%Y-%m-%dT%H:%M:%fZ', \"createdAt\", ?), started_at = strftime('%Y-%m-%dT%H:%M:%fZ', started_at, ?) where id = ?",
+      'update tickets set "createdAt" = strftime(\'%Y-%m-%dT%H:%M:%fZ\', "createdAt", ?), started_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\', started_at, ?) where id = ?',
     ).run(shift, shift, ticketId)
   })
 }
