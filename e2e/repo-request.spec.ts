@@ -51,6 +51,8 @@ test('an agent asks for a repo, the human answers Add on the card, and the agent
   await card.getByRole('radio', { name: /^Add/ }).click()
   await card.getByRole('button', { name: 'Decide' }).click()
   await expect(card).toContainText(`decided by ${HUMAN}`)
+  // The reply under the card says what Add did.
+  await page.getByRole('button', { name: '1 reply' }).click()
   await expect(page.getByText(/Added repo shop \(repo \d+\)/)).toBeVisible()
 
   const after = await ok<Project>(human.get(`/api/projects/${project.id}`))
