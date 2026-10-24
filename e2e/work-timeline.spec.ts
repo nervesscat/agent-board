@@ -107,7 +107,8 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   void lane
 
   // From the keyboard: Tab reaches the span, which has its story as its name and shows its tooltip.
-  const named = ticket.getByRole('button', { name: /^build by claude, .* to now, \d+ min, open$/ })
+  // It started an hour back and is still open.
+  const named = ticket.getByRole('button', { name: /^build by claude, .* to now, 1 h( \d+ min)?, open$/ })
   await expect(named).toHaveCount(1)
   await ticket.getByRole('button', { name: '1 lane' }).focus()
   for (let i = 0; i < 6 && !(await named.evaluate((el) => el === document.activeElement)); i++)
@@ -193,9 +194,11 @@ test('a stalled ticket shows on its card, in the list and in Needs you, linking 
   const needsYou = section(page, 'Needs you')
   const link = needsYou.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` })
   await expect(link).toBeVisible()
-  await expect(needsYou.getByRole('listitem').filter({ has: link })).toContainText(
-    /silent 4\dm · last claude/,
-  )
+  // `has` is matched inside each row, so it takes the link alone, not one scoped to the section.
+  const row = needsYou
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` }) })
+  await expect(row).toContainText(/silent 4\dm · last claude/)
   await expect(needsYou.getByRole('link', { name: /Stalled: .*All quiet/ })).toHaveCount(0)
   await link.click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}$`))
