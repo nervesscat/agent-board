@@ -22,7 +22,8 @@ These are the links for a landing page or a README badge: they do not change fro
 The versioned files of the same release are `agent-board-setup-<version>.exe`,
 `agent-board-<version>-x86_64.AppImage`, `agent-board_<version>_amd64.deb`,
 `agent-board-<version>.x86_64.rpm` and `agent-board-<version>.pacman`. `latest` is the newest release
-that is not a draft or a pre-release.
+that is not a draft or a pre-release, and a version with a suffix (`0.2.0-beta.1`) is published as a
+pre-release by both the workflow and `pnpm release`, so `latest` stays on the newest stable one.
 
 The Linux packages are built by `pnpm desktop:package` on Linux once the Linux packaging is part of the
 commit being released. On a commit without it, `pnpm desktop:package` on Linux stops with

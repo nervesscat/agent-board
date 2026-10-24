@@ -1,9 +1,11 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { ASSETS, REPO, ghCommands, parseArgs, releaseFiles } from './release.mjs'
+import { ASSETS, REPO, ghCommands, parseArgs, releaseFiles, treeChanges } from './release.mjs'
 
 const all = () => true
 
@@ -91,6 +93,22 @@ describe('ghCommands', () => {
     ])
   })
 
+  it('creates a version with a suffix as a pre-release, and only that', () => {
+    const [create] = ghCommands({ ...base, tag: 'v0.2.0-beta.1', version: '0.2.0-beta.1', exists: false })
+    expect(create.at(-1)).toBe('--prerelease')
+    expect(create).toContain('CrossBoard 0.2.0-beta.1')
+    expect(ghCommands({ ...base, exists: false })[0]).not.toContain('--prerelease')
+    expect(
+      ghCommands({ ...base, tag: 'v0.2.0-beta.1', version: '0.2.0-beta.1', exists: true })[0],
+    ).not.toContain('--prerelease')
+  })
+
+  it('makes the release workflow publish a version with a suffix as a pre-release too', () => {
+    const workflow = fs.readFileSync(path.resolve('.github/workflows/release.yml'), 'utf8')
+    expect(workflow).toMatch(/"\$VERSION" == \*-\* \]\]; then prerelease=\(--prerelease\)/)
+    expect(workflow).toMatch(/gh release create .*"\$\{prerelease\[@\]\}"/)
+  })
+
   it('adds to an existing release, replacing files of the same name', () => {
     expect(ghCommands({ ...base, exists: true })).toEqual([
       ['release', 'upload', 'v0.1.0', 'a.exe', 'b.exe', '--clobber', '--repo', REPO],
@@ -107,5 +125,66 @@ describe('parseArgs', () => {
       force: false,
     })
     expect(() => parseArgs(['--publish'])).toThrow(/unknown argument --publish/)
+  })
+})
+
+describe('treeChanges', () => {
+  let dir = ''
+  afterEach(() => {
+    if (dir) fs.rmSync(dir, { recursive: true, force: true })
+    dir = ''
+  })
+
+  /** A repo with core.autocrlf, as on Windows: a file committed from CRLF is stored with LF. */
+  function repo() {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-tree-'))
+    const git = (/** @type {string[]} */ ...args) => execFileSync('git', args, { cwd: dir, stdio: 'pipe' })
+    git('init', '-q')
+    git('config', 'core.autocrlf', 'true')
+    git('config', 'user.name', 't')
+    git('config', 'user.email', 't@t')
+    git('config', 'commit.gpgsign', 'false')
+    fs.writeFileSync(path.join(dir, 'routeTree.gen.ts'), 'a\r\nb\r\n')
+    fs.writeFileSync(path.join(dir, 'other.ts'), 'x\r\n')
+    git('add', '.')
+    git('commit', '-q', '-m', 'base')
+    return git
+  }
+  const status = (/** @type {(...a: string[]) => Buffer} */ git) =>
+    git('status', '--porcelain').toString().split('\n').filter(Boolean)
+
+  it('puts back a file whose only change is its line endings, and calls the tree clean', () => {
+    const git = repo()
+    // What the build does: the same content, written with LF.
+    fs.writeFileSync(path.join(dir, 'routeTree.gen.ts'), 'a\nb\n')
+    expect(status(git)).toEqual([' M routeTree.gen.ts'])
+
+    // --dry-run: not counted as a change, and left as it is.
+    expect(treeChanges(dir, { keep: true })).toEqual({ ok: true, changes: [], eolOnly: ['routeTree.gen.ts'] })
+    expect(status(git)).toEqual([' M routeTree.gen.ts'])
+
+    expect(treeChanges(dir)).toEqual({ ok: true, changes: [], eolOnly: ['routeTree.gen.ts'] })
+    expect(status(git)).toEqual([])
+    expect(treeChanges(dir)).toEqual({ ok: true, changes: [], eolOnly: [] })
+  })
+
+  it('still reports, and keeps, a real change', () => {
+    const git = repo()
+    fs.writeFileSync(path.join(dir, 'routeTree.gen.ts'), 'a\nc\n')
+    fs.writeFileSync(path.join(dir, 'other.ts'), 'x\n')
+    fs.writeFileSync(path.join(dir, 'new.ts'), 'n\n')
+
+    expect(treeChanges(dir)).toEqual({
+      ok: true,
+      changes: [' M routeTree.gen.ts', '?? new.ts'],
+      eolOnly: ['other.ts'],
+    })
+    expect(fs.readFileSync(path.join(dir, 'routeTree.gen.ts'), 'utf8')).toBe('a\nc\n')
+    expect(status(git)).toEqual([' M routeTree.gen.ts', '?? new.ts'])
+  })
+
+  it('says when git status fails', () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-tree-'))
+    expect(treeChanges(path.join(dir, 'missing'))).toMatchObject({ ok: false })
   })
 })

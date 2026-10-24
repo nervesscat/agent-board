@@ -86,7 +86,8 @@ export function releaseFiles(platform, version, exists) {
 
 /**
  * The gh commands that publish `uploads` (file paths) to the release of `tag`: create it at `sha` when
- * it does not exist yet, else add to it, replacing files of the same name.
+ * it does not exist yet (a pre-release when the version has a suffix), else add to it, replacing files of
+ * the same name.
  * @param {{ tag: string, version: string, sha: string, exists: boolean, uploads: string[] }} o
  */
 export function ghCommands({ tag, version, sha, exists, uploads }) {
@@ -104,8 +105,39 @@ export function ghCommands({ tag, version, sha, exists, uploads }) {
       '--title',
       `CrossBoard ${version}`,
       '--generate-notes',
+      // 0.2.0-beta.1 and the like: a pre-release, so releases/latest stays on the newest stable one.
+      ...(version.includes('-') ? ['--prerelease'] : []),
     ],
   ]
+}
+
+/**
+ * The working tree's changes (`git status --porcelain` entries), less the files whose only change is
+ * their line endings: on Windows with core.autocrlf the build rewrites src/routeTree.gen.ts with LF,
+ * the same content `git diff` sees no change in. Unless `keep`, those files are checked out again so
+ * the tree is clean (scripts/bench/bench.mjs does the same after its build).
+ * @param {string} cwd @param {{ keep?: boolean }} [o]
+ * @returns {{ ok: true, changes: string[], eolOnly: string[] } | { ok: false, err: string }}
+ */
+export function treeChanges(cwd, { keep = false } = {}) {
+  const res = spawnSync('git', ['status', '--porcelain', '-z'], { cwd, encoding: 'utf8' })
+  if (res.error || res.status !== 0)
+    return { ok: false, err: res.error?.message ?? (res.stderr ?? '').trim() }
+  const entries = (res.stdout ?? '').split('\0')
+  const changes = []
+  const eolOnly = []
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]
+    if (!entry) continue
+    // A rename or copy is followed by its source path.
+    if (/^[RC]/.test(entry)) i++
+    const file = entry.slice(3)
+    if (entry.startsWith(' M ') && spawnSync('git', ['diff', '--quiet', '--', file], { cwd }).status === 0) {
+      eolOnly.push(file)
+      if (!keep) spawnSync('git', ['checkout', '--', file], { cwd })
+    } else changes.push(entry)
+  }
+  return { ok: true, changes, eolOnly }
 }
 
 /** @param {string[]} argv */
@@ -175,9 +207,9 @@ function main() {
   const sha = run('git', ['rev-parse', 'HEAD'], { cwd: root }).out
   if (!opts.stageOnly) {
     const problems = []
-    const dirty = run('git', ['status', '--porcelain'], { cwd: root })
-    if (!dirty.ok) problems.push(`git status failed: ${dirty.err}`)
-    else if (dirty.out) problems.push('the working tree has uncommitted changes')
+    const tree = treeChanges(root, { keep: opts.dryRun })
+    if (!tree.ok) problems.push(`git status failed: ${tree.err}`)
+    else if (tree.changes.length) problems.push('the working tree has uncommitted changes')
     const onOrigin = run('git', ['branch', '-r', '--contains', sha], { cwd: root })
     if (!onOrigin.ok || !onOrigin.out)
       problems.push(`commit ${sha.slice(0, 7)} is not on origin (push it first)`)
@@ -198,6 +230,8 @@ function main() {
   if (opts.skipBuild) say('build: skipped, using desktop/dist as it is')
   else if (opts.dryRun) say(`build: ${show('node', ['desktop/package.mjs'])} (pnpm desktop:package)`)
   else if (!run(process.execPath, build, { cwd: root, inherit: true }).ok) fail('pnpm desktop:package failed')
+  // The build rewrites src/routeTree.gen.ts; a change of line endings only is put back.
+  else treeChanges(root)
 
   // 2. Each one under its versioned and its stable name, in desktop/dist/release.
   const exists = (/** @type {string} */ f) =>
