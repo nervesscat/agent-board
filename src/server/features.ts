@@ -637,32 +637,32 @@ export function cleanTags(tags: string[]): string[] {
   return out.slice(0, MAX_TAGS)
 }
 
-export function updateTicket(
-  id: number,
-  patch: Partial<
-    Pick<
-      schema.Ticket,
-      | 'title'
-      | 'body'
-      | 'status'
-      | 'complexity'
-      | 'assignee'
-      | 'branch'
-      | 'baseBranch'
-      | 'repoId'
-      | 'tags'
-      | 'prNumber'
-    >
-  > & {
-    /** Replaces the ticket's repos; the first is the primary, which the fields above also write. */
-    repos?: TicketRepoInput[]
-  },
-  actor: string,
-  opts: { agent?: boolean } = {},
-) {
-  const before = getTicket(id)
-  const { repos: reposGiven, ...fields } = patch
-  patch = fields
+type TicketFieldsPatch = Partial<
+  Pick<
+    schema.Ticket,
+    | 'title'
+    | 'body'
+    | 'status'
+    | 'complexity'
+    | 'assignee'
+    | 'branch'
+    | 'baseBranch'
+    | 'repoId'
+    | 'tags'
+    | 'prNumber'
+  >
+>
+
+/**
+ * What an update writes to a ticket's primary: the repos list it produces (null when its repos stay as
+ * they are) and the fields with the new primary's own repo, branch, base and PR filled in. The needs
+ * check judges a ticket against the same primary the write produces.
+ */
+export function plannedPrimary(
+  before: schema.Ticket,
+  reposGiven: TicketRepoInput[] | undefined,
+  fields: TicketFieldsPatch,
+): { repos: ReturnType<typeof resolveTicketRepos> | null; patch: TicketFieldsPatch } {
   const reposBefore = ticketRepoList(before)
   // A repoId alone naming another repo the ticket spans makes that one the primary, with its own
   // branch, base and PR; the old primary stays as one of its other repos, with its own. Any other
@@ -673,9 +673,10 @@ export function updateTicket(
       ? reposBefore.map((e) => ({ repoId: e.repoId }))
       : undefined)
   let repos: ReturnType<typeof resolveTicketRepos> | null = null
+  let patch = fields
   if (reposInput) {
     if (before.prId)
-      throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: its repos cannot change`)
+      throw new HttpError(400, `ticket ${before.id} is PR #${before.prNumber}'s: its repos cannot change`)
     // A repoId given with the list names its primary: that entry goes first, the rest keep their order.
     let ordered = reposInput
     if (fields.repoId !== undefined) {
@@ -694,6 +695,24 @@ export function updateTicket(
       ...patch,
     }
   }
+  return { repos, patch }
+}
+
+export function updateTicket(
+  id: number,
+  patch: TicketFieldsPatch & {
+    /** Replaces the ticket's repos; the first is the primary, which the fields above also write. */
+    repos?: TicketRepoInput[]
+  },
+  actor: string,
+  opts: { agent?: boolean } = {},
+) {
+  const before = getTicket(id)
+  const { repos: reposGiven, ...fields } = patch
+  const reposBefore = ticketRepoList(before)
+  const planned = plannedPrimary(before, reposGiven, fields)
+  const repos = planned.repos
+  patch = planned.patch
   if (before.prId) {
     // A PR's own ticket is for that PR, in that repo, and has no branch of its own.
     if (

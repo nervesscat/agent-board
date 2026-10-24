@@ -413,3 +413,67 @@ describe('the git view', () => {
     expect(view.workspaces[0].info).toMatchObject({ exists: true, subject: 'work on feat/back' })
   }, 60_000)
 })
+
+describe('needs, when the primary changes in the same write as the move to done', () => {
+  it("are judged against the base of the primary the write produces, not the old primary's", async () => {
+    const own = dbm.db.insert(dbm.schema.projects).values({ name: 'needs' }).returning().get().id
+    // Repo b: feat/dev-only is merged into dev and not main, feat/main-only into main and not dev.
+    const dir = path.join(tmp, 'code', 'needs-b')
+    fs.mkdirSync(dir, { recursive: true })
+    git(dir, 'init', '-q', '-b', 'main')
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n')
+    git(dir, 'add', '.')
+    git(dir, 'commit', '-q', '-m', 'base')
+    git(dir, 'branch', 'dev')
+    for (const [branch, into] of [
+      ['feat/dev-only', 'dev'],
+      ['feat/main-only', 'main'],
+    ] as const) {
+      git(dir, 'checkout', '-q', '-b', branch, 'main')
+      fs.writeFileSync(path.join(dir, `${into}.txt`), `${branch}\n`)
+      git(dir, 'add', '.')
+      git(dir, 'commit', '-q', '-m', `work on ${branch}`)
+      git(dir, 'checkout', '-q', into)
+      git(dir, 'merge', '-q', '--no-ff', '-m', `merge ${branch}`, branch)
+    }
+    git(dir, 'checkout', '-q', 'main')
+    const repo = (name: string, repoPath: string) =>
+      dbm.db.insert(dbm.schema.repos).values({ projectId: own, name, repoPath }).returning().get().id
+    const a = repo('needs-a', checkout('needs-a', 'feat/a'))
+    const b = repo('needs-b', dir)
+    const create = async (data: Record<string, unknown>) =>
+      (await call('POST', `/api/projects/${own}/tickets`, { title: 'needs', status: 'in_progress', ...data }))
+        .body
+    const devOnly = await create({ repoId: b, branch: 'feat/dev-only' })
+    const mainOnly = await create({ repoId: b, branch: 'feat/main-only' })
+    // On a (base main) first and b (base dev) second.
+    const onBoth = (need: number) =>
+      create({
+        repos: [
+          { repoId: a, branch: 't-a' },
+          { repoId: b, branch: 't-b', baseBranch: 'dev' },
+        ],
+        needs: [need],
+      })
+
+    // The need is in b's dev: making b the primary and moving to done passes, by repoId or by the list.
+    for (const change of [{ repoId: b }, { repos: [{ repoId: b }, { repoId: a }] }]) {
+      const t = await onBoth(devOnly.id)
+      const res = await call('PATCH', `/api/tickets/${t.id}`, { ...change, status: 'done' }, 'agent')
+      expect(res.status, JSON.stringify(res.body)).toBe(200)
+      expect(res.body).toMatchObject({ repoId: b, baseBranch: 'dev', status: 'done' })
+    }
+
+    // The need is in b's main only: the same calls are refused against dev, and nothing changes.
+    for (const change of [{ repoId: b }, { repos: [{ repoId: b }, { repoId: a }] }]) {
+      const t = await onBoth(mainOnly.id)
+      const res = await call('PATCH', `/api/tickets/${t.id}`, { ...change, status: 'done' }, 'agent')
+      expect(res.status).toBe(409)
+      expect(res.body.error).toMatch(`#${t.id} needs #${mainOnly.id} (branch feat/main-only) merged into dev`)
+      expect((await call('GET', `/api/tickets/${t.id}`)).body).toMatchObject({
+        repoId: a,
+        status: 'in_progress',
+      })
+    }
+  }, 60_000)
+})

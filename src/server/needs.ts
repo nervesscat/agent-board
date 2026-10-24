@@ -389,10 +389,13 @@ export async function changeTicket(
   const { needs, force, ...patch } = input
   const before = features.getTicket(id)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
+  // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
+  const { repos, ...fields } = patch
+  const primary = features.plannedPrimary(before, repos, fields).patch
   const subject = {
     ...before,
-    repoId: patch.repoId ?? patch.repos?.[0]?.repoId ?? before.repoId,
-    baseBranch: patch.baseBranch || before.baseBranch,
+    repoId: primary.repoId ?? before.repoId,
+    baseBranch: primary.baseBranch || before.baseBranch,
     from: before.status,
   }
   const to = patch.status ? resolveStage(listStages(before.projectId), patch.status).key : before.status
