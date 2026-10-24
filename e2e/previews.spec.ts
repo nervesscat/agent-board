@@ -9,7 +9,7 @@ import type { APIRequestContext, Page } from '@playwright/test'
 
 import type { ManagedPreview, ProjectPreview, ProjectPreviews, TicketFull, Workspace } from '#/lib/api'
 import { END_BUILD as END, e2eEnv, git } from './env'
-import { expect, expectTooltip, ok, seedProject, test } from './fixtures'
+import { BOARD_RUNS, expect, expectTooltip, ok, seedProject, test } from './fixtures'
 import { boardPreview } from './runs'
 
 /** A server on this machine that answers, as a branch an agent runs would; closed when the test ends. */
@@ -233,8 +233,9 @@ test('a project route that does not exist answers 404', async ({ human }) => {
 })
 
 // The previews the board runs count against one board-wide limit, which some of these change: one test
-// at a time, and the limit back to 8 after each, so no other test's Start is refused.
-test.describe('board-run previews and the preview limit', () => {
+// at a time (with every other test that starts a run, BOARD_RUNS), and the limit back to 8 after each,
+// so no other test's Start is refused.
+test.describe('board-run previews and the preview limit', BOARD_RUNS, () => {
   test.describe.configure({ mode: 'serial' })
 
   const limitBack = (human: APIRequestContext) =>
