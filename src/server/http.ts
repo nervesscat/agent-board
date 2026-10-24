@@ -27,7 +27,8 @@ export async function readJson<T extends z.ZodType>(request: Request, schema: T)
     raw = await request.json()
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
-    const hint = /\bescape/i.test(reason) ? backslashHint : ''
+    // The parser's own words only: other messages quote the body, which may say "escape" itself.
+    const hint = /^Bad (escaped character|Unicode escape)\b/.test(reason) ? backslashHint : ''
     throw new HttpError(400, `body must be JSON: ${reason}${hint}`)
   }
   const parsed = schema.safeParse(raw)

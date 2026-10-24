@@ -54,6 +54,14 @@ describe('readJson', () => {
     expect(err.message).toBe(`body must be JSON: ${parseError(body)}`)
   })
 
+  it('gives no backslash hint when only the quoted body says "escape"', async () => {
+    const body = '{"projectId":1,"repoPath": escape}'
+    const reason = parseError(body)
+    expect(reason).toContain('escape')
+    const err = await refusal(raw(body))
+    expect(err.message).toBe(`body must be JSON: ${reason}`)
+  })
+
   it('refuses an empty body as not JSON, with the reason', async () => {
     const err = await refusal(raw(''))
     expect(err.status).toBe(400)
