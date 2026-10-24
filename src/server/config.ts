@@ -141,7 +141,9 @@ export function builtServerBind(e: Record<string, string | undefined>) {
 
 export const authOffBanner = (auth: AuthMode, name: string) =>
   `AUTH OFF: ${auth.boardEnv}, signed in as ${name}, do not expose this` +
-  (auth.boardEnv === 'test' ? ' (X-Test-Actor: human:<name> or agent:<name> picks another caller)' : '')
+  (auth.boardEnv === 'test'
+    ? ' (X-Test-Actor: human:<name>, agent:<name> or orchestrator:<name> picks another caller)'
+    : '')
 
 // --- the tailnet entrance: the board on this machine's tailnet name, through `tailscale serve`. ---
 // README: "Using it from other devices". Off unless PUBLIC_ORIGIN is set, and never with sign-in off.

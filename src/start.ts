@@ -14,7 +14,7 @@ const signIn = createMiddleware({ type: 'request' }).server(async ({ request, pa
   if (admission.kind === 'refuse') return admission.response
   if (admission.kind === 'page') return signInPage(request, pathname, admission.site)
   if (admission.kind === 'open') return next()
-  rememberActor(request, admission.actor)
+  rememberActor(request, admission.caller)
   return next({ context: { actor: admission.actor } })
 })
 

@@ -652,3 +652,42 @@ describe('with the log the board writes', () => {
     expect(s.doneToday.tickets.map((x) => x.id)).toEqual([d.id])
   })
 })
+
+describe('instruction changes in needs you', () => {
+  it("lists an orchestrator's pending change until the human reviews or reverts it", async () => {
+    const history = await import('./instructionsHistory')
+    const ORCH = { name: 'orch', role: 'orchestrator' } as const
+    const HUMAN_CHANGER = { name: HUMAN, role: 'human' } as const
+    const p = project('instructions')
+    const take = () => summary.getSummary(p, { humans: [] }).projects[0]!.needsYou
+    const before = take().total
+    const one = history.setInstructions(p, '# Rules\n\nAlways   run the e2e suite.', ORCH).change!
+    history.setInstructions(p, '# Rules\n\nAlways run the e2e suite.', HUMAN_CHANGER)
+    const two = history.setInstructions(p, 'two', ORCH).change!
+    expect(take().instructionChanges).toEqual([
+      {
+        changeId: two.id,
+        projectId: p,
+        changedBy: 'orch',
+        role: 'orchestrator',
+        createdAt: two.createdAt,
+        excerpt: 'two',
+        revertable: true,
+      },
+      {
+        changeId: one.id,
+        projectId: p,
+        changedBy: 'orch',
+        role: 'orchestrator',
+        createdAt: one.createdAt,
+        excerpt: 'Rules Always   run the e2e suite.',
+        revertable: false,
+      },
+    ])
+    expect(take().total).toBe(before + 2)
+    history.reviewInstructionChange(one.id, 'enrique')
+    history.revertInstructionChange(two.id, 'enrique')
+    expect(take().instructionChanges).toEqual([])
+    expect(take().total).toBe(before)
+  })
+})

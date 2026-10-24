@@ -5,6 +5,7 @@ import { db, schema } from '#/db'
 import { MAX_TAG_LENGTH, cleanSuggestions, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
 import { hostToolsForAgents } from './hostTools'
+import { assertMayChangeInstructions, type Changer, setInstructions } from './instructionsHistory'
 import { notFound } from './http'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
@@ -123,30 +124,38 @@ export const TagSuggestions = z
 
 /**
  * `defaultPhases`: the names trimmed, null for the built-in list again. `tagSuggestions`: trimmed,
- * blanks and repeats in any casing left out; [] stays empty.
+ * blanks and repeats in any casing left out; [] stays empty. `instructions` go through their history
+ * (instructionsHistory.ts): only `who` as the human or an orchestrator changes them, and a worker's
+ * patch that has them is refused whole. Without `who` the caller is taken for a worker.
  */
 export function updateProject(
   id: number,
   patch: Partial<Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions'>>,
   actor: string,
+  who: Changer = { name: actor, role: 'worker' },
 ) {
   getProject(id)
-  const { defaultPhases, tagSuggestions, ...rest } = patch
+  const { defaultPhases, tagSuggestions, instructions, ...rest } = patch
+  if (instructions !== undefined) assertMayChangeInstructions(who)
   const set = {
     ...rest,
     ...(defaultPhases !== undefined && { defaultPhases: defaultPhases?.map((name) => name.trim()) ?? null }),
     ...(tagSuggestions !== undefined && { tagSuggestions: cleanSuggestions(tagSuggestions) }),
   }
-  const row = db.update(schema.projects).set(set).where(eq(schema.projects.id, id)).returning().get()!
-  logActivity({
-    projectId: id,
-    actor,
-    kind: 'project',
-    text: `updated project ${row.name}`,
-    refType: 'project',
-    refId: id,
+  return db.transaction(() => {
+    if (instructions !== undefined) setInstructions(id, instructions, who)
+    if (Object.keys(set).length === 0) return getProject(id)
+    const row = db.update(schema.projects).set(set).where(eq(schema.projects.id, id)).returning().get()!
+    logActivity({
+      projectId: id,
+      actor,
+      kind: 'project',
+      text: `updated project ${row.name}`,
+      refType: 'project',
+      refId: id,
+    })
+    return withPhases(row)
   })
-  return withPhases(row)
 }
 
 export function deleteProject(id: number, actor: string) {

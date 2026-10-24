@@ -43,6 +43,8 @@ describe('test mode through the API router', () => {
     expect(await (await call('GET', '/api/me', 'agent:builder')).json()).toEqual({
       actor: 'builder',
       agent: true,
+      role: 'worker',
+      parent: '',
       boardEnv: 'test',
       authOff: true,
     })
@@ -182,7 +184,13 @@ describe('a decision the orchestrator relays, through the router', () => {
     const tool = listed.tools.find((t: { name: string }) => t.name === 'answer_decision')
     expect(tool.description).toContain('AskUserQuestion')
     expect(tool.description).toContain('subagent')
-    expect(Object.keys(tool.inputSchema.properties).sort()).toEqual(['as', 'option', 'postId', 'words'])
+    expect(Object.keys(tool.inputSchema.properties).sort()).toEqual([
+      'agentName',
+      'as',
+      'option',
+      'postId',
+      'words',
+    ])
 
     const { postId } = await askCard()
     const answer = (testActor: string, args: Record<string, unknown>) =>
@@ -210,5 +218,162 @@ describe('a decision the orchestrator relays, through the router', () => {
       relayedBy: 'claude',
       relayedText: 'MinIO',
     })
+  })
+})
+
+describe('who is who in test mode: orchestrator:, agent: and sub-identities', () => {
+  /** A request as the middleware hands it on, with any headers (X-Test-Actor, X-Agent-Name). */
+  async function send(method: string, pathname: string, headers: Record<string, string>, body?: unknown) {
+    const request = new Request(`http://localhost${pathname}`, {
+      method,
+      headers: {
+        accept: 'application/json, text/event-stream',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    const caller = await callerOf(request)
+    return handle({ request, actor: caller!.name })
+  }
+  /** A tool call: its parsed result, or `{error}` with the message of a refused call. */
+  async function tool(headers: Record<string, string>, name: string, args: Record<string, unknown>) {
+    const res = await send('POST', '/api/mcp', headers, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name, arguments: args },
+    })
+    const { result } = (await res.json()) as { result: any }
+    const text = result.content[0].text
+    return result.isError ? { error: text } : JSON.parse(text)
+  }
+  const ORCH = { 'x-test-actor': 'orchestrator:orch' }
+
+  it('/api/me and whoami tell the human, an orchestrator, a worker and a sub-identity apart', async () => {
+    const me = async (headers: Record<string, string>) => (await send('GET', '/api/me', headers)).json()
+    expect(await me({})).toMatchObject({ actor: 'human', agent: false, role: 'human', parent: '' })
+    expect(await me(ORCH)).toMatchObject({ actor: 'orch', agent: true, role: 'orchestrator', parent: '' })
+    expect(await me({ 'x-test-actor': 'agent:w' })).toMatchObject({ actor: 'w', role: 'worker', parent: '' })
+    expect(await me({ ...ORCH, 'x-agent-name': 'orch/worker-1' })).toMatchObject({
+      actor: 'orch/worker-1',
+      agent: true,
+      role: 'worker',
+      parent: 'orch',
+    })
+    expect(await tool(ORCH, 'whoami', { agentName: 'orch/worker-2' })).toEqual({
+      actor: 'orch/worker-2',
+      name: 'orch/worker-2',
+      role: 'worker',
+      parent: 'orch',
+      token: 'orch',
+    })
+    expect(await tool({ 'x-test-actor': 'human:qa' }, 'whoami', { agentName: 'qa/x' })).toMatchObject({
+      name: 'qa',
+      role: 'human',
+    })
+    // Every tool takes agentName.
+    const listed = await send('POST', '/api/mcp', ORCH, { jsonrpc: '2.0', id: 1, method: 'tools/list' })
+    const { tools } = ((await listed.json()) as { result: { tools: any[] } }).result
+    for (const t of tools) expect(Object.keys(t.inputSchema.properties ?? {}), t.name).toContain('agentName')
+  })
+
+  it("files a sub-identity's posts, claims and comments under its own name", async () => {
+    const features = await import('./features')
+    const ticket = features.createTicket(projectId, { title: 'Delegated' }, 'human')
+    const as = { agentName: 'orch/worker-2' }
+    const claimed = await tool(ORCH, 'claim_ticket', { ticketId: ticket.id, ...as })
+    expect(claimed.assignee).toBe('orch/worker-2')
+    const post = await tool(ORCH, 'post_update', { ticketId: ticket.id, body: 'built it', ...as })
+    expect(post.author).toBe('orch/worker-2')
+    const reply = await tool(ORCH, 'comment', {
+      parentType: 'update',
+      parentId: post.id,
+      body: 'and tested it',
+      ...as,
+    })
+    expect(reply.author).toBe('orch/worker-2')
+    const { db, schema } = await import('#/db')
+    const { eq } = await import('drizzle-orm')
+    const lines = db.select().from(schema.activity).where(eq(schema.activity.projectId, projectId)).all()
+    expect(lines.filter((l) => l.actor === 'orch/worker-2').length).toBeGreaterThanOrEqual(3)
+    const { listActors } = await import('./actors')
+    expect(listActors().find((a) => a.name === 'orch/worker-2')).toEqual({
+      name: 'orch/worker-2',
+      kind: 'agent',
+      role: 'worker',
+      parent: 'orch',
+      lastSeenAt: expect.any(String),
+    })
+    // A bad agentName refuses the call: nothing is posted.
+    const before = features.listComments('ticket', ticket.id).length
+    expect(await tool(ORCH, 'post_update', { ticketId: ticket.id, body: 'x', agentName: 'other/x' })).toEqual(
+      {
+        error: expect.stringMatching(/^agentName must be <token-name>\/<name>, here orch\/<name>/),
+      },
+    )
+    expect(features.listComments('ticket', ticket.id).length).toBe(before)
+  })
+
+  it("refuses a sub-identity's relay of a decision; the orchestrator's own still works", async () => {
+    const features = await import('./features')
+    const ticket = features.createTicket(projectId, { title: 'Pick one' }, 'human')
+    const asked = features.askDecision(
+      ticket.id,
+      { body: 'Which?', options: [{ label: 'A' }, { label: 'B' }] },
+      'orch',
+    )
+    const refusal = 'only the session that talks to the human relays an answer'
+    const rest = await send(
+      'POST',
+      `/api/updates/${asked.id}/decision/relay`,
+      { ...ORCH, 'x-agent-name': 'orch/worker-1' },
+      {
+        option: 0,
+        words: 'A',
+      },
+    )
+    expect(rest.status).toBe(403)
+    expect(await rest.json()).toEqual({ error: refusal })
+    expect(
+      await tool(ORCH, 'answer_decision', {
+        postId: asked.id,
+        option: 0,
+        words: 'A',
+        agentName: 'orch/worker-1',
+      }),
+    ).toEqual({ error: refusal })
+    expect(features.getPost(asked.id)).toMatchObject({ decidedAt: null, relayedBy: '' })
+    const ok = await send('POST', `/api/updates/${asked.id}/decision/relay`, ORCH, { option: 1, words: 'B' })
+    expect(ok.status).toBe(200)
+    expect(await ok.json()).toMatchObject({ decidedOption: 1, relayedBy: 'orch' })
+  })
+
+  it('set_project_instructions: an orchestrator changes them, a worker hears to ask its orchestrator', async () => {
+    const projects = await import('./projects')
+    const p = projects.createProject({ name: 'rules', instructions: 'old' }, 'human').id
+    expect(
+      await tool({ 'x-test-actor': 'agent:w' }, 'set_project_instructions', {
+        projectId: p,
+        instructions: 'x',
+      }),
+    ).toEqual({
+      error:
+        "only an orchestrator or the human changes the project's instructions: ask your orchestrator (you are w, a worker)",
+    })
+    const done = await tool(ORCH, 'set_project_instructions', { projectId: p, instructions: 'new' })
+    expect(done).toMatchObject({
+      instructions: 'new',
+      change: { oldValue: 'old', newValue: 'new', state: 'pending' },
+    })
+    expect((await tool(ORCH, 'get_project', { projectId: p })).instructions).toBe('new')
+    expect(await tool(ORCH, 'set_project_instructions', { projectId: p, instructions: 'new' })).toEqual({
+      instructions: 'new',
+      change: null,
+    })
+    const summary = await tool({}, 'get_summary', { projectId: p })
+    expect(summary.projects[0].needsYou.instructionChanges).toMatchObject([
+      { changeId: done.change.id, changedBy: 'orch', role: 'orchestrator', excerpt: 'new' },
+    ])
   })
 })

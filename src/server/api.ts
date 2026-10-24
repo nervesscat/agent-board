@@ -16,8 +16,8 @@ import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
 import { roadmap } from './roadmap'
 import { addDefaultAgents } from './defaultAgents'
-import { listActors } from './actors'
-import { isAgent } from './auth'
+import { AGENT_ROLES, listActors } from './actors'
+import { callerInfo, isAgent } from './auth'
 import { authRoutes } from './authApi'
 import { cleanupReport } from './cleanup'
 import { DeleteItems, deleteLeftovers } from './cleanupActions'
@@ -29,6 +29,7 @@ import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { checkHostTools, readyHostTools } from './hostTools'
 import { HttpError, intParam, readJson } from './http'
+import * as instructions from './instructionsHistory'
 import {
   isActive,
   managedPreview,
@@ -112,14 +113,24 @@ export const api = new ApiRouter()
 
 api.get('/api/health', () => json({ ok: true }))
 // `authOff` (test, or development with AUTH=off) puts a badge in the top bar: this is not the live board.
-api.get('/api/me', ({ request, actor }) =>
-  json({ actor, agent: isAgent(request), boardEnv: authMode().boardEnv, authOff: authMode().off }),
-)
+// `role` is human, orchestrator or worker; `parent` the name a sub-identity works under ('' for none).
+api.get('/api/me', ({ request, actor }) => {
+  const { role, parent } = callerInfo(request)
+  return json({
+    actor,
+    agent: isAgent(request),
+    role,
+    parent,
+    boardEnv: authMode().boardEnv,
+    authOff: authMode().off,
+  })
+})
 // The tools on this machine the board runs (git, gh, claude, node, pnpm): the last check, waiting for the
 // one the server started with when it has not ended yet; POST checks them again.
 api.get('/api/host-tools', async () => json(await readyHostTools()))
 api.post('/api/host-tools/check', async () => json(await checkHostTools()))
-// Every name the board has seen sign in, with whether it is an agent or a human.
+// Every name the board has seen sign in: whether it is an agent or a human, its role as last seen
+// (human, orchestrator, worker) and, for a sub-identity, the name it works under.
 api.get('/api/actors', () => json(listActors()))
 // Signing in with passkeys, signing out, and the devices section (authApi.ts).
 authRoutes(api)
@@ -141,6 +152,12 @@ api.post('/api/agent-tokens', async ({ request }) => {
 api.get('/api/agent-tokens', ({ request }) => {
   tokensHumanOnly(request, 'lists agent tokens')
   return json(tokens.listAgentTokens())
+})
+// The human's call alone: an orchestrator also changes the projects' instructions; a worker does not.
+api.patch('/api/agent-tokens/:id', async ({ request, params, actor }) => {
+  tokensHumanOnly(request, "sets an agent token's role")
+  const { role } = await readJson(request, z.object({ role: z.enum(AGENT_ROLES) }))
+  return json(tokens.setAgentTokenRole(id(params), role, actor))
 })
 api.delete('/api/agent-tokens/:id', ({ request, params }) => {
   tokensHumanOnly(request, 'revokes agent tokens')
@@ -221,7 +238,32 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
   if (body.defaultPhases !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's default phases")
-  return json(projects.updateProject(id(params), body, actor))
+  // Instructions: the human's or an orchestrator's, with their history (as the PUT below).
+  return json(projects.updateProject(id(params), body, actor, callerInfo(request)))
+})
+
+// --- the project's instructions: changed by the human or an orchestrator, every change kept ---
+api.put('/api/projects/:id/instructions', async ({ request, params }) => {
+  const body = await readJson(request, z.object({ instructions: Instructions }))
+  return json(instructions.setInstructions(id(params), body.instructions, callerInfo(request)))
+})
+// Every change, newest first.
+api.get('/api/projects/:id/instructions/changes', ({ params }) =>
+  json(instructions.listInstructionChanges(id(params))),
+)
+api.get('/api/instructions/changes/:id', ({ params }) => json(instructions.getInstructionChange(id(params))))
+// Only the human settles a change: reviewed (keep it), or the instructions put back as they were.
+const humanReviews = (request: Request) => {
+  if (isAgent(request))
+    throw new HttpError(403, "only the human reviews or reverts a change of the project's instructions")
+}
+api.post('/api/instructions/changes/:id/review', ({ request, params, actor }) => {
+  humanReviews(request)
+  return json(instructions.reviewInstructionChange(id(params), actor))
+})
+api.post('/api/instructions/changes/:id/revert', ({ request, params, actor }) => {
+  humanReviews(request)
+  return json(instructions.revertInstructionChange(id(params), actor))
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
   stopProjectPreviews(id(params), actor)
@@ -687,8 +729,9 @@ api.put('/api/updates/:id/decision', async ({ request, params, actor }) => {
   )
   return json(features.decide(id(params), body.option, body.note, actor))
 })
-// The orchestrator's record of the human's answer given in the chat: only a connected agent, and never
-// as one of the project's agents (features.relayDecision checks both, and that the card is open).
+// The orchestrator's record of the human's answer given in the chat: only a connected agent, never as
+// one of the project's agents nor as a sub-identity (features.relayDecision checks these, and that the
+// card is open).
 api.post('/api/updates/:id/decision/relay', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
@@ -698,7 +741,12 @@ api.post('/api/updates/:id/decision/relay', async ({ request, params, actor }) =
       as: AgentName.optional(),
     }),
   )
-  return json(features.relayDecision(id(params), body, actor, { agent: isAgent(request) }))
+  return json(
+    features.relayDecision(id(params), body, actor, {
+      agent: isAgent(request),
+      delegated: callerInfo(request).parent !== '',
+    }),
+  )
 })
 // Its author edits or deletes a post or reply; the human (passkey) any.
 api.patch('/api/updates/:id', async ({ request, params, actor }) => {
