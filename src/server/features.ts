@@ -668,7 +668,14 @@ export function updateTicket(
   if (reposInput) {
     if (before.prId)
       throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: its repos cannot change`)
-    repos = resolveTicketRepos(before, reposInput)
+    // A repoId given with the list names its primary: that entry goes first, the rest keep their order.
+    let ordered = reposInput
+    if (fields.repoId !== undefined) {
+      const at = reposInput.findIndex((e) => e.repoId === fields.repoId)
+      if (at < 0) throw new HttpError(400, `repoId: repo ${fields.repoId} is not one of the repos listed`)
+      ordered = [reposInput[at]!, ...reposInput.filter((_, i) => i !== at)]
+    }
+    repos = resolveTicketRepos(before, ordered)
     const primary = repos[0]!
     // The list says what the primary is; a field given alongside it still has the last word.
     patch = {

@@ -164,6 +164,39 @@ describe("a ticket's repos", () => {
     expect(refused.status).toBe(400)
     expect(refused.body.error).toMatch(`repo ${elsewhere} is not in project ${projectId}`)
   })
+
+  it('a repoId given with repos makes that repo the primary, the others keeping their entries', async () => {
+    const t = (
+      await ticket({
+        repos: [
+          { repoId: front.id, branch: 'feat/front' },
+          { repoId: back.id, branch: 'feat/back', prNumber: 12 },
+        ],
+      })
+    ).body
+    const res = await call('PATCH', `/api/tickets/${t.id}`, {
+      repos: [{ repoId: front.id }, { repoId: back.id }],
+      repoId: back.id,
+    })
+    expect(res.status).toBe(200)
+    expect(res.body).toMatchObject({ repoId: back.id, branch: 'feat/back', prNumber: 12 })
+    expect(repoRows(t.id)).toEqual([
+      [back.id, 'feat/back', 0],
+      [front.id, 'feat/front', 1],
+    ])
+
+    // A repoId the list does not name is refused, and nothing changes.
+    const bad = await call('PATCH', `/api/tickets/${t.id}`, {
+      repos: [{ repoId: back.id }],
+      repoId: front.id,
+    })
+    expect(bad.status).toBe(400)
+    expect(bad.body.error).toMatch(/^repoId: /)
+    expect(repoRows(t.id)).toEqual([
+      [back.id, 'feat/back', 0],
+      [front.id, 'feat/front', 1],
+    ])
+  })
 })
 
 describe('over MCP', () => {
@@ -222,6 +255,25 @@ describe('over MCP', () => {
     expect(t).toMatchObject({ repoId: back.id, branch: 'feat/back' })
     await tool('update_ticket', { ticketId: t.id, repos: [{ repoId: front.id, branch: 'feat/front' }] })
     expect(repoRows(t.id)).toEqual([[front.id, 'feat/front', 0]])
+
+    // repoId with repos picks the primary from the list, or is refused naming the field.
+    const both = await tool('update_ticket', {
+      ticketId: t.id,
+      repos: [{ repoId: front.id }, { repoId: back.id, branch: 'feat/back' }],
+      repoId: back.id,
+    })
+    expect(both.error).toBe(false)
+    expect(repoRows(t.id)).toEqual([
+      [back.id, 'feat/back', 0],
+      [front.id, 'feat/front', 1],
+    ])
+    expect(
+      await tool('update_ticket', { ticketId: t.id, repos: [{ repoId: front.id }], repoId: back.id }),
+    ).toMatchObject({ error: true, text: expect.stringMatching(/repoId: /) })
+    expect(repoRows(t.id)).toEqual([
+      [back.id, 'feat/back', 0],
+      [front.id, 'feat/front', 1],
+    ])
   })
 })
 
