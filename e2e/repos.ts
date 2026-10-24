@@ -68,6 +68,26 @@ export async function ownRepo(human: APIRequestContext, name: string) {
   }
 }
 
+/**
+ * A git checkout whose path has backslash separators on every OS: Windows' own, elsewhere a folder
+ * name holding backslashes (legal there). Its JSON carries `\\` either way.
+ */
+export function backslashCheckout(name: string) {
+  const dir = fs.mkdtempSync(path.join(e2eEnv().root, `${name}-`))
+  const repoPath =
+    process.platform === 'win32'
+      ? path.join(dir, 'code', 'repo')
+      : path.join(dir, ['code', 'repo'].join(String.fromCharCode(0x5c)))
+  fs.mkdirSync(repoPath, { recursive: true })
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=e2e', '-c', 'user.email=e2e@example.com', ...args], {
+      cwd: repoPath,
+    })
+  git('init', '-q', '-b', 'main')
+  git('commit', '-q', '--allow-empty', '-m', 'base')
+  return repoPath
+}
+
 /** What the page's refresh does: fetch origin into the checkout and read its branches afresh. */
 export const look = (human: APIRequestContext, project: Project) =>
   ok(human.post(`/api/projects/${project.id}/push/refresh`))

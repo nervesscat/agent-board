@@ -112,7 +112,12 @@ export default defineConfig(({ mode }) => ({
       ...(process.env.BOARD_BUILD_DIR && { output: { dir: process.env.BOARD_BUILD_DIR } }),
     }),
     tailwindcss(),
-    tanstackStart(),
+    // No dev stylesheet of TanStack Start's (/@tanstack-start/styles.css): it is given a precedence, so
+    // React puts it at the top of the head, and the inline KEY_ENTRIES after it (src/lib/reveal.ts) would
+    // not run until it had loaded. It holds the CSS that routes import as modules, and none does: the
+    // app's CSS is the link in src/routes/__root.tsx, which Vite serves and hot-reloads as it is. Builds
+    // never had it.
+    tanstackStart({ dev: { ssrStyles: { enabled: false } } }),
     viteReact(),
     connectionGoneIsNotAnError(),
   ],
