@@ -1,4 +1,4 @@
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, ne, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
@@ -152,6 +152,46 @@ export function deleteRepo(id: number, actor: string) {
         .all()
       for (const w of workspaces) forgetPreview(w.id, actor)
       tx.delete(schema.tickets).where(inArray(schema.tickets.prId, repoPrIds)).run()
+      // A ticket whose primary it was gets its next repo as the primary, with that repo's own branch,
+      // base and PR. One with no other repo falls back to the project's, as a ticket without a repo does.
+      const primaryOf = tx
+        .select({ id: schema.tickets.id })
+        .from(schema.tickets)
+        .where(
+          or(
+            eq(schema.tickets.repoId, id),
+            inArray(
+              schema.tickets.id,
+              tx
+                .select({ id: schema.ticketRepos.ticketId })
+                .from(schema.ticketRepos)
+                .where(and(eq(schema.ticketRepos.repoId, id), eq(schema.ticketRepos.position, 0))),
+            ),
+          ),
+        )
+        .all()
+      for (const t of primaryOf) {
+        const next = tx
+          .select()
+          .from(schema.ticketRepos)
+          .where(and(eq(schema.ticketRepos.ticketId, t.id), ne(schema.ticketRepos.repoId, id)))
+          .orderBy(asc(schema.ticketRepos.position), asc(schema.ticketRepos.repoId))
+          .get()
+        if (!next) continue
+        tx.update(schema.tickets)
+          .set({
+            repoId: next.repoId,
+            branch: next.branch,
+            baseBranch: next.baseBranch,
+            prNumber: next.prNumber,
+          })
+          .where(eq(schema.tickets.id, t.id))
+          .run()
+        tx.update(schema.ticketRepos)
+          .set({ position: 0 })
+          .where(and(eq(schema.ticketRepos.ticketId, t.id), eq(schema.ticketRepos.repoId, next.repoId)))
+          .run()
+      }
       tx.delete(schema.repos).where(eq(schema.repos.id, id)).run()
     },
     { behavior: 'immediate' },

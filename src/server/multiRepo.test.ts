@@ -197,6 +197,63 @@ describe("a ticket's repos", () => {
       [front.id, 'feat/front', 1],
     ])
   })
+
+  it('deleting the primary repo makes the next one the primary, with its own branch, base and PR', async () => {
+    const gone = dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId, name: 'gone', repoPath: path.join(tmp, 'code', 'gone') })
+      .returning()
+      .get().id
+    // The next by position is front, though back would come first by name.
+    const t = (
+      await ticket({
+        repos: [
+          { repoId: gone, branch: 'feat/gone', prNumber: 3 },
+          { repoId: front.id, branch: 'feat/front', baseBranch: 'dev', prNumber: 7 },
+          { repoId: back.id, branch: 'feat/back' },
+        ],
+      })
+    ).body
+    const solo = (await ticket({ repoId: gone, branch: 'feat/solo' })).body
+    expect((await call('DELETE', `/api/repos/${gone}`)).status).toBe(200)
+
+    const expected = [
+      {
+        repoId: front.id,
+        name: 'front',
+        branch: 'feat/front',
+        baseBranch: 'dev',
+        prNumber: 7,
+        primary: true,
+      },
+      {
+        repoId: back.id,
+        name: 'back',
+        branch: 'feat/back',
+        baseBranch: 'main',
+        prNumber: null,
+        primary: false,
+      },
+    ]
+    const read = (await call('GET', `/api/tickets/${t.id}`)).body
+    expect(read).toMatchObject({ repoId: front.id, branch: 'feat/front', baseBranch: 'dev', prNumber: 7 })
+    expect(read.repos).toEqual(expected)
+    expect(repoRows(t.id)).toEqual([
+      [front.id, 'feat/front', 0],
+      [back.id, 'feat/back', 2],
+    ])
+
+    // A write to the primary's fields writes front's own row, not a stale branch.
+    expect((await call('PATCH', `/api/tickets/${t.id}`, { prNumber: null })).status).toBe(200)
+    expect((await call('GET', `/api/tickets/${t.id}`)).body.repos).toEqual([
+      { ...expected[0], prNumber: null },
+      expected[1],
+    ])
+
+    // A ticket with no other repo falls back to the project's, as before.
+    const after = (await call('GET', `/api/tickets/${solo.id}`)).body
+    expect(after).toMatchObject({ repoId: null, branch: 'feat/solo' })
+  })
 })
 
 describe('over MCP', () => {
