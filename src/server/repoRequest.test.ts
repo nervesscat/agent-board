@@ -312,6 +312,50 @@ describe('the checks of a request', () => {
     expect(dupe.message).toContain('of project checks-elsewhere')
     expect(decisionsOn(ticketId).map((d) => d.repoRequest?.name)).toEqual(['cased'])
   })
+
+  it('refuses a registered checkout spelled with ., .. or doubled slashes, and stores a path resolved', async () => {
+    const dir = checkout('https://github.com/acme/spelled.git')
+    const fwd = dir.replace(/\\/g, '/')
+    const parent = path.dirname(fwd)
+    const base = path.basename(fwd)
+    // Resolved, a new checkout's path loses its `.`, `..` and doubled slashes on the card.
+    const card = await features.requestRepo(
+      ticketId,
+      { name: 'spelled', repoPath: `${parent}/nope/..//./${base}/.`, githubRepo: 'acme/spelled' },
+      AGENT,
+    )
+    expect(card.repoRequest).toMatchObject({ repoPath: dir })
+    expect(card.body).toContain(dir)
+
+    const registered = checkout('https://github.com/acme/registered.git')
+    dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId: newProject('checks-spelled').id, name: 'registered', repoPath: registered })
+      .run()
+    const r = registered.replace(/\\/g, '/')
+    const [p, b] = [path.dirname(r), path.basename(r)]
+    for (const spelling of [`${p}/./${b}`, `${r}/.`, `${p}/nope/../${b}`, `${p}//${b}`]) {
+      expect(
+        await ask({ name: 'registered', repoPath: spelling, githubRepo: 'acme/registered' }),
+        spelling,
+      ).toMatchObject({
+        status: 409,
+        message: expect.stringContaining('already registered as repo'),
+      })
+    }
+    // A request stored with such a spelling is held to the same check.
+    const stored = {
+      projectId: pid,
+      name: 'other',
+      repoPath: `${p}/x/../${b}/.`,
+      githubRepo: 'acme/registered',
+      baseBranch: 'main',
+    }
+    expect(repos.repoRequestProblem(stored, 'https://github.com/acme/registered.git')).toMatchObject({
+      status: 409,
+    })
+    expect(decisionsOn(ticketId).map((d) => d.repoRequest?.name)).toEqual(['cased', 'spelled'])
+  })
 })
 
 describe('answering a request', () => {
@@ -416,6 +460,38 @@ describe('answering a request', () => {
     expect(late.status).toBe(200)
     expect(late.body.repo.refused).toContain('already has a repo named same')
     expect(names(pid).filter((n) => ['gone', 'moved', 'same'].includes(n))).toEqual(['same'])
+  })
+
+  it('on Add, refuses a path a repo of the board took since, in any spelling, and adds nothing', async () => {
+    const { card, dir } = await ask('taken')
+    const fwd = dir.replace(/\\/g, '/')
+    // The human added it to another project by hand, spelled with `.` and `..`.
+    dbm.db
+      .insert(dbm.schema.repos)
+      .values({
+        projectId: newProject('answers-taken').id,
+        name: 'taken-there',
+        repoPath: `${path.dirname(fwd)}/x/../${path.basename(fwd)}/.`,
+      })
+      .run()
+    const answered = await answer(card.id, 0)
+    expect(answered.status).toBe(200)
+    expect(answered.body.repo).toMatchObject({ added: null, already: null })
+    expect(answered.body.repo.refused).toContain('already registered as repo')
+    expect(names(pid)).not.toContain('taken')
+  })
+
+  it('Add again finds the repo it added in any spelling: already added', async () => {
+    const { card, dir } = await ask('respelled')
+    expect((await answer(card.id, 0)).body.repo.added).toMatchObject({ name: 'respelled' })
+    const added = repos.listRepos(pid).find((r) => r.name === 'respelled')!
+    const fwd = dir.replace(/\\/g, '/')
+    dbm.db
+      .update(dbm.schema.repos)
+      .set({ repoPath: `${path.dirname(fwd)}//${path.basename(fwd)}/./` })
+      .where(eq(dbm.schema.repos.id, added.id))
+      .run()
+    expect((await answer(card.id, 0)).body.repo).toMatchObject({ added: null, already: { id: added.id } })
   })
 
   it('an ordinary card with an Add option adds nothing', async () => {

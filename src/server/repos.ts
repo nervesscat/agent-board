@@ -5,7 +5,7 @@ import { asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
-import { samePath } from './cleanup'
+import { folderKey } from './cleanup'
 import { assertRepo, originUrl, repoNameWithOwner } from './git'
 import { HttpError, notFound } from './http'
 import { forgetPreview } from './managedPreview'
@@ -71,9 +71,9 @@ const GITHUB_REPO = /^[\w.-]+\/[\w.-]+$/
  * Why the repo an agent asks for (`requestRepo`) cannot be added now, or null when it can: its path is an
  * existing git checkout, given whole; `origin` (the checkout's origin URL, as `originUrl` read it) is
  * github.com's `githubRepo`, owner and name in any casing; the project has no repo of that name (trimmed,
- * any casing); and no repo of the board is registered at that path (`samePath`: either slash, a trailing
- * one, and on Windows any casing). Checked when it is asked and again when the human answers Add, since
- * the checkout or the board may have changed in between.
+ * any casing); and no repo of the board is registered at that folder (`folderKey`: in any spelling, `.`,
+ * `..`, doubled or either slashes, a trailing one, links, and on Windows any casing). Checked when it is
+ * asked and again when the human answers Add, since the checkout or the board may have changed in between.
  */
 export function repoRequestProblem(req: schema.RepoRequest, origin: string | null): HttpError | null {
   if (!path.isAbsolute(req.repoPath))
@@ -94,7 +94,8 @@ export function repoRequestProblem(req: schema.RepoRequest, origin: string | nul
   const named = listRepos(req.projectId).find((r) => r.name.trim().toLowerCase() === req.name.toLowerCase())
   if (named)
     return new HttpError(409, `this project already has a repo named ${named.name} (repo ${named.id})`)
-  const there = listRepos().find((r) => samePath(r.repoPath, req.repoPath))
+  const key = folderKey(req.repoPath)
+  const there = listRepos().find((r) => folderKey(r.repoPath) === key)
   if (there)
     return new HttpError(
       409,
@@ -110,17 +111,19 @@ export async function requestOrigin(repoPath: string): Promise<string | null> {
 }
 
 /**
- * The repo an agent asks to add to `projectId`, cleaned (trimmed; base branch main when left out) and
- * checked (`repoRequestProblem`): what its card names and its Add creates. A problem is thrown.
+ * The repo an agent asks to add to `projectId`, cleaned (trimmed; an absolute path resolved, so its `.`,
+ * `..` and doubled slashes go; base branch main when left out) and checked (`repoRequestProblem`): what its card names and its Add creates. A problem is thrown.
  */
 export async function checkRepoRequest(
   projectId: number,
   input: { name: string; repoPath: string; githubRepo: string; baseBranch?: string },
 ): Promise<schema.RepoRequest> {
+  const repoPath = input.repoPath.trim()
   const req = {
     projectId,
     name: input.name.trim(),
-    repoPath: input.repoPath.trim(),
+    // A relative path stays as given, for `repoRequestProblem` to refuse.
+    repoPath: path.isAbsolute(repoPath) ? path.resolve(repoPath) : repoPath,
     githubRepo: input.githubRepo.trim(),
     baseBranch: input.baseBranch?.trim() || 'main',
   }
@@ -153,11 +156,12 @@ export function insertRequestedRepo(req: schema.RepoRequest) {
     .get()
 }
 
-/** The repo a repo request's Add created already: the same name and path in its project. */
+/** The repo a repo request's Add created already: the same name and folder (`folderKey`) in its project. */
 export function requestedRepo(req: schema.RepoRequest) {
+  const key = folderKey(req.repoPath)
   return (
     listRepos(req.projectId).find(
-      (r) => samePath(r.repoPath, req.repoPath) && r.name.trim().toLowerCase() === req.name.toLowerCase(),
+      (r) => r.name.trim().toLowerCase() === req.name.toLowerCase() && folderKey(r.repoPath) === key,
     ) ?? null
   )
 }
