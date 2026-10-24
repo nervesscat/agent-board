@@ -20,6 +20,7 @@ vi.mock('./git', async (original) => ({
   listMyPrs: async () => found,
   currentGithubLogin: async () => 'enrique',
   prMerged: async (_repo: string, n: number) => merged.has(n),
+  prStateOf: async (_repo: string, n: number) => (merged.has(n) ? 'MERGED' : null),
 }))
 
 let mp: typeof import('./managedPreview')

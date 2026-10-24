@@ -6,7 +6,7 @@ import { logActivity } from './activity'
 import { workspacePreviews } from './handoff'
 import { managedPreview, type ManagedPreview } from './managedPreview'
 import { getProject } from './projects'
-import { autoPrRow, ciGreen, prsKnown } from './prs'
+import { autoPrRow, ciGreen, prsKnown, prWasMerged } from './prs'
 import { type Push, pushStates } from './push'
 import { listRepos, ticketRepo } from './repos'
 import { kindOf, listStages } from './stages'
@@ -24,9 +24,11 @@ export interface AutoFacts {
   push: Pick<Push, 'state'> | null
   /**
    * The ticket's PR as the queue holds it (open, merged or closed): null when it has none, undefined
-   * when the board does not know the repo's PRs yet (no refresh, no rows).
+   * when the board does not know the repo's PRs yet (no refresh, no rows). A row closed with no merge
+   * time that GitHub has not called closed (`leftAs`) is not known either: the capped merged searches
+   * may have missed its merge.
    */
-  pr: Pick<schema.Pr, 'open' | 'mergedAt' | 'checks' | 'headSha' | 'localCiSha'> | null | undefined
+  pr: Pick<schema.Pr, 'open' | 'mergedAt' | 'leftAs' | 'checks' | 'headSha' | 'localCiSha'> | null | undefined
   /** Whether a preview of one of the ticket's own workspaces runs, or its link answers. */
   preview: boolean
 }
@@ -35,9 +37,9 @@ export interface AutoFacts {
 export type AutoTicks = Record<AutoPhase, boolean | null>
 
 export function autoPhaseRules(f: AutoFacts): AutoTicks {
-  const pr = f.pr
-  const live = pr ? pr.open || pr.mergedAt !== null : false
-  const prMerged = pr ? pr.mergedAt !== null : false
+  const prMerged = f.pr ? prWasMerged(f.pr) : false
+  const pr = f.pr && !f.pr.open && !prMerged && f.pr.leftAs !== 'CLOSED' ? undefined : f.pr
+  const live = pr ? pr.open || prMerged : false
   const pushMerged = f.push?.state === 'merged'
   return {
     // Every local commit on origin (origin may be ahead), only origin has it, or it landed and went.
@@ -87,6 +89,9 @@ function addMissingMerged(t: schema.Ticket): boolean {
       const now = db.select().from(schema.tickets).where(eq(schema.tickets.id, t.id)).get()
       if (!now || now.mergedPhaseChecked) return false
       db.update(schema.tickets).set({ mergedPhaseChecked: true }).where(eq(schema.tickets.id, t.id)).run()
+      // A closed ticket's work is over: an open Merged it may never tick would take it off 100%.
+      const kind = kindOf(listStages(t.projectId), now.status)
+      if (kind === 'done' || kind === 'cancelled') return false
       const tasks = topLevelTasks(t.id)
       const phases = tasks.map((task) => autoPhaseOf(task))
       if (!name || !phases.some(Boolean) || phases.includes('Merged')) return false
@@ -186,7 +191,7 @@ type Workspace = { previewUrl: string; managedPreview: ManagedPreview | null }
 
 /** The facts for a ticket, given its branch's push state as just read (null when there is no repo). */
 async function factsOf(
-  t: Pick<schema.Ticket, 'projectId' | 'repoId' | 'prNumber' | 'branch'>,
+  t: Pick<schema.Ticket, 'projectId' | 'repoId' | 'prNumber' | 'branch' | 'createdAt'>,
   push: Push | null,
   workspaces: Workspace[],
 ): Promise<AutoFacts> {
@@ -198,7 +203,7 @@ async function factsOf(
       ? undefined
       : !t.prNumber && !t.branch
         ? null
-        : prsKnown(t.projectId, repo.id)
+        : prsKnown(repo.id)
           ? autoPrRow(t, repo.id)
           : undefined,
     preview: previews.some((p) => p.running),
@@ -210,7 +215,10 @@ async function factsOf(
  * workspaces with their previews. True when a task changed.
  */
 export async function reconcileTicket(
-  t: Pick<schema.Ticket, 'id' | 'projectId' | 'repoId' | 'prNumber' | 'branch' | 'archivedAt' | 'prId'>,
+  t: Pick<
+    schema.Ticket,
+    'id' | 'projectId' | 'repoId' | 'prNumber' | 'branch' | 'createdAt' | 'archivedAt' | 'prId'
+  >,
   push: Push | null,
   workspaces: Workspace[],
 ): Promise<boolean> {

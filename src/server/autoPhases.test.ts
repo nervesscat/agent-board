@@ -17,6 +17,8 @@ const repo = path.join(tmp, 'repo')
 
 // gh answers from fixtures, as in prs.test.ts: a refresh reads whatever `found` holds. git is the real one.
 let found: MyGhPr[] = []
+/** What GitHub says of a PR that left the searches; null (it cannot say) when not set. */
+let states: Record<number, 'OPEN' | 'CLOSED' | 'MERGED'> = {}
 vi.mock('./git', async (original) => {
   const real = await original<typeof import('./git')>()
   return {
@@ -24,11 +26,12 @@ vi.mock('./git', async (original) => {
     listMyPrs: async () => found,
     currentGithubLogin: async () => 'enrique',
     prMerged: async () => false,
-    prStateOf: async () => null,
+    prStateOf: async (_repoPath: string, number: number) => states[number] ?? null,
   }
 })
 afterEach(() => {
   found = []
+  states = {}
 })
 
 const gitIn = (cwd: string, ...args: string[]) =>
@@ -202,6 +205,7 @@ describe('autoPhaseRules', () => {
     checks: [],
     headSha: 'abc1234def',
     localCiSha: null,
+    leftAs: null,
     ...over,
   })
   const pass = [{ name: 'c', state: 'pass' as const, url: null }]
@@ -219,9 +223,21 @@ describe('autoPhaseRules', () => {
       auto.autoPhaseRules({ push: { state: 'pushed' }, pr, preview: false }).PR
     expect(rule(row())).toBe(true)
     expect(rule(row({ open: false, mergedAt: '2026-10-01T00:00:00Z' }))).toBe(true)
-    expect(rule(row({ open: false }))).toBe(false)
+    expect(rule(row({ open: false, leftAs: 'MERGED' }))).toBe(true)
+    expect(rule(row({ open: false, leftAs: 'CLOSED' }))).toBe(false)
     expect(rule(null)).toBe(false)
     expect(rule(undefined)).toBeNull()
+  })
+
+  it('a PR closed with no merge time that GitHub has not called closed is unknown: PR, CI and Merged stay', () => {
+    const gone = row({ open: false, checks: pass })
+    expect(auto.autoPhaseRules({ push: { state: 'pushed' }, pr: gone, preview: false })).toMatchObject({
+      PR: null,
+      CI: null,
+      Merged: null,
+    })
+    // The branch merged still says Merged.
+    expect(auto.autoPhaseRules({ push: { state: 'merged' }, pr: gone, preview: false }).Merged).toBe(true)
   })
 
   it('CI: green checks, or the local-green SHA equal to the head; failing or pending checks untick', () => {
@@ -237,8 +253,9 @@ describe('autoPhaseRules', () => {
     )
     expect(rule(row({ localCiSha: 'older' }))).toBe(false)
     // A PR closed without merging has no CI to speak of.
-    expect(rule(row({ open: false, checks: pass }))).toBe(false)
+    expect(rule(row({ open: false, leftAs: 'CLOSED', checks: pass }))).toBe(false)
     expect(rule(row({ open: false, mergedAt: '2026-10-01T00:00:00Z', checks: pass }))).toBe(true)
+    expect(rule(row({ open: false, leftAs: 'MERGED', checks: pass }))).toBe(true)
     expect(rule(null)).toBe(false)
     expect(rule(undefined)).toBeNull()
   })
@@ -249,6 +266,8 @@ describe('autoPhaseRules', () => {
     const merged = (f: Omit<import('./autoPhases').AutoFacts, 'preview'>) =>
       auto.autoPhaseRules({ ...f, preview: false }).Merged
     expect(merged({ push: { state: 'pushed' }, pr: row({ open: false, mergedAt: 'x' }) })).toBe(true)
+    expect(merged({ push: { state: 'pushed' }, pr: row({ open: false, leftAs: 'MERGED' }) })).toBe(true)
+    expect(merged({ push: { state: 'pushed' }, pr: row({ open: false, leftAs: 'CLOSED' }) })).toBe(false)
     expect(merged({ push: { state: 'merged' }, pr: undefined })).toBe(true)
     expect(merged({ push: null, pr: row({ open: false, mergedAt: 'x' }) })).toBe(true)
     expect(merged({ push: { state: 'pushed' }, pr: row() })).toBe(false)
@@ -316,7 +335,7 @@ describe('the board ticking the phases', () => {
     const pr21 = prRow(projectId, repoId, 21)
     await read(byNumber.id)
     expect(ticks(byNumber.id).PR).toBe(true)
-    setPr(pr21.id, { open: false })
+    setPr(pr21.id, { open: false, leftAs: 'CLOSED' })
     await read(byNumber.id)
     expect(ticks(byNumber.id).PR).toBe(false)
     // A prNumber the queue never saw is no PR.
@@ -339,7 +358,7 @@ describe('the board ticking the phases', () => {
     const pr23 = prRow(projectId, repoId, 23)
     await read(closed.id)
     expect(ticks(closed.id).PR).toBe(true)
-    setPr(pr23.id, { open: false })
+    setPr(pr23.id, { open: false, leftAs: 'CLOSED' })
     await read(closed.id)
     expect(ticks(closed.id).PR).toBe(false)
   }, 30_000)
@@ -529,6 +548,104 @@ describe('the board ticking the phases', () => {
     await auto.reconcileProject(projectId)
     expect(ticks(t.id).PR).toBe(false)
   })
+
+  it('a repo the PR refresh never read (no GitHub remote, no rows) leaves PR, CI and Merged alone', async () => {
+    const { projectId } = newProject()
+    const byBranch = await newTicket(projectId, { branch: 'feat/unread' })
+    const byNumber = await newTicket(projectId, { branch: 'feat/unread-2', prNumber: 7 })
+    for (const id of [byBranch.id, byNumber.id]) for (const phase of ['PR', 'CI']) setTick(id, phase, true)
+    // The refresh goes through, skipping the repo: the project was refreshed, its repo was not read.
+    await prs.refreshPrs(projectId)
+    for (const id of [byBranch.id, byNumber.id]) {
+      await read(id)
+      expect(ticks(id)).toMatchObject({ PR: true, CI: true, Merged: false })
+    }
+
+    // A GitHub repo the refresh read, with no PR on the branch: that is a fact.
+    const read1 = newProject(repo, { github: true })
+    const t = await newTicket(read1.projectId, { branch: 'feat/read-none' })
+    for (const phase of ['PR', 'CI']) setTick(t.id, phase, true)
+    await prs.refreshPrs(read1.projectId)
+    expect(ticks(t.id)).toMatchObject({ PR: false, CI: false })
+  })
+
+  it("by the branch, a PR merged before the ticket was made is not the ticket's; its own merged PR is", async () => {
+    const { projectId, repoId } = newProject()
+    const before = new Date(Date.now() - 10 * 86_400_000).toISOString()
+    prRow(projectId, repoId, 81, {
+      headRef: 'feat/reused',
+      open: false,
+      mergedAt: before,
+      closedAt: before,
+      updatedAt: before,
+    })
+    const t = await newTicket(projectId, { branch: 'feat/reused' })
+    await read(t.id)
+    expect(ticks(t.id)).toMatchObject({ PR: false, Merged: false })
+    // A new PR on the branch is the ticket's; merging it ticks Merged.
+    const own = prRow(projectId, repoId, 82, { headRef: 'feat/reused' })
+    await read(t.id)
+    expect(ticks(t.id)).toMatchObject({ PR: true, Merged: false })
+    const now = new Date().toISOString()
+    setPr(own.id, { open: false, mergedAt: now, closedAt: now, updatedAt: now })
+    await read(t.id)
+    expect(ticks(t.id)).toMatchObject({ PR: true, Merged: true })
+  })
+
+  it('a PR that left the searches stays as it was until GitHub says merged or closed', async () => {
+    const { projectId, repoId } = newProject()
+    const pass = [{ name: 'c', state: 'pass' as const, url: null }]
+    const byNumber = await newTicket(projectId, { prNumber: 91 })
+    const byBranch = await newTicket(projectId, { branch: 'feat/92' })
+    const pr91 = prRow(projectId, repoId, 91, { checks: pass })
+    const pr92 = prRow(projectId, repoId, 92, { checks: pass })
+    for (const t of [byNumber, byBranch]) {
+      await read(t.id)
+      expect(ticks(t.id)).toMatchObject({ PR: true, CI: true, Merged: false })
+    }
+    // Gone from every search, with no merge time and no word from GitHub: maybe a merge they missed.
+    const now = new Date().toISOString()
+    for (const pr of [pr91, pr92]) setPr(pr.id, { open: false, closedAt: now })
+    for (const t of [byNumber, byBranch]) {
+      await read(t.id)
+      expect(ticks(t.id)).toMatchObject({ PR: true, CI: true, Merged: false })
+    }
+    setPr(pr91.id, { leftAs: 'MERGED' })
+    setPr(pr92.id, { leftAs: 'CLOSED' })
+    await read(byNumber.id)
+    expect(ticks(byNumber.id)).toMatchObject({ PR: true, CI: true, Merged: true })
+    await read(byBranch.id)
+    expect(ticks(byBranch.id)).toMatchObject({ PR: false, CI: false, Merged: false })
+  })
+
+  it('the refresh asks GitHub about a PR that left every search, and the phases follow its answer', async () => {
+    const { projectId, repoId } = newProject(repo, { github: true })
+    const merged = await newTicket(projectId, { branch: 'feat/95' })
+    const closed = await newTicket(projectId, { branch: 'feat/96' })
+    const silent = await newTicket(projectId, { branch: 'feat/97' })
+    const green = { statusCheckRollup: [{ ...failingRun, conclusion: 'SUCCESS' }] }
+    found = [ghPr(95, green), ghPr(96, green), ghPr(97, green)]
+    await prs.refreshPrs(projectId)
+    for (const t of [merged, closed, silent]) expect(ticks(t.id)).toMatchObject({ PR: true, CI: true })
+    found = []
+    states = { 95: 'MERGED', 96: 'CLOSED' }
+    await prs.refreshPrs(projectId)
+    const leftAs = (number: number) =>
+      dbm.db
+        .select()
+        .from(dbm.schema.prs)
+        .where(and(eq(dbm.schema.prs.repoId, repoId), eq(dbm.schema.prs.number, number)))
+        .get()!.leftAs
+    expect([leftAs(95), leftAs(96), leftAs(97)]).toEqual(['MERGED', 'CLOSED', null])
+    expect(ticks(merged.id)).toMatchObject({ PR: true, CI: true, Merged: true })
+    expect(ticks(closed.id)).toMatchObject({ PR: false, CI: false, Merged: false })
+    expect(ticks(silent.id)).toMatchObject({ PR: true, CI: true, Merged: false })
+    // Found by the searches again (reopened): GitHub's earlier answer no longer holds.
+    found = [ghPr(96, green)]
+    await prs.refreshPrs(projectId)
+    expect(leftAs(96)).toBeNull()
+    expect(ticks(closed.id)).toMatchObject({ PR: true, CI: true })
+  })
 })
 
 describe('Merged on tickets seeded before it', () => {
@@ -616,6 +733,27 @@ describe('Merged on tickets seeded before it', () => {
     expect(order(own.id)).toEqual(OLD)
   })
 
+  it('is not added to a done or cancelled ticket, which would drop it from 100%; it is looked at once', async () => {
+    const { projectId } = newProject()
+    const { listStages } = await import('./stages')
+    const key = (kind: string) => listStages(projectId).find((s) => s.kind === kind)!.key
+    for (const kind of ['done', 'cancelled']) {
+      const t = olderTicket(projectId)
+      dbm.db
+        .update(dbm.schema.tickets)
+        .set({ status: key(kind) })
+        .where(eq(dbm.schema.tickets.id, t.id))
+        .run()
+      await read(t.id)
+      await auto.reconcileProject(projectId)
+      expect(order(t.id)).toEqual(OLD)
+      expect(
+        dbm.db.select().from(dbm.schema.tickets).where(eq(dbm.schema.tickets.id, t.id)).get()!
+          .mergedPhaseChecked,
+      ).toBe(true)
+    }
+  })
+
   it('is never added to a new ticket again: it was seeded with the list in effect', async () => {
     const { projectId } = newProject()
     const { updateProject } = await import('./projects')
@@ -661,7 +799,8 @@ describe('without anyone reading the ticket', () => {
     found = [ghPr(71, { statusCheckRollup: [{ ...failingRun, conclusion: 'SUCCESS' }] })]
     await prs.refreshPrs(projectId)
     expect(ticks(t.id)).toMatchObject({ PR: true, CI: true, Merged: false })
-    found = [ghPr(71, { mergedAt: '2026-10-02T10:00:00Z' })]
+    // Merged after the ticket was made, as its own PR is.
+    found = [ghPr(71, { mergedAt: new Date().toISOString() })]
     await prs.refreshPrs(projectId)
     expect(ticks(t.id)).toMatchObject({ PR: true, Merged: true })
   })

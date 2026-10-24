@@ -1,0 +1,1 @@
+ALTER TABLE `prs` ADD `left_as` text;

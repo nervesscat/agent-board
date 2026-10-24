@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, inArray, isNotNull, or } from 'drizzle-orm'
+import { and, desc, eq, gt, gte, inArray, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import type { PrCheck } from '#/lib/constants'
@@ -308,6 +308,8 @@ const prState = (pr: schema.Pr, merge: Merge) => ({
 
 const REFRESH_MS = 5 * 60_000
 const lastRefresh = new Map<number, number>()
+/** The repos whose PRs a refresh read from GitHub since the board started. */
+const refreshedRepos = new Set<number>()
 /** Per project: the last refresh queued, which never rejects, so the next one can wait on it. */
 const refreshing = new Map<number, Promise<void>>()
 /** Per project: the refresh waiting behind the running one, not started yet, which later requests join. */
@@ -346,6 +348,9 @@ async function runRefresh(projectId: number) {
     r.status === 'rejected' ? [{ repo: repos[i]!, err: r.reason }] : [],
   )
   for (const f of failed) console.error(`PR refresh failed for ${f.repo.name}:`, f.err)
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') refreshedRepos.add(repos[i]!.id)
+  })
   if (repos.length && failed.length === repos.length) {
     const gh = toolProblem('gh', failed[0]!.err)
     throw gh ? new HttpError(502, gh) : failed[0]!.err
@@ -363,20 +368,28 @@ async function runRefresh(projectId: number) {
 }
 
 /**
- * Whether the board knows the PRs of a repo: a refresh of its project went through since the board
- * started, or the queue has rows of it from before. Until then a PR not found is not a PR missing.
+ * Whether the board knows the PRs of a repo: a refresh read them from GitHub since the board started,
+ * or the queue has rows of it from before. A repo the refresh skips (no GitHub remote) or whose own
+ * read failed is not known for its project's other repos going through. Until then a PR not found is
+ * not a PR missing.
  */
-export const prsKnown = (projectId: number, repoId: number) =>
-  lastRefresh.has(projectId) ||
+export const prsKnown = (repoId: number) =>
+  refreshedRepos.has(repoId) ||
   !!db.select({ id: schema.prs.id }).from(schema.prs).where(eq(schema.prs.repoId, repoId)).get()
 
+/** Merged, as the searches found it or as GitHub said when it left them. */
+export const prWasMerged = (pr: Pick<schema.Pr, 'mergedAt' | 'leftAs'>) =>
+  pr.mergedAt !== null || pr.leftAs === 'MERGED'
+
 /**
- * The queue's row of the PR a ticket was opened as, open or merged, for its automatic phases: the one
- * it names with `prNumber`, else the newest open or merged one on its branch, in the ticket's repo.
- * Unlike `prForTicket`, a merged PR found by the branch still counts. Null when there is none (a
- * `prNumber` the queue never saw included); a PR closed without merging comes back as it is.
+ * The queue's row of the PR a ticket was opened as, for its automatic phases: the one it names with
+ * `prNumber`, else on its branch, in the ticket's repo, the newest open one, else the newest that left
+ * the queue after the ticket was made, merged first. Unlike `prForTicket`, a merged PR found by the
+ * branch still counts, but not one from before the ticket: a branch name used again is new work. Null
+ * when there is none (a `prNumber` the queue never saw included); a PR closed without merging comes
+ * back as it is when named by `prNumber`, and by the branch only while GitHub has not said it closed.
  */
-export function autoPrRow(ticket: Pick<schema.Ticket, 'prNumber' | 'branch'>, repoId: number) {
+export function autoPrRow(ticket: Pick<schema.Ticket, 'prNumber' | 'branch' | 'createdAt'>, repoId: number) {
   if (ticket.prNumber)
     return (
       db
@@ -386,19 +399,21 @@ export function autoPrRow(ticket: Pick<schema.Ticket, 'prNumber' | 'branch'>, re
         .get() ?? null
     )
   if (!ticket.branch) return null
+  const rows = db
+    .select()
+    .from(schema.prs)
+    .where(and(eq(schema.prs.repoId, repoId), eq(schema.prs.headRef, ticket.branch)))
+    .orderBy(desc(schema.prs.updatedAt), desc(schema.prs.id))
+    .all()
+  const open = rows.find((r) => r.open)
+  if (open) return open
+  const made = Date.parse(ticket.createdAt)
+  const since = rows.filter((r) => Date.parse(r.mergedAt ?? r.closedAt ?? r.updatedAt) >= made)
   return (
-    db
-      .select()
-      .from(schema.prs)
-      .where(
-        and(
-          eq(schema.prs.repoId, repoId),
-          eq(schema.prs.headRef, ticket.branch),
-          or(eq(schema.prs.open, true), isNotNull(schema.prs.mergedAt)),
-        ),
-      )
-      .orderBy(desc(schema.prs.updatedAt), desc(schema.prs.id))
-      .get() ?? null
+    since.find((r) => prWasMerged(r)) ??
+    // Left the searches with no answer from GitHub yet: maybe merged, so not "no PR".
+    since.find((r) => r.leftAs === null) ??
+    null
   )
 }
 
@@ -431,7 +446,9 @@ async function syncPrTickets(projectId: number, changes: RowChange[]) {
     else movePrTicket(c.after, to)
   }
   const asked = left.filter((c) => hasOwnTicket(c.after))
-  const states = await Promise.all(asked.map((c) => prStateOf(c.repo.repoPath, c.after.number)))
+  const states = await Promise.all(
+    asked.map((c) => c.after.leftAs ?? prStateOf(c.repo.repoPath, c.after.number)),
+  )
   asked.forEach((c, i) => {
     if (states[i] === 'CLOSED') movePrTicket(c.after, 'cancelled')
     else if (states[i] === 'MERGED') movePrTicket(c.after, 'done')
@@ -539,6 +556,7 @@ export function resetPrRefreshes() {
   moveRefresh.clear()
   followUps.clear()
   lastRefresh.clear()
+  refreshedRepos.clear()
   refreshing.clear()
   queued.clear()
   lastTry.clear()
@@ -603,6 +621,7 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
       mergeStateStatus: pr.mergeStateStatus,
       checks: prChecks(pr.statusCheckRollup),
       localCiSha: localGreenSha(pr.comments, pr.headRefOid),
+      leftAs: null,
       updatedAt: pr.updatedAt,
       fetchedAt,
       open,
@@ -626,20 +645,27 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
         .run()
   }
   // A PR that left every search was closed, unassigned, or merged out of the merged searches' reach:
-  // keep the row, mark it closed.
-  const gone = db
+  // keep the row, mark it closed, and keep what GitHub says it became (null when it cannot say).
+  const goneOpen = db
     .select()
     .from(schema.prs)
     .where(and(eq(schema.prs.repoId, repo.id), eq(schema.prs.open, true)))
     .all()
     .filter((row) => !seen.has(row.number))
-  for (const row of gone) {
-    db.update(schema.prs)
-      .set({ open: false, closedAt: fetchedAt, fetchedAt })
-      .where(eq(schema.prs.id, row.id))
-      .run()
-    changes.push({ repo, before: row, after: { ...row, open: false, closedAt: fetchedAt, fetchedAt } })
-  }
+  const states = await Promise.all(goneOpen.map((row) => prStateOf(repo.repoPath, row.number)))
+  const gone = goneOpen.map((row, i) => {
+    const state = states[i]
+    const set = {
+      open: false,
+      closedAt: fetchedAt,
+      fetchedAt,
+      leftAs: state === 'MERGED' || state === 'CLOSED' ? state : null,
+    }
+    db.update(schema.prs).set(set).where(eq(schema.prs.id, row.id)).run()
+    const after = { ...row, ...set }
+    changes.push({ repo, before: row, after })
+    return after
+  })
   left.push(...gone)
   if (left.length) await stopMergedPreviews(repo, left)
   return changes
@@ -658,7 +684,7 @@ async function stopMergedPreviews(repo: schema.Repo, left: schema.Pr[]) {
     if (
       ids.length &&
       hasPreviews(ids) &&
-      (pr.mergedAt !== null || (await prMerged(repo.repoPath, pr.number)))
+      (prWasMerged(pr) || (pr.leftAs === null && (await prMerged(repo.repoPath, pr.number))))
     )
       stopPreviewsFor(ids, `PR #${pr.number} was merged`)
   }

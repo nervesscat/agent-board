@@ -52,6 +52,7 @@ vi.mock('./git', async (original) => ({
   },
   currentGithubLogin: async () => 'enrique',
   prMerged: async () => false,
+  prStateOf: async () => null,
   repoNameWithOwner: async () => 'acme/app',
 }))
 
