@@ -105,14 +105,18 @@ function madeByBrowser(action: string) {
 }
 
 /**
- * Run inline in the page's head, before its scripts load: gives each entry of the history the page makes
- * before the router starts the state the router gives the one it starts on, as the entry is made.
+ * Run inline first in the page's head, before its stylesheet and scripts load: gives each entry of the
+ * history the page makes before the router starts the state the router gives the one it starts on, as
+ * the entry is made.
  *
  * A #link followed while the scripts load (typed into the address bar, or clicked on the page) makes an
  * entry of the browser's own, and the router keys only the entry it starts on: Back to the one before
  * would come to an entry with none of the router's state, which followHistory takes for a #link the
  * browser followed while the router ran, an arrival. Keyed, Back to it is a return. followHistory stops
  * the keying as the router starts, so an entry the browser makes after that is still told apart.
+ *
+ * First, not after the stylesheet: a script in the head does not run until a stylesheet before it has
+ * loaded, and a #link followed while it loads would make an entry before the first one was keyed.
  *
  * A string, not a function's source: the bundler may wrap a function's inner ones in helpers of its own.
  */

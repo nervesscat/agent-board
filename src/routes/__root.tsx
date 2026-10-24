@@ -36,10 +36,10 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       { title: 'CrossBoard' },
     ],
-    // The SVG favicon switches its own colours with the system theme. The PNG is for browsers without
-    // SVG icons; its `sizes` lets the others prefer the SVG.
+    // The stylesheet is not here but in RootDocument, after KEY_ENTRIES. The SVG favicon switches its own
+    // colours with the system theme. The PNG is for browsers without SVG icons; its `sizes` lets the
+    // others prefer the SVG.
     links: [
-      { rel: 'stylesheet', href: appCss },
       { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32.png' },
       { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' },
       { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
@@ -53,9 +53,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <HeadContent />
-        {/* Before the page's scripts load: see KEY_ENTRIES. */}
+        {/* KEY_ENTRIES before the stylesheet: a script in the head does not run until a stylesheet before
+            it has loaded, and it must run as the page opens. A stylesheet from HeadContent would come
+            first whatever the order here: it is given a precedence, and React puts those at the top of
+            the head. Without one, the link stays where it is written. */}
         <ScriptOnce>{KEY_ENTRIES}</ScriptOnce>
+        <link rel="stylesheet" href={appCss} />
+        <HeadContent />
       </head>
       <body className="min-h-dvh bg-background text-foreground antialiased">
         {children}
