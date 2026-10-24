@@ -843,6 +843,48 @@ describe('autostart', () => {
     expect(autostartExec(env, '/tmp/.mount_OtherAB')).toBe('/tmp/.mount_OtherAB')
   })
 
+  it("runs an unpacked AppImage's AppRun, which adds --no-sandbox where it is needed", () => {
+    // squashfs-root/AppRun exports neither APPIMAGE nor APPDIR: the app sees only its executable.
+    const appRun = '/home/u/squashfs-root/AppRun'
+    const isExecutable = (/** @type {string} */ p) => p === appRun
+    expect(autostartExec({}, '/home/u/squashfs-root/agent-board', isExecutable)).toBe(appRun)
+    const spaced = '/home/u/My Apps/squashfs-root/AppRun'
+    expect(autostartExec({}, '/home/u/My Apps/squashfs-root/agent-board', (p) => p === spaced)).toBe(spaced)
+    expect(autostartEntry({ exec: spaced, name: 'CrossBoard' }).split('\n')).toContain(
+      'Exec="/home/u/My Apps/squashfs-root/AppRun"',
+    )
+    // The mounted AppImage still starts the image, though its mount has an AppRun too.
+    const image = '/home/me/Apps/agent-board-0.1.0-x86_64.AppImage'
+    const env = { APPIMAGE: image, APPDIR: '/tmp/.mount_agentXYZ' }
+    expect(autostartExec(env, '/tmp/.mount_agentXYZ/agent-board', () => true)).toBe(image)
+  })
+
+  it('runs the installed executable, which has no AppRun beside it', () => {
+    const exe = '/opt/CrossBoard/agent-board'
+    const asked = /** @type {string[]} */ ([])
+    const isExecutable = (/** @type {string} */ p) => (asked.push(p), false)
+    expect(autostartExec({}, exe, isExecutable)).toBe(exe)
+    expect(asked).toEqual(['/opt/CrossBoard/AppRun'])
+  })
+
+  it.runIf(process.platform !== 'win32')('finds an AppRun only when it is a file this user may run', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-apprun-'))
+    try {
+      const exe = path.join(dir, 'agent-board')
+      const appRun = path.join(dir, 'AppRun')
+      expect(autostartExec({}, exe)).toBe(exe)
+      fs.writeFileSync(appRun, '#!/bin/sh\n', { mode: 0o644 })
+      expect(autostartExec({}, exe)).toBe(exe)
+      fs.chmodSync(appRun, 0o755)
+      expect(autostartExec({}, exe)).toBe(appRun)
+      fs.rmSync(appRun)
+      fs.mkdirSync(appRun)
+      expect(autostartExec({}, exe)).toBe(exe)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('writes an entry that starts it at login', () => {
     const text = autostartEntry({ exec: '/opt/CrossBoard/agent-board', name: 'CrossBoard' })
     expect(text.split('\n')).toEqual(

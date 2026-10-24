@@ -236,9 +236,9 @@ GNOME's, KDE's). Links, Open in browser and previews open in the default browser
 
 **Start at login** (tray menu or window menu; off at first) writes
 `~/.config/autostart/agent-board.desktop`, which starts the installed app, or the AppImage where it is
-when it was turned on; off removes it. Desktops that follow the autostart spec run it (GNOME, KDE,
-Xfce, and Hyprland started through uwsm, as Omarchy starts it, through systemd's
-`xdg-desktop-autostart.target`); for a Hyprland started otherwise, run the folder from an `exec-once`
+when it was turned on (an unpacked one through its `squashfs-root/AppRun`); off removes it. Desktops
+that follow the autostart spec run it (GNOME, KDE, Xfce, and Hyprland started through uwsm, as Omarchy
+starts it, through systemd's `xdg-desktop-autostart.target`); for a Hyprland started otherwise, run the folder from an `exec-once`
 (e.g. `dex -a`), or put `exec-once = agent-board` in `hyprland.conf` instead.
 
 **Uninstalling:** `sudo apt remove agent-board`, `sudo dnf remove agent-board` (`zypper remove`), or
