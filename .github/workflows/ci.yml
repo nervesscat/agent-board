@@ -58,7 +58,7 @@ jobs:
             test-results/
           retention-days: 14
 
-  # The desktop app (README: "Install"): the Windows installer, a smoke test of the unpacked app and of
+  # The desktop app (README: "The desktop app"): the Windows installer, a smoke test of the unpacked app and of
   # the app as the installer puts it, and the installer kept as an artifact of the run.
   desktop:
     runs-on: windows-latest

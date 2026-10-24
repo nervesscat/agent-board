@@ -1,6 +1,6 @@
 // The desktop app: runs the built board (.output/server/index.mjs) under Electron's own Node, shows it
 // in a window, and keeps a tray icon to open it again or quit. Closing the window leaves the board
-// running for the agents; Quit stops it and frees its port. README: "Install".
+// running for the agents; Quit stops it and frees its port. README: "The desktop app".
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Builds the Windows installer and the unpacked app: `pnpm desktop:package` (README: "Install").
+// Builds the Windows installer and the unpacked app: `pnpm desktop:package` (README: "The desktop app").
 //
 //   1. builds the board into desktop/.stage/board/.output (never .output, which previews use);
 //   2. copies the migrations beside it (the server reads ./drizzle from its working folder);

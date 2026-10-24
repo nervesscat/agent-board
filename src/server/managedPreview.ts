@@ -535,7 +535,7 @@ const WATCHDOG = `data:text/javascript,${encodeURIComponent(
 )}`
 
 /**
- * The Node that runs a preview's build: this board's own, but in the desktop app (README: "Install"),
+ * The Node that runs a preview's build: this board's own, but in the desktop app (README: "The desktop app"),
  * where the board runs under Electron's Node, the `node` on PATH that `pnpm build` used: the worktree's
  * better-sqlite3 is built for Node's ABI, not Electron's.
  */
