@@ -36,10 +36,3 @@ Out of scope: a board deliberately run with its sign-in off (`AUTH=off`, `BOARD_
 on loopback outside production), what a signed-in human or an agent with a valid token is allowed to do
 by design, and flaws in `git`, `gh`, `claude` or other tools the board starts (report those to their
 projects).
-
-## Known advisories
-
-- `braces` (GHSA-vfj7-8cjw-p6xm, denial of service from deeply nested brace patterns), pulled in by the
-  `shadcn` command-line tool through `fast-glob`/`micromatch`: no fixed `braces` release exists yet. It is
-  reached only by glob patterns the developer runs `shadcn` with, never by the board's requests. It will
-  be updated when a fix is published.
