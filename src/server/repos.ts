@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, ne, or } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, ne, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
@@ -7,7 +7,7 @@ import { HttpError, notFound } from './http'
 import { forgetPreview } from './managedPreview'
 import { createProject, getProject } from './projects'
 import { seedRepo } from './runConfig'
-import { forgetRepoRuns } from './runs'
+import { forgetRepoRuns, stopRunsFor } from './runs'
 
 /** A local git checkout the board reads with git and gh. Every repo belongs to one project. */
 
@@ -101,10 +101,38 @@ export async function updateRepo(
     set.githubRepo = await repoNameWithOwner(patch.repoPath)
   }
   const moved = patch.projectId !== undefined && patch.projectId !== before.projectId
+  // A ticket's repos are all of its project: what the move splits apart leaves the ticket, and its
+  // runs for that ticket stop once the rows are gone.
+  const left: { ticketId: number; repoId: number }[] = []
   const row = db.transaction((tx) => {
     const r = tx.update(schema.repos).set(set).where(eq(schema.repos.id, id)).returning().get()!
     // The repo's PRs, tickets and review results move with it; threads follow their parents.
     if (moved) {
+      // The tickets it leaves behind no longer span it; the ones it takes no longer span the repos
+      // that stay.
+      const stays = tx
+        .select({ ticketId: schema.ticketRepos.ticketId, repoId: schema.ticketRepos.repoId })
+        .from(schema.ticketRepos)
+        .innerJoin(schema.tickets, eq(schema.tickets.id, schema.ticketRepos.ticketId))
+        .where(
+          and(
+            eq(schema.ticketRepos.repoId, id),
+            or(isNull(schema.tickets.repoId), ne(schema.tickets.repoId, id)),
+          ),
+        )
+        .all()
+      const goes = tx
+        .select({ ticketId: schema.ticketRepos.ticketId, repoId: schema.ticketRepos.repoId })
+        .from(schema.ticketRepos)
+        .innerJoin(schema.tickets, eq(schema.tickets.id, schema.ticketRepos.ticketId))
+        .where(and(eq(schema.tickets.repoId, id), ne(schema.ticketRepos.repoId, id)))
+        .all()
+      for (const e of [...stays, ...goes]) {
+        tx.delete(schema.ticketRepos)
+          .where(and(eq(schema.ticketRepos.ticketId, e.ticketId), eq(schema.ticketRepos.repoId, e.repoId)))
+          .run()
+        left.push(e)
+      }
       const to = { projectId: patch.projectId! }
       tx.update(schema.prs).set(to).where(eq(schema.prs.repoId, id)).run()
       tx.update(schema.tickets).set(to).where(eq(schema.tickets.repoId, id)).run()
@@ -129,6 +157,30 @@ export async function updateRepo(
     refType: 'repo',
     refId: id,
   })
+  if (left.length) {
+    const from = getProject(before.projectId).name
+    const to = getProject(row.projectId).name
+    const names = new Map(listRepos(before.projectId).map((r) => [r.id, r.name]))
+    for (const e of left)
+      stopRunsFor(
+        [e.ticketId],
+        e.repoId === id
+          ? `${row.name} moved to project ${to}`
+          : `the ticket moved to project ${to} with ${row.name}; ${names.get(e.repoId) ?? `repo ${e.repoId}`} stays in ${from}`,
+        actor,
+        { repoId: e.repoId, lanes: false },
+      )
+    const behind = [...new Set(left.filter((e) => e.repoId === id).map((e) => e.ticketId))]
+    if (behind.length)
+      logActivity({
+        projectId: before.projectId,
+        actor,
+        kind: 'project',
+        text: `moved repo ${row.name} to ${to}: ${behind.map((t) => `#${t}`).join(', ')} no longer span it`,
+        refType: 'repo',
+        refId: id,
+      })
+  }
   return row
 }
 

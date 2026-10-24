@@ -722,6 +722,80 @@ describe('a ticket that spans two repos', () => {
     // The ticket's own repo still runs from its worktree.
     expect(runs.cannotStartRun(frontWs.id, web.id)).toBeNull()
   })
+
+  it('a repo moved to another project leaves the tickets it does not take, and its runs for them stop', async () => {
+    useFake()
+    const from = dbm.db.insert(dbm.schema.projects).values({ name: 'from' }).returning().get().id
+    const to = dbm.db.insert(dbm.schema.projects).values({ name: 'to' }).returning().get().id
+    const front = addRepo('front-m', from)
+    const back = addRepo('back-m', from)
+    const side = addRepo('side-m', from)
+    const web = run(front, { name: 'Web' })
+    const backJob = run(back, { name: 'Worker', type: 'job', start: 'python w.py', healthPath: '' })
+    const sideJob = run(side, { name: 'Worker', type: 'job', start: 'python s.py', healthPath: '' })
+    // t stays in `from` (its primary is front); u goes with back, its primary, and leaves side behind.
+    const t = features.createTicket(
+      from,
+      { title: 'stays', status: 'in_progress', repos: [{ repoId: front.id }, { repoId: back.id }] },
+      'claude',
+    )
+    const u = features.createTicket(
+      from,
+      { title: 'moves', status: 'in_progress', repos: [{ repoId: back.id }, { repoId: side.id }] },
+      'claude',
+    )
+    const tFront = features.addWorkspace(
+      t.id,
+      { name: 'front', branch: 'f', path: worktree(front) },
+      'claude',
+    )
+    const tBack = features.addWorkspace(
+      t.id,
+      { name: 'back', branch: 'b', path: worktree(back), repoId: back.id },
+      'claude',
+    )
+    const uSide = features.addWorkspace(
+      u.id,
+      { name: 'side', branch: 's', path: worktree(side), repoId: side.id },
+      'claude',
+    )
+    await running(tFront.id, web.id)
+    const tJob = (await running(tBack.id, backJob.id)) && fake.calls.at(-1)!
+    const uJob = (await running(uSide.id, sideJob.id)) && fake.calls.at(-1)!
+
+    const moved = await call('PATCH', `/api/repos/${back.id}`, { projectId: to }, 'agent')
+    expect(moved.status).toBe(200)
+
+    await vi.waitFor(() => expect(fake.killed).toEqual(expect.arrayContaining([tJob.pid, uJob.pid])))
+    expect(state(tBack.id, backJob.id)).toMatchObject({
+      status: 'stopped',
+      reason: 'back-m moved to project to',
+    })
+    expect(state(uSide.id, sideJob.id)).toMatchObject({
+      status: 'stopped',
+      reason: 'the ticket moved to project to with back-m; side-m stays in from',
+    })
+    expect(status(tFront.id, web.id)).toBe('running')
+    expect(runs.activeRuns().map((r) => r.repoId)).toEqual([front.id])
+
+    // Neither ticket lists a repo outside its project any more, nor keeps a row for it.
+    const repoIds = async (id: number) =>
+      ((await (await call('GET', `/api/tickets/${id}`)).json()) as { repos: { repoId: number }[] }).repos.map(
+        (r) => r.repoId,
+      )
+    expect(await repoIds(t.id)).toEqual([front.id])
+    expect(await repoIds(u.id)).toEqual([back.id])
+    const rows = (id: number) =>
+      dbm.db
+        .select()
+        .from(dbm.schema.ticketRepos)
+        .where(eq(dbm.schema.ticketRepos.ticketId, id))
+        .all()
+        .map((r) => r.repoId)
+    expect(rows(t.id)).toEqual([front.id])
+    expect(rows(u.id)).toEqual([back.id])
+    expect(runs.cannotStartRun(tBack.id, backJob.id)).toMatch(/is not one of ticket \d+'s repos/)
+  })
 })
 
 describe('over REST and MCP', () => {
