@@ -19,9 +19,16 @@ function Tooltip({ actionsRef, onOpenChange, ...props }: TooltipPrimitive.Root.P
   React.useEffect(() => {
     if (!open) return
     const close = () => actions.current?.close()
-    // In the capture phase, a scroll of any element reaches the window, not only the page's own.
-    window.addEventListener('scroll', close, { capture: true, passive: true })
-    return () => window.removeEventListener('scroll', close, { capture: true })
+    // From the next frame on: focus scrolls its element into view, and that scroll, which comes as the
+    // tooltip opens, is not one to close it for. In the capture phase, a scroll of any element reaches
+    // the window, not only the page's own.
+    const frame = requestAnimationFrame(() =>
+      window.addEventListener('scroll', close, { capture: true, passive: true }),
+    )
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', close, { capture: true })
+    }
   }, [open, actions])
   return (
     <TooltipPrimitive.Root
