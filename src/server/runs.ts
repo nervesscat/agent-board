@@ -472,10 +472,21 @@ export function runToolProblem(run: Pick<RunConfig, 'install' | 'build' | 'start
 
 const article = (type: RunType) => (type === 'preview' ? 'a preview' : 'a job')
 
+/** Whether the repo is one of the ticket's: its primary, or one of its project's it lists. */
+function isTicketRepo(ticket: schema.Ticket, repo: schema.Repo) {
+  if (repo.id === primaryRepoIdOf(ticket)) return true
+  if (repo.projectId !== ticket.projectId) return false
+  return !!db
+    .select({ repoId: schema.ticketRepos.repoId })
+    .from(schema.ticketRepos)
+    .where(and(eq(schema.ticketRepos.ticketId, ticket.id), eq(schema.ticketRepos.repoId, repo.id)))
+    .get()
+}
+
 /**
  * Why no run at all may start from the workspace, whatever the run: a preview board, a finished
- * ticket, a path that is not a worktree of its repo the board may act on, one being removed. Null
- * when runs may start there.
+ * ticket, a repo the ticket does not span, a path that is not a worktree of its repo the board may act
+ * on, one being removed. Null when runs may start there.
  */
 export function workspaceCannotRun(workspaceId: number): string | null {
   if (authMode().boardEnv === 'development')
@@ -489,6 +500,8 @@ export function workspaceCannotRun(workspaceId: number): string | null {
   const repo = repoId
     ? (db.select().from(schema.repos).where(eq(schema.repos.id, repoId)).get() ?? null)
     : null
+  // A worktree of a repo taken off the ticket has nothing left to run for it.
+  if (repo && !isTicketRepo(ticket, repo)) return `${repo.name} is not one of ticket ${ticket.id}'s repos`
   const target = worktreeTarget(ws, repo)
   if (!target.ok) return target.reason
   if ([...kept.removing].some((at) => at(target.path))) return 'its worktree is being removed'

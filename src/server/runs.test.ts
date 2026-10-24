@@ -663,6 +663,65 @@ describe('a ticket that spans two repos', () => {
     expect(state(backWs.id, worker.id)!.reason).toBe('back was removed from the ticket')
     expect(status(frontWs.id, web.id)).toBe('running')
   })
+
+  it("a repo taken off the ticket cannot run again from the ticket's worktree of it", async () => {
+    useFake()
+    const project = dbm.db.insert(dbm.schema.projects).values({ name: 'dropped' }).returning().get().id
+    const front = addRepo('front-d', project)
+    const back = addRepo('back-d', project)
+    const web = run(front, { name: 'Web' })
+    const worker = run(back, { name: 'Worker', type: 'job', start: 'python w.py', healthPath: '' })
+    const api = run(back, { name: 'API' })
+    const t = features.createTicket(
+      project,
+      { title: 'both', status: 'in_progress', repos: [{ repoId: front.id }, { repoId: back.id }] },
+      'claude',
+    )
+    const frontWs = features.addWorkspace(
+      t.id,
+      { name: 'front', branch: 'f', path: worktree(front) },
+      'claude',
+    )
+    const backWs = features.addWorkspace(
+      t.id,
+      { name: 'back', branch: 'b', path: worktree(back), repoId: back.id },
+      'claude',
+    )
+    await running(backWs.id, worker.id)
+    features.updateTicket(t.id, { repos: [{ repoId: front.id }] }, 'enrique')
+    await vi.waitFor(() => expect(status(backWs.id, worker.id)).toBe('stopped'))
+    const spawned = fake.calls.length
+
+    const refused = /^back-d is not one of ticket \d+'s repos$/
+    expect(runs.cannotStartRun(backWs.id, worker.id)).toMatch(refused)
+    const start = await call(
+      'POST',
+      `/api/workspaces/${backWs.id}/runs/${worker.id}/start`,
+      undefined,
+      'agent',
+    )
+    expect(start.status).toBe(400)
+    expect(((await start.json()) as { error: string }).error).toMatch(refused)
+    const restart = await call(
+      'POST',
+      `/api/workspaces/${backWs.id}/runs/${worker.id}/restart`,
+      undefined,
+      'agent',
+    )
+    expect(restart.status).toBe(400)
+    expect(await tool('start_preview', { workspaceId: backWs.id })).toMatchObject({
+      error: true,
+      text: expect.stringMatching(/is not one of ticket \d+'s repos/),
+    })
+    expect(await tool('start_run', { ticketId: t.id, run: 'API', repoId: back.id })).toMatchObject({
+      error: true,
+    })
+    expect(fake.calls.length).toBe(spawned)
+    expect([status(backWs.id, worker.id), state(backWs.id, api.id)]).toEqual(['stopped', null])
+
+    // The ticket's own repo still runs from its worktree.
+    expect(runs.cannotStartRun(frontWs.id, web.id)).toBeNull()
+  })
 })
 
 describe('over REST and MCP', () => {
