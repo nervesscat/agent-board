@@ -122,6 +122,28 @@ function age(ticketId: number, minutes: number) {
     .run()
 }
 
+/** A PR as gh lists it, open until `mergedAt` is set. */
+const ghPr = (number: number, head: string, mergedAt: string | null): MyGhPr => ({
+  number,
+  title: `pr ${number}`,
+  url: `https://github.com/acme/app/pull/${number}`,
+  author: { login: 'enrique' },
+  headRefName: head,
+  baseRefName: 'main',
+  headRefOid: 'a1b2c3',
+  isDraft: false,
+  reviewDecision: '',
+  mergeable: 'MERGEABLE',
+  mergeStateStatus: 'CLEAN',
+  statusCheckRollup: [],
+  updatedAt: '2026-10-01T10:00:00Z',
+  mergedAt,
+  reviews: [],
+  reviewRequests: [],
+  requested: false,
+  assigned: false,
+})
+
 function activeTicket(pid: number, title = 'work') {
   return features.createTicket(pid, { title, status: 'in_progress', branch: `feat/${title}` }, HUMAN)
 }
@@ -420,15 +442,22 @@ describe('the stalled flag', () => {
     age(t.id, 90)
     age(lane.id, 45)
     const after = (await tool('get_summary', { projectId: pid })).projects[0]
+    const signal = Object.fromEntries(
+      ((await tool('list_tickets', { projectId: pid })) as { id: number; lastSignalAt: string }[]).map(
+        (r) => [r.id, r.lastSignalAt],
+      ),
+    )
     expect(after.needsYou.stalled).toEqual([
-      expect.objectContaining({ ticketId: t.id, minutes: 90, parent: null }),
+      expect.objectContaining({ ticketId: t.id, lastSignalAt: signal[t.id], parent: null }),
       expect.objectContaining({
         ticketId: lane.id,
         lastAgent: 'builder',
-        minutes: 45,
+        lastSignalAt: signal[lane.id],
         parent: { id: t.id, title: 'top' },
       }),
     ])
+    // Moments only, no minutes counted up to the read: the summary reads the same at any hour of its day.
+    for (const s of after.needsYou.stalled) expect(s).not.toHaveProperty('minutes')
     expect(after.needsYou.total).toBe(before.needsYou.total + 2)
     const progress = Object.fromEntries(
       after.inProgress.map((p: { id: number; stalled: boolean }) => [p.id, p.stalled]),
@@ -539,26 +568,7 @@ describe('what the board records itself', () => {
     const pid = newProject('merges')
     const t = features.createTicket(pid, { title: 'merging', status: 'review', branch: 'feat/m' }, HUMAN)
     const prs = await import('./prs')
-    const gh = (mergedAt: string | null): MyGhPr => ({
-      number: 7,
-      title: 'pr 7',
-      url: 'https://github.com/acme/app/pull/7',
-      author: { login: 'enrique' },
-      headRefName: 'feat/m',
-      baseRefName: 'main',
-      headRefOid: 'a1b2c3',
-      isDraft: false,
-      reviewDecision: '',
-      mergeable: 'MERGEABLE',
-      mergeStateStatus: 'CLEAN',
-      statusCheckRollup: [],
-      updatedAt: '2026-10-01T10:00:00Z',
-      mergedAt,
-      reviews: [],
-      reviewRequests: [],
-      requested: false,
-      assigned: false,
-    })
+    const gh = (mergedAt: string | null) => ghPr(7, 'feat/m', mergedAt)
     found = [gh(null)]
     await prs.refreshPrs(pid)
     expect(boardEvents(t.id, 'merge')).toEqual([])
@@ -566,6 +576,29 @@ describe('what the board records itself', () => {
     await prs.refreshPrs(pid)
     await prs.refreshPrs(pid)
     expect(boardEvents(t.id, 'merge').map((e) => e.note)).toEqual(['PR #7 merged'])
+    found = []
+  })
+
+  it('a stage event when the board opens a PR’s own ticket and when it moves it', async () => {
+    const pid = newProject('pr-tickets')
+    const prs = await import('./prs')
+    found = [ghPr(8, 'feat/nobody', null)]
+    await prs.refreshPrs(pid)
+    const own = dbm.db
+      .select()
+      .from(dbm.schema.tickets)
+      .where(eq(dbm.schema.tickets.projectId, pid))
+      .all()
+      .find((r) => r.prNumber === 8)!
+    expect(boardEvents(own.id, 'stage').map((e) => [e.fromStage, e.toStage])).toEqual([['', own.status]])
+    found = [ghPr(8, 'feat/nobody', new Date().toISOString())]
+    await prs.refreshPrs(pid)
+    const moved = dbm.db.select().from(dbm.schema.tickets).where(eq(dbm.schema.tickets.id, own.id)).get()!
+    expect(moved.status).not.toBe(own.status)
+    expect(boardEvents(own.id, 'stage').map((e) => [e.fromStage, e.toStage])).toEqual([
+      ['', own.status],
+      [own.status, moved.status],
+    ])
     found = []
   })
 

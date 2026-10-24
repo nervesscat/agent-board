@@ -251,7 +251,6 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
               parent: parentOf(t),
               lastSignalAt: s.since,
               lastAgent: s.lastAgent,
-              minutes: s.minutes,
             },
           ]
         : []

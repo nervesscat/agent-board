@@ -249,10 +249,13 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
   )
 }
 
+/** Whole minutes since `since`: the summary carries the moment, the page counts up to now. */
+const silentMinutes = (since: string) => Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60_000))
+
 /** A stalled ticket's details, from the Needs you list that names it. */
 function stalledOf(p: ProjectSummary, id: number) {
   const s = p.needsYou.stalled.find((x) => x.ticketId === id)
-  return s ? { since: s.lastSignalAt, minutes: s.minutes, lastAgent: s.lastAgent } : null
+  return s ? { since: s.lastSignalAt, minutes: silentMinutes(s.lastSignalAt), lastAgent: s.lastAgent } : null
 }
 
 function Stale() {
@@ -427,7 +430,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                   {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
                   <Tip content={`No heartbeat or event since ${clock(s.lastSignalAt)}`}>
                     <span>
-                      silent {formatDuration(s.minutes * 60_000)}
+                      silent {formatDuration(silentMinutes(s.lastSignalAt) * 60_000)}
                       {s.lastAgent && ` · last ${s.lastAgent}`}
                     </span>
                   </Tip>
