@@ -459,7 +459,10 @@ to GitHub.
 
 All routes need the board's session cookie or `Authorization: Bearer <token>` (Signing in, above),
 but `/api/health` on this machine and the sign-in calls; JSON in and out. `actor` is the account's
-name, or the agent token's.
+name, or the agent token's. A backslash in a JSON string is written `\\`, so a Windows path is
+`"C:\\code\\repo"`; some shells and tools collapse `\\` to `\` before sending. Where that leaves a
+bad escape (`\c`) the board refuses the body (400 `body must be JSON: …`), but where it leaves a valid
+one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survives them.
 
 | Method       | Path                                                                                                          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
