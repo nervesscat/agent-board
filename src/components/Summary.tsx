@@ -9,6 +9,7 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  FileText,
   GitPullRequest,
   Hand,
   Hourglass,
@@ -24,7 +25,9 @@ import type { ReactNode } from 'react'
 import { Actor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
+import { useSettleInstructions } from '#/components/InstructionsHistory'
 import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
+import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
@@ -260,8 +263,9 @@ function Stale() {
 // --- the sections ---
 
 function NeedsYou({ p }: { p: ProjectSummary }) {
-  const { decisions, prs, threads, reviews, blockedTasks, total } = p.needsYou
+  const { decisions, prs, threads, reviews, blockedTasks, instructionChanges, total } = p.needsYou
   const pid = String(p.project.id)
+  const settle = useSettleInstructions(pid)
   return (
     <Section icon={Inbox} title="Needs you" count={total} scroll>
       {!total ? (
@@ -396,6 +400,61 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                     />
                   </span>
                   {task.parent && <span className="truncate">lane of #{task.parent.id}</span>}
+                </>
+              }
+            />
+          ))}
+          {instructionChanges.map((c) => (
+            <Row
+              key={`i${c.changeId}`}
+              icon={<FileText className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <span>
+                  <Link
+                    to="/projects/$id/settings"
+                    params={{ id: pid }}
+                    hash="instructions-history"
+                    className="hover:underline"
+                  >
+                    Project instructions changed
+                  </Link>{' '}
+                  by <Actor name={c.changedBy} />
+                </span>
+              }
+              meta={
+                <>
+                  {c.excerpt && <span className="min-w-0 truncate">{c.excerpt}</span>}
+                  <span className="shrink-0">{ago(c.createdAt)}</span>
+                  <span className="flex shrink-0 gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      disabled={settle.isPending}
+                      onClick={() => settle.mutate({ id: c.changeId, action: 'review' })}
+                    >
+                      Reviewed
+                    </Button>
+                    <Tip
+                      content={
+                        c.revertable
+                          ? 'Put the instructions back as they were before this change'
+                          : 'The instructions changed again since: revert the later change first'
+                      }
+                    >
+                      <span className="inline-flex">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="xs"
+                          disabled={settle.isPending || !c.revertable}
+                          onClick={() => settle.mutate({ id: c.changeId, action: 'revert' })}
+                        >
+                          Revert
+                        </Button>
+                      </span>
+                    </Tip>
+                  </span>
                 </>
               }
             />

@@ -6,6 +6,7 @@
 import type {
   Attachment,
   Comment,
+  ProjectInstructionChange,
   Repo,
   ReportSettingsChange,
   ReviewResult,
@@ -39,6 +40,8 @@ import type { PrRow } from '#/server/prs'
 import type { ProjectPush, Push } from '#/server/push'
 import type { ProjectAgent } from '#/server/projectAgents'
 import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
+import type { ActorRole, ActorRow } from '#/server/actors'
+import type { AgentTokenRow } from '#/server/tokens'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
@@ -65,6 +68,7 @@ export type {
   Summary,
   WorkspacePreview,
 }
+export type { ActorRole, ActorRow, AgentTokenRow, ProjectInstructionChange }
 export type {
   PushedToday,
   ReportDue,
@@ -173,6 +177,10 @@ export function errorMessage(err: unknown, fallback = 'something went wrong'): s
 export interface Me {
   actor: string
   agent: boolean
+  /** human, orchestrator or worker. */
+  role: ActorRole
+  /** The name a sub-identity works under; '' for none. */
+  parent: string
   boardEnv: 'production' | 'development' | 'test'
   authOff: boolean
 }
@@ -216,4 +224,17 @@ export interface ReportDueList {
 export interface RevertedChange {
   change: ReportSettingsChange
   settings: ReportSettingsView
+}
+
+/** `PUT /api/projects/:id/instructions`: the text now, and the change it recorded (null: it was that already). */
+export interface InstructionsSet {
+  instructions: string
+  change: ProjectInstructionChange | null
+}
+
+/** `POST /api/instructions/changes/:id/revert`: the change, now reverted, the revert's own record and the text after it. */
+export interface RevertedInstructions {
+  change: ProjectInstructionChange
+  revert: ProjectInstructionChange
+  instructions: string
 }

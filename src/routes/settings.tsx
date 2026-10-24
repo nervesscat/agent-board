@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
+import { AgentIdentities } from '#/components/AgentIdentities'
 import { AgentPicker } from '#/components/AgentPicker'
 import { Devices } from '#/components/Devices'
 import { PreviewLimitEditor } from '#/components/Preview'
@@ -48,6 +49,8 @@ function BoardSettings() {
         </p>
         <PreviewLimitEditor key={data.previewLimit} id="settings-preview-limit" limit={data.previewLimit} />
       </section>
+      {/* The agents' roles are the human's call: an agent never sees them here. */}
+      {me && !me.agent && <AgentIdentities />}
       {/* With sign-in off (test mode, AUTH=off) there are no passkeys to show. */}
       {me && !me.authOff && !me.agent && <Devices />}
     </div>
