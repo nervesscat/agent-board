@@ -288,6 +288,9 @@ export const updates = sqliteTable(
     // On a decision an agent posted to have tickets archived (features.requestArchive): the top-level tickets
     // it names. Answering its Archive option archives those still finished then. Null on any other post.
     archiveTickets: text('archive_tickets', { mode: 'json' }).$type<number[] | null>(),
+    // On a decision an agent posted to have a repo added to the project (features.requestRepo): the repo its
+    // Add option creates, once checked again. Null on any other post.
+    repoRequest: text('repo_request', { mode: 'json' }).$type<RepoRequest | null>(),
     // The tab of the ticket's feed it shows in (FEED_TABS): picked when it is posted, moved only on purpose.
     tab: text().$type<FeedTab>().notNull().default('main'),
     // A version of the ticket's summary: the newest is the summary, the older ones its history. Never a
@@ -301,6 +304,14 @@ export const updates = sqliteTable(
 )
 
 export type DecisionOption = { label: string; detail?: string; recommended?: boolean }
+/** What a repo request's Add creates: a repo of `projectId`, as the agent asked for it and the board checked. */
+export type RepoRequest = {
+  projectId: number
+  name: string
+  repoPath: string
+  githubRepo: string
+  baseBranch: string
+}
 
 export const comments = sqliteTable(
   'comments',

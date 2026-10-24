@@ -161,6 +161,13 @@ Lanes of a ticket you are working are yours to create (next section).
   `answer_decision` after asking them in the chat); Keep leaves them. The card is never edited:
   ask again instead. Never try to archive any
   other way.
+- Repos: only the human adds, changes and removes them. When the work needs a repo the project
+  lacks (a new repository you are building), `add_repo` with your ticket, the repo's name, its
+  checkout's absolute path, its GitHub `owner/name` (what `git remote get-url origin` points at)
+  and its base branch posts the human one Add / Don't add card on that ticket, without blocking
+  it; it is checked first (a git checkout whose origin is that GitHub repo, a name and a path no
+  repo has yet), and the error says what failed. Only their Add adds it, to that ticket's project.
+  Then `set_ticket_repo` moves your ticket onto it (any repo of the ticket's own project, at once).
 - `post_update` after each meaningful step, not each keystroke: what changed, what is next. It
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are

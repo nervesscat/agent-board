@@ -44,6 +44,9 @@ http_headers = { Authorization = "Bearer <token>" }
    (how to run them, conventions, what never to do). Follow them over any default of yours. A
    project can span several repos (`repos[]`: id, name, checkout path, base branch); when it does,
    give `repoId` to `create_ticket` and `post_review_result` so the board knows which one you mean.
+   Repos are the human's to add, change and remove (`POST`/`PATCH`/`DELETE /api/repos` answer 403
+   to an agent). When the work needs one the project lacks (a new repository you are building), ask
+   with `add_repo` (step 7); once it is added, `set_ticket_repo` moves your ticket onto it.
    Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
    (`open`, `active`, `blocked`, `review`, `done`, `cancelled`). A ticket's `status` is a stage key;
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
@@ -244,6 +247,27 @@ http_headers = { Authorization = "Bearer <token>" }
    then each ticket still finished is archived in the human's name, lanes with it, and the activity
    says which agent asked. Keep changes nothing. The card's body is never edited (409): ask again
    instead.
+
+   Adding a repo is the human's in the same way. `add_repo` (MCP `{ticketId, name, repoPath,
+githubRepo, baseBranch?, as?}`; REST `POST /api/tickets/:id/repo-request` `{name, repoPath,
+githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo shop?" with Add
+   and Don't add, on the ticket you name (it does not block), naming the repo's name, GitHub repo,
+   path and base branch (`main` when left out). The repo goes to that ticket's project, never
+   another. It is checked first, and nothing is posted when a check fails (400 or 409, saying
+   which): `repoPath` is an absolute path to an existing git checkout (a worktree too); its `origin`
+   remote is `githubRepo` on github.com (`owner/name` in any casing; https, `git@github.com:` and
+   `ssh://` URLs; only the URL is read); the project has no repo of that name (any casing); and no
+   repo of the board is registered at that path (either slash, a trailing one, and on Windows any
+   casing). Nothing is added until the human answers Add on the board (or the orchestrator relays
+   their chat answer with `answer_decision`): Add checks it all again, then adds the repo as asked,
+   in the human's name, and the activity says which agent asked; a check that fails by then adds
+   nothing and the reply under the card says why. Answering Add again reports it as already added.
+   Don't add changes nothing. The card's body is never edited (409). Once the repo is there,
+   `set_ticket_repo` (MCP `{ticketId, repoId, baseBranch?}`; REST `PUT /api/tickets/:id/repo`
+   `{repoId, baseBranch?}`) moves a ticket onto any repo of its own project at once, with no card:
+   its base branch becomes that repo's unless you give one, its lanes keep theirs, and the ticket's
+   activity logs the move. A repo of another project (400), a PR's own ticket (400) and an unknown
+   ticket or repo (404) are refused.
 
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is
    in its base (dev, main). `get_ticket_git` says so per branch with `reach` (`merged`, `rebased`,
