@@ -28,6 +28,7 @@ import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch } from '#/lib/api'
 import { STALL_MINUTES } from '#/lib/constants'
 import { useProject } from '#/lib/project'
+import { useAnchor, useReveal } from '#/lib/reveal'
 import { DEFAULT_TAG_SUGGESTIONS, cleanSuggestions } from '#/lib/tags'
 import { addTasks } from '#/lib/tasks'
 
@@ -36,6 +37,8 @@ export const Route = createFileRoute('/projects/$id/settings')({ component: Sett
 function Settings() {
   const { id } = Route.useParams()
   const { data: p } = useProject(id)
+  // A link into a section (#layout, #instructions-history) lands on it on an in-app navigation too.
+  useReveal(useAnchor(), { page: id, ready: p !== undefined })
   if (!p) return null
   return (
     <div className="space-y-10">

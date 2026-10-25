@@ -293,7 +293,8 @@ test('every Overview card hidden leaves a note that leads to the layout', async 
   await expect(page.locator('[data-slot="card"]')).toHaveCount(0)
   await page.getByRole('link', { name: 'Show them again in the layout settings' }).click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/settings#layout$`))
-  await expect(editor(page)).toBeVisible()
+  // Followed in the app, not loaded afresh: the page still lands on the Layout section below the others.
+  await expect(editor(page)).toBeInViewport()
 })
 
 test('the layout editor fits a phone: no sideways scroll, the columns one above the other', async ({
