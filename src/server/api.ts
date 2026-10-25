@@ -118,7 +118,8 @@ const TicketPatch = z.object({
   // The tickets whose branches must be merged into this one's base before it can be done; replaces the list.
   needs: z.array(z.number().int()).max(50).optional(),
   // The repos its work spans, each with its branch (base, PR); the first is the primary, the one repoId,
-  // branch, baseBranch and prNumber above are. Replaces the list.
+  // branch, baseBranch and prNumber above are. Replaces the list; an empty one is refused, in the words
+  // the rest of its checks use (ticketRepos.ts).
   repos: z
     .array(
       z.object({
@@ -128,7 +129,6 @@ const TicketPatch = z.object({
         prNumber: z.number().int().positive().nullable().optional(),
       }),
     )
-    .min(1)
     .max(20)
     .optional(),
 })

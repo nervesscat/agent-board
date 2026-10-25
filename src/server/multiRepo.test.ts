@@ -142,9 +142,13 @@ describe("a ticket's repos", () => {
     ).toEqual(['feat/back-2', 'feat/front'])
 
     // Refused, and nothing changes: a repo of another project, the same repo twice, none at all.
-    for (const repos of [[{ repoId: elsewhere }], [{ repoId: back.id }, { repoId: back.id }], []]) {
+    for (const [repos, error] of [
+      [[{ repoId: elsewhere }], `repos: repo ${elsewhere} is not in project ${projectId}`],
+      [[{ repoId: back.id }, { repoId: back.id }], 'repos: repo back is listed twice'],
+      [[], 'repos: a ticket has at least one repo'],
+    ] as const) {
       const bad = await call('PATCH', `/api/tickets/${t.id}`, { repos })
-      expect(bad.status, JSON.stringify(repos)).toBe(400)
+      expect([bad.status, bad.body.error], JSON.stringify(repos)).toEqual([400, error])
     }
     expect(repoRows(t.id)).toEqual([
       [back.id, 'feat/back-2', 0],
@@ -163,6 +167,8 @@ describe("a ticket's repos", () => {
     const refused = await ticket({ title: 'nope', repos: [{ repoId: elsewhere }] })
     expect(refused.status).toBe(400)
     expect(refused.body.error).toMatch(`repo ${elsewhere} is not in project ${projectId}`)
+    const none = await ticket({ title: 'nope', repos: [] })
+    expect([none.status, none.body.error]).toEqual([400, 'repos: a ticket has at least one repo'])
   })
 
   it('a repoId given with repos makes that repo the primary, the others keeping their entries', async () => {
