@@ -40,6 +40,15 @@ import {
   ticketRepo,
 } from './repos'
 import { reportDueFor } from './reportDue'
+import { stopRunsFor } from './runs'
+import {
+  resolveTicketRepos,
+  syncPrimaryRow,
+  ticketRepoList,
+  type TicketRepoInput,
+  workspaceRepo,
+  writeOtherRepos,
+} from './ticketRepos'
 import { type WithResume, type WithResumeBrief, resumeState, withoutResume } from './resume'
 import {
   firstOfKind,
@@ -392,6 +401,8 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     // The ticket's own posts (count, who posted last); each post carries the thread of its replies below.
     thread: ticketThread,
     pr: prForTicket(ticket),
+    // The repos its work spans, the primary (its repoId, branch, baseBranch, prNumber) first.
+    repos: ticketRepoList(ticket),
     tasks,
     // managedPreview: the preview the board builds and runs from the workspace, if it ever ran one.
     workspaces: workspaces.map((w) => ({ ...w, managedPreview: managedPreview(w.id) })),
@@ -519,6 +530,32 @@ export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolea
   }
 }
 
+/**
+ * A new ticket's own fields as `createTicket` stores them: with `repos`, the first is the primary, its
+ * repo, and its branch, base and PR where the input gives none. What a create into a done stage
+ * judges its needs against too.
+ */
+export function newTicketPrimary<
+  T extends {
+    repoId?: number | null
+    branch?: string
+    baseBranch?: string
+    prNumber?: number | null
+    repos?: TicketRepoInput[]
+  },
+>(input: T): T {
+  const first = input.repos?.[0]
+  if (input.repos && !first) throw new HttpError(400, 'repos: a ticket has at least one repo')
+  if (!first) return input
+  return {
+    ...input,
+    repoId: first.repoId,
+    branch: input.branch || first.branch,
+    baseBranch: input.baseBranch || first.baseBranch,
+    prNumber: input.prNumber !== undefined ? input.prNumber : first.prNumber,
+  }
+}
+
 export function createTicket(
   projectId: number,
   input: {
@@ -539,10 +576,19 @@ export function createTicket(
     prNumber?: number | null
     /** Uploads (POST /api/uploads) that go with the instructions. */
     attachmentIds?: number[]
+    /** The repos its work spans, each with its branch; the first is the primary (repoId, branch…). */
+    repos?: TicketRepoInput[]
   },
   actor: string,
 ) {
+  input = newTicketPrimary(input)
   const { parent, repo, baseBranch } = placement(projectId, input)
+  // Checked before the ticket exists: a bad repo does not leave a ticket behind without them.
+  if (input.repos)
+    resolveTicketRepos(
+      { id: 0, projectId, repoId: repo.id, branch: '', baseBranch, prNumber: null },
+      input.repos,
+    )
   if (parent?.prId) throw new HttpError(400, `ticket ${parent.id} is a PR's: it has no lanes`)
   // Checked before the ticket exists, so a bad file does not leave a ticket behind without its files.
   const attachmentIds = input.attachmentIds ?? []
@@ -574,6 +620,8 @@ export function createTicket(
     })
     .returning()
     .get()
+  syncPrimaryRow(row)
+  if (input.repos) writeOtherRepos(row.id, resolveTicketRepos(row, input.repos))
   noteStageMove(row.id, null, row.status)
   if (row.prNumber) noteBoardEvent(row.id, 'pr', { note: `PR #${row.prNumber}` })
   if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
@@ -631,27 +679,84 @@ export function cleanTags(tags: string[]): string[] {
   return out.slice(0, MAX_TAGS)
 }
 
+type TicketFieldsPatch = Partial<
+  Pick<
+    schema.Ticket,
+    | 'title'
+    | 'body'
+    | 'status'
+    | 'complexity'
+    | 'assignee'
+    | 'branch'
+    | 'baseBranch'
+    | 'repoId'
+    | 'tags'
+    | 'prNumber'
+  >
+>
+
+/**
+ * What an update writes to a ticket's primary: the repos list it produces (null when its repos stay as
+ * they are) and the fields with the new primary's own repo, branch, base and PR filled in. The needs
+ * check judges a ticket against the same primary the write produces.
+ */
+export function plannedPrimary(
+  before: schema.Ticket,
+  reposGiven: TicketRepoInput[] | undefined,
+  fields: TicketFieldsPatch,
+): { repos: ReturnType<typeof resolveTicketRepos> | null; patch: TicketFieldsPatch } {
+  const reposBefore = ticketRepoList(before)
+  // A repoId alone naming another repo the ticket spans makes that one the primary, with its own
+  // branch, base and PR; the old primary stays as one of its other repos, with its own. Any other
+  // repoId replaces the primary's repo, keeping the ticket's branch.
+  const reposInput =
+    reposGiven ??
+    (fields.repoId != null && !before.prId && reposBefore.slice(1).some((e) => e.repoId === fields.repoId)
+      ? reposBefore.map((e) => ({ repoId: e.repoId }))
+      : undefined)
+  let repos: ReturnType<typeof resolveTicketRepos> | null = null
+  let patch = fields
+  if (reposInput) {
+    if (before.prId)
+      throw new HttpError(400, `ticket ${before.id} is PR #${before.prNumber}'s: its repos cannot change`)
+    // Refused as such before a repoId given with it is looked for in it.
+    if (!reposInput.length) throw new HttpError(400, 'repos: a ticket has at least one repo')
+    // A repoId given with the list names its primary: that entry goes first, the rest keep their order.
+    let ordered = reposInput
+    if (fields.repoId !== undefined) {
+      const at = reposInput.findIndex((e) => e.repoId === fields.repoId)
+      if (at < 0) throw new HttpError(400, `repoId: repo ${fields.repoId} is not one of the repos listed`)
+      ordered = [reposInput[at]!, ...reposInput.filter((_, i) => i !== at)]
+    }
+    repos = resolveTicketRepos(before, ordered)
+    const primary = repos[0]!
+    // The list says what the primary is; a field given alongside it still has the last word.
+    patch = {
+      repoId: primary.repoId,
+      branch: primary.branch,
+      baseBranch: primary.baseBranch,
+      prNumber: primary.prNumber,
+      ...patch,
+    }
+  }
+  return { repos, patch }
+}
+
 export function updateTicket(
   id: number,
-  patch: Partial<
-    Pick<
-      schema.Ticket,
-      | 'title'
-      | 'body'
-      | 'status'
-      | 'complexity'
-      | 'assignee'
-      | 'branch'
-      | 'baseBranch'
-      | 'repoId'
-      | 'tags'
-      | 'prNumber'
-    >
-  >,
+  patch: TicketFieldsPatch & {
+    /** Replaces the ticket's repos; the first is the primary, which the fields above also write. */
+    repos?: TicketRepoInput[]
+  },
   actor: string,
   opts: { agent?: boolean } = {},
 ) {
   const before = getTicket(id)
+  const { repos: reposGiven, ...fields } = patch
+  const reposBefore = ticketRepoList(before)
+  const planned = plannedPrimary(before, reposGiven, fields)
+  const repos = planned.repos
+  patch = planned.patch
   if (before.prId) {
     // A PR's own ticket is for that PR, in that repo, and has no branch of its own.
     if (
@@ -707,6 +812,24 @@ export function updateTicket(
     changes.push(`base branch → ${patch.baseBranch}`)
   if (patch.tags && patch.tags.join('\n') !== before.tags.join('\n'))
     changes.push(`tags → ${patch.tags.join(', ') || 'none'}`)
+  if (
+    repos ||
+    patch.repoId !== undefined ||
+    patch.branch !== undefined ||
+    patch.baseBranch !== undefined ||
+    patch.prNumber !== undefined
+  )
+    syncPrimaryRow(row)
+  if (repos) writeOtherRepos(id, repos)
+  const reposAfter = ticketRepoList(row)
+  const names = (list: typeof reposAfter) => list.map((r) => r.name).join(', ')
+  if (names(reposAfter) !== names(reposBefore)) changes.push(`repos → ${names(reposAfter)}`)
+  // A repo the ticket no longer spans has nothing of its left to run for it.
+  for (const gone of reposBefore.filter((b) => !reposAfter.some((a) => a.repoId === b.repoId)))
+    stopRunsFor([id], `${gone.name} was removed from the ticket`, actor, {
+      repoId: gone.repoId,
+      lanes: false,
+    })
   if (patch.title && patch.title !== before.title) changes.push('renamed')
   if (patch.body !== undefined && patch.body !== before.body) changes.push('edited the instructions')
   logActivity({
@@ -725,8 +848,10 @@ export function updateTicket(
 /**
  * A ticket moved onto another repo of its own project, at once: its branch is then looked for in that
  * checkout, and its base branch becomes that repo's (or `baseBranch`, when given; it stays as it is when
- * the repo does not change). A repo of another project is refused (resolveRepo), and so is a PR's own
- * ticket, as updateTicket refuses it. Its lanes keep their own repos.
+ * the repo does not change). A repo the ticket already spans as one of its other repos becomes its
+ * primary instead, with that repo's own branch, base and PR (updateTicket's plannedPrimary), the old
+ * primary staying as one of its other repos. A repo of another project is refused (resolveRepo), and so
+ * is a PR's own ticket, as updateTicket refuses it. Its lanes keep their own repos.
  */
 export function setTicketRepo(
   id: number,
@@ -737,8 +862,11 @@ export function setTicketRepo(
   const before = getTicket(id)
   const repo = resolveRepo(before.projectId, input.repoId)
   const same = ticketRepo(before)?.id === repo.id
-  const baseBranch = input.baseBranch?.trim() || (same ? before.baseBranch : repo.baseBranch)
-  return updateTicket(id, { repoId: repo.id, baseBranch }, actor, opts)
+  const spanned = !same && ticketRepoList(before).some((e) => !e.primary && e.repoId === repo.id)
+  const given = input.baseBranch?.trim()
+  // An other repo of the ticket keeps its own base when none is given; a new one starts on the repo's.
+  const baseBranch = given || (same ? before.baseBranch : spanned ? undefined : repo.baseBranch)
+  return updateTicket(id, { repoId: repo.id, ...(baseBranch ? { baseBranch } : {}) }, actor, opts)
 }
 
 /** A ticket that reached a done or cancelled stage has nothing left to preview. */
@@ -755,8 +883,26 @@ function stopIfClosed(t: schema.Ticket, stages: ReturnType<typeof listStages>, a
  * since it was read, so two agents claiming at once cannot both win. A ticket waiting in an open or
  * blocked stage moves to the project's first active stage, if it has one.
  */
-export function claimTicket(id: number, actor: string, opts: { branch?: string; as?: string } = {}) {
+export function claimTicket(
+  id: number,
+  actor: string,
+  opts: { branch?: string; as?: string; repos?: { repoId: number; branch: string }[] } = {},
+) {
   const before = getTicket(id)
+  // Each repo's branch, the primary's as `branch` (which wins when both name it); a repo of the project
+  // the ticket does not span yet is added to it.
+  const listed = ticketRepoList(before)
+  const primaryId = listed[0]?.repoId
+  if (opts.repos?.length) {
+    if (before.prId)
+      throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: its repos cannot change`)
+    resolveTicketRepos(before, [
+      ...listed,
+      ...opts.repos.filter((r) => !listed.some((l) => l.repoId === r.repoId)),
+    ])
+    const own = opts.repos.find((r) => r.repoId === primaryId)
+    if (own && opts.branch === undefined) opts = { ...opts, branch: own.branch }
+  }
   const stages = listStages(before.projectId)
   const from = stageOf(stages, before.status)
   if (from.kind === 'done' || from.kind === 'cancelled')
@@ -790,6 +936,18 @@ export function claimTicket(id: number, actor: string, opts: { branch?: string; 
     .returning()
     .get()
   if (!row) throw new HttpError(409, `ticket ${id} was reassigned while claiming it; read it again`)
+  if (opts.branch !== undefined) syncPrimaryRow(row)
+  const others = (opts.repos ?? []).filter((r) => r.repoId !== primaryId)
+  if (others.length) {
+    const next = ticketRepoList(row).map((e) => ({
+      ...e,
+      branch: others.find((r) => r.repoId === e.repoId)?.branch ?? e.branch,
+    }))
+    for (const r of others)
+      if (!next.some((e) => e.repoId === r.repoId))
+        next.push({ ...r, name: '', baseBranch: '', prNumber: null, primary: false })
+    writeOtherRepos(id, resolveTicketRepos(row, next))
+  }
   noteStageMove(id, before.status, row.status)
   if (row.parentId) touch(row.parentId)
   const tookOver = before.assignee && before.assignee !== assignee ? ` from ${before.assignee}` : ''
@@ -1433,16 +1591,31 @@ export function deleteTask(id: number, actor: string) {
 
 export function addWorkspace(
   ticketId: number,
-  input: { name: string; branch?: string; path?: string; agent?: string; previewUrl?: string | null },
+  input: {
+    name: string
+    branch?: string
+    path?: string
+    agent?: string
+    previewUrl?: string | null
+    /** The repo of the ticket its worktree is of; the ticket's primary when left out. */
+    repoId?: number | null
+  },
   actor: string,
 ) {
   const ticket = getTicket(ticketId)
+  const repos = ticketRepoList(ticket)
+  if (input.repoId && !repos.some((r) => r.repoId === input.repoId))
+    throw new HttpError(
+      400,
+      `repo ${input.repoId} is not one of ticket ${ticketId}'s repos (${repos.map((r) => `${r.repoId} ${r.name}`).join(', ') || 'none'})`,
+    )
   const preview = previewUrl(input.previewUrl)
   const row = db
     .insert(schema.workspaces)
     .values({
       ticketId,
       name: input.name,
+      repoId: input.repoId || repos[0]?.repoId || null,
       branch: input.branch ?? '',
       path: input.path ?? '',
       agent: input.agent ?? actor,
@@ -1498,7 +1671,7 @@ export function setWorkspacePreview(id: number, value: string | null, actor: str
  * `running: false` without a link), the preview the board runs from it (`managed`, null when it never
  * ran one), and `cannotStart`: why the board would refuse to start one, null when it would.
  * `toolProblem` is set when that is a tool missing on this machine (pnpm or node): the workspace could
- * run one once it is fixed, so the Preview card shows it with the reason.
+ * run one once it is fixed, so the Previews page shows it with the reason.
  */
 export async function workspacePreview(id: number) {
   const ws = getWorkspace(id)
@@ -1556,11 +1729,43 @@ export async function ticketGit(id: number, repoGit: GitCache = gitCache({ recen
     )
     .all()
   const workspaces = owners.flatMap((owner) =>
-    rows.filter((w) => w.ticketId === owner.id).map((w) => ({ w, owner, repo: ticketRepo(owner) })),
+    rows
+      .filter((w) => w.ticketId === owner.id)
+      .map((w) => {
+        const r = workspaceRepo(w, owner)
+        // In another repo of its ticket than the primary: compared with that repo's branch.
+        const entry =
+          r && r.id !== ticketRepo(owner)?.id ? ticketRepoList(owner).find((e) => e.repoId === r.id) : null
+        return {
+          w,
+          owner: entry
+            ? { ...owner, repoId: r!.id, branch: entry.branch, baseBranch: entry.baseBranch }
+            : owner,
+          repo: r,
+        }
+      }),
   )
   const repo = ticketRepo(ticket)
+  const entries = ticketRepoList(ticket)
   const byId = new Map(all.map((t) => [t.id, t]))
-  const [branch, ...wsState] = await Promise.all([
+  // The other repos', each against its own base.
+  const othersGit = Promise.all(
+    entries.slice(1).map(async (e) => {
+      const r = getRepo(e.repoId)
+      const subject = { ...ticket, repoId: r.id, branch: e.branch, baseBranch: e.baseBranch }
+      const [{ refs }, push] = await Promise.all([
+        repoGit(r.repoPath),
+        pushStates(r.repoPath, [e.branch], new Map([[e.branch, e.baseBranch]])),
+      ])
+      const [info, reach] = await Promise.all([
+        infoOf(r.repoPath, e.branch, e.baseBranch, refs),
+        reachOf(r.repoPath, e.branch, baseChain(subject, byId, r), refs),
+      ])
+      return { ...info, reach, push: push.get(e.branch) ?? NO_PUSH }
+    }),
+  )
+  const [others, branch, ...wsState] = await Promise.all([
+    othersGit,
     (async () => {
       if (!repo) return { ...NO_BRANCH, reach: null, push: NO_PUSH }
       const [{ refs }, push] = await Promise.all([
@@ -1597,8 +1802,18 @@ export async function ticketGit(id: number, repoGit: GitCache = gitCache({ recen
     branch: ticket.branch,
     baseBranch: ticket.baseBranch,
     info: branch,
-    workspaces: workspaces.map(({ w, owner }, i) => ({
+    // Every repo of the ticket, the primary (the fields above) first, each with its branch, git state and PR.
+    repos: entries.map((e, i) => ({
+      repo: { id: e.repoId, name: e.name },
+      primary: e.primary,
+      branch: e.branch,
+      baseBranch: e.baseBranch,
+      info: i === 0 ? branch : others[i - 1]!,
+      pr: i === 0 ? prForTicket(ticket) : prForTicket({ ...ticket, ...e }),
+    })),
+    workspaces: workspaces.map(({ w, owner, repo: r }, i) => ({
       ...w,
+      repo: r ? { id: r.id, name: r.name } : null,
       ...wsState[i]!,
       // Set on a lane's workspace shown in its parent's panel.
       lane: owner.id === id ? null : { id: owner.id, title: owner.title },

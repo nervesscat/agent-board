@@ -87,8 +87,8 @@ Then:
   and `stale` says the work moved on (new commits or a newer progress post): check the branch and
   the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
 - A new ticket starts with its project's default phases as its top-level tasks (`get_project` →
-  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged,
-  Hand-off post). Tasks go two levels and no more: put the concrete steps of the work under Implementation
+  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged).
+  Tasks go two levels and no more: put the concrete steps of the work under Implementation
   as its subtasks (`add_tasks` with `parentTaskId` = its id; a subtask takes no subtasks). Remove
   or reword a phase that does not fit (`remove_task`, `update_task`); `add_tasks` adds one at the
   end. A lane starts without phases, since its parent carries the hand-off (`defaultPhases: true`
@@ -113,8 +113,7 @@ Lanes of a ticket you are working are yours to create (next section).
   (a new push unticks it until it is green again), Preview while one of the ticket's workspaces
   runs a preview or its link answers, Merged once the PR or the branch is merged. Nobody ticks
   those by hand: `set_task_done` and `update_task` `done` on them are refused (`get_ticket` marks
-  them `auto: true`). Hand-off post is yours: tick it once the summary is up to date, and on a
-  rework untick it until the summary is updated again. A phase with steps is done exactly when
+  them `auto: true`). Implementation and its steps are yours to tick. A phase with steps is done exactly when
   all its steps are: ticking or unticking a phase does the same to its steps, ticking its last open
   step ticks it, unticking a step unticks it (a phase the board ticks follows its fact, not its
   steps). When the plan changes, `update_task` rewords a task and `remove_task` drops one
@@ -215,20 +214,24 @@ Lanes of a ticket you are working are yours to create (next section).
 - **Previews:** when the change can be tried (a page, an API), give the human a preview and put
   its link with what to try in the summary; say that what they post there stays in the copy. Keep
   it running while the ticket is in `review`.
-  - A branch of the board itself: the board runs it. `add_workspace` with your worktree's `path`
-    and `branch` (a worktree next to the main checkout, `../agent-board-<branch>`), then
-    `start_preview` with the `workspaceId`. It returns at once; `get_ticket` shows the workspace's
-    `managedPreview` (`building`, `starting`, `running` with its `url`, or `failed` with the last
-    log lines and the log paths). Do not run `pnpm dev` in your session for it: that dies with
-    your session. `start_preview` with `restart: true` rebuilds after more commits;
-    `stop_preview` stops it, and the board stops it by itself once the PR is merged or the
-    ticket is done, cancelled, archived or its workspace removed. The human's preview limit (8 by
-    default) caps how many the board runs at once; a start beyond it is refused with the limit.
-  - Anything else: start your branch from your worktree on a free port, with a copy of the data
+  - A repo with runs (the human configures them per repo in the project's settings: previews with
+    a link, jobs without; a checkout of the board has its `Preview`): the board runs them.
+    `add_workspace` with your worktree's `path` and `branch` (a worktree next to the main
+    checkout, `../<repo>-<branch>`; `repoId` for a repo other than the ticket's primary), then
+    `list_runs` and `start_run` by name (`all: true` for every run). It returns at once;
+    `list_runs` shows each run (`building`, `starting`, `running` with its `url`, or `failed` with
+    the last log lines and the log paths). You name a run, never a command: what runs is the
+    human's config. Do not run `pnpm dev` in your session for it: that dies with your session.
+    `start_run` with `restart: true` rebuilds after more commits; `stop_run` stops it, and the
+    board stops it by itself once the PR is merged or the ticket is done, cancelled, archived or
+    its workspace removed. `start_preview` / `stop_preview` still act on the first preview run.
+    The human's preview limit (8 by default) caps how many runs the board runs at once; a start
+    beyond it is refused with the limit.
+  - A repo with no runs: start your branch from your worktree on a free port, with a copy of the data
     rather than the real one (the project's `instructions` say how), then `set_preview` with the
     `workspaceId` and `previewUrl` once it answers (or `previewUrl` on `add_workspace` when it
-    already runs). The ticket page then shows a Preview card with an Open button and whether it
-    is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
+    already runs). The ticket page then shows it on its Runs card with an Open button and whether
+    it is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
     `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port
     the human uses day to day. The human may stop it from the Previews page when it listens on
     loopback and runs from the workspace's worktree; its link stays, as not running.
@@ -298,7 +301,7 @@ The human should not have to tell you to check comments. While this session has 
 ## 4. Hand off
 
 Before `update_ticket` → `status: review`, every item, in order (the board ticks Pushed, PR, CI,
-Preview and Merged as their facts hold; Hand-off post is ticked by hand):
+Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
 
 1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
 2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
@@ -323,16 +326,15 @@ Preview and Merged as their facts hold; Hand-off post is ticked by hand):
    While GitHub's checks do not run, comment on the PR `CI run locally: green on <sha>` with the
    head commit the checks of item 2 passed on (`gh pr comment`): that ticks CI. Comment again after
    each push.
-6. **Preview running**: `start_preview` on the workspace, then `get_ticket` until its
-   `managedPreview` is `running` (`failed`: read the log lines and fix). For a repo the board cannot
-   build, start one the project's way and `set_preview` (see Previews in
+6. **Preview running**: `start_run` (or `start_preview`), then `list_runs` until it is `running`
+   (`failed`: read the log lines and fix). For a repo with no runs configured, start one the
+   project's way and `set_preview` (see Previews in
    [While working](#3-while-working)). Required whenever the change can be tried; when it cannot
    (docs only, a script), say why in the summary.
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
    preview link and what to try there**, how it was tested, the e2e result (its summary, or its
    report when something failed), each review round's verdict and, for a UI change, screenshots of
-   what changed, in `files`. Then tick Hand-off post: a tick is not a commit, so the summary still
-   counts.
+   what changed, in `files`.
 8. Resume note if the ticket stays open past the session (`set_resume_note`, see
    [End of session](#5-end-of-session)).
 

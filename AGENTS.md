@@ -44,9 +44,15 @@ http_headers = { Authorization = "Bearer <token>" }
    (how to run them, conventions, what never to do). Follow them over any default of yours. A
    project can span several repos (`repos[]`: id, name, checkout path, base branch); when it does,
    give `repoId` to `create_ticket` and `post_review_result` so the board knows which one you mean.
+   A ticket's work can span several of them: `repos` on `get_ticket` lists each with its own
+   `branch`, `baseBranch` and `prNumber`, the first being the primary (the ticket's own `repoId`,
+   `branch`, `baseBranch`, `prNumber`). `repos` on `create_ticket` and `update_ticket` sets the list,
+   `claim_ticket`'s `branch` is the primary's and its `repos` sets each one's branch, `add_workspace`
+   takes the `repoId` its worktree is of, and `get_ticket_git` reports every repo.
    Repos are the human's to add, change and remove (`POST`/`PATCH`/`DELETE /api/repos` answer 403
    to an agent). When the work needs one the project lacks (a new repository you are building), ask
-   with `add_repo` (step 7); once it is added, `set_ticket_repo` moves your ticket onto it.
+   with `add_repo` (step 7); once it is added, `set_ticket_repo` moves your ticket onto it
+   (makes it the primary).
    Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
    (`open`, `active`, `blocked`, `review`, `done`, `cancelled`). A ticket's `status` is a stage key;
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
@@ -67,7 +73,7 @@ http_headers = { Authorization = "Bearer <token>" }
    day without one.
 3. **Break it down**: a new ticket starts with its project's default phases as its top-level
    tasks (`get_project` → `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR,
-   CI, Preview, Merged, Hand-off post). Tasks go two levels and no more: the concrete steps of the
+   CI, Preview, Merged). Tasks go two levels and no more: the concrete steps of the
    work go under Implementation as its subtasks (`add_tasks` with `parentTaskId` = its id; a
    subtask takes no subtasks). `set_task_done` as you finish each step. **The board ticks Pushed,
    PR, CI, Preview and Merged itself**, from git, GitHub and the previews, and unticks one when its
@@ -82,8 +88,7 @@ http_headers = { Authorization = "Bearer <token>" }
 
    Nobody ticks those by hand: `set_task_done` and `update_task` `done` on them are refused, and
    `get_ticket` marks them `auto: true` (a top-level task with one of those names, in any case).
-   Hand-off post is yours: tick it once the summary is up to date (step 7), and on a rework untick
-   it until the summary is updated again. When a phase does not fit, `remove_task` drops it (its steps go with it),
+   Implementation and its steps are yours to tick. When a phase does not fit, `remove_task` drops it (its steps go with it),
    `update_task` rewords it, and `add_tasks` adds one (at the end). A lane starts without phases,
    since its parent carries the hand-off (`defaultPhases: true` on `create_ticket` seeds it
    anyway), and `defaultPhases: false` opts a ticket out. A ticket with no tasks (an older one, a
@@ -150,24 +155,29 @@ http_headers = { Authorization = "Bearer <token>" }
    **Previews:** when the change can be tried (a page, an API), have a preview the human can open
    before anything is merged, and post its link with what to try. Say that what the human posts
    there stays in a copy of the data. Keep it running while the ticket is in review.
-   - **A branch of the board itself: the board runs it.** Register your worktree
-     (`add_workspace` with its `path` and `branch`; it must sit next to the main checkout, like
-     `../agent-board-<branch>`), then `start_preview` with the workspace's id. The board installs
-     (only when the lockfile changed), builds, copies the live data and starts the build on a free
-     port from 47101 with sign-in off, then sets the workspace's `previewUrl`. It returns
-     at once; `get_ticket` shows the workspace's `managedPreview` going `building` → `starting` →
-     `running`, or `failed` with the last log lines (`logs` has the paths). `start_preview` with
-     `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board runs as
-     many at once as the human's preview limit (8 by default); a start beyond it is refused with
-     the limit, so stop the ones you no longer need. The board stops it
-     by itself when the PR is merged, the ticket moves to done or cancelled or is archived, or the
-     workspace is removed, and when the board itself stops (it does not start them again). Do not
-     run `pnpm dev` in your session for the human: it dies with your session and the dev server
-     behaves differently from the build.
-   - **Anything else:** start your branch from your worktree on a free port, with a copy of the
+   - **A repo with runs: the board runs them.** The human configures each repo's runs in the
+     project's settings: a preview answers on a port and gets a link, a job is a background worker
+     with no link; a checkout of the board has its `Preview` (install when the lockfile changed,
+     build, a copy of the live data, the build on a free port from 47101 with sign-in off). Register
+     your worktree (`add_workspace` with its `path` and `branch`, and `repoId` for a repo other than
+     the ticket's primary; it must sit next to the repo's main checkout, like
+     `../agent-board-<branch>`), then `list_runs` shows every run of every repo of the ticket and
+     `start_run` starts one by name (`all: true` starts them all). It returns at once; `list_runs`
+     follows it `building` → `starting` → `running`, or `failed` with the last log lines (`logs`
+     has the paths), and a running preview sets the workspace's `previewUrl`. `start_run` with
+     `restart: true` rebuilds after you push more work, `stop_run` stops it. You name a run, never a
+     command, env or port: what runs is the human's config. `start_preview` / `stop_preview` still
+     work on the workspace's first preview run. The board runs as many at once, previews and jobs
+     alike, as the human's preview limit (8 by default); a start beyond it is refused with the
+     limit, so stop the ones you no longer need. The board stops them by itself when the PR is
+     merged (in that repo), the ticket moves to done or cancelled or is archived, the repo is taken
+     off the ticket, or the workspace is removed, and when the board itself stops (it does not start
+     them again). Do not run `pnpm dev` in your session for the human: it dies with your session and
+     the dev server behaves differently from the build.
+   - **A repo with no runs:** start your branch from your worktree on a free port, with a copy of the
      data rather than the real one (the project's instructions say how), and register its link on
-     the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it as
-     a Preview card with an Open button and whether it is running. Stop it once the ticket is
+     the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it on
+     its Runs card with an Open button and whether it is running. Stop it once the ticket is
      merged or dropped, and clear it (`set_preview` with `previewUrl: ""`). The human can stop it
      from the project's Previews page when it listens on loopback and runs from the workspace's
      worktree; the link stays, as not running.
@@ -220,7 +230,7 @@ http_headers = { Authorization = "Bearer <token>" }
      events (pushes, the PR, the preview, the merge, stage moves); nothing of this goes to the feed
      or the Daily view.
 7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
-   PR, CI, Preview and Merged as their facts hold; Hand-off post is ticked by hand):
+   PR, CI, Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
    1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
    2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
       project's instructions say how; here `pnpm test:e2e`).
@@ -251,8 +261,7 @@ http_headers = { Authorization = "Bearer <token>" }
    7. The summary, up to date (`set_ticket_summary`, not a new hand-off post): the PR link, **the
       preview link and what to try there**, how it was tested, the e2e result (the run's summary, or
       its report when something failed), each review round's verdict, and screenshots of what
-      changed for a UI change in `files`. Then tick Hand-off post: a tick is not a commit, so the
-      summary still counts.
+      changed for a UI change in `files`.
    8. Resume note if the ticket stays open past the session (step 9).
 
    `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
@@ -301,9 +310,10 @@ githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo 
    nothing and the reply under the card says why. Answering Add again reports it as already added.
    Don't add changes nothing. The card's body is never edited (409). Once the repo is there,
    `set_ticket_repo` (MCP `{ticketId, repoId, baseBranch?}`; REST `PUT /api/tickets/:id/repo`
-   `{repoId, baseBranch?}`) moves a ticket onto any repo of its own project at once, with no card:
-   its base branch becomes that repo's unless you give one, its lanes keep theirs, and the ticket's
-   activity logs the move. A repo of another project (400), a PR's own ticket (400) and an unknown
+   `{repoId, baseBranch?}`) moves a ticket onto any repo of its own project at once, with no card,
+   as its primary: its base branch becomes that repo's unless you give one (a repo it already spans
+   becomes the primary with its own branch, base and PR, the old primary staying among its `repos`),
+   its lanes keep theirs, and the ticket's activity logs the move. A repo of another project (400), a PR's own ticket (400) and an unknown
    ticket or repo (404) are refused.
 
 8. **Clean up**: a lane can go once its work is on its parent's branch, a ticket once its branch is

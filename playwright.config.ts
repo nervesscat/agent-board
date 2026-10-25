@@ -24,6 +24,12 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
+  // Every run the board runs counts against one board-wide preview limit, which some tests change: the
+  // tests that start runs or change it (tagged BOARD_RUNS) run one at a time, beside the rest.
+  projects: [
+    { name: 'e2e', grepInvert: /@board-runs/ },
+    { name: 'board-runs', grep: /@board-runs/, workers: 1 },
+  ],
   use: {
     ...devices['Desktop Chrome'],
     baseURL: env.baseURL,

@@ -410,10 +410,13 @@ export async function changeTicket(
   const { needs, force, ...patch } = input
   const before = features.getTicket(id)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
+  // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
+  const { repos, ...fields } = patch
+  const primary = features.plannedPrimary(before, repos, fields).patch
   const subject = {
     ...before,
-    repoId: patch.repoId ?? before.repoId,
-    baseBranch: patch.baseBranch || before.baseBranch,
+    repoId: primary.repoId ?? before.repoId,
+    baseBranch: primary.baseBranch || before.baseBranch,
     from: before.status,
   }
   const to = patch.status ? resolveStage(listStages(before.projectId), patch.status).key : before.status
@@ -461,7 +464,8 @@ export async function newTicket(
   const { needs = [], defaultPhases, ...rest } = input
   const ids = checkNeeds({ id: null, projectId }, needs)
   if (ids.length && rest.status) {
-    const { repo, baseBranch } = features.placement(projectId, rest)
+    // Judged against the repo and base the ticket is created with.
+    const { repo, baseBranch } = features.placement(projectId, features.newTicketPrimary(rest))
     const to = resolveStage(listStages(projectId), rest.status).key
     await guardDone({ id: null, projectId, repoId: repo.id, baseBranch }, to, ids, opts)
   }

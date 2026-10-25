@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { asc, eq, inArray } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, ne, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
@@ -10,6 +10,8 @@ import { assertRepo, originUrl, repoNameWithOwner } from './git'
 import { HttpError, notFound } from './http'
 import { forgetPreview } from './managedPreview'
 import { createProject, getProject } from './projects'
+import { seedRepo } from './runConfig'
+import { forgetRepoRuns, stopRunsFor } from './runs'
 
 /** A local git checkout the board reads with git and gh. Every repo belongs to one project. */
 
@@ -151,7 +153,7 @@ export async function checkRepoRequest(
  * again with gh). The caller checked it just before (`repoRequestProblem`) and logs it.
  */
 export function insertRequestedRepo(req: schema.RepoRequest) {
-  return db
+  const row = db
     .insert(schema.repos)
     .values({
       projectId: req.projectId,
@@ -162,6 +164,9 @@ export function insertRequestedRepo(req: schema.RepoRequest) {
     })
     .returning()
     .get()
+  // As createRepo: a checkout of the board gets the board's own preview run.
+  seedRepo(row)
+  return row
 }
 
 /** The repo a repo request's Add created already: the same name and folder (`folderKey`) in its project. */
@@ -207,6 +212,8 @@ export async function createRepo(
     refType: 'repo',
     refId: row.id,
   })
+  // A checkout of the board gets the board's own preview run.
+  seedRepo(row)
   return row
 }
 
@@ -224,10 +231,38 @@ export async function updateRepo(
     set.githubRepo = await repoNameWithOwner(patch.repoPath)
   }
   const moved = patch.projectId !== undefined && patch.projectId !== before.projectId
+  // A ticket's repos are all of its project: what the move splits apart leaves the ticket, and its
+  // runs for that ticket stop once the rows are gone.
+  const left: { ticketId: number; repoId: number }[] = []
   const row = db.transaction((tx) => {
     const r = tx.update(schema.repos).set(set).where(eq(schema.repos.id, id)).returning().get()!
     // The repo's PRs, tickets and review results move with it; threads follow their parents.
     if (moved) {
+      // The tickets it leaves behind no longer span it; the ones it takes no longer span the repos
+      // that stay.
+      const stays = tx
+        .select({ ticketId: schema.ticketRepos.ticketId, repoId: schema.ticketRepos.repoId })
+        .from(schema.ticketRepos)
+        .innerJoin(schema.tickets, eq(schema.tickets.id, schema.ticketRepos.ticketId))
+        .where(
+          and(
+            eq(schema.ticketRepos.repoId, id),
+            or(isNull(schema.tickets.repoId), ne(schema.tickets.repoId, id)),
+          ),
+        )
+        .all()
+      const goes = tx
+        .select({ ticketId: schema.ticketRepos.ticketId, repoId: schema.ticketRepos.repoId })
+        .from(schema.ticketRepos)
+        .innerJoin(schema.tickets, eq(schema.tickets.id, schema.ticketRepos.ticketId))
+        .where(and(eq(schema.tickets.repoId, id), ne(schema.ticketRepos.repoId, id)))
+        .all()
+      for (const e of [...stays, ...goes]) {
+        tx.delete(schema.ticketRepos)
+          .where(and(eq(schema.ticketRepos.ticketId, e.ticketId), eq(schema.ticketRepos.repoId, e.repoId)))
+          .run()
+        left.push(e)
+      }
       const to = { projectId: patch.projectId! }
       tx.update(schema.prs).set(to).where(eq(schema.prs.repoId, id)).run()
       tx.update(schema.tickets).set(to).where(eq(schema.tickets.repoId, id)).run()
@@ -252,11 +287,54 @@ export async function updateRepo(
     refType: 'repo',
     refId: id,
   })
+  if (left.length) {
+    const from = getProject(before.projectId).name
+    const to = getProject(row.projectId).name
+    const names = new Map(listRepos(before.projectId).map((r) => [r.id, r.name]))
+    for (const e of left)
+      stopRunsFor(
+        [e.ticketId],
+        e.repoId === id
+          ? `${row.name} moved to project ${to}`
+          : `the ticket moved to project ${to} with ${row.name}; ${names.get(e.repoId) ?? `repo ${e.repoId}`} stays in ${from}`,
+        actor,
+        { repoId: e.repoId, lanes: false },
+      )
+    const behind = [...new Set(left.filter((e) => e.repoId === id).map((e) => e.ticketId))]
+    if (behind.length)
+      logActivity({
+        projectId: before.projectId,
+        actor,
+        kind: 'project',
+        text: `moved repo ${row.name} to ${to}: ${behind.map((t) => `#${t}`).join(', ')} no longer span it`,
+        refType: 'repo',
+        refId: id,
+      })
+  }
+  if (moved) {
+    // A ticket that stays can be running the repo without a row of it (one with no repo of its own
+    // runs the project's first): those runs stop too.
+    const stopped = new Set(left.filter((e) => e.repoId === id).map((e) => e.ticketId))
+    const staying = db
+      .select({ id: schema.tickets.id })
+      .from(schema.tickets)
+      .where(eq(schema.tickets.projectId, before.projectId))
+      .all()
+      .map((t) => t.id)
+      .filter((t) => !stopped.has(t))
+    if (staying.length)
+      stopRunsFor(staying, `${row.name} moved to project ${getProject(row.projectId).name}`, actor, {
+        repoId: id,
+        lanes: false,
+      })
+  }
   return row
 }
 
 export function deleteRepo(id: number, actor: string) {
   const r = getRepo(id)
+  // What runs from its worktrees goes with it: its run configs and ticket rows go with the row.
+  forgetRepoRuns(id, actor)
   db.transaction(
     (tx) => {
       // The repo's PR rows go with it, and so do their tickets: a PR's own ticket is for its PR, and would read as a
@@ -273,6 +351,46 @@ export function deleteRepo(id: number, actor: string) {
         .all()
       for (const w of workspaces) forgetPreview(w.id, actor)
       tx.delete(schema.tickets).where(inArray(schema.tickets.prId, repoPrIds)).run()
+      // A ticket whose primary it was gets its next repo as the primary, with that repo's own branch,
+      // base and PR. One with no other repo falls back to the project's, as a ticket without a repo does.
+      const primaryOf = tx
+        .select({ id: schema.tickets.id })
+        .from(schema.tickets)
+        .where(
+          or(
+            eq(schema.tickets.repoId, id),
+            inArray(
+              schema.tickets.id,
+              tx
+                .select({ id: schema.ticketRepos.ticketId })
+                .from(schema.ticketRepos)
+                .where(and(eq(schema.ticketRepos.repoId, id), eq(schema.ticketRepos.position, 0))),
+            ),
+          ),
+        )
+        .all()
+      for (const t of primaryOf) {
+        const next = tx
+          .select()
+          .from(schema.ticketRepos)
+          .where(and(eq(schema.ticketRepos.ticketId, t.id), ne(schema.ticketRepos.repoId, id)))
+          .orderBy(asc(schema.ticketRepos.position), asc(schema.ticketRepos.repoId))
+          .get()
+        if (!next) continue
+        tx.update(schema.tickets)
+          .set({
+            repoId: next.repoId,
+            branch: next.branch,
+            baseBranch: next.baseBranch,
+            prNumber: next.prNumber,
+          })
+          .where(eq(schema.tickets.id, t.id))
+          .run()
+        tx.update(schema.ticketRepos)
+          .set({ position: 0 })
+          .where(and(eq(schema.ticketRepos.ticketId, t.id), eq(schema.ticketRepos.repoId, next.repoId)))
+          .run()
+      }
       tx.delete(schema.repos).where(eq(schema.repos.id, id)).run()
     },
     { behavior: 'immediate' },
