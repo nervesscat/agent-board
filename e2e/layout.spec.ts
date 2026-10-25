@@ -124,6 +124,80 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   expect((await saved()).filter((it) => it.area === 'nav').map((it) => it.id)[1]).toBe('nav.prs')
 })
 
+test('an edit made while a Save or a Reset is on its way stays, unsaved, and a second Save keeps it', async ({
+  page,
+  project,
+  human,
+}) => {
+  const saved = async () => (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
+  const hiddenIds = async () => (await saved()).filter((it) => it.hidden).map((it) => it.id)
+  // The project's saves wait until released, to edit while one is on its way.
+  let release = () => {}
+  let hold = Promise.resolve()
+  const holdNext = () => (hold = new Promise<void>((r) => (release = r)))
+  await page.route(`**/api/projects/${project.id}`, async (route) => {
+    if (route.request().method() === 'PATCH') await hold
+    await route.fallback()
+  })
+  await page.goto(`/projects/${project.id}/settings`)
+  const layout = editor(page)
+  const save = layout.getByRole('button', { name: 'Save' })
+  const saving = layout.getByRole('button', { name: 'Saving…' })
+  const status = layout.getByText(/^(No changes|Unsaved changes)\./)
+  const gallery = layout.getByRole('switch', { name: 'Show Gallery in the menu' })
+  const roadmap = layout.getByRole('switch', { name: 'Show Roadmap in the menu' })
+
+  // Gallery off and saved; Roadmap off and Daily up while that save is on its way.
+  holdNext()
+  await gallery.click()
+  await save.click()
+  await expect(saving).toBeDisabled()
+  await roadmap.click()
+  await layout.getByRole('button', { name: 'Move Daily up in the menu' }).click()
+  const order = [...MENU.slice(0, 6), 'Daily', 'Agents', 'Cleanup', 'Instructions']
+  await expect(tiles(layout, 'Project menu')).toHaveText(order)
+  await expect(status).toHaveText('Unsaved changes. 2 hidden.')
+  release()
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Saved' })).toBeVisible()
+  // The save brought Gallery only; the edits made meanwhile are still there, still to save.
+  expect(await hiddenIds()).toEqual(['nav.gallery'])
+  await expect(roadmap).not.toBeChecked()
+  await expect(tiles(layout, 'Project menu')).toHaveText(order)
+  await expect(status).toHaveText('Unsaved changes. 2 hidden.')
+  await expect(save).toBeEnabled()
+
+  // A second Save keeps them, after a reload too.
+  await save.click()
+  await expect(status).toHaveText('No changes. 2 hidden.')
+  expect((await hiddenIds()).sort()).toEqual(['nav.gallery', 'nav.roadmap'])
+  await page.reload()
+  await expect(tiles(layout, 'Project menu')).toHaveText(order)
+  await expect(gallery).not.toBeChecked()
+  await expect(roadmap).not.toBeChecked()
+  await expect(status).toHaveText('No changes. 2 hidden.')
+
+  // Reset the same way: Roadmap switched back on while the defaults are on their way.
+  holdNext()
+  await layout.getByRole('button', { name: 'Reset to default' }).click()
+  await expect(saving).toBeDisabled()
+  await roadmap.click()
+  await expect(roadmap).toBeChecked()
+  release()
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Saved' }).last()).toBeVisible()
+  expect(await hiddenIds()).toEqual([])
+  // Kept as edited: the saved order with Roadmap shown, Gallery still off, unsaved against the defaults.
+  await expect(tiles(layout, 'Project menu')).toHaveText(order)
+  await expect(gallery).not.toBeChecked()
+  await expect(roadmap).toBeChecked()
+  await expect(status).toHaveText('Unsaved changes. 1 hidden.')
+  await save.click()
+  await expect(status).toHaveText('No changes. 1 hidden.')
+  await page.reload()
+  await expect(tiles(layout, 'Project menu')).toHaveText(order)
+  await expect(gallery).not.toBeChecked()
+  await expect(roadmap).toBeChecked()
+})
+
 test('dragging reorders the Overview and moves a ticket section to the other column; both persist', async ({
   page,
   project,

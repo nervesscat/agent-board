@@ -59,10 +59,14 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
   const [items, setItems] = useState(saved)
   const dirty = !sameLayout(items, saved)
   const save = useMutation({
-    mutationFn: (layout: Layout | null) =>
+    // `from`: the editor's tiles as they were when Save or Reset was pressed.
+    mutationFn: ({ layout }: { layout: Layout | null; from: Layout }) =>
       patch<{ layout: Layout }>(`/api/projects/${projectId}`, { layout }),
-    onSuccess: async (row) => {
-      setItems(row.layout)
+    onSuccess: async (row, { from }) => {
+      // The tiles take the saved layout only if nothing was edited while it saved: an edit made
+      // meanwhile stays, as an unsaved change against the layout now saved (the `saved` the refetch
+      // below brings).
+      setItems((now) => (sameLayout(now, from) ? row.layout : now))
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['project', projectId] }),
         // The Overview's cards, on the project's Overview and on Home.
@@ -193,7 +197,7 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
           variant="ghost"
           size="sm"
           disabled={save.isPending}
-          onClick={() => save.mutate(null)}
+          onClick={() => save.mutate({ layout: null, from: items })}
         >
           <RotateCcw data-icon="inline-start" /> Reset to default
         </Button>
@@ -201,7 +205,7 @@ export function LayoutEditor({ projectId, saved }: { projectId: string; saved: L
           type="button"
           size="sm"
           disabled={!dirty || save.isPending}
-          onClick={() => save.mutate(items)}
+          onClick={() => save.mutate({ layout: items, from: items })}
         >
           {save.isPending ? 'Saving…' : 'Save'}
         </Button>
