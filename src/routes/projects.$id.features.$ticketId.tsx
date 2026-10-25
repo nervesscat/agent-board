@@ -42,7 +42,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 
-import { Actor, useActorKinds } from '#/components/Actor'
+import { Actor, ClaimedActor, useActorKinds } from '#/components/Actor'
 import { ComplexitySelect } from '#/components/Complexity'
 import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
@@ -512,7 +512,8 @@ function WorkTimelineCard({ t }: { t: TicketFull }) {
                 {/* The row's parts sit in a div of their own: a <time> right under an <li> is the feed's post shape. */}
                 {shown.map((e) => (
                   <li key={e.id}>
-                    <div className="flex gap-2">
+                    {/* It wraps: a long name breaks, and the sentence keeps a readable width on a line of its own. */}
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       <Tip content={stamp(e.at)}>
                         <time
                           dateTime={e.at}
@@ -521,8 +522,9 @@ function WorkTimelineCard({ t }: { t: TicketFull }) {
                           {clock(e.at)}
                         </time>
                       </Tip>
-                      <span className="shrink-0 font-medium">{e.agent}</span>
-                      <span className="min-w-0 break-words">{eventSentence(e, stageName)}</span>
+                      {/* The name an event claims may be free text: who recorded it follows when that is someone else. */}
+                      <ClaimedActor name={e.agent} by={e.by} className="min-w-0 flex-wrap break-all" />
+                      <span className="min-w-0 grow basis-48 break-words">{eventSentence(e, stageName)}</span>
                     </div>
                   </li>
                 ))}

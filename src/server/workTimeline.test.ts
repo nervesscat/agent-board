@@ -453,6 +453,8 @@ describe('the stalled flag', () => {
       expect.objectContaining({
         ticketId: lane.id,
         lastAgent: 'builder',
+        lastBy: AGENT,
+        lastFrom: 'event',
         lastSignalAt: signal[lane.id],
         parent: { id: t.id, title: 'top' },
       }),

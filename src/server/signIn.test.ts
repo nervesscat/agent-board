@@ -52,7 +52,7 @@ beforeAll(async () => {
     const admission = await admit(request, pathname)
     if (admission.kind === 'refuse') return admission.response
     if (admission.kind === 'page') return signInPage(request, pathname, admission.site)
-    if (admission.kind === 'actor') rememberActor(request, admission.actor)
+    if (admission.kind === 'actor') rememberActor(request, admission.caller)
     return handle({ request, actor: admission.kind === 'actor' ? admission.actor : 'unknown' })
   }
   // The human the board saw before it had sign-in of its own: setup offers that name.
@@ -544,7 +544,13 @@ describe('agent tokens', () => {
       body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'whoami', arguments: {} } },
     })
     expect(mcp.status).toBe(200)
-    expect(JSON.parse((await mcp.json()).result.content[0].text)).toEqual({ actor: 'codex' })
+    expect(JSON.parse((await mcp.json()).result.content[0].text)).toEqual({
+      actor: 'codex',
+      name: 'codex',
+      role: 'worker',
+      parent: '',
+      token: 'codex',
+    })
     expect(
       (await send('POST', '/api/mcp', { body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } })).status,
     ).toBe(401)
@@ -595,6 +601,7 @@ describe('agent tokens', () => {
       'last_used_at',
       'expires_at',
       'revoked_at',
+      'role',
     ])
     const rows = dbm.db.$client.prepare('select * from agent_tokens').all() as Record<string, unknown>[]
     for (const row of rows) expect(JSON.stringify(row)).not.toMatch(/token-of-codex|agent-token-claude/)
@@ -699,6 +706,7 @@ describe('the agent tokens the board issues', () => {
       createdAt: made.createdAt,
       lastUsedAt: expect.any(String),
       expiresAt: made.expiresAt,
+      role: 'worker',
     })
     for (const t of list) expect(Object.keys(t).sort()).toEqual(Object.keys(row).sort())
     expect(JSON.stringify(list)).not.toContain(made.token)
@@ -800,5 +808,246 @@ describe('the devices section', () => {
     })
     expect(res.status).toBe(403)
     expect((await res.json()).error).toMatch(/session cookie/)
+  })
+})
+
+describe("agent roles: the human's call alone, bound to the token", () => {
+  const mint = async (name: string) =>
+    json<{ id: number; token: string }>(
+      send('POST', '/api/agent-tokens', { cookie: hostSession, body: { name } }),
+    )
+  const setRole = (id: number, role: unknown, o: Send = { cookie: hostSession }) =>
+    send('PATCH', `/api/agent-tokens/${id}`, { ...o, body: { role } })
+  const roleInDb = (id: number) =>
+    dbm.db
+      .select()
+      .from(dbm.schema.agentTokens)
+      .all()
+      .find((t) => t.id === id)!.role
+  const me = (token: string, headers: Record<string, string> = {}) =>
+    json(send('GET', '/api/me', { token, headers }))
+  const actors = () => json<any[]>(send('GET', '/api/actors', { cookie: hostSession }))
+  /** A tool call over /api/mcp with the token: its parsed result, or `{error}` when the tool refused. */
+  async function tool(token: string, name: string, args: Record<string, unknown>, headers = {}) {
+    const res = await send('POST', '/api/mcp', {
+      token,
+      headers: { accept: 'application/json, text/event-stream', ...headers },
+      body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } },
+    })
+    expect(res.status).toBe(200)
+    const { result } = await res.json()
+    const text = result.content[0].text
+    return result.isError ? { error: text } : JSON.parse(text)
+  }
+
+  let orch: { id: number; token: string }
+  let worker: { id: number; token: string }
+  let projectId: number
+  beforeAll(async () => {
+    orch = await mint('orch')
+    worker = await mint('wrk')
+    const res = await send('POST', '/api/projects', { cookie: hostSession, body: { name: 'roles' } })
+    projectId = (await res.json()).id
+  })
+
+  it('makes every token a worker, and only the human makes one an orchestrator', async () => {
+    expect(roleInDb(orch.id)).toBe('worker')
+    expect(await me(orch.token)).toMatchObject({ actor: 'orch', agent: true, role: 'worker', parent: '' })
+    // No agent changes a role, its own included, nor makes a token: whatever it sends.
+    for (const token of [orch.token, worker.token])
+      for (const headers of [{}, { 'x-agent-name': `${token === orch.token ? 'orch' : 'wrk'}/x` }] as Record<
+        string,
+        string
+      >[]) {
+        const res = await setRole(orch.id, 'orchestrator', { token, headers })
+        expect(res.status).toBe(403)
+        expect(await res.json()).toEqual({ error: "only the human sets an agent token's role" })
+        const made = await send('POST', '/api/agent-tokens', { token, headers, body: { name: 'x' } })
+        expect(made.status).toBe(403)
+      }
+    expect((await setRole(orch.id, 'orchestrator', {})).status).toBe(401)
+    expect(roleInDb(orch.id)).toBe('worker')
+    expect(await me(orch.token)).toMatchObject({ role: 'worker' })
+
+    const res = await setRole(orch.id, 'orchestrator')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ id: orch.id, name: 'orch', role: 'orchestrator' })
+    // The actor row shows it before the token's next request.
+    expect((await actors()).find((a) => a.name === 'orch')).toEqual({
+      name: 'orch',
+      kind: 'agent',
+      role: 'orchestrator',
+      parent: '',
+      lastSeenAt: expect.any(String),
+    })
+    expect(await me(orch.token)).toMatchObject({ actor: 'orch', role: 'orchestrator', parent: '' })
+    const line = dbm.db
+      .select()
+      .from(dbm.schema.activity)
+      .all()
+      .find((a) => a.kind === 'agent-token' && a.text === 'made the agent token orch an orchestrator')
+    expect(line).toMatchObject({ actor: 'Enrique', projectId: null })
+    expect(
+      (await json<any[]>(send('GET', '/api/agent-tokens', { cookie: hostSession }))).find(
+        (t) => t.id === orch.id,
+      ),
+    ).toMatchObject({ role: 'orchestrator' })
+
+    // Back to a worker, and back again.
+    expect(await json(setRole(orch.id, 'worker'))).toMatchObject({ role: 'worker' })
+    expect(await me(orch.token)).toMatchObject({ role: 'worker' })
+    expect(await json(setRole(orch.id, 'orchestrator'))).toMatchObject({ role: 'orchestrator' })
+  })
+
+  it('refuses any other role, and an unknown or revoked token', async () => {
+    for (const role of ['admin', 'human', '', null, 1, 'Orchestrator']) {
+      const res = await setRole(worker.id, role)
+      expect(res.status, JSON.stringify(role)).toBe(400)
+    }
+    expect(roleInDb(worker.id)).toBe('worker')
+    expect((await setRole(999_999, 'orchestrator')).status).toBe(404)
+    const gone = await mint('gone')
+    await send('DELETE', `/api/agent-tokens/${gone.id}`, { cookie: hostSession })
+    const res = await setRole(gone.id, 'orchestrator')
+    expect(res.status).toBe(404)
+    expect(roleInDb(gone.id)).toBe('worker')
+  })
+
+  it('X-Agent-Name makes a REST call a worker sub-identity of the token; anything else is a 400', async () => {
+    expect(await me(orch.token, { 'x-agent-name': 'orch/worker-1' })).toMatchObject({
+      actor: 'orch/worker-1',
+      agent: true,
+      role: 'worker',
+      parent: 'orch',
+    })
+    expect(await me(orch.token, { 'x-agent-name': 'orch/a/b' })).toMatchObject({
+      role: 'worker',
+      parent: 'orch/a',
+    })
+    expect(await me(orch.token, { 'x-agent-name': 'orch' })).toMatchObject({
+      actor: 'orch',
+      role: 'orchestrator',
+    })
+    // A worker cannot name itself as the orchestrator, or as anyone else's.
+    for (const name of ['orch', 'orch/worker-1', 'Enrique', '../orch', 'wrk/../orch']) {
+      const res = await send('GET', '/api/me', { token: worker.token, headers: { 'x-agent-name': name } })
+      expect(res.status, name).toBe(400)
+      expect((await res.json()).error).toMatch(/^X-Agent-Name must be <token-name>\/<name>, here wrk\/<name>/)
+    }
+    expect((await actors()).find((a) => a.name === 'orch/worker-1')).toEqual({
+      name: 'orch/worker-1',
+      kind: 'agent',
+      role: 'worker',
+      parent: 'orch',
+      lastSeenAt: expect.any(String),
+    })
+    // The human is the human whatever the header says.
+    expect(
+      await json(send('GET', '/api/me', { cookie: hostSession, headers: { 'x-agent-name': 'orch/x' } })),
+    ).toMatchObject({
+      actor: 'Enrique',
+      agent: false,
+      role: 'human',
+      parent: '',
+    })
+  })
+
+  it('whoami says name, role, parent and token, a sub-identity by agentName or X-Agent-Name', async () => {
+    expect(await tool(orch.token, 'whoami', {})).toEqual({
+      actor: 'orch',
+      name: 'orch',
+      role: 'orchestrator',
+      parent: '',
+      token: 'orch',
+    })
+    expect(await tool(orch.token, 'whoami', { agentName: 'orch/worker-2' })).toEqual({
+      actor: 'orch/worker-2',
+      name: 'orch/worker-2',
+      role: 'worker',
+      parent: 'orch',
+      token: 'orch',
+    })
+    expect(await tool(orch.token, 'whoami', {}, { 'x-agent-name': 'orch/worker-3' })).toMatchObject({
+      name: 'orch/worker-3',
+      role: 'worker',
+    })
+    // Both, the same name: fine; different names, refused.
+    expect(
+      await tool(orch.token, 'whoami', { agentName: 'orch/worker-3' }, { 'x-agent-name': 'orch/worker-3' }),
+    ).toMatchObject({ name: 'orch/worker-3' })
+    expect(
+      await tool(orch.token, 'whoami', { agentName: 'orch/worker-4' }, { 'x-agent-name': 'orch/worker-3' }),
+    ).toEqual({
+      error:
+        'agentName orch/worker-4 and X-Agent-Name orch/worker-3 disagree: give one of them, or the same name in both',
+    })
+    const refused = await tool(worker.token, 'whoami', { agentName: 'orch' })
+    expect(refused.error).toMatch(/^agentName must be <token-name>\/<name>, here wrk\/<name>/)
+    expect(await tool(worker.token, 'whoami', { agentName: 'wrk' })).toMatchObject({
+      name: 'wrk',
+      role: 'worker',
+    })
+  })
+
+  it("lets the orchestrator change a project's instructions, never a worker nor its sub-identity", async () => {
+    const changed = await tool(orch.token, 'set_project_instructions', { projectId, instructions: 'by orch' })
+    expect(changed).toMatchObject({
+      instructions: 'by orch',
+      change: { changedBy: 'orch', role: 'orchestrator', state: 'pending' },
+    })
+    expect((await tool(orch.token, 'get_project', { projectId })).instructions).toBe('by orch')
+
+    const refusal = (name: string) =>
+      `only an orchestrator or the human changes the project's instructions: ask your orchestrator (you are ${name}, a worker)`
+    expect(await tool(worker.token, 'set_project_instructions', { projectId, instructions: 'x' })).toEqual({
+      error: refusal('wrk'),
+    })
+    expect(
+      await tool(orch.token, 'set_project_instructions', {
+        projectId,
+        instructions: 'x',
+        agentName: 'orch/worker-1',
+      }),
+    ).toEqual({ error: refusal('orch/worker-1') })
+    expect(
+      await tool(
+        orch.token,
+        'set_project_instructions',
+        { projectId, instructions: 'x' },
+        { 'x-agent-name': 'orch/w' },
+      ),
+    ).toEqual({ error: refusal('orch/w') })
+
+    // REST: PUT and PATCH alike.
+    const put = (o: Send, instructions: string) =>
+      send('PUT', `/api/projects/${projectId}/instructions`, { ...o, body: { instructions } })
+    expect((await put({ token: worker.token }, 'x')).status).toBe(403)
+    expect((await put({ token: orch.token, headers: { 'x-agent-name': 'orch/w' } }, 'x')).status).toBe(403)
+    const patch = (o: Send, body: unknown) => send('PATCH', `/api/projects/${projectId}`, { ...o, body })
+    expect((await patch({ token: worker.token }, { instructions: 'x' })).status).toBe(403)
+    expect((await patch({ token: worker.token }, { name: 'renamed by a worker' })).status).toBe(200)
+    expect((await put({ token: orch.token }, 'by orch again')).status).toBe(200)
+    expect((await put({ cookie: hostSession }, 'by the human')).status).toBe(200)
+    expect((await patch({ token: orch.token }, { instructions: 'orch patch' })).status).toBe(200)
+    const changes = await json<any[]>(
+      send('GET', `/api/projects/${projectId}/instructions/changes`, { cookie: hostSession }),
+    )
+    expect(changes.map((c) => [c.newValue, c.changedBy, c.role, c.state])).toEqual([
+      ['orch patch', 'orch', 'orchestrator', 'pending'],
+      ['by the human', 'Enrique', 'human', 'accepted'],
+      ['by orch again', 'orch', 'orchestrator', 'pending'],
+      ['by orch', 'orch', 'orchestrator', 'pending'],
+    ])
+    // Reviewing and reverting are the human's, an orchestrator's token cannot.
+    expect(
+      (await send('POST', `/api/instructions/changes/${changes[0].id}/revert`, { token: orch.token })).status,
+    ).toBe(403)
+    expect(
+      (await send('POST', `/api/instructions/changes/${changes[0].id}/review`, { token: orch.token })).status,
+    ).toBe(403)
+    expect(
+      (await send('POST', `/api/instructions/changes/${changes[0].id}/revert`, { cookie: hostSession }))
+        .status,
+    ).toBe(200)
   })
 })

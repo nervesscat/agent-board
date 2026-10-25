@@ -2,6 +2,7 @@ import type { APIRequestContext, Page } from '@playwright/test'
 
 import type { Project, TicketFull } from '#/lib/api'
 import { inDatabase } from './db'
+import { HUMAN } from './env'
 import { expect, expectTooltip, ok, section, test, tooltip } from './fixtures'
 
 /**
@@ -59,6 +60,16 @@ async function workedTicket(human: APIRequestContext, agent: APIRequestContext, 
   age(t.id, 40)
   return { t, lane }
 }
+
+type Playwright = { request: { newContext: (o: object) => Promise<APIRequestContext> } }
+
+/** REST as whoever `actor` names in test mode (orchestrator:<name>, agent:<name>), with any other headers. */
+const as = (playwright: Playwright, baseURL: string | undefined, actor: string, headers = {}) =>
+  playwright.request.newContext({ baseURL, extraHTTPHeaders: { 'X-Test-Actor': actor, ...headers } })
+
+/** Whether the page itself scrolls sideways. */
+const scrollsSideways = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
 
 const errorsOn = (page: Page) => {
   const errors: string[] = []
@@ -152,11 +163,32 @@ test('the ticket page has a Timeline card with the bar, the totals and the event
   // Newest first; the heartbeats are one line until they are asked for.
   const items = events.getByRole('listitem')
   await expect(items.first()).toContainText(/^3 heartbeats, last /)
-  await expect(items.filter({ hasText: /^\S+\s*claude\s*heartbeat$/ })).toHaveCount(0)
+  await expect(items.filter({ hasText: /^\S+\s*claude\s*Agent\s*heartbeat$/ })).toHaveCount(0)
   await expect(items.nth(1)).toContainText('stopped waiting: lock')
   await card.getByRole('button', { name: 'Show heartbeats' }).click()
-  await expect(items.filter({ hasText: /claude\s*heartbeat$/ })).toHaveCount(3)
+  await expect(items.filter({ hasText: /claude\s*Agent\s*heartbeat$/ })).toHaveCount(3)
+  // Each event names its agent as everywhere else: with the role badge.
+  await expect(items.first().locator('[data-role="worker"]').first()).toBeVisible()
   await expect(items.first()).toContainText('heartbeat')
+  // The board's own events name the board, with its own badge: never the Human one.
+  const created = items.filter({ hasText: 'created in In progress' })
+  await expect(created).toHaveCount(1)
+  const board = created.locator('[data-role="board"]').first()
+  await expect(board).toContainText(/^board\s*Board$/)
+  await expect(created.locator('[data-role="human"]')).toHaveCount(0)
+  await expectTooltip(board, 'the board, recorded automatically')
+  // A claimed name is followed by who recorded it, with that caller's badge.
+  const handoff = items.filter({ hasText: 'handoff orchestrator → builder-sub-1' })
+  await expect(handoff.getByTestId('event-by')).toContainText(/^by\s*claude\s*Agent$/)
+  await expect(handoff.getByTestId('event-by').locator('[data-role="worker"]')).not.toHaveCount(0)
+  // The claimed name is plain text: no badge and no tooltip of its own, since nobody signed in as it.
+  const claimed = handoff.getByTestId('claimed-name')
+  await expect(claimed).toHaveText('orchestrator')
+  await expect(claimed).not.toHaveAttribute('data-slot', 'tooltip-trigger')
+  await expect(handoff.locator('[data-role]:not([data-testid="event-by"] *)')).toHaveCount(0)
+  // An event recorded under its caller's own name says nothing more.
+  await expect(created.getByTestId('event-by')).toHaveCount(0)
+  await expect(items.first().getByTestId('event-by')).toHaveCount(0)
   await expect(card.getByRole('button', { name: 'Hide heartbeats' })).toHaveAttribute('aria-expanded', 'true')
   await card.screenshot({ path: test.info().outputPath('ticket-timeline-card.png') })
 
@@ -203,6 +235,159 @@ test('a stalled ticket shows on its card, in the list and in Needs you, linking 
   await link.click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}$`))
   await expect(page.getByRole('region', { name: 'Timeline' })).toBeVisible()
+})
+
+test('a stalled row names who recorded the last event: a claimed name gets no badge of its own', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // A worker's heartbeat that claims the human's name.
+  const t = await create(human, project, { title: 'Claimed heartbeat', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'heartbeat', agent: HUMAN })
+  age(t.id, 40)
+
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  const row = needsYou
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Claimed heartbeat` }) })
+  await expect(row).toContainText(new RegExp(`silent 4\\dm · last ${HUMAN}\\s*by\\s*claude\\s*Agent`))
+  await expect(row.getByTestId('claimed-name')).toHaveText(HUMAN)
+  await expect(row.locator('[data-role="human"]')).toHaveCount(0)
+  await expect(row.getByTestId('event-by').locator('[data-role="worker"]')).not.toHaveCount(0)
+  await expect(row.locator('[data-role]:not([data-testid="event-by"] *)')).toHaveCount(0)
+})
+
+test("a worker's event under the name 'board' is a claim: no Board badge, and who recorded it", async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Board claims', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'board' })
+  await record(agent, project, t.id, { kind: 'heartbeat', agent: 'board' })
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Timeline' })
+  await card.getByRole('button', { name: 'Show heartbeats' }).click()
+  const items = card.getByRole('list', { name: 'Events' }).getByRole('listitem')
+  for (const text of ['heartbeat', 'started build']) {
+    const row = items.filter({
+      hasText: new RegExp(`\\d(\\s*[AP]M)?\\s*board\\s*by\\s*claude\\s*Agent\\s*${text}$`),
+    })
+    await expect(row).toHaveCount(1)
+    await expect(row.getByTestId('claimed-name')).toHaveText('board')
+    await expect(row.getByTestId('event-by')).toContainText(/^by\s*claude\s*Agent$/)
+    await expect(row.locator('[data-role="board"]')).toHaveCount(0)
+    await expect(row.locator('[data-role]:not([data-testid="event-by"] *)')).toHaveCount(0)
+  }
+  // The board's own event keeps its badge.
+  const created = items.filter({ hasText: 'created in In progress' })
+  await expect(created.locator('[data-role="board"]').first()).toContainText(/^board\s*Board$/)
+  await expect(created.getByTestId('event-by')).toHaveCount(0)
+})
+
+test("a stalled row names a worker's event under the name 'board' as a claim, with who recorded it", async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // The worker's heartbeat is the last thing heard: not the board's own, so it is named, not skipped.
+  const t = await create(human, project, { title: 'Board-named heartbeat', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'heartbeat', agent: 'board' })
+  age(t.id, 40)
+
+  await page.goto(`/projects/${project.id}`)
+  const row = section(page, 'Needs you')
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Board-named heartbeat` }) })
+  await expect(row).toContainText(/silent 4\dm · last board\s*by\s*claude\s*Agent/)
+  await expect(row.getByTestId('claimed-name')).toHaveText('board')
+  await expect(row.getByTestId('last-assignee')).toHaveCount(0)
+  await expect(row.locator('[data-role="board"]')).toHaveCount(0)
+  await expect(row.getByTestId('event-by').locator('[data-role="worker"]')).not.toHaveCount(0)
+})
+
+test('a stalled row with no agent heard from names the assignee as plain text, with no badge', async ({
+  page,
+  project,
+  human,
+  playwright,
+  baseURL,
+}, info) => {
+  const name = `quiet-agent-${info.workerIndex}`
+  // A name that signs in as an agent, so a badge would show if the row used Actor.
+  const signedIn = await as(playwright, baseURL, `agent:${name}`)
+  try {
+    await ok(signedIn.get('/api/me'))
+    const t = await create(human, project, {
+      title: 'Assigned, silent',
+      status: 'in_progress',
+      assignee: name,
+    })
+    age(t.id, 40)
+
+    await page.goto(`/projects/${project.id}`)
+    const row = section(page, 'Needs you')
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Assigned, silent` }) })
+    await expect(row).toContainText(new RegExp(`silent 4\\dm · last ${name}$`))
+    await expect(row.getByTestId('last-assignee')).toHaveText(name)
+    await expect(row.locator('[data-role]')).toHaveCount(0)
+    await expect(row.getByTestId('event-by')).toHaveCount(0)
+  } finally {
+    await signedIn.dispose()
+  }
+})
+
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  test('an event row with a long claimed name and a long sub-identity fits 390px', async ({
+    page,
+    project,
+    human,
+    playwright,
+    baseURL,
+  }, info) => {
+    const orchName = `orch-w${info.workerIndex}`
+    const sub = `${orchName}/builder-with-a-long-sub-identity/importer-lane-one`
+    const worker = await as(playwright, baseURL, `orchestrator:${orchName}`, { 'X-Agent-Name': sub })
+    try {
+      const t = await create(human, project, { title: 'Narrow timeline', status: 'in_progress' })
+      await record(worker, project, t.id, {
+        kind: 'span_start',
+        phase: 'verification',
+        agent: `${orchName}/verifier-for-the-importer-lane`,
+        note: 'checking the importer against the sample files',
+      })
+
+      await page.goto(`/projects/${project.id}/features/${t.id}`)
+      const events = page.getByRole('region', { name: 'Timeline' }).getByRole('list', { name: 'Events' })
+      const row = events.getByRole('listitem').filter({ hasText: 'started verification' })
+      await expect(row.getByTestId('event-by')).toContainText(sub)
+      await expect(row.getByTestId('claimed-name')).toHaveText(`${orchName}/verifier-for-the-importer-lane`)
+      expect(await scrollsSideways(page)).toBe(false)
+      // Each part keeps a readable width, on a line of its own if it must: none is squeezed to a sliver.
+      const sentence = row.getByText(/^started verification/)
+      const recorder = row.getByTestId('event-by').locator('[data-role="worker"]').first()
+      for (const part of [sentence, recorder, row.getByTestId('claimed-name')])
+        expect((await part.boundingBox())!.width).toBeGreaterThan(150)
+      // And none runs past the list's right edge, where a clipping card would hide it.
+      const list = (await events.boundingBox())!
+      for (const part of [sentence, recorder, row.getByTestId('claimed-name')]) {
+        const box = (await part.boundingBox())!
+        expect(box.x + box.width).toBeLessThanOrEqual(list.x + list.width + 1)
+      }
+      await row.screenshot({ path: test.info().outputPath('event-row-390.png') })
+    } finally {
+      await worker.dispose()
+    }
+  })
 })
 
 test('the human sets after how many minutes a ticket reads as stalled', async ({

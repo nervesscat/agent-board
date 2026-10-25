@@ -43,6 +43,8 @@ describe('test mode through the API router', () => {
     expect(await (await call('GET', '/api/me', 'agent:builder')).json()).toEqual({
       actor: 'builder',
       agent: true,
+      role: 'worker',
+      parent: '',
       boardEnv: 'test',
       authOff: true,
     })
@@ -182,7 +184,13 @@ describe('a decision the orchestrator relays, through the router', () => {
     const tool = listed.tools.find((t: { name: string }) => t.name === 'answer_decision')
     expect(tool.description).toContain('AskUserQuestion')
     expect(tool.description).toContain('subagent')
-    expect(Object.keys(tool.inputSchema.properties).sort()).toEqual(['as', 'option', 'postId', 'words'])
+    expect(Object.keys(tool.inputSchema.properties).sort()).toEqual([
+      'agentName',
+      'as',
+      'option',
+      'postId',
+      'words',
+    ])
 
     const { postId } = await askCard()
     const answer = (testActor: string, args: Record<string, unknown>) =>
@@ -210,5 +218,225 @@ describe('a decision the orchestrator relays, through the router', () => {
       relayedBy: 'claude',
       relayedText: 'MinIO',
     })
+  })
+})
+
+describe('who is who in test mode: orchestrator:, agent: and sub-identities', () => {
+  /** A request as the middleware hands it on, with any headers (X-Test-Actor, X-Agent-Name). */
+  async function send(method: string, pathname: string, headers: Record<string, string>, body?: unknown) {
+    const request = new Request(`http://localhost${pathname}`, {
+      method,
+      headers: {
+        accept: 'application/json, text/event-stream',
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...headers,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    const caller = await callerOf(request)
+    return handle({ request, actor: caller!.name })
+  }
+  /** A tool call: its parsed result, or `{error}` with the message of a refused call. */
+  async function tool(headers: Record<string, string>, name: string, args: Record<string, unknown>) {
+    const res = await send('POST', '/api/mcp', headers, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name, arguments: args },
+    })
+    const { result } = (await res.json()) as { result: any }
+    const text = result.content[0].text
+    return result.isError ? { error: text } : JSON.parse(text)
+  }
+  const ORCH = { 'x-test-actor': 'orchestrator:orch' }
+
+  it('/api/me and whoami tell the human, an orchestrator, a worker and a sub-identity apart', async () => {
+    const me = async (headers: Record<string, string>) => (await send('GET', '/api/me', headers)).json()
+    expect(await me({})).toMatchObject({ actor: 'human', agent: false, role: 'human', parent: '' })
+    expect(await me(ORCH)).toMatchObject({ actor: 'orch', agent: true, role: 'orchestrator', parent: '' })
+    expect(await me({ 'x-test-actor': 'agent:w' })).toMatchObject({ actor: 'w', role: 'worker', parent: '' })
+    expect(await me({ ...ORCH, 'x-agent-name': 'orch/worker-1' })).toMatchObject({
+      actor: 'orch/worker-1',
+      agent: true,
+      role: 'worker',
+      parent: 'orch',
+    })
+    expect(await tool(ORCH, 'whoami', { agentName: 'orch/worker-2' })).toEqual({
+      actor: 'orch/worker-2',
+      name: 'orch/worker-2',
+      role: 'worker',
+      parent: 'orch',
+      token: 'orch',
+    })
+    expect(await tool({ 'x-test-actor': 'human:qa' }, 'whoami', { agentName: 'qa/x' })).toMatchObject({
+      name: 'qa',
+      role: 'human',
+    })
+    // Every tool takes agentName.
+    const listed = await send('POST', '/api/mcp', ORCH, { jsonrpc: '2.0', id: 1, method: 'tools/list' })
+    const { tools } = ((await listed.json()) as { result: { tools: any[] } }).result
+    for (const t of tools) expect(Object.keys(t.inputSchema.properties ?? {}), t.name).toContain('agentName')
+  })
+
+  it("files a sub-identity's posts, claims and comments under its own name", async () => {
+    const features = await import('./features')
+    const ticket = features.createTicket(projectId, { title: 'Delegated' }, 'human')
+    const as = { agentName: 'orch/worker-2' }
+    const claimed = await tool(ORCH, 'claim_ticket', { ticketId: ticket.id, ...as })
+    expect(claimed.assignee).toBe('orch/worker-2')
+    const post = await tool(ORCH, 'post_update', { ticketId: ticket.id, body: 'built it', ...as })
+    expect(post.author).toBe('orch/worker-2')
+    const reply = await tool(ORCH, 'comment', {
+      parentType: 'update',
+      parentId: post.id,
+      body: 'and tested it',
+      ...as,
+    })
+    expect(reply.author).toBe('orch/worker-2')
+    const { db, schema } = await import('#/db')
+    const { eq } = await import('drizzle-orm')
+    const lines = db.select().from(schema.activity).where(eq(schema.activity.projectId, projectId)).all()
+    expect(lines.filter((l) => l.actor === 'orch/worker-2').length).toBeGreaterThanOrEqual(3)
+    const { listActors } = await import('./actors')
+    expect(listActors().find((a) => a.name === 'orch/worker-2')).toEqual({
+      name: 'orch/worker-2',
+      kind: 'agent',
+      role: 'worker',
+      parent: 'orch',
+      lastSeenAt: expect.any(String),
+    })
+    // A bad agentName refuses the call: nothing is posted.
+    const before = features.listComments('ticket', ticket.id).length
+    expect(await tool(ORCH, 'post_update', { ticketId: ticket.id, body: 'x', agentName: 'other/x' })).toEqual(
+      {
+        error: expect.stringMatching(/^agentName must be <token-name>\/<name>, here orch\/<name>/),
+      },
+    )
+    expect(features.listComments('ticket', ticket.id).length).toBe(before)
+  })
+
+  it("records a sub-identity's work timeline under its full name, by MCP and by REST", async () => {
+    const features = await import('./features')
+    const ticket = features.createTicket(projectId, { title: 'Timed' }, 'human')
+    const scope = { projectId, ticketId: ticket.id }
+    const span = await tool(ORCH, 'start_span', { ...scope, phase: 'build', agentName: 'orch/worker-3' })
+    expect(span.event).toMatchObject({ agent: 'orch/worker-3', by: 'orch/worker-3' })
+    // Its own open span is found under its full name, not its parent's.
+    const ended = await tool(ORCH, 'end_span', { ...scope, agentName: 'orch/worker-3' })
+    expect(ended.span.id).toBe(span.event.id)
+    const rest = await send(
+      'POST',
+      `/api/projects/${projectId}/tickets/${ticket.id}/events`,
+      { ...ORCH, 'x-agent-name': 'orch/worker-4' },
+      { kind: 'span_start', phase: 'review' },
+    )
+    expect(rest.status).toBe(201)
+    expect((await rest.json()).event).toMatchObject({ agent: 'orch/worker-4', by: 'orch/worker-4' })
+  })
+
+  it("refuses a sub-identity's relay of a decision; the orchestrator's own still works", async () => {
+    const features = await import('./features')
+    const ticket = features.createTicket(projectId, { title: 'Pick one' }, 'human')
+    const asked = features.askDecision(
+      ticket.id,
+      { body: 'Which?', options: [{ label: 'A' }, { label: 'B' }] },
+      'orch',
+    )
+    const refusal = 'only the session that talks to the human relays an answer'
+    const rest = await send(
+      'POST',
+      `/api/updates/${asked.id}/decision/relay`,
+      { ...ORCH, 'x-agent-name': 'orch/worker-1' },
+      {
+        option: 0,
+        words: 'A',
+      },
+    )
+    expect(rest.status).toBe(403)
+    expect(await rest.json()).toEqual({ error: refusal })
+    expect(
+      await tool(ORCH, 'answer_decision', {
+        postId: asked.id,
+        option: 0,
+        words: 'A',
+        agentName: 'orch/worker-1',
+      }),
+    ).toEqual({ error: refusal })
+    expect(features.getPost(asked.id)).toMatchObject({ decidedAt: null, relayedBy: '' })
+    const ok = await send('POST', `/api/updates/${asked.id}/decision/relay`, ORCH, { option: 1, words: 'B' })
+    expect(ok.status).toBe(200)
+    expect(await ok.json()).toMatchObject({ decidedOption: 1, relayedBy: 'orch' })
+  })
+
+  it('set_project_instructions: an orchestrator changes them, a worker hears to ask its orchestrator', async () => {
+    const projects = await import('./projects')
+    const p = projects.createProject({ name: 'rules', instructions: 'old' }, 'human', {
+      name: 'human',
+      role: 'human',
+    }).id
+    expect(
+      await tool({ 'x-test-actor': 'agent:w' }, 'set_project_instructions', {
+        projectId: p,
+        instructions: 'x',
+      }),
+    ).toEqual({
+      error:
+        "only an orchestrator or the human changes the project's instructions: ask your orchestrator (you are w, a worker)",
+    })
+    const done = await tool(ORCH, 'set_project_instructions', { projectId: p, instructions: 'new' })
+    expect(done).toMatchObject({
+      instructions: 'new',
+      change: { oldValue: 'old', newValue: 'new', state: 'pending' },
+    })
+    expect((await tool(ORCH, 'get_project', { projectId: p })).instructions).toBe('new')
+    expect(await tool(ORCH, 'set_project_instructions', { projectId: p, instructions: 'new' })).toEqual({
+      instructions: 'new',
+      change: null,
+    })
+    const summary = await tool({}, 'get_summary', { projectId: p })
+    expect(summary.projects[0].needsYou.instructionChanges).toMatchObject([
+      { changeId: done.change.id, changedBy: 'orch', role: 'orchestrator', excerpt: 'new' },
+    ])
+  })
+
+  it("refuses an orchestrator and a sub-identity a repo's run settings; the human writes them", async () => {
+    const { db, schema } = await import('#/db')
+    const repo = db.select().from(schema.repos).all()[0]!
+    const run = { name: 'web', type: 'preview', start: 'node server.js' }
+    for (const headers of [ORCH, { ...ORCH, 'x-agent-name': 'orch/worker-6' }]) {
+      const res = await send('POST', `/api/repos/${repo.id}/runs`, headers, run)
+      expect(res.status, JSON.stringify(headers)).toBe(403)
+      expect(await res.json()).toEqual({ error: "only the human configures a repo's runs" })
+    }
+    expect(db.select().from(schema.runConfigs).all()).toEqual([])
+    const made = await send('POST', `/api/repos/${repo.id}/runs`, { 'x-test-actor': 'human:qa' }, run)
+    expect(made.status).toBe(201)
+    const { id: runId } = (await made.json()) as { id: number }
+    expect((await send('PATCH', `/api/runs/${runId}`, ORCH, { name: 'x' })).status).toBe(403)
+    expect((await send('DELETE', `/api/runs/${runId}`, ORCH)).status).toBe(403)
+    expect((await send('PUT', `/api/repos/${repo.id}/runs/order`, ORCH, { ids: [runId] })).status).toBe(403)
+    db.delete(schema.runConfigs).run()
+  })
+
+  it("files a sub-identity's multi-repo claim under its own name, and refuses the run tools a bad agentName", async () => {
+    const { db, schema } = await import('#/db')
+    const repo = db.select().from(schema.repos).all()[0]!
+    const features = await import('./features')
+    const ticket = features.createTicket(projectId, { title: 'Two repos', repoId: repo.id }, 'human')
+    const as = { agentName: 'orch/worker-7' }
+    const claimed = await tool(ORCH, 'claim_ticket', {
+      ticketId: ticket.id,
+      repos: [{ repoId: repo.id, branch: 'feat/x' }],
+      ...as,
+    })
+    expect(claimed).toMatchObject({ assignee: 'orch/worker-7', branch: 'feat/x' })
+    expect(await tool(ORCH, 'list_runs', { ticketId: ticket.id, ...as })).toMatchObject({
+      repos: [{ repoId: repo.id, branch: 'feat/x' }],
+    })
+    expect(await tool(ORCH, 'stop_run', { ticketId: ticket.id, all: true, ...as })).toEqual({ results: [] })
+    for (const name of ['list_runs', 'start_run', 'stop_run'])
+      expect(await tool(ORCH, name, { ticketId: ticket.id, agentName: 'other/x' }), name).toEqual({
+        error: expect.stringMatching(/^agentName must be <token-name>\/<name>, here orch\/<name>/),
+      })
   })
 })

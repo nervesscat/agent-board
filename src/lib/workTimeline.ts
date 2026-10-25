@@ -1,4 +1,5 @@
 import type { EventKind, StageKind } from './constants'
+import { isBoardRecord } from './roles'
 
 /**
  * A ticket's work timeline, from its events (src/server/workTimeline.ts): the spans its agents worked,
@@ -47,8 +48,20 @@ export type TimelineWait = {
 export type TimelineHandoff = { id: number; at: string; from: string; to: string; note: string }
 export type TimelineMark = { id: number; kind: EventKind; at: string; note: string }
 export type WorkTotals = { workingMs: number; waitingMs: number; blockedOnHumanMs: number }
-/** Since when an active ticket has been silent, for how many whole minutes, and who was heard from last. */
-export type Stalled = { since: string; minutes: number; lastAgent: string }
+/**
+ * Since when an active ticket has been silent, for how many whole minutes, and who was heard from last:
+ * `lastAgent` is the name the latest event claims (free text, or the assignee when no agent recorded
+ * one), `lastBy` who recorded that event as it signed in ('' for an older event or the assignee), and
+ * `lastFrom` where the name came from: 'event' when an event claims it, 'assignee' when none did and it
+ * is the ticket's assignee (then nobody signed in recorded it).
+ */
+export type Stalled = {
+  since: string
+  minutes: number
+  lastAgent: string
+  lastBy: string
+  lastFrom: 'event' | 'assignee'
+}
 
 export type WorkTimeline = {
   /** The first event's time; null while the ticket has none (then `end` is null too). */
@@ -244,8 +257,12 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
     now,
     stallMinutes: o.stallMinutes,
   })
-  const lastAgent =
-    [...sorted].reverse().find((e) => e.agent && e.agent !== 'board')?.agent ?? o.ticket.assignee
+  // Who was last heard from: any event but the board's own. A worker's event under the name 'board'
+  // counts (it is a claim, shown with who recorded it), as it counts for the stall clock above.
+  const lastEvent = [...sorted].reverse().find((e) => e.agent && !isBoardRecord(e.agent, e.by))
+  const lastAgent = lastEvent?.agent ?? o.ticket.assignee
+  const lastBy = lastEvent?.by ?? ''
+  const lastFrom: Stalled['lastFrom'] = lastEvent ? 'event' : 'assignee'
   return {
     start: startMs === null ? null : iso(startMs),
     end: endMs === null ? null : iso(endMs),
@@ -262,6 +279,8 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
           since: lastSignalAt,
           minutes: Math.floor((now - Date.parse(lastSignalAt)) / 60_000),
           lastAgent,
+          lastBy,
+          lastFrom,
         }
       : null,
   }

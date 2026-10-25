@@ -764,7 +764,7 @@ describe('a ticket that spans two repos', () => {
     const tJob = (await running(tBack.id, backJob.id)) && fake.calls.at(-1)!
     const uJob = (await running(uSide.id, sideJob.id)) && fake.calls.at(-1)!
 
-    const moved = await call('PATCH', `/api/repos/${back.id}`, { projectId: to }, 'agent')
+    const moved = await call('PATCH', `/api/repos/${back.id}`, { projectId: to })
     expect(moved.status).toBe(200)
 
     await vi.waitFor(() => expect(fake.killed).toEqual(expect.arrayContaining([tJob.pid, uJob.pid])))
@@ -820,7 +820,7 @@ describe('a ticket that spans two repos', () => {
     )
     const proc = (await running(ws.id, job.id)) && fake.calls.at(-1)!
 
-    const moved = await call('PATCH', `/api/repos/${next.id}`, { projectId: to }, 'agent')
+    const moved = await call('PATCH', `/api/repos/${next.id}`, { projectId: to })
     expect(moved.status).toBe(200)
     expect(features.getTicket(t.id).projectId).toBe(from)
 

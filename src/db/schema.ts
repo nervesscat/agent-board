@@ -542,6 +542,31 @@ export const reportSettingsChanges = sqliteTable(
   (t) => [index('report_settings_changes_project').on(t.projectId, t.createdAt)],
 )
 
+// The history of a project's instructions: every change with the text before and after it, who made it
+// (the full name, a sub-identity's included) and their role. The human's own change is accepted at once;
+// an orchestrator's applies at once too but stays pending until the human marks it reviewed or reverts
+// it. A revert is itself a change, pointing at the one it undid.
+export const projectInstructionChanges = sqliteTable(
+  'project_instruction_changes',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    oldValue: text('old_value').notNull().default(''),
+    newValue: text('new_value').notNull().default(''),
+    changedBy: text('changed_by').notNull(),
+    role: text().$type<'human' | 'orchestrator'>().notNull(),
+    state: text().$type<'accepted' | 'pending' | 'reverted'>().notNull().default('accepted'),
+    resolvedBy: text('resolved_by').notNull().default(''),
+    resolvedAt: text('resolved_at'),
+    // The change a revert undid, on the change the revert records; null on any other change.
+    revertOf: integer('revert_of'),
+    createdAt: now(),
+  },
+  (t) => [index('project_instruction_changes_project').on(t.projectId, t.createdAt)],
+)
+
 // A report for one period of a project: the day (YYYY-MM-DD) or, for a weekly cadence, the Monday of the
 // week. Posting again for the same period adds a newer version; the latest is the report.
 export const reports = sqliteTable(
@@ -609,11 +634,15 @@ export const settings = sqliteTable('settings', {
 })
 
 // Who each name on the board is, learned from how it signs in: an agent token is an agent, a passkey
-// session in the browser is a human. Every author field elsewhere is just the name.
+// session in the browser is a human. Every author field elsewhere is just the name. An agent's role is
+// the one it was last seen with (its token's, or worker for a sub-identity `<token>/<name>`, whose
+// parent is the name before the last `/`); a human's role reads as human whatever the column says.
 export const actors = sqliteTable('actors', {
   name: text().primaryKey(),
   kind: text().$type<'agent' | 'human'>().notNull(),
   lastSeenAt: text('last_seen_at').notNull(),
+  role: text().$type<'orchestrator' | 'worker'>().notNull().default('worker'),
+  parent: text().notNull().default(''),
 })
 
 // --- signing in (src/server/passkeys.ts, credentials.ts; README: "Signing in") ---
@@ -673,7 +702,8 @@ export const enrolCodes = sqliteTable('enrol_codes', {
 })
 
 // The tokens agents sign in with (`Authorization: Bearer <token>`): only the hash is kept, and the
-// name is the agent's name on the board.
+// name is the agent's name on the board. The role is the human's call (Settings > Agents): an
+// orchestrator also changes the projects' instructions; every token starts as a worker.
 export const agentTokens = sqliteTable('agent_tokens', {
   id: id(),
   tokenHash: text('token_hash').notNull().unique(),
@@ -682,6 +712,7 @@ export const agentTokens = sqliteTable('agent_tokens', {
   lastUsedAt: text('last_used_at'),
   expiresAt: text('expires_at').notNull(),
   revokedAt: text('revoked_at'),
+  role: text().$type<'orchestrator' | 'worker'>().notNull().default('worker'),
 })
 
 export type Activity = typeof activity.$inferSelect
@@ -703,6 +734,7 @@ export type ReviewResult = typeof reviewResults.$inferSelect
 export type ReportSettings = typeof reportSettings.$inferSelect
 export type Report = typeof reports.$inferSelect
 export type ReportSettingsChange = typeof reportSettingsChanges.$inferSelect
+export type ProjectInstructionChange = typeof projectInstructionChanges.$inferSelect
 export type OriginRef = typeof originRefs.$inferSelect
 export type OriginRefMove = typeof originRefMoves.$inferSelect
 export type Passkey = typeof passkeys.$inferSelect

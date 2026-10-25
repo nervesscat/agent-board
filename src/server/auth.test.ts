@@ -56,6 +56,10 @@ const devOn = readAuthMode({ BOARD_ENV: 'development' })
 const devOff = readAuthMode({ BOARD_ENV: 'development', AUTH: 'off', DEV_HUMAN: 'enrique' })
 const test = readAuthMode({ BOARD_ENV: 'test' })
 
+/** A caller as callerOf answers it: the human, or an agent with its credential's role. */
+const asHuman = (name: string) => ({ name, kind: 'human', role: 'human', parent: '', token: null })
+const asWorker = (name: string) => ({ name, kind: 'agent', role: 'worker', parent: '', token: name })
+
 const req = (headers: Record<string, string> = {}) => new Request('http://localhost/api/me', { headers })
 const cookie = (value: string) => ({ cookie: `theme=dark; ${sessionCookieName(config.port)}=${value}` })
 const bearer = (token: string) => ({ authorization: `Bearer ${token}` })
@@ -71,10 +75,10 @@ describe('with sign-in on (production, and development without AUTH=off)', () =>
       expect(auth.isAgent(req({ 'x-test-actor': 'agent:bot' }), mode)).toBe(false)
 
       const human = { ...cookie(SESSION.local), 'x-test-actor': 'agent:bot' }
-      expect(await auth.callerOf(req(human), mode)).toEqual({ name: 'Enrique', kind: 'human' })
+      expect(await auth.callerOf(req(human), mode)).toEqual(asHuman('Enrique'))
       expect(auth.isAgent(req(human), mode)).toBe(false)
       const agent = { ...bearer(TOKEN), 'x-test-actor': 'human:me' }
-      expect(await auth.callerOf(req(agent), mode)).toEqual({ name: 'claude', kind: 'agent' })
+      expect(await auth.callerOf(req(agent), mode)).toEqual(asWorker('claude'))
       expect(auth.isAgent(req(agent), mode)).toBe(true)
     })
   }
@@ -101,35 +105,28 @@ describe('development with AUTH=off', () => {
       cookie(SESSION.local),
       bearer('made-up'),
     ]) {
-      expect(await auth.callerOf(req(headers), devOff)).toEqual({ name: 'enrique', kind: 'human' })
+      expect(await auth.callerOf(req(headers), devOff)).toEqual(asHuman('enrique'))
       expect(auth.isAgent(req(headers), devOff)).toBe(false)
     }
   })
 
   it('without DEV_HUMAN, is the human the board saw sign in last', async () => {
     const mode = readAuthMode({ BOARD_ENV: 'development', AUTH: 'off' })
-    expect(await auth.callerOf(req(), mode)).toEqual({ name: 'enrique-desktop', kind: 'human' })
+    expect(await auth.callerOf(req(), mode)).toEqual(asHuman('enrique-desktop'))
   })
 })
 
 describe('test', () => {
   it('takes the caller from X-Test-Actor, and the human without it', async () => {
-    expect(await auth.callerOf(req({ 'x-test-actor': 'agent:builder' }), test)).toEqual({
-      name: 'builder',
-      kind: 'agent',
-    })
-    expect(await auth.callerOf(req({ 'x-test-actor': 'human: qa ' }), test)).toEqual({
-      name: 'qa',
-      kind: 'human',
-    })
-    expect(await auth.callerOf(req(), test)).toEqual({ name: 'human', kind: 'human' })
+    expect(await auth.callerOf(req({ 'x-test-actor': 'agent:builder' }), test)).toEqual(asWorker('builder'))
+    expect(await auth.callerOf(req({ 'x-test-actor': 'human: qa ' }), test)).toEqual(asHuman('qa'))
+    expect(await auth.callerOf(req(), test)).toEqual(asHuman('human'))
     // A real token or session does not change who you are: only the header does.
-    expect(await auth.callerOf(req(bearer(TOKEN)), test)).toEqual({ name: 'human', kind: 'human' })
-    expect(await auth.callerOf(req(cookie(SESSION.local)), test)).toEqual({ name: 'human', kind: 'human' })
-    expect(await auth.callerOf(req(), readAuthMode({ BOARD_ENV: 'test', TEST_HUMAN: 'tester' }))).toEqual({
-      name: 'tester',
-      kind: 'human',
-    })
+    expect(await auth.callerOf(req(bearer(TOKEN)), test)).toEqual(asHuman('human'))
+    expect(await auth.callerOf(req(cookie(SESSION.local)), test)).toEqual(asHuman('human'))
+    expect(await auth.callerOf(req(), readAuthMode({ BOARD_ENV: 'test', TEST_HUMAN: 'tester' }))).toEqual(
+      asHuman('tester'),
+    )
   })
 
   it('turns away a malformed X-Test-Actor', async () => {
@@ -170,15 +167,15 @@ describe('the origin the request used (README: "Using it from other devices")', 
   it('signs a session in only on the origin its passkey belongs to', async () => {
     expect(auth.siteOf(through(), entrance)).toEqual(publicSite(entrance))
     expect(auth.siteOf(direct(), entrance)).toEqual(localSite(47100))
-    expect(await caller(through(cookie(SESSION.public)))).toEqual({ name: 'Enrique', kind: 'human' })
-    expect(await caller(direct(cookie(SESSION.local)))).toEqual({ name: 'Enrique', kind: 'human' })
+    expect(await caller(through(cookie(SESSION.public)))).toEqual(asHuman('Enrique'))
+    expect(await caller(direct(cookie(SESSION.local)))).toEqual(asHuman('Enrique'))
     expect(await caller(direct(cookie(SESSION.public)))).toBeNull()
     expect(await caller(through(cookie(SESSION.local)))).toBeNull()
   })
 
   it('signs an agent token in on both origins', async () => {
-    expect(await caller(through(bearer(TOKEN)))).toEqual({ name: 'claude', kind: 'agent' })
-    expect(await caller(direct(bearer(TOKEN)))).toEqual({ name: 'claude', kind: 'agent' })
+    expect(await caller(through(bearer(TOKEN)))).toEqual(asWorker('claude'))
+    expect(await caller(direct(bearer(TOKEN)))).toEqual(asWorker('claude'))
     expect(auth.isAgent(through(bearer(TOKEN)), production)).toBe(true)
   })
 
@@ -229,5 +226,220 @@ describe('the origin the request used (README: "Using it from other devices")', 
           expect(await auth.callerOf(request, mode, auth.siteOf(request, entrance))).toBeNull()
         expect(auth.isAgent(request, production)).toBe(false)
       }
+  })
+})
+
+describe('roles and sub-identities', () => {
+  const ORCH_TOKEN = 'token-of-orch'
+  const OLD_TOKEN = 'token-of-an-older-board'
+  beforeAll(async () => {
+    const { db, schema } = await import('#/db')
+    const { hashSecret } = await import('./credentials')
+    const future = '2099-01-01T00:00:00.000Z'
+    db.insert(schema.agentTokens)
+      .values({ tokenHash: hashSecret(ORCH_TOKEN), name: 'orch', expiresAt: future, role: 'orchestrator' })
+      .run()
+    // A token made before roles existed: the column's default.
+    db.$client
+      .prepare('insert into agent_tokens (token_hash, name, expires_at) values (?, ?, ?)')
+      .run(hashSecret(OLD_TOKEN), 'older', future)
+  })
+  const named = (token: string, name: string) => req({ ...bearer(token), 'x-agent-name': name })
+  const actorRow = async (name: string) => {
+    const { db, schema } = await import('#/db')
+    const { eq } = await import('drizzle-orm')
+    return db.select().from(schema.actors).where(eq(schema.actors.name, name)).get()
+  }
+
+  it("signs a token in with its role: an orchestrator's, else a worker (a token from before roles too)", async () => {
+    for (const mode of [production, devOn]) {
+      expect(await auth.callerOf(req(bearer(ORCH_TOKEN)), mode)).toEqual({
+        name: 'orch',
+        kind: 'agent',
+        role: 'orchestrator',
+        parent: '',
+        token: 'orch',
+      })
+      expect(await auth.callerOf(req(bearer(TOKEN)), mode)).toEqual(asWorker('claude'))
+      expect(await auth.callerOf(req(bearer(OLD_TOKEN)), mode)).toEqual(asWorker('older'))
+    }
+  })
+
+  it('makes the call X-Agent-Name names, <token>/<name>: always a worker, its parent before the last /', async () => {
+    expect(await auth.callerOf(named(ORCH_TOKEN, 'orch/worker-1'), production)).toEqual({
+      name: 'orch/worker-1',
+      kind: 'agent',
+      role: 'worker',
+      parent: 'orch',
+      token: 'orch',
+    })
+    expect(await auth.callerOf(named(ORCH_TOKEN, ' orch/a/b.c/d_e '), production)).toMatchObject({
+      name: 'orch/a/b.c/d_e',
+      role: 'worker',
+      parent: 'orch/a/b.c',
+    })
+    expect(await auth.callerOf(named(TOKEN, 'claude/sub'), production)).toMatchObject({
+      role: 'worker',
+      parent: 'claude',
+    })
+    // The token's own name is the token itself.
+    expect(await auth.callerOf(named(ORCH_TOKEN, 'orch'), production)).toMatchObject({
+      name: 'orch',
+      role: 'orchestrator',
+      parent: '',
+    })
+    // What the request keeps for the handlers.
+    const request = named(ORCH_TOKEN, 'orch/worker-1')
+    await auth.callerOf(request, production)
+    expect(auth.callerInfo(request)).toMatchObject({ name: 'orch/worker-1', role: 'worker' })
+    expect(auth.roleOf(request)).toBe('worker')
+    expect(auth.isAgent(request, production)).toBe(true)
+  })
+
+  it('callerInfo with no caller remembered: a worker for an agent request, the human only otherwise', () => {
+    // Never through callerOf: nothing is remembered for these requests, and the board runs as production.
+    for (const headers of [
+      bearer(ORCH_TOKEN),
+      bearer(TOKEN),
+      { ...bearer(ORCH_TOKEN), 'x-agent-name': 'orch' },
+    ]) {
+      const request = req(headers)
+      expect(auth.isAgent(request)).toBe(true)
+      expect(auth.callerInfo(request, 'orch')).toEqual({ ...asWorker('orch'), token: null })
+      expect(auth.roleOf(request)).toBe('worker')
+      expect(auth.callerInfo(request).name).toBe('unknown')
+    }
+    for (const headers of [
+      {} as Record<string, string>,
+      cookie(SESSION.local),
+      { 'x-test-actor': 'agent:bot' },
+    ]) {
+      const request = req(headers)
+      expect(auth.isAgent(request)).toBe(false)
+      expect(auth.callerInfo(request, 'Enrique')).toEqual(asHuman('Enrique'))
+      expect(auth.roleOf(request)).toBe('human')
+    }
+  })
+
+  it('refuses any other X-Agent-Name with a 400 naming the form, and remembers nobody', async () => {
+    const bad = [
+      '',
+      'claude',
+      'claude/x',
+      'someone-else',
+      'orchestra/x',
+      'orch/',
+      'orch//x',
+      'orch/..',
+      'orch/x/../y',
+      'orch/.hidden',
+      'orch/two words',
+      `orch/${'x'.repeat(41)}`,
+      'orch/a/b/c/d',
+      `orch/${'a'.repeat(40)}/${'b'.repeat(40)}`,
+    ]
+    for (const value of bad) {
+      const request = named(ORCH_TOKEN, value)
+      await expect(auth.authenticate(request, localSite(47100)), value).rejects.toMatchObject({
+        status: 400,
+        message: expect.stringMatching(/^X-Agent-Name must be <token-name>\/<name>, here orch\/<name>/),
+      })
+      if (value) expect(await actorRow(value.trim())).toBeUndefined()
+    }
+    // A worker cannot take an orchestrator's name, nor a sub-identity of it.
+    for (const value of ['orch', 'orch/worker-1'])
+      await expect(auth.callerOf(named(TOKEN, value), production)).rejects.toMatchObject({ status: 400 })
+  })
+
+  it("never takes a human's name for a sub-identity", async () => {
+    const { db, schema } = await import('#/db')
+    db.insert(schema.actors)
+      .values({ name: 'orch/me', kind: 'human', lastSeenAt: '2026-01-01T00:00:00.000Z' })
+      .run()
+    await expect(auth.callerOf(named(ORCH_TOKEN, 'orch/me'), production)).rejects.toMatchObject({
+      status: 400,
+      message: "X-Agent-Name: orch/me is the human's name on the board",
+    })
+    expect(await actorRow('orch/me')).toMatchObject({ kind: 'human' })
+  })
+
+  it('remembers a sub-identity with its role and parent', async () => {
+    expect(await auth.authenticate(named(ORCH_TOKEN, 'orch/remembered'), localSite(47100))).toBe(
+      'orch/remembered',
+    )
+    expect(await actorRow('orch/remembered')).toMatchObject({ kind: 'agent', role: 'worker', parent: 'orch' })
+    const { listActors } = await import('./actors')
+    expect(listActors().find((a) => a.name === 'orch/remembered')).toEqual({
+      name: 'orch/remembered',
+      kind: 'agent',
+      role: 'worker',
+      parent: 'orch',
+      lastSeenAt: expect.any(String),
+    })
+    expect(listActors().find((a) => a.name === 'enrique-desktop')).toMatchObject({
+      role: 'human',
+      parent: '',
+    })
+  })
+
+  it('ignores X-Agent-Name for the human, in every mode', async () => {
+    const sub = { 'x-agent-name': 'orch/worker-1' }
+    expect(await auth.callerOf(req({ ...cookie(SESSION.local), ...sub }), production)).toEqual(
+      asHuman('Enrique'),
+    )
+    expect(await auth.callerOf(req({ ...bearer(TOKEN), ...sub }), devOff)).toEqual(asHuman('enrique'))
+    expect(await auth.callerOf(req(sub), test)).toEqual(asHuman('human'))
+    expect(await auth.callerOf(req({ 'x-test-actor': 'human:qa', ...sub }), test)).toEqual(asHuman('qa'))
+    expect(await auth.callerOf(req({ 'x-agent-name': 'nonsense//' }), devOff)).toEqual(asHuman('enrique'))
+  })
+
+  it('test: orchestrator:<name> is an orchestrator, agent:<name> a worker; X-Agent-Name works the same', async () => {
+    expect(await auth.callerOf(req({ 'x-test-actor': 'orchestrator: orch ' }), test)).toEqual({
+      name: 'orch',
+      kind: 'agent',
+      role: 'orchestrator',
+      parent: '',
+      token: 'orch',
+    })
+    expect(auth.isAgent(req({ 'x-test-actor': 'orchestrator:orch' }), test)).toBe(true)
+    expect(
+      await auth.callerOf(req({ 'x-test-actor': 'orchestrator:orch', 'x-agent-name': 'orch/w' }), test),
+    ).toMatchObject({ name: 'orch/w', role: 'worker', parent: 'orch' })
+    expect(await auth.callerOf(req({ 'x-test-actor': 'orchestrator:' }), test)).toBeNull()
+    // Never read outside test.
+    for (const mode of [production, devOn])
+      expect(await auth.callerOf(req({ 'x-test-actor': 'orchestrator:orch' }), mode)).toBeNull()
+    expect(await auth.callerOf(req({ 'x-test-actor': 'orchestrator:orch' }), devOff)).toEqual(
+      asHuman('enrique'),
+    )
+  })
+
+  it('admit: a malformed X-Test-Actor is a 401 naming the three forms, a bad X-Agent-Name a 400', async () => {
+    // Straight to the board on this machine, as the guard wants it.
+    const at = (headers: Record<string, string>) => req({ host: 'localhost:47100', ...headers })
+    const refusal = async (admission: Awaited<ReturnType<typeof auth.admit>>) => {
+      expect(admission.kind).toBe('refuse')
+      return (admission as { response: Response }).response
+    }
+    const malformed = await refusal(
+      await auth.admit(at({ 'x-test-actor': 'robot:x' }), '/api/me', test, null),
+    )
+    expect(malformed.status).toBe(401)
+    expect(await malformed.json()).toEqual({
+      error: 'X-Test-Actor must be human:<name>, agent:<name> or orchestrator:<name>',
+    })
+    const badName = await refusal(
+      await auth.admit(at({ 'x-test-actor': 'agent:w', 'x-agent-name': 'other/x' }), '/api/me', test, null),
+    )
+    expect(badName.status).toBe(400)
+    expect((await badName.json()).error).toMatch(/^X-Agent-Name must be <token-name>\/<name>, here w\/<name>/)
+    expect(await actorRow('other/x')).toBeUndefined()
+    const ok = await auth.admit(
+      at({ 'x-test-actor': 'orchestrator:orch', 'x-agent-name': 'orch/w' }),
+      '/api/me',
+      test,
+      null,
+    )
+    expect(ok).toMatchObject({ kind: 'actor', actor: 'orch/w', caller: { role: 'worker', parent: 'orch' } })
   })
 })
