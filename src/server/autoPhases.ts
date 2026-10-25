@@ -77,8 +77,8 @@ const topLevelTasks = (ticketId: number) =>
 
 /**
  * Merged joined the built-in phases after tickets were seeded without it: a ticket that has the hand-off
- * phases (at least one automatic phase) and no Merged gets it once, right before its Hand-off post (else
- * at the end), when its project's list in effect has Merged. Each ticket is looked at once (its
+ * phases (at least one automatic phase) and no Merged gets it once, at the end (before a Hand-off post
+ * task, if one exists), when its project's list in effect has Merged. Each ticket is looked at once (its
  * `mergedPhaseChecked`), so a Merged removed on purpose stays removed. True when it added one.
  */
 function addMissingMerged(t: schema.Ticket): boolean {

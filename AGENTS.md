@@ -64,7 +64,7 @@ http_headers = { Authorization = "Bearer <token>" }
    day without one.
 3. **Break it down**: a new ticket starts with its project's default phases as its top-level
    tasks (`get_project` → `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR,
-   CI, Preview, Merged, Hand-off post). Tasks go two levels and no more: the concrete steps of the
+   CI, Preview, Merged). Tasks go two levels and no more: the concrete steps of the
    work go under Implementation as its subtasks (`add_tasks` with `parentTaskId` = its id; a
    subtask takes no subtasks). `set_task_done` as you finish each step. **The board ticks Pushed,
    PR, CI, Preview and Merged itself**, from git, GitHub and the previews, and unticks one when its
@@ -79,8 +79,7 @@ http_headers = { Authorization = "Bearer <token>" }
 
    Nobody ticks those by hand: `set_task_done` and `update_task` `done` on them are refused, and
    `get_ticket` marks them `auto: true` (a top-level task with one of those names, in any case).
-   Hand-off post is yours: tick it once the summary is up to date (step 7), and on a rework untick
-   it until the summary is updated again. When a phase does not fit, `remove_task` drops it (its steps go with it),
+   Implementation and its steps are yours to tick. When a phase does not fit, `remove_task` drops it (its steps go with it),
    `update_task` rewords it, and `add_tasks` adds one (at the end). A lane starts without phases,
    since its parent carries the hand-off (`defaultPhases: true` on `create_ticket` seeds it
    anyway), and `defaultPhases: false` opts a ticket out. A ticket with no tasks (an older one, a
@@ -197,7 +196,7 @@ http_headers = { Authorization = "Bearer <token>" }
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
    cursor is yours to hold, the board stores nothing per agent.
 7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
-   PR, CI, Preview and Merged as their facts hold; Hand-off post is ticked by hand):
+   PR, CI, Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
    1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
    2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
       project's instructions say how; here `pnpm test:e2e`).
@@ -228,8 +227,7 @@ http_headers = { Authorization = "Bearer <token>" }
    7. The summary, up to date (`set_ticket_summary`, not a new hand-off post): the PR link, **the
       preview link and what to try there**, how it was tested, the e2e result (the run's summary, or
       its report when something failed), each review round's verdict, and screenshots of what
-      changed for a UI change in `files`. Then tick Hand-off post: a tick is not a commit, so the
-      summary still counts.
+      changed for a UI change in `files`.
    8. Resume note if the ticket stays open past the session (step 9).
 
    `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
