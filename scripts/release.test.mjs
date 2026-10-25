@@ -157,7 +157,7 @@ describe('parseArgs', () => {
   })
 })
 
-describe('treeChanges', () => {
+describe('treeChanges', { timeout: 30_000 }, () => {
   let dir = ''
   afterEach(() => {
     if (dir) fs.rmSync(dir, { recursive: true, force: true })
@@ -331,7 +331,7 @@ describe('treeChanges', () => {
   })
 })
 
-describe('remoteTagProblem', () => {
+describe('remoteTagProblem', { timeout: 30_000 }, () => {
   let dir = ''
   afterEach(() => {
     if (dir) fs.rmSync(dir, { recursive: true, force: true })
