@@ -296,6 +296,31 @@ describe('roles and sub-identities', () => {
     expect(auth.isAgent(request, production)).toBe(true)
   })
 
+  it('callerInfo with no caller remembered: a worker for an agent request, the human only otherwise', () => {
+    // Never through callerOf: nothing is remembered for these requests, and the board runs as production.
+    for (const headers of [
+      bearer(ORCH_TOKEN),
+      bearer(TOKEN),
+      { ...bearer(ORCH_TOKEN), 'x-agent-name': 'orch' },
+    ]) {
+      const request = req(headers)
+      expect(auth.isAgent(request)).toBe(true)
+      expect(auth.callerInfo(request, 'orch')).toEqual({ ...asWorker('orch'), token: null })
+      expect(auth.roleOf(request)).toBe('worker')
+      expect(auth.callerInfo(request).name).toBe('unknown')
+    }
+    for (const headers of [
+      {} as Record<string, string>,
+      cookie(SESSION.local),
+      { 'x-test-actor': 'agent:bot' },
+    ]) {
+      const request = req(headers)
+      expect(auth.isAgent(request)).toBe(false)
+      expect(auth.callerInfo(request, 'Enrique')).toEqual(asHuman('Enrique'))
+      expect(auth.roleOf(request)).toBe('human')
+    }
+  })
+
   it('refuses any other X-Agent-Name with a 400 naming the form, and remembers nobody', async () => {
     const bad = [
       '',
