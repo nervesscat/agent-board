@@ -87,8 +87,8 @@ Then:
   and `stale` says the work moved on (new commits or a newer progress post): check the branch and
   the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
 - A new ticket starts with its project's default phases as its top-level tasks (`get_project` →
-  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Hand-off
-  post). Tasks go two levels and no more: put the concrete steps of the work under Implementation
+  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged,
+  Hand-off post). Tasks go two levels and no more: put the concrete steps of the work under Implementation
   as its subtasks (`add_tasks` with `parentTaskId` = its id; a subtask takes no subtasks). Remove
   or reword a phase that does not fit (`remove_task`, `update_task`); `add_tasks` adds one at the
   end. A lane starts without phases, since its parent carries the hand-off (`defaultPhases: true`
@@ -105,12 +105,19 @@ Lanes of a ticket you are working are yours to create (next section).
 
 ## 3. While working
 
-- `set_task_done` as each step finishes, and each hand-off phase as you finish it (Pushed after
-  the push, PR once it is open, CI once it is green, Preview once it runs, Hand-off post once the
-  summary is up to date); the board ticks none itself. On a rework, untick the phases the new work redoes and tick
-  them again as you redo each. A phase with steps is done exactly when all its steps are: ticking
-  or unticking a phase does the same to its steps, ticking its last open step ticks it, unticking a
-  step unticks it. When the plan changes, `update_task` rewords a task and `remove_task` drops one
+- `set_task_done` as each step finishes. The board ticks the phases Pushed, PR, CI, Preview and
+  Merged itself, from git, GitHub and the previews, and unticks one when its fact stops holding:
+  Pushed while the branch is on origin with every local commit (a new commit not pushed unticks
+  it), PR while a PR for the ticket is open or merged, CI while the PR's checks are green on its
+  head or a PR comment whose first line is `CI run locally: green on <sha>` names its head commit
+  (a new push unticks it until it is green again), Preview while one of the ticket's workspaces
+  runs a preview or its link answers, Merged once the PR or the branch is merged. Nobody ticks
+  those by hand: `set_task_done` and `update_task` `done` on them are refused (`get_ticket` marks
+  them `auto: true`). Hand-off post is yours: tick it once the summary is up to date, and on a
+  rework untick it until the summary is updated again. A phase with steps is done exactly when
+  all its steps are: ticking or unticking a phase does the same to its steps, ticking its last open
+  step ticks it, unticking a step unticks it (a phase the board ticks follows its fact, not its
+  steps). When the plan changes, `update_task` rewords a task and `remove_task` drops one
   that no longer applies (a phase goes with its steps), so the progress bar stays honest.
 - Record your work on the ticket's timeline (the Roadmap and the ticket page draw it; the human
   sees from it who worked when, who waited on what, and what stalled). Each call takes `projectId`
@@ -283,8 +290,8 @@ The human should not have to tell you to check comments. While this session has 
 
 ## 4. Hand off
 
-Before `update_ticket` → `status: review`, every item, in order, ticking each hand-off phase of
-the ticket as its item is done:
+Before `update_ticket` → `status: review`, every item, in order (the board ticks Pushed, PR, CI,
+Preview and Merged as their facts hold; Hand-off post is ticked by hand):
 
 1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
 2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
@@ -306,6 +313,9 @@ the ticket as its item is done:
    `update_ticket` with the PR's `prNumber`: the PR queue shows this ticket on the PR's card, and
    `get_ticket` the PR with its latest review. A PR ticket the board made for that PR is cancelled,
    with a post, and this ticket takes the PR over. (A PR on the ticket's branch links by itself.)
+   While GitHub's checks do not run, comment on the PR `CI run locally: green on <sha>` with the
+   head commit the checks of item 2 passed on (`gh pr comment`): that ticks CI. Comment again after
+   each push.
 6. **Preview running**: `start_preview` on the workspace, then `get_ticket` until its
    `managedPreview` is `running` (`failed`: read the log lines and fix). For a repo the board cannot
    build, start one the project's way and `set_preview` (see Previews in
@@ -321,11 +331,12 @@ the ticket as its item is done:
 
 `update_ticket` → `review` then answers with `handoff.missing`: what the board still sees missing,
 each a `code` with a `text`: `tasks_open` (Implementation, the ticket's tasks and subtasks, its
-phases and their steps, the hand-off phases included: missing while it has none, or while some of
-them, its lanes' included, are open; the other checks still verify each fact themselves), `no_pr`, `not_pushed`, `no_preview`,
+phases and their steps, the hand-off phases included but Merged, which is the human's: missing
+while it has none, or while some of them, its lanes' included, are open; the other checks still
+verify each fact themselves), `no_pr`, `not_pushed`, `no_preview`,
 `no_handoff_post` (no summary written by an agent since the branch's last commit; on a ticket that
 never had a summary, an agent's progress post since then still counts), `checks_unknown` (the
-PR's CI is failing or still running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
+PR's CI is failing or still running, and no `CI run locally: green` comment names its head). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
 the ticket is in review, and its page shows it as a Hand-off card.
 
 After that:

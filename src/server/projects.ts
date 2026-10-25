@@ -13,7 +13,8 @@ import { listStages } from './stages'
 /**
  * The top-level phases a new ticket starts with when its project keeps no list of its own: the
  * implementation, then the hand-off's items in the order the work does them (push before the PR, CI
- * once the PR runs it, the preview, then the post). Each is the label of a hand-off check.
+ * once the PR runs it, the preview, the merge, then the post). Each is the label of a hand-off check.
+ * The board ticks Pushed, PR, CI, Preview and Merged itself (`#/lib/autoPhases`).
  */
 export const BUILT_IN_PHASES: readonly string[] = [
   'Implementation',
@@ -21,6 +22,7 @@ export const BUILT_IN_PHASES: readonly string[] = [
   'PR',
   'CI',
   'Preview',
+  'Merged',
   'Hand-off post',
 ]
 

@@ -1,10 +1,16 @@
+import { and, eq, inArray, isNull } from 'drizzle-orm'
+
+import { db, schema } from '#/db'
+import { autoPhaseOf } from '#/lib/autoPhases'
 import { listActors } from './actors'
 import { type getTicketWithPush, summaryStandIn } from './features'
 import { lastCommitAt } from './git'
+import type { ManagedPreview } from './managedPreview'
 import { isLocalUrl, previewState } from './preview'
 import type { CiState } from './prs'
 import type { Push } from './push'
 import { ticketRepo } from './repos'
+import { kindOf, listStages } from './stages'
 
 /**
  * What a ticket handed to review still lacks: the parts of the hand-off the board can see for itself
@@ -43,13 +49,17 @@ export interface Handoff {
 /** What the checks go by, gathered from the ticket, git, the previews and the PR queue. */
 export interface HandoffFacts {
   branch: string
-  /** The implementation's tasks and subtasks, with those of its lanes that are not cancelled: its rollup. */
+  /**
+   * The implementation's tasks and subtasks, with those of its lanes that are not cancelled: its rollup,
+   * without the Merged phases (merging is the human's step, done after the hand-off).
+   */
   tasks: { done: number; total: number }
   /**
    * The PR it was opened as (by prNumber or its branch), with CI from the PR queue when it is there,
-   * and whether the queue saw it merged on GitHub.
+   * and whether the queue saw it merged on GitHub. `localCi`: a "CI run locally: green" comment names
+   * its head, which counts as CI passing whatever GitHub's checks say.
    */
-  pr: { number: number; ci: CiState | null; merged: boolean } | null
+  pr: { number: number; ci: CiState | null; merged: boolean; localCi?: boolean } | null
   push: Pick<Push, 'state' | 'ahead' | 'into'>
   /** Each workspace's preview: its link, and whether the board runs it or it answers. */
   previews: { url: string; running: boolean }[]
@@ -91,7 +101,7 @@ export function handoffOf(f: HandoffFacts): Handoff {
     total > 0 && done === total,
     total
       ? `${done} of ${plural(total, 'task')} done`
-      : 'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Hand-off post), put the steps under Implementation, and tick each as you finish it',
+      : 'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Merged, Hand-off post), put the steps under Implementation, and tick each step as you finish it (the board ticks Pushed, PR, CI, Preview and Merged itself)',
   )
 
   check(
@@ -146,7 +156,7 @@ export function handoffOf(f: HandoffFacts): Handoff {
       : `No summary since ${since}`,
   )
 
-  const ci = f.pr?.ci
+  const ci = f.pr?.localCi ? 'passing' : f.pr?.ci
   if (ci === 'failing' || ci === 'pending')
     check(
       'checks_unknown',
@@ -154,7 +164,13 @@ export function handoffOf(f: HandoffFacts): Handoff {
       false,
       ci === 'failing' ? "The PR's CI is failing" : "The PR's CI is still running",
     )
-  else if (ci === 'passing') check('checks_unknown', 'CI', true, "The PR's CI passed")
+  else if (ci === 'passing')
+    check(
+      'checks_unknown',
+      'CI',
+      true,
+      f.pr?.localCi ? 'CI run locally: green on the head' : "The PR's CI passed",
+    )
 
   // Merging is the human's step: a branch not merged yet is pending, not something the hand-off lacks.
   const missing = checks.filter((c) => !c.ok && c.code !== 'not_merged')
@@ -177,9 +193,11 @@ function handoffPost(f: HandoffFacts, after: string) {
 type TicketWithPush = Awaited<ReturnType<typeof getTicketWithPush>>
 
 /** Every running preview counts: one the board runs, or a link that answers (one off this machine is taken on trust). */
-async function previewsOf(t: TicketWithPush): Promise<HandoffFacts['previews']> {
+export async function workspacePreviews(
+  workspaces: { previewUrl: string; managedPreview: ManagedPreview | null }[],
+): Promise<HandoffFacts['previews']> {
   return Promise.all(
-    t.workspaces
+    workspaces
       .filter((w) => w.previewUrl || w.managedPreview?.status === 'running')
       .map(async (w) => {
         const url = w.managedPreview?.url ?? w.previewUrl
@@ -190,18 +208,53 @@ async function previewsOf(t: TicketWithPush): Promise<HandoffFacts['previews']> 
   )
 }
 
+/**
+ * The ticket's rollup without the Merged phases of it and of its lanes that are not cancelled (the
+ * rollup's scope): the hand-off's Implementation item.
+ */
+function handoffTasks(t: TicketWithPush): HandoffFacts['tasks'] {
+  const stages = listStages(t.projectId)
+  const all = db
+    .select({ id: schema.tickets.id, parentId: schema.tickets.parentId, status: schema.tickets.status })
+    .from(schema.tickets)
+    .where(eq(schema.tickets.projectId, t.projectId))
+    .all()
+  const ids: number[] = []
+  for (const queue = [t.id]; queue.length; ) {
+    const id = queue.shift()!
+    ids.push(id)
+    for (const lane of all)
+      if (lane.parentId === id && kindOf(stages, lane.status) !== 'cancelled') queue.push(lane.id)
+  }
+  const merged = db
+    .select()
+    .from(schema.tasks)
+    .where(and(inArray(schema.tasks.ticketId, ids), isNull(schema.tasks.parentId)))
+    .all()
+    .filter((task) => autoPhaseOf(task) === 'Merged')
+  return {
+    done: t.rollup.done - merged.filter((task) => task.done).length,
+    total: t.rollup.total - merged.length,
+  }
+}
+
 /** The checklist for a ticket read with `getTicketWithPush` (its feed, workspaces, PR and push state). */
 export async function ticketHandoff(t: TicketWithPush): Promise<Handoff> {
   const repo = ticketRepo(t)
   const [previews, last] = await Promise.all([
-    previewsOf(t),
+    workspacePreviews(t.workspaces),
     repo && t.branch ? lastCommitAt(repo.repoPath, t.branch).catch(() => null) : null,
   ])
   return handoffOf({
     branch: t.branch,
-    tasks: t.rollup,
+    tasks: handoffTasks(t),
     pr: t.pr
-      ? { number: t.pr.number, ci: t.pr.queue?.ci ?? null, merged: t.pr.queue?.status === 'done' }
+      ? {
+          number: t.pr.number,
+          ci: t.pr.queue?.ci ?? null,
+          merged: t.pr.queue?.status === 'done',
+          localCi: t.pr.queue?.localCi ?? false,
+        }
       : null,
     push: t.push,
     previews,
