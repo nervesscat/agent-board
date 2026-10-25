@@ -5,7 +5,7 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ASSETS, REPO, ghCommands, parseArgs, releaseFiles, treeChanges } from './release.mjs'
+import { ASSETS, BUILD_OUTPUTS, REPO, ghCommands, parseArgs, releaseFiles, treeChanges } from './release.mjs'
 
 const all = () => true
 
@@ -23,28 +23,36 @@ describe('releaseFiles', () => {
     })
   })
 
-  it('publishes every Linux package that was made, and needs the AppImage and the .deb', () => {
-    const made = new Set(['agent-board-0.2.0-x86_64.AppImage', 'agent-board_0.2.0_amd64.deb'])
-    const { files, missing } = releaseFiles('linux', '0.2.0', (f) => made.has(f))
-    expect(files.map((f) => [f.versioned, f.stable])).toEqual([
-      ['agent-board-0.2.0-x86_64.AppImage', 'agent-board-x86_64.AppImage'],
-      ['agent-board_0.2.0_amd64.deb', 'agent-board_amd64.deb'],
-    ])
-    expect(missing).toEqual([])
-
-    const all4 = releaseFiles('linux', '0.2.0', all).files.map((f) => f.stable)
-    expect(all4).toEqual([
-      'agent-board-x86_64.AppImage',
-      'agent-board_amd64.deb',
-      'agent-board.x86_64.rpm',
-      'agent-board.pacman',
-    ])
+  it('publishes the four Linux packages under their versioned and their stable names', () => {
+    expect(releaseFiles('linux', '0.2.0', all)).toEqual({
+      files: [
+        {
+          what: 'AppImage',
+          versioned: 'agent-board-0.2.0-x86_64.AppImage',
+          stable: 'agent-board-x86_64.AppImage',
+        },
+        { what: 'deb', versioned: 'agent-board_0.2.0_amd64.deb', stable: 'agent-board_amd64.deb' },
+        { what: 'rpm', versioned: 'agent-board-0.2.0.x86_64.rpm', stable: 'agent-board.x86_64.rpm' },
+        { what: 'pacman', versioned: 'agent-board-0.2.0.pacman', stable: 'agent-board.pacman' },
+      ],
+      missing: [],
+    })
   })
 
-  it('lists a required file that is missing, and leaves out an optional one', () => {
-    expect(releaseFiles('linux', '1.0.0', () => false).missing).toEqual([
-      'agent-board-1.0.0-x86_64.AppImage',
-      'agent-board_1.0.0_amd64.deb',
+  it('lists every package that is missing: each is required', () => {
+    expect(releaseFiles('linux', '1.0.0', () => false)).toEqual({
+      files: [],
+      missing: [
+        'agent-board-1.0.0-x86_64.AppImage',
+        'agent-board_1.0.0_amd64.deb',
+        'agent-board-1.0.0.x86_64.rpm',
+        'agent-board-1.0.0.pacman',
+      ],
+    })
+    const made = new Set(['agent-board-0.2.0-x86_64.AppImage', 'agent-board_0.2.0_amd64.deb'])
+    expect(releaseFiles('linux', '0.2.0', (f) => made.has(f)).missing).toEqual([
+      'agent-board-0.2.0.x86_64.rpm',
+      'agent-board-0.2.0.pacman',
     ])
     expect(releaseFiles('win32', '1.0.0', () => false).missing).toEqual(['agent-board-setup-1.0.0.exe'])
   })
@@ -59,6 +67,15 @@ describe('releaseFiles', () => {
       .map((a) => a.stable)
     expect(new Set(stable).size).toBe(stable.length)
     for (const name of stable) expect(name).not.toMatch(/\d+\.\d+\.\d+/)
+  })
+
+  it('expects the versioned names desktop/package.mjs checks it made', () => {
+    // package.mjs ends by checking each file it made, by name: `agent-board-${v}-x86_64.AppImage` and
+    // the like on Linux, `agent-board-setup-${brand.version}.exe` on Windows.
+    const script = fs
+      .readFileSync(path.resolve('desktop/package.mjs'), 'utf8')
+      .replaceAll('${brand.version}', '${v}')
+    for (const a of Object.values(ASSETS).flat()) expect(script).toContain('`' + a.versioned('${v}') + '`')
   })
 
   it('uses the stable names the release workflow and docs/releasing.md use', () => {
@@ -160,12 +177,22 @@ describe('treeChanges', () => {
     expect(status(git)).toEqual([' M routeTree.gen.ts'])
 
     // --dry-run: not counted as a change, and left as it is.
-    expect(treeChanges(dir, { keep: true })).toEqual({ ok: true, changes: [], eolOnly: ['routeTree.gen.ts'] })
+    expect(treeChanges(dir, { keep: true })).toEqual({
+      ok: true,
+      changes: [],
+      eolOnly: ['routeTree.gen.ts'],
+      buildOutputs: [],
+    })
     expect(status(git)).toEqual([' M routeTree.gen.ts'])
 
-    expect(treeChanges(dir)).toEqual({ ok: true, changes: [], eolOnly: ['routeTree.gen.ts'] })
+    expect(treeChanges(dir)).toEqual({
+      ok: true,
+      changes: [],
+      eolOnly: ['routeTree.gen.ts'],
+      buildOutputs: [],
+    })
     expect(status(git)).toEqual([])
-    expect(treeChanges(dir)).toEqual({ ok: true, changes: [], eolOnly: [] })
+    expect(treeChanges(dir)).toEqual({ ok: true, changes: [], eolOnly: [], buildOutputs: [] })
   })
 
   it('still reports, and keeps, a real change', () => {
@@ -178,9 +205,95 @@ describe('treeChanges', () => {
       ok: true,
       changes: [' M routeTree.gen.ts', '?? new.ts'],
       eolOnly: ['other.ts'],
+      buildOutputs: [],
     })
     expect(fs.readFileSync(path.join(dir, 'routeTree.gen.ts'), 'utf8')).toBe('a\nc\n')
     expect(status(git)).toEqual([' M routeTree.gen.ts', '?? new.ts'])
+  })
+
+  // What `vite build` appends to src/routeTree.gen.ts (the repo keeps it out of git).
+  const footer = [
+    '',
+    "import type { getRouter } from './router.tsx'",
+    "import type { startInstance } from './start.ts'",
+    "declare module '@tanstack/react-start' {",
+    '  interface Register {',
+    '    ssr: true',
+    '    router: Awaited<ReturnType<typeof getRouter>>',
+    '    config: Awaited<ReturnType<typeof startInstance.getOptions>>',
+    '  }',
+    '}',
+    '',
+  ].join('\n')
+
+  /** The repo with the real src/routeTree.gen.ts committed, as this checkout has it. */
+  function repoWithRouteTree() {
+    const git = repo()
+    const routeTree = fs.readFileSync(path.resolve('src/routeTree.gen.ts'), 'utf8')
+    fs.mkdirSync(path.join(dir, 'src'))
+    fs.writeFileSync(path.join(dir, 'src', 'routeTree.gen.ts'), routeTree)
+    git('add', '.')
+    git('commit', '-q', '-m', 'route tree')
+    return { git, routeTree }
+  }
+
+  it('puts back the route tree after a build, whatever the build changed in it', () => {
+    expect(BUILD_OUTPUTS).toEqual(['src/routeTree.gen.ts'])
+    const { git, routeTree } = repoWithRouteTree()
+    const file = path.join(dir, 'src', 'routeTree.gen.ts')
+    // The build: the same tree, with LF, and its Register block at the end.
+    fs.writeFileSync(file, routeTree.replace(/\r\n/g, '\n').trimEnd() + '\n' + footer)
+    expect(() => git('diff', '--quiet', '--', 'src/routeTree.gen.ts')).toThrow()
+    expect(status(git)).toEqual([' M src/routeTree.gen.ts'])
+
+    // --dry-run: not counted as a change, and left as it is.
+    expect(treeChanges(dir, { keep: true })).toEqual({
+      ok: true,
+      changes: [],
+      eolOnly: [],
+      buildOutputs: ['src/routeTree.gen.ts'],
+    })
+    expect(status(git)).toEqual([' M src/routeTree.gen.ts'])
+
+    expect(treeChanges(dir)).toEqual({
+      ok: true,
+      changes: [],
+      eolOnly: [],
+      buildOutputs: ['src/routeTree.gen.ts'],
+    })
+    expect(status(git)).toEqual([])
+    expect(fs.readFileSync(file, 'utf8')).not.toContain('interface Register')
+    // The next run (a re-run, --skip-build) finds the tree clean.
+    expect(treeChanges(dir)).toEqual({ ok: true, changes: [], eolOnly: [], buildOutputs: [] })
+  })
+
+  it('still refuses a content change to any other file beside the rebuilt route tree', () => {
+    const { git, routeTree } = repoWithRouteTree()
+    fs.writeFileSync(path.join(dir, 'src', 'routeTree.gen.ts'), routeTree + footer)
+    fs.writeFileSync(path.join(dir, 'other.ts'), 'y\r\n')
+    // A route tree at another path is not the build's.
+    fs.writeFileSync(path.join(dir, 'routeTree.gen.ts'), 'a\nc\n')
+
+    expect(treeChanges(dir)).toEqual({
+      ok: true,
+      changes: [' M other.ts', ' M routeTree.gen.ts'],
+      eolOnly: [],
+      buildOutputs: ['src/routeTree.gen.ts'],
+    })
+    expect(status(git)).toEqual([' M other.ts', ' M routeTree.gen.ts'])
+  })
+
+  it('keeps a staged change to the route tree as a change', () => {
+    const { git, routeTree } = repoWithRouteTree()
+    fs.writeFileSync(path.join(dir, 'src', 'routeTree.gen.ts'), routeTree + '// edited\n')
+    git('add', 'src/routeTree.gen.ts')
+
+    expect(treeChanges(dir)).toMatchObject({
+      ok: true,
+      changes: ['M  src/routeTree.gen.ts'],
+      buildOutputs: [],
+    })
+    expect(status(git)).toEqual(['M  src/routeTree.gen.ts'])
   })
 
   it('says when git status fails', () => {

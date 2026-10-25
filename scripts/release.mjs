@@ -25,7 +25,8 @@ export const REPO = 'nervesscat/agent-board'
 /**
  * Every file a platform's `pnpm desktop:package` makes, by its versioned name (desktop/package.mjs) and
  * the stable name it is also published under. The workflow (.github/workflows/release.yml) and
- * docs/releasing.md list the same stable names. An optional file is published when it was made.
+ * docs/releasing.md list the same stable names. desktop/package.mjs fails unless it made every one of
+ * its platform's, so each is required here; an optional one would be published only when it was made.
  */
 export const ASSETS = {
   win32: [
@@ -53,13 +54,13 @@ export const ASSETS = {
       what: 'rpm',
       versioned: (v) => `agent-board-${v}.x86_64.rpm`,
       stable: 'agent-board.x86_64.rpm',
-      required: false,
+      required: true,
     },
     {
       what: 'pacman',
       versioned: (v) => `agent-board-${v}.pacman`,
       stable: 'agent-board.pacman',
-      required: false,
+      required: true,
     },
   ],
 }
@@ -112,12 +113,20 @@ export function ghCommands({ tag, version, sha, exists, uploads }) {
 }
 
 /**
- * The working tree's changes (`git status --porcelain` entries), less the files whose only change is
- * their line endings: on Windows with core.autocrlf the build rewrites src/routeTree.gen.ts with LF,
- * the same content `git diff` sees no change in. Unless `keep`, those files are checked out again so
- * the tree is clean (scripts/bench/bench.mjs does the same after its build).
+ * Tracked files the build rewrites: `vite build` regenerates src/routeTree.gen.ts and appends its
+ * `declare module '@tanstack/react-start'` block, which the repo keeps out of git. A change to one is
+ * never the release's, whatever it is.
+ */
+export const BUILD_OUTPUTS = ['src/routeTree.gen.ts']
+
+/**
+ * The working tree's changes (`git status --porcelain` entries), less two kinds the build makes:
+ * a build output (BUILD_OUTPUTS) changed in the working tree only, and a file whose only change is its
+ * line endings (on Windows with core.autocrlf a rewrite with LF is the same content to `git diff`).
+ * Unless `keep`, those files are checked out again so the tree is clean (scripts/bench/bench.mjs does
+ * the same after its build).
  * @param {string} cwd @param {{ keep?: boolean }} [o]
- * @returns {{ ok: true, changes: string[], eolOnly: string[] } | { ok: false, err: string }}
+ * @returns {{ ok: true, changes: string[], eolOnly: string[], buildOutputs: string[] } | { ok: false, err: string }}
  */
 export function treeChanges(cwd, { keep = false } = {}) {
   const res = spawnSync('git', ['status', '--porcelain', '-z'], { cwd, encoding: 'utf8' })
@@ -126,18 +135,30 @@ export function treeChanges(cwd, { keep = false } = {}) {
   const entries = (res.stdout ?? '').split('\0')
   const changes = []
   const eolOnly = []
+  const buildOutputs = []
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]
     if (!entry) continue
     // A rename or copy is followed by its source path.
     if (/^[RC]/.test(entry)) i++
     const file = entry.slice(3)
-    if (entry.startsWith(' M ') && spawnSync('git', ['diff', '--quiet', '--', file], { cwd }).status === 0) {
-      eolOnly.push(file)
-      if (!keep) spawnSync('git', ['checkout', '--', file], { cwd })
-    } else changes.push(entry)
+    // Changed in the working tree only (nothing staged): what a build leaves.
+    const unstaged = entry.startsWith(' M ')
+    const kind = !unstaged
+      ? null
+      : BUILD_OUTPUTS.includes(file)
+        ? buildOutputs
+        : spawnSync('git', ['diff', '--quiet', '--', file], { cwd }).status === 0
+          ? eolOnly
+          : null
+    if (!kind) {
+      changes.push(entry)
+      continue
+    }
+    kind.push(file)
+    if (!keep) spawnSync('git', ['checkout', '--', file], { cwd })
   }
-  return { ok: true, changes, eolOnly }
+  return { ok: true, changes, eolOnly, buildOutputs }
 }
 
 /** @param {string[]} argv */
@@ -230,7 +251,7 @@ function main() {
   if (opts.skipBuild) say('build: skipped, using desktop/dist as it is')
   else if (opts.dryRun) say(`build: ${show('node', ['desktop/package.mjs'])} (pnpm desktop:package)`)
   else if (!run(process.execPath, build, { cwd: root, inherit: true }).ok) fail('pnpm desktop:package failed')
-  // The build rewrites src/routeTree.gen.ts; a change of line endings only is put back.
+  // The build rewrites src/routeTree.gen.ts (BUILD_OUTPUTS): put back, with any line-ending-only change.
   else treeChanges(root)
 
   // 2. Each one under its versioned and its stable name, in desktop/dist/release.

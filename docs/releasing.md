@@ -25,9 +25,8 @@ The versioned files of the same release are `agent-board-setup-<version>.exe`,
 that is not a draft or a pre-release, and a version with a suffix (`0.2.0-beta.1`) is published as a
 pre-release by both the workflow and `pnpm release`, so `latest` stays on the newest stable one.
 
-The Linux packages are built by `pnpm desktop:package` on Linux once the Linux packaging is part of the
-commit being released. On a commit without it, `pnpm desktop:package` on Linux stops with
-`the installer is built on Windows (NSIS, x64)`, and only the Windows link works.
+`pnpm desktop:package` builds the Windows installer on Windows and the four Linux packages on Linux
+(README: "The desktop app"), and a release needs all five.
 
 ## 1. Prepare
 
@@ -47,8 +46,9 @@ releases `v<version>` at the commit it runs on):
 - **Windows installer** (`windows-latest`): `pnpm install --frozen-lockfile`, `pnpm release --stage-only`
   (that is `pnpm desktop:package`, then the copies under both names in `desktop/dist/release`), a smoke
   test of the unpacked app.
-- **Linux packages** (`ubuntu-24.04`): the same on Linux. It fails, with a note in the run's summary, on
-  a commit without the Linux packaging.
+- **Linux packages** (`ubuntu-24.04`): the same on Linux, with the packaging tools CI's `desktop-linux`
+  job installs (`rpm`, `libarchive-tools`, Xvfb and Electron's libraries), and the smoke test under
+  `xvfb-run`.
 - **Publish the GitHub Release**: only when both builds succeeded, so a release never goes out with a
   platform missing. It creates the release for the tag (or adds to it) with the run's own
   `GITHUB_TOKEN` (`contents: write` on this job alone) and uploads every file. No other secret is used.
@@ -78,7 +78,9 @@ replaces its own files (`--clobber`). Until the second platform's run, the relea
 platform's files, and its stable links for the other platform answer 404.
 
 The script refuses a working tree with uncommitted changes, a commit that is not on origin, and a tag
-already on origin at another commit (`--force` uploads anyway). `--skip-build` uses the installers already
+already on origin at another commit (`--force` uploads anyway). `src/routeTree.gen.ts`, which the build
+regenerates, is not one of those changes: the script puts it back before that check and after its own
+build, so a run again or `--skip-build` after a build is not refused. `--skip-build` uses the installers already
 in `desktop/dist`; `--stage-only` builds and copies and publishes nothing (the workflow's step).
 
 ## After a release

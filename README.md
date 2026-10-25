@@ -26,7 +26,10 @@ The desktop app runs the board in a window of its own: no checkout, node or pnpm
   once (More info, Run anyway).
 - **Linux** (x86_64):
   [AppImage](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board-x86_64.AppImage),
-  [.deb](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board_amd64.deb).
+  [.deb](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board_amd64.deb),
+  [.rpm](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board.x86_64.rpm),
+  [pacman](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board.pacman).
+  The desktop app's Linux section, below, says how to install each on your distribution.
 
 The [latest release](https://github.com/nervesscat/agent-board/releases/latest) has every package,
 and [docs/releasing.md](docs/releasing.md) lists them and how a release is made. The app needs `git`,
