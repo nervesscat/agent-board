@@ -17,12 +17,14 @@ let dbm: typeof import('#/db')
 let features: typeof import('./features')
 let repos: typeof import('./repos')
 let summary: typeof import('./summary')
+let ticketRepos: typeof import('./ticketRepos')
 let handle: (request: Request) => Promise<Response>
 beforeAll(async () => {
   dbm = await import('#/db')
   features = await import('./features')
   repos = await import('./repos')
   summary = await import('./summary')
+  ticketRepos = await import('./ticketRepos')
   // The human signed in: who a relayed Add goes to.
   ;(await import('./actors')).noteActor(HUMAN, 'human')
   const { api } = await import('./api')
@@ -434,6 +436,25 @@ describe('answering a request', () => {
     ])
   })
 
+  it('Add gives a checkout of the board its Preview run, as adding a repo by hand does; other repos get none', async () => {
+    const { card, dir } = await ask('board-copy')
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'agent-board' }))
+    const { card: plain } = await ask('not-board')
+    expect((await answer(card.id, 0)).body.repo.added).toMatchObject({ name: 'board-copy' })
+    expect((await answer(plain.id, 0)).body.repo.added).toMatchObject({ name: 'not-board' })
+    const runsOf = (name: string) => {
+      const repo = repos.listRepos(pid).find((r) => r.name === name)!
+      const configs = dbm.db
+        .select()
+        .from(dbm.schema.runConfigs)
+        .where(eq(dbm.schema.runConfigs.repoId, repo.id))
+        .all()
+      return { seeded: repo.runsSeeded, runs: configs.map((c) => [c.name, c.type, c.createdBy]) }
+    }
+    expect(runsOf('board-copy')).toEqual({ seeded: true, runs: [['Preview', 'preview', 'board']] })
+    expect(runsOf('not-board')).toEqual({ seeded: false, runs: [] })
+  })
+
   it('a relayed Add adds it in the human’s name, saying who relayed it', async () => {
     const { card } = await ask('relayed', 'acme/relayed', { baseBranch: 'develop' })
     const relayed = await tool('answer_decision', { postId: card.id, option: 0, words: 'yes, add it' })
@@ -655,13 +676,63 @@ describe('moving a ticket to a repo', () => {
     expect(activity(pid)).toContainEqual(
       expect.objectContaining({
         actor: AGENT,
-        text: `updated ticket #${t.id} moving (moved to repo shop from app, base branch → dev)`,
+        // The ticket's list of repos changes with it, and says so.
+        text: `updated ticket #${t.id} moving (moved to repo shop from app, base branch → dev, repos → shop)`,
       }),
     )
     // The REST route does the same, with the base branch given.
     const back = await call('PUT', `/api/tickets/${t.id}/repo`, { repoId: app.id, baseBranch: 'release' })
     expect(back.status).toBe(200)
     expect(features.getTicket(t.id)).toMatchObject({ repoId: app.id, baseBranch: 'release' })
+  })
+
+  it('set_ticket_repo to a repo the ticket already spans makes it the primary, with its own branch, base and PR', async () => {
+    const { id: pid, repo: app } = newProject('promote')
+    const shop = dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId: pid, name: 'shop', repoPath: path.join(tmp, 'promote-shop'), baseBranch: 'dev' })
+      .returning()
+      .get()
+    const t = features.createTicket(
+      pid,
+      { title: 'spanning', status: 'in_progress', repoId: app.id, branch: 'feat/app' },
+      HUMAN,
+    )
+    features.updateTicket(
+      t.id,
+      {
+        repos: [
+          { repoId: app.id },
+          { repoId: shop.id, branch: 'feat/shop', baseBranch: 'release', prNumber: 12 },
+        ],
+      },
+      HUMAN,
+    )
+    const moved = await tool('set_ticket_repo', { ticketId: t.id, repoId: shop.id })
+    // Its own base, not the repo's dev: none was given.
+    expect(moved).toMatchObject({
+      id: t.id,
+      repoId: shop.id,
+      branch: 'feat/shop',
+      baseBranch: 'release',
+      prNumber: 12,
+    })
+    // The old primary stays among the ticket's repos, with what it had.
+    expect(ticketRepos.ticketRepoList(features.getTicket(t.id))).toEqual([
+      {
+        repoId: shop.id,
+        name: 'shop',
+        branch: 'feat/shop',
+        baseBranch: 'release',
+        prNumber: 12,
+        primary: true,
+      },
+      { repoId: app.id, name: 'app', branch: 'feat/app', baseBranch: 'main', prNumber: null, primary: false },
+    ])
+    expect(activity(pid).at(-1)).toMatchObject({
+      actor: AGENT,
+      text: `updated ticket #${t.id} spanning (branch → feat/shop, PR → #12, moved to repo shop from app, base branch → release, repos → shop, app)`,
+    })
   })
 
   it('refuses a repo of another project, a PR’s own ticket, and an unknown ticket or repo', async () => {
