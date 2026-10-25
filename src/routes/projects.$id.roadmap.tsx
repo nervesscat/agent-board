@@ -9,7 +9,8 @@ import { ChipTabs } from '#/components/Chips'
 import { Empty } from '#/components/Empty'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { errorMessage, get, type RoadmapTicket } from '#/lib/api'
+import { StalledBadge, WorkTimelineBar, WorkTotals, hasWork } from '#/components/WorkTimeline'
+import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
 import { useStages } from '#/lib/project'
 import { STAGE_DOT, type StageLike, stageBadge, stageOf } from '#/lib/stages'
@@ -39,6 +40,11 @@ function Roadmap() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['roadmap', id],
     queryFn: () => get<RoadmapTicket[]>(`/api/projects/${id}/roadmap`),
+    refetchInterval: 10_000,
+  })
+  const { data: work } = useQuery({
+    queryKey: ['work', id],
+    queryFn: () => get<ProjectWork>(`/api/projects/${id}/work`),
     refetchInterval: 10_000,
   })
   const item = (row: RoadmapTicket | Lane): RoadmapItem => ({
@@ -78,9 +84,16 @@ function Roadmap() {
           <Stat n={every.filter((b) => hasState(b, 'now')).length} label="working now" />
           <Stat n={every.filter(isBlocked).length} label="blocked" amber />
           <Stat n={review.length} label="in review" />
+          <Stat n={every.filter((b) => b.row.work.stalled).length} label="stalled" amber />
         </div>
         <Legend />
       </div>
+      {work && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>Project work, every ticket and lane:</span>
+          <WorkTotals totals={work.totals} />
+        </div>
+      )}
       {error ? (
         <p className="text-sm text-destructive">{errorMessage(error)}</p>
       ) : isLoading ? (
@@ -219,6 +232,7 @@ function Row({
           <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${stageBadge(stage)}`}>
             {stage.name}
           </span>
+          <StalledBadge stalled={row.work.stalled} />
           {children}
           {total > 0 && (
             <Tip content={`${done} of ${total} done`}>
@@ -237,7 +251,13 @@ function Row({
           )}
         </div>
       </div>
-      <Track groups={groups} lane={Boolean(lane)} />
+      <div className="min-w-0">
+        <Track groups={groups} lane={Boolean(lane)} />
+        <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
+          <WorkTimelineBar timeline={row.work} compact={Boolean(lane)} />
+          {hasWork(row.work) && <WorkTotals totals={row.work.totals} />}
+        </div>
+      </div>
     </div>
   )
 }

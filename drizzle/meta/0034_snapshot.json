@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1c9bde2d-9e36-4b2e-9cf9-107c0fbb49f7",
+  "id": "ad6cf17a-2f7e-4d9c-95a3-e6a3d19edbf9",
   "prevId": "8aa3ffb6-0e55-449c-843a-d283753a6f24",
   "tables": {
     "account": {
@@ -936,6 +936,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'[\"Bug\",\"UI\",\"Implementation\",\"Report\"]'"
+        },
+        "stall_minutes": {
+          "name": "stall_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 30
         }
       },
       "indexes": {},
@@ -1131,13 +1139,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "''"
-        },
-        "local_ci_sha": {
-          "name": "local_ci_sha",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -2020,6 +2021,189 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "ticket_events": {
+      "name": "ticket_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent": {
+          "name": "agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "by": {
+          "name": "by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phase": {
+          "name": "phase",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "round": {
+          "name": "round",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ref_id": {
+          "name": "ref_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "from_agent": {
+          "name": "from_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "to_agent": {
+          "name": "to_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "from_stage": {
+          "name": "from_stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "to_stage": {
+          "name": "to_stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "at": {
+          "name": "at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {
+        "ticket_events_ticket_at": {
+          "name": "ticket_events_ticket_at",
+          "columns": [
+            "ticket_id",
+            "at"
+          ],
+          "isUnique": false
+        },
+        "ticket_events_project_at": {
+          "name": "ticket_events_project_at",
+          "columns": [
+            "project_id",
+            "at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ticket_events_ticket_id_tickets_id_fk": {
+          "name": "ticket_events_ticket_id_tickets_id_fk",
+          "tableFrom": "ticket_events",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_events_project_id_projects_id_fk": {
+          "name": "ticket_events_project_id_projects_id_fk",
+          "tableFrom": "ticket_events",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ticket_events_kind": {
+          "name": "ticket_events_kind",
+          "value": "kind IN ('span_start', 'span_end', 'handoff', 'wait_start', 'wait_end', 'heartbeat', 'push', 'pr', 'preview', 'merge', 'stage')"
+        },
+        "ticket_events_reason": {
+          "name": "ticket_events_reason",
+          "value": "reason IN ('', 'lock', 'builder', 'mcp', 'human', 'other')"
+        }
+      }
+    },
     "ticket_needs": {
       "name": "ticket_needs",
       "columns": {
@@ -2283,14 +2467,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "merged_phase_checked": {
-          "name": "merged_phase_checked",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         },
         "createdAt": {
           "name": "createdAt",

@@ -125,11 +125,14 @@ export const TagSuggestions = z
 
 /**
  * `defaultPhases`: the names trimmed, null for the built-in list again. `tagSuggestions`: trimmed,
- * blanks and repeats in any casing left out; [] stays empty.
+ * blanks and repeats in any casing left out; [] stays empty. `stallMinutes`: how long an active ticket
+ * may go without a work event before it reads as stalled (the caller checks the range).
  */
 export function updateProject(
   id: number,
-  patch: Partial<Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions'>>,
+  patch: Partial<
+    Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'stallMinutes'>
+  >,
   actor: string,
 ) {
   getProject(id)

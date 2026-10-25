@@ -8,6 +8,7 @@ import { commitsBrought, type CommitLines, type Refs } from './git'
 import { getProject } from './projects'
 import { fetchRepo, fetchStatus, readRefs } from './push'
 import { listRepos } from './repos'
+import { noteBoardEvent } from './workTimeline'
 
 /**
  * What reached origin today on a project's repos: the commits that became reachable from an origin
@@ -68,6 +69,7 @@ export function noteOriginRefs(
   const seenAt = now.toISOString()
   const recorded: { repoId: number; ref: string }[] = []
   for (const repo of repos) {
+    const pushes: { ref: string; sha: string }[] = []
     db.transaction((tx) => {
       const firstLook = !tx
         .select({ repoId: schema.originLooks.repoId })
@@ -118,9 +120,25 @@ export function noteOriginRefs(
         .where(and(eq(schema.originRefMoves.repoId, repo.id), lt(schema.originRefMoves.seenAt, old)))
         .run()
       recorded.push(...moves.map((m) => ({ repoId: m.repoId, ref: m.ref })))
+      for (const m of moves) if (m.newSha) pushes.push({ ref: m.ref, sha: m.newSha })
     })
+    if (pushes.length) notePushes(repo, pushes)
   }
   return recorded
+}
+
+/** A push origin's branch saw, on the work timeline of each ticket of that repo whose branch it is. */
+function notePushes(repo: schema.Repo, pushes: { ref: string; sha: string }[]) {
+  const first = listRepos(repo.projectId)[0]
+  const tickets = db
+    .select({ id: schema.tickets.id, repoId: schema.tickets.repoId, branch: schema.tickets.branch })
+    .from(schema.tickets)
+    .where(eq(schema.tickets.projectId, repo.projectId))
+    .all()
+    .filter((t) => t.branch && (t.repoId ?? first?.id) === repo.id)
+  for (const { ref, sha } of pushes)
+    for (const t of tickets)
+      if (t.branch === ref) noteBoardEvent(t.id, 'push', { note: `pushed ${sha.slice(0, 7)}` })
 }
 
 /**

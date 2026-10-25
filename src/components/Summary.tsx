@@ -29,10 +29,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
+import { StalledBadge } from '#/components/WorkTimeline'
 import { threadAnchor } from '#/lib/anchors'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
+import { formatDuration } from '#/lib/workTimeline'
 
 /**
  * Where things stand, for one project (its Overview) or every project (Home, one block each): what
@@ -247,6 +249,15 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
   )
 }
 
+/** Whole minutes since `since`: the summary carries the moment, the page counts up to now. */
+const silentMinutes = (since: string) => Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60_000))
+
+/** A stalled ticket's details, from the Needs you list that names it. */
+function stalledOf(p: ProjectSummary, id: number) {
+  const s = p.needsYou.stalled.find((x) => x.ticketId === id)
+  return s ? { since: s.lastSignalAt, minutes: silentMinutes(s.lastSignalAt), lastAgent: s.lastAgent } : null
+}
+
 function Stale() {
   return (
     <Tip content="No progress post in over 24 hours">
@@ -260,7 +271,7 @@ function Stale() {
 // --- the sections ---
 
 function NeedsYou({ p }: { p: ProjectSummary }) {
-  const { decisions, prs, threads, reviews, blockedTasks, total } = p.needsYou
+  const { decisions, prs, threads, reviews, blockedTasks, stalled, total } = p.needsYou
   const pid = String(p.project.id)
   return (
     <Section icon={Inbox} title="Needs you" count={total} scroll>
@@ -400,6 +411,33 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               }
             />
           ))}
+          {stalled.map((s) => (
+            <Row
+              key={`s${s.ticketId}`}
+              icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <Link
+                  to="/projects/$id/features/$ticketId"
+                  params={{ id: pid, ticketId: String(s.ticketId) }}
+                  className="hover:underline"
+                >
+                  Stalled: #{s.ticketId} {s.title}
+                </Link>
+              }
+              meta={
+                <>
+                  <StageBadge p={p} status={s.status} />
+                  {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
+                  <Tip content={`No heartbeat or event since ${clock(s.lastSignalAt)}`}>
+                    <span>
+                      silent {formatDuration(silentMinutes(s.lastSignalAt) * 60_000)}
+                      {s.lastAgent && ` · last ${s.lastAgent}`}
+                    </span>
+                  </Tip>
+                </>
+              }
+            />
+          ))}
           {reviews.map((t) => (
             <Row
               key={`r${t.id}`}
@@ -437,6 +475,7 @@ function InProgress({ p }: { p: ProjectSummary }) {
               side={
                 <>
                   {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
+                  {t.stalled && <StalledBadge stalled={stalledOf(p, t.id)} />}
                   {t.stale && <Stale />}
                 </>
               }
