@@ -107,6 +107,27 @@ Only the holder of `LOCK` starts one in this repo.
   until the preview runs or fails (step 7). Nothing you hold while you wait for `LOCK` is
   something its holder waits on, so the wait always ends.
 
+## The work timeline
+
+The human watches the ticket's work timeline (the Roadmap, the ticket page, Needs you) to see who
+works when, who waits on what, and what stalled. Keep it, with `projectId: PROJECT` and
+`ticketId: TICKET` on every call:
+- `heartbeat` every few minutes for as long as you run, between steps and while you wait on an
+  agent you started (an active ticket silent for longer than the project's `stallMinutes`, 30 by
+  default, reads as stalled in Needs you).
+- `start_span` when each phase starts and `end_span` when it ends: `spec` (step 2), `build` (step 3;
+  `agent: builder`), `review` with its `round` (step 5), `verify` (steps 4 and 6), `pr` and
+  `preview` (step 7).
+- `handoff` with `to` the agent's name each time you brief one (spec, builder, `/feature-review`'s
+  runner), and with `from` its name when it returns. Put the same rhythm in each brief (the
+  `projectId` and `ticketId`, a `heartbeat` every few minutes, its spans and waits) so its own
+  time shows too; an agent that cannot reach the board leaves that to you.
+- `start_wait` with the reason and `end_wait` when it is over: `lock` while you wait for `LOCK` or
+  a git lock, `builder` while you wait on the builder or another agent's result, `mcp` while the
+  board does not answer (record it once it does), `human` once you block on a decision.
+- `get_ticket` → `work.open` lists the spans and waits still open: close yours before you return
+  any `STATUS`.
+
 ## Procedure
 
 ### 1. Read and claim
