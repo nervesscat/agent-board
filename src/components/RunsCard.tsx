@@ -58,12 +58,15 @@ function statusOf(s: RunState | null): { label: string; className: string } {
   return { label: 'Stopped', className: 'bg-muted text-muted-foreground' }
 }
 
-export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
-  // Polled only while the page is in view (TanStack Query pauses intervals in a hidden tab): every
-  // 2 s while one builds or starts, 15 s while one runs, else every 30 s.
+/**
+ * The ticket's runs and the links agents set, as the Runs card shows them; `shown` is false while it
+ * has neither and the card is left out. The page asks it too, to know whether the card shows.
+ */
+export function useTicketRuns(t: TicketFull | undefined, git?: TicketGit) {
   const { data, refetch } = useQuery({
-    queryKey: ['ticket-runs', t.id],
-    queryFn: () => get<TicketRuns>(`/api/tickets/${t.id}/runs`),
+    queryKey: ['ticket-runs', t?.id],
+    queryFn: () => get<TicketRuns>(`/api/tickets/${t!.id}/runs`),
+    enabled: !!t,
     refetchInterval: (q) => {
       const states = [
         ...(q.state.data?.repos ?? []).flatMap((r) => r.runs.map((x) => x.state)),
@@ -74,10 +77,6 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
       return states.some((s) => s?.status === 'running') ? 15_000 : 30_000
     },
   })
-  const changed = () => {
-    void refetch()
-    onChange()
-  }
   const boardUrls = new Set([
     ...(data?.repos ?? []).flatMap((r) => r.runs.flatMap((x) => (x.state?.url ? [x.state.url] : []))),
     ...[...(data?.orphaned ?? []), ...(data?.alsoRunning ?? [])].flatMap((o) =>
@@ -87,9 +86,22 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   // The links agents set (a server they started), the lanes' with them; one a run of the board set is
   // that run's link, an orphaned run's or one also running from another workspace too.
   const links = [
-    ...t.workspaces.filter((w) => w.previewUrl).map((w) => ({ ...w, lane: null })),
+    ...(t?.workspaces ?? []).filter((w) => w.previewUrl).map((w) => ({ ...w, lane: null })),
     ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
   ].filter((w) => !boardUrls.has(w.previewUrl))
+  const anyRuns =
+    (data?.repos ?? []).some((r) => r.runs.length) ||
+    (data?.orphaned ?? []).length > 0 ||
+    (data?.alsoRunning ?? []).length > 0
+  return { data, refetch, links, anyRuns, shown: anyRuns || links.length > 0 }
+}
+
+export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+  const { data, refetch, links, anyRuns } = useTicketRuns(t, git)
+  const changed = () => {
+    void refetch()
+    onChange()
+  }
   const checks = useQueries({
     queries: links.map((w) => ({
       queryKey: ['preview', w.id, w.previewUrl],
@@ -115,7 +127,6 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   const repos = data?.repos ?? []
   const orphaned = data?.orphaned ?? []
   const alsoRunning = data?.alsoRunning ?? []
-  const anyRuns = repos.some((r) => r.runs.length) || orphaned.length > 0 || alsoRunning.length > 0
   if (!anyRuns && !links.length) return null
   const runsList = repos.flatMap((r) => r.runs)
   const canStartAll = runsList.some((x) => !runActive(x.state) && x.cannotStart === null)

@@ -2,6 +2,7 @@ import { asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
+import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
 import { MAX_TAG_LENGTH, cleanSuggestions, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
 import { hostToolsForAgents } from './hostTools'
@@ -26,9 +27,12 @@ export const BUILT_IN_PHASES: readonly string[] = [
   'Merged',
 ]
 
-/** A project as it is handed out: `defaultPhases` is the list in effect, never null. */
-function withPhases<T extends { defaultPhases: string[] | null }>(p: T) {
-  return { ...p, defaultPhases: p.defaultPhases ?? [...BUILT_IN_PHASES] }
+/**
+ * A project as it is handed out: `defaultPhases` is the list in effect and `layout` the layout in
+ * effect (what was saved merged with the elements there are now), never null.
+ */
+function withPhases<T extends Pick<schema.Project, 'defaultPhases' | 'layout'>>(p: T) {
+  return { ...p, defaultPhases: p.defaultPhases ?? [...BUILT_IN_PHASES], layout: mergeLayout(p.layout) }
 }
 
 /** Projects with their repos and what they hold, for the top-bar menu and agents' `list_projects`. */
@@ -134,28 +138,50 @@ export const TagSuggestions = z
   .max(50)
 
 /**
+ * A project's layout as REST takes it: its elements in order, each with its area and whether it is
+ * hidden. Ids and areas are checked as it is merged, not here: an id or an area the board no longer
+ * knows is dropped or put back rather than refused. Null goes back to the defaults.
+ */
+export const LayoutBody = z
+  .array(
+    z.object({
+      id: z.string().max(100),
+      area: z.string().max(40),
+      hidden: z.boolean().optional(),
+    }),
+  )
+  .max(LAYOUT_ELEMENTS.length * LAYOUT_AREAS.length)
+  .nullable()
+
+/**
  * `defaultPhases`: the names trimmed, null for the built-in list again. `tagSuggestions`: trimmed,
  * blanks and repeats in any casing left out; [] stays empty. `instructions` go through their history
  * (instructionsHistory.ts): only `who` as the human or an orchestrator changes them, and a worker's
  * patch that has them is refused whole. Without `who` the caller is taken for a worker.
  * `stallMinutes`: how long an active ticket
- * may go without a work event before it reads as stalled (the caller checks the range).
+ * may go without a work event before it reads as stalled (the caller checks the range). `layout`: kept
+ * as it is in effect (`mergeLayout`: unknown ids dropped, locked elements shown), null for the defaults
+ * again.
  */
 export function updateProject(
   id: number,
   patch: Partial<
-    Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'stallMinutes'>
+    Pick<
+      schema.Project,
+      'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'stallMinutes' | 'layout'
+    >
   >,
   actor: string,
   who: Changer = { name: actor, role: 'worker' },
 ) {
   getProject(id)
-  const { defaultPhases, tagSuggestions, instructions, ...rest } = patch
+  const { defaultPhases, tagSuggestions, instructions, layout, ...rest } = patch
   if (instructions !== undefined) assertMayChangeInstructions(who)
   const set = {
     ...rest,
     ...(defaultPhases !== undefined && { defaultPhases: defaultPhases?.map((name) => name.trim()) ?? null }),
     ...(tagSuggestions !== undefined && { tagSuggestions: cleanSuggestions(tagSuggestions) }),
+    ...(layout !== undefined && { layout: layout && mergeLayout(layout) }),
   }
   return db.transaction(() => {
     if (instructions !== undefined) setInstructions(id, instructions, who)
