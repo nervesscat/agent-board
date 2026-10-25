@@ -6,7 +6,16 @@ import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ASSETS, BUILD_OUTPUTS, REPO, ghCommands, parseArgs, releaseFiles, treeChanges } from './release.mjs'
+import {
+  ASSETS,
+  BUILD_OUTPUTS,
+  REPO,
+  ghCommands,
+  parseArgs,
+  releaseFiles,
+  remoteTagProblem,
+  treeChanges,
+} from './release.mjs'
 
 /** The checkout these tests run in. */
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -76,14 +85,14 @@ describe('releaseFiles', () => {
     // package.mjs ends by checking each file it made, by name: `agent-board-${v}-x86_64.AppImage` and
     // the like on Linux, `agent-board-setup-${brand.version}.exe` on Windows.
     const script = fs
-      .readFileSync(path.resolve('desktop/package.mjs'), 'utf8')
+      .readFileSync(path.join(repoRoot, 'desktop', 'package.mjs'), 'utf8')
       .replaceAll('${brand.version}', '${v}')
     for (const a of Object.values(ASSETS).flat()) expect(script).toContain('`' + a.versioned('${v}') + '`')
   })
 
   it('uses the stable names the release workflow and docs/releasing.md use', () => {
-    const workflow = fs.readFileSync(path.resolve('.github/workflows/release.yml'), 'utf8')
-    const docs = fs.readFileSync(path.resolve('docs/releasing.md'), 'utf8')
+    const workflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8')
+    const docs = fs.readFileSync(path.join(repoRoot, 'docs', 'releasing.md'), 'utf8')
     for (const a of Object.values(ASSETS).flat()) {
       expect(workflow).toContain(a.stable)
       expect(docs).toContain(`https://github.com/${REPO}/releases/latest/download/${a.stable}`)
@@ -124,7 +133,7 @@ describe('ghCommands', () => {
   })
 
   it('makes the release workflow publish a version with a suffix as a pre-release too', () => {
-    const workflow = fs.readFileSync(path.resolve('.github/workflows/release.yml'), 'utf8')
+    const workflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8')
     expect(workflow).toMatch(/"\$VERSION" == \*-\* \]\]; then prerelease=\(--prerelease\)/)
     expect(workflow).toMatch(/gh release create .*"\$\{prerelease\[@\]\}"/)
   })
@@ -319,5 +328,80 @@ describe('treeChanges', () => {
   it('says when git status fails', () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-tree-'))
     expect(treeChanges(path.join(dir, 'missing'))).toMatchObject({ ok: false })
+  })
+})
+
+describe('remoteTagProblem', () => {
+  let dir = ''
+  afterEach(() => {
+    if (dir) fs.rmSync(dir, { recursive: true, force: true })
+    dir = ''
+  })
+
+  /** A clone of a bare origin, with two commits pushed: returns git in the clone and both shas. */
+  function cloned() {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-tag-'))
+    const origin = path.join(dir, 'origin.git')
+    const work = path.join(dir, 'work')
+    execFileSync('git', ['init', '-q', '--bare', origin], { stdio: 'pipe' })
+    execFileSync('git', ['init', '-q', work], { stdio: 'pipe' })
+    const git = (/** @type {string[]} */ ...args) =>
+      execFileSync('git', args, { cwd: work, stdio: 'pipe', encoding: 'utf8' }).trim()
+    for (const [k, v] of [
+      ['user.name', 't'],
+      ['user.email', 't@t'],
+      ['commit.gpgsign', 'false'],
+      ['tag.gpgsign', 'false'],
+    ])
+      git('config', k, v)
+    git('remote', 'add', 'origin', origin)
+    git('commit', '-q', '--allow-empty', '-m', 'one')
+    const first = git('rev-parse', 'HEAD')
+    git('commit', '-q', '--allow-empty', '-m', 'two')
+    const head = git('rev-parse', 'HEAD')
+    git('push', '-q', 'origin', 'HEAD:refs/heads/main')
+    return { git, work, first, head }
+  }
+
+  it('passes when the tag is not on origin, or is there at the commit', () => {
+    const { git, work, head } = cloned()
+    expect(remoteTagProblem(work, { tag: 'v0.1.0', sha: head })).toBeNull()
+    git('tag', 'v0.1.0')
+    git('push', '-q', 'origin', 'v0.1.0')
+    expect(remoteTagProblem(work, { tag: 'v0.1.0', sha: head })).toBeNull()
+  })
+
+  it('refuses a lightweight tag on origin at another commit, unless forced', () => {
+    const { git, work, first, head } = cloned()
+    git('tag', 'v0.1.0', first)
+    git('push', '-q', 'origin', 'v0.1.0')
+    expect(remoteTagProblem(work, { tag: 'v0.1.0', sha: head })).toBe(
+      `v0.1.0 is on origin at ${first.slice(0, 7)}, not ${head.slice(0, 7)} (--force to upload anyway)`,
+    )
+    expect(remoteTagProblem(work, { tag: 'v0.1.0', sha: head, force: true })).toBeNull()
+  })
+
+  it('compares an annotated tag by the commit it points to, not its own id', () => {
+    const { git, work, first, head } = cloned()
+    git('tag', '-a', 'v0.1.0', '-m', 'v0.1.0')
+    git('tag', '-a', 'v0.2.0', '-m', 'v0.2.0', first)
+    git('push', '-q', 'origin', 'v0.1.0', 'v0.2.0')
+    // origin lists the tag object, which is not the commit.
+    expect(git('ls-remote', 'origin', 'refs/tags/v0.1.0').split(/\s+/)[0]).not.toBe(head)
+
+    expect(remoteTagProblem(work, { tag: 'v0.1.0', sha: head })).toBeNull()
+    expect(remoteTagProblem(work, { tag: 'v0.2.0', sha: head })).toBe(
+      `v0.2.0 is on origin at ${first.slice(0, 7)}, not ${head.slice(0, 7)} (--force to upload anyway)`,
+    )
+  })
+
+  it('refuses when origin cannot be asked, forced or not', () => {
+    const { git, work, head } = cloned()
+    git('remote', 'set-url', 'origin', path.join(dir, 'nope.git'))
+    for (const force of [false, true]) {
+      expect(remoteTagProblem(work, { tag: 'v0.1.0', sha: head, force })).toMatch(
+        /^git ls-remote origin failed, so v0\.1\.0 on origin could not be checked: [^\n]+$/,
+      )
+    }
   })
 })

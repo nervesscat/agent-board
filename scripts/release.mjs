@@ -164,6 +164,36 @@ export function treeChanges(cwd, { keep = false } = {}) {
   return { ok: true, changes, eolOnly, buildOutputs }
 }
 
+/**
+ * Why publishing `tag` at `sha` is refused because of the tag on origin, or null: when origin cannot
+ * be asked (`git ls-remote` fails; `force` does not skip this), or when the tag is there at another
+ * commit, unless `force`. An annotated tag is compared by the commit it points to
+ * (`refs/tags/<tag>^{}`), not by its own id.
+ * @param {string} cwd @param {{ tag: string, sha: string, force?: boolean }} o
+ * @returns {string | null}
+ */
+export function remoteTagProblem(cwd, { tag, sha, force = false }) {
+  const ref = `refs/tags/${tag}`
+  const res = spawnSync('git', ['ls-remote', '--tags', 'origin', ref, `${ref}^{}`], {
+    cwd,
+    encoding: 'utf8',
+  })
+  if (res.error || res.status !== 0) {
+    // git's stderr runs over several lines: one line, so the refusal stays one.
+    const why = res.error?.message ?? ((res.stderr ?? '').trim().replace(/\s+/g, ' ') || `exit ${res.status}`)
+    return `git ls-remote origin failed, so ${tag} on origin could not be checked: ${why}`
+  }
+  /** @type {Record<string, string>} */
+  const ids = {}
+  for (const line of (res.stdout ?? '').split('\n')) {
+    const [id, name] = line.trim().split(/\s+/)
+    if (id && name) ids[name] = id
+  }
+  const tagSha = ids[`${ref}^{}`] ?? ids[ref]
+  if (!tagSha || tagSha === sha || force) return null
+  return `${tag} is on origin at ${tagSha.slice(0, 7)}, not ${sha.slice(0, 7)} (--force to upload anyway)`
+}
+
 /** @param {string[]} argv */
 export function parseArgs(argv) {
   const known = new Set(['--dry-run', '--skip-build', '--stage-only', '--force', '--help'])
@@ -237,12 +267,8 @@ function main() {
     const onOrigin = run('git', ['branch', '-r', '--contains', sha], { cwd: root })
     if (!onOrigin.ok || !onOrigin.out)
       problems.push(`commit ${sha.slice(0, 7)} is not on origin (push it first)`)
-    const remoteTag = run('git', ['ls-remote', '--tags', 'origin', `refs/tags/${tag}`], { cwd: root })
-    const tagSha = remoteTag.out.split(/\s+/)[0]
-    if (tagSha && tagSha !== sha && !opts.force)
-      problems.push(
-        `${tag} is on origin at ${tagSha.slice(0, 7)}, not ${sha.slice(0, 7)} (--force to upload anyway)`,
-      )
+    const tagProblem = remoteTagProblem(root, { tag, sha, force: opts.force })
+    if (tagProblem) problems.push(tagProblem)
     if (problems.length) {
       if (!opts.dryRun) fail(problems.join('; '))
       for (const p of problems) say(`would refuse: ${p}`)

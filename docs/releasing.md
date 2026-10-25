@@ -78,7 +78,9 @@ replaces its own files (`--clobber`). Until the second platform's run, the relea
 platform's files, and its stable links for the other platform answer 404.
 
 The script refuses a working tree with uncommitted changes, a commit that is not on origin, and a tag
-already on origin at another commit (`--force` uploads anyway). `src/routeTree.gen.ts`, which the build
+already on origin at another commit (`--force` uploads anyway); an annotated tag counts at the commit it
+points to. It also refuses when it cannot ask origin for the tag (`git ls-remote origin` fails), with or
+without `--force`. `src/routeTree.gen.ts`, which the build
 regenerates, is not one of those changes: the script puts it back before that check and after its own
 build, so a run again or `--skip-build` after a build is not refused. `--skip-build` uses the installers already
 in `desktop/dist`; `--stage-only` builds and copies and publishes nothing (the workflow's step).
