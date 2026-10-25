@@ -29,6 +29,13 @@ describe('whoOf', () => {
     // A leading / is no parent.
     expect(who('/odd')).toEqual({ kind: 'human', role: 'human', parent: '' })
   })
+
+  it('reads `board` as the board itself, never a human, even when an actors row carries that name', () => {
+    expect(who('board')).toEqual({ kind: 'board', role: 'board', parent: '' })
+    const named = new Map<string, Who>([['board', { kind: 'human', role: 'human', parent: '' }]])
+    expect(whoOf('board', named).role).toBe('board')
+    expect(chainOf('board', who)).toBe('board (Board)')
+  })
 })
 
 describe('chainOf', () => {

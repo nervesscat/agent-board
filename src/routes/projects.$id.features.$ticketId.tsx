@@ -522,6 +522,15 @@ function WorkTimelineCard({ t }: { t: TicketFull }) {
                         </time>
                       </Tip>
                       <Actor name={e.agent} className="shrink-0 font-medium" />
+                      {/* The name an event claims may be free text: who recorded it follows when that is someone else. */}
+                      {e.by && e.by !== e.agent && (
+                        <span
+                          data-testid="event-by"
+                          className="inline-flex shrink-0 items-baseline gap-1 text-muted-foreground"
+                        >
+                          by <Actor name={e.by} />
+                        </span>
+                      )}
                       <span className="min-w-0 break-words">{eventSentence(e, stageName)}</span>
                     </div>
                   </li>

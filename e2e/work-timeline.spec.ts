@@ -159,6 +159,20 @@ test('the ticket page has a Timeline card with the bar, the totals and the event
   // Each event names its agent as everywhere else: with the role badge.
   await expect(items.first().locator('[data-role="worker"]').first()).toBeVisible()
   await expect(items.first()).toContainText('heartbeat')
+  // The board's own events name the board, with its own badge: never the Human one.
+  const created = items.filter({ hasText: 'created in In progress' })
+  await expect(created).toHaveCount(1)
+  const board = created.locator('[data-role="board"]').first()
+  await expect(board).toContainText(/^board\s*Board$/)
+  await expect(created.locator('[data-role="human"]')).toHaveCount(0)
+  await expectTooltip(board, 'the board, recorded automatically')
+  // A claimed name is followed by who recorded it, with that caller's badge.
+  const handoff = items.filter({ hasText: 'handoff orchestrator → builder-sub-1' })
+  await expect(handoff.getByTestId('event-by')).toContainText(/^by\s*claude\s*Agent$/)
+  await expect(handoff.getByTestId('event-by').locator('[data-role="worker"]')).not.toHaveCount(0)
+  // An event recorded under its caller's own name says nothing more.
+  await expect(created.getByTestId('event-by')).toHaveCount(0)
+  await expect(items.first().getByTestId('event-by')).toHaveCount(0)
   await expect(card.getByRole('button', { name: 'Hide heartbeats' })).toHaveAttribute('aria-expanded', 'true')
   await card.screenshot({ path: test.info().outputPath('ticket-timeline-card.png') })
 
