@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -86,3 +87,53 @@ describe('deleteRepo', () => {
     expect(features.getTicket(feature.id)).toMatchObject({ repoId: null })
   })
 })
+
+describe('POST /api/repos', () => {
+  it('takes a body written by hand with \\\\ separators and stores the path exactly', async () => {
+    const { db, schema } = await import('#/db')
+    const projectId = db.insert(schema.projects).values({ name: 'backslash paths' }).returning().get().id
+    // Backslash separators on every OS: Windows' own, else a folder name holding them (legal there).
+    const repoPath =
+      process.platform === 'win32'
+        ? path.join(tmp, 'backslash', 'Python', 'x')
+        : path.join(tmp, ['backslash', 'Python', 'x'].join(String.fromCharCode(0x5c)))
+    fs.mkdirSync(repoPath, { recursive: true })
+    execFileSync('git', ['init', '-q'], { cwd: repoPath })
+    // Escaped by hand, as a client writing JSON text does: each backslash doubled, nothing else changed.
+    const escaped = repoPath.replaceAll('\\', '\\\\')
+    const body = `{"projectId":${projectId},"repoPath":"${escaped}"}`
+    expect(body).toContain(String.raw`\\`)
+
+    const created = await call('POST', '/api/repos', body)
+    expect(created.status, await created.clone().text()).toBe(201)
+    expect(((await created.json()) as { repoPath: string }).repoPath).toBe(repoPath)
+    const listed = (await (await call('GET', '/api/repos')).json()) as {
+      projectId: number
+      repoPath: string
+    }[]
+    expect(listed.filter((r) => r.projectId === projectId).map((r) => r.repoPath)).toEqual([repoPath])
+  })
+
+  it("refuses a body with a bad escape, saying the parser's reason", async () => {
+    // A body after a shell collapsed \\ to \: \c is no JSON escape.
+    const res = await call('POST', '/api/repos', String.raw`{"projectId":1,"repoPath":"C:\code"}`)
+    expect(res.status).toBe(400)
+    const { error } = (await res.json()) as { error: string }
+    expect(error).toMatch(/^body must be JSON: .*escaped character/i)
+  })
+})
+
+/** A call through the routes as the API serves them, with `body` sent as these exact bytes. */
+async function call(method: string, pathname: string, body?: string) {
+  const { api } = await import('./api')
+  const { api: guard } = await import('./http')
+  const handle = guard(({ request, actor }: { request: Request; actor: string }) =>
+    api.handle(request, actor),
+  )
+  const request = new Request(`http://localhost${pathname}`, {
+    method,
+    headers: body === undefined ? {} : { 'content-type': 'application/json' },
+    body,
+  })
+  return handle({ request, actor: 'enrique' })
+}

@@ -2260,7 +2260,7 @@ describe('the route', () => {
 
 describe('the cleanup_delete tool', () => {
   let rpcId = 0
-  /** An MCP call as the agent `codex`, as its gate token names it. */
+  /** An MCP call as the agent `codex`, as its agent token names it. */
   const rpc = async (method: string, params: Record<string, unknown> = {}) => {
     const { handleMcp } = await import('./mcp')
     const res = await handleMcp(

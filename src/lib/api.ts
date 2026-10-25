@@ -1,9 +1,14 @@
-/** JSON client for /api. The gate cookie does the auth; a 401 on a page means the session is gone. */
+/**
+ * JSON client for /api. The board's session cookie does the auth; a 401 on a page means the session is
+ * gone, and the reload lands on /login.
+ */
 
 import type {
   Attachment,
   Comment,
+  ProjectInstructionChange,
   Repo,
+  RunConfig,
   ReportSettingsChange,
   ReviewResult,
   Task,
@@ -19,13 +24,24 @@ import type { ReportList, ReportPeriod, ReportSettingsView, ReportView } from '#
 import type { ReportsOverview } from '#/server/reportsOverview'
 import type { Need, NeededBy, TicketListRow as TicketRow, TicketView as TicketFull } from '#/server/needs'
 import type { WorkspacePreview, summaryHistory } from '#/server/features'
+import type { RoadmapTicket } from '#/server/roadmap'
 import type { CleanupReport } from '#/server/cleanup'
 import type { DeleteItem, DeleteKind, DeleteResult } from '#/server/cleanupActions'
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
 import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { Handoff } from '#/server/handoff'
+import type { HostTool, HostTools } from '#/server/hostTools'
 import type { ManagedPreview } from '#/server/managedPreview'
+import type { RunState } from '#/server/runs'
+import type {
+  AlsoRunning,
+  OrphanedRun,
+  RunOutcome,
+  TicketRun,
+  TicketRuns,
+  TicketRunsRepo,
+} from '#/server/ticketRuns'
 import type { PreviewState } from '#/server/preview'
 import type { LinkStopped, StopAll } from '#/server/linkPreview'
 import type { ProjectPreview, ProjectPreviews } from '#/server/projectPreviews'
@@ -34,6 +50,10 @@ import type { PrRow } from '#/server/prs'
 import type { ProjectPush, Push } from '#/server/push'
 import type { ProjectAgent } from '#/server/projectAgents'
 import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
+import type { ActorRole, ActorRow } from '#/server/actors'
+import type { AgentTokenRow } from '#/server/tokens'
+import type { ProjectWork, TicketEvent } from '#/server/workTimeline'
+import type { WorkTimeline } from './workTimeline'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
@@ -41,14 +61,28 @@ export type Project = ProjectFull
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
 export type {
+  RoadmapTicket,
+  ProjectWork,
+  TicketEvent,
+  WorkTimeline,
   CarryOver,
   DirListing,
   Gallery,
   GalleryFile,
   Handoff,
+  HostTool,
+  HostTools,
   ManagedPreview,
   PreviewState,
   ProjectAgent,
+  RunConfig,
+  RunOutcome,
+  RunState,
+  OrphanedRun,
+  AlsoRunning,
+  TicketRun,
+  TicketRuns,
+  TicketRunsRepo,
   LinkStopped,
   ProjectPreview,
   ProjectPreviews,
@@ -57,6 +91,7 @@ export type {
   Summary,
   WorkspacePreview,
 }
+export type { ActorRole, ActorRow, AgentTokenRow, ProjectInstructionChange }
 export type {
   PushedToday,
   ReportDue,
@@ -126,6 +161,8 @@ async function request<T>(url: string, init: RequestInit): Promise<T> {
       data && typeof data === 'object' && 'code' in data && typeof data.code === 'string'
         ? data.code
         : undefined
+    // The board has no account yet (its data was replaced under the page): the reload lands on /setup.
+    if (res.status === 409 && code === 'setup') window.location.reload()
     throw new ApiError(message, res.status, code)
   }
   return data as T
@@ -159,10 +196,14 @@ export function errorMessage(err: unknown, fallback = 'something went wrong'): s
 
 // --- payload shapes the server composes ---
 
-/** `/api/me`: who you are, and whether this board runs without the passkey gate (never the live one). */
+/** `/api/me`: who you are, and whether this board runs with sign-in off (never the live one). */
 export interface Me {
   actor: string
   agent: boolean
+  /** human, orchestrator or worker. */
+  role: ActorRole
+  /** The name a sub-identity works under; '' for none. */
+  parent: string
   boardEnv: 'production' | 'development' | 'test'
   authOff: boolean
 }
@@ -176,12 +217,32 @@ export interface SummaryHistory {
   versions: ReturnType<typeof summaryHistory>
 }
 
+export type GitInfo = BranchInfo & { reach: Reach | null; push: Push }
+
+/** GET /api/tickets/:id/events: every event of the ticket, newest first, and its work timeline. */
+export interface TicketEvents {
+  events: TicketEvent[]
+  timeline: WorkTimeline
+}
+
 export interface TicketGit {
+  /** The primary repo, its branch and base, and that branch's state. */
   repo: { id: number; name: string } | null
   branch: string
   baseBranch: string
-  info: BranchInfo & { reach: Reach | null; push: Push }
+  info: GitInfo
+  /** Every repo the ticket spans, the primary first, each with its branch, its state and its PR. */
+  repos: {
+    repo: { id: number; name: string }
+    primary: boolean
+    branch: string
+    baseBranch: string
+    info: GitInfo
+    pr: TicketFull['pr']
+  }[]
   workspaces: (Workspace & {
+    /** The repo it is a worktree of. */
+    repo: { id: number; name: string } | null
     info: BranchInfo & { reach: Reach | null; push: Push }
     worktree: Worktree | null
     lane: { id: number; title: string } | null
@@ -206,4 +267,17 @@ export interface ReportDueList {
 export interface RevertedChange {
   change: ReportSettingsChange
   settings: ReportSettingsView
+}
+
+/** `PUT /api/projects/:id/instructions`: the text now, and the change it recorded (null: it was that already). */
+export interface InstructionsSet {
+  instructions: string
+  change: ProjectInstructionChange | null
+}
+
+/** `POST /api/instructions/changes/:id/revert`: the change, now reverted, the revert's own record and the text after it. */
+export interface RevertedInstructions {
+  change: ProjectInstructionChange
+  revert: ProjectInstructionChange
+  instructions: string
 }

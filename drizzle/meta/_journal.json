@@ -225,6 +225,76 @@
       "when": 1792285128930,
       "tag": "0031_project_tag_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792387484420,
+      "tag": "0032_passkey_sign_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1792585612638,
+      "tag": "0033_archive_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1792840537816,
+      "tag": "0034_work_timeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1792840537817,
+      "tag": "0035_auto_phase_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1792879630282,
+      "tag": "0036_pr_left_as",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1792896924604,
+      "tag": "0037_drop_handoff_post_phase",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1792923806934,
+      "tag": "0038_multi_repo_tickets_and_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1792940106483,
+      "tag": "0039_agent_roles_and_instruction_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1792949671718,
+      "tag": "0040_project_layout",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1792956666602,
+      "tag": "0041_repo_requests",
+      "breakpoints": true
     }
   ]
 }

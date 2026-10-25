@@ -17,13 +17,13 @@ let agents: typeof import('./agents')
 beforeAll(async () => {
   agents = await import('./agents')
   const { db, schema } = await import('#/db')
-  const projectId = db.insert(schema.projects).values({ name: 'Spark | web' }).returning().get().id
+  const projectId = db.insert(schema.projects).values({ name: 'Acme | web' }).returning().get().id
   db.insert(schema.repos)
     .values({
       projectId,
       name: 'front',
-      repoPath: '/home/me/spark-frontend/',
-      githubRepo: 'acme/spark-frontend',
+      repoPath: '/home/me/acme-frontend/',
+      githubRepo: 'acme/acme-frontend',
     })
     .run()
 })
@@ -35,7 +35,7 @@ describe('the board skill', () => {
     expect(skill).toMatch(/^---\nname: board\n/)
     expect(skill).toContain('| Folder | GitHub | Checkout | Project | projectId | repoId |')
     expect(skill).toContain(
-      '| `spark-frontend` | `acme/spark-frontend` | `/home/me/spark-frontend/` | `Spark \\| web` | 1 | 1 |',
+      '| `acme-frontend` | `acme/acme-frontend` | `/home/me/acme-frontend/` | `Acme \\| web` | 1 | 1 |',
     )
     expect(skill).toContain(
       'claude mcp add --transport http --scope user board http://localhost:47100/api/mcp',
@@ -122,7 +122,7 @@ describe('settings', () => {
       await expect(send(bad), JSON.stringify(bad)).rejects.toMatchObject({ status: 400 })
 
     // An agent reads the choice, and cannot change it.
-    const agent = { authorization: 'Bearer gate_agent' }
+    const agent = { authorization: 'Bearer token-of-agent' }
     expect(await read(agent)).toEqual({ defaultAgent: 'codex', previewLimit: 8, skillsTracking: 'repo' })
     await expect(send({ skillsTracking: 'global' }, agent)).rejects.toMatchObject({
       status: 403,
@@ -361,7 +361,7 @@ describe("the review skills in each repo's .claude", () => {
   it('is served to the human and to agents alike, never cached, and per project with ?projectId', async () => {
     const { api } = await import('./api')
     const route = 'http://localhost/api/agent-setup/review-skills/status'
-    for (const headers of [{}, { authorization: 'Bearer gate_agent' }] as Record<string, string>[]) {
+    for (const headers of [{}, { authorization: 'Bearer token-of-agent' }] as Record<string, string>[]) {
       const res = await api.handle(new Request(route, { headers }), 'claude')
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('no-store')
@@ -633,7 +633,7 @@ describe('one review skills file as installed, against the copy served', () => {
     const route = `http://localhost/api/agent-setup/review-skills/diff?path=${encodeURIComponent(feature)}`
     const read = async (url: string) =>
       (await (await api.handle(new Request(url), 'enrique')).json()) as SkillFileDiff
-    for (const headers of [{}, { authorization: 'Bearer gate_agent' }] as Record<string, string>[]) {
+    for (const headers of [{}, { authorization: 'Bearer token-of-agent' }] as Record<string, string>[]) {
       const res = await api.handle(new Request(route, { headers }), 'claude')
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('no-store')

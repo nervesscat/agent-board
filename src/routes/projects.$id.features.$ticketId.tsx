@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type HistoryState, Link, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   Archive,
@@ -23,6 +23,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  RefreshCw,
   Scale,
   ScrollText,
   Trash2,
@@ -41,7 +42,7 @@ import {
 } from 'react'
 import { toast } from 'sonner'
 
-import { Actor, useActorKinds } from '#/components/Actor'
+import { Actor, ClaimedActor, useActorKinds } from '#/components/Actor'
 import { ComplexitySelect } from '#/components/Complexity'
 import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
@@ -55,7 +56,7 @@ import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
-import { ManagedLine, PreviewActions, PreviewBadge, previewActive } from '#/components/Preview'
+import { RunsCard, useTicketRuns } from '#/components/RunsCard'
 import { PrState } from '#/components/PrState'
 import { type FeedTab, RESUME_TEMPLATE } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
@@ -86,6 +87,8 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
+import { autoPhaseOf, autoPhaseTip } from '#/lib/autoPhases'
+import { StalledBadge, WorkTimelineBar, WorkTotals, hasWork } from '#/components/WorkTimeline'
 import {
   del,
   errorMessage,
@@ -94,13 +97,13 @@ import {
   post,
   put,
   upload,
+  type TicketEvent,
+  type TicketEvents,
   type TicketFull,
   type TicketGit,
   type SummaryHistory,
   type TicketRow,
   type UpdateRow,
-  type Workspace,
-  type WorkspacePreview,
 } from '#/lib/api'
 import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
@@ -122,6 +125,7 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
+import { type AreaId, type Layout, defaultLayout, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -140,6 +144,15 @@ function TicketPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const stages = useStages(id)
+  // Which sections show, in which column and order: the project's layout, taken once per ticket shown.
+  // Until it loads no section is drawn, rather than drawn in its default place and moved (a #link would
+  // land on where it was). A layout saved while the ticket is open applies on the next one shown or the
+  // next visit: a section that changed column would be drawn afresh, losing what is typed in it.
+  const project = useProject(id)
+  const live = project.data?.layout ?? (project.isError ? defaultLayout() : undefined)
+  const [kept, setKept] = useState<{ ticketId: string; layout: Layout } | null>(null)
+  const layout = kept?.ticketId === ticketId ? kept.layout : live
+  if (layout && kept?.ticketId !== ticketId) setKept({ ticketId, layout })
   const setFilter = (f: LaneFilter) =>
     navigate({
       to: '/projects/$id/features/$ticketId',
@@ -168,6 +181,8 @@ function TicketPage() {
     qc.invalidateQueries({ queryKey: key })
     qc.invalidateQueries({ queryKey: ticketsKey(id) })
     qc.invalidateQueries({ queryKey: ['ticket-git', ticketId] })
+    // Its repos, and with them its runs, may have changed.
+    qc.invalidateQueries({ queryKey: ['ticket-runs'] })
     // The tags the project's tickets carry, offered under every tags field.
     qc.invalidateQueries({ queryKey: ['project', id] })
   }
@@ -238,7 +253,7 @@ function TicketPage() {
   const anchor = useAnchor()
   const linkedTo = useLocation({ select: (l) => l.pathname.split('/').at(-1) })
   const drawn = t !== undefined && String(t.id) === ticketId && ticketId === linkedTo
-  useReveal(anchor, { page: ticketId, ready: drawn })
+  useReveal(anchor, { page: ticketId, ready: drawn && layout !== undefined })
   // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
@@ -251,11 +266,14 @@ function TicketPage() {
     }
   }, [drawn, anchor, anchoredPost, laneFeed, t])
 
-  if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
-  if (!t) return null
   // Stepping to another ticket, the previous one stays on screen until the new one loads: its git state
   // may come first, and must not show under the previous ticket's branch.
-  const git = t.id === Number(ticketId) ? ticketGit : undefined
+  const git = t && t.id === Number(ticketId) ? ticketGit : undefined
+  // Here, not only in the Runs card: with none to show the card is left out, and its column with it.
+  const runs = useTicketRuns(t, git)
+
+  if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
+  if (!t) return null
 
   /**
    * Record a verdict. Disapproving cancels the lane, which can drop it out of the filtered list, so
@@ -298,6 +316,35 @@ function TicketPage() {
   const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
   const kind = stageOf(stages, t.status).kind
   const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
+  // null: a section with nothing to show on this ticket. It is left out of its column, so a column
+  // with nothing left to show is not drawn and the other one takes the page's width.
+  const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
+    // Keyed by ticket, so an open editor and its draft do not follow to the next one. Not on a
+    // ticket that is finished or archived.
+    'ticket.resume':
+      t.archivedAt || isClosed(kind) ? null : <ResumeNote key={t.id} t={t} onChange={invalidate} />,
+    'ticket.instructions': (
+      <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+    ),
+    'ticket.tasks': <Tasks t={t} onChange={invalidate} />,
+    'ticket.timeline': <WorkTimelineCard key={t.id} t={t} />,
+    'ticket.lanes': (
+      <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
+    ),
+    'ticket.activity': (
+      <ShownAnchor value={drawn ? anchor : null}>
+        {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
+        <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+      </ShownAnchor>
+    ),
+    'ticket.handoff': t.handoff ? <HandoffCard handoff={t.handoff} git={git} pr={t.pr} /> : null,
+    'ticket.runs': runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.details': <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />,
+    'ticket.branch': <BranchPanel t={t} git={git} />,
+    'ticket.workspaces': <WorkspacesPanel t={t} git={git} onChange={invalidate} />,
+  }
+  const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
+  const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
 
   return (
     <div className="flex flex-col gap-6">
@@ -434,32 +481,134 @@ function TicketPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      {/* One column when the layout leaves the other empty. */}
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-6',
+          main.length > 0 && side.length > 0 && 'lg:grid-cols-[minmax(0,1fr)_18rem]',
+        )}
+      >
         {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
               widen the page */}
-        <div className="min-w-0 space-y-6">
-          {/* Keyed by ticket, so an open editor and its draft do not follow to the next one; one key for
-                both, as siblings sharing a key would leave one of them behind on screen. */}
-          <Fragment key={t.id}>
-            <ResumeNote t={t} onChange={invalidate} />
-            <Instructions t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
-          </Fragment>
-          <Tasks t={t} onChange={invalidate} />
-          <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
-          <ShownAnchor value={drawn ? anchor : null}>
-            {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
-            <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
-          </ShownAnchor>
-        </div>
-        <aside className="min-w-0 space-y-4">
-          {t.handoff && <HandoffCard handoff={t.handoff} git={git} pr={t.pr} />}
-          <Previews t={t} git={git} onChange={invalidate} />
-          <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />
-          <GitPanel t={t} git={git} onChange={invalidate} />
-        </aside>
+        {main.length > 0 && (
+          <div data-ticket-column="main" className="min-w-0 space-y-6">
+            {main.map((s) => (
+              <Fragment key={s}>{sections[s]}</Fragment>
+            ))}
+          </div>
+        )}
+        {side.length > 0 && (
+          <aside data-ticket-column="side" className="min-w-0 space-y-4">
+            {side.map((s) => (
+              <Fragment key={s}>{sections[s]}</Fragment>
+            ))}
+          </aside>
+        )}
       </div>
     </div>
   )
+}
+
+/**
+ * The ticket's work timeline: the agents' spans, waits and hand-offs and the board's own events as one
+ * bar, the working / waiting / blocked-on-human totals, the stalled warning, and every event, newest
+ * first, with the heartbeats folded into one line.
+ */
+function WorkTimelineCard({ t }: { t: TicketFull }) {
+  const stages = useStages(t.projectId)
+  const [beats, setBeats] = useState(false)
+  const { data, error } = useQuery({
+    queryKey: ['ticket-events', t.id],
+    queryFn: () => get<TicketEvents>(`/api/tickets/${t.id}/events`),
+    refetchInterval: 10_000,
+  })
+  const stageName = (key: string) => stages.find((s) => s.key === key)?.name ?? key
+  const heartbeats = data?.events.filter((e) => e.kind === 'heartbeat') ?? []
+  const shown = data?.events.filter((e) => beats || e.kind !== 'heartbeat') ?? []
+  return (
+    <section className="rounded-lg border p-4" aria-label="Timeline">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-medium">Timeline</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <StalledBadge stalled={data?.timeline.stalled} />
+          {data && hasWork(data.timeline) && <WorkTotals totals={data.timeline.totals} />}
+        </div>
+      </div>
+      {error ? (
+        <p className="text-sm text-destructive">{errorMessage(error)}</p>
+      ) : !data ? (
+        <p className="text-xs text-muted-foreground">Loading…</p>
+      ) : (
+        <div className="space-y-3">
+          <WorkTimelineBar timeline={data.timeline} />
+          {data.events.length > 0 && (
+            <>
+              <ol aria-label="Events" className="space-y-1 text-xs">
+                {heartbeats.length > 0 && !beats && (
+                  <li className="text-muted-foreground">
+                    {heartbeats.length} heartbeat{heartbeats.length === 1 ? '' : 's'}, last{' '}
+                    {clock(heartbeats[0]!.at)}
+                  </li>
+                )}
+                {/* The row's parts sit in a div of their own: a <time> right under an <li> is the feed's post shape. */}
+                {shown.map((e) => (
+                  <li key={e.id}>
+                    {/* It wraps: a long name breaks, and the sentence keeps a readable width on a line of its own. */}
+                    <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <Tip content={stamp(e.at)}>
+                        <time
+                          dateTime={e.at}
+                          className="shrink-0 font-mono text-muted-foreground tabular-nums"
+                        >
+                          {clock(e.at)}
+                        </time>
+                      </Tip>
+                      {/* The name an event claims may be free text: who recorded it follows when that is someone else. */}
+                      <ClaimedActor name={e.agent} by={e.by} className="min-w-0 flex-wrap break-all" />
+                      <span className="min-w-0 grow basis-48 break-words">{eventSentence(e, stageName)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              {heartbeats.length > 0 && (
+                <Button variant="ghost" size="sm" aria-expanded={beats} onClick={() => setBeats((v) => !v)}>
+                  {beats ? 'Hide heartbeats' : 'Show heartbeats'}
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** One event as a plain sentence, after who did it. */
+function eventSentence(e: TicketEvent, stageName: (key: string) => string): string {
+  const phase = `${e.phase}${e.round !== null ? ` round ${e.round}` : ''}`
+  const note = e.note ? `: ${e.note}` : ''
+  switch (e.kind) {
+    case 'span_start':
+      return `started ${phase}${note}`
+    case 'span_end':
+      return `ended ${phase}${note}`
+    case 'handoff':
+      return `handoff ${e.fromAgent} → ${e.toAgent}${note}`
+    case 'wait_start':
+      return `started waiting: ${e.reason}${note}`
+    case 'wait_end':
+      return `stopped waiting: ${e.reason}${note}`
+    case 'heartbeat':
+      return `heartbeat${note}`
+    case 'stage':
+      return e.fromStage
+        ? `moved ${stageName(e.fromStage)} → ${stageName(e.toStage)}`
+        : `created in ${stageName(e.toStage)}`
+    case 'preview':
+      return `preview ${e.note}`
+    default:
+      return e.note || e.kind
+  }
 }
 
 /** The anchor of the URL to the feed's posts, once the ticket it is on is the one shown. */
@@ -760,8 +909,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
  * is. Edited like the instructions; an empty note starts from the template. On any other open ticket
  * a one-line button writes the first one.
  */
+/** Shown only on a ticket still open and not archived: the page leaves it out otherwise. */
 function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
-  const stages = useStages(t.projectId)
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState('')
   const r = t.resume
@@ -773,7 +922,6 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  if (t.archivedAt || isClosed(stageOf(stages, t.status).kind)) return null
   const open = () => {
     setNote(r.note || RESUME_TEMPLATE)
     setEditing(true)
@@ -928,6 +1076,100 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   )
 }
 
+/** A repo of the ticket as a write of its repos gives it back: what it has now. */
+const repoInput = (r: TicketFull['repos'][number]) => ({
+  repoId: r.repoId,
+  branch: r.branch,
+  baseBranch: r.baseBranch,
+  prNumber: r.prNumber,
+})
+
+/**
+ * The ticket's repos beyond the primary (the Repository field above): each with its own branch, and
+ * a way to take one off or add another repo of the project. Each change saves the whole list.
+ */
+function OtherRepos({
+  t,
+  repos,
+  onSave,
+}: {
+  t: TicketFull
+  repos: { id: number; name: string }[]
+  onSave: (p: Record<string, unknown>) => void
+}) {
+  const others = t.repos.filter((r) => !r.primary)
+  const addable = repos.filter((r) => !t.repos.some((x) => x.repoId === r.id))
+  const save = (next: TicketFull['repos']) => onSave({ repos: next.map(repoInput) })
+  // A branch typed by hand saves once typing stops, as the primary's does.
+  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+  const [typed, setTyped] = useState<Record<number, string>>({})
+  const setBranch = (repoId: number, branch: string) => {
+    setTyped((b) => ({ ...b, [repoId]: branch }))
+    clearTimeout(timers.current[repoId])
+    timers.current[repoId] = setTimeout(() => {
+      save(t.repos.map((r) => (r.repoId === repoId ? { ...r, branch } : r)))
+      setTyped(({ [repoId]: _done, ...rest }) => rest)
+    }, 700)
+  }
+  return (
+    <div className="space-y-2">
+      <Tip content="The ticket's work in other repos of the project, each on its own branch: they show in Branch and Runs">
+        <Label className="text-xs text-muted-foreground">Other repositories</Label>
+      </Tip>
+      {others.map((r) => (
+        <div key={r.repoId} className="space-y-1" role="group" aria-label={`Repository ${r.name}`}>
+          <div className="flex items-center gap-2">
+            <Label htmlFor={`branch-${r.repoId}`} className="font-mono text-xs">
+              {r.name}
+            </Label>
+            <Tip content={`Take ${r.name} off the ticket (its runs for the ticket stop)`}>
+              <button
+                type="button"
+                className="ml-auto text-muted-foreground hover:text-foreground"
+                aria-label={`Remove ${r.name}`}
+                onClick={() => save(t.repos.filter((x) => x.repoId !== r.repoId))}
+              >
+                <X className="size-3.5" />
+              </button>
+            </Tip>
+          </div>
+          <BranchSelect
+            id={`branch-${r.repoId}`}
+            value={typed[r.repoId] ?? r.branch}
+            repoId={r.repoId}
+            optional
+            onChange={(v) => setBranch(r.repoId, v)}
+          />
+        </div>
+      ))}
+      {addable.length > 0 && (
+        <Select
+          value=""
+          onValueChange={(v) => {
+            if (v)
+              save([
+                ...t.repos,
+                { repoId: Number(v), name: '', branch: '', baseBranch: '', prNumber: null, primary: false },
+              ])
+          }}
+          items={Object.fromEntries(addable.map((r) => [String(r.id), r.name]))}
+        >
+          <SelectTrigger className="w-full" aria-label="Add a repository">
+            <SelectValue placeholder="Add a repository…" />
+          </SelectTrigger>
+          <SelectContent>
+            {addable.map((r) => (
+              <SelectItem key={r.id} value={String(r.id)}>
+                {r.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  )
+}
+
 /** Who, where, and what it needs merged first: each field saves as soon as it changes. */
 function Details({
   t,
@@ -974,7 +1216,16 @@ function Details({
           </Label>
           <Select
             value={repoId}
-            onValueChange={(v) => v && v !== repoId && onSave({ repoId: Number(v) })}
+            onValueChange={(v) => {
+              if (!v || v === repoId) return
+              // One of the ticket's other repos becomes its primary; any other repo replaces the primary.
+              const picked = t.repos.find((r) => r.repoId === Number(v))
+              onSave(
+                picked
+                  ? { repos: [picked, ...t.repos.filter((r) => r !== picked)].map(repoInput) }
+                  : { repoId: Number(v) },
+              )
+            }}
             items={Object.fromEntries(repos.map((r) => [String(r.id), r.name]))}
           >
             <SelectTrigger id="repo" className="w-full">
@@ -1019,6 +1270,7 @@ function Details({
           }}
         />
       </div>
+      {repos.length > 1 && !t.prId && <OtherRepos t={t} repos={repos} onSave={onSave} />}
       <div className="space-y-1">
         <Tip content="Tickets whose branches must be merged into this one's base before it can be done">
           <Label htmlFor="needs" className="text-xs text-muted-foreground">
@@ -1102,16 +1354,31 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const pct = t.progress.total ? Math.round((100 * t.progress.done) / t.progress.total) : 0
   const row = (task: TicketFull['tasks'][number], subtask: boolean) => {
     const blockedSubtasks = subtask ? 0 : t.tasks.filter((s) => s.parentId === task.id && s.blocked).length
+    // A phase the board ticks from git, GitHub or the previews: no tick by hand.
+    const auto = task.auto ? autoPhaseOf(task) : null
     return (
       // A summary's blocked task lands here as #task-<id> (src/lib/reveal.ts).
       <div id={`task-${task.id}`} className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
         <div className="group flex items-center gap-2">
           <Checkbox
             checked={task.done}
+            disabled={auto !== null}
             onCheckedChange={(v) => toggle.mutate({ id: task.id, done: Boolean(v) })}
             aria-label={task.text}
           />
           <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
+          {auto && (
+            <Tip content={autoPhaseTip(auto)}>
+              <span
+                role="img"
+                tabIndex={0}
+                aria-label="Ticked automatically"
+                className="shrink-0 text-muted-foreground"
+              >
+                <RefreshCw className="size-3.5" />
+              </span>
+            </Tip>
+          )}
           {task.blocked && <span className={BLOCKED_CHIP}>blocked</span>}
           {blockedSubtasks > 0 && (
             <span className={BLOCKED_CHIP}>
@@ -1119,24 +1386,27 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
             </span>
           )}
           <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
-            <button
-              type="button"
-              onClick={() => {
-                if (task.blocked) tag.mutate({ id: task.id, blocked: false })
-                else {
-                  setBlocking(task.id)
-                  setReason('')
-                }
-              }}
-              aria-label={task.blocked ? `Unblock ${task.text}` : `Mark ${task.text} blocked`}
-            >
-              <Hand
-                className={cn(
-                  'size-3.5',
-                  task.blocked ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
-                )}
-              />
-            </button>
+            {/* Tagging a done phase blocked would untick it by hand. */}
+            {!(auto && task.done) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (task.blocked) tag.mutate({ id: task.id, blocked: false })
+                  else {
+                    setBlocking(task.id)
+                    setReason('')
+                  }
+                }}
+                aria-label={task.blocked ? `Unblock ${task.text}` : `Mark ${task.text} blocked`}
+              >
+                <Hand
+                  className={cn(
+                    'size-3.5',
+                    task.blocked ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+                  )}
+                />
+              </button>
+            )}
             {!subtask && (
               <Tip content="Add a subtask">
                 <button
@@ -1218,7 +1488,8 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       {t.tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off&apos;s
-          (Pushed, PR, CI, Preview, Hand-off post). The concrete steps go under Implementation as subtasks.
+          (Pushed, PR, CI, Preview, Merged). The concrete steps go under Implementation as subtasks. The board
+          ticks Pushed, PR, CI, Preview and Merged itself.
         </p>
       )}
       <ul className="space-y-1.5">
@@ -2231,6 +2502,11 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
  * one (and an optional note) answers it; once decided the choice stays marked and can be changed. An
  * answer the orchestrator relayed from the chat shows the words the human said there, as they were.
  */
+/** What answering a card returns that the card reads: an archive request's result, null on any other card. */
+type DecideResult = {
+  archive: { archived: number[]; already: number[]; skipped: { id: number; why: string }[] } | null
+}
+
 function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   const options = u.decision!
   const decided = u.decidedOption !== null && u.decidedAt !== null
@@ -2241,12 +2517,19 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   const [note, setNote] = useState('')
   const choosing = !decided || changing
   const decide = useMutation({
-    mutationFn: () => put(`/api/updates/${u.id}/decision`, { option: picked, note }),
-    onSuccess: () => {
+    mutationFn: () => put<DecideResult>(`/api/updates/${u.id}/decision`, { option: picked, note }),
+    onSuccess: (res) => {
       setChanging(false)
       setPicked(null)
       setNote('')
       onChange()
+      // An agent's archive request answered Archive: what came off the board, and what could not. Those
+      // archived already are as asked: the reply under the card lists them, no toast.
+      const ids = (list: number[]) => list.map((id) => `#${id}`).join(', ')
+      if (res.archive?.archived.length)
+        toast.success(`Archived ${ids(res.archive.archived)}: off the board, under Archived`)
+      if (res.archive?.skipped.length)
+        toast.error(`Not archived: ${res.archive.skipped.map((s) => s.why).join('; ')}`)
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
@@ -2349,209 +2632,147 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   )
 }
 
-/**
- * Where the ticket's work runs for the human to try: a row per workspace with a preview link, or one
- * the board can build and run a preview of (its own worktree on this machine).
- */
-function Previews({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
-  const candidates = [
-    ...t.workspaces.filter((w) => w.previewUrl || w.path).map((w) => ({ ...w, lane: null })),
-    // The lanes' come with the git state, tagged with their lane.
-    ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
-  ]
-  // Polled only while the page is in view: TanStack Query pauses intervals in a hidden tab. Faster
-  // while the board builds or starts one.
-  const previews = useQueries({
-    queries: candidates.map((w) => ({
-      queryKey: ['preview', w.id, w.previewUrl],
-      queryFn: () => get<WorkspacePreview>(`/api/workspaces/${w.id}/preview`),
-      refetchInterval: (q: { state: { data?: WorkspacePreview } }) =>
-        previewActive(q.state.data?.managed) && q.state.data?.managed?.status !== 'running' ? 2_000 : 15_000,
-      retry: false,
-    })),
-  })
-  const rows = candidates
-    .map((w, i) => ({ w, query: previews[i]! }))
-    // A worktree shows only once the board says it could run it, or ran it before.
-    .filter(({ w, query: { data } }) => w.previewUrl || data?.managed || data?.cannotStart === null)
-  if (!rows.length) return null
+/** Where a branch's head is: its last commit, how far from the base, how far it has gone. */
+function Info({ info }: { info: TicketGit['info'] }) {
+  return info.exists ? (
+    <div className="text-xs text-muted-foreground">
+      <span className="font-mono">{shortSha(info.sha!)}</span> {info.subject}
+      <div>
+        {info.ahead != null && (
+          <>
+            +{info.ahead} / −{info.behind} vs base ·{' '}
+          </>
+        )}
+        {ago(info.authoredAt)}
+      </div>
+      {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
+    </div>
+  ) : (
+    <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>
+  )
+}
+
+/** A PR of the ticket's: its link, where it is in the queue, its latest review. */
+function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
   return (
-    <section className="rounded-lg border p-3" aria-label="Preview">
-      <h2 className="mb-2 text-sm font-medium">Preview</h2>
-      <ul className="space-y-3">
-        {rows.map(({ w, query }) => (
-          <PreviewRow
-            key={w.id}
-            w={w}
-            data={query.data}
-            error={query.error}
-            projectId={t.projectId}
-            onChange={() => {
-              void query.refetch()
-              onChange()
-            }}
-          />
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      {pr.url ? (
+        <a
+          href={pr.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 font-medium hover:underline"
+        >
+          PR #{pr.number} <ExternalLink className="size-3 text-muted-foreground" />
+        </a>
+      ) : (
+        <span className="font-medium">PR #{pr.number}</span>
+      )}
+      {pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[pr.queue.status]}</span>}
+      {pr.latestReview && (
+        <ReviewResultButton
+          resultId={pr.latestReview.id}
+          className={`rounded bg-muted px-1 hover:underline ${pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
+          tip={pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
+        >
+          {pr.latestReview.verdict}
+        </ReviewResultButton>
+      )}
+    </div>
+  )
+}
+
+/** The ticket's branch: its git state and its PR; one panel per repo when it spans several. */
+function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
+  if ((git?.repos.length ?? 0) > 1)
+    return (
+      <>
+        {git!.repos.map((r) => (
+          <section key={r.repo.id} className="rounded-lg border p-3" aria-label={`Branch in ${r.repo.name}`}>
+            <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+              Branch
+              <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
+                {r.repo.name}
+              </span>
+            </h2>
+            {r.branch ? (
+              <>
+                <div className="inline-flex items-center gap-1 font-mono text-sm">
+                  <GitBranch className="size-3.5" /> {r.branch}
+                </div>
+                <div className="text-xs text-muted-foreground">base {r.baseBranch}</div>
+                <div className="flex min-w-0 items-center gap-1">
+                  <PushBadge push={r.info.push} />
+                  {r.primary && <RefreshPush projectId={t.projectId} className="-my-1" />}
+                </div>
+                <Info info={r.info} />
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                No branch yet: pick one above, or the agent sets it.
+              </p>
+            )}
+            {r.pr && <PrLine pr={r.pr} />}
+            {r.pr?.queue?.open && <PrState pr={r.pr.queue} className="mt-1.5" />}
+          </section>
         ))}
-      </ul>
+      </>
+    )
+  return (
+    <section className="rounded-lg border p-3">
+      <h2 className="mb-2 flex items-center text-sm font-medium">
+        Branch
+        {git?.repo && (
+          <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">{git.repo.name}</span>
+        )}
+      </h2>
+      {t.branch ? (
+        <>
+          <div className="inline-flex items-center gap-1 font-mono text-sm">
+            <GitBranch className="size-3.5" /> {t.branch}
+          </div>
+          <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
+          {git?.repo && (
+            <div className="flex min-w-0 items-center gap-1">
+              <PushBadge push={git.info.push} />
+              <RefreshPush projectId={t.projectId} className="-my-1" />
+            </div>
+          )}
+          {git && <Info info={git.info} />}
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">No branch yet: pick one above, or the agent sets it.</p>
+      )}
+      {t.pr && <PrLine pr={t.pr} />}
+      {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
     </section>
   )
 }
 
-function PreviewRow({
-  w,
-  data,
-  error,
-  projectId,
-  onChange,
-}: {
-  w: Workspace & { lane: { id: number; title: string } | null }
-  data: WorkspacePreview | undefined
-  error: Error | null
-  projectId: number
-  onChange: () => void
-}) {
-  const url = data?.url ?? w.previewUrl
-  const m = data?.managed ?? null
-  return (
-    <li className="space-y-1.5 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <PreviewActions
-          workspaceId={w.id}
-          url={url}
-          managed={m}
-          cannotStart={data?.cannotStart}
-          onChange={onChange}
-        />
-        <PreviewBadge
-          url={url}
-          check={data}
-          unchecked={error ? errorMessage(error) : null}
-          className="ml-auto"
-        />
-      </div>
-      {url && (
-        <Tip content={url}>
-          <div className="truncate font-mono text-xs text-muted-foreground">{url}</div>
-        </Tip>
-      )}
-      {m && <ManagedLine m={m} workspaceId={w.id} />}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
-          <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-            <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
-          </span>
-        </Tip>
-        {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
-      </div>
-      {w.lane && (
-        <Link
-          to="/projects/$id/features/$ticketId"
-          params={{ id: String(projectId), ticketId: String(w.lane.id) }}
-          className="inline-flex max-w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <Layers className="size-3 shrink-0" /> <span className="truncate">{w.lane.title}</span>
-        </Link>
-      )}
-    </li>
-  )
-}
-
-function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
-  const onError = (err: unknown) => toast.error(errorMessage(err))
+/** The worktrees, sub-branches and sandboxes opened for the ticket and its lanes. */
+function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
   const remove = useMutation({
     mutationFn: (id: number) => del(`/api/workspaces/${id}`),
     onSuccess: onChange,
-    onError,
+    onError: (err: unknown) => toast.error(errorMessage(err)),
   })
-  const Info = ({ info }: { info: TicketGit['info'] }) =>
-    info.exists ? (
-      <div className="text-xs text-muted-foreground">
-        <span className="font-mono">{shortSha(info.sha!)}</span> {info.subject}
-        <div>
-          {info.ahead != null && (
-            <>
-              +{info.ahead} / −{info.behind} vs base ·{' '}
-            </>
-          )}
-          {ago(info.authoredAt)}
-        </div>
-        {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
-      </div>
-    ) : (
-      <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>
-    )
   return (
-    <>
-      <section className="rounded-lg border p-3">
-        <h2 className="mb-2 flex items-center text-sm font-medium">
-          Branch
-          {git?.repo && (
-            <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
-              {git.repo.name}
-            </span>
-          )}
-        </h2>
-        {t.branch ? (
-          <>
-            <div className="inline-flex items-center gap-1 font-mono text-sm">
-              <GitBranch className="size-3.5" /> {t.branch}
-            </div>
-            <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
-            {git?.repo && (
-              <div className="flex min-w-0 items-center gap-1">
-                <PushBadge push={git.info.push} />
-                <RefreshPush projectId={t.projectId} className="-my-1" />
-              </div>
-            )}
-            {git && <Info info={git.info} />}
-          </>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            No branch yet: pick one above, or the agent sets it.
-          </p>
-        )}
-        {t.pr && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            {t.pr.url ? (
-              <a
-                href={t.pr.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-medium hover:underline"
-              >
-                PR #{t.pr.number} <ExternalLink className="size-3 text-muted-foreground" />
-              </a>
-            ) : (
-              <span className="font-medium">PR #{t.pr.number}</span>
-            )}
-            {t.pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[t.pr.queue.status]}</span>}
-            {t.pr.latestReview && (
-              <ReviewResultButton
-                resultId={t.pr.latestReview.id}
-                className={`rounded bg-muted px-1 hover:underline ${t.pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
-                tip={t.pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
-              >
-                {t.pr.latestReview.verdict}
-              </ReviewResultButton>
-            )}
-          </div>
-        )}
-        {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
-      </section>
-      <section className="rounded-lg border p-3">
-        <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
-        <p className="mb-2 text-xs text-muted-foreground">
-          Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
-          {t.lanes.length > 0 && ' and its lanes'}.
-        </p>
-        <ul className="space-y-2">
-          {(
-            git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))
-          ).map((w) => (
+    <section className="rounded-lg border p-3">
+      <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
+      <p className="mb-2 text-xs text-muted-foreground">
+        Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
+        {t.lanes.length > 0 && ' and its lanes'}.
+      </p>
+      <ul className="space-y-2">
+        {(git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))).map(
+          (w) => (
             <li key={w.id} className="group text-sm">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{w.name}</span>
                 {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
+                {(git?.repos.length ?? 0) > 1 && 'repo' in w && w.repo && (
+                  <span className="font-mono text-[11px] text-muted-foreground">{w.repo.name}</span>
+                )}
                 <Tip content="remove">
                   <button
                     type="button"
@@ -2587,12 +2808,12 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
                 </Tip>
               )}
             </li>
-          ))}
-        </ul>
-        {t.workspaces.length === 0 && !git?.workspaces.length && (
-          <p className="text-xs text-muted-foreground">None yet.</p>
+          ),
         )}
-      </section>
-    </>
+      </ul>
+      {t.workspaces.length === 0 && !git?.workspaces.length && (
+        <p className="text-xs text-muted-foreground">None yet.</p>
+      )}
+    </section>
   )
 }

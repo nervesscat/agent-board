@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Bot, Lock } from 'lucide-react'
 
+import { RoleBadge, useWho } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import {
   Select,
@@ -11,14 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#/components/ui/select'
-import { get } from '#/lib/api'
+import { type ActorRow, get } from '#/lib/api'
 import { useProjectAgents } from '#/lib/project'
 
 const NONE = '__none__'
 
 /**
- * Who a ticket goes to. One of the project's agents reserves it for that agent; a connected agent (a
- * gate token) or nobody leaves it shared, for any agent to pick up or take over.
+ * Who a ticket goes to. One of the project's agents reserves it for that agent; a connected agent (an
+ * agent token, or a sub-identity of one) or nobody leaves it shared, for any agent to pick up or take
+ * over. A connected agent shows its role's badge, as `Actor` does.
  */
 export function AssigneeSelect({
   id,
@@ -32,7 +34,7 @@ export function AssigneeSelect({
   const agents = useProjectAgents()
   const { data: actors = [] } = useQuery({
     queryKey: ['actors'],
-    queryFn: () => get<{ name: string; kind: 'agent' | 'human' }[]>('/api/actors'),
+    queryFn: () => get<ActorRow[]>('/api/actors'),
     staleTime: 5 * 60_000,
   })
   const isAgent = (n: string) => agents.some((a) => a.name.toLowerCase() === n.toLowerCase())
@@ -45,10 +47,23 @@ export function AssigneeSelect({
     ...Object.fromEntries(connected.map((n) => [n, n])),
   }
   const current = agents.find((a) => a.name.toLowerCase() === value.toLowerCase())?.name ?? value
+  const who = useWho()
+  const isConnected = (v: string) => v !== NONE && !isAgent(v)
   return (
     <Select value={current || NONE} onValueChange={(v) => onChange(!v || v === NONE ? '' : v)} items={items}>
       <SelectTrigger id={id} className="w-full">
-        <SelectValue />
+        <SelectValue>
+          {(v: string) =>
+            isConnected(v) ? (
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate">{v}</span>
+                <RoleBadge role={who(v).role} />
+              </span>
+            ) : (
+              items[v]
+            )
+          }
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE}>Unassigned</SelectItem>
@@ -71,6 +86,7 @@ export function AssigneeSelect({
               <SelectItem key={n} value={n}>
                 <Bot className="text-muted-foreground" />
                 {n}
+                <RoleBadge role={who(n).role} />
               </SelectItem>
             ))}
           </SelectGroup>

@@ -15,13 +15,24 @@ const STATE: Record<ReportSettingsChange['state'], string> = {
   reverted: 'reverted',
 }
 
-/** Old against new, line by line: removed lines in red marked −, added ones in green marked +, the rest as is. */
-export function ChangeDiff({ change, className }: { change: ReportSettingsChange; className?: string }) {
+/**
+ * Old against new, line by line: removed lines in red marked −, added ones in green marked +, the rest as
+ * is. `label` names it; by default, the report field the change is of.
+ */
+export function ChangeDiff({
+  change,
+  label,
+  className,
+}: {
+  change: Pick<ReportSettingsChange, 'oldValue' | 'newValue'> & { field?: ReportSettingsChange['field'] }
+  label?: string
+  className?: string
+}) {
   const lines = lineDiff(change.oldValue, change.newValue)
   return (
     <div
       role="group"
-      aria-label={`What changed in the report ${change.field}`}
+      aria-label={label ?? `What changed in the report ${change.field}`}
       className={cn(
         'max-h-[60vh] overflow-auto rounded-md border bg-muted/20 py-1 font-mono text-xs',
         className,

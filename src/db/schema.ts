@@ -13,7 +13,10 @@ import {
 import {
   COMMENT_PARENTS,
   DEFAULT_COMPLEXITY,
+  EVENT_KINDS,
   STAGE_KINDS,
+  WAIT_REASONS,
+  type EventKind,
   type CommentParent,
   type Complexity,
   type PrCheck,
@@ -23,6 +26,8 @@ import {
   type StageKind,
   type FeedTab,
 } from '#/lib/constants'
+import type { SavedLayout } from '#/lib/layout'
+import type { RunType } from '#/lib/runs'
 
 export { COMMENT_PARENTS, STAGE_KINDS, type CommentParent, type StageColor, type StageKind }
 
@@ -47,6 +52,12 @@ export const projects = sqliteTable('projects', {
     .$type<string[]>()
     .notNull()
     .default(['Bug', 'UI', 'Implementation', 'Report']),
+  // How many minutes an active ticket may go without a work event before it reads as stalled, 1 to 1440.
+  // The migration adds that range as a column CHECK: a table CHECK would have drizzle rebuild projects.
+  stallMinutes: integer('stall_minutes').notNull().default(30),
+  // Which of the project's menu pages, Overview cards and ticket sections show, and where. Null is
+  // the defaults; what is handed out is that merged with the elements there are now (`mergeLayout`).
+  layout: text('layout', { mode: 'json' }).$type<SavedLayout>(),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
@@ -101,8 +112,46 @@ export const repos = sqliteTable('repos', {
   repoPath: text('repo_path').notNull(),
   githubRepo: text('github_repo'),
   baseBranch: text('base_branch').notNull().default('main'),
+  // Whether the board gave it the default run once (a checkout of the board itself gets its preview):
+  // a run the human deleted is not given back.
+  runsSeeded: integer('runs_seeded', { mode: 'boolean' }).notNull().default(false),
   createdAt: now(),
 })
+
+// A run of a repo, as the human configures it in the project's settings: what the board starts from a
+// ticket's worktree of the repo (src/server/runs.ts). A preview answers on a port, a job has none.
+// Agents read these, never write them: the commands come from the human alone.
+export const runConfigs = sqliteTable(
+  'run_configs',
+  {
+    id: id(),
+    repoId: integer('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    name: text().notNull(),
+    type: text().$type<RunType>().notNull(),
+    // Each a whole command line run in the worktree; an empty install or build is skipped.
+    install: text().notNull().default(''),
+    build: text().notNull().default(''),
+    start: text().notNull().default(''),
+    // Set on its start command; `{port}` in a value is the port it was given.
+    env: text({ mode: 'json' }).$type<Record<string, string>>().notNull().default({}),
+    // A preview's fixed port (47101 to 47199); null takes the first free one. Always null on a job.
+    port: integer(),
+    // Where a preview answers once it is up ('' on a job).
+    healthPath: text('health_path').notNull().default(''),
+    // A fresh copy of the live data in <worktree>/data/preview, as DATA_DIR.
+    copyData: integer('copy_data', { mode: 'boolean' }).notNull().default(false),
+    position: integer().notNull().default(0),
+    createdBy: text('created_by').notNull().default(''),
+    createdAt: now(),
+    updatedAt: now(),
+  },
+  (t) => [
+    uniqueIndex('run_configs_repo_name').on(t.repoId, t.name),
+    check('run_configs_type', sql`${t.type} IN ('preview', 'job')`),
+  ],
+)
 
 export const prs = sqliteTable(
   'prs',
@@ -146,6 +195,13 @@ export const prs = sqliteTable(
     closedAt: text('closed_at'),
     hold: integer({ mode: 'boolean' }).notNull().default(false),
     holdNote: text('hold_note').notNull().default(''),
+    // The head SHA a "CI run locally: green" comment on the PR names, as of the last refresh; null when
+    // no such comment names the head. The CI phase counts it as green while it equals `headSha`.
+    localCiSha: text('local_ci_sha'),
+    // What GitHub said of a PR that left every search while open (MERGED or CLOSED), asked once when
+    // it left; null while the searches see it, or when GitHub could not say. A row closed here with no
+    // merge time and no answer may be a merge the capped searches missed.
+    leftAs: text('left_as').$type<'MERGED' | 'CLOSED'>(),
   },
   (t) => [index('prs_project_number').on(t.projectId, t.number), index('prs_repo').on(t.repoId)],
 )
@@ -200,12 +256,56 @@ export const tickets = sqliteTable(
     resumeAt: text('resume_at'),
     resumeBy: text('resume_by').notNull().default(''),
     resumeSha: text('resume_sha'),
+    // Whether the board has looked at the ticket for a missing Merged phase (added once, before its
+    // Hand-off post, when it has the hand-off phases): set once looked at, and on a new ticket, so a
+    // Merged phase someone removed does not come back.
+    mergedPhaseChecked: integer('merged_phase_checked', { mode: 'boolean' }).notNull().default(false),
     createdAt: now(),
     updatedAt: now(),
   },
   (t) => [
     index('tickets_parent').on(t.parentId),
     check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high')`),
+  ],
+)
+
+// A ticket's work timeline (src/server/workTimeline.ts): what its agents recorded (spans of a phase,
+// hand-offs, waits, heartbeats) and what the board saw (pushes, the PR, the preview, the merge, stage
+// moves). Always the server's time; never edited.
+export const ticketEvents = sqliteTable(
+  'ticket_events',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    // The ticket's project, kept for the project-wide reads.
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: text().$type<EventKind>().notNull(),
+    // Who did the work: the name the caller gave (a sub-agent's), else the caller; `board` for the board's own.
+    agent: text().notNull(),
+    // Who recorded it: the token or human name that called.
+    by: text().notNull(),
+    phase: text().notNull().default(''),
+    round: integer(),
+    // On span_end and wait_end: the start it closes.
+    refId: integer('ref_id'),
+    fromAgent: text('from_agent').notNull().default(''),
+    toAgent: text('to_agent').notNull().default(''),
+    reason: text().notNull().default(''),
+    note: text().notNull().default(''),
+    // On stage events: the stage keys it moved from ('' when the ticket was created) and to.
+    fromStage: text('from_stage').notNull().default(''),
+    toStage: text('to_stage').notNull().default(''),
+    at: now(),
+  },
+  (t) => [
+    index('ticket_events_ticket_at').on(t.ticketId, t.at),
+    index('ticket_events_project_at').on(t.projectId, t.at),
+    check('ticket_events_kind', sql.raw(`kind IN (${EVENT_KINDS.map((k) => `'${k}'`).join(', ')})`)),
+    check('ticket_events_reason', sql.raw(`reason IN ('', ${WAIT_REASONS.map((k) => `'${k}'`).join(', ')})`)),
   ],
 )
 
@@ -222,6 +322,25 @@ export const ticketNeeds = sqliteTable(
       .references(() => tickets.id, { onDelete: 'cascade' }),
   },
   (t) => [primaryKey({ columns: [t.ticketId, t.needsId] }), index('ticket_needs_needs').on(t.needsId)],
+)
+
+// The repos a ticket's work spans, in order, each with its own branch, base and PR. The first is the
+// primary: the ticket's own repoId, branch, baseBranch and prNumber always say the same as it does.
+export const ticketRepos = sqliteTable(
+  'ticket_repos',
+  {
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    repoId: integer('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    branch: text().notNull().default(''),
+    baseBranch: text('base_branch').notNull().default('main'),
+    prNumber: integer('pr_number'),
+    position: integer().notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.ticketId, t.repoId] }), index('ticket_repos_repo').on(t.repoId)],
 )
 
 export const tasks = sqliteTable(
@@ -250,6 +369,8 @@ export const workspaces = sqliteTable('workspaces', {
     .notNull()
     .references(() => tickets.id, { onDelete: 'cascade' }),
   name: text().notNull(),
+  // The repo of the ticket its worktree is of; null is the ticket's primary repo.
+  repoId: integer('repo_id').references(() => repos.id, { onDelete: 'set null' }),
   branch: text().notNull().default(''),
   path: text().notNull().default(''),
   agent: text().notNull().default(''),
@@ -285,6 +406,12 @@ export const updates = sqliteTable(
     // it, and the words as the human gave them. Both '' on a decision the human made on the board.
     relayedBy: text('relayed_by').notNull().default(''),
     relayedText: text('relayed_text').notNull().default(''),
+    // On a decision an agent posted to have tickets archived (features.requestArchive): the top-level tickets
+    // it names. Answering its Archive option archives those still finished then. Null on any other post.
+    archiveTickets: text('archive_tickets', { mode: 'json' }).$type<number[] | null>(),
+    // On a decision an agent posted to have a repo added to the project (features.requestRepo): the repo its
+    // Add option creates, once checked again. Null on any other post.
+    repoRequest: text('repo_request', { mode: 'json' }).$type<RepoRequest | null>(),
     // The tab of the ticket's feed it shows in (FEED_TABS): picked when it is posted, moved only on purpose.
     tab: text().$type<FeedTab>().notNull().default('main'),
     // A version of the ticket's summary: the newest is the summary, the older ones its history. Never a
@@ -298,6 +425,14 @@ export const updates = sqliteTable(
 )
 
 export type DecisionOption = { label: string; detail?: string; recommended?: boolean }
+/** What a repo request's Add creates: a repo of `projectId`, as the agent asked for it and the board checked. */
+export type RepoRequest = {
+  projectId: number
+  name: string
+  repoPath: string
+  githubRepo: string
+  baseBranch: string
+}
 
 export const comments = sqliteTable(
   'comments',
@@ -422,6 +557,31 @@ export const reportSettingsChanges = sqliteTable(
   (t) => [index('report_settings_changes_project').on(t.projectId, t.createdAt)],
 )
 
+// The history of a project's instructions: every change with the text before and after it, who made it
+// (the full name, a sub-identity's included) and their role. The human's own change is accepted at once;
+// an orchestrator's applies at once too but stays pending until the human marks it reviewed or reverts
+// it. A revert is itself a change, pointing at the one it undid.
+export const projectInstructionChanges = sqliteTable(
+  'project_instruction_changes',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    oldValue: text('old_value').notNull().default(''),
+    newValue: text('new_value').notNull().default(''),
+    changedBy: text('changed_by').notNull(),
+    role: text().$type<'human' | 'orchestrator'>().notNull(),
+    state: text().$type<'accepted' | 'pending' | 'reverted'>().notNull().default('accepted'),
+    resolvedBy: text('resolved_by').notNull().default(''),
+    resolvedAt: text('resolved_at'),
+    // The change a revert undid, on the change the revert records; null on any other change.
+    revertOf: integer('revert_of'),
+    createdAt: now(),
+  },
+  (t) => [index('project_instruction_changes_project').on(t.projectId, t.createdAt)],
+)
+
 // A report for one period of a project: the day (YYYY-MM-DD) or, for a weekly cadence, the Monday of the
 // week. Posting again for the same period adds a newer version; the latest is the report.
 export const reports = sqliteTable(
@@ -488,12 +648,86 @@ export const settings = sqliteTable('settings', {
   value: text({ mode: 'json' }).notNull(),
 })
 
-// Who each name on the board is, learned from how it signs in: a gate token is an agent, a passkey
-// session in the browser is a human. Every author field elsewhere is just the name.
+// Who each name on the board is, learned from how it signs in: an agent token is an agent, a passkey
+// session in the browser is a human. Every author field elsewhere is just the name. An agent's role is
+// the one it was last seen with (its token's, or worker for a sub-identity `<token>/<name>`, whose
+// parent is the name before the last `/`); a human's role reads as human whatever the column says.
 export const actors = sqliteTable('actors', {
   name: text().primaryKey(),
   kind: text().$type<'agent' | 'human'>().notNull(),
   lastSeenAt: text('last_seen_at').notNull(),
+  role: text().$type<'orchestrator' | 'worker'>().notNull().default('worker'),
+  parent: text().notNull().default(''),
+})
+
+// --- signing in (src/server/passkeys.ts, credentials.ts; README: "Signing in") ---
+
+// The human who signs in to the board: one row, created by /setup on this machine at first boot.
+// userHandle is the WebAuthn user id every passkey of the account is registered under.
+export const account = sqliteTable(
+  'account',
+  {
+    id: integer().primaryKey(),
+    name: text().notNull(),
+    userHandle: text('user_handle').notNull(),
+    createdAt: now(),
+  },
+  (t) => [check('account_one_row', sql`${t.id} = 1`)],
+)
+
+// The account's passkeys. A passkey is bound to the RP ID it was made on: localhost on this machine,
+// the tailnet name through the entrance; it signs in there and nowhere else. The public key is the
+// COSE key, base64url.
+export const passkeys = sqliteTable('passkeys', {
+  id: id(),
+  credentialId: text('credential_id').notNull().unique(),
+  publicKey: text('public_key').notNull(),
+  counter: integer().notNull().default(0),
+  transports: text({ mode: 'json' }).$type<string[]>().notNull().default([]),
+  rpId: text('rp_id').notNull(),
+  name: text().notNull(),
+  createdAt: now(),
+  lastUsedAt: text('last_used_at'),
+})
+
+// A browser signed in with a passkey: only the hash of its cookie is kept. Revoking the passkey ends it.
+export const sessions = sqliteTable(
+  'sessions',
+  {
+    id: id(),
+    tokenHash: text('token_hash').notNull().unique(),
+    passkeyId: integer('passkey_id')
+      .notNull()
+      .references(() => passkeys.id, { onDelete: 'cascade' }),
+    createdAt: now(),
+    expiresAt: text('expires_at').notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
+  },
+  (t) => [index('sessions_passkey').on(t.passkeyId)],
+)
+
+// One-time links the signed-in human makes to enrol another device's passkey: hashed, short-lived,
+// used once.
+export const enrolCodes = sqliteTable('enrol_codes', {
+  id: id(),
+  codeHash: text('code_hash').notNull().unique(),
+  createdAt: now(),
+  expiresAt: text('expires_at').notNull(),
+  usedAt: text('used_at'),
+})
+
+// The tokens agents sign in with (`Authorization: Bearer <token>`): only the hash is kept, and the
+// name is the agent's name on the board. The role is the human's call (Settings > Agents): an
+// orchestrator also changes the projects' instructions; every token starts as a worker.
+export const agentTokens = sqliteTable('agent_tokens', {
+  id: id(),
+  tokenHash: text('token_hash').notNull().unique(),
+  name: text().notNull(),
+  createdAt: now(),
+  lastUsedAt: text('last_used_at'),
+  expiresAt: text('expires_at').notNull(),
+  revokedAt: text('revoked_at'),
+  role: text().$type<'orchestrator' | 'worker'>().notNull().default('worker'),
 })
 
 export type Activity = typeof activity.$inferSelect
@@ -501,8 +735,11 @@ export type Project = typeof projects.$inferSelect
 export type Agent = typeof agents.$inferSelect
 export type Stage = typeof stages.$inferSelect
 export type Repo = typeof repos.$inferSelect
+export type RunConfig = typeof runConfigs.$inferSelect
+export type TicketRepo = typeof ticketRepos.$inferSelect
 export type Pr = typeof prs.$inferSelect
 export type Ticket = typeof tickets.$inferSelect
+export type TicketEvent = typeof ticketEvents.$inferSelect
 export type Task = typeof tasks.$inferSelect
 export type Workspace = typeof workspaces.$inferSelect
 export type Update = typeof updates.$inferSelect
@@ -512,5 +749,9 @@ export type ReviewResult = typeof reviewResults.$inferSelect
 export type ReportSettings = typeof reportSettings.$inferSelect
 export type Report = typeof reports.$inferSelect
 export type ReportSettingsChange = typeof reportSettingsChanges.$inferSelect
+export type ProjectInstructionChange = typeof projectInstructionChanges.$inferSelect
 export type OriginRef = typeof originRefs.$inferSelect
 export type OriginRefMove = typeof originRefMoves.$inferSelect
+export type Passkey = typeof passkeys.$inferSelect
+export type Session = typeof sessions.$inferSelect
+export type AgentToken = typeof agentTokens.$inferSelect

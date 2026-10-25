@@ -32,7 +32,7 @@ beforeAll(async () => {
   // The project's agents: posting as one of them is how a connected agent delegates.
   const agents = await import('./projectAgents')
   for (const name of ['spec', 'builder']) agents.createAgent(projectId, { name }, 'enrique')
-  // Both have signed in once, as the gate would have noted them.
+  // Both have signed in once, as signing in would have noted them.
   await call('GET', '/api/me', HUMAN)
   await call('GET', '/api/me', AGENT)
 })

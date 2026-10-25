@@ -399,7 +399,11 @@ describe('needs you', () => {
     expect(s.needsYou.prs.map((p) => p.number)).toEqual([7])
     expect(s.needsYou.threads).toMatchObject([{ parentType: 'ticket', parentId: asked.id, waiting: 1 }])
     expect(s.needsYou.reviews).toMatchObject([{ id: review.id, prNumber: 7, parent: null }])
-    expect(s.needsYou.total).toBe(4)
+    // The tickets in progress have no work-timeline event since long before now: stalled, and counted.
+    expect(s.needsYou.stalled.map((x) => x.ticketId).sort()).toEqual(
+      [asked.id, reported.id, answered.id].sort(),
+    )
+    expect(s.needsYou.total).toBe(4 + 3)
     // Nobody signed in as the human yet: no threads, the rest stays.
     expect(take(pid, { humans: [] }).needsYou.threads).toEqual([])
   })
@@ -465,7 +469,9 @@ describe('blocked tasks', () => {
     ])
     // The ticket in review is there twice: once to review, once for its blocked task.
     expect(base.needsYou.reviews.map((r) => r.id)).toEqual([review.id])
-    expect(base.needsYou.total).toBe(5)
+    // The ticket and its lane in progress are silent on the work timeline: stalled, and counted.
+    expect(base.needsYou.stalled.map((x) => x.ticketId).sort()).toEqual([t.id, lane.id].sort())
+    expect(base.needsYou.total).toBe(5 + 2)
 
     // In progress carries the count of each ticket, its lanes' included.
     const payments = base.inProgress.find((x) => x.id === t.id)!
@@ -480,10 +486,10 @@ describe('blocked tasks', () => {
       parentTask: 'Implementation',
       reason: '',
     })
-    expect(more.needsYou.total).toBe(6)
+    expect(more.needsYou.total).toBe(6 + 2)
     // Ticked done: gone.
     features.updateTask(own.get('webhook')!.id, { done: true }, 'claude')
-    expect(take(pid).needsYou.total).toBe(5)
+    expect(take(pid).needsYou.total).toBe(5 + 2)
   })
 
   it('leave out done tasks, and tickets that are done, cancelled, archived or under a cancelled lane', () => {
@@ -509,7 +515,9 @@ describe('blocked tasks', () => {
 
     const s = take(pid)
     expect(s.needsYou.blockedTasks.map((x) => [x.ticketId, x.text])).toEqual([[live.id, 'open']])
-    expect(s.needsYou.total).toBe(1)
+    // The tickets in progress (not the archived one) are silent on the work timeline: stalled, and counted.
+    expect(s.needsYou.stalled.map((x) => x.ticketId).sort()).toEqual([parent.id, under.id, live.id].sort())
+    expect(s.needsYou.total).toBe(1 + 3)
     expect(s.inProgress.find((x) => x.id === parent.id)!.blockedTasks).toBe(0)
   })
 })
@@ -650,5 +658,44 @@ describe('with the log the board writes', () => {
     expect(Date.now() - new Date(s.inProgress[0]!.since).getTime()).toBeLessThan(60_000)
     expect(s.inProgress[0]!.since).toBe(features.getTicket(t.id).startedAt)
     expect(s.doneToday.tickets.map((x) => x.id)).toEqual([d.id])
+  })
+})
+
+describe('instruction changes in needs you', () => {
+  it("lists an orchestrator's pending change until the human reviews or reverts it", async () => {
+    const history = await import('./instructionsHistory')
+    const ORCH = { name: 'orch', role: 'orchestrator' } as const
+    const HUMAN_CHANGER = { name: HUMAN, role: 'human' } as const
+    const p = project('instructions')
+    const take = () => summary.getSummary(p, { humans: [] }).projects[0]!.needsYou
+    const before = take().total
+    const one = history.setInstructions(p, '# Rules\n\nAlways   run the e2e suite.', ORCH).change!
+    history.setInstructions(p, '# Rules\n\nAlways run the e2e suite.', HUMAN_CHANGER)
+    const two = history.setInstructions(p, 'two', ORCH).change!
+    expect(take().instructionChanges).toEqual([
+      {
+        changeId: two.id,
+        projectId: p,
+        changedBy: 'orch',
+        role: 'orchestrator',
+        createdAt: two.createdAt,
+        excerpt: 'two',
+        revertable: true,
+      },
+      {
+        changeId: one.id,
+        projectId: p,
+        changedBy: 'orch',
+        role: 'orchestrator',
+        createdAt: one.createdAt,
+        excerpt: 'Rules Always   run the e2e suite.',
+        revertable: false,
+      },
+    ])
+    expect(take().total).toBe(before + 2)
+    history.reviewInstructionChange(one.id, 'enrique')
+    history.revertInstructionChange(two.id, 'enrique')
+    expect(take().instructionChanges).toEqual([])
+    expect(take().total).toBe(before)
   })
 })

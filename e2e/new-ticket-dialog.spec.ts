@@ -7,7 +7,7 @@ import { type Api, expect, ok, test } from './fixtures'
 const LINES = 60
 const TASKS = Array.from({ length: 40 }, (_, i) => `Task number ${i + 1}`)
 // A new ticket starts with the project's default phases, the typed tasks under the first.
-const PHASES = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Hand-off post']
+const PHASES = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged']
 // As many as a ticket takes.
 const TAGS = Array.from({ length: 20 }, (_, i) => `Longer-tag-name-${i + 1}`)
 const FILES = 4
@@ -401,8 +401,12 @@ test('the New lane dialog with long content stays on screen, scrolls its fields 
   const t = await api.ticket({ title: 'Parent', status: 'in_progress' })
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   await page.waitForLoadState('networkidle')
+  // A banner above the page (a report due, a missing tool) can push the button below the fold: the click
+  // would scroll to it, which is not the dialog moving the page.
+  const newLane = page.getByRole('button', { name: 'New lane' })
+  await newLane.scrollIntoViewIfNeeded()
   const before = await pageScroll(page)
-  await page.getByRole('button', { name: 'New lane' }).click()
+  await newLane.click()
   const dialog = page.getByRole('dialog')
   await fillTall(page, dialog, { files: false })
 

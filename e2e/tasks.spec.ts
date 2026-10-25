@@ -93,7 +93,7 @@ test('an empty Tasks card points the human to the default phases, in every stage
   expect(created.progress).toEqual({ done: 0, total: 0 })
 
   const hint =
-    "No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off's (Pushed, PR, CI, Preview, Hand-off post)."
+    "No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off's (Pushed, PR, CI, Preview, Merged)."
   for (const status of ['todo', 'in_progress', 'review', 'done']) {
     await ok(human.patch(`/api/tickets/${t.id}`, { data: { status } }))
     await page.goto(`/projects/${project.id}/features/${t.id}`)

@@ -35,9 +35,9 @@ test("the orchestrator relays the human's chat answer, and the card shows it as 
   // The words exactly as given: plain text, so the Markdown marks show as they are.
   await expect(card).toContainText(`“${words}”`)
   await expect(card.locator('strong')).toHaveCount(0)
-  // Nothing without a name: no "decided by" line, no admin badge.
+  // Nothing without a name: no "decided by" line, no Human badge.
   await expect(card).not.toContainText('decided by')
-  await expect(card.getByText('admin', { exact: true })).toHaveCount(0)
+  await expect(card.getByText('Human', { exact: true })).toHaveCount(0)
   await expectTooltip(
     card.getByText('relayed', { exact: true }),
     'The orchestrator recorded your answer from the chat. Nothing was clicked on the card.',

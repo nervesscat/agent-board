@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/nervesscat/agent-board/security/advisories/new
+    about: Privately, as SECURITY.md describes. Never in a public issue.
+  - name: Security policy
+    url: https://github.com/nervesscat/agent-board/blob/dev/SECURITY.md
+    about: What is in scope, what to include, and what to expect.

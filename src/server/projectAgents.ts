@@ -9,7 +9,7 @@ import { attachmentUrl, getAttachment } from './uploads'
 
 /**
  * A project's agents: personas the human defines (name, picture, instructions). A connected agent (a
- * gate token, the orchestrator) works a ticket reserved for one by briefing a subagent with its
+ * agent token, the orchestrator) works a ticket reserved for one by briefing a subagent with its
  * instructions, and posts the work under its name with `as`.
  */
 
@@ -63,7 +63,7 @@ function checkName(projectId: number, name: string, self?: number) {
   const n = name.toLowerCase()
   if (listAgents(projectId).some((a) => a.id !== self && a.name.toLowerCase() === n))
     throw new HttpError(409, `this project already has an agent called ${name}`)
-  // A gate token or the human with the same name would make every assignee and author ambiguous.
+  // An agent token or the human with the same name would make every assignee and author ambiguous.
   if (listActors().some((a) => a.name.toLowerCase() === n))
     throw new HttpError(409, `${name} already signs in to the board; pick another name`)
 }

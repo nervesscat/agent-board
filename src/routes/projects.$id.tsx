@@ -1,38 +1,36 @@
 import { Link, Outlet, createFileRoute } from '@tanstack/react-router'
-import {
-  Bot,
-  BrushCleaning,
-  CalendarDays,
-  FolderGit2,
-  GitPullRequest,
-  Home,
-  Images,
-  KanbanSquare,
-  MonitorPlay,
-  Settings,
-} from 'lucide-react'
+import { FolderGit2 } from 'lucide-react'
 
 import { PushedTodayBadge } from '#/components/daily/PushedToday'
+import { LAYOUT_ICONS } from '#/components/layoutIcons'
 import { Tip } from '#/components/ui/tooltip'
+import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
 
-const MODULES = [
-  { to: '/projects/$id', label: 'Overview', icon: Home, exact: true },
-  { to: '/projects/$id/prs', label: 'PR queue', icon: GitPullRequest },
-  { to: '/projects/$id/features', label: 'Ongoing features', icon: KanbanSquare },
-  { to: '/projects/$id/previews', label: 'Previews', icon: MonitorPlay },
-  { to: '/projects/$id/gallery', label: 'Gallery', icon: Images },
-  { to: '/projects/$id/agents', label: 'Agents', icon: Bot },
-  { to: '/projects/$id/daily', label: 'Daily', icon: CalendarDays },
-  { to: '/projects/$id/cleanup', label: 'Cleanup', icon: BrushCleaning },
-  { to: '/projects/$id/settings', label: 'Instructions', icon: Settings },
-] as const
+/**
+ * Where each page of the project's menu goes. Which pages show, in what order, with what label and
+ * icon is the project's layout (`#/lib/layout`); a hidden page still opens by its URL.
+ */
+const MODULES = {
+  'nav.overview': '/projects/$id',
+  'nav.prs': '/projects/$id/prs',
+  'nav.features': '/projects/$id/features',
+  'nav.roadmap': '/projects/$id/roadmap',
+  'nav.previews': '/projects/$id/previews',
+  'nav.gallery': '/projects/$id/gallery',
+  'nav.agents': '/projects/$id/agents',
+  'nav.daily': '/projects/$id/daily',
+  'nav.cleanup': '/projects/$id/cleanup',
+  'nav.settings': '/projects/$id/settings',
+} as const satisfies Record<AreaId<'nav'>, string>
 
 function ProjectLayout() {
   const { id } = Route.useParams()
   const { data: project } = useProject(id)
+  // The defaults until the project has loaded.
+  const pages = shownIn(project?.layout ?? defaultLayout(), 'nav')
   return (
     <div className="flex flex-col gap-6 md:flex-row">
       <aside className="md:w-52 md:shrink-0">
@@ -58,17 +56,21 @@ function ProjectLayout() {
           </ul>
         </div>
         <nav className="flex gap-1 overflow-x-auto md:flex-col">
-          {MODULES.map((m) => (
-            <Link
-              key={m.to}
-              to={m.to}
-              params={{ id }}
-              activeOptions={{ exact: 'exact' in m }}
-              className="flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground [&.active]:bg-muted [&.active]:text-foreground"
-            >
-              <m.icon className="size-4" /> {m.label}
-            </Link>
-          ))}
+          {pages.map((page) => {
+            const Icon = LAYOUT_ICONS[page]
+            return (
+              <Link
+                key={page}
+                to={MODULES[page]}
+                params={{ id }}
+                // The Overview's URL starts every other page's.
+                activeOptions={{ exact: page === 'nav.overview' }}
+                className="flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground [&.active]:bg-muted [&.active]:text-foreground"
+              >
+                <Icon className="size-4" /> {layoutElement(page).label}
+              </Link>
+            )
+          })}
         </nav>
       </aside>
       <section className="min-w-0 flex-1">

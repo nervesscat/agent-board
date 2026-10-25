@@ -31,9 +31,9 @@ const apiIsNeverAnAsset = (): Plugin => ({
 })
 
 /**
- * `vite dev` listens before Nitro's plugins run, so the gate-off checks of src/server/startup.ts on
+ * `vite dev` listens before Nitro's plugins run, so the sign-in-off checks of src/server/startup.ts on
  * where it listens happen here, on Vite's own host and port: loopback only, never the live port. So does
- * its refusal of a tailnet entrance only half configured (README: "Using it from other devices").
+ * its refusal of a PUBLIC_ORIGIN it cannot trust (README: "Using it from other devices").
  */
 const refuseUnsafeAuth = (): Plugin => ({
   name: 'agent-board:refuse-unsafe-auth',
@@ -76,8 +76,8 @@ const connectionGoneIsNotAnError = (): Plugin => ({
 })
 
 /**
- * The host `vite dev` answers besides loopback: the tailnet entrance's public host, once its keys are
- * valid and the gate is on; otherwise none. Never `true`, never a wildcard. Nitro loads .env only after
+ * The host `vite dev` answers besides loopback: the tailnet entrance's public host, once PUBLIC_ORIGIN
+ * is valid and sign-in is on; otherwise none. Never `true`, never a wildcard. Nitro loads .env only after
  * this file has run, so it is read here as Vite reads it (the shell's values win, as they do in Nitro).
  */
 function allowedHosts(mode: string): string[] {
@@ -85,7 +85,7 @@ function allowedHosts(mode: string): string[] {
     const entrance = readServedEntrance(loadEnv(mode, process.cwd(), ''))
     return entrance ? [entrance.host] : []
   } catch (err) {
-    // A half-configured entrance: refuseUnsafeAuth stops the start and says why.
+    // A PUBLIC_ORIGIN it cannot trust: refuseUnsafeAuth stops the start and says why.
     if (err instanceof StartupError) return []
     throw err
   }
@@ -99,20 +99,36 @@ export default defineConfig(({ mode }) => ({
     entranceGuard(),
     apiIsNeverAnAsset(),
     nitro({
-      plugins: ['./src/server/startup.ts', './src/server/plugins/uploadSweep.ts'],
+      plugins: [
+        './src/server/startup.ts',
+        './src/server/plugins/uploadSweep.ts',
+        './src/server/plugins/hostTools.ts',
+        './src/server/plugins/seedRuns.ts',
+      ],
+      // Loaded from node_modules, not bundled: its certificate code (@peculiar/x509, tsyringe) needs
+      // reflect-metadata to run first, an order bundling breaks.
+      traceDeps: ['@simplewebauthn/server'],
       // The e2e suite builds into its own folder, so the live board's .output is never touched.
       ...(process.env.BOARD_BUILD_DIR && { output: { dir: process.env.BOARD_BUILD_DIR } }),
     }),
     tailwindcss(),
-    tanstackStart(),
+    // No dev stylesheet of TanStack Start's (/@tanstack-start/styles.css): it is given a precedence, so
+    // React puts it at the top of the head, and the inline KEY_ENTRIES after it (src/lib/reveal.ts) would
+    // not run until it had loaded. It holds the CSS that routes import as modules, and none does: the
+    // app's CSS is the link in src/routes/__root.tsx, which Vite serves and hot-reloads as it is. Builds
+    // never had it.
+    tanstackStart({ dev: { ssrStyles: { enabled: false } } }),
     viteReact(),
     connectionGoneIsNotAnError(),
   ],
   ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
   server: {
     // The board writes its database, uploads and logs under data/ all the time; none of it is code. Nor
-    // is what the benchmark keeps in .bench/ (its builds, copies of the data and results).
-    watch: { ignored: ['**/data/**', '**/.output*/**', '**/.bench/**'] },
+    // is what the benchmark keeps in .bench/ (its builds, copies of the data and results), nor the desktop
+    // app's staged board and installer (desktop/.stage, desktop/dist).
+    watch: {
+      ignored: ['**/data/**', '**/.output*/**', '**/.bench/**', '**/desktop/.stage/**', '**/desktop/dist/**'],
+    },
     allowedHosts: allowedHosts(mode),
   },
 }))

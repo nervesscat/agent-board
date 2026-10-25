@@ -5,6 +5,7 @@ import type { StageKind } from '#/lib/constants'
 import { logActivity } from './activity'
 import { listRepos } from './repos'
 import { firstOfKind, kindOf, listStages, startedPatch, startStage, type Stage } from './stages'
+import { noteStageMove } from './workTimeline'
 
 /**
  * A PR's own ticket: the ticket the board opens for each open PR of the queue that no feature ticket names,
@@ -111,6 +112,7 @@ export function openPrTickets(projectId: number, statusOf: (pr: schema.Pr) => Pr
           .returning()
           .get()
         tickets.push(row)
+        noteStageMove(row.id, null, row.status)
         logActivity({
           projectId,
           actor: 'board',
@@ -143,6 +145,7 @@ export function movePrTicket(pr: Pr, status: PrTicketStatus, actor = 'board') {
     })
     .where(eq(schema.tickets.id, own.id))
     .run()
+  noteStageMove(own.id, own.status, stage.key)
   logActivity({
     projectId: pr.projectId,
     actor,
@@ -175,6 +178,7 @@ export function cancelSupersededPrTickets(t: schema.Ticket, actor: string) {
       .set({ status: cancel.key, updatedAt: new Date().toISOString() })
       .where(eq(schema.tickets.id, own.id))
       .run()
+    noteStageMove(own.id, own.status, cancel.key)
     logActivity({
       projectId: t.projectId,
       actor,

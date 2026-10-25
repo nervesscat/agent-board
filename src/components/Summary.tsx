@@ -9,6 +9,7 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  FileText,
   GitPullRequest,
   Hand,
   Hourglass,
@@ -21,17 +22,23 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { Actor } from '#/components/Actor'
+import { Actor, ClaimedActor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
+import { useSettleInstructions } from '#/components/InstructionsHistory'
 import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
+import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
+import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
+import { StalledBadge } from '#/components/WorkTimeline'
 import { threadAnchor } from '#/lib/anchors'
+import type { AreaId } from '#/lib/layout'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
+import { formatDuration } from '#/lib/workTimeline'
 
 /**
  * Where things stand, for one project (its Overview) or every project (Home, one block each): what
@@ -97,14 +104,37 @@ const headline = (p: ProjectSummary) =>
     .filter(Boolean)
     .join(' · ')
 
+/** Each card of the block; which show and in what order is the project's layout. */
+const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary }) => ReactNode> = {
+  'overview.needsYou': NeedsYou,
+  'overview.inProgress': InProgress,
+  'overview.doneToday': DoneToday,
+  'overview.next': Next,
+  'overview.carryingOver': CarryingOver,
+}
+
 function ProjectBlock({ p }: { p: ProjectSummary }) {
+  if (!p.project.overview.length)
+    return (
+      <Empty>
+        Every card of this overview is hidden.{' '}
+        <Link
+          to="/projects/$id/settings"
+          params={{ id: String(p.project.id) }}
+          hash="layout"
+          className="underline"
+        >
+          Show them again in the layout settings
+        </Link>
+        .
+      </Empty>
+    )
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <NeedsYou p={p} />
-      <InProgress p={p} />
-      <DoneToday p={p} />
-      <Next p={p} />
-      <CarryingOver p={p} />
+      {p.project.overview.map((card) => {
+        const Shown = CARDS[card]
+        return <Shown key={card} p={p} />
+      })}
     </div>
   )
 }
@@ -117,6 +147,7 @@ function Section({
   count,
   extra,
   className = '',
+  scroll = false,
   children,
 }: {
   icon: typeof Inbox
@@ -125,10 +156,12 @@ function Section({
   /** After the count: what among them needs attention. */
   extra?: ReactNode
   className?: string
+  /** A fixed height (a cap on a phone) with the content scrolling under the header. */
+  scroll?: boolean
   children: ReactNode
 }) {
   return (
-    <Card size="sm" className={className}>
+    <Card size="sm" className={cn(scroll && 'max-h-[28rem] lg:h-[28rem]', className)}>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           <Icon className="size-4 text-muted-foreground" /> {title}
@@ -140,7 +173,12 @@ function Section({
           {extra}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">{children}</CardContent>
+      <CardContent
+        data-scroll={scroll ? '' : undefined}
+        className={cn('space-y-3', scroll && 'min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2')}
+      >
+        {children}
+      </CardContent>
     </Card>
   )
 }
@@ -238,6 +276,23 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
   )
 }
 
+/** Whole minutes since `since`: the summary carries the moment, the page counts up to now. */
+const silentMinutes = (since: string) => Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60_000))
+
+/** A stalled ticket's details, from the Needs you list that names it. */
+function stalledOf(p: ProjectSummary, id: number) {
+  const s = p.needsYou.stalled.find((x) => x.ticketId === id)
+  return s
+    ? {
+        since: s.lastSignalAt,
+        minutes: silentMinutes(s.lastSignalAt),
+        lastAgent: s.lastAgent,
+        lastBy: s.lastBy,
+        lastFrom: s.lastFrom,
+      }
+    : null
+}
+
 function Stale() {
   return (
     <Tip content="No progress post in over 24 hours">
@@ -251,10 +306,11 @@ function Stale() {
 // --- the sections ---
 
 function NeedsYou({ p }: { p: ProjectSummary }) {
-  const { decisions, prs, threads, reviews, blockedTasks, total } = p.needsYou
+  const { decisions, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } = p.needsYou
   const pid = String(p.project.id)
+  const settle = useSettleInstructions(pid)
   return (
-    <Section icon={Inbox} title="Needs you" count={total}>
+    <Section icon={Inbox} title="Needs you" count={total} scroll>
       {!total ? (
         <Quiet>Nothing waiting on you.</Quiet>
       ) : (
@@ -391,6 +447,100 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               }
             />
           ))}
+          {instructionChanges.map((c) => (
+            <Row
+              key={`i${c.changeId}`}
+              icon={<FileText className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <span>
+                  <Link
+                    to="/projects/$id/settings"
+                    params={{ id: pid }}
+                    hash="instructions-history"
+                    className="hover:underline"
+                  >
+                    Project instructions changed
+                  </Link>{' '}
+                  by <Actor name={c.changedBy} />
+                </span>
+              }
+              meta={
+                <>
+                  {c.excerpt && <span className="min-w-0 truncate">{c.excerpt}</span>}
+                  <span className="shrink-0">{ago(c.createdAt)}</span>
+                  <span className="flex shrink-0 gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      disabled={settle.isPending}
+                      onClick={() => settle.mutate({ id: c.changeId, action: 'review' })}
+                    >
+                      Reviewed
+                    </Button>
+                    <Tip
+                      content={
+                        c.revertable
+                          ? 'Put the instructions back as they were before this change'
+                          : 'The instructions changed again since: revert the later change first'
+                      }
+                    >
+                      <span className="inline-flex">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="xs"
+                          disabled={settle.isPending || !c.revertable}
+                          onClick={() => settle.mutate({ id: c.changeId, action: 'revert' })}
+                        >
+                          Revert
+                        </Button>
+                      </span>
+                    </Tip>
+                  </span>
+                </>
+              }
+            />
+          ))}
+          {stalled.map((s) => (
+            <Row
+              key={`s${s.ticketId}`}
+              icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <Link
+                  to="/projects/$id/features/$ticketId"
+                  params={{ id: pid, ticketId: String(s.ticketId) }}
+                  className="hover:underline"
+                >
+                  Stalled: #{s.ticketId} {s.title}
+                </Link>
+              }
+              meta={
+                <>
+                  <StageBadge p={p} status={s.status} />
+                  {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
+                  <Tip content={`No heartbeat or event since ${clock(s.lastSignalAt)}`}>
+                    <span className="min-w-0">
+                      silent {formatDuration(silentMinutes(s.lastSignalAt) * 60_000)}
+                      {s.lastAgent && (
+                        <>
+                          {' · last '}
+                          {s.lastFrom === 'assignee' ? (
+                            // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
+                            <span data-testid="last-assignee" className="font-medium wrap-anywhere">
+                              {s.lastAgent}
+                            </span>
+                          ) : (
+                            <ClaimedActor name={s.lastAgent} by={s.lastBy} />
+                          )}
+                        </>
+                      )}
+                    </span>
+                  </Tip>
+                </>
+              }
+            />
+          ))}
           {reviews.map((t) => (
             <Row
               key={`r${t.id}`}
@@ -416,7 +566,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
 function InProgress({ p }: { p: ProjectSummary }) {
   const items = p.inProgress
   return (
-    <Section icon={Play} title="In progress" count={items.length}>
+    <Section icon={Play} title="In progress" count={items.length} scroll>
       {!items.length ? (
         <Quiet>Nothing in progress.</Quiet>
       ) : (
@@ -428,6 +578,7 @@ function InProgress({ p }: { p: ProjectSummary }) {
               side={
                 <>
                   {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
+                  {t.stalled && <StalledBadge stalled={stalledOf(p, t.id)} />}
                   {t.stale && <Stale />}
                 </>
               }

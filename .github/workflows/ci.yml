@@ -57,3 +57,161 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 14
+
+  # The desktop app (README: "The desktop app"): the Windows installer, a smoke test of the unpacked app and of
+  # the app as the installer puts it, and the installer kept as an artifact of the run.
+  desktop:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the installer
+        run: pnpm desktop:package
+
+      - name: Smoke-test the unpacked app
+        run: pnpm desktop:smoke --port 8240 --screenshot desktop/dist/smoke/window.png --busy-screenshot desktop/dist/smoke/busy-port.png --data-dir-screenshot desktop/dist/smoke/data-dir.png --app-folder-screenshot desktop/dist/smoke/app-folder.png --unwritable-screenshot desktop/dist/smoke/app-folder-unwritable.png
+
+      - name: Install it, smoke-test the installed app, uninstall it
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'agent-board-installed'
+          $setup = (Get-Item desktop/dist/agent-board-setup-*.exe).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/S', "/D=$dir"
+          if (-not (Test-Path "$dir/agent-board.exe")) { throw "the installer put no agent-board.exe in $dir" }
+          pnpm desktop:smoke --app $dir --port 8250
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # The uninstaller Windows itself runs: the install's per-user uninstall entry, else one in the folder.
+          $entry = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -eq 'CrossBoard' } | Select-Object -First 1
+          $uninstaller = $null
+          $uninstallArgs = @('/S')
+          if ($entry -and $entry.UninstallString -match '^"([^"]+)"\s*(.*)$') {
+            $uninstaller = $Matches[1]
+            if ($Matches[2]) { $uninstallArgs = @($Matches[2] -split '\s+') + '/S' }
+          }
+          if (-not $uninstaller -or -not (Test-Path $uninstaller)) {
+            $uninstaller = (Get-ChildItem $dir -Filter 'Uninstall*.exe' | Select-Object -First 1).FullName
+          }
+          if (-not $uninstaller) {
+            Write-Host "uninstall entry: $($entry | Format-List | Out-String)"
+            Get-ChildItem $dir | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+            throw "no uninstaller found for $dir"
+          }
+          Write-Host "uninstalling with $uninstaller $($uninstallArgs -join ' ')"
+          # The uninstaller hands over to a copy of itself and returns at once.
+          Start-Process -Wait -FilePath $uninstaller -ArgumentList $uninstallArgs
+          for ($i = 0; $i -lt 60 -and (Test-Path "$dir/agent-board.exe"); $i++) { Start-Sleep 1 }
+          if (Test-Path "$dir/agent-board.exe") { throw "the uninstaller left $dir/agent-board.exe" }
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-board-setup
+          path: desktop/dist/agent-board-setup-*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload the smoke test's screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-smoke
+          path: desktop/dist/smoke/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The desktop app's Linux packages (README: "The desktop app"): the AppImage, .deb, .rpm and pacman package,
+  # a smoke test of the unpacked app, then each package installed and checked in a container of its
+  # distribution (desktop/linux/install-test.sh), and the four kept as artifacts of the run.
+  desktop-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Ubuntu 24.04's AppArmor keeps unprivileged programs from making user namespaces, which
+      # Chromium's sandbox needs; the app keeps its sandbox, the runner allows them instead.
+      - name: Allow user namespaces for Chromium's sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # rpmbuild for the .rpm, bsdtar for the pacman package, Xvfb for the window, and what Electron
+      # needs to run here (its check of the packed driver, the smoke test).
+      - name: Install the packaging tools
+        run: >-
+          sudo apt-get update && sudo apt-get install -y rpm libarchive-tools xvfb xauth
+          libgtk-3-0t64 libnss3 libgbm1 libasound2t64 libxss1 libxtst6 libnotify4 libsecret-1-0
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the packages
+        run: pnpm desktop:package
+
+      - name: Smoke-test the unpacked app
+        run: xvfb-run -a pnpm desktop:smoke --port 9250
+
+      # The checkout (with node_modules, for the smoke test) and this node go into each container; the
+      # containers run unconfined by seccomp so that Chromium's sandbox can make its namespaces there too.
+      - name: Install and check the .deb (Debian)
+        run: &install >-
+          docker run --rm --shm-size=1g --security-opt seccomp=unconfined
+          -v "$GITHUB_WORKSPACE:/repo" -v "$(dirname "$(command -v node)"):/nodebin:ro"
+          -e REPO=/repo -e NODE=/nodebin/node "$IMAGE"
+          bash -c "bash /repo/desktop/linux/install-test.sh $FORMAT /repo/desktop/dist/$PACKAGE $PORT"
+        env:
+          IMAGE: debian:bookworm
+          FORMAT: deb
+          PACKAGE: agent-board_*_amd64.deb
+          PORT: 9260
+
+      - name: Install and check the .rpm (Fedora)
+        run: *install
+        env:
+          IMAGE: fedora:latest
+          FORMAT: rpm
+          PACKAGE: agent-board-*.x86_64.rpm
+          PORT: 9270
+
+      - name: Install and check the pacman package (Arch)
+        run: *install
+        env:
+          IMAGE: archlinux:latest
+          FORMAT: pacman
+          PACKAGE: agent-board-*.pacman
+          PORT: 9280
+
+      - name: Check the AppImage (Ubuntu)
+        run: *install
+        env:
+          IMAGE: ubuntu:24.04
+          FORMAT: appimage
+          PACKAGE: agent-board-*-x86_64.AppImage
+          PORT: 9290
+
+      - name: Upload the packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-board-linux
+          path: |
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.rpm
+            desktop/dist/*.pacman
+          if-no-files-found: error
+          retention-days: 14

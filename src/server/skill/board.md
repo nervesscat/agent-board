@@ -6,19 +6,20 @@ description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - 
 # Working through the agent board
 
 The board is where the human and every agent coordinate. Its tools come from the `board` MCP
-server. If they are missing, say so and stop: the human connects it with a gate token from the
-board's Connect agents page ({{BOARD_URL}}/agents). {{MCP_HINT}} Git and GitHub stay read-only
-through the board for you, but for closed tickets' landed local branches, which `cleanup_delete`
-deletes (worktrees and origin's branches are the human's, from its Cleanup page): never push,
-merge, approve or comment on GitHub on its behalf.
+server. If they are missing, or the board answers 401 (the token was revoked or is a year old), say
+so and stop: the human presses Generate commands on the board's Connect agents page
+({{BOARD_URL}}/agents), which makes your agent token and fills it into the setup. {{MCP_HINT}} Git
+and GitHub stay read-only through the board for you, but for closed tickets' landed local branches,
+which `cleanup_delete` deletes (worktrees and origin's branches are the human's, from its Cleanup
+page): never push, merge, approve or comment on GitHub on its behalf.
 
 ## Keep the board out of the repo
 
-The board, trazic, habits and any other personal tracking tool are private to the human. Nothing
+The board and any other personal tracking tool are private to the human. Nothing
 you write into the repo or onto GitHub may mention them:
 
-- no code comments, docs, READMEs, changelogs or config that name the board, trazic or habits,
-  their tools (`post_update`, `list_tickets`, …), their URLs (`localhost:47100`, `47110`), or a
+- no code comments, docs, READMEs, changelogs or config that name the board or any such tool,
+  their tools (`post_update`, `list_tickets`, …), their URLs (`localhost:47100`), or a
   board ticket, task, update or project (`#12`, "ticket 12", "per the board");
 - no commit messages, branch names, PR titles or PR descriptions that do either;
 - no links or screenshots of the board in PRs or issues.
@@ -48,7 +49,13 @@ name or the GitHub slug, and both map to the same ids.
 
 Then:
 
-1. `whoami`: your name on the board (the gate token's name). Use it as the assignee.
+1. `whoami`: who the board knows you as: `name` (the agent token's name, or your sub-identity's),
+   `role` and `parent`. Use the name as the assignee. An `orchestrator` (the human makes a token one,
+   in Settings, Agents) also changes the projects' instructions (`set_project_instructions`), creates
+   a project with instructions and moves a repo to another project; a `worker` cannot: tell your
+   orchestrator what should change. If you were briefed with an `agentName`
+   (`<orchestrator>/<you>`), pass it on **every** board call: it makes your posts, claims and
+   comments yours, as a worker under the orchestrator.
 2. `get_project` with your `projectId`, and check its `name` matches the table (if not, the table
    is stale: tell the human to copy the skill again from the board). Its `instructions` override
    your defaults for every repo in it. Its `stages` are the board's columns, each with a `key`, a
@@ -86,8 +93,8 @@ Then:
   and `stale` says the work moved on (new commits or a newer progress post): check the branch and
   the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
 - A new ticket starts with its project's default phases as its top-level tasks (`get_project` →
-  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Hand-off
-  post). Tasks go two levels and no more: put the concrete steps of the work under Implementation
+  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged).
+  Tasks go two levels and no more: put the concrete steps of the work under Implementation
   as its subtasks (`add_tasks` with `parentTaskId` = its id; a subtask takes no subtasks). Remove
   or reword a phase that does not fit (`remove_task`, `update_task`); `add_tasks` adds one at the
   end. A lane starts without phases, since its parent carries the hand-off (`defaultPhases: true`
@@ -104,13 +111,32 @@ Lanes of a ticket you are working are yours to create (next section).
 
 ## 3. While working
 
-- `set_task_done` as each step finishes, and each hand-off phase as you finish it (Pushed after
-  the push, PR once it is open, CI once it is green, Preview once it runs, Hand-off post once the
-  summary is up to date); the board ticks none itself. On a rework, untick the phases the new work redoes and tick
-  them again as you redo each. A phase with steps is done exactly when all its steps are: ticking
-  or unticking a phase does the same to its steps, ticking its last open step ticks it, unticking a
-  step unticks it. When the plan changes, `update_task` rewords a task and `remove_task` drops one
+- `set_task_done` as each step finishes. The board ticks the phases Pushed, PR, CI, Preview and
+  Merged itself, from git, GitHub and the previews, and unticks one when its fact stops holding:
+  Pushed while the branch is on origin with every local commit (a new commit not pushed unticks
+  it), PR while a PR for the ticket is open or merged, CI while the PR's checks are green on its
+  head or a PR comment whose first line is `CI run locally: green on <sha>` names its head commit
+  (a new push unticks it until it is green again), Preview while one of the ticket's workspaces
+  runs a preview or its link answers, Merged once the PR or the branch is merged. Nobody ticks
+  those by hand: `set_task_done` and `update_task` `done` on them are refused (`get_ticket` marks
+  them `auto: true`). Implementation and its steps are yours to tick. A phase with steps is done exactly when
+  all its steps are: ticking or unticking a phase does the same to its steps, ticking its last open
+  step ticks it, unticking a step unticks it (a phase the board ticks follows its fact, not its
+  steps). When the plan changes, `update_task` rewords a task and `remove_task` drops one
   that no longer applies (a phase goes with its steps), so the progress bar stays honest.
+- Record your work on the ticket's timeline (the Roadmap and the ticket page draw it; the human
+  sees from it who worked when, who waited on what, and what stalled). Each call takes `projectId`
+  and `ticketId`, and only a ticket of that project:
+  - `heartbeat` every few minutes while you work the ticket: in Claude Code under `/loop` (the same
+    loop as [Watch for feedback](#watch-for-feedback)), elsewhere between steps. An active ticket
+    with no event for longer than the project's `stallMinutes` (30 by default) reads as stalled in
+    the human's Needs you.
+  - `start_span` when a phase starts (`spec`, `build`, `review` with its `round`, `verify`, `pr`,
+    `preview`, `merge`) and `end_span` when it is done.
+  - `start_wait` with the reason when you cannot go on (`lock`, `builder`, `mcp`, `human`, `other`
+    with a `note`), and `end_wait` as soon as you can.
+  - `handoff` when you brief a sub-agent and when it hands back ([Delegating](#delegating)).
+    `get_ticket` → `work.open` lists your open spans and waits to close.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
   they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
@@ -152,7 +178,22 @@ Lanes of a ticket you are working are yours to create (next section).
 - The archive: the human takes finished tickets (done or cancelled) off the board, their lanes with
   them; `archivedAt` / `archivedBy` show it. `list_tickets` leaves them out unless `archived` is
   `"include"` (with the rest) or `"only"`; `get_ticket` still opens them. Only the human archives
-  and restores.
+  and restores. You may ask: `request_archive` with one ticket id or a list posts the human one
+  decision card ("Archive #12, #15?", Archive / Keep) on the first ticket, without blocking it, and
+  it shows in their Needs you. Each ticket must be top-level, in a done or cancelled stage and not
+  archived yet, or the whole request is refused with each failing ticket and why. Only the human's
+  Archive answer archives them (in their name, lanes included; or yours relayed with
+  `answer_decision` after asking them in the chat); Keep leaves them. The card is never edited:
+  ask again instead. Never try to archive any
+  other way.
+- Repos: only the human adds, changes and removes them (an orchestrator also moves one to another
+  project). When the work needs a repo the project
+  lacks (a new repository you are building), `add_repo` with your ticket, the repo's name, its
+  checkout's absolute path, its GitHub `owner/name` (what `git remote get-url origin` points at)
+  and its base branch posts the human one Add / Don't add card on that ticket, without blocking
+  it; it is checked first (a git checkout whose origin is that GitHub repo, a name and a path no
+  repo has yet), and the error says what failed. Only their Add adds it, to that ticket's project.
+  Then `set_ticket_repo` moves your ticket onto it (any repo of the ticket's own project, at once).
 - `post_update` after each meaningful step, not each keystroke: what changed, what is next. It
   is a post marked as progress; `edit_post` / `delete_post` change what you posted.
   Attach evidence with `files` as absolute paths (screenshots, recordings, logs); Windows paths are
@@ -180,20 +221,24 @@ Lanes of a ticket you are working are yours to create (next section).
 - **Previews:** when the change can be tried (a page, an API), give the human a preview and put
   its link with what to try in the summary; say that what they post there stays in the copy. Keep
   it running while the ticket is in `review`.
-  - A branch of the board itself: the board runs it. `add_workspace` with your worktree's `path`
-    and `branch` (a worktree next to the main checkout, `../agent-board-<branch>`), then
-    `start_preview` with the `workspaceId`. It returns at once; `get_ticket` shows the workspace's
-    `managedPreview` (`building`, `starting`, `running` with its `url`, or `failed` with the last
-    log lines and the log paths). Do not run `pnpm dev` in your session for it: that dies with
-    your session. `start_preview` with `restart: true` rebuilds after more commits;
-    `stop_preview` stops it, and the board stops it by itself once the PR is merged or the
-    ticket is done, cancelled, archived or its workspace removed. The human's preview limit (8 by
-    default) caps how many the board runs at once; a start beyond it is refused with the limit.
-  - Anything else: start your branch from your worktree on a free port, with a copy of the data
+  - A repo with runs (the human configures them per repo in the project's settings: previews with
+    a link, jobs without; a checkout of the board has its `Preview`): the board runs them.
+    `add_workspace` with your worktree's `path` and `branch` (a worktree next to the main
+    checkout, `../<repo>-<branch>`; `repoId` for a repo other than the ticket's primary), then
+    `list_runs` and `start_run` by name (`all: true` for every run). It returns at once;
+    `list_runs` shows each run (`building`, `starting`, `running` with its `url`, or `failed` with
+    the last log lines and the log paths). You name a run, never a command: what runs is the
+    human's config. Do not run `pnpm dev` in your session for it: that dies with your session.
+    `start_run` with `restart: true` rebuilds after more commits; `stop_run` stops it, and the
+    board stops it by itself once the PR is merged or the ticket is done, cancelled, archived or
+    its workspace removed. `start_preview` / `stop_preview` still act on the first preview run.
+    The human's preview limit (8 by default) caps how many runs the board runs at once; a start
+    beyond it is refused with the limit.
+  - A repo with no runs: start your branch from your worktree on a free port, with a copy of the data
     rather than the real one (the project's `instructions` say how), then `set_preview` with the
     `workspaceId` and `previewUrl` once it answers (or `previewUrl` on `add_workspace` when it
-    already runs). The ticket page then shows a Preview card with an Open button and whether it
-    is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
+    already runs). The ticket page then shows it on its Runs card with an Open button and whether
+    it is running. Stop it once it is merged or dropped, and clear it with `set_preview` and
     `previewUrl: ""` (`remove_workspace` drops it too). Never run it from the checkout or port
     the human uses day to day. The human may stop it from the Previews page when it listens on
     loopback and runs from the workspace's worktree; its link stays, as not running.
@@ -233,9 +278,20 @@ Every spawned agent and lane costs time: hand out only what is new, and only wha
      earlier results.
   4. Done when: the condition to stop at.
   5. Return: the exact shape of the answer.
-- A subagent never answers a decision (`answer_decision`). If its work needs the human's answer, it
-  asks (`ask_decision`) or returns the question in its result; you ask the human in the chat and
-  answer the card yourself.
+- Name every subagent on the board: its brief says to pass `agentName: "<your whoami name>/<its
+name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is filed under it, a
+  worker with you as its parent, instead of under you. A worker session started on its own sends
+  the header `X-Agent-Name: <token name>/<its name>` instead (over REST the token name is `actor`
+  in `GET /api/me`; there is no `token` field there), or gets a worker token of its own.
+- A subagent never answers a decision (`answer_decision`), and one that passes `agentName` is
+  refused. If its work needs the human's answer, it asks (`ask_decision`) or returns the question in
+  its result; you ask the human in the chat and answer the card yourself.
+- Put the hand-off on the ticket's timeline: `handoff` with `to` the sub-agent's name (its full
+  `agentName`, e.g. `orch/builder-1`, so the timeline matches its posts; it need not be a project agent) when you brief it, and `from` that name when it returns. A sub-agent
+  that cannot reach the board has you record its spans, with `agent` its name. Put the work timeline
+  in its brief too: the `projectId` and `ticketId`, a `heartbeat` every few minutes, `start_span` /
+  `end_span` around its phase, `start_wait` / `end_wait` with the reason while it waits (a lock,
+  the builder, the MCP server down).
 
 ### Watch for feedback
 
@@ -256,8 +312,8 @@ The human should not have to tell you to check comments. While this session has 
 
 ## 4. Hand off
 
-Before `update_ticket` → `status: review`, every item, in order, ticking each hand-off phase of
-the ticket as its item is done:
+Before `update_ticket` → `status: review`, every item, in order (the board ticks Pushed, PR, CI,
+Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
 
 1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
 2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
@@ -279,26 +335,29 @@ the ticket as its item is done:
    `update_ticket` with the PR's `prNumber`: the PR queue shows this ticket on the PR's card, and
    `get_ticket` the PR with its latest review. A PR ticket the board made for that PR is cancelled,
    with a post, and this ticket takes the PR over. (A PR on the ticket's branch links by itself.)
-6. **Preview running**: `start_preview` on the workspace, then `get_ticket` until its
-   `managedPreview` is `running` (`failed`: read the log lines and fix). For a repo the board cannot
-   build, start one the project's way and `set_preview` (see Previews in
+   While GitHub's checks do not run, comment on the PR `CI run locally: green on <sha>` with the
+   head commit the checks of item 2 passed on (`gh pr comment`): that ticks CI. Comment again after
+   each push.
+6. **Preview running**: `start_run` (or `start_preview`), then `list_runs` until it is `running`
+   (`failed`: read the log lines and fix). For a repo with no runs configured, start one the
+   project's way and `set_preview` (see Previews in
    [While working](#3-while-working)). Required whenever the change can be tried; when it cannot
    (docs only, a script), say why in the summary.
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
    preview link and what to try there**, how it was tested, the e2e result (its summary, or its
    report when something failed), each review round's verdict and, for a UI change, screenshots of
-   what changed, in `files`. Then tick Hand-off post: a tick is not a commit, so the summary still
-   counts.
+   what changed, in `files`.
 8. Resume note if the ticket stays open past the session (`set_resume_note`, see
    [End of session](#5-end-of-session)).
 
 `update_ticket` → `review` then answers with `handoff.missing`: what the board still sees missing,
 each a `code` with a `text`: `tasks_open` (Implementation, the ticket's tasks and subtasks, its
-phases and their steps, the hand-off phases included: missing while it has none, or while some of
-them, its lanes' included, are open; the other checks still verify each fact themselves), `no_pr`, `not_pushed`, `no_preview`,
+phases and their steps, the hand-off phases included but Merged, which is the human's: missing
+while it has none, or while some of them, its lanes' included, are open; the other checks still
+verify each fact themselves), `no_pr`, `not_pushed`, `no_preview`,
 `no_handoff_post` (no summary written by an agent since the branch's last commit; on a ticket that
 never had a summary, an agent's progress post since then still counts), `checks_unknown` (the
-PR's CI is failing or still running). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
+PR's CI is failing or still running, and no `CI run locally: green` comment names its head). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
 the ticket is in review, and its page shows it as a Hand-off card.
 
 After that:
@@ -475,7 +534,8 @@ Without those skills, or for one ticket, orchestrate by hand:
 2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
    prompt is its `instructions`, the project's `instructions` and a brief in the five parts of
    [Delegating](#delegating): the step's goal from the ticket (`get_ticket`), its focus, what is
-   known (the worktree and branch, what earlier steps returned: subagents share nothing else),
+   known (the worktree and branch, what earlier steps returned, the `agentName` it passes on every
+   board call: subagents share nothing else),
    done when (with the checklist from [Hand off](#4-hand-off), as it stands) and what to return;
    post what it returns on the ticket **as that agent** (`post_update` with `as`, `progress: true`,
    its evidence in `files`: it goes to the Agents tab); when it changes where the ticket stands for
@@ -515,8 +575,9 @@ when the project has several repos): the human reads it from its verdict on the 
 ticket's Branch card, and the summary is also a progress post on the PR's ticket. Never post the
 review to GitHub.
 
-`list_actors` gives every name that signs in to the board (the project's agents are in
-`get_project`); use those exact names for `assignee`.
+`list_actors` gives every name that signs in to the board, with its `role` (human, orchestrator,
+worker) and `parent` (the name a sub-identity works under); the project's agents are in
+`get_project`. Use those exact names for `assignee`.
 
 ## Style
 

@@ -10,7 +10,7 @@ type Box = { top: number; bottom: number; mid: number }
 /**
  * One reading of a row that holds an author (`Actor`), taken at a single moment so that nothing moving on
  * the page in between can skew it: the author's icon or avatar, the glyphs of its name, what follows the
- * name (the admin badge, or `via`), and the glyphs of every other text in the row, in order. Glyph boxes
+ * name (its role's badge, or `via`), and the glyphs of every other text in the row, in order. Glyph boxes
  * of two texts in the same font have the same bottom exactly when they share a baseline. A text that wraps
  * is measured on its first line.
  */
@@ -39,7 +39,12 @@ const measure = (row: Locator) =>
     return {
       icon: box(icon.getBoundingClientRect()),
       name: glyphs(name)!,
-      after: after && { box: box(after.getBoundingClientRect()), glyphs: glyphs(after)! },
+      after: after && {
+        box: box(after.getBoundingClientRect()),
+        glyphs: glyphs(after)!,
+        // The role's badge (Human, Orchestrator, Agent): centred on the text, not on its baseline.
+        badge: after.hasAttribute('data-role'),
+      },
       texts,
     }
   })
@@ -89,7 +94,7 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
   const card = page.locator('[data-column="backlog"]').getByRole('link', { name: /Fix the login form/ })
   await expect(card).toBeVisible()
   await expect(card).toContainText('High')
-  // The two tasks typed, under Implementation, and the default phases: 8 in all.
+  // The two tasks typed, under Implementation, and the default phases: 9 in all.
   await expect(card).toContainText('0/8')
 
   const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
@@ -105,7 +110,7 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
     'PR',
     'CI',
     'Preview',
-    'Hand-off post',
+    'Merged',
   ])
 
   await card.click()
@@ -451,9 +456,9 @@ test('the author sits on the line of the text around it: "opened by", the "by" o
   await ok(agent.put(`/api/tickets/${byHuman.id}/resume`, { data: { note: 'Halfway there', as } }))
 
   for (const { ticket, name, title } of [
-    // A bot glyph, as in the ticket's screenshot.
-    { ticket: byAgent, name: 'claude', title: /agent, gate token/ },
-    // A person glyph, and the admin badge after the name.
+    // A bot glyph, as in the ticket's screenshot, and the Agent badge after the name.
+    { ticket: byAgent, name: 'claude', title: /agent, signed in with a token/ },
+    // A person glyph, and the Human badge after the name.
     { ticket: byHuman, name: 'enrique', title: /signed in with a passkey/ },
   ]) {
     await page.goto(`/projects/${project.id}/features/${ticket.id}`)
@@ -517,7 +522,7 @@ test('an author in the header of a post or a reply stays centred on it, on a pho
     await expect(page.getByText('A reply from a project agent.')).toBeVisible()
 
     for (const [what, header, title] of [
-      ['post by claude', authorRow(article('From the agent itself.')), /agent, gate token/],
+      ['post by claude', authorRow(article('From the agent itself.')), /agent, signed in with a token/],
       [
         `post by ${as}`,
         authorRow(article('From one of the project agents.')),
@@ -535,7 +540,9 @@ test('an author in the header of a post or a reply stays centred on it, on a pho
       const author = await measure(header)
       const label = `${width}px, ${what}`
       aligned(`${label}: the icon centred on the name`, author.icon.mid, author.name.mid)
-      if (author.after)
+      if (author.after?.badge)
+        aligned(`${label}: the badge centred on the name`, author.after.box.mid, author.name.mid)
+      else if (author.after)
         aligned(`${label}: "via" on the baseline of the name`, author.after.glyphs.bottom, author.name.bottom)
     }
   }

@@ -37,15 +37,7 @@ const tasksOf = async (human: APIRequestContext, id: number) =>
   (await ok<TicketFull>(human.get(`/api/tickets/${id}`))).tasks.map((t) => t.text)
 
 /** A top-level ticket's tasks in order: the project's default phases, the typed tasks under the first. */
-const phased = (...steps: string[]) => [
-  'Implementation',
-  ...steps,
-  'Pushed',
-  'PR',
-  'CI',
-  'Preview',
-  'Hand-off post',
-]
+const phased = (...steps: string[]) => ['Implementation', ...steps, 'Pushed', 'PR', 'CI', 'Preview', 'Merged']
 
 /** The exact text of each listed task, without the whitespace `toHaveText` would forgive. */
 const texts = (items: Locator) => items.evaluateAll((all) => all.map((li) => li.textContent))
@@ -434,7 +426,7 @@ test('a ticket from the New ticket dialog starts with the project phases, the ty
   const { dialog, input, create } = await openDialog(page)
   // The dialog says so, by name, next to the field.
   const hint =
-    "It starts with the project's phases: Implementation, Pushed, PR, CI, Preview, Hand-off post. The tasks typed here go under Implementation."
+    "It starts with the project's phases: Implementation, Pushed, PR, CI, Preview, Merged. The tasks typed here go under Implementation."
   await expect(dialog).toContainText(hint)
   await dialog.getByLabel('Title').fill('Seeded from the dialog')
   for (const t of ['Reproduce it', 'Fix it']) {
@@ -457,9 +449,9 @@ test('a ticket from the New ticket dialog starts with the project phases, the ty
   // Only a top-level task takes subtasks: those buttons list the top level, in order.
   const top = card.getByRole('button', { name: /^Add a subtask to / })
   expect(await top.evaluateAll((all) => all.map((b) => b.getAttribute('aria-label')))).toEqual(
-    ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Hand-off post'].map((x) => `Add a subtask to ${x}`),
+    ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged'].map((x) => `Add a subtask to ${x}`),
   )
-  for (const name of ['Implementation', 'Reproduce it', 'Fix it', 'Hand-off post'])
+  for (const name of ['Implementation', 'Reproduce it', 'Fix it'])
     await expect(card.getByRole('checkbox', { name, exact: true })).not.toBeChecked()
   await card.screenshot({ path: test.info().outputPath('new-ticket-phases-card.png') })
 })

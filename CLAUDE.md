@@ -1,13 +1,43 @@
 # agent-board
 
-What it is and its API: `README.md`. How agents work through a running board: `AGENTS.md`.
+What it is and its API: `README.md`. How agents work through a running board: `AGENTS.md`. How to
+contribute: `CONTRIBUTING.md`.
+
+The rules below are for whoever runs a board from a checkout of this repo: that checkout (on `main`)
+is the live board on port 47100 with its real data in `data/`, and all work happens in worktrees beside
+it. Without a live board of your own, the worktree, checks and database rules still apply.
+
+## Branches and releases
+
+- **`dev`** is GitHub's default branch: work branches start from `origin/dev` and their PRs go into
+  `dev`.
+- **`main`** is production: what the board in this checkout runs. A release is a PR from `dev` into
+  `main`, merged once it is checked (Checks, below). The desktop installers are published as GitHub
+  Releases: `docs/releasing.md`.
+- **Putting a release live:** `pnpm stop`, `git pull` on `main` here, `pnpm start` (it installs and
+  applies migrations as it starts). `data/` is kept across versions.
+- **Development** happens in worktrees, with previews (Running it, below).
+
+## Sign-in
+
+The human has a passkey account, made once at `/setup` on this machine, then `/login` (README:
+"Signing in"). Agents never sign in: each uses a token the board issues (Agents page, **Generate
+commands**), sent as `Authorization: Bearer <token>`.
+
+## Desktop app
+
+The installer (`pnpm desktop:package`, README: "The desktop app") is the packaged production board for other
+machines. It installs per user, without admin rights; its data and `config.env` live in
+`%LOCALAPPDATA%\agent-board` and are kept on uninstall and on upgrade (install a newer build over
+it). It needs `git`, `gh` (signed in) and `claude` on `PATH`; `node` and `pnpm` only for previews.
 
 ## Running it
 
 There is one board: `pnpm start` runs it from this main checkout on port 47100 (from `.env`), with
 hot reload (`vite dev`) on the real data in `data/`, in the background, and waits until it answers.
 `pnpm start --fg` runs it in the foreground, `pnpm stop` stops it. It always runs as production, so it
-always asks the gate. Logs: `data/logs/board.out.log`, `board.err.log`.
+always requires sign-in (its own passkeys; README: "Signing in"). Logs: `data/logs/board.out.log`,
+`board.err.log`.
 
 - **Put changes live:** `git pull` on `main` here; the board reloads by itself. A pull that changes
   dependencies (`package.json`, `pnpm-lock.yaml`) or adds a migration needs `pnpm start` again: it
@@ -36,12 +66,13 @@ always asks the gate. Logs: `data/logs/board.out.log`, `board.err.log`.
   ticket is closed or archived, or the board stops (`src/server/managedPreview.ts`). Remove the
   worktree (`git worktree remove`) once the branch is merged or dropped.
 
-- **Without the passkey gate (outside production only):** `AUTH=off pnpm dev` runs the preview with
-  every request as the human; `BOARD_ENV=test` runs a board with no gate where `X-Test-Actor:
-human:<name>` or `agent:<name>` says who calls (CI, Playwright). The server refuses to start without
-  the gate in production, off loopback or on 47100, and shows an AUTH OFF banner and a top-bar badge
+- **With sign-in off (outside production only):** `AUTH=off pnpm dev` runs the preview with
+  every request as the human; `BOARD_ENV=test` runs a board where nobody signs in and `X-Test-Actor:
+human:<name>` or `agent:<name>` says who calls (CI, Playwright). The server refuses to start with
+  sign-in off in production, off loopback or on 47100, and shows an AUTH OFF banner and a top-bar badge
   while it is off; `pnpm start` always runs production. README: "Test mode". This
-  is authentication: change `src/server/config.ts`, `auth.ts`, `startup.ts` and their tests together.
+  is authentication: change `src/server/config.ts`, `auth.ts`, `passkeys.ts`, `credentials.ts`,
+  `entrance.ts`, `devEntrance.ts`, `startup.ts` and their tests together.
 
 ## Checks
 

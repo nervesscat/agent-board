@@ -73,7 +73,7 @@ describe('handoffOf', () => {
     expect(none.missing).toEqual([{ code: 'tasks_open', text: expect.stringMatching(/^No tasks/) }])
     // It points to the default phases, with the steps under Implementation.
     expect(none.checks[1]!.text).toBe(
-      'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Hand-off post), put the steps under Implementation, and tick each as you finish it',
+      'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Merged), put the steps under Implementation, and tick each step as you finish it (the board ticks Pushed, PR, CI, Preview and Merged itself)',
     )
     expect(handoffOf(facts({ tasks: { done: 3, total: 5 } })).missing).toEqual([
       { code: 'tasks_open', text: '3 of 5 tasks done' },
@@ -244,6 +244,23 @@ describe('handoffOf', () => {
       expect(ci(state).checks.map((c) => c.code)).not.toContain('checks_unknown')
     }
   })
+
+  it('checks_unknown: a "CI run locally: green" comment on the head passes it, whatever the checks say', async () => {
+    const { handoffOf } = await import('./handoff')
+    for (const state of ['failing', 'pending', 'none', null] as const) {
+      const h = handoffOf(facts({ pr: { number: 7, ci: state, merged: false, localCi: true } }))
+      expect(h.missing).toEqual([])
+      expect(h.checks.find((c) => c.code === 'checks_unknown')).toEqual({
+        code: 'checks_unknown',
+        label: 'CI',
+        ok: true,
+        text: 'CI run locally: green on the head',
+      })
+    }
+    expect(
+      handoffOf(facts({ pr: { number: 7, ci: 'failing', merged: false, localCi: false } })).missing,
+    ).toEqual([{ code: 'checks_unknown', text: "The PR's CI is failing" }])
+  })
 })
 
 describe('moving a ticket to review', () => {
@@ -389,13 +406,17 @@ describe('moving a ticket to review', () => {
     expect(merged.handoff!.checks[0]).toMatchObject({ code: 'not_merged', ok: true, text: 'PR #12 merged' })
   }, 30_000)
 
-  it('with the default phases: Implementation is met once they are ticked too, and ticks never undo the summary', async () => {
+  it('with the default phases: the board ticks the hand-off phases, Merged is not counted, ticks never undo the summary', async () => {
     const { db, schema } = await import('#/db')
     const features = await import('./features')
     const needs = await import('./needs')
     const { fetchRepo } = await import('./push')
     const projectId = db.insert(schema.projects).values({ name: 'phases' }).returning().get().id
-    db.insert(schema.repos).values({ projectId, name: 'repo', repoPath: repo, baseBranch: 'main' }).run()
+    const repoId = db
+      .insert(schema.repos)
+      .values({ projectId, name: 'repo', repoPath: repo, baseBranch: 'main' })
+      .returning()
+      .get().id
     // The branch's last commit is a minute old, and it is on origin.
     git('checkout', '-q', '-b', 'feat/phases', 'main')
     fs.writeFileSync(path.join(repo, 'phases.txt'), 'phases\n')
@@ -421,38 +442,58 @@ describe('moving a ticket to review', () => {
     // The work done: Implementation's steps ticked, which ticks it.
     features.updateTask(task('code').id, { done: true }, 'claude')
     features.updateTask(task('test').id, { done: true }, 'claude')
-    // The rest of the hand-off done, not ticked: pushed above, the PR, a preview that runs, the post.
+    // The rest of the hand-off done, none of it ticked by hand: pushed above, the PR with its CI green,
+    // a preview that runs.
     features.addWorkspace(t.id, { name: 'wt', branch: 'feat/phases', previewUrl }, 'claude')
+    const now = new Date().toISOString()
+    db.insert(schema.prs)
+      .values({
+        projectId,
+        repoId,
+        number: 13,
+        title: 'Phases',
+        url: 'https://github.com/o/r/pull/13',
+        author: 'claude',
+        headRef: 'feat/phases',
+        baseRef: 'main',
+        headSha: git('rev-parse', 'feat/phases'),
+        checks: [{ name: 'check', state: 'pass', url: null }],
+        updatedAt: now,
+        fetchedAt: now,
+      })
+      .run()
     await needs.changeTicket(t.id, { prNumber: 13 }, 'claude', { agent: true })
     features.setSummary(t.id, { body: 'Hand-off: PR #13, preview at …' }, 'claude')
-    // The board ticks nothing on its own.
+    // The board ticks the phases that follow git, GitHub and the previews on its own, at the next read;
+    // Merged stays open.
+    await needs.ticketView(t.id)
     expect(ticks()).toEqual({
       Implementation: true,
       code: true,
       test: true,
-      Pushed: false,
-      PR: false,
-      CI: false,
-      Preview: false,
-      'Hand-off post': false,
+      Pushed: true,
+      PR: true,
+      CI: true,
+      Preview: true,
+      Merged: false,
     })
 
-    // The move goes through; Implementation is all that is missing.
+    // The move goes through with nothing missing: the open Merged (the human's step) is not counted,
+    // and the board's ticks after the summary are not commits, so it still counts.
     const moved = await needs.changeTicket(t.id, { status: 'review' }, 'claude', { agent: true })
     expect(moved.status).toBe('review')
-    expect('handoff' in moved && moved.handoff.missing).toEqual([
-      { code: 'tasks_open', text: '3 of 8 tasks done' },
-    ])
-
-    // Each phase ticked: a tick is not a commit, so the summary written before them still counts.
-    for (const phase of ['Pushed', 'PR', 'CI', 'Preview', 'Hand-off post'])
-      features.updateTask(task(phase).id, { done: true }, 'claude')
+    expect('handoff' in moved && moved.handoff.missing).toEqual([])
     const view = await needs.ticketView(t.id)
     expect(view.handoff!.missing).toEqual([])
     expect(view.handoff!.checks.find((c) => c.code === 'tasks_open')).toMatchObject({
       ok: true,
-      text: '8 of 8 tasks done',
+      text: '7 of 7 tasks done',
     })
-    expect(view.handoff!.checks.find((c) => c.code === 'no_handoff_post')).toMatchObject({ ok: true })
+    expect(view.handoff!.checks.find((c) => c.code === 'no_handoff_post')).toMatchObject({
+      ok: true,
+      label: 'Summary',
+    })
+    // The progress bar still counts Merged.
+    expect(view.progress).toEqual({ done: 7, total: 8 })
   }, 30_000)
 })

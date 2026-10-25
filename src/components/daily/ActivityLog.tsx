@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 
 import { Actor } from '#/components/Actor'
@@ -135,6 +136,16 @@ function ActivityLine({ line: a, withProject }: { line: Line; withProject: boole
         </ReviewResultButton>
       ) : a.refType === 'report-settings-change' && a.refId ? (
         <SettingsChangeDiff changeId={a.refId}>{a.text}</SettingsChangeDiff>
+      ) : a.refType === 'instruction-change' && a.projectId ? (
+        // The change in the project's instructions history, with its diff.
+        <Link
+          to="/projects/$id/settings"
+          params={{ id: String(a.projectId) }}
+          hash="instructions-history"
+          className="min-w-0 wrap-anywhere hover:underline"
+        >
+          {a.text}
+        </Link>
       ) : (
         <span className="min-w-0 wrap-anywhere">{a.text}</span>
       )}

@@ -138,3 +138,30 @@ export type ReportCadence = (typeof REPORT_CADENCES)[number]
 /** What a report is: written on the board, or a file an agent attaches (a PDF, say). */
 export const REPORT_FORMATS = ['text', 'file'] as const
 export type ReportFormat = (typeof REPORT_FORMATS)[number]
+
+/**
+ * The work timeline of a ticket (src/lib/workTimeline.ts): what its agents record as they go, through the
+ * MCP tools and the REST endpoint — a phase's span, a hand-off to another agent (a sub-agent too), a wait
+ * and its reason, a heartbeat — and what the board sees itself (a push to the ticket's branch, its PR
+ * being set or merged, its preview's state, a move between stages).
+ */
+export const AGENT_EVENT_KINDS = [
+  'span_start',
+  'span_end',
+  'handoff',
+  'wait_start',
+  'wait_end',
+  'heartbeat',
+] as const
+export type AgentEventKind = (typeof AGENT_EVENT_KINDS)[number]
+export const BOARD_EVENT_KINDS = ['push', 'pr', 'preview', 'merge', 'stage'] as const
+export type BoardEventKind = (typeof BOARD_EVENT_KINDS)[number]
+export const EVENT_KINDS = [...AGENT_EVENT_KINDS, ...BOARD_EVENT_KINDS] as const
+export type EventKind = (typeof EVENT_KINDS)[number]
+/** What an agent waits on: the test lock, the builder, the MCP server being down, the human, or else. */
+export const WAIT_REASONS = ['lock', 'builder', 'mcp', 'human', 'other'] as const
+export type WaitReason = (typeof WAIT_REASONS)[number]
+/** The phases a span is usually of; any other phase is free text. These are stored lowercased. */
+export const KNOWN_PHASES = ['spec', 'build', 'review', 'verify', 'pr', 'preview', 'merge'] as const
+/** How long an active ticket may go without an event before it reads as stalled, unless its project says. */
+export const STALL_MINUTES = { default: 30, min: 1, max: 1440 } as const

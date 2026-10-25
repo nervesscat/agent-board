@@ -3,16 +3,18 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod'
 
 import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, RESUME_TEMPLATE } from '#/lib/constants'
-import { listActors } from './actors'
-import { isAgent } from './auth'
+import { listActors, noteActor } from './actors'
+import { asSubIdentity, type Caller, callerInfo } from './auth'
 import { cleanupReport } from './cleanup'
 import { AgentDeleteItems, deleteLeftovers } from './cleanupActions'
 import { dailyReport, today } from './daily'
 import * as features from './features'
 import { galleryShape, listGallery } from './gallery'
 import { HttpError } from './http'
+import { setInstructions } from './instructionsHistory'
 import * as needs from './needs'
 import { isActive, managedPreview, restartPreview, startPreview, stopPreview } from './managedPreview'
+import * as ticketRuns from './ticketRuns'
 import * as prs from './prs'
 import * as projects from './projects'
 import * as reports from './reports'
@@ -20,11 +22,15 @@ import { withResume } from './resume'
 import * as reviews from './reviews'
 import { getSummary } from './summary'
 import * as uploads from './uploads'
+import * as work from './workTimeline'
 
 /**
  * The same board, as MCP tools. Stateless streamable HTTP: one server per request, closed over the
- * actor the gate identified and whether it is an agent, so every write is attributed to the agent's
- * token name and the tools that only an agent may call can refuse a human.
+ * caller the board signed in (name, whether it is an agent, its role and parent), so every write is
+ * attributed to the agent's name and the tools that only an agent, or only an orchestrator, may call can
+ * refuse the others. A subagent that shares its orchestrator's connection says who it is with the
+ * `agentName` argument every tool takes (`<the orchestrator's name>/<its own>`), read before the server
+ * is built (agentNameOf): the call is then that sub-identity, a worker.
  */
 
 const text = (data: unknown) => ({
@@ -48,19 +54,22 @@ Work only in the project of the repo you are in, and never read or write another
 The rhythm:
 1. get_project before touching it; its instructions override your defaults. Its stages are the board's columns, in order, each with a key, a name and a kind (open, active, blocked, review, done, cancelled). A ticket's status is a stage key; wherever status is asked for you can also give a stage's name or a kind (the first stage of that kind; todo and in_progress mean open and active). Below, todo, in_progress, blocked, review, done and cancelled mean the stage of that kind.
 2. Starting a session, get_summary with your projectId is the picture in one read: what waits on the human, what is in progress and since when, what got done today, what is next, and what carries over from before today. Pick up work from list_tickets (status todo, assignee "" or your name from whoami); read it with get_ticket; then claim_ticket with the branch. Tickets are shared: you may take over one another agent holds (the board logs it), so prefer unassigned ones and take over only what is clearly stalled or handed to you. A ticket with reserved: true belongs to one of the project's agents (see below). Start of a session: before anything else on a ticket you pick up or come back to, read its resume note (resume in get_ticket, also returned by claim_ticket): where the last session left off, the next steps and how to resume. resume.commitsSince and resume.stale say whether the work moved on since it was written; resume.noHandoff means it carried over from an earlier day without one, so read the latest posts and the branch instead.
-3. A new ticket starts with its project's default phases as its top-level tasks (get_project's defaultPhases; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Hand-off post). Tasks go two levels and no more: the concrete steps of the work go under Implementation as its subtasks (add_tasks with parentTaskId = its id). set_task_done as you finish each step, and tick each hand-off phase as you finish it (Pushed after the push, PR once it is open, CI once it is green, Preview once it runs, Hand-off post once the summary is up to date); on a rework, untick the phases the new work redoes and tick them again as you redo each. When a phase does not fit, remove_task drops it (its steps go with it), update_task rewords it, and add_tasks adds one (at the end). A lane starts without phases, since its parent carries the hand-off (defaultPhases: true on create_ticket seeds it anyway), and defaultPhases: false opts a ticket out. A ticket with no tasks (an older one, a lane, one opted out) gets its phases the same way: add_tasks with the names from defaultPhases, then its steps under the first. The progress counts tasks and subtasks alike, and together they are the hand-off's Implementation item. When a step needs the human (a credential, a manual action, a call only they can make), tag that task or subtask blocked: update_task with blocked: true and blockedReason saying what the human must do. It shows on the task, on the ticket's card and in the human's Needs you (get_summary), still counts as open, and does not move the ticket: keep working on the rest. Ticking it done clears the tag; update_task with blocked: false clears it once resolved.
+3. A new ticket starts with its project's default phases as its top-level tasks (get_project's defaultPhases; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged). Tasks go two levels and no more: the concrete steps of the work go under Implementation as its subtasks (add_tasks with parentTaskId = its id). set_task_done as you finish each step: Implementation and its steps are the ones you tick. The board ticks the phases Pushed, PR, CI, Preview and Merged itself, from git, GitHub and the previews, and unticks one when its fact stops holding: Pushed while the branch is on origin with every local commit (a new commit not pushed unticks it), PR while a PR for the ticket is open or merged, CI while the PR's checks are green on its head or a PR comment whose first line is "CI run locally: green on <sha>" names its head commit (a new push unticks it until it is green again), Preview while one of the ticket's workspaces runs a preview or its link answers, Merged once the PR or the branch is merged. Nobody ticks those by hand: set_task_done and update_task done on them are refused (get_ticket marks them auto: true). When a phase does not fit, remove_task drops it (its steps go with it), update_task rewords it, and add_tasks adds one (at the end). A lane starts without phases, since its parent carries the hand-off (defaultPhases: true on create_ticket seeds it anyway), and defaultPhases: false opts a ticket out. A ticket with no tasks (an older one, a lane, one opted out) gets its phases the same way: add_tasks with the names from defaultPhases, then its steps under the first. The progress counts tasks and subtasks alike, and together they are the hand-off's Implementation item. When a step needs the human (a credential, a manual action, a call only they can make), tag that task or subtask blocked: update_task with blocked: true and blockedReason saying what the human must do. It shows on the task, on the ticket's card and in the human's Needs you (get_summary), still counts as open, and does not move the ticket: keep working on the rest. Ticking it done clears the tag; update_task with blocked: false clears it once resolved.
 4. Split parallel work into lanes: when a ticket needs several pieces worked at once (subagents, worktrees, other agents), create_ticket with parentId = the ticket for each piece, with its own branch and assignee. A lane is worked like any ticket (tasks, updates, review) and can have lanes of its own. Tag each lane (tags) so the human can filter them: severity, area or kind, the same words across sibling lanes, not in the title. Tag every ticket too with the module it touches, a short name (Auth, Board, MCP): check get_project's tagSuggestions and usedTags (or the tags list_tickets returns) first and reuse an existing tag in its casing rather than a new spelling; set_tag_suggestions replaces the project's suggestions (when the human asks, or to add a module its tickets keep touching). add_workspace registers where code runs (a worktree, a sub-branch, a sandbox): register every worktree you open, since that list is what gets cleaned up later; remove_workspace when it is gone.
-5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket's feed of posts has two tabs, and the board puts each post in one (its tab): Agents is your working record (progress posts, which post_update makes and lane summaries and the Daily view pick out; anything posted with as, such as the spec, builder and review phases; the resume note's versions); Main is the human's and stays short and to the point (their posts with your replies under them, decision cards, your questions to them: comment on the ticket, or post_update with progress: false; and the summary on top). tab on post_update, comment and ask_decision overrides the default, edit_post with tab moves a post; a lane's posts show in its parent's tabs the same way. Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. A PR of the queue that no feature ticket names has a ticket of its own: list_prs names it as ticket. Reviews, findings and progress on that PR are posts there, not on a daily ticket. The board moves that ticket as the PR's status changes, and its questions and threads show in the human's Needs you as PR rows. The summary (set_ticket_summary) is the one post on top of Main: what the change does, where it stands, each review round's verdict in one line, the PR, the preview and what to try there, and the proofs as files. Rewrite it to the current state instead of posting a new hand-off: each write is a new version (change: what changed, one line), the board keeps every earlier one (get_ticket_summary), and each write reaches the human like a new post. When the change can be tried (a page, an API), have a preview the human can open before anything is merged. For a branch of the board itself, the board runs it: register your worktree (add_workspace with its path and branch; it must sit next to the repo's main checkout), then start_preview with the workspace's id. The board installs if the lockfile changed, builds, copies the live data and starts the build on a free port without the passkey gate; get_ticket shows its state on the workspace (managedPreview: building, starting, running, failed with the last log lines, or stopped), and once it runs the workspace's previewUrl is set. Do not run pnpm dev in your session for it: that dies with your session. start_preview with restart: true rebuilds it after you push more work; stop_preview stops it, and the board stops it by itself when the PR is merged, the ticket is done, cancelled or archived, or the workspace is removed. For anything else, start your branch from your worktree on a free port with a copy of the data rather than the real one (the project's instructions say how) and register its link on the workspace (set_preview, or previewUrl on add_workspace). Either way post the link with what to try, say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped (clear a link you set with set_preview "").
+5. post_update after each meaningful step: short markdown, what changed and what is next, with screenshots or logs as absolute file paths in files. A ticket's feed of posts has two tabs, and the board puts each post in one (its tab): Agents is your working record (progress posts, which post_update makes and lane summaries and the Daily view pick out; anything posted with as, such as the spec, builder and review phases; the resume note's versions); Main is the human's and stays short and to the point (their posts with your replies under them, decision cards, your questions to them: comment on the ticket, or post_update with progress: false; and the summary on top). tab on post_update, comment and ask_decision overrides the default, edit_post with tab moves a post; a lane's posts show in its parent's tabs the same way. Every post can have replies (comment on the post's id with parentType update). edit_post and delete_post change what you posted. A PR of the queue that no feature ticket names has a ticket of its own: list_prs names it as ticket. Reviews, findings and progress on that PR are posts there, not on a daily ticket. The board moves that ticket as the PR's status changes, and its questions and threads show in the human's Needs you as PR rows. The summary (set_ticket_summary) is the one post on top of Main: what the change does, where it stands, each review round's verdict in one line, the PR, the preview and what to try there, and the proofs as files. Rewrite it to the current state instead of posting a new hand-off: each write is a new version (change: what changed, one line), the board keeps every earlier one (get_ticket_summary), and each write reaches the human like a new post. When the change can be tried (a page, an API), have a preview the human can open before anything is merged. When the ticket's repo has runs (the human configures them per repo in the project's settings: previews, which answer on a port and get a link, and jobs, background workers with no link; a checkout of the board has its Preview), the board runs them for you: register your worktree (add_workspace with its path and branch, and repoId for a repo other than the ticket's primary; it must sit next to the repo's main checkout), then list_runs shows every run of every repo of the ticket and start_run starts one by name (or all of them with all: true). The board installs when the lockfile changed, builds, copies the live data when the run asks for it and starts it (a preview on a free port from 47101 with sign-in off, its link set on the workspace once it answers); list_runs and get_ticket follow it (building, starting, running, failed with the last log lines, or stopped). What runs is always the human's configured commands: you name a run, never a command, env or port. Do not run pnpm dev in your session for it: that dies with your session. start_run with restart: true rebuilds it after you push more work; stop_run stops it, and the board stops it by itself when the PR is merged (in that repo), the ticket is done, cancelled or archived, or the workspace is removed. start_preview and stop_preview still work on a workspace's first preview run. A repo with no runs configured: start your branch from your worktree on a free port with a copy of the data rather than the real one (the project's instructions say how) and register its link on the workspace (set_preview, or previewUrl on add_workspace). Either way post the link with what to try, say that what they post there stays in the copy, keep it running while the ticket is in review, and stop it once it is merged or dropped (clear a link you set with set_preview "").
 6. Ask and answer with comment. When the human posts on a ticket you work, answer under their post (comment with replyTo, or parentType update), never with a new top-level post: first a reply with your plan, then, once done, a reply with the result and its proofs (files, the preview link); a reply brings their post back to the top of Main. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. That is for when nothing else can go on: when only one step waits on the human, tag that task blocked instead (step 3) and keep working. When it is a choice between clear options (an approach, a trade-off, a scope call), ask_decision instead: the human answers with one click, and the ticket blocks and unblocks by itself. When the human answers a card in the chat rather than on the board, record their answer with answer_decision (the option they picked, and their words verbatim): ask them in the chat first, with AskUserQuestion in Claude Code or the client's equivalent, offering the card's options; if no card exists yet, ask_decision first, since it blocks the ticket. Only the session that talks to the human does this: never a delegated subagent, never with as, never in a run with no human to ask. If their answer matches none of the options, do not relay it: comment it on the card and ask again, or leave the card to the board. When you resume, and between steps, list_my_threads shows every ticket feed or reply thread where someone spoke after you; get_ticket shows each post's reply count and last author. Files on posts and replies come with a local path you can open. While you have tickets in progress or review, watch for feedback without being told: every few minutes call check_inbox with the cursor from your last call (in Claude Code, under /loop); for each new thread read it, fix what it asks the usual way (checks, commit, push, preview), reply in the thread with what changed, and keep the new cursor.
-7. Hand off: before update_ticket to review, every item, in order, ticking each hand-off phase of the ticket as its item is done: (1) worktree registered (add_workspace), Implementation and its steps ticked; (2) checks green: typecheck, lint, unit tests, and the e2e suite when the repo has one; (3) branch pushed: get_ticket's push.state is pushed (green on the board), not ahead or local-only (red); (4) needs declared for any unmerged branch it builds on (below); (5) PR open and assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), and update_ticket with its prNumber (a PR's own ticket from the queue, if it has one, is then cancelled: this ticket takes the PR over); (6) preview running: start_preview on the workspace and wait for running (a repo the board cannot build: start one the project's way and set_preview); when the change cannot be tried (docs only, a script), say why in the summary; (7) the summary up to date (set_ticket_summary, never a new hand-off post): the PR link, the preview link and what to try there, how it was tested, the e2e result, each review round's verdict, and screenshots for a UI change as files, then tick Hand-off post (a tick is not a commit, so the summary still counts); (8) a resume note if the ticket stays open past the session. update_ticket to review answers with handoff.missing: what the board still sees missing (tasks_open: Implementation, the ticket's tasks and subtasks, its phases and their steps, the hand-off phases included: missing while it has none or some of them, its lanes' included, are open; the board ticks nothing itself, and its other checks still verify each fact; no_pr, not_pushed, no_preview, no_handoff_post when no agent wrote the summary since the branch's last commit, checks_unknown when the PR's CI is failing or running); fix each one. Briefing a subagent, put the same list in its brief. When your branch is built on another ticket's open branch, or you merged one in (to get past a conflict), declare it with update_ticket needs: [its id] instead of only writing "builds on" in the PR: the PR queue then says which PR to merge first, and the ticket cannot be done until that branch is merged into its base. get_ticket_git includes lists the tickets whose unmerged work your branch holds. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either. Archiving is the human's too: archivedAt set means the ticket (lanes included) is finished and off the board, and list_tickets leaves it out unless you pass archived.
+7. Hand off: before update_ticket to review, every item, in order (the board ticks Pushed, PR, CI, Preview and Merged as their facts hold; Implementation and its steps are ticked by hand): (1) worktree registered (add_workspace), Implementation and its steps ticked; (2) checks green: typecheck, lint, unit tests, and the e2e suite when the repo has one; (3) branch pushed: get_ticket's push.state is pushed (green on the board), not ahead or local-only (red); (4) needs declared for any unmerged branch it builds on (below); (5) PR open and assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), and update_ticket with its prNumber (a PR's own ticket from the queue, if it has one, is then cancelled: this ticket takes the PR over); while GitHub's checks do not run, comment on the PR "CI run locally: green on <sha>" with the head commit your checks passed on (gh pr comment), which ticks CI, and again after each push; (6) preview running: start_run (or start_preview) and wait for running (a repo with no runs configured: start one the project's way and set_preview); when the change cannot be tried (docs only, a script), say why in the summary; (7) the summary up to date (set_ticket_summary, never a new hand-off post): the PR link, the preview link and what to try there, how it was tested, the e2e result, each review round's verdict, and screenshots for a UI change as files; (8) a resume note if the ticket stays open past the session. update_ticket to review answers with handoff.missing: what the board still sees missing (tasks_open: Implementation, the ticket's tasks and subtasks, its phases and their steps, the hand-off phases included but Merged (merging is the human's): missing while it has none or some of them, its lanes' included, are open; the board ticks Pushed, PR, CI, Preview and Merged from their facts, and its other checks still verify each fact; no_pr, not_pushed, no_preview, no_handoff_post when no agent wrote the summary since the branch's last commit, checks_unknown when the PR's CI is failing or running and no "CI run locally: green" comment names its head); fix each one. Briefing a subagent, put the same list in its brief. When your branch is built on another ticket's open branch, or you merged one in (to get past a conflict), declare it with update_ticket needs: [its id] instead of only writing "builds on" in the PR: the PR queue then says which PR to merge first, and the ticket cannot be done until that branch is merged into its base. get_ticket_git includes lists the tickets whose unmerged work your branch holds. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either. Archiving is the human's too: archivedAt set means the ticket (lanes included) is finished and off the board, and list_tickets leaves it out unless you pass archived. You may ask for it: request_archive posts the human one Archive / Keep card for done or cancelled top-level tickets, and only their Archive answer archives them; never archive any other way. Repos are the human's too: when the work needs a repo the project lacks (a new repository you are building), add_repo asks for it with an Add / Don't add card on your ticket, and only their Add adds it; once added, set_ticket_repo moves the ticket onto it (that one is yours: any repo of the ticket's own project, at once).
 8. Clean up after yourself: once a lane's work is in its parent's branch (or a ticket's in its base), and before moving it to done, delete its local branch once no worktree holds it, and post_update the deleted branch names with their commit hashes (e.g. lane/47 @ 9ec12e8b) so any of them can be restored. Leave its worktrees, and the workspaces registered at them, to the human, who removes them from the Cleanup page. get_ticket_git says whether each branch's work arrived (reach); cleanup_report lists every leftover in the project, and cleanup_delete deletes closed tickets' landed local branches, the board checking each one again as for the human and answering how to restore it: post those branch @ sha lines on the ticket too. Never delete a branch whose reach is unique without the human's go-ahead, nor one cleanup_report marks protected, and never delete branches on origin nor remove worktrees: list them for the human, who does that from the Cleanup page.
-9. End of session: for every ticket you leave in progress, blocked or review, set_resume_note with its template filled in (state, done so far, next steps, open questions or blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that another agent can continue without asking. Then the project's report, if it keeps one (get_report_settings: cadence daily or weekly): one report per period, due at the end of the project's shift. list_reports shows which periods are done, missing, upcoming or off; write the current or a missing one as the prompt says, in the shape of the template (its headings, in order), from daily_report for the days it covers, and post_report it (files as absolute paths). reportDue on get_summary and check_inbox says when the human expects it (due soon, or missing): write it then, with the human's go-ahead.
+9. Record your work on the ticket's work timeline as you go (the Roadmap and the ticket page draw it; the human sees from it who worked when, who waited on what, and what stalled): heartbeat every few minutes while you work a ticket (in Claude Code under /loop, or between steps), since a ticket in an active stage with no event for longer than its project's stallMinutes (30 by default) reads as stalled in the human's Needs you; start_span when you start a phase (spec, build, review with its round, verify, pr, preview, merge) and end_span when it is done; handoff when you brief a sub-agent (to: its name, the full agentName it passes such as orch/builder-1, and record its own spans with agent: its name) and when it hands back; start_wait with the reason (lock, builder, mcp, human, other) when you cannot go on, and end_wait as soon as you can. Each takes projectId and ticketId, and only a ticket of that project. get_ticket's work lists your open spans and waits to close.
+10. End of session: for every ticket you leave in progress, blocked or review, set_resume_note with its template filled in (state, done so far, next steps, open questions or blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that another agent can continue without asking. Then the project's report, if it keeps one (get_report_settings: cadence daily or weekly): one report per period, due at the end of the project's shift. list_reports shows which periods are done, missing, upcoming or off; write the current or a missing one as the prompt says, in the shape of the template (its headings, in order), from daily_report for the days it covers, and post_report it (files as absolute paths). reportDue on get_summary and check_inbox says when the human expects it (due soon, or missing): write it then, with the human's go-ahead.
+
+Who is who: every caller has a name, a role and maybe a parent (whoami). The human is the human. An agent token is a worker unless the human made it an orchestrator. A subagent you delegate to that shares your connection is your worker: brief it to pass agentName: "<your whoami name>/<its name>" (e.g. orch/builder-1) on every board call, so its posts, claims and comments show under its own name with you as its parent; a worker session configured on its own sends the header X-Agent-Name: <token name>/<its name> instead (or gets its own worker token, the hard boundary). A sub-identity is always a worker. Only the human and an orchestrator change a project's instructions (set_project_instructions), create a project with instructions or move a repo to another project; a worker asks its orchestrator, and every change shows in the human's Needs you until they review it.
 
 The project's agents: get_project lists them (agents: name, instructions, delegation notes, picture). They are personas the human defined, not connected tools; you work for them. A ticket assigned to one (reserved: true; get_ticket's agent has its instructions) is that agent's alone: claim_ticket with as: <its name>, brief a subagent with its instructions (and the ticket's), and post that work with post_update and comment using as: <its name>, so it shows under the agent's name, via you. Never take a reserved ticket as yourself, reassign it, or work it without the agent's instructions; only the human reassigns it. A thread can wait on an agent too: when someone @mentions it, or replies on its ticket or post, list_my_threads returns that thread with as: <its name>; answer it with comment as: <its name>, in that agent's voice and instructions. Orchestrating: each agent's delegation notes say when to call it, what to give it, what it returns and what comes next. With them you can work a ticket as its orchestrator instead of doing the work yourself: run each step as a subagent briefed with that agent's instructions, the project's instructions and the ticket; post what it returns on the ticket as that agent (as: <its name>, progress: true: it goes to the Agents tab), and keep the ticket's summary current with what the human needs from it; go where its notes say next. The default set (spec, builder, runner, and the review phases env, verify, hunt, refute, merge) is the cycle spec → build → review that tries to break it → (a fix pass by the builder on the confirmed findings, each with the project's checks and a new review, for as many review rounds as the ticket's complexity allows: none for low, one for mid, three for high; round 1 is the first build and its review, so a mid ticket stops after its review, and a review that does not survive after the last round goes to a human decision; a high ticket gets two fix passes; a low ticket has no review, and its checks return the build at most twice; after the second return, when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes to hand-off only with evidence for every criterion) → hand off; the /review-queue skill runs it (/feature-review is its review). The agents' thinking effort follows the complexity too: low for a low ticket, medium for mid and high; the orchestrator passes it as the Agent tool's effort on every agent it starts for the ticket (the ticket agent, the spec agent, the builder and the review's phase agents). Ask the human with ask_decision instead of guessing, never run two builders on one branch, never delegate to an agent without delegation notes, and a persona never answers a decision. The board skill has the full routine.
 
-When a project has several repos, pass repoId to create_ticket and post_review_result. Plain words, titles under 80 characters; the human reads dozens of these a day.
+When a project has several repos, pass repoId to create_ticket and post_review_result. A ticket can span several of them: repos on get_ticket lists each with its own branch, base and PR, the first being the primary (the ticket's own repoId, branch, baseBranch, prNumber); repos on create_ticket and update_ticket sets the list, claim_ticket's repos sets each one's branch (its branch is the primary's), add_workspace takes repoId, and get_ticket_git reports every repo. Plain words, titles under 80 characters; the human reads dozens of these a day.
 
-Keep the board out of the repo. The board, trazic, habits and any other personal tracking tool are private to the human: never mention them, their tool names, their URLs (localhost:47100, 47110) or a board ticket, task or project ("#12", "ticket 12", "per the board") in code comments, docs, READMEs, changelogs, config, commit messages, branch names, PR titles or descriptions, or issues, and never link or screenshot the board there. Describe the change and its reason in the repo's own terms; if the PR needs something from the ticket, restate it instead of pointing at it. Board updates and comments may talk about the repo, branches and PRs freely.`
+Keep the board out of the repo. The board and any other personal tracking tool are private to the human: never mention them, their tool names, their URLs (localhost:47100) or a board ticket, task or project ("#12", "ticket 12", "per the board") in code comments, docs, READMEs, changelogs, config, commit messages, branch names, PR titles or descriptions, or issues, and never link or screenshot the board there. Describe the change and its reason in the repo's own terms; if the PR needs something from the ticket, restate it instead of pointing at it. Board updates and comments may talk about the repo, branches and PRs freely.`
 
 const STATUS =
   'a stage key from get_project, a stage name, or a kind (open, active, blocked, review, done, cancelled; todo and in_progress also work): the first stage of that kind'
@@ -85,7 +94,7 @@ const PREVIEW_URL =
 const NEEDS =
   "ticket ids whose branches must be merged into this ticket's base before it can be done: the branch this one is built on (stacked), or one it merged in to get past a conflict. Same project, not itself, no cycles."
 const TASKS =
-  "Each item is a task, or {text, subtasks} for a task with the subtasks that go under it. Two levels and no more: the top level is the ticket's phases (a new ticket starts with its project's default phases: Implementation, then the hand-off's Pushed, PR, CI, Preview, Hand-off post), and the concrete steps go under a phase as its subtasks, the work's under Implementation."
+  "Each item is a task, or {text, subtasks} for a task with the subtasks that go under it. Two levels and no more: the top level is the ticket's phases (a new ticket starts with its project's default phases: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged; the board ticks Pushed, PR, CI, Preview and Merged itself), and the concrete steps go under a phase as its subtasks, the work's under Implementation."
 const BLOCKED =
   "blocked: true tags the task as waiting on the human (a credential, a manual action, a call only they can make), blockedReason says what they must do (only with blocked; up to 500 characters). A blocked task still counts as open and does not move the ticket; it shows on the ticket's card and in the human's Needs you."
 const BLOCKED_REASON = z
@@ -106,9 +115,28 @@ const NEW_TASKS = z.array(
     }),
   ]),
 )
+const REPOS = z.array(
+  z.object({
+    repoId: z.number().int(),
+    branch: z.string().optional(),
+    baseBranch: z.string().optional(),
+    prNumber: z.number().int().nullable().optional(),
+  }),
+)
+const REPOS_TEXT =
+  "The repos the ticket's work spans, each a repo of the project with its own branch, baseBranch and prNumber; at least one, none twice. The first is the primary: the ticket's repoId, branch, baseBranch and prNumber are its."
 const TAGS = `Short labels the human filters tickets and lanes by: the module the ticket touches (a short name such as Auth, Board, MCP), a kind (Bug, UI, Implementation, Report…) or a severity (Critical, High, Medium, Low, Cosmetic). One or two words each; before tagging, read get_project's tagSuggestions and usedTags (or the tags list_tickets returns) and reuse a tag already there in its exact casing rather than a new spelling; keep them out of the title (no "[High] …").`
 
-function buildServer(actor: string, agent: boolean) {
+const AGENT_NAME = z
+  .string()
+  .optional()
+  .describe(
+    'who makes this call, when you are a subagent (a worker) on your orchestrator\'s connection: "<the orchestrator\'s whoami name>/<your name>", e.g. orch/builder-1 (each name a letter or digit, then letters, digits, ".", "_" or "-"; up to 4 names, 80 characters). Your posts, claims and comments then carry that name, and you are a worker whatever the token is. Leave it out when you are the orchestrator itself or work on your own token; with an X-Agent-Name header it must name the same.',
+  )
+
+function buildServer(caller: Caller, refused: HttpError | null) {
+  const actor = caller.name
+  const agent = caller.kind === 'agent'
   const server = new McpServer({ name: 'agent-board', version: '0.1.0' }, { instructions: INSTRUCTIONS })
   const tool = <S extends z.ZodRawShape>(
     name: string,
@@ -116,19 +144,26 @@ function buildServer(actor: string, agent: boolean) {
     shape: S,
     run: (args: z.infer<z.ZodObject<S>>) => unknown,
   ) => {
-    const cb = (async (args: unknown) => {
+    const cb = (async ({ agentName: _agentName, ...args }: { agentName?: string }) => {
       try {
+        // The request's agentName was refused before the server was built: no tool runs under it.
+        if (refused) throw refused
         // Every file handed to an agent is on this machine to open (with STORAGE=s3, fetched if needed).
         return text(await uploads.ensureLocalFiles(await run(args as z.infer<z.ZodObject<S>>)))
       } catch (err) {
         if (!(err instanceof HttpError)) console.error(`mcp ${name} failed:`, err)
         return fail(err)
       }
-    }) as ToolCallback<S>
-    server.registerTool(name, { description, inputSchema: shape }, cb)
+    }) as unknown as ToolCallback<S & { agentName: typeof AGENT_NAME }>
+    server.registerTool(name, { description, inputSchema: { ...shape, agentName: AGENT_NAME } }, cb)
   }
 
-  tool('whoami', 'The name the board knows you by (your gate token name).', {}, () => ({ actor }))
+  tool(
+    'whoami',
+    "Who the board knows you as: name (your agent token's name, or your sub-identity <token name>/<name> when you pass agentName or send X-Agent-Name), role (orchestrator: also changes the projects' instructions; worker: every other agent, a sub-identity always; human for the human), parent (the name a sub-identity works under, '' otherwise) and token (the name of the credential you signed in with). actor is name, for older callers. An orchestrator hands its name to its subagents: each passes agentName \"<name>/<its own>\" on every call.",
+    {},
+    () => ({ actor, name: actor, role: caller.role, parent: caller.parent, token: caller.token }),
+  )
 
   // projects
   tool(
@@ -139,9 +174,18 @@ function buildServer(actor: string, agent: boolean) {
   )
   tool(
     'get_project',
-    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, and a picture; tickets can be reserved for them), defaultPhases (the top-level phases every new ticket starts with, in order; built in: Implementation, Pushed, PR, CI, Preview, Hand-off post; [] when the project seeds none; only the human changes the list), tagSuggestions (the tags the human offers for tickets; built in: Bug, UI, Implementation, Report), usedTags (the tags its tickets carry, most used first, each in the casing to reuse) and the instructions agents must follow when working on it. Read this before touching a project.",
+    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, and a picture; tickets can be reserved for them), defaultPhases (the top-level phases every new ticket starts with, in order; built in: Implementation, Pushed, PR, CI, Preview, Merged; [] when the project seeds none; only the human changes the list; a top-level task named Pushed, PR, CI, Preview or Merged is ticked by the board, never by hand), tagSuggestions (the tags the human offers for tickets; built in: Bug, UI, Implementation, Report), usedTags (the tags its tickets carry, most used first, each in the casing to reuse), stallMinutes (how many minutes an active ticket may go without a work-timeline event before it reads as stalled; only the human changes it), hostTools (the board's last check of the tools on its machine: checkedAt, and for each of git, gh, claude, node and pnpm its name, found, version, signedIn for gh and ok; one not ok also says what it breaks, the problem and the fix: a feature that needs it fails until the human fixes it; null before the first check ends) and the instructions agents must follow when working on it (only the human and an orchestrator change them: set_project_instructions; a worker asks its orchestrator). Read this before touching a project.",
     { projectId: z.number().int() },
     ({ projectId }) => projects.getProjectFull(projectId),
+  )
+  tool(
+    'set_project_instructions',
+    "Replace the project's instructions (get_project's instructions: what every agent follows on it) with instructions, at once. Only an orchestrator (or the human) may: a worker, any sub-identity included, is refused (ask your orchestrator). Change them when the human asked for it or the project's way of working changed, never to get around a rule. Every change is kept with the text before it, your name and role, shows in the project's activity, and waits in the human's Needs you as \"changed by <you>\" until they mark it reviewed or revert it. Returns {instructions, change}: change is null when the text was already that.",
+    {
+      projectId: z.number().int(),
+      instructions: z.string().max(50_000).describe('the whole new text, markdown'),
+    },
+    ({ projectId, instructions }) => setInstructions(projectId, instructions, caller),
   )
   tool(
     'set_tag_suggestions',
@@ -156,7 +200,7 @@ function buildServer(actor: string, agent: boolean) {
 
   tool(
     'get_summary',
-    "Where a project stands, in one read (every project, one block each, without projectId): reportDue (the project's report while the board is reminding about it: { projectId, project, cadence, period, label, dueAt, alertAt, state due or missing, minutesLeft, negative once overdue }, null otherwise), needsYou (open decisions, PRs waiting on the human's review, threads waiting on the human, tickets in a review stage, and blockedTasks: each task or subtask tagged blocked on a ticket still being worked, not done, cancelled or archived nor under one that is: taskId, text, reason, parentTask (the text of the task it is a step of, null for a top-level one), ticketId, ticketTitle, status, parent (the ticket it is a lane of); total counts them all), inProgress (tickets in active or blocked stages: assignee, task progress, blockedTasks, lanes, last progress post, preview, since when, stale when no progress post in 24 hours), doneToday (tickets that reached a done stage today, PRs that left the queue today, today's activity count), next (the head of the first open stage that is not a backlog, with how many are blocked and in the backlog) and carryingOver (tickets in progress since before today, each with resume: its resume note as a short plain-text excerpt with who wrote it when, noHandoff when nobody left one since the last day it was worked, stale when a progress post came after it, and which day of work this is). A PR's own ticket is in none of these lists: its decisions and threads waiting on the human are in needsYou as PR rows (prTicket true). Today is the board's local day. Read it when starting a session.",
+    "Where a project stands, in one read (every project, one block each, without projectId): reportDue (the project's report while the board is reminding about it: { projectId, project, cadence, period, label, dueAt, alertAt, state due or missing, minutesLeft, negative once overdue }, null otherwise), needsYou (open decisions, PRs waiting on the human's review, threads waiting on the human, tickets in a review stage, stalled: each ticket or lane in an active stage nobody recorded a work-timeline event on for longer than the project's stallMinutes, oldest signal first ({ticketId, title, status, assignee, parent, lastSignalAt, lastAgent, lastBy, lastFrom}; lastAgent is the name the latest event claims, or the assignee when no agent's event names one, lastBy who recorded it as signed in, '' when unknown, lastFrom 'event' or 'assignee': where lastAgent came from; how long it has been silent is generatedAt minus lastSignalAt), instructionChanges (an orchestrator's changes of the project's instructions the human has not reviewed or reverted yet: changeId, projectId, changedBy, role, createdAt, excerpt of the new text, revertable), and blockedTasks: each task or subtask tagged blocked on a ticket still being worked, not done, cancelled or archived nor under one that is: taskId, text, reason, parentTask (the text of the task it is a step of, null for a top-level one), ticketId, ticketTitle, status, parent (the ticket it is a lane of); total counts them all), inProgress (tickets in active or blocked stages: assignee, task progress, blockedTasks, lanes, last progress post, preview, since when, stale when no progress post in 24 hours, stalled when silent on the work timeline past the project's stallMinutes), doneToday (tickets that reached a done stage today, PRs that left the queue today, today's activity count), next (the head of the first open stage that is not a backlog, with how many are blocked and in the backlog) and carryingOver (tickets in progress since before today, each with resume: its resume note as a short plain-text excerpt with who wrote it when, noHandoff when nobody left one since the last day it was worked, stale when a progress post came after it, and which day of work this is). A PR's own ticket is in none of these lists: its decisions and threads waiting on the human are in needsYou as PR rows (prTicket true). Today is the board's local day. Read it when starting a session.",
     { projectId: z.number().int().optional() },
     ({ projectId }) => getSummary(projectId, { refreshPrs: true }),
   )
@@ -215,7 +259,7 @@ function buildServer(actor: string, agent: boolean) {
   // ongoing features
   tool(
     'list_tickets',
-    "Tickets of a project (all its repos; a PR's own ticket, which the board opens for a PR of the queue, is left out: list_prs names it as ticket) with status, assignee, reserved (assigned to one of the project's agents: only that agent works it), repoId, branch, parentId, complexity (low, mid or high: how much review it gets), tags, task progress (own and rolled up over lanes), blockedTasks (its open tasks and subtasks tagged blocked on the human, over the same lanes as the rolled-up progress), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage), startedAt (when work on it last started), and resume: whether its resume note holds (at: when it was written, null for none; stale: the work moved on since; noHandoff: it carried over from an earlier day without one; day: which day of work this is). status is a stage key (see get_project). needs lists the tickets it needs merged first, each with merged (see get_ticket). Cancelled lanes' tasks are left out of the rolled-up progress. Archived tickets (finished work the human took off the board, lanes with it; archivedAt/archivedBy) are left out unless archived says otherwise.",
+    "Tickets of a project (all its repos; a PR's own ticket, which the board opens for a PR of the queue, is left out: list_prs names it as ticket) with status, assignee, reserved (assigned to one of the project's agents: only that agent works it), repoId, branch, parentId, complexity (low, mid or high: how much review it gets), tags, task progress (own and rolled up over lanes), blockedTasks (its open tasks and subtasks tagged blocked on the human, over the same lanes as the rolled-up progress), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage), startedAt (when work on it last started), resume: whether its resume note holds (at: when it was written, null for none; stale: the work moved on since; noHandoff: it carried over from an earlier day without one; day: which day of work this is), lastSignalAt (the latest of its work-timeline events of any kind, startedAt and createdAt) and stalled ({since, minutes, lastAgent, lastBy, lastFrom} when it is in an active stage, not waiting on the human, and silent for longer than the project's stallMinutes; null otherwise). status is a stage key (see get_project). needs lists the tickets it needs merged first, each with merged (see get_ticket). Cancelled lanes' tasks are left out of the rolled-up progress. Archived tickets (finished work the human took off the board, lanes with it; archivedAt/archivedBy) are left out unless archived says otherwise.",
     {
       projectId: z.number().int(),
       parentId: z
@@ -245,7 +289,7 @@ function buildServer(actor: string, agent: boolean) {
   )
   tool(
     'get_ticket',
-    "A ticket in full: instructions and the files attached to them (attachments, each with a local path), complexity (low, mid or high: how much review it gets), agent (the project agent it is reserved for, with its instructions; null when shared), tasks (one flat list in tree order: each top-level task followed by its subtasks; parentId is null on a top-level task, else the task it is a subtask of; blocked: true when it waits on the human, blockedReason: what they must do, '' when none), blockedTasks (how many of its open tasks and subtasks are blocked, its lanes' included as in rollup), workspaces (each with managedPreview: the preview the board builds and runs from it, null when it never ran one; status building | starting | running | failed | stopped, step, port, url, reason, tail: the last log lines when it failed, logs: their paths), its parent chain, its lanes with their last progress post and verdict, the feed of posts (updates: newest first, each with tab: main or agents, the tab of the feed it shows in; progress true for a step of the work or false for discussion; summary true on a version of the summary; editedAt, attachments with a local path, and thread: its reply count, last author and time), summary (the one at the top of Main: body, change, at, by, via, attachments, postId, versions: how many were written, get_ticket_summary has them; fallback: true when none was written yet and the newest agent progress post stands in; null when there is neither), thread on the ticket (how many posts, who posted last), pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review, and push: whether its branch is on origin (state pushed: origin has every commit, behind counts what origin has on top; ahead: ahead commits are only local; local-only: origin has no such branch; merged: origin has no such branch any more and it was merged into the ticket's base, into; remote-only: only origin has it; none: no branch, or it exists nowhere; checkedAt: when origin was last fetched, every few minutes), likewise on each workspace. A ticket goes to review only with its branch pushed. handoff, in a review stage (null otherwise): what the hand-off still lacks, as update_ticket answers it. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled). archivedAt/archivedBy is set when the human archived it (or the ticket it is a lane of): finished, off the board. resume is where the last session left off: note (markdown; '' when none), at, by, sha (the branch head when it was written), commitsSince (commits on the branch since; null when unknown), stale (new commits or a newer progress post since), noHandoff (in progress, blocked or review since an earlier day with no note written since) and day (which day of work this is). Read the note before anything else when you pick the ticket up; handoff: true marks its earlier versions in the feed. needs: the tickets whose branches must be merged into its base before it can be done ({id, title, branch, prNumber, status, merged, into}); neededBy: the tickets that need this one. A decision post (decision: its options) also carries decidedOption and decidedBy, and relayedBy and relayedText when the orchestrator relayed the human's answer from the chat (decidedBy is '' then; both relay fields are '' when the human answered on the board).",
+    "A ticket in full: instructions and the files attached to them (attachments, each with a local path), complexity (low, mid or high: how much review it gets), agent (the project agent it is reserved for, with its instructions; null when shared), tasks (one flat list in tree order: each top-level task followed by its subtasks; parentId is null on a top-level task, else the task it is a subtask of; blocked: true when it waits on the human, blockedReason: what they must do, '' when none; auto: true on a phase the board ticks itself, Pushed, PR, CI, Preview or Merged at the top level, which nobody ticks by hand), blockedTasks (how many of its open tasks and subtasks are blocked, its lanes' included as in rollup), repos (the repos its work spans, in order, each {repoId, name, branch, baseBranch, prNumber, primary}: the first is the primary, whose values the ticket's own repoId, branch, baseBranch and prNumber always are), workspaces (each with repoId: the repo it is a worktree of, null for the primary; managedPreview: its first preview run as the board runs it from it, null when it never ran one (list_runs has every run); status building | starting | running | failed | stopped, step, port, url, reason, tail: the last log lines when it failed, logs: their paths), its parent chain, its lanes with their last progress post and verdict, the feed of posts (updates: newest first, each with tab: main or agents, the tab of the feed it shows in; progress true for a step of the work or false for discussion; summary true on a version of the summary; editedAt, attachments with a local path, and thread: its reply count, last author and time), summary (the one at the top of Main: body, change, at, by, via, attachments, postId, versions: how many were written, get_ticket_summary has them; fallback: true when none was written yet and the newest agent progress post stands in; null when there is neither), thread on the ticket (how many posts, who posted last), pr: the PR it was opened as (prNumber, or the open PR on its branch) with its latest review, and push: whether its branch is on origin (state pushed: origin has every commit, behind counts what origin has on top; ahead: ahead commits are only local; local-only: origin has no such branch; merged: origin has no such branch any more and it was merged into the ticket's base, into; remote-only: only origin has it; none: no branch, or it exists nowhere; checkedAt: when origin was last fetched, every few minutes), likewise on each workspace. A ticket goes to review only with its branch pushed. handoff, in a review stage (null otherwise): what the hand-off still lacks, as update_ticket answers it. approvedAt/approvedBy or disapprovedAt/disapprovedBy is the human's verdict (both null: no call yet; disapproved also means cancelled). archivedAt/archivedBy is set when the human archived it (or the ticket it is a lane of): finished, off the board. resume is where the last session left off: note (markdown; '' when none), at, by, sha (the branch head when it was written), commitsSince (commits on the branch since; null when unknown), stale (new commits or a newer progress post since), noHandoff (in progress, blocked or review since an earlier day with no note written since) and day (which day of work this is). Read the note before anything else when you pick the ticket up; handoff: true marks its earlier versions in the feed. needs: the tickets whose branches must be merged into its base before it can be done ({id, title, branch, prNumber, status, merged, into}); neededBy: the tickets that need this one. stalled and lastSignalAt as in list_tickets, and work: its work timeline in short (totals: workingMs, waitingMs, blockedOnHumanMs; stalled; lastSignalAt; open: the spans and waits still open, each with its id, to close with end_span and end_wait). A decision post (decision: its options) also carries decidedOption and decidedBy, and relayedBy and relayedText when the orchestrator relayed the human's answer from the chat (decidedBy is '' then; both relay fields are '' when the human answered on the board).",
     {
       ticketId: z.number().int(),
       laneUpdates: z.boolean().default(false).describe("include the lanes' posts in the feed"),
@@ -254,7 +298,7 @@ function buildServer(actor: string, agent: boolean) {
   )
   tool(
     'create_ticket',
-    "Create a ticket (a feature or piece of work) with optional initial tasks. A top-level ticket starts with its project's default phases (get_project's defaultPhases: Implementation, Pushed, PR, CI, Preview, Hand-off post unless the project changed them): tasks given as plain texts become the steps under the first phase, and {text, subtasks} items are phases of yours that go right after it. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, branch, tasks and updates, which starts without phases unless defaultPhases is true. defaultPhases false stores the tasks exactly as given. complexity sets how much review the ticket gets (low, mid or high; mid by default, and a lane without one copies its parent's).",
+    "Create a ticket (a feature or piece of work) with optional initial tasks. A top-level ticket starts with its project's default phases (get_project's defaultPhases: Implementation, Pushed, PR, CI, Preview, Merged unless the project changed them): tasks given as plain texts become the steps under the first phase, and {text, subtasks} items are phases of yours that go right after it. With parentId it is a lane of that ticket: a parallel piece of it with its own assignee, branch, tasks and updates, which starts without phases unless defaultPhases is true. defaultPhases false stores the tasks exactly as given. complexity sets how much review the ticket gets (low, mid or high; mid by default, and a lane without one copies its parent's).",
     {
       projectId: z.number().int(),
       title: z.string(),
@@ -292,12 +336,15 @@ function buildServer(actor: string, agent: boolean) {
           "the PR opened from this ticket's branch; a PR of the queue that had its own ticket has it cancelled, and this ticket takes the PR over",
         ),
       needs: z.array(z.number().int()).optional().describe(NEEDS),
+      repos: REPOS.optional().describe(
+        `${REPOS_TEXT} The first replaces repoId, branch, baseBranch and prNumber when those are left out.`,
+      ),
     },
     ({ projectId, ...rest }) => needs.newTicket(projectId, rest, actor, { agent: true }),
   )
   tool(
     'update_ticket',
-    "Change status, assignee, branch, tags, prNumber, title, instructions or complexity (the review level, low, mid or high). Use claim_ticket to pick a ticket up. Changing the assignee of a ticket reserved for one of the project's agents fails: only the human reassigns those. Status blocked means you are waiting on the human: say what for in a comment on the ticket. A move to done is refused while one of its needs is not merged into its base (the error says which); merge order is the human's, so leave it in review. A move to a review stage goes through and answers with handoff: missing [{code, text}] lists what the hand-off still lacks (tasks_open: Implementation, the ticket's tasks and subtasks, its phases and their steps, the hand-off phases included: missing while it has none or some of them, its lanes' included, are open; no_pr: no PR set or open on the branch; not_pushed: the branch is not on origin; no_preview: no preview the board runs or that answers; no_handoff_post: no summary written by an agent (set_ticket_summary) since the branch's last commit, or since work started without one; a ticket that never had a summary still passes with an agent's progress post since then; checks_unknown: the PR's CI is failing or still running), and checks has every item with ok, first not_merged (Merged: the PR merged on GitHub or the branch merged into its base), which is never in missing: merging is the human's. Fix what it lists.",
+    "Change status, assignee, branch, tags, prNumber, title, instructions or complexity (the review level, low, mid or high). Use claim_ticket to pick a ticket up. Changing the assignee of a ticket reserved for one of the project's agents fails: only the human reassigns those. Status blocked means you are waiting on the human: say what for in a comment on the ticket. A move to done is refused while one of its needs is not merged into its base (the error says which); merge order is the human's, so leave it in review. A move to a review stage goes through and answers with handoff: missing [{code, text}] lists what the hand-off still lacks (tasks_open: Implementation, the ticket's tasks and subtasks, its phases and their steps, the hand-off phases included but Merged: missing while it has none or some of them, its lanes' included, are open; no_pr: no PR set or open on the branch; not_pushed: the branch is not on origin; no_preview: no preview the board runs or that answers; no_handoff_post: no summary written by an agent (set_ticket_summary) since the branch's last commit, or since work started without one; a ticket that never had a summary still passes with an agent's progress post since then; checks_unknown: the PR's CI is failing or still running, and no \"CI run locally: green\" comment names its head), and checks has every item with ok, first not_merged (Merged: the PR merged on GitHub or the branch merged into its base), which is never in missing: merging is the human's. Fix what it lists.",
     {
       ticketId: z.number().int(),
       title: z.string().optional(),
@@ -307,7 +354,13 @@ function buildServer(actor: string, agent: boolean) {
       assignee: z.string().optional(),
       branch: z.string().optional(),
       baseBranch: z.string().optional(),
-      repoId: z.number().int().optional(),
+      repoId: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          "the primary repo. One of the ticket's other repos becomes the primary with its own branch, baseBranch and prNumber, the old primary staying among its repos with its own; any other repo of the project replaces the primary's repo, keeping the ticket's branch. With repos, it picks the primary from that list.",
+        ),
       tags: z.array(z.string()).optional().describe(`replaces the whole list. ${TAGS}`),
       prNumber: z
         .number()
@@ -318,18 +371,28 @@ function buildServer(actor: string, agent: boolean) {
           "the PR opened from this ticket's branch, in the ticket's repo; null unlinks it. A PR of the queue that had its own ticket has it cancelled, and this ticket takes the PR over",
         ),
       needs: z.array(z.number().int()).optional().describe(`${NEEDS} Replaces the whole list; [] clears it.`),
+      repos: REPOS.optional().describe(
+        `${REPOS_TEXT} Replaces the whole list; what an entry leaves out stays as it was for that repo. A repo removed from the list has its runs for the ticket stopped.`,
+      ),
     },
     ({ ticketId, ...patch }) => needs.changeTicket(ticketId, patch, actor, { agent: true }),
   )
   tool(
     'claim_ticket',
-    "Pick a ticket up: assigns it to you (or, with as, to the project agent you work it as) and moves it from an open or blocked stage to the first active stage, optionally setting the branch. Returns the ticket with resume, its resume note (as in get_ticket): read it before anything else. A shared ticket someone else holds is taken over from them. Fails when the ticket is reserved for one of the project's agents and as is not that agent, or when it is in a done or cancelled stage.",
+    "Pick a ticket up: assigns it to you (or, with as, to the project agent you work it as) and moves it from an open or blocked stage to the first active stage, optionally setting the branch (the primary repo's) and, with repos, each repo's branch. Returns the ticket with resume, its resume note (as in get_ticket): read it before anything else. A shared ticket someone else holds is taken over from them. Fails when the ticket is reserved for one of the project's agents and as is not that agent, or when it is in a done or cancelled stage.",
     {
       ticketId: z.number().int(),
-      branch: z.string().optional(),
+      branch: z.string().optional().describe("the branch in the ticket's primary repo"),
       as: AS.describe('the project agent you work this ticket as; required when it is reserved for one'),
+      repos: z
+        .array(z.object({ repoId: z.number().int(), branch: z.string() }))
+        .optional()
+        .describe(
+          "each repo's branch (get_project lists the repos); a repo of the project the ticket does not span yet is added to it. branch, when given, wins for the primary repo",
+        ),
     },
-    ({ ticketId, branch, as }) => withResume(features.claimTicket(ticketId, actor, { branch, as })),
+    ({ ticketId, branch, as, repos }) =>
+      withResume(features.claimTicket(ticketId, actor, { branch, as, repos })),
   )
   tool(
     'set_resume_note',
@@ -347,7 +410,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'add_tasks',
-    `Append tasks to a ticket. ${TASKS} With parentTaskId (a top-level task of this ticket, such as Implementation) they are added as subtasks of it: the way to put the steps under a phase. A subtask cannot have subtasks, so a third level is refused and nothing is added. Without parentTaskId they are phases, appended at the end; a ticket with no tasks gets its phases this way (the names from get_project's defaultPhases, the steps under the first). Tasks and subtasks all count in the progress, and they are the hand-off's Implementation item (tasks_open), met once the ticket has tasks and every one, its lanes' included and the hand-off phases too, is done. An item given as an object can also come tagged blocked: {text, blocked: true, blockedReason} (its subtasks stay plain texts; tag those with update_task). ${BLOCKED}`,
+    `Append tasks to a ticket. ${TASKS} With parentTaskId (a top-level task of this ticket, such as Implementation) they are added as subtasks of it: the way to put the steps under a phase. A subtask cannot have subtasks, so a third level is refused and nothing is added. Without parentTaskId they are phases, appended at the end; a ticket with no tasks gets its phases this way (the names from get_project's defaultPhases, the steps under the first). Tasks and subtasks all count in the progress, and they are the hand-off's Implementation item (tasks_open), met once the ticket has tasks and every one, its lanes' included and the hand-off phases too (Merged aside), is done. An item given as an object can also come tagged blocked: {text, blocked: true, blockedReason} (its subtasks stay plain texts; tag those with update_task). ${BLOCKED}`,
     {
       ticketId: z.number().int(),
       tasks: NEW_TASKS.min(1),
@@ -362,13 +425,13 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'set_task_done',
-    'Tick or untick a task or a subtask. A task with subtasks is done exactly when all of them are: ticking or unticking it does the same to its subtasks, ticking its last open subtask ticks it, and unticking one of them unticks it. A done task waits on nobody: ticking clears its blocked tag, and that of every task the tick reaches (its subtasks, a parent its last subtask ticks); unticking does not bring a tag back.',
+    'Tick or untick a task or a subtask. A task with subtasks is done exactly when all of them are: ticking or unticking it does the same to its subtasks, ticking its last open subtask ticks it, and unticking one of them unticks it. A done task waits on nobody: ticking clears its blocked tag, and that of every task the tick reaches (its subtasks, a parent its last subtask ticks); unticking does not bring a tag back. Pushed, PR, CI, Preview and Merged at the top level (auto: true on get_ticket) are ticked by the board from git, GitHub and the previews: ticking or unticking one is refused.',
     { taskId: z.number().int(), done: z.boolean().default(true) },
     ({ taskId, done }) => features.updateTask(taskId, { done }, actor),
   )
   tool(
     'update_task',
-    `Reword a task or a subtask, tick / untick it (ticks keep a task and its subtasks in step, as set_task_done says), or tag it blocked on the human and clear that. When a step needs the human (a credential, a manual action, a call only they can make), set blocked: true with blockedReason saying what they must do, and keep working on the rest; blocked: false clears the tag and its reason once resolved (ticking it done clears it too). A reason alone rewrites the reason of a blocked task. Tagging a done task reopens it, as unticking would; done: true with blocked: true is refused. The tag is for one step: move the whole ticket to blocked (update_ticket) or ask_decision only when nothing else can go on. ${BLOCKED}`,
+    `Reword a task or a subtask, tick / untick it (ticks keep a task and its subtasks in step, as set_task_done says), or tag it blocked on the human and clear that. When a step needs the human (a credential, a manual action, a call only they can make), set blocked: true with blockedReason saying what they must do, and keep working on the rest; blocked: false clears the tag and its reason once resolved (ticking it done clears it too). A reason alone rewrites the reason of a blocked task. Tagging a done task reopens it, as unticking would; done: true with blocked: true is refused. A phase the board ticks (auto: true on get_ticket: Pushed, PR, CI, Preview, Merged at the top level) takes no done here, nor a blocked tag while done; rewording, removing, or tagging it blocked while open still work. The tag is for one step: move the whole ticket to blocked (update_ticket) or ask_decision only when nothing else can go on. ${BLOCKED}`,
     {
       taskId: z.number().int(),
       text: z.string().min(1).optional(),
@@ -389,7 +452,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'add_workspace',
-    'Register a worktree / sub-branch / subagent sandbox you opened for a ticket, so the board can show it. previewUrl is where its branch runs for the human to try, if it does already (set_preview sets it later).',
+    "Register a worktree / sub-branch / subagent sandbox you opened for a ticket, so the board can show it. previewUrl is where its branch runs for the human to try, if it does already (set_preview sets it later). repoId is the repo it is a worktree of, one of the ticket's repos (get_ticket's repos); the ticket's primary repo when left out. A repo's runs run from its worktree.",
     {
       ticketId: z.number().int(),
       name: z.string(),
@@ -397,12 +460,17 @@ It replaces the previous note; each new version is also posted to the ticket's f
       path: z.string().default(''),
       agent: z.string().optional(),
       previewUrl: z.string().optional().describe(PREVIEW_URL),
+      repoId: z
+        .number()
+        .int()
+        .optional()
+        .describe("the ticket's repo this is a worktree of; the primary repo when left out"),
     },
     ({ ticketId, ...rest }) => features.addWorkspace(ticketId, rest, actor),
   )
   tool(
     'set_preview',
-    'Set the link where a workspace\'s branch runs for the human to try (after you start its server), or clear it with "" once you stop the server. The ticket page shows it as a Preview card with an Open button and whether it is running.',
+    'Set the link where a workspace\'s branch runs for the human to try (after you start its server), or clear it with "" once you stop the server. The ticket page shows it on its Runs card with an Open button and whether it is running.',
     {
       workspaceId: z.number().int(),
       previewUrl: z.string().describe(`${PREVIEW_URL}; "" clears it`),
@@ -411,7 +479,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'start_preview',
-    "Have the board build and run a branch of the board itself as a preview, from the workspace's worktree (its registered path: a git worktree next to the repo's main checkout, never the main checkout). In the background: pnpm install when the lockfile changed, pnpm build, a fresh copy of the live data, then the built server on a free port from 47101 without the passkey gate; once it answers the workspace's previewUrl is set. Returns at once with status building; get_ticket (the workspace's managedPreview) follows it to running, or failed with the last log lines. One per workspace; at most as many at once, board-wide, as the human's preview limit allows (8 by default): a start beyond it is refused with the limit, a restart of a running one is not. restart: true stops a running one first and builds again.",
+    "start_run for the first preview run of the workspace's repo (on a checkout of the board, its Preview), kept for older instructions; a repo with no preview run configured is refused. The board builds and runs it from the workspace's worktree (its registered path: a git worktree next to the repo's main checkout, never the main checkout). In the background, for the board's Preview: pnpm install when the lockfile changed, pnpm build, a fresh copy of the live data, then the built server on a free port from 47101 with sign-in off; once it answers the workspace's previewUrl is set. Returns at once with status building; get_ticket (the workspace's managedPreview) follows it to running, or failed with the last log lines. One per workspace; at most as many at once, board-wide, as the human's preview limit allows (8 by default): a start beyond it is refused with the limit, a restart of a running one is not. restart: true stops a running one first and builds again.",
     {
       workspaceId: z.number().int(),
       restart: z.boolean().default(false).describe('stop the running preview first and build again'),
@@ -421,13 +489,48 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'stop_preview',
-    "Stop the preview the board runs from a workspace (start_preview): its processes are killed, its port freed and the workspace's previewUrl cleared.",
+    "Stop the first preview run of the workspace's repo (start_preview), kept for older instructions (stop_run stops any run): its processes are killed, its port freed and the workspace's previewUrl cleared.",
     { workspaceId: z.number().int() },
     async ({ workspaceId }) => {
       if (!isActive(managedPreview(workspaceId)))
         throw new HttpError(409, 'the board runs no preview of this workspace')
       return stopPreview(workspaceId, `stopped by ${actor}`, actor)
     },
+  )
+  tool(
+    'list_runs',
+    "Every run of every repo of the ticket, grouped by repo in the ticket's order (the primary first): repos [{repoId, name, branch, primary, workspace (the ticket's worktree of that repo the runs use: on the repo's branch first, else the newest; null when the ticket has none), workspaceProblem (why there is none), runs [{id, name, type preview | job, install, build, start, env, port (null: auto), healthPath, copyData, workspaceId, state (null when it never ran there; status building | starting | running | failed | stopped, step, port, url (a preview's, once it answers), reason, tail: the last log lines, logs: their paths), cannotStart (why a start would be refused, null when it would start)}]}], orphaned [{repoId, repoName, runId, name, type, workspace, state, reason}]: runs started from the ticket's workspaces that still go for a repo the ticket no longer spans (stop_run stops them; they cannot start again), alsoRunning [the same shape]: runs of the ticket's repos going from another of its workspaces than the one their row shows (stop_run stops them with the rest of that run), and inUse and limit: the runs going board-wide and the human's preview limit. The runs are the human's: you start and stop them, never change what they run.",
+    { ticketId: z.number().int() },
+    ({ ticketId }) => ticketRuns.ticketRuns(ticketId),
+  )
+  tool(
+    'start_run',
+    "Have the board start one of the ticket's runs (list_runs), by its id or name, from the ticket's worktree of its repo (register it with add_workspace first). repoId picks the repo when a name is in several (the error lists them). In the background: install when the lockfile changed, build, a copy of the live data when the run takes one, then its start command; a preview gets a free port from 47101 (or its fixed one), and once its health path answers the workspace's previewUrl is set; a job runs once started. Returns at once with status building; list_runs follows it to running, or failed with the last log lines. With all: true (or no run) it starts every run of the ticket's repos (of repoId's only, given) that does not run yet and answers results, each with ok and reason: one refused does not stop the rest. At most as many runs at once, board-wide, as the human's preview limit allows: a start beyond it is refused, a restart of a running one is not. restart: true stops a running one first and starts it again. What runs is always the human's configured commands.",
+    {
+      ticketId: z.number().int(),
+      run: z.union([z.number().int(), z.string()]).optional().describe("the run's id or name (list_runs)"),
+      repoId: z.number().int().optional().describe("the ticket's repo the run is of"),
+      restart: z.boolean().default(false).describe('stop it first if it runs, and start it again'),
+      all: z.boolean().default(false).describe("every run of the ticket's repos (repoId's only, given)"),
+    },
+    ({ ticketId, run, repoId, restart, all }) =>
+      all || run === undefined
+        ? ticketRuns.startTicketRuns(ticketId, actor, { repoId })
+        : ticketRuns.startTicketRun(ticketId, run, actor, { repoId, restart }),
+  )
+  tool(
+    'stop_run',
+    "Stop one of the ticket's runs that builds or runs (by id or name, as start_run takes it): its processes are killed, its port freed and a preview's link cleared. With all: true (or no run), every run of the ticket (of repoId's only, given) that builds or runs, answering results. A run is stopped from every workspace of the ticket it goes from; its orphaned runs (list_runs) are stopped too, by name or with all.",
+    {
+      ticketId: z.number().int(),
+      run: z.union([z.number().int(), z.string()]).optional().describe("the run's id or name (list_runs)"),
+      repoId: z.number().int().optional().describe("the ticket's repo the run is of"),
+      all: z.boolean().default(false).describe("every run of the ticket's repos (repoId's only, given)"),
+    },
+    ({ ticketId, run, repoId, all }) =>
+      all || run === undefined
+        ? ticketRuns.stopTicketRuns(ticketId, actor, { repoId })
+        : ticketRuns.stopTicketRun(ticketId, run, actor, { repoId }),
   )
   tool(
     'remove_workspace',
@@ -438,6 +541,47 @@ It replaces the previous note; each new version is also posted to the ticket's f
       return { ok: true }
     },
   )
+  // the work timeline: what you record as you work a ticket (workTimeline.ts)
+  const SCOPE =
+    "projectId and ticketId name the ticket: it must be a ticket of that project (another project's is refused with 403 and nothing is written; an archived ticket with 409). agent is who did the work (1 to 60 characters, a sub-agent's name too; you when left out: your whoami name, <token>/<name> for a sub-identity); the board also records you as by. note: up to 500 characters. The board takes the time itself. Nothing goes to the feed or the Daily view, and the ticket is not bumped."
+  const scoped = { projectId: z.number().int(), ticketId: z.number().int(), ...work.eventBase }
+  tool(
+    'start_span',
+    `Start a span of work on a ticket: a phase (spec, build, review, verify, pr, preview, merge, or any other words; the known ones are stored lowercased), with round for a review round (1 to 20). Start one at the beginning of each phase and end it (end_span) when the phase is done; it shows as a segment of the ticket's work timeline on the Roadmap and the ticket page, and counts as working time. Returns spanId. ${SCOPE}`,
+    { ...scoped, ...work.eventFields.span_start },
+    ({ projectId, ticketId, ...input }) => work.startSpan(projectId, ticketId, input, actor),
+  )
+  tool(
+    'end_span',
+    `End a span you started: by spanId, or else the latest open span on the ticket by agent (of phase, when given). Refused with 409 when there is no such open span, or it already ended. Returns the span's start, end and durationMs. get_ticket's work.open.spans lists the open ones. ${SCOPE}`,
+    { ...scoped, ...work.eventFields.span_end },
+    ({ projectId, ticketId, ...input }) => work.endSpan(projectId, ticketId, input, actor),
+  )
+  tool(
+    'handoff',
+    `Record that work on a ticket passes from one agent to another: when you brief a sub-agent (to: its name, which need not be one of the project's agents or a token), or hand back to the orchestrator. from defaults to agent. It shows as a marker on the timeline. ${SCOPE}`,
+    { ...scoped, ...work.eventFields.handoff },
+    ({ projectId, ticketId, ...input }) => work.handoff(projectId, ticketId, input, actor),
+  )
+  tool(
+    'start_wait',
+    `Start a wait on a ticket, with its reason: lock (a shared lock, such as the test lock), builder (waiting on the builder or another agent's result), mcp (the board or another MCP server is down), human (waiting on the human's answer or action) or other (say what in note). End it with end_wait as soon as you can go on. A wait shows hatched on the timeline and counts as waiting time, or as blocked on the human for reason human; an open human wait keeps the ticket from reading as stalled. Returns waitId. ${SCOPE}`,
+    { ...scoped, ...work.eventFields.wait_start },
+    ({ projectId, ticketId, ...input }) => work.startWait(projectId, ticketId, input, actor),
+  )
+  tool(
+    'end_wait',
+    `End a wait: by waitId, or else the latest open wait on the ticket by agent. Refused with 409 when there is no such open wait, or it already ended. ${SCOPE}`,
+    { ...scoped, ...work.eventFields.wait_end },
+    ({ projectId, ticketId, ...input }) => work.endWait(projectId, ticketId, input, actor),
+  )
+  tool(
+    'heartbeat',
+    `Say you are still working a ticket. Send one every few minutes while you work it (in Claude Code under /loop, or between steps): a ticket in an active stage with no event of any kind for longer than its project's stallMinutes (30 by default) reads as stalled, on its card, in list_tickets, get_ticket and the human's Needs you. Returns at and lastSignalAt. ${SCOPE}`,
+    { ...scoped },
+    ({ projectId, ticketId, ...input }) => work.heartbeat(projectId, ticketId, input, actor),
+  )
+
   tool(
     'post_update',
     "Post on a ticket: markdown plus optional files (screenshots, recordings) given as absolute paths on this machine. progress (default true) marks it as a step of the work; false makes it discussion, like comment on the ticket. A progress post, and any post made with as, goes to the feed's Agents tab, out of the human's way; the hand-off is the summary (set_ticket_summary), not a post, and an answer to the human's post is a reply under it (comment with replyTo), not a new post. tab says otherwise.",
@@ -505,8 +649,58 @@ It replaces the previous note; each new version is also posted to the ticket's f
     ({ ticketId, ...input }) => features.askDecision(ticketId, input, actor),
   )
   tool(
+    'request_archive',
+    "Ask the human to archive finished tickets: one decision card, \"Archive #12, #15?\" with Archive and Keep, on the first ticket named (Main tab; it does not block or move any ticket). It shows in the human's Needs you. Nothing is archived until the human answers Archive on the board, or you relay their chat answer with answer_decision after asking them; then each ticket that is still finished is archived as the human's own archive does it (archivedBy the human, lanes with it), and Keep changes nothing. You can never archive directly. Each ticket must be in this one project, top-level (a lane goes with its ticket), in a done or cancelled stage, and not archived yet: one that is not refuses the whole request, the error naming each failing ticket and why, and no card is posted. Returns the card's post (its id is the postId answer_decision takes).",
+    {
+      ticketIds: z
+        .union([z.number().int(), z.array(z.number().int()).min(1).max(features.MAX_ARCHIVE_REQUEST)])
+        .describe('the ticket to archive, or a list of them (up to 50)'),
+      as: AS,
+    },
+    ({ ticketIds, as }) => {
+      if (!agent) throw new HttpError(403, 'the human archives tickets directly; agents ask here')
+      return features.requestArchive(Array.isArray(ticketIds) ? ticketIds : [ticketIds], { as }, actor)
+    },
+  )
+  tool(
+    'add_repo',
+    "Ask the human to add a repo to your project: one decision card, \"Add repo <name>?\" with Add and Don't add, on the ticket you name (Main tab; it does not block or move it), naming the repo's name, GitHub repo, path and base branch. It shows in the human's Needs you. The repo goes to that ticket's project: never another one, and no project is made. Nothing is added until the human answers Add on the board, or you relay their chat answer with answer_decision after asking them; Add checks it all again and adds the repo in the human's name, and Don't add changes nothing. You can never add, change or remove a repo directly. Checked first, and no card is posted when one fails (the error says which): repoPath is an absolute path to an existing git checkout (a worktree too); its origin remote is github.com's githubRepo (owner/name, any casing; only the URL is compared); the project has no repo of that name (any casing); and no repo of the board is registered at that path. Returns the card's post (its id is the postId answer_decision takes). Once it is added, move the ticket onto it with set_ticket_repo.",
+    {
+      ticketId: z.number().int().describe('the ticket you work on; the repo goes to its project'),
+      name: z.string().min(1).max(100).describe("the repo's name on the board, unique in the project"),
+      repoPath: z.string().min(1).max(1000).describe("the checkout's absolute path on the board's machine"),
+      githubRepo: z
+        .string()
+        .min(1)
+        .max(200)
+        .describe(
+          'the GitHub owner/name its origin remote points at, like acme/shop (git remote get-url origin)',
+        ),
+      baseBranch: z.string().max(200).optional().describe('the branch work merges into; main when left out'),
+      as: AS,
+    },
+    ({ ticketId, ...input }) => {
+      if (!agent) throw new HttpError(403, 'the human adds repos directly; agents ask here')
+      return features.requestRepo(ticketId, input, actor)
+    },
+  )
+  tool(
+    'set_ticket_repo',
+    "Move a ticket onto another repo of its own project, at once (no card), as its primary repo: the board then looks for its branch in that checkout, and its base branch becomes that repo's (baseBranch to give another). A repo the ticket already spans (its repos) becomes the primary with its own branch, base and PR, the old primary staying among its repos. Logged in the ticket's activity. Refused: a repo of another project (a ticket never moves across projects), a PR's own ticket (it belongs to its PR's repo), an unknown ticket or repo. Its lanes keep their own repos. Returns the ticket.",
+    {
+      ticketId: z.number().int(),
+      repoId: z.number().int().describe("one of the project's repos (get_project lists them)"),
+      baseBranch: z
+        .string()
+        .max(200)
+        .optional()
+        .describe("the ticket's base branch there; the repo's when left out"),
+    },
+    ({ ticketId, ...input }) => features.setTicketRepo(ticketId, input, actor, { agent: true }),
+  )
+  tool(
     'answer_decision',
-    "Record the human's answer to a decision card, given in the chat, as the orchestrator. Call it only in the session that talks to the human, after you asked them the card's question in the chat (AskUserQuestion in Claude Code, or the client's equivalent) and they answered there. postId: the card's post (get_ticket, or needsYou.decisions in get_summary). option: the index of the option they picked, as the card lists them. words: their answer as they gave it, verbatim. The card is recorded as decided by the human, relayed by you, with their words; the ticket goes back to in progress once nothing else is open. Refused: a human caller; any call with as (one of the project's agents); empty words; an option the card does not have; a post that is not a decision; a card already decided (the human changes it on the board). A delegated subagent never answers a decision either, and the server cannot tell one that calls without as from you: keeping to this is your job.",
+    "Record the human's answer to a decision card, given in the chat, as the orchestrator. Call it only in the session that talks to the human, after you asked them the card's question in the chat (AskUserQuestion in Claude Code, or the client's equivalent) and they answered there. postId: the card's post (get_ticket, or needsYou.decisions in get_summary). option: the index of the option they picked, as the card lists them. words: their answer as they gave it, verbatim. The card is recorded as decided by the human, relayed by you, with their words; the ticket goes back to in progress once nothing else is open. On a request_archive card, Archive then archives its tickets in the human's name; on an add_repo card, Add then adds the repo in the human's name, once it passes add_repo's checks again (repo in the answer: added, already, or refused with why). Refused: a human caller; a sub-identity (a call with agentName or X-Agent-Name: a delegated worker); any call with as (one of the project's agents); empty words; an option the card does not have; a post that is not a decision; a card already decided (the human changes it on the board). A delegated subagent never answers a decision either; one that passes agentName is refused, and the server cannot tell one that leaves it out from you: keeping to this is your job.",
     {
       postId: z.number().int().describe("the decision card's post id"),
       option: z
@@ -522,11 +716,16 @@ It replaces the previous note; each new version is also posted to the ticket's f
           'leave it out: a call that sets it is refused, since the orchestrator relays a decision itself',
         ),
     },
-    (args) => features.relayDecision(args.postId, args, actor, { agent }),
+    async (args) =>
+      features.relayDecision(args.postId, args, actor, {
+        agent,
+        delegated: caller.parent !== '',
+        origin: await features.answerOrigin(args.postId, args.option),
+      }),
   )
   tool(
     'edit_post',
-    'Change a post you made on a ticket (its body, whether it is progress, or its tab of the feed: tab main or agents moves it), or a reply (kind reply: its body). Edits show as edited. A version of the summary is never edited: write a new one with set_ticket_summary.',
+    'Change a post you made on a ticket (its body, whether it is progress, or its tab of the feed: tab main or agents moves it), or a reply (kind reply: its body). Edits show as edited. A version of the summary is never edited: write a new one with set_ticket_summary. Nor is the body of a request_archive or add_repo card: ask again instead.',
     {
       kind: z.enum(['post', 'reply']).default('post'),
       id: z
@@ -558,7 +757,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'get_ticket_git',
-    "Read-only git state of the ticket branch and its workspaces, its lanes' included and tagged with the lane (ahead/behind, last commit, worktrees). Each branch's reach says whether its work is already in its base chain (a lane's parent branch, then the parent's base, then the repo's base): merged (as is), rebased (same patches), edited (patches differ but merging would change nothing), unique (still has work of its own, listed). merged, rebased and edited are safe to delete. Each branch's push says whether it is on origin: state pushed (origin has every commit; behind: how many origin has on top), ahead (ahead commits not pushed yet), local-only (not on origin at all), merged (gone from origin, merged into the ticket's base: into), remote-only (only on origin) or none, with checkedAt: when origin was last fetched (the board fetches every few minutes). includes: ids of open tickets whose unmerged work this ticket's branch holds (commits of their branch that are in this one but not in its base): declare them with update_ticket needs, so they are merged first.",
+    "Read-only git state of the ticket branch and its workspaces, its lanes' included and tagged with the lane (ahead/behind, last commit, worktrees). repos has every repo the ticket spans, the primary first, each {repo, primary, branch, baseBranch, info (the same state for that repo's branch), pr}; the top-level repo, branch and info are the primary's, and each workspace says its repo. Each branch's reach says whether its work is already in its base chain (a lane's parent branch, then the parent's base, then the repo's base): merged (as is), rebased (same patches), edited (patches differ but merging would change nothing), unique (still has work of its own, listed). merged, rebased and edited are safe to delete. Each branch's push says whether it is on origin: state pushed (origin has every commit; behind: how many origin has on top), ahead (ahead commits not pushed yet), local-only (not on origin at all), merged (gone from origin, merged into the ticket's base: into), remote-only (only on origin) or none, with checkedAt: when origin was last fetched (the board fetches every few minutes). includes: ids of open tickets whose unmerged work this ticket's branch holds (commits of their branch that are in this one but not in its base): declare them with update_ticket needs, so they are merged first.",
     { ticketId: z.number().int() },
     ({ ticketId }) => needs.ticketGitView(ticketId),
   )
@@ -634,7 +833,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'list_actors',
-    "Every name that signs in to the board (connected agents by token name, the human by passkey). The project's own agents are in get_project. Use these exact names for assignee.",
+    "Every name that signs in to the board: {name, kind (agent or human), role (human; orchestrator or worker for an agent, as last seen), parent (the name a sub-identity <token name>/<name> works under, '' otherwise)}. Connected agents by token name and their sub-identities, the human by passkey. The project's own agents are in get_project. Use these exact names for assignee.",
     {},
     () => listActors(),
   )
@@ -694,13 +893,66 @@ It replaces the previous note; each new version is also posted to the ticket's f
   return server
 }
 
+/**
+ * The tool calls' `agentName` in the request's body: undefined for a call without one. A request is one
+ * call in practice; a batch whose calls name different callers is refused whole.
+ */
+async function agentNamesOf(request: Request): Promise<unknown[]> {
+  if (request.method !== 'POST') return []
+  let body: unknown
+  try {
+    body = await request.clone().json()
+  } catch {
+    return []
+  }
+  type Message = { method?: unknown; params?: { arguments?: Record<string, unknown> } }
+  return (Array.isArray(body) ? body : [body])
+    .filter(
+      (m): m is Message => typeof m === 'object' && m !== null && (m as Message).method === 'tools/call',
+    )
+    .map((m) => m.params?.arguments?.agentName)
+}
+
+/**
+ * Who the request's tool calls run as: the signed-in caller, or the sub-identity their agentName names
+ * (asSubIdentity's rules). With X-Agent-Name already making the request a sub-identity, agentName must
+ * name that same one. A human's call is the human's whatever it says.
+ */
+export async function agentNameOf(request: Request, caller: Caller): Promise<Caller> {
+  if (caller.kind === 'human') return caller
+  const names = [...new Set(await agentNamesOf(request))]
+  if (names.length > 1)
+    throw new HttpError(400, 'agentName: every tool call of one request is made by the same caller')
+  const name = names[0]
+  if (typeof name !== 'string') return caller
+  if (caller.parent) {
+    if (name.trim() === caller.name) return caller
+    throw new HttpError(
+      400,
+      `agentName ${name} and X-Agent-Name ${caller.name} disagree: give one of them, or the same name in both`,
+    )
+  }
+  return asSubIdentity(caller, name, 'agentName')
+}
+
 export async function handleMcp(request: Request, actor: string): Promise<Response> {
   // Stateless and JSON-only: each POST is fully answered before the response is returned, nothing outlives the request.
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   })
-  // Whether the caller is an agent comes with the request: the tools that only the orchestrator may call check it.
-  await buildServer(actor, isAgent(request)).connect(transport)
+  // Who calls comes with the request, its agentName included: the tools that only an agent, or only an
+  // orchestrator, may call check it.
+  let caller = callerInfo(request, actor)
+  let refused: HttpError | null = null
+  try {
+    const named = await agentNameOf(request, caller)
+    if (named !== caller) noteActor(named.name, named.kind, named.role, named.parent)
+    caller = named
+  } catch (err) {
+    if (!(err instanceof HttpError)) throw err
+    refused = err
+  }
+  await buildServer(caller, refused).connect(transport)
   return transport.handleRequest(request)
 }

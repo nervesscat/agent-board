@@ -216,6 +216,8 @@ function boardWorktree() {
 
 beforeAll(async () => {
   fs.mkdirSync(path.join(main, '.git'), { recursive: true })
+  // A checkout of the board: its repo gets the board's preview run.
+  fs.writeFileSync(path.join(main, 'package.json'), JSON.stringify({ name: 'agent-board' }))
   mp = await import('./managedPreview')
   lp = await import('./linkPreview')
   features = await import('./features')
@@ -245,8 +247,8 @@ async function call(method: string, pathname: string, as: 'human' | 'agent' = 'h
   )
   const request = new Request(`http://localhost${pathname}`, {
     method,
-    // A gate token: an agent, as opposed to the human's passkey session.
-    headers: as === 'agent' ? { authorization: 'Bearer gate_test' } : {},
+    // An agent token: an agent, as opposed to the human's passkey session.
+    headers: as === 'agent' ? { authorization: 'Bearer token-of-test' } : {},
   })
   const res = await handle({ request, actor: as === 'agent' ? 'claude' : 'enrique' })
   return { status: res.status, body: (await res.json()) as any }

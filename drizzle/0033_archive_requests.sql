@@ -1,0 +1,1 @@
+ALTER TABLE `updates` ADD `archive_tickets` text;

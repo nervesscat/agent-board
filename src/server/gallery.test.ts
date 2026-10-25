@@ -74,7 +74,7 @@ const ids = (g: { items: { id: number }[] }) => g.items.map((i) => i.id)
 async function call(pathname: string, as: 'human' | 'agent' = 'human') {
   const res = await handle(
     new Request(`http://localhost${pathname}`, {
-      headers: as === 'agent' ? { authorization: 'Bearer gate_test' } : {},
+      headers: as === 'agent' ? { authorization: 'Bearer token-of-test' } : {},
     }),
   )
   return { status: res.status, body: (await res.json()) as any }

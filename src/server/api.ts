@@ -7,15 +7,30 @@ import {
   COMPLEXITIES,
   PREVIEW_LIMIT,
   SKILLS_TRACKING,
+  STALL_MINUTES,
   STAGE_COLORS,
   STAGE_KINDS,
   FEED_TABS,
 } from '#/lib/constants'
+import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
+import { roadmap } from './roadmap'
+import * as runConfig from './runConfig'
+import {
+  forgetRunConfig,
+  isActive as runActive,
+  restartRun,
+  runLog,
+  runState,
+  startRun,
+  stopRun,
+} from './runs'
+import * as ticketRuns from './ticketRuns'
 import { addDefaultAgents } from './defaultAgents'
-import { listActors } from './actors'
-import { isAgent } from './auth'
+import { AGENT_ROLES, listActors } from './actors'
+import { callerInfo, isAgent } from './auth'
+import { authRoutes } from './authApi'
 import { cleanupReport } from './cleanup'
 import { DeleteItems, deleteLeftovers } from './cleanupActions'
 import { authMode } from './config'
@@ -24,7 +39,9 @@ import * as features from './features'
 import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
+import { checkHostTools, readyHostTools } from './hostTools'
 import { HttpError, intParam, readJson } from './http'
+import * as instructions from './instructionsHistory'
 import {
   isActive,
   managedPreview,
@@ -54,8 +71,10 @@ import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import * as tokens from './tokens'
 import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
+import * as work from './workTimeline'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -101,17 +120,96 @@ const TicketPatch = z.object({
   prNumber: z.number().int().positive().nullable().optional(),
   // The tickets whose branches must be merged into this one's base before it can be done; replaces the list.
   needs: z.array(z.number().int()).max(50).optional(),
+  // The repos its work spans, each with its branch (base, PR); the first is the primary, the one repoId,
+  // branch, baseBranch and prNumber above are. Replaces the list; an empty one is refused, in the words
+  // the rest of its checks use (ticketRepos.ts).
+  repos: z
+    .array(
+      z.object({
+        repoId: z.number().int(),
+        branch: z.string().max(200).optional(),
+        baseBranch: z.string().max(200).optional(),
+        prNumber: z.number().int().positive().nullable().optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
 })
+// A run of a repo as the human configures it; runConfigProblem (src/lib/runs.ts) checks the rest.
+const RunBody = z.object({
+  name: z.string().max(200),
+  type: z.string().max(20),
+  install: z.string().max(5_000).optional(),
+  build: z.string().max(5_000).optional(),
+  start: z.string().max(5_000),
+  env: z.record(z.string(), z.string()).optional(),
+  port: z.number().int().nullable().optional(),
+  healthPath: z.string().max(1_000).optional(),
+  copyData: z.boolean().optional(),
+})
+// The commands are the human's alone: an agent reads them and starts runs, never writes them.
+const humanRuns = (request: Request) => {
+  if (isAgent(request)) throw new HttpError(403, "only the human configures a repo's runs")
+}
+/** An optional JSON body: none (or an empty one) is `{}`. */
+const optionalJson = async <T extends z.ZodType>(request: Request, schema: T): Promise<z.infer<T>> =>
+  (await request.clone().text()).trim() ? readJson(request, schema) : schema.parse({})
 
 export const api = new ApiRouter()
 
 api.get('/api/health', () => json({ ok: true }))
 // `authOff` (test, or development with AUTH=off) puts a badge in the top bar: this is not the live board.
-api.get('/api/me', ({ request, actor }) =>
-  json({ actor, agent: isAgent(request), boardEnv: authMode().boardEnv, authOff: authMode().off }),
-)
-// Every name the board has seen sign in, with whether it is an agent or a human.
+// `role` is human, orchestrator or worker; `parent` the name a sub-identity works under ('' for none).
+api.get('/api/me', ({ request, actor }) => {
+  const { role, parent } = callerInfo(request)
+  return json({
+    actor,
+    agent: isAgent(request),
+    role,
+    parent,
+    boardEnv: authMode().boardEnv,
+    authOff: authMode().off,
+  })
+})
+// The tools on this machine the board runs (git, gh, claude, node, pnpm): the last check, waiting for the
+// one the server started with when it has not ended yet; POST checks them again.
+api.get('/api/host-tools', async () => json(await readyHostTools()))
+api.post('/api/host-tools/check', async () => json(await checkHostTools()))
+// Every name the board has seen sign in: whether it is an agent or a human, its role as last seen
+// (human, orchestrator, worker) and, for a sub-identity, the name it works under.
 api.get('/api/actors', () => json(listActors()))
+// Signing in with passkeys, signing out, and the devices section (authApi.ts).
+authRoutes(api)
+
+// --- the agent tokens Connect agents makes, lists and revokes (tokens.ts): the human's alone ---
+const TokenName = z
+  .string()
+  .trim()
+  .regex(AGENT_TOKEN_NAME, 'name: a letter or digit, then letters, digits, ".", "_" or "-", 40 at most')
+const tokensHumanOnly = (request: Request, what: string) => {
+  if (isAgent(request)) throw new HttpError(403, `only the human ${what}`)
+}
+// The token itself is in this answer only: the board keeps its hash.
+api.post('/api/agent-tokens', async ({ request }) => {
+  tokensHumanOnly(request, 'makes agent tokens')
+  const { name } = await readJson(request, z.object({ name: TokenName }))
+  return json(tokens.mintAgentToken(name), 201)
+})
+api.get('/api/agent-tokens', ({ request }) => {
+  tokensHumanOnly(request, 'lists agent tokens')
+  return json(tokens.listAgentTokens())
+})
+// The human's call alone: an orchestrator also changes the projects' instructions; a worker does not.
+api.patch('/api/agent-tokens/:id', async ({ request, params, actor }) => {
+  tokensHumanOnly(request, "sets an agent token's role")
+  const { role } = await readJson(request, z.object({ role: z.enum(AGENT_ROLES) }))
+  return json(tokens.setAgentTokenRole(id(params), role, actor))
+})
+api.delete('/api/agent-tokens/:id', ({ request, params }) => {
+  tokensHumanOnly(request, 'revokes agent tokens')
+  tokens.revokeAgentToken(id(params))
+  return new Response(null, { status: 204 })
+})
 
 // --- connecting agents: board settings, and the skill each CLI installs ---
 api.get('/api/agent-setup', () => json(agents.agentSetup()))
@@ -168,7 +266,8 @@ api.post('/api/projects', async ({ request, actor }) => {
     request,
     z.object({ name: z.string().min(1).max(100), instructions: Instructions.optional() }),
   )
-  return json(projects.createProject(body, actor), 201)
+  // Instructions it starts with are a change of them: the human's or an orchestrator's (as the PUT below).
+  return json(projects.createProject(body, actor, callerInfo(request)), 201)
 })
 api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
 // The phases every new ticket of the project starts with; null goes back to the built-in list.
@@ -181,12 +280,44 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       instructions: Instructions.optional(),
       defaultPhases: DefaultPhases.optional(),
       tagSuggestions: projects.TagSuggestions.optional(),
+      stallMinutes: z.number().int().min(STALL_MINUTES.min).max(STALL_MINUTES.max).optional(),
+      layout: projects.LayoutBody.optional(),
     }),
   )
+  if (body.stallMinutes !== undefined && isAgent(request))
+    throw new HttpError(403, 'only the human sets when a ticket reads as stalled')
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
   if (body.defaultPhases !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's default phases")
-  return json(projects.updateProject(id(params), body, actor))
+  // Which pages, cards and sections the human sees, and where: theirs to arrange.
+  if (body.layout !== undefined && isAgent(request))
+    throw new HttpError(403, "only the human sets the project's layout")
+  // Instructions: the human's or an orchestrator's, with their history (as the PUT below).
+  return json(projects.updateProject(id(params), body, actor, callerInfo(request)))
+})
+
+// --- the project's instructions: changed by the human or an orchestrator, every change kept ---
+api.put('/api/projects/:id/instructions', async ({ request, params }) => {
+  const body = await readJson(request, z.object({ instructions: Instructions }))
+  return json(instructions.setInstructions(id(params), body.instructions, callerInfo(request)))
+})
+// Every change, newest first.
+api.get('/api/projects/:id/instructions/changes', ({ params }) =>
+  json(instructions.listInstructionChanges(id(params))),
+)
+api.get('/api/instructions/changes/:id', ({ params }) => json(instructions.getInstructionChange(id(params))))
+// Only the human settles a change: reviewed (keep it), or the instructions put back as they were.
+const humanReviews = (request: Request) => {
+  if (isAgent(request))
+    throw new HttpError(403, "only the human reviews or reverts a change of the project's instructions")
+}
+api.post('/api/instructions/changes/:id/review', ({ request, params, actor }) => {
+  humanReviews(request)
+  return json(instructions.reviewInstructionChange(id(params), actor))
+})
+api.post('/api/instructions/changes/:id/revert', ({ request, params, actor }) => {
+  humanReviews(request)
+  return json(instructions.revertInstructionChange(id(params), actor))
 })
 api.delete('/api/projects/:id', ({ params, actor }) => {
   stopProjectPreviews(id(params), actor)
@@ -276,8 +407,18 @@ api.delete('/api/agents/:id', ({ request, params, actor }) => {
 })
 
 // --- repos ---
+// Adding, changing and removing repos is the human's: an agent asks for a repo (repo-request, below), and
+// the human's Add on that card adds it. An orchestrator also moves a repo to another project (PATCH).
+const humanRepos = (request: Request) => {
+  if (isAgent(request))
+    throw new HttpError(
+      403,
+      'only the human adds, changes and removes repos; an agent asks with a repo request',
+    )
+}
 api.get('/api/repos', () => json(repos.listRepos()))
 api.post('/api/repos', async ({ request, actor }) => {
+  humanRepos(request)
   const body = await readJson(
     request,
     z.object({
@@ -300,12 +441,59 @@ api.patch('/api/repos/:id', async ({ request, params, actor }) => {
       baseBranch: z.string().max(200).optional(),
     }),
   )
+  // A move takes the repo's tickets with it, under another project's instructions: a worker asks.
+  const moves = body.projectId !== undefined && body.projectId !== repos.getRepo(id(params)).projectId
+  if (moves) {
+    const who = callerInfo(request, actor)
+    if (who.role === 'worker')
+      throw new HttpError(
+        403,
+        `only an orchestrator or the human moves a repo to another project: ask your orchestrator or the human (you are ${who.name}, a worker)`,
+      )
+  }
+  // An orchestrator moves a repo and nothing more: the rest of the patch is the human's.
+  const changes = body.name !== undefined || body.repoPath !== undefined || body.baseBranch !== undefined
+  if (!moves || changes) humanRepos(request)
   return json(await repos.updateRepo(id(params), body, actor))
 })
-api.delete('/api/repos/:id', ({ params, actor }) => {
+api.delete('/api/repos/:id', ({ request, params, actor }) => {
+  humanRepos(request)
   repos.deleteRepo(id(params), actor)
   return json({ ok: true })
 })
+// --- runs: what the board starts from a ticket's worktree of a repo (previews and jobs) ---
+// A repo's runs, in order: anyone signed in reads them; only the human writes them.
+api.get('/api/repos/:id/runs', ({ params }) => json(runConfig.listRunConfigs(id(params))))
+api.post('/api/repos/:id/runs', async ({ request, params, actor }) => {
+  humanRuns(request)
+  const body = await readJson(request, RunBody)
+  return json(
+    runConfig.createRunConfig(id(params), body as Parameters<typeof runConfig.createRunConfig>[1], actor),
+    201,
+  )
+})
+// Body: every run id of the repo, in the new order.
+api.put('/api/repos/:id/runs/order', async ({ request, params, actor }) => {
+  humanRuns(request)
+  const body = await readJson(request, z.object({ ids: z.array(z.number().int()) }))
+  return json(runConfig.reorderRunConfigs(id(params), body.ids, actor))
+})
+api.patch('/api/runs/:id', async ({ request, params, actor }) => {
+  humanRuns(request)
+  const body = await readJson(request, RunBody.partial())
+  return json(
+    runConfig.updateRunConfig(id(params), body as Parameters<typeof runConfig.updateRunConfig>[1], actor),
+  )
+})
+// Whatever runs of it stops first.
+api.delete('/api/runs/:id', ({ request, params, actor }) => {
+  humanRuns(request)
+  runConfig.getRunConfig(id(params))
+  forgetRunConfig(id(params), actor)
+  runConfig.deleteRunConfig(id(params), actor)
+  return json({ ok: true })
+})
+
 // Local branches of any checkout, so the new-repo dialog can offer them before the repo is registered.
 api.get('/api/branches', async ({ url }) => {
   const repoPath = url.searchParams.get('path') ?? ''
@@ -424,6 +612,7 @@ api.put('/api/tickets/:id/approval', async ({ request, params, actor }) => {
 // Assigns the ticket to the caller (or, with `as`, to the project agent the caller works it as) and starts
 // it; 409 when it is reserved for another of the project's agents.
 // The archive is the human's, like the board's layout: finished tickets come off the board, lanes with them.
+// An agent can only ask for it (archive-request, below), and the human confirms.
 const humanArchive = (request: Request) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human archives and restores tickets')
 }
@@ -442,10 +631,55 @@ api.post('/api/tickets/:id/restore', ({ request, params, actor }) => {
   humanArchive(request)
   return json(features.restoreTicket(id(params), actor))
 })
+// An agent asks the human to archive finished top-level tickets of the project: a decision card (Archive /
+// Keep) on the first one; they are archived only once the human answers Archive.
+api.post('/api/projects/:id/tickets/archive-request', async ({ request, params, actor }) => {
+  if (!isAgent(request)) throw new HttpError(403, 'the human archives tickets directly; agents ask here')
+  const body = await readJson(
+    request,
+    z.object({
+      ticketIds: z.array(z.number().int()).min(1).max(features.MAX_ARCHIVE_REQUEST),
+      as: AgentName.optional(),
+    }),
+  )
+  return json(features.requestArchive(body.ticketIds, { as: body.as, projectId: id(params) }, actor), 201)
+})
+// An agent asks the human to add a repo to the project of this ticket: a decision card (Add / Don't add) on
+// it, posted once the checkout passes the checks; the repo is added only once the human answers Add.
+api.post('/api/tickets/:id/repo-request', async ({ request, params, actor }) => {
+  if (!isAgent(request)) throw new HttpError(403, 'the human adds repos directly; agents ask here')
+  const body = await readJson(
+    request,
+    z.object({
+      name: z.string().min(1).max(100),
+      repoPath: z.string().min(1).max(1000),
+      githubRepo: z.string().min(1).max(200),
+      baseBranch: z.string().max(200).optional(),
+      as: AgentName.optional(),
+    }),
+  )
+  return json(await features.requestRepo(id(params), body, actor), 201)
+})
+// Moves the ticket onto another repo of its project, at once; its base branch becomes that repo's unless given.
+api.put('/api/tickets/:id/repo', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ repoId: z.number().int(), baseBranch: z.string().max(200).optional() }),
+  )
+  return json(features.setTicketRepo(id(params), body, actor, { agent: isAgent(request) }))
+})
 api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({ branch: z.string().max(200).optional(), as: AgentName.optional() }),
+    z.object({
+      branch: z.string().max(200).optional(),
+      as: AgentName.optional(),
+      // Each repo's branch; one of the project the ticket does not span yet is added to it.
+      repos: z
+        .array(z.object({ repoId: z.number().int(), branch: z.string().max(200) }))
+        .max(20)
+        .optional(),
+    }),
   )
   return json(await withResume(features.claimTicket(id(params), actor, body)))
 })
@@ -515,6 +749,8 @@ api.post('/api/tickets/:id/workspaces', async ({ request, params, actor }) => {
       path: z.string().max(500).optional(),
       agent: z.string().max(80).optional(),
       previewUrl: PreviewUrl.optional(),
+      // The repo of the ticket its worktree is of; the ticket's primary when left out.
+      repoId: z.number().int().optional(),
     }),
   )
   return json(features.addWorkspace(id(params), body, actor), 201)
@@ -551,6 +787,35 @@ api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
 api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
   const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))
   return new Response(previewLog(id(params), name), {
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
+// Every run of every repo of the ticket, each with the workspace it runs from, its state and why it
+// would not start; Start all and Stop all (repoId: one repo's only) answer each run's outcome.
+api.get('/api/tickets/:id/runs', ({ params }) => json(ticketRuns.ticketRuns(id(params))))
+const RunsScope = z.object({ repoId: z.number().int().optional() })
+api.post('/api/tickets/:id/runs/start', async ({ request, params, actor }) =>
+  json(ticketRuns.startTicketRuns(id(params), actor, await optionalJson(request, RunsScope))),
+)
+api.post('/api/tickets/:id/runs/stop', async ({ request, params, actor }) =>
+  json(await ticketRuns.stopTicketRuns(id(params), actor, await optionalJson(request, RunsScope))),
+)
+// One run from one workspace. Nothing in the body is read: what runs is the stored config.
+api.post('/api/workspaces/:id/runs/:runId/start', ({ params, actor }) =>
+  json(startRun(id(params), id(params, 'runId'), actor), 202),
+)
+api.post('/api/workspaces/:id/runs/:runId/stop', async ({ params, actor }) => {
+  if (!runActive(runState(id(params), id(params, 'runId'))))
+    throw new HttpError(409, 'that run does not run from this workspace')
+  return json(await stopRun(id(params), id(params, 'runId'), `stopped by ${actor}`, actor))
+})
+api.post('/api/workspaces/:id/runs/:runId/restart', async ({ params, actor }) =>
+  json(await restartRun(id(params), id(params, 'runId'), actor), 202),
+)
+// ?name=build (install and build) or server (the start command's output).
+api.get('/api/workspaces/:id/runs/:runId/log', ({ params, url }) => {
+  const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))
+  return new Response(runLog(id(params), id(params, 'runId'), name), {
     headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
   })
 })
@@ -636,10 +901,12 @@ api.put('/api/updates/:id/decision', async ({ request, params, actor }) => {
     request,
     z.object({ option: z.number().int().min(0), note: z.string().max(5_000).default('') }),
   )
-  return json(features.decide(id(params), body.option, body.note, actor))
+  const origin = await features.answerOrigin(id(params), body.option)
+  return json(features.decide(id(params), body.option, body.note, actor, { origin }))
 })
-// The orchestrator's record of the human's answer given in the chat: only a connected agent, and never
-// as one of the project's agents (features.relayDecision checks both, and that the card is open).
+// The orchestrator's record of the human's answer given in the chat: only a connected agent, never as
+// one of the project's agents nor as a sub-identity (features.relayDecision checks these, and that the
+// card is open).
 api.post('/api/updates/:id/decision/relay', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
@@ -649,7 +916,14 @@ api.post('/api/updates/:id/decision/relay', async ({ request, params, actor }) =
       as: AgentName.optional(),
     }),
   )
-  return json(features.relayDecision(id(params), body, actor, { agent: isAgent(request) }))
+  const origin = await features.answerOrigin(id(params), body.option)
+  return json(
+    features.relayDecision(id(params), body, actor, {
+      agent: isAgent(request),
+      delegated: callerInfo(request).parent !== '',
+      origin,
+    }),
+  )
 })
 // Its author edits or deletes a post or reply; the human (passkey) any.
 api.patch('/api/updates/:id', async ({ request, params, actor }) => {
@@ -767,6 +1041,22 @@ api.get('/api/uploads/:id', async ({ request, params }) => {
 // The project's gallery: the files on its tickets, newest first by default, a page at a time. ?type=image,pdf (kinds,
 // comma-separated), ?from=&to= (local days, inclusive), ?sort= (an order of GALLERY_SORTS), ?archived=include, ?cursor= (the
 // last page's next), ?limit= (60 by default, 200 at most).
+// The roadmap: the top-level tickets being worked, blocked or in review, each with its tasks and its
+// lanes' (not cancelled), read-only.
+api.get('/api/projects/:id/roadmap', async ({ params }) => json(roadmap(id(params))))
+
+// --- the work timeline (workTimeline.ts): agents' spans, hand-offs, waits and heartbeats, the board's own events ---
+// One agent event on a ticket of this project, by kind (span_start, span_end, handoff, wait_start, wait_end,
+// heartbeat); the board's kinds are its own. A ticket of another project is a 403.
+api.post('/api/projects/:id/tickets/:ticketId/events', async ({ request, params, actor }) => {
+  const body = await readJson(request, work.EventBody)
+  return json(work.recordEvent(id(params), id(params, 'ticketId'), body, actor), 201)
+})
+// Every event of a ticket, newest first, and its timeline: spans, waits, hand-offs, marks, totals, stalled.
+api.get('/api/tickets/:id/events', ({ params }) => json(work.ticketTimeline(id(params))))
+// The project's working / waiting / blocked-on-human totals and each ticket's, with its stalled flag.
+api.get('/api/projects/:id/work', ({ params }) => json(work.projectWork(id(params))))
+
 api.get('/api/projects/:id/gallery', async ({ request, params, url }) => {
   const q = url.searchParams
   const limit = q.get('limit')

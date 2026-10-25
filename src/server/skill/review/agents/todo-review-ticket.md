@@ -41,7 +41,7 @@ earned.
    environment (`NODE_ENV === 'test'`, `process.env.CI`, `X-Test-Actor` in product code); mock the
    module under change or the call that is the feature; disable a lint or type rule; add `|| true`
    or `continue-on-error`. A builder that did any of these has not finished.
-3. **Fakes only at the edges the project already fakes** (external APIs, the clock, the gate in
+3. **Fakes only at the edges the project already fakes** (external APIs, the clock, sign-in in
    its test mode), and the hand-off says which.
 4. **A subagent saying "done" or "tests pass" is a claim.** You re-run the checks yourself and read
    the diff yourself before every review and before hand-off.
@@ -106,6 +106,27 @@ Only the holder of `LOCK` starts one in this repo.
   reproductions, the merge check) and do not take the lock themselves; you, from `start_preview`
   until the preview runs or fails (step 7). Nothing you hold while you wait for `LOCK` is
   something its holder waits on, so the wait always ends.
+
+## The work timeline
+
+The human watches the ticket's work timeline (the Roadmap, the ticket page, Needs you) to see who
+works when, who waits on what, and what stalled. Keep it, with `projectId: PROJECT` and
+`ticketId: TICKET` on every call:
+- `heartbeat` every few minutes for as long as you run, between steps and while you wait on an
+  agent you started (an active ticket silent for longer than the project's `stallMinutes`, 30 by
+  default, reads as stalled in Needs you).
+- `start_span` when each phase starts and `end_span` when it ends: `spec` (step 2), `build` (step 3;
+  `agent: builder`), `review` with its `round` (step 5), `verify` (steps 4 and 6), `pr` and
+  `preview` (step 7).
+- `handoff` with `to` the agent's name each time you brief one (spec, builder, `/feature-review`'s
+  runner), and with `from` its name when it returns. Put the same rhythm in each brief (the
+  `projectId` and `ticketId`, a `heartbeat` every few minutes, its spans and waits) so its own
+  time shows too; an agent that cannot reach the board leaves that to you.
+- `start_wait` with the reason and `end_wait` when it is over: `lock` while you wait for `LOCK` or
+  a git lock, `builder` while you wait on the builder or another agent's result, `mcp` while the
+  board does not answer (record it once it does), `human` once you block on a decision.
+- `get_ticket` → `work.open` lists the spans and waits still open: close yours before you return
+  any `STATUS`.
 
 ## Procedure
 
@@ -288,12 +309,12 @@ and return `STATUS: needs-browser`: the orchestrator runs you again with the bro
 
 ### 7. Hand off
 
-Every item, in order, as the board skill's hand-off checklist says, ticking each hand-off phase of
-the ticket (`set_task_done`) as its step finishes; the board ticks none itself. On a rework round,
-untick the phases the new work redoes first.
+Every item, in order, as the board skill's hand-off checklist says. The board ticks the phases
+Pushed, PR, CI, Preview and Merged itself as their facts hold (a tick by hand is refused); you tick
+Implementation and its steps (`set_task_done`).
 1. Implementation and its subtasks ticked (`set_task_done`); the workspace registered.
-2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`. Tick
-   Pushed.
+2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`, and
+   the board ticks Pushed.
    The push updates `REPO`'s refs: a lock error is retried as **Shared with the other tickets of
    this repo** says.
 3. Any unmerged branch yours builds on: `update_ticket` with `needs`.
@@ -309,14 +330,17 @@ untick the phases the new work redoes first.
    (`ticket` in `list_prs`). Right before, check `list_review_results` (with `sha`) and the ledger for a newer review
    of that SHA: post only when there is none. A newer one that did not survive is not posted over:
    the change did not survive, and its findings go back to the builder (step 5).
-   Tick PR once it is open, and CI once its checks are green.
+   The board ticks PR once it is open, and CI once its checks are green. While GitHub's checks do
+   not run, comment on the PR `CI run locally: green on <sha>` with the head SHA the checks passed
+   on (`gh pr comment`): that ticks CI. Comment again after each push.
 5. The preview: `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
    project's way and `set_preview`. When the change cannot be tried (docs, a script), say why in
    the summary instead.
    The preview's build is a heavy run: take `LOCK` (holder `#<TICKET> preview <ISO time>`) before
    `start_preview` or the project's start, and release it once the preview runs or has failed.
-   Tick Preview once it runs; when the change cannot be tried, remove the Preview phase instead.
+   The board ticks Preview once it runs; when the change cannot be tried, remove the Preview phase
+   instead.
 6. The ticket's summary (`set_ticket_summary`, not a new hand-off post), the one post the human
    reads on top of Main, short and to the point: what the change does and its current state, each
    review round's verdict in one line, the PR link, the preview link and exactly
@@ -331,7 +355,6 @@ untick the phases the new work redoes first.
    When a summary is already there (an earlier round, a rework), rewrite it to the state now, with
    `change` saying in one line what changed; the board keeps the earlier versions. Then the result
    reply under each of the human's posts you answered with a plan (step 2), with its proofs.
-   Then tick Hand-off post: a tick is not a commit, so the summary still counts.
 7. `update_ticket` to `review`, and read `handoff.missing` in its answer: fix every item it lists
    and check again (`no_handoff_post`: no summary written since the last commit). `no_preview` may
    stay only when the summary says why.

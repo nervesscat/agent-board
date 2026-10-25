@@ -20,6 +20,7 @@ vi.mock('./git', async (original) => ({
   listMyPrs: async () => found,
   currentGithubLogin: async () => 'enrique',
   prMerged: async (_repo: string, n: number) => merged.has(n),
+  prStateOf: async (_repo: string, n: number) => (merged.has(n) ? 'MERGED' : null),
 }))
 
 let mp: typeof import('./managedPreview')
@@ -165,10 +166,10 @@ async function startRunning(id: number) {
   return mp.managedPreview(id)!
 }
 
-describe('previewTarget', () => {
+describe('worktreeTarget', () => {
   const repo = { repoPath: main }
   const boardRoot = worktree(path.join(repos, 'agent-board-self'))
-  const target = (p: string) => mp.previewTarget({ path: p }, repo, boardRoot)
+  const target = (p: string) => mp.worktreeTarget({ path: p }, repo, boardRoot)
 
   it('runs a worktree of the repo next to its main checkout', () => {
     const dir = worktree(path.join(repos, 'agent-board-feat'))
@@ -190,17 +191,17 @@ describe('previewTarget', () => {
       reason: expect.stringMatching(/does not exist/),
     })
     expect(target('agent-board-feat')).toMatchObject({ ok: false, reason: expect.stringMatching(/absolute/) })
-    expect(mp.previewTarget({ path: '' }, repo)).toMatchObject({
+    expect(mp.worktreeTarget({ path: '' }, repo)).toMatchObject({
       ok: false,
       reason: expect.stringMatching(/no local path/),
     })
-    expect(mp.previewTarget({ path: main }, null)).toMatchObject({
+    expect(mp.worktreeTarget({ path: main }, null)).toMatchObject({
       ok: false,
       reason: expect.stringMatching(/no repo/),
     })
   })
 
-  it("refuses a folder that is not one of the repo's worktrees, or not the board", () => {
+  it("refuses a folder that is not one of the repo's worktrees, and takes one whatever its package", () => {
     const plain = path.join(repos, 'plain')
     fs.mkdirSync(path.join(plain, '.git'), { recursive: true })
     expect(target(plain)).toMatchObject({ ok: false, reason: expect.stringMatching(/not a git worktree/) })
@@ -208,8 +209,9 @@ describe('previewTarget', () => {
     fs.mkdirSync(path.join(other, '.git'), { recursive: true })
     const foreign = worktree(path.join(repos, 'other-repo-wt'), { of: other })
     expect(target(foreign)).toMatchObject({ ok: false, reason: expect.stringMatching(/not a git worktree/) })
+    // Any repo the human configured runs for may run them: what its package is called does not matter.
     const app = worktree(path.join(repos, 'agent-board-app'), { name: 'some-app' })
-    expect(target(app)).toMatchObject({ ok: false, reason: expect.stringMatching(/own repo only/) })
+    expect(target(app)).toEqual({ ok: true, path: app })
   })
 })
 
@@ -224,6 +226,16 @@ describe('needsInstall', () => {
     expect(mp.needsInstall(dir)).toBe(true)
     fs.rmSync(path.join(dir, 'node_modules'), { recursive: true })
     expect(mp.needsInstall(dir)).toBe(true)
+  })
+})
+
+describe('previewNode', () => {
+  it("runs the preview's server under this board's Node", () => {
+    expect(mp.previewNode('', 'C:\\node.exe')).toBe('C:\\node.exe')
+  })
+
+  it('runs it under the node on PATH when the board runs in the desktop app, under Electron', () => {
+    expect(mp.previewNode('42.11.10', 'C:\\agent-board.exe')).toBe('node')
   })
 })
 
@@ -274,10 +286,12 @@ describe('a preview the board runs', () => {
   })
 
   it("leaves the board's tailnet entrance out of what it builds and runs: a preview stays on loopback", async () => {
+    // With the earlier entrance's names a leftover `.env` may still carry: a preview of an older
+    // branch reads them.
     const entrance = {
       PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net',
-      PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net:8443',
-      PUBLIC_GATE_AUTH_URL: 'http://127.0.0.1:47111',
+      PUBLIC_GATE_URL: 'https://devbox.example-tailnet.ts.net/gate',
+      PUBLIC_GATE_AUTH_URL: 'https://devbox.example-tailnet.ts.net/auth',
       TAILNET_HOST: 'devbox.example-tailnet.ts.net',
     }
     for (const [key, value] of Object.entries(entrance)) vi.stubEnv(key, value)
@@ -529,6 +543,59 @@ describe('a preview the board runs', () => {
     const { ws: atMain } = ticketWithWorktree(main)
     expect(() => mp.startPreview(atMain.id, 'claude')).toThrow(/main checkout/)
   })
+
+  it('refuses while pnpm or node is missing on this machine, saying which and the fix, and runs nothing', async () => {
+    const r = useFake()
+    const host = await import('./hostTools')
+    const { ws } = ticketWithWorktree()
+    try {
+      host.setHostTools(host.hostToolsWith({ pnpm: { path: null } }))
+      const reason = mp.cannotStart(ws.id)
+      expect(reason).toMatch(/^pnpm was not found on the board's PATH: run corepack enable pnpm/)
+      expect(() => mp.startPreview(ws.id, 'claude')).toThrow(reason!)
+      // The Preview card shows the workspace with the reason, instead of hiding it.
+      expect(await features.workspacePreview(ws.id)).toMatchObject({
+        cannotStart: reason,
+        toolProblem: reason,
+      })
+      host.setHostTools(host.hostToolsWith({ node: { path: null } }))
+      expect(mp.cannotStart(ws.id)).toMatch(/^node was not found on the board's PATH: install Node\.js/)
+      expect(r.calls).toEqual([])
+      expect(mp.managedPreview(ws.id)).toBeNull()
+      // Once both are found again, it starts.
+      host.setHostTools(host.hostToolsWith({}))
+      expect(mp.cannotStart(ws.id)).toBeNull()
+      expect((await features.workspacePreview(ws.id)).toolProblem).toBeNull()
+    } finally {
+      host.setHostTools(null)
+    }
+  })
+})
+
+describe('on the work timeline', () => {
+  it('records building, running, failed and stopped as preview events of the ticket', async () => {
+    const fake = useFake()
+    const { t, ws } = ticketWithWorktree()
+    const p = await startRunning(ws.id)
+    await mp.stopPreview(ws.id, 'stopped by claude', 'claude')
+    fake.codes['pnpm build'] = 1
+    mp.startPreview(ws.id, 'claude')
+    await vi.waitFor(() => expect(status(ws.id)).toBe('failed'))
+    const notes = dbm.db
+      .select()
+      .from(dbm.schema.ticketEvents)
+      .where(eq(dbm.schema.ticketEvents.ticketId, t.id))
+      .all()
+      .filter((e) => e.kind === 'preview')
+      .map((e) => [e.note, e.agent])
+    expect(notes).toEqual([
+      ['building', 'board'],
+      [`running ${p.url}`, 'board'],
+      ['stopped: stopped by claude', 'board'],
+      ['building', 'board'],
+      ['failed: pnpm build failed (exit 1)', 'board'],
+    ])
+  })
 })
 
 describe('stops by itself', () => {
@@ -608,6 +675,7 @@ describe('stops by itself', () => {
       mergedAt,
       reviews: [],
       reviewRequests: [],
+      comments: [],
       requested: false,
       assigned: true,
     }) satisfies MyGhPr
@@ -673,8 +741,8 @@ describe('over MCP and REST', () => {
       headers: {
         accept: 'application/json, text/event-stream',
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        // A gate token: an agent, as opposed to the human's passkey session.
-        ...(as === 'agent' ? { authorization: 'Bearer gate_test' } : {}),
+        // An agent token: an agent, as opposed to the human's passkey session.
+        ...(as === 'agent' ? { authorization: 'Bearer token-of-test' } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
     })

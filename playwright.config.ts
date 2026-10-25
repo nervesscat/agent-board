@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test'
 import { HUMAN, e2eEnv } from './e2e/env'
 
 /**
- * The e2e suite drives a built board in test mode (README: "Test mode"): no passkey gate, on a free
+ * The e2e suite drives a built board in test mode (README: "Test mode"): sign-in off, on a free
  * loopback port above 47140, with its data in a throwaway folder. The build goes to .output-e2e, never
  * .output, so running this in the main checkout leaves the live board's build alone. E2E_SKIP_BUILD=1
  * reuses the last .output-e2e (CI builds it in the step before).
@@ -24,6 +24,12 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
+  // Every run the board runs counts against one board-wide preview limit, which some tests change: the
+  // tests that start runs or change it (tagged BOARD_RUNS) run one at a time, beside the rest.
+  projects: [
+    { name: 'e2e', grepInvert: /@board-runs/ },
+    { name: 'board-runs', grep: /@board-runs/, workers: 1 },
+  ],
   use: {
     ...devices['Desktop Chrome'],
     baseURL: env.baseURL,
