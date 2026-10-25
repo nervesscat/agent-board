@@ -15,6 +15,7 @@ import { HttpError, notFound } from './http'
 import { checkPreview } from './preview'
 import { ticketRepo } from './repos'
 import { kindOf, listStages } from './stages'
+import { noteBoardEvent } from './workTimeline'
 
 /**
  * Previews the board runs itself: a ticket workspace's worktree of the board, built and started as a
@@ -462,6 +463,7 @@ export function startPreview(
   all().set(workspaceId, e)
   save()
   log(e, actor, 'started a preview')
+  noteBoardEvent(e.ticketId, 'preview', { note: 'building' })
   const running = run(e)
     .catch((err: unknown) => fail(e, `could not start: ${(err as Error).message ?? err}`, null))
     .finally(() => runs.delete(e))
@@ -535,7 +537,7 @@ const WATCHDOG = `data:text/javascript,${encodeURIComponent(
 )}`
 
 /**
- * The Node that runs a preview's build: this board's own, but in the desktop app (README: "Install"),
+ * The Node that runs a preview's build: this board's own, but in the desktop app (README: "The desktop app"),
  * where the board runs under Electron's Node, the `node` on PATH that `pnpm build` used: the worktree's
  * better-sqlite3 is built for Node's ABI, not Electron's.
  */
@@ -617,6 +619,7 @@ async function run(e: Entry) {
         .where(eq(schema.workspaces.id, e.workspaceId))
         .run()
       save()
+      noteBoardEvent(e.ticketId, 'preview', { note: `running ${url}` })
       return
     }
     await new Promise((r) => setTimeout(r, 500))
@@ -673,6 +676,7 @@ function fail(e: Entry, reason: string, from: 'build' | 'server' | null) {
   })
   if (pid) void runner.killTree(pid)
   save()
+  noteBoardEvent(e.ticketId, 'preview', { note: `failed: ${reason}` })
 }
 
 /**
@@ -698,6 +702,7 @@ export async function stopPreview(workspaceId: number, reason: string, actor: st
   if (url) clearUrl(workspaceId, url)
   save()
   log(e, actor, `stopped the preview (${reason})`)
+  noteBoardEvent(e.ticketId, 'preview', { note: `stopped: ${reason}` })
   return view(e)
 }
 

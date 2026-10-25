@@ -12,6 +12,7 @@ import { getProject } from './projects'
 import { listRepos } from './repos'
 import { withResume, withResumeBriefs } from './resume'
 import { deleteStage, firstOfKind, kindOf, listStages, resolveStage, stageOf } from './stages'
+import { stalledFor, timelinesFor, workOf } from './workTimeline'
 
 /**
  * What a ticket needs merged before it can be done: other tickets of the project whose branches have
@@ -230,14 +231,34 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
   // A PR's own ticket has no hand-off: its PR is reviewed on the queue, not handed off.
   const handoff: Handoff | null =
     kindOf(ctx.stages, full.status) === 'review' && !full.prId ? await ticketHandoff(full) : null
-  return withResume({ ...full, needs, neededBy, handoff })
+  const { timeline } = timelinesFor([full]).get(full.id)!
+  return withResume({
+    ...full,
+    needs,
+    neededBy,
+    handoff,
+    stalled: timeline.stalled,
+    lastSignalAt: timeline.lastSignalAt,
+    work: workOf(timeline),
+  })
 }
 
-/** `listTickets` with each ticket's needs, met or not, and whether its resume note holds (`resume`). */
+/**
+ * `listTickets` with each ticket's needs, met or not, whether its resume note holds (`resume`), and
+ * whether it reads as stalled with when it was last heard from (the work timeline).
+ */
 export async function ticketRows(projectId: number, filter: features.TicketFilter = {}) {
   const rows = features.listTickets(projectId, filter)
   const needs = await needsFor(rows, context(projectId))
-  return withResumeBriefs(rows.map((t) => ({ ...t, needs: needs.get(t.id) ?? [] })))
+  const signals = stalledFor(rows)
+  return withResumeBriefs(
+    rows.map((t) => ({
+      ...t,
+      needs: needs.get(t.id) ?? [],
+      stalled: signals.get(t.id)!.stalled,
+      lastSignalAt: signals.get(t.id)!.lastSignalAt,
+    })),
+  )
 }
 
 // --- what a branch took in from other tickets' branches ---

@@ -195,6 +195,26 @@ http_headers = { Authorization = "Bearer <token>" }
    ticket's worktree (checks, commit, push, preview), reply in the thread with what changed, and
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
    cursor is yours to hold, the board stores nothing per agent.
+   **Record your work on the ticket's timeline** as you go: the Roadmap and the ticket page draw it,
+   so the human sees who worked when, who waited on what, and what stalled. Each call takes
+   `projectId` and `ticketId`, and only a ticket of that project (another project's is a 403 and
+   writes nothing); `agent` names who did the work (a sub-agent's name too; you by default).
+   - `heartbeat` every few minutes while you work a ticket (in Claude Code under `/loop`, or between
+     steps). A ticket in an active stage with no event of any kind for longer than its project's
+     `stallMinutes` (30 by default, set by the human) reads as **stalled**: on its card, in
+     `list_tickets` and `get_ticket`, and in the human's Needs you.
+   - `start_span` when you start a phase (`spec`, `build`, `review` with its `round`, `verify`, `pr`,
+     `preview`, `merge`, or your own words) and `end_span` when it is done (by `spanId`, or your
+     latest open span).
+   - `handoff` when you brief a sub-agent (`to`: its name, which need not be a project agent or a
+     token) and when it hands back; record the sub-agent's spans with `agent`: its name.
+   - `start_wait` with the reason when you cannot go on (`lock`: a shared lock such as the test
+     lock; `builder`: another agent's result; `mcp`: the board or another MCP server is down;
+     `human`: the human's answer or action; `other`, with a `note`), and `end_wait` as soon as you
+     can. An open `human` wait keeps the ticket from reading as stalled.
+     `get_ticket` → `work.open` lists your open spans and waits to close. The board adds its own
+     events (pushes, the PR, the preview, the merge, stage moves); nothing of this goes to the feed
+     or the Daily view.
 7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
    PR, CI, Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
    1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
@@ -373,7 +393,7 @@ human reads dozens of these a day. Screenshots beat paragraphs.
 
 ## Keep the board out of the repo
 
-The board, trazic, habits and any other personal tracking tool are private to the human. Never
+The board and any other personal tracking tool are private to the human. Never
 mention them, their tool names, their URLs or a board ticket, task or project (`#12`, "ticket 12",
 "per the board") in code comments, docs, commit messages, branch names, PR titles or descriptions,
 or issues, and never link or screenshot the board there. Describe the change in the repo's own

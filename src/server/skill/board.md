@@ -15,10 +15,10 @@ page): never push, merge, approve or comment on GitHub on its behalf.
 
 ## Keep the board out of the repo
 
-The board, trazic, habits and any other personal tracking tool are private to the human. Nothing
+The board and any other personal tracking tool are private to the human. Nothing
 you write into the repo or onto GitHub may mention them:
 
-- no code comments, docs, READMEs, changelogs or config that name the board, trazic or habits,
+- no code comments, docs, READMEs, changelogs or config that name the board or any such tool,
   their tools (`post_update`, `list_tickets`, …), their URLs (`localhost:47100`), or a
   board ticket, task, update or project (`#12`, "ticket 12", "per the board");
 - no commit messages, branch names, PR titles or PR descriptions that do either;
@@ -118,6 +118,19 @@ Lanes of a ticket you are working are yours to create (next section).
   step ticks it, unticking a step unticks it (a phase the board ticks follows its fact, not its
   steps). When the plan changes, `update_task` rewords a task and `remove_task` drops one
   that no longer applies (a phase goes with its steps), so the progress bar stays honest.
+- Record your work on the ticket's timeline (the Roadmap and the ticket page draw it; the human
+  sees from it who worked when, who waited on what, and what stalled). Each call takes `projectId`
+  and `ticketId`, and only a ticket of that project:
+  - `heartbeat` every few minutes while you work the ticket: in Claude Code under `/loop` (the same
+    loop as [Watch for feedback](#watch-for-feedback)), elsewhere between steps. An active ticket
+    with no event for longer than the project's `stallMinutes` (30 by default) reads as stalled in
+    the human's Needs you.
+  - `start_span` when a phase starts (`spec`, `build`, `review` with its `round`, `verify`, `pr`,
+    `preview`, `merge`) and `end_span` when it is done.
+  - `start_wait` with the reason when you cannot go on (`lock`, `builder`, `mcp`, `human`, `other`
+    with a `note`), and `end_wait` as soon as you can.
+  - `handoff` when you brief a sub-agent and when it hands back ([Delegating](#delegating)).
+    `get_ticket` → `work.open` lists your open spans and waits to close.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
   they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
@@ -250,6 +263,12 @@ Every spawned agent and lane costs time: hand out only what is new, and only wha
 - A subagent never answers a decision (`answer_decision`). If its work needs the human's answer, it
   asks (`ask_decision`) or returns the question in its result; you ask the human in the chat and
   answer the card yourself.
+- Put the hand-off on the ticket's timeline: `handoff` with `to` the sub-agent's name (any name;
+  it need not be a project agent) when you brief it, and `from` that name when it returns. A sub-agent
+  that cannot reach the board has you record its spans, with `agent` its name. Put the work timeline
+  in its brief too: the `projectId` and `ticketId`, a `heartbeat` every few minutes, `start_span` /
+  `end_span` around its phase, `start_wait` / `end_wait` with the reason while it waits (a lock,
+  the builder, the MCP server down).
 
 ### Watch for feedback
 
