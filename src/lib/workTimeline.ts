@@ -1,4 +1,5 @@
 import type { EventKind, StageKind } from './constants'
+import { isBoardRecord } from './roles'
 
 /**
  * A ticket's work timeline, from its events (src/server/workTimeline.ts): the spans its agents worked,
@@ -256,7 +257,9 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
     now,
     stallMinutes: o.stallMinutes,
   })
-  const lastEvent = [...sorted].reverse().find((e) => e.agent && e.agent !== 'board')
+  // Who was last heard from: any event but the board's own. A worker's event under the name 'board'
+  // counts (it is a claim, shown with who recorded it), as it counts for the stall clock above.
+  const lastEvent = [...sorted].reverse().find((e) => e.agent && !isBoardRecord(e.agent, e.by))
   const lastAgent = lastEvent?.agent ?? o.ticket.assignee
   const lastBy = lastEvent?.by ?? ''
   const lastFrom: Stalled['lastFrom'] = lastEvent ? 'event' : 'assignee'

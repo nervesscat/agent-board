@@ -12,6 +12,23 @@ export type Who = { kind: ActorKind | 'board'; role: WhoRole; parent: string }
 /** The name the board's own records carry (stage moves, pushes, merges, phases it ticks). */
 export const BOARD_NAME = 'board'
 
+/**
+ * How a record shows who made it, from the name it claims (`name`, which may be free text such as a
+ * sub-agent's label) and who recorded it as signed in (`by`). A role badge goes only on a signed-in
+ * identity: when `by` is someone else it is a claim ('claimed': the name as plain text, then who
+ * recorded it); when they are the same, or `by` is unknown (an older record), it is that actor.
+ */
+export const claimedShape = (name: string, by: string | null | undefined): 'actor' | 'claimed' =>
+  !by || by === name ? 'actor' : 'claimed'
+
+/**
+ * Whether the board recorded this event itself: it carries the board's name and the board recorded it
+ * (`by` 'board', or empty for older events). An event someone else recorded under the name 'board' is
+ * a claim like any other: a worker's activity, never the board's.
+ */
+export const isBoardRecord = (agent: string, by: string | null | undefined): boolean =>
+  agent === BOARD_NAME && claimedShape(agent, by) === 'actor'
+
 const BOARD: Who = { kind: 'board', role: 'board', parent: '' }
 
 const AGENTS = ['claude', 'codex', 'opencode', 'gemini', 'cursor', 'agent', 'bot']

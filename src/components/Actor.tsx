@@ -6,7 +6,7 @@ import { AgentAvatar } from '#/components/AgentAvatar'
 import { Tip } from '#/components/ui/tooltip'
 import { type ActorRow, get } from '#/lib/api'
 import { useProjectAgent } from '#/lib/project'
-import { ROLE_LABEL, type Who, type WhoRole, chainOf, whoOf } from '#/lib/roles'
+import { ROLE_LABEL, type Who, type WhoRole, chainOf, claimedShape, whoOf } from '#/lib/roles'
 import { cn } from '#/lib/utils'
 
 /**
@@ -121,14 +121,11 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
 
 /**
  * The name a record claims (`name`, which may be free text such as a sub-agent's label) and who
- * recorded it as signed in (`by`). A role badge goes only on a signed-in identity: when `by` is someone
- * else, the claimed name is plain text, then "by" and the recorder as `Actor` shows it. When they are
- * the same, or `by` is unknown (an older record), it is one `Actor`. The board's own events are
- * recorded by the board (`by` 'board'); an event someone else recorded under the name 'board' is a
- * claim like any other, so it never gets the Board badge.
+ * recorded it as signed in (`by`): when `by` is someone else, the claimed name is plain text, then "by"
+ * and the recorder as `Actor` shows it (roles.ts claimedShape). When they are the same, or `by` is
+ * unknown (an older record), it is one `Actor`.
  */
-export const claimedShape = (name: string, by: string | null | undefined): 'actor' | 'claimed' =>
-  !by || by === name ? 'actor' : 'claimed'
+export { claimedShape }
 
 export function ClaimedActor({
   name,

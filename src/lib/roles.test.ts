@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { type Who, chainOf, whoOf } from './roles'
+import { type Who, chainOf, claimedShape, isBoardRecord, whoOf } from './roles'
 
 const actors = new Map<string, Who>([
   ['enrique', { kind: 'human', role: 'human', parent: '' }],
@@ -54,5 +54,24 @@ describe('chainOf', () => {
       ['b', { kind: 'agent', role: 'worker', parent: 'a' }],
     ])
     expect(chainOf('a', (n) => whoOf(n, loop))).toBe('a (Agent) ← b (Agent)')
+  })
+})
+
+describe('isBoardRecord', () => {
+  it("is the board's own only when the board recorded it, or no one did (an older event)", () => {
+    expect(isBoardRecord('board', 'board')).toBe(true)
+    expect(isBoardRecord('board', '')).toBe(true)
+    expect(isBoardRecord('board', null)).toBe(true)
+    // A worker's event under the board's name is a claim, not the board's.
+    expect(isBoardRecord('board', 'claude')).toBe(false)
+    expect(isBoardRecord('board', 'orch/builder-1')).toBe(false)
+    // Another name is never the board's, whoever recorded it.
+    expect(isBoardRecord('claude', 'board')).toBe(false)
+    expect(isBoardRecord('claude', 'claude')).toBe(false)
+  })
+
+  it('agrees with how the record is shown: the Board badge exactly when it is the board’s own', () => {
+    for (const by of ['board', '', null, 'claude', 'orch/builder-1'])
+      expect(isBoardRecord('board', by)).toBe(claimedShape('board', by) === 'actor')
   })
 })

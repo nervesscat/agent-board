@@ -290,6 +290,28 @@ test("a worker's event under the name 'board' is a claim: no Board badge, and wh
   await expect(created.getByTestId('event-by')).toHaveCount(0)
 })
 
+test("a stalled row names a worker's event under the name 'board' as a claim, with who recorded it", async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // The worker's heartbeat is the last thing heard: not the board's own, so it is named, not skipped.
+  const t = await create(human, project, { title: 'Board-named heartbeat', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'heartbeat', agent: 'board' })
+  age(t.id, 40)
+
+  await page.goto(`/projects/${project.id}`)
+  const row = section(page, 'Needs you')
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Board-named heartbeat` }) })
+  await expect(row).toContainText(/silent 4\dm · last board\s*by\s*claude\s*Agent/)
+  await expect(row.getByTestId('claimed-name')).toHaveText('board')
+  await expect(row.getByTestId('last-assignee')).toHaveCount(0)
+  await expect(row.locator('[data-role="board"]')).toHaveCount(0)
+  await expect(row.getByTestId('event-by').locator('[data-role="worker"]')).not.toHaveCount(0)
+})
+
 test('a stalled row with no agent heard from names the assignee as plain text, with no badge', async ({
   page,
   project,
