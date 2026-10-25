@@ -152,10 +152,12 @@ test('the ticket page has a Timeline card with the bar, the totals and the event
   // Newest first; the heartbeats are one line until they are asked for.
   const items = events.getByRole('listitem')
   await expect(items.first()).toContainText(/^3 heartbeats, last /)
-  await expect(items.filter({ hasText: /^\S+\s*claude\s*heartbeat$/ })).toHaveCount(0)
+  await expect(items.filter({ hasText: /^\S+\s*claude\s*Agent\s*heartbeat$/ })).toHaveCount(0)
   await expect(items.nth(1)).toContainText('stopped waiting: lock')
   await card.getByRole('button', { name: 'Show heartbeats' }).click()
-  await expect(items.filter({ hasText: /claude\s*heartbeat$/ })).toHaveCount(3)
+  await expect(items.filter({ hasText: /claude\s*Agent\s*heartbeat$/ })).toHaveCount(3)
+  // Each event names its agent as everywhere else: with the role badge.
+  await expect(items.first().locator('[data-role="worker"]').first()).toBeVisible()
   await expect(items.first()).toContainText('heartbeat')
   await expect(card.getByRole('button', { name: 'Hide heartbeats' })).toHaveAttribute('aria-expanded', 'true')
   await card.screenshot({ path: test.info().outputPath('ticket-timeline-card.png') })
