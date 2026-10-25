@@ -675,9 +675,189 @@ describe('0036_pr_left_as', () => {
   })
 })
 
-describe('0037_multi_repo_tickets_and_runs', () => {
+describe('0037_drop_handoff_post_phase', () => {
+  // The migrator runs with foreign keys on; the migration must not need their cascade either.
+  it.each([true, false])(
+    'drops the top-level Hand-off post phase with its steps, and from stored lists (foreign keys %s)',
+    (foreignKeys) => {
+      const sqlite = databaseAt('0036_pr_left_as')
+      sqlite.pragma(`foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`)
+      const project = (phases: string | null) =>
+        Number(
+          sqlite.prepare('INSERT INTO projects (name, default_phases) VALUES (?, ?)').run('p', phases)
+            .lastInsertRowid,
+        )
+      const builtIn = project(null)
+      const custom = project('["Implementation","Pushed","PR","CI","Preview","Merged","Hand-off post"]')
+      const without = project('["A","B"]')
+      const onlyPost = project('["Hand-off post"]')
+      const middle = project('[" hand-off POST ","Implementation","Hand-off post notes","Merged"]')
+
+      const ticket = (
+        title: string,
+        extra: { status?: string; archivedAt?: string; parentId?: number } = {},
+      ) =>
+        Number(
+          sqlite
+            .prepare(
+              'INSERT INTO tickets (project_id, title, created_by, status, archived_at, parent_id) VALUES (?, ?, ?, ?, ?, ?)',
+            )
+            .run(
+              builtIn,
+              title,
+              'claude',
+              extra.status ?? 'todo',
+              extra.archivedAt ?? null,
+              extra.parentId ?? null,
+            ).lastInsertRowid,
+        )
+      const task = (
+        ticketId: number,
+        text: string,
+        position: number,
+        done = false,
+        parentId?: number,
+        blocked = false,
+      ) =>
+        Number(
+          sqlite
+            .prepare(
+              'INSERT INTO tasks (ticket_id, text, position, done, parent_id, blocked, blocked_reason) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            )
+            .run(
+              ticketId,
+              text,
+              position,
+              done ? 1 : 0,
+              parentId ?? null,
+              blocked ? 1 : 0,
+              blocked ? 'a key' : '',
+            ).lastInsertRowid,
+        )
+
+      // At 100% with its Hand-off post done.
+      const full = ticket('Full')
+      const fullImpl = task(full, 'Implementation', 0, true)
+      task(full, 'Write it', 0, true, fullImpl)
+      task(full, 'Hand-off post', 1, true)
+      // Its only open task was Hand-off post.
+      const almost = ticket('Almost')
+      task(almost, 'Implementation', 0, true)
+      task(almost, 'Hand-off post', 1)
+      // 3 of 4 phases done, Hand-off post (done) in the middle.
+      const most = ticket('Most')
+      const mostImpl = task(most, 'Implementation', 0, true)
+      task(most, 'Hand-off post', 1, true)
+      task(most, 'Pushed', 2, true)
+      task(most, 'PR', 3)
+      // A step of that name under another phase is someone's choice; so are other spellings.
+      const kept = [
+        task(most, 'Hand-off post', 0, false, mostImpl, true),
+        task(most, 'Handoff post', 4),
+        task(most, 'Hand-off post notes', 5, true),
+      ]
+      // Archived, odd spacing and case, with steps under it.
+      const archived = ticket('Archived', { status: 'done', archivedAt: '2026-10-01' })
+      task(archived, 'Implementation', 0, true)
+      const archivedPost = task(archived, ' hand-off POST ', 1)
+      task(archived, 'Summary', 0, true, archivedPost)
+      task(archived, 'Screenshots', 1, false, archivedPost)
+      // Closed with Hand-off post as its only task.
+      const closed = ticket('Closed', { status: 'done' })
+      task(closed, 'Hand-off post', 0, true)
+      // A lane of the full ticket.
+      const lane = ticket('Lane', { parentId: full })
+      task(lane, 'Implementation', 0)
+      task(lane, 'Hand-off post', 1, true)
+
+      const rows = (where: string, ...params: unknown[]) =>
+        sqlite.prepare(`SELECT * FROM tasks WHERE ${where} ORDER BY id`).all(...params)
+      const progress = (where: string, ...params: unknown[]) =>
+        sqlite
+          .prepare(`SELECT coalesce(sum(done), 0) AS done, count(*) AS total FROM tasks WHERE ${where}`)
+          .get(...params)
+      const rollup = `ticket_id IN (SELECT id FROM tickets WHERE id = ? OR parent_id = ?)`
+      const before = {
+        kept: rows(`id IN (${kept.join(', ')})`),
+        // Everything but the top-level Hand-off posts and the archived one's steps.
+        others: rows(
+          "(parent_id IS NOT NULL OR lower(trim(text)) <> 'hand-off post') AND parent_id IS NOT ?",
+          archivedPost,
+        ),
+        tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all(),
+        stored: sqlite.prepare('SELECT id, default_phases FROM projects WHERE id = ?').get(without),
+      }
+      expect(before.kept).toHaveLength(3)
+      expect(progress('ticket_id = ?', most)).toEqual({ done: 4, total: 7 })
+      expect(progress(rollup, full, full)).toEqual({ done: 4, total: 5 })
+
+      migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+      expect(rows("parent_id IS NULL AND lower(trim(text)) = 'hand-off post'")).toEqual([])
+      expect(rows('parent_id IS NOT NULL AND parent_id NOT IN (SELECT id FROM tasks)')).toEqual([])
+      // Every other row is as it was: done, blocked, position and parent included.
+      expect(rows(`id IN (${kept.join(', ')})`)).toEqual(before.kept)
+      expect(rows('1')).toEqual(before.others)
+      expect(sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()).toEqual(before.tickets)
+
+      expect(progress('ticket_id = ?', full)).toEqual({ done: 2, total: 2 })
+      expect(progress('ticket_id = ?', almost)).toEqual({ done: 1, total: 1 })
+      // Its phases alone: 3 of 4 before, 2 of 3 now.
+      expect(
+        progress('ticket_id = ? AND parent_id IS NULL AND id NOT IN (?, ?)', most, ...kept.slice(1)),
+      ).toEqual({
+        done: 2,
+        total: 3,
+      })
+      expect(progress('ticket_id = ?', most)).toEqual({ done: 3, total: 6 })
+      expect(progress('ticket_id = ?', archived)).toEqual({ done: 1, total: 1 })
+      expect(progress('ticket_id = ?', closed)).toEqual({ done: 0, total: 0 })
+      expect(progress('ticket_id = ?', lane)).toEqual({ done: 0, total: 1 })
+      // The full ticket's rollup with its lane.
+      expect(progress(rollup, full, full)).toEqual({ done: 2, total: 3 })
+      // The phases left keep their positions, gap included.
+      expect(
+        sqlite
+          .prepare(
+            'SELECT text, position FROM tasks WHERE ticket_id = ? AND parent_id IS NULL ORDER BY position, id',
+          )
+          .all(most),
+      ).toEqual([
+        { text: 'Implementation', position: 0 },
+        { text: 'Pushed', position: 2 },
+        { text: 'PR', position: 3 },
+        { text: 'Handoff post', position: 4 },
+        { text: 'Hand-off post notes', position: 5 },
+      ])
+
+      const phases = (id: number) =>
+        (
+          sqlite.prepare('SELECT default_phases FROM projects WHERE id = ?').get(id) as {
+            default_phases: string | null
+          }
+        ).default_phases
+      expect(phases(builtIn)).toBeNull()
+      expect(JSON.parse(phases(custom)!)).toEqual([
+        'Implementation',
+        'Pushed',
+        'PR',
+        'CI',
+        'Preview',
+        'Merged',
+      ])
+      expect(sqlite.prepare('SELECT id, default_phases FROM projects WHERE id = ?').get(without)).toEqual(
+        before.stored,
+      )
+      expect(JSON.parse(phases(onlyPost)!)).toEqual([])
+      expect(JSON.parse(phases(middle)!)).toEqual(['Implementation', 'Hand-off post notes', 'Merged'])
+      sqlite.close()
+    },
+  )
+})
+
+describe('0038_multi_repo_tickets_and_runs', () => {
   it("gives every ticket its repo as a one-repo list, and every workspace its ticket's repo, changing nothing else", () => {
-    const sqlite = databaseAt('0036_pr_left_as')
+    const sqlite = databaseAt('0037_drop_handoff_post_phase')
     const insertProject = sqlite.prepare('INSERT INTO projects (name) VALUES (?)')
     const project = (name: string) => Number(insertProject.run(name).lastInsertRowid)
     const two = project('two repos')

@@ -2,7 +2,7 @@
  * The hand-off phases the board ticks itself, from git, GitHub and the previews: a top-level task named
  * one of these (trimmed, any case) is ticked while its fact holds and unticked when it stops holding,
  * and nobody ticks it by hand. A subtask of the same name is an ordinary task, and so is a phase
- * reworded away from these names. Implementation and Hand-off post stay ticked by hand.
+ * reworded away from these names. Implementation and its steps stay ticked by hand.
  */
 export const AUTO_PHASES = ['Pushed', 'PR', 'CI', 'Preview', 'Merged'] as const
 

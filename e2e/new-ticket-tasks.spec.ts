@@ -37,16 +37,7 @@ const tasksOf = async (human: APIRequestContext, id: number) =>
   (await ok<TicketFull>(human.get(`/api/tickets/${id}`))).tasks.map((t) => t.text)
 
 /** A top-level ticket's tasks in order: the project's default phases, the typed tasks under the first. */
-const phased = (...steps: string[]) => [
-  'Implementation',
-  ...steps,
-  'Pushed',
-  'PR',
-  'CI',
-  'Preview',
-  'Merged',
-  'Hand-off post',
-]
+const phased = (...steps: string[]) => ['Implementation', ...steps, 'Pushed', 'PR', 'CI', 'Preview', 'Merged']
 
 /** The exact text of each listed task, without the whitespace `toHaveText` would forgive. */
 const texts = (items: Locator) => items.evaluateAll((all) => all.map((li) => li.textContent))
@@ -435,7 +426,7 @@ test('a ticket from the New ticket dialog starts with the project phases, the ty
   const { dialog, input, create } = await openDialog(page)
   // The dialog says so, by name, next to the field.
   const hint =
-    "It starts with the project's phases: Implementation, Pushed, PR, CI, Preview, Merged, Hand-off post. The tasks typed here go under Implementation."
+    "It starts with the project's phases: Implementation, Pushed, PR, CI, Preview, Merged. The tasks typed here go under Implementation."
   await expect(dialog).toContainText(hint)
   await dialog.getByLabel('Title').fill('Seeded from the dialog')
   for (const t of ['Reproduce it', 'Fix it']) {
@@ -448,21 +439,19 @@ test('a ticket from the New ticket dialog starts with the project phases, the ty
   const [row] = await rows(human, project.id)
   expect(await tasksOf(human, row!.id)).toEqual(phased('Reproduce it', 'Fix it'))
 
-  // On its page: Implementation with the typed tasks nested, then the hand-off's phases; 0 of 9.
+  // On its page: Implementation with the typed tasks nested, then the hand-off's phases; 0 of 8.
   await page.goto(`/projects/${project.id}/features/${row!.id}`)
   const card = page.getByRole('region', { name: 'Tasks' })
-  await expect(card).toContainText('0/9 · 0%')
+  await expect(card).toContainText('0/8 · 0%')
   await expect(
     card.getByRole('list', { name: 'Subtasks of Implementation' }).getByRole('listitem'),
   ).toHaveText(['Reproduce it', 'Fix it'])
   // Only a top-level task takes subtasks: those buttons list the top level, in order.
   const top = card.getByRole('button', { name: /^Add a subtask to / })
   expect(await top.evaluateAll((all) => all.map((b) => b.getAttribute('aria-label')))).toEqual(
-    ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged', 'Hand-off post'].map(
-      (x) => `Add a subtask to ${x}`,
-    ),
+    ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged'].map((x) => `Add a subtask to ${x}`),
   )
-  for (const name of ['Implementation', 'Reproduce it', 'Fix it', 'Hand-off post'])
+  for (const name of ['Implementation', 'Reproduce it', 'Fix it'])
     await expect(card.getByRole('checkbox', { name, exact: true })).not.toBeChecked()
   await card.screenshot({ path: test.info().outputPath('new-ticket-phases-card.png') })
 })

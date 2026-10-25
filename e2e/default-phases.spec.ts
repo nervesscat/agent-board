@@ -3,7 +3,7 @@ import type { Locator } from '@playwright/test'
 import type { Project, TicketFull } from '#/lib/api'
 import { expect, ok, test } from './fixtures'
 
-const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged', 'Hand-off post']
+const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged']
 
 /** The phases listed in the section, in order. */
 const listed = (section: Locator) =>
@@ -35,7 +35,7 @@ test('the human sets the default phases on the Settings page, and new tickets st
   await section.screenshot({ path: test.info().outputPath('default-phases.png') })
 
   // Removed with ×, every one but Implementation and PR.
-  for (const name of ['Pushed', 'CI', 'Preview', 'Merged', 'Hand-off post']) {
+  for (const name of ['Pushed', 'CI', 'Preview', 'Merged']) {
     await section.getByRole('button', { name: `Remove ${name}` }).click()
   }
   await expect(listed(section)).toHaveText(['Implementation', 'PR'])
@@ -122,8 +122,8 @@ test('the Settings page shows the refusal of a list the server will not take, an
   await page.goto(`/projects/${project.id}/settings`)
   const section = page.getByRole('region', { name: 'Default phases' })
   const field = section.getByRole('textbox', { name: 'New phase' })
-  // Pasted lines add one phase each: 7 built in and 14 more, over the 20 allowed.
-  const more = Array.from({ length: 14 }, (_, i) => `Phase ${i + 1}`)
+  // Pasted lines add one phase each: 6 built in and 15 more, over the 20 allowed.
+  const more = Array.from({ length: 15 }, (_, i) => `Phase ${i + 1}`)
   await field.focus()
   await field.evaluate((el, text) => {
     const data = new DataTransfer()
