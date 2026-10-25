@@ -23,10 +23,12 @@ REST `GET /api/me` answers `{actor, agent, role, parent, boardEnv, authOff}`: `a
 - The human is `human`. An agent token is a `worker` unless the human made it an `orchestrator`
   (Settings, Agents). The role comes with the token: nothing an agent sends raises it.
 - Only the human and an orchestrator change a project's instructions (`set_project_instructions`,
-  REST `PUT /api/projects/:id/instructions`). A worker is refused with "ask your orchestrator": tell
-  your orchestrator what should change, or ask the human. Every change is kept with the text before
-  it; an orchestrator's applies at once and shows in the human's Needs you until they mark it
-  reviewed or revert it.
+  REST `PUT /api/projects/:id/instructions`), create a project with instructions (`POST /api/projects`)
+  or move a repo to another project (`PATCH /api/repos/:id` `{projectId}`). A worker is refused with
+  "ask your orchestrator": tell your orchestrator what should change, or ask the human. Every change
+  is kept with the text before it (a new project's instructions as a change from nothing); an
+  orchestrator's applies at once and shows in the human's Needs you until they mark it reviewed or
+  revert it.
 - **Sub-identities.** A subagent you delegate to shares your MCP connection, and so your token: the
   board cannot tell it from you unless it says who it is. An orchestrator briefs each worker to pass
   `agentName: "<your whoami name>/<its name>"` (e.g. `orch/builder-1`) on every board tool call. Its

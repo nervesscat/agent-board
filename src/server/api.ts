@@ -266,7 +266,8 @@ api.post('/api/projects', async ({ request, actor }) => {
     request,
     z.object({ name: z.string().min(1).max(100), instructions: Instructions.optional() }),
   )
-  return json(projects.createProject(body, actor), 201)
+  // Instructions it starts with are a change of them: the human's or an orchestrator's (as the PUT below).
+  return json(projects.createProject(body, actor, callerInfo(request)), 201)
 })
 api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
 // The phases every new ticket of the project starts with; null goes back to the built-in list.
@@ -426,6 +427,15 @@ api.patch('/api/repos/:id', async ({ request, params, actor }) => {
       baseBranch: z.string().max(200).optional(),
     }),
   )
+  // A move takes the repo's tickets with it, under another project's instructions: a worker asks.
+  if (body.projectId !== undefined && body.projectId !== repos.getRepo(id(params)).projectId) {
+    const who = callerInfo(request, actor)
+    if (who.role === 'worker')
+      throw new HttpError(
+        403,
+        `only an orchestrator or the human moves a repo to another project: ask your orchestrator or the human (you are ${who.name}, a worker)`,
+      )
+  }
   return json(await repos.updateRepo(id(params), body, actor))
 })
 api.delete('/api/repos/:id', ({ params, actor }) => {

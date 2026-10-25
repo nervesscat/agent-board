@@ -370,7 +370,10 @@ describe('who is who in test mode: orchestrator:, agent: and sub-identities', ()
 
   it('set_project_instructions: an orchestrator changes them, a worker hears to ask its orchestrator', async () => {
     const projects = await import('./projects')
-    const p = projects.createProject({ name: 'rules', instructions: 'old' }, 'human').id
+    const p = projects.createProject({ name: 'rules', instructions: 'old' }, 'human', {
+      name: 'human',
+      role: 'human',
+    }).id
     expect(
       await tool({ 'x-test-actor': 'agent:w' }, 'set_project_instructions', {
         projectId: p,

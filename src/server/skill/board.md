@@ -51,10 +51,11 @@ Then:
 
 1. `whoami`: who the board knows you as: `name` (the agent token's name, or your sub-identity's),
    `role` and `parent`. Use the name as the assignee. An `orchestrator` (the human makes a token one,
-   in Settings, Agents) also changes the projects' instructions (`set_project_instructions`); a
-   `worker` cannot: tell your orchestrator what should change. If you were briefed with an
-   `agentName` (`<orchestrator>/<you>`), pass it on **every** board call: it makes your posts,
-   claims and comments yours, as a worker under the orchestrator.
+   in Settings, Agents) also changes the projects' instructions (`set_project_instructions`), creates
+   a project with instructions and moves a repo to another project; a `worker` cannot: tell your
+   orchestrator what should change. If you were briefed with an `agentName`
+   (`<orchestrator>/<you>`), pass it on **every** board call: it makes your posts, claims and
+   comments yours, as a worker under the orchestrator.
 2. `get_project` with your `projectId`, and check its `name` matches the table (if not, the table
    is stale: tell the human to copy the skill again from the board). Its `instructions` override
    your defaults for every repo in it. Its `stages` are the board's columns, each with a `key`, a

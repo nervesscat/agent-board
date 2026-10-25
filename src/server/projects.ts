@@ -94,21 +94,31 @@ function projectUsedTags(projectId: number) {
 
 export type ProjectFull = ReturnType<typeof getProjectFull>
 
-export function createProject(input: { name: string; instructions?: string }, actor: string) {
-  const row = db
-    .insert(schema.projects)
-    .values({ name: input.name, instructions: input.instructions || '' })
-    .returning()
-    .get()
-  logActivity({
-    projectId: row.id,
-    actor,
-    kind: 'project',
-    text: `created project ${row.name}`,
-    refType: 'project',
-    refId: row.id,
+/**
+ * A new project. Instructions that are not empty are its first change of them (instructionsHistory.ts),
+ * from '' to the text: only `who` as the human or an orchestrator sets them, kept pending for an
+ * orchestrator; a worker is refused and nothing is made. Without `who` the caller is taken for a worker.
+ */
+export function createProject(
+  input: { name: string; instructions?: string },
+  actor: string,
+  who: Changer = { name: actor, role: 'worker' },
+) {
+  const instructions = input.instructions || ''
+  if (instructions) assertMayChangeInstructions(who)
+  return db.transaction(() => {
+    const row = db.insert(schema.projects).values({ name: input.name, instructions: '' }).returning().get()
+    logActivity({
+      projectId: row.id,
+      actor,
+      kind: 'project',
+      text: `created project ${row.name}`,
+      refType: 'project',
+      refId: row.id,
+    })
+    if (instructions) setInstructions(row.id, instructions, who)
+    return withPhases({ ...row, instructions })
   })
-  return withPhases(row)
 }
 
 /** The tags offered under every ticket's tags field, as REST and MCP take them; [] offers none of the project's own. */

@@ -14,6 +14,13 @@ let dbm: typeof import('#/db')
 let history: typeof import('./instructionsHistory')
 let projects: typeof import('./projects')
 let send: (method: string, target: string, testActor?: string, body?: unknown) => Promise<Response>
+let sendWith: (
+  method: string,
+  target: string,
+  testActor: string | undefined,
+  extra: Record<string, string>,
+  body?: unknown,
+) => Promise<Response>
 beforeAll(async () => {
   dbm = await import('#/db')
   history = await import('./instructionsHistory')
@@ -25,8 +32,9 @@ beforeAll(async () => {
     api.handle(request, actor),
   )
   // As the middleware hands a request on in test mode: who calls is X-Test-Actor (none: the human).
-  send = async (method, target, testActor, body) => {
-    const headers: Record<string, string> = { accept: 'application/json' }
+  send = (method, target, testActor, body) => sendWith(method, target, testActor, {}, body)
+  sendWith = async (method, target, testActor, extra, body) => {
+    const headers: Record<string, string> = { accept: 'application/json', ...extra }
     if (testActor !== undefined) headers['x-test-actor'] = testActor
     if (body !== undefined) headers['content-type'] = 'application/json'
     const request = new Request(`http://localhost${target}`, {
@@ -289,5 +297,168 @@ describe('through the API router (test mode)', () => {
     expect((await send('POST', `/api/instructions/changes/${second.id}/revert`)).status).toBe(409)
     expect((await send('POST', `/api/instructions/changes/${second.id}/review`)).status).toBe(409)
     expect(textOf(p)).toBe('v1')
+  })
+})
+
+describe('a new project with instructions', () => {
+  const REFUSAL =
+    "only an orchestrator or the human changes the project's instructions: ask your orchestrator (you are w, a worker)"
+  const named = (prefix: string) => {
+    const name = `${prefix} ${++made}`
+    const p = () => projects.listProjects().find((row) => row.name === name)
+    return { name, p }
+  }
+
+  it('createProject: their first change from nothing, pending for an orchestrator; a worker makes nothing', async () => {
+    const { getSummary } = await import('./summary')
+    const orch = projects.createProject({ name: `by orch ${++made}`, instructions: 'rules' }, 'orch', ORCH)
+    expect(orch.instructions).toBe('rules')
+    expect(textOf(orch.id)).toBe('rules')
+    expect(rowsOf(orch.id)).toMatchObject([
+      { oldValue: '', newValue: 'rules', changedBy: 'orch', role: 'orchestrator', state: 'pending' },
+    ])
+    expect(linesOf(orch.id)).toHaveLength(1)
+    const [summary] = getSummary(orch.id).projects
+    expect(summary!.needsYou.instructionChanges).toMatchObject([
+      { changeId: rowsOf(orch.id)[0]!.id, changedBy: 'orch', role: 'orchestrator', excerpt: 'rules' },
+    ])
+
+    const human = projects.createProject({ name: `by human ${++made}`, instructions: 'h' }, 'enrique', HUMAN)
+    expect(rowsOf(human.id)).toMatchObject([
+      { oldValue: '', newValue: 'h', role: 'human', state: 'accepted' },
+    ])
+    expect(getSummary(human.id).projects[0]!.needsYou.instructionChanges).toEqual([])
+
+    const before = projects.listProjects().length
+    expect(() => projects.createProject({ name: 'by worker', instructions: 'x' }, 'w', WORKER)).toThrow(
+      REFUSAL,
+    )
+    // Without a role the caller is taken for a worker.
+    expect(() => projects.createProject({ name: 'by nobody', instructions: 'x' }, 'w')).toThrow(REFUSAL)
+    expect(projects.listProjects()).toHaveLength(before)
+    // Without instructions it stays open to anyone, and records no change.
+    const plain = projects.createProject({ name: `plain ${++made}`, instructions: '' }, 'w', WORKER)
+    expect(plain.instructions).toBe('')
+    expect(rowsOf(plain.id)).toEqual([])
+  })
+
+  it('POST /api/projects: a worker, a sub-identity too, gets the same 403; an orchestrator and the human make it', async () => {
+    for (const [actor, headers] of [
+      ['agent:w', {}],
+      ['orchestrator:orch', { 'x-agent-name': 'orch/w' }],
+    ] as const) {
+      const { name, p } = named('refused')
+      const res = await sendWith('POST', '/api/projects', actor, headers, { name, instructions: 'x' })
+      expect(res.status, actor).toBe(403)
+      const who = 'x-agent-name' in headers ? 'orch/w' : 'w'
+      expect(await res.json()).toEqual({ error: REFUSAL.replace('you are w,', `you are ${who},`) })
+      expect(p()).toBeUndefined()
+    }
+
+    const orch = named('orch made')
+    const made1 = await send('POST', '/api/projects', 'orchestrator:orch', {
+      name: orch.name,
+      instructions: 'o',
+    })
+    expect(made1.status).toBe(201)
+    expect(await made1.json()).toMatchObject({ name: orch.name, instructions: 'o' })
+    expect(rowsOf(orch.p()!.id)).toMatchObject([
+      { oldValue: '', newValue: 'o', role: 'orchestrator', state: 'pending' },
+    ])
+
+    const human = named('human made')
+    expect(
+      (await send('POST', '/api/projects', 'human:enrique', { name: human.name, instructions: 'h' })).status,
+    ).toBe(201)
+    expect(rowsOf(human.p()!.id)).toMatchObject([{ changedBy: 'enrique', role: 'human', state: 'accepted' }])
+
+    // Empty instructions, or none: open to a worker, as before.
+    for (const body of [{ instructions: '' }, {}]) {
+      const plain = named('worker made')
+      const res = await send('POST', '/api/projects', 'agent:w', { name: plain.name, ...body })
+      expect(res.status).toBe(201)
+      expect(rowsOf(plain.p()!.id)).toEqual([])
+    }
+  })
+})
+
+describe('moving a repo to another project', () => {
+  const newRepo = (projectId: number) =>
+    dbm.db
+      .insert(dbm.schema.repos)
+      .values({ projectId, name: `repo ${++made}`, repoPath: path.join(tmp, `repo-${made}`) })
+      .returning()
+      .get().id
+  const projectOf = (repo: number) =>
+    dbm.db.select().from(dbm.schema.repos).where(eq(dbm.schema.repos.id, repo)).get()!.projectId
+
+  it('PATCH /api/repos/:id with another projectId: an orchestrator and the human, never a worker', async () => {
+    const from = newProject('from')
+    const to = newProject('to')
+    const repo = newRepo(from)
+    for (const [actor, headers, who] of [
+      ['agent:w', {}, 'w'],
+      ['orchestrator:orch', { 'x-agent-name': 'orch/w' }, 'orch/w'],
+    ] as const) {
+      const res = await sendWith('PATCH', `/api/repos/${repo}`, actor, headers, {
+        projectId: to,
+        name: 'moved',
+      })
+      expect(res.status, actor).toBe(403)
+      expect(await res.json()).toEqual({
+        error: `only an orchestrator or the human moves a repo to another project: ask your orchestrator or the human (you are ${who}, a worker)`,
+      })
+      expect(projectOf(repo)).toBe(from)
+    }
+    // The rest of a repo's patch stays open to a worker, its own projectId again included.
+    expect(
+      (await send('PATCH', `/api/repos/${repo}`, 'agent:w', { name: 'renamed', projectId: from })).status,
+    ).toBe(200)
+
+    expect((await send('PATCH', `/api/repos/${repo}`, 'orchestrator:orch', { projectId: to })).status).toBe(
+      200,
+    )
+    expect(projectOf(repo)).toBe(to)
+    expect((await send('PATCH', `/api/repos/${repo}`, 'human:enrique', { projectId: from })).status).toBe(200)
+    expect(projectOf(repo)).toBe(from)
+  })
+})
+
+describe('with no caller remembered for the request', () => {
+  it('callerInfo takes an agent request for a worker, a non-agent one for the human', async () => {
+    const { callerInfo } = await import('./auth')
+    const { api } = await import('./api')
+    const { api: guard } = await import('./http')
+    const handle = guard(({ request, actor }: { request: Request; actor: string }) =>
+      api.handle(request, actor),
+    )
+    // Straight to the router, never through callerOf: nothing remembers who calls.
+    const raw = (testActor: string | null, instructions: string) => {
+      const headers: Record<string, string> = {
+        accept: 'application/json',
+        'content-type': 'application/json',
+      }
+      if (testActor) headers['x-test-actor'] = testActor
+      return new Request(`http://localhost/api/projects/${p}/instructions`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ instructions }),
+      })
+    }
+    const p = newProject('v0')
+    for (const actor of ['agent:w', 'orchestrator:orch']) {
+      expect(callerInfo(raw(actor, 'x'), 'w')).toMatchObject({ name: 'w', kind: 'agent', role: 'worker' })
+      const res = await handle({ request: raw(actor, 'x'), actor: 'w' })
+      expect(res.status, actor).toBe(403)
+      // The route asks callerInfo without a name: with none remembered either, it is 'unknown'.
+      expect(await res.json()).toEqual({
+        error:
+          "only an orchestrator or the human changes the project's instructions: ask your orchestrator (you are unknown, a worker)",
+      })
+    }
+    expect(textOf(p)).toBe('v0')
+    expect(callerInfo(raw(null, 'y'), 'enrique')).toMatchObject({ name: 'enrique', role: 'human' })
+    expect((await handle({ request: raw(null, 'y'), actor: 'enrique' })).status).toBe(200)
+    expect(rowsOf(p)).toMatchObject([{ changedBy: 'unknown', role: 'human', state: 'accepted' }])
   })
 })
