@@ -47,7 +47,7 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   ])
   await expect(tiles(layout, 'Ticket page, side column')).toHaveText([
     'Hand-off',
-    'Preview',
+    'Runs',
     'Details',
     'Branch',
     'Workspaces',
@@ -231,7 +231,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
     'Lanes',
     'Activity',
   ])
-  await expect(side).toHaveText(['Hand-off', 'Preview', 'Branch', 'Workspaces'])
+  await expect(side).toHaveText(['Hand-off', 'Runs', 'Branch', 'Workspaces'])
   // And Workspaces to the main column with its button, hidden there.
   await layout.getByRole('button', { name: 'Move Workspaces to the main column' }).click()
   await expect(layout.getByRole('button', { name: 'Move Workspaces to the side column' })).toBeFocused()
@@ -333,11 +333,11 @@ test('a ticket column with nothing to show on this ticket is not drawn; the othe
   const base = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
   // Sent as is: the server checks it.
   const arrange = (layout: unknown) => ok(human.patch(`/api/projects/${project.id}`, { data: { layout } }))
-  // A new ticket: no hand-off, no preview, still open.
+  // A new ticket: no hand-off, no runs, still open.
   const ticket = await api.ticket({ title: 'Nothing on the side' })
   const url = `/projects/${project.id}/features/${ticket.id}`
 
-  // Details, Branch and Workspaces hidden: Hand-off and Preview are left there, with nothing to show.
+  // Details, Branch and Workspaces hidden: Hand-off and Runs are left there, with nothing to show.
   const hidden = ['ticket.details', 'ticket.branch', 'ticket.workspaces']
   await arrange(base.map((it) => (hidden.includes(it.id) ? { ...it, hidden: true } : it)))
   await page.goto(url)
@@ -346,10 +346,8 @@ test('a ticket column with nothing to show on this ticket is not drawn; the othe
   await expect(side).toHaveCount(0)
   expect((await main.boundingBox())!.width).toBeCloseTo(grid, 0)
 
-  // Preview hidden too: Hand-off alone, still nothing.
-  await arrange(
-    base.map((it) => ([...hidden, 'ticket.preview'].includes(it.id) ? { ...it, hidden: true } : it)),
-  )
+  // Runs hidden too: Hand-off alone, still nothing.
+  await arrange(base.map((it) => ([...hidden, 'ticket.runs'].includes(it.id) ? { ...it, hidden: true } : it)))
   await page.reload()
   ;({ grid, main, side } = await columns(page))
   await expect(main.getByRole('heading', { level: 2, name: 'Tasks' })).toBeVisible()

@@ -14,6 +14,13 @@ import { AGENT, HUMAN, e2eEnv } from './env'
 
 export { expect }
 
+/**
+ * What a test that starts a run the board runs (a preview or a job), or changes the board-wide preview
+ * limit, is tagged with: every run counts against that one limit, so these tests run one at a time
+ * (the board-runs project in playwright.config.ts), next to the others.
+ */
+export const BOARD_RUNS = { tag: '@board-runs' }
+
 /** A JSON body, after checking the call worked (the error text in the failure if it did not). */
 export async function ok<T>(res: APIResponse | Promise<APIResponse>): Promise<T> {
   const r = await res

@@ -28,13 +28,8 @@ import {
 } from './git'
 import { HttpError } from './http'
 import { stopLinkPreview } from './linkPreview'
-import {
-  activePreviews,
-  holdPreviews,
-  type ManagedPreview,
-  previewsSettled,
-  stopPreview,
-} from './managedPreview'
+import { activePreviews, holdPreviews, type ManagedPreview, previewsSettled } from './managedPreview'
+import { stopRun } from './runs'
 import { getProject } from './projects'
 import { dropListings, fetchRepo, fetchStatus } from './push'
 import { listRepos } from './repos'
@@ -462,7 +457,7 @@ async function stopPreviews(worktreePath: string, actor: string): Promise<Manage
   const at = (p: string) => folderKey(p) === here
   const settled = previewsSettled(at)
   for (const p of activePreviews().filter((p) => at(p.path)))
-    await stopPreview(p.workspaceId, 'its worktree was removed', actor)
+    await stopRun(p.workspaceId, p.runId, 'its worktree was removed', actor)
   await settled
   return activePreviews().find((p) => at(p.path)) ?? null
 }

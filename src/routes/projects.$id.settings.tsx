@@ -8,6 +8,7 @@ import { LayoutEditor } from '#/components/LayoutEditor'
 import { ListInput } from '#/components/ListInput'
 import { Markdown } from '#/components/Markdown'
 import { RichEditor } from '#/components/RichEditor'
+import { RunsSettings } from '#/components/RunsSettings'
 import { StagesEditor } from '#/components/StagesEditor'
 import {
   AlertDialog,
@@ -71,6 +72,7 @@ function Settings() {
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
       <StallMinutes key={`stall-${id}`} projectId={id} saved={p.stallMinutes} />
       <StagesEditor projectId={id} />
+      <RunsSettings projectId={id} />
       <LayoutEditor key={`layout-${id}`} projectId={id} saved={p.layout} />
     </div>
   )

@@ -52,7 +52,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'ticket.lanes': Layers,
   'ticket.activity': MessageSquare,
   'ticket.handoff': Hand,
-  'ticket.preview': MonitorPlay,
+  'ticket.runs': MonitorPlay,
   'ticket.details': Info,
   'ticket.branch': GitBranch,
   'ticket.workspaces': FolderGit2,
