@@ -810,7 +810,7 @@ test('a truncated path or URL shows in full in its tooltip, wrapped on screen', 
   await expectTooltip(cell, worktree)
   await expectWrappedOnScreen(page)
 
-  // The Preview card's link, on a ticket.
+  // The Runs card's link, on a ticket.
   const url = `http://localhost:9/${'p'.repeat(150)}`
   const t = await ok<TicketFull>(
     human.post(`/api/projects/${project.id}/tickets`, { data: { title: 'Has a preview' } }),
@@ -818,7 +818,7 @@ test('a truncated path or URL shows in full in its tooltip, wrapped on screen', 
   await ok(human.post(`/api/tickets/${t.id}/workspaces`, { data: { name: 'preview', previewUrl: url } }))
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const link = page
-    .getByRole('region', { name: 'Preview' })
+    .getByRole('region', { name: 'Runs' })
     .locator('div[data-slot="tooltip-trigger"]')
     .filter({ hasText: url })
   expect(await link.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)

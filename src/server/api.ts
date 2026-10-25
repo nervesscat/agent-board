@@ -16,6 +16,17 @@ import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import * as agents from './agents'
 import { roadmap } from './roadmap'
+import * as runConfig from './runConfig'
+import {
+  forgetRunConfig,
+  isActive as runActive,
+  restartRun,
+  runLog,
+  runState,
+  startRun,
+  stopRun,
+} from './runs'
+import * as ticketRuns from './ticketRuns'
 import { addDefaultAgents } from './defaultAgents'
 import { AGENT_ROLES, listActors } from './actors'
 import { callerInfo, isAgent } from './auth'
@@ -109,7 +120,40 @@ const TicketPatch = z.object({
   prNumber: z.number().int().positive().nullable().optional(),
   // The tickets whose branches must be merged into this one's base before it can be done; replaces the list.
   needs: z.array(z.number().int()).max(50).optional(),
+  // The repos its work spans, each with its branch (base, PR); the first is the primary, the one repoId,
+  // branch, baseBranch and prNumber above are. Replaces the list; an empty one is refused, in the words
+  // the rest of its checks use (ticketRepos.ts).
+  repos: z
+    .array(
+      z.object({
+        repoId: z.number().int(),
+        branch: z.string().max(200).optional(),
+        baseBranch: z.string().max(200).optional(),
+        prNumber: z.number().int().positive().nullable().optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
 })
+// A run of a repo as the human configures it; runConfigProblem (src/lib/runs.ts) checks the rest.
+const RunBody = z.object({
+  name: z.string().max(200),
+  type: z.string().max(20),
+  install: z.string().max(5_000).optional(),
+  build: z.string().max(5_000).optional(),
+  start: z.string().max(5_000),
+  env: z.record(z.string(), z.string()).optional(),
+  port: z.number().int().nullable().optional(),
+  healthPath: z.string().max(1_000).optional(),
+  copyData: z.boolean().optional(),
+})
+// The commands are the human's alone: an agent reads them and starts runs, never writes them.
+const humanRuns = (request: Request) => {
+  if (isAgent(request)) throw new HttpError(403, "only the human configures a repo's runs")
+}
+/** An optional JSON body: none (or an empty one) is `{}`. */
+const optionalJson = async <T extends z.ZodType>(request: Request, schema: T): Promise<z.infer<T>> =>
+  (await request.clone().text()).trim() ? readJson(request, schema) : schema.parse({})
 
 export const api = new ApiRouter()
 
@@ -388,6 +432,39 @@ api.delete('/api/repos/:id', ({ params, actor }) => {
   repos.deleteRepo(id(params), actor)
   return json({ ok: true })
 })
+// --- runs: what the board starts from a ticket's worktree of a repo (previews and jobs) ---
+// A repo's runs, in order: anyone signed in reads them; only the human writes them.
+api.get('/api/repos/:id/runs', ({ params }) => json(runConfig.listRunConfigs(id(params))))
+api.post('/api/repos/:id/runs', async ({ request, params, actor }) => {
+  humanRuns(request)
+  const body = await readJson(request, RunBody)
+  return json(
+    runConfig.createRunConfig(id(params), body as Parameters<typeof runConfig.createRunConfig>[1], actor),
+    201,
+  )
+})
+// Body: every run id of the repo, in the new order.
+api.put('/api/repos/:id/runs/order', async ({ request, params, actor }) => {
+  humanRuns(request)
+  const body = await readJson(request, z.object({ ids: z.array(z.number().int()) }))
+  return json(runConfig.reorderRunConfigs(id(params), body.ids, actor))
+})
+api.patch('/api/runs/:id', async ({ request, params, actor }) => {
+  humanRuns(request)
+  const body = await readJson(request, RunBody.partial())
+  return json(
+    runConfig.updateRunConfig(id(params), body as Parameters<typeof runConfig.updateRunConfig>[1], actor),
+  )
+})
+// Whatever runs of it stops first.
+api.delete('/api/runs/:id', ({ request, params, actor }) => {
+  humanRuns(request)
+  runConfig.getRunConfig(id(params))
+  forgetRunConfig(id(params), actor)
+  runConfig.deleteRunConfig(id(params), actor)
+  return json({ ok: true })
+})
+
 // Local branches of any checkout, so the new-repo dialog can offer them before the repo is registered.
 api.get('/api/branches', async ({ url }) => {
   const repoPath = url.searchParams.get('path') ?? ''
@@ -541,7 +618,15 @@ api.post('/api/projects/:id/tickets/archive-request', async ({ request, params, 
 api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
-    z.object({ branch: z.string().max(200).optional(), as: AgentName.optional() }),
+    z.object({
+      branch: z.string().max(200).optional(),
+      as: AgentName.optional(),
+      // Each repo's branch; one of the project the ticket does not span yet is added to it.
+      repos: z
+        .array(z.object({ repoId: z.number().int(), branch: z.string().max(200) }))
+        .max(20)
+        .optional(),
+    }),
   )
   return json(await withResume(features.claimTicket(id(params), actor, body)))
 })
@@ -611,6 +696,8 @@ api.post('/api/tickets/:id/workspaces', async ({ request, params, actor }) => {
       path: z.string().max(500).optional(),
       agent: z.string().max(80).optional(),
       previewUrl: PreviewUrl.optional(),
+      // The repo of the ticket its worktree is of; the ticket's primary when left out.
+      repoId: z.number().int().optional(),
     }),
   )
   return json(features.addWorkspace(id(params), body, actor), 201)
@@ -647,6 +734,35 @@ api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
 api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
   const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))
   return new Response(previewLog(id(params), name), {
+    headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
+// Every run of every repo of the ticket, each with the workspace it runs from, its state and why it
+// would not start; Start all and Stop all (repoId: one repo's only) answer each run's outcome.
+api.get('/api/tickets/:id/runs', ({ params }) => json(ticketRuns.ticketRuns(id(params))))
+const RunsScope = z.object({ repoId: z.number().int().optional() })
+api.post('/api/tickets/:id/runs/start', async ({ request, params, actor }) =>
+  json(ticketRuns.startTicketRuns(id(params), actor, await optionalJson(request, RunsScope))),
+)
+api.post('/api/tickets/:id/runs/stop', async ({ request, params, actor }) =>
+  json(await ticketRuns.stopTicketRuns(id(params), actor, await optionalJson(request, RunsScope))),
+)
+// One run from one workspace. Nothing in the body is read: what runs is the stored config.
+api.post('/api/workspaces/:id/runs/:runId/start', ({ params, actor }) =>
+  json(startRun(id(params), id(params, 'runId'), actor), 202),
+)
+api.post('/api/workspaces/:id/runs/:runId/stop', async ({ params, actor }) => {
+  if (!runActive(runState(id(params), id(params, 'runId'))))
+    throw new HttpError(409, 'that run does not run from this workspace')
+  return json(await stopRun(id(params), id(params, 'runId'), `stopped by ${actor}`, actor))
+})
+api.post('/api/workspaces/:id/runs/:runId/restart', async ({ params, actor }) =>
+  json(await restartRun(id(params), id(params, 'runId'), actor), 202),
+)
+// ?name=build (install and build) or server (the start command's output).
+api.get('/api/workspaces/:id/runs/:runId/log', ({ params, url }) => {
+  const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))
+  return new Response(runLog(id(params), id(params, 'runId'), name), {
     headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' },
   })
 })

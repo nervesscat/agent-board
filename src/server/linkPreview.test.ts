@@ -216,6 +216,8 @@ function boardWorktree() {
 
 beforeAll(async () => {
   fs.mkdirSync(path.join(main, '.git'), { recursive: true })
+  // A checkout of the board: its repo gets the board's preview run.
+  fs.writeFileSync(path.join(main, 'package.json'), JSON.stringify({ name: 'agent-board' }))
   mp = await import('./managedPreview')
   lp = await import('./linkPreview')
   features = await import('./features')

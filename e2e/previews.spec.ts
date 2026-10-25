@@ -9,7 +9,8 @@ import type { APIRequestContext, Page } from '@playwright/test'
 
 import type { ManagedPreview, ProjectPreview, ProjectPreviews, TicketFull, Workspace } from '#/lib/api'
 import { END_BUILD as END, e2eEnv, git } from './env'
-import { expect, expectTooltip, ok, seedProject, test } from './fixtures'
+import { BOARD_RUNS, expect, expectTooltip, ok, seedProject, test } from './fixtures'
+import { boardPreview } from './runs'
 
 /** A server on this machine that answers, as a branch an agent runs would; closed when the test ends. */
 async function answering() {
@@ -232,8 +233,9 @@ test('a project route that does not exist answers 404', async ({ human }) => {
 })
 
 // The previews the board runs count against one board-wide limit, which some of these change: one test
-// at a time, and the limit back to 8 after each, so no other test's Start is refused.
-test.describe('board-run previews and the preview limit', () => {
+// at a time (with every other test that starts a run, BOARD_RUNS), and the limit back to 8 after each,
+// so no other test's Start is refused.
+test.describe('board-run previews and the preview limit', BOARD_RUNS, () => {
   test.describe.configure({ mode: 'serial' })
 
   const limitBack = (human: APIRequestContext) =>
@@ -246,6 +248,7 @@ test.describe('board-run previews and the preview limit', () => {
     project,
   }) => {
     const { worktree, branch, end } = buildingWorktree(`${project.id}-previews`)
+    await boardPreview(human, project)
 
     const t = await ok<TicketFull>(
       human.post(`/api/projects/${project.id}/tickets`, {
@@ -333,6 +336,7 @@ test.describe('board-run previews and the preview limit', () => {
     project,
   }) => {
     const { worktree, branch, end } = buildingWorktree(`${project.id}-limit`)
+    await boardPreview(human, project)
     const t = await ok<TicketFull>(
       human.post(`/api/projects/${project.id}/tickets`, {
         data: { title: 'Counted against the limit', status: 'in_progress', branch },
@@ -385,6 +389,7 @@ test.describe('board-run previews and the preview limit', () => {
   }) => {
     const first = buildingWorktree(`${project.id}-first`)
     const second = buildingWorktree(`${project.id}-second`)
+    await boardPreview(human, project)
     const ticketFor = (title: string, branch: string) =>
       ok<TicketFull>(
         human.post(`/api/projects/${project.id}/tickets`, { data: { title, status: 'in_progress', branch } }),
@@ -454,6 +459,7 @@ test.describe('board-run previews and the preview limit', () => {
     project,
   }) => {
     const board = buildingWorktree(`${project.id}-stop-all`)
+    await boardPreview(human, project)
     const linked = worktreeOf(`${project.id}-stop-all-link`)
     const server = await serveFrom(linked.worktree)
     const stranger = await answering()

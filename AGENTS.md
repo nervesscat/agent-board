@@ -68,6 +68,11 @@ http_headers = { Authorization = "Bearer <token>" }
    (how to run them, conventions, what never to do). Follow them over any default of yours. A
    project can span several repos (`repos[]`: id, name, checkout path, base branch); when it does,
    give `repoId` to `create_ticket` and `post_review_result` so the board knows which one you mean.
+   A ticket's work can span several of them: `repos` on `get_ticket` lists each with its own
+   `branch`, `baseBranch` and `prNumber`, the first being the primary (the ticket's own `repoId`,
+   `branch`, `baseBranch`, `prNumber`). `repos` on `create_ticket` and `update_ticket` sets the list,
+   `claim_ticket`'s `branch` is the primary's and its `repos` sets each one's branch, `add_workspace`
+   takes the `repoId` its worktree is of, and `get_ticket_git` reports every repo.
    Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
    (`open`, `active`, `blocked`, `review`, `done`, `cancelled`). A ticket's `status` is a stage key;
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
@@ -170,24 +175,29 @@ http_headers = { Authorization = "Bearer <token>" }
    **Previews:** when the change can be tried (a page, an API), have a preview the human can open
    before anything is merged, and post its link with what to try. Say that what the human posts
    there stays in a copy of the data. Keep it running while the ticket is in review.
-   - **A branch of the board itself: the board runs it.** Register your worktree
-     (`add_workspace` with its `path` and `branch`; it must sit next to the main checkout, like
-     `../agent-board-<branch>`), then `start_preview` with the workspace's id. The board installs
-     (only when the lockfile changed), builds, copies the live data and starts the build on a free
-     port from 47101 with sign-in off, then sets the workspace's `previewUrl`. It returns
-     at once; `get_ticket` shows the workspace's `managedPreview` going `building` → `starting` →
-     `running`, or `failed` with the last log lines (`logs` has the paths). `start_preview` with
-     `restart: true` rebuilds after you push more work, `stop_preview` stops it. The board runs as
-     many at once as the human's preview limit (8 by default); a start beyond it is refused with
-     the limit, so stop the ones you no longer need. The board stops it
-     by itself when the PR is merged, the ticket moves to done or cancelled or is archived, or the
-     workspace is removed, and when the board itself stops (it does not start them again). Do not
-     run `pnpm dev` in your session for the human: it dies with your session and the dev server
-     behaves differently from the build.
-   - **Anything else:** start your branch from your worktree on a free port, with a copy of the
+   - **A repo with runs: the board runs them.** The human configures each repo's runs in the
+     project's settings: a preview answers on a port and gets a link, a job is a background worker
+     with no link; a checkout of the board has its `Preview` (install when the lockfile changed,
+     build, a copy of the live data, the build on a free port from 47101 with sign-in off). Register
+     your worktree (`add_workspace` with its `path` and `branch`, and `repoId` for a repo other than
+     the ticket's primary; it must sit next to the repo's main checkout, like
+     `../agent-board-<branch>`), then `list_runs` shows every run of every repo of the ticket and
+     `start_run` starts one by name (`all: true` starts them all). It returns at once; `list_runs`
+     follows it `building` → `starting` → `running`, or `failed` with the last log lines (`logs`
+     has the paths), and a running preview sets the workspace's `previewUrl`. `start_run` with
+     `restart: true` rebuilds after you push more work, `stop_run` stops it. You name a run, never a
+     command, env or port: what runs is the human's config. `start_preview` / `stop_preview` still
+     work on the workspace's first preview run. The board runs as many at once, previews and jobs
+     alike, as the human's preview limit (8 by default); a start beyond it is refused with the
+     limit, so stop the ones you no longer need. The board stops them by itself when the PR is
+     merged (in that repo), the ticket moves to done or cancelled or is archived, the repo is taken
+     off the ticket, or the workspace is removed, and when the board itself stops (it does not start
+     them again). Do not run `pnpm dev` in your session for the human: it dies with your session and
+     the dev server behaves differently from the build.
+   - **A repo with no runs:** start your branch from your worktree on a free port, with a copy of the
      data rather than the real one (the project's instructions say how), and register its link on
-     the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it as
-     a Preview card with an Open button and whether it is running. Stop it once the ticket is
+     the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it on
+     its Runs card with an Open button and whether it is running. Stop it once the ticket is
      merged or dropped, and clear it (`set_preview` with `previewUrl: ""`). The human can stop it
      from the project's Previews page when it listens on loopback and runs from the workspace's
      worktree; the link stays, as not running.

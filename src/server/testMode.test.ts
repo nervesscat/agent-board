@@ -395,4 +395,45 @@ describe('who is who in test mode: orchestrator:, agent: and sub-identities', ()
       { changeId: done.change.id, changedBy: 'orch', role: 'orchestrator', excerpt: 'new' },
     ])
   })
+
+  it("refuses an orchestrator and a sub-identity a repo's run settings; the human writes them", async () => {
+    const { db, schema } = await import('#/db')
+    const repo = db.select().from(schema.repos).all()[0]!
+    const run = { name: 'web', type: 'preview', start: 'node server.js' }
+    for (const headers of [ORCH, { ...ORCH, 'x-agent-name': 'orch/worker-6' }]) {
+      const res = await send('POST', `/api/repos/${repo.id}/runs`, headers, run)
+      expect(res.status, JSON.stringify(headers)).toBe(403)
+      expect(await res.json()).toEqual({ error: "only the human configures a repo's runs" })
+    }
+    expect(db.select().from(schema.runConfigs).all()).toEqual([])
+    const made = await send('POST', `/api/repos/${repo.id}/runs`, { 'x-test-actor': 'human:qa' }, run)
+    expect(made.status).toBe(201)
+    const { id: runId } = (await made.json()) as { id: number }
+    expect((await send('PATCH', `/api/runs/${runId}`, ORCH, { name: 'x' })).status).toBe(403)
+    expect((await send('DELETE', `/api/runs/${runId}`, ORCH)).status).toBe(403)
+    expect((await send('PUT', `/api/repos/${repo.id}/runs/order`, ORCH, { ids: [runId] })).status).toBe(403)
+    db.delete(schema.runConfigs).run()
+  })
+
+  it("files a sub-identity's multi-repo claim under its own name, and refuses the run tools a bad agentName", async () => {
+    const { db, schema } = await import('#/db')
+    const repo = db.select().from(schema.repos).all()[0]!
+    const features = await import('./features')
+    const ticket = features.createTicket(projectId, { title: 'Two repos', repoId: repo.id }, 'human')
+    const as = { agentName: 'orch/worker-7' }
+    const claimed = await tool(ORCH, 'claim_ticket', {
+      ticketId: ticket.id,
+      repos: [{ repoId: repo.id, branch: 'feat/x' }],
+      ...as,
+    })
+    expect(claimed).toMatchObject({ assignee: 'orch/worker-7', branch: 'feat/x' })
+    expect(await tool(ORCH, 'list_runs', { ticketId: ticket.id, ...as })).toMatchObject({
+      repos: [{ repoId: repo.id, branch: 'feat/x' }],
+    })
+    expect(await tool(ORCH, 'stop_run', { ticketId: ticket.id, all: true, ...as })).toEqual({ results: [] })
+    for (const name of ['list_runs', 'start_run', 'stop_run'])
+      expect(await tool(ORCH, name, { ticketId: ticket.id, agentName: 'other/x' }), name).toEqual({
+        error: expect.stringMatching(/^agentName must be <token-name>\/<name>, here orch\/<name>/),
+      })
+  })
 })

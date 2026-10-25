@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type HistoryState, Link, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   Archive,
@@ -56,7 +56,7 @@ import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
-import { ManagedLine, PreviewActions, PreviewBadge, previewActive } from '#/components/Preview'
+import { RunsCard } from '#/components/RunsCard'
 import { PrState } from '#/components/PrState'
 import { type FeedTab, RESUME_TEMPLATE } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
@@ -104,8 +104,6 @@ import {
   type SummaryHistory,
   type TicketRow,
   type UpdateRow,
-  type Workspace,
-  type WorkspacePreview,
 } from '#/lib/api'
 import { STATUS_LABEL, ago, agoLong, clock, shortSha, stamp } from '#/lib/format'
 import {
@@ -173,6 +171,8 @@ function TicketPage() {
     qc.invalidateQueries({ queryKey: key })
     qc.invalidateQueries({ queryKey: ticketsKey(id) })
     qc.invalidateQueries({ queryKey: ['ticket-git', ticketId] })
+    // Its repos, and with them its runs, may have changed.
+    qc.invalidateQueries({ queryKey: ['ticket-runs'] })
     // The tags the project's tickets carry, offered under every tags field.
     qc.invalidateQueries({ queryKey: ['project', id] })
   }
@@ -459,7 +459,7 @@ function TicketPage() {
         </div>
         <aside className="min-w-0 space-y-4">
           {t.handoff && <HandoffCard handoff={t.handoff} git={git} pr={t.pr} />}
-          <Previews t={t} git={git} onChange={invalidate} />
+          <RunsCard t={t} git={git} onChange={invalidate} />
           <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />
           <GitPanel t={t} git={git} onChange={invalidate} />
         </aside>
@@ -1036,6 +1036,100 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   )
 }
 
+/** A repo of the ticket as a write of its repos gives it back: what it has now. */
+const repoInput = (r: TicketFull['repos'][number]) => ({
+  repoId: r.repoId,
+  branch: r.branch,
+  baseBranch: r.baseBranch,
+  prNumber: r.prNumber,
+})
+
+/**
+ * The ticket's repos beyond the primary (the Repository field above): each with its own branch, and
+ * a way to take one off or add another repo of the project. Each change saves the whole list.
+ */
+function OtherRepos({
+  t,
+  repos,
+  onSave,
+}: {
+  t: TicketFull
+  repos: { id: number; name: string }[]
+  onSave: (p: Record<string, unknown>) => void
+}) {
+  const others = t.repos.filter((r) => !r.primary)
+  const addable = repos.filter((r) => !t.repos.some((x) => x.repoId === r.id))
+  const save = (next: TicketFull['repos']) => onSave({ repos: next.map(repoInput) })
+  // A branch typed by hand saves once typing stops, as the primary's does.
+  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({})
+  const [typed, setTyped] = useState<Record<number, string>>({})
+  const setBranch = (repoId: number, branch: string) => {
+    setTyped((b) => ({ ...b, [repoId]: branch }))
+    clearTimeout(timers.current[repoId])
+    timers.current[repoId] = setTimeout(() => {
+      save(t.repos.map((r) => (r.repoId === repoId ? { ...r, branch } : r)))
+      setTyped(({ [repoId]: _done, ...rest }) => rest)
+    }, 700)
+  }
+  return (
+    <div className="space-y-2">
+      <Tip content="The ticket's work in other repos of the project, each on its own branch: they show in Branch and Runs">
+        <Label className="text-xs text-muted-foreground">Other repositories</Label>
+      </Tip>
+      {others.map((r) => (
+        <div key={r.repoId} className="space-y-1" role="group" aria-label={`Repository ${r.name}`}>
+          <div className="flex items-center gap-2">
+            <Label htmlFor={`branch-${r.repoId}`} className="font-mono text-xs">
+              {r.name}
+            </Label>
+            <Tip content={`Take ${r.name} off the ticket (its runs for the ticket stop)`}>
+              <button
+                type="button"
+                className="ml-auto text-muted-foreground hover:text-foreground"
+                aria-label={`Remove ${r.name}`}
+                onClick={() => save(t.repos.filter((x) => x.repoId !== r.repoId))}
+              >
+                <X className="size-3.5" />
+              </button>
+            </Tip>
+          </div>
+          <BranchSelect
+            id={`branch-${r.repoId}`}
+            value={typed[r.repoId] ?? r.branch}
+            repoId={r.repoId}
+            optional
+            onChange={(v) => setBranch(r.repoId, v)}
+          />
+        </div>
+      ))}
+      {addable.length > 0 && (
+        <Select
+          value=""
+          onValueChange={(v) => {
+            if (v)
+              save([
+                ...t.repos,
+                { repoId: Number(v), name: '', branch: '', baseBranch: '', prNumber: null, primary: false },
+              ])
+          }}
+          items={Object.fromEntries(addable.map((r) => [String(r.id), r.name]))}
+        >
+          <SelectTrigger className="w-full" aria-label="Add a repository">
+            <SelectValue placeholder="Add a repository…" />
+          </SelectTrigger>
+          <SelectContent>
+            {addable.map((r) => (
+              <SelectItem key={r.id} value={String(r.id)}>
+                {r.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </div>
+  )
+}
+
 /** Who, where, and what it needs merged first: each field saves as soon as it changes. */
 function Details({
   t,
@@ -1082,7 +1176,16 @@ function Details({
           </Label>
           <Select
             value={repoId}
-            onValueChange={(v) => v && v !== repoId && onSave({ repoId: Number(v) })}
+            onValueChange={(v) => {
+              if (!v || v === repoId) return
+              // One of the ticket's other repos becomes its primary; any other repo replaces the primary.
+              const picked = t.repos.find((r) => r.repoId === Number(v))
+              onSave(
+                picked
+                  ? { repos: [picked, ...t.repos.filter((r) => r !== picked)].map(repoInput) }
+                  : { repoId: Number(v) },
+              )
+            }}
             items={Object.fromEntries(repos.map((r) => [String(r.id), r.name]))}
           >
             <SelectTrigger id="repo" className="w-full">
@@ -1127,6 +1230,7 @@ function Details({
           }}
         />
       </div>
+      {repos.length > 1 && !t.prId && <OtherRepos t={t} repos={repos} onSave={onSave} />}
       <div className="space-y-1">
         <Tip content="Tickets whose branches must be merged into this one's base before it can be done">
           <Label htmlFor="needs" className="text-xs text-muted-foreground">
@@ -2488,122 +2592,6 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   )
 }
 
-/**
- * Where the ticket's work runs for the human to try: a row per workspace with a preview link, or one
- * the board can build and run a preview of (its own worktree on this machine).
- */
-function Previews({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
-  const candidates = [
-    ...t.workspaces.filter((w) => w.previewUrl || w.path).map((w) => ({ ...w, lane: null })),
-    // The lanes' come with the git state, tagged with their lane.
-    ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
-  ]
-  // Polled only while the page is in view: TanStack Query pauses intervals in a hidden tab. Faster
-  // while the board builds or starts one.
-  const previews = useQueries({
-    queries: candidates.map((w) => ({
-      queryKey: ['preview', w.id, w.previewUrl],
-      queryFn: () => get<WorkspacePreview>(`/api/workspaces/${w.id}/preview`),
-      refetchInterval: (q: { state: { data?: WorkspacePreview } }) =>
-        previewActive(q.state.data?.managed) && q.state.data?.managed?.status !== 'running' ? 2_000 : 15_000,
-      retry: false,
-    })),
-  })
-  const rows = candidates
-    .map((w, i) => ({ w, query: previews[i]! }))
-    // A worktree shows only once the board says it could run it (or could once a missing tool is
-    // installed, which it then says), or ran it before.
-    .filter(
-      ({ w, query: { data } }) =>
-        w.previewUrl || data?.managed || data?.cannotStart === null || data?.toolProblem,
-    )
-  if (!rows.length) return null
-  return (
-    <section className="rounded-lg border p-3" aria-label="Preview">
-      <h2 className="mb-2 text-sm font-medium">Preview</h2>
-      <ul className="space-y-3">
-        {rows.map(({ w, query }) => (
-          <PreviewRow
-            key={w.id}
-            w={w}
-            data={query.data}
-            error={query.error}
-            projectId={t.projectId}
-            onChange={() => {
-              void query.refetch()
-              onChange()
-            }}
-          />
-        ))}
-      </ul>
-    </section>
-  )
-}
-
-function PreviewRow({
-  w,
-  data,
-  error,
-  projectId,
-  onChange,
-}: {
-  w: Workspace & { lane: { id: number; title: string } | null }
-  data: WorkspacePreview | undefined
-  error: Error | null
-  projectId: number
-  onChange: () => void
-}) {
-  const url = data?.url ?? w.previewUrl
-  const m = data?.managed ?? null
-  return (
-    <li className="space-y-1.5 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <PreviewActions
-          workspaceId={w.id}
-          url={url}
-          managed={m}
-          cannotStart={data?.cannotStart}
-          onChange={onChange}
-        />
-        <PreviewBadge
-          url={url}
-          check={data}
-          unchecked={error ? errorMessage(error) : null}
-          className="ml-auto"
-        />
-      </div>
-      {url && (
-        <Tip content={url}>
-          <div className="truncate font-mono text-xs text-muted-foreground">{url}</div>
-        </Tip>
-      )}
-      {m && <ManagedLine m={m} workspaceId={w.id} />}
-      {data?.toolProblem && (
-        <p className="text-xs text-destructive [overflow-wrap:anywhere]">
-          Cannot start a preview: {data.toolProblem}
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
-          <span className="inline-flex min-w-0 items-center gap-1 font-mono">
-            <GitBranch className="size-3 shrink-0" /> <span className="truncate">{w.branch || w.name}</span>
-          </span>
-        </Tip>
-        {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
-      </div>
-      {w.lane && (
-        <Link
-          to="/projects/$id/features/$ticketId"
-          params={{ id: String(projectId), ticketId: String(w.lane.id) }}
-          className="inline-flex max-w-full items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <Layers className="size-3 shrink-0" /> <span className="truncate">{w.lane.title}</span>
-        </Link>
-      )}
-    </li>
-  )
-}
-
 function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const remove = useMutation({
@@ -2611,6 +2599,32 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
     onSuccess: onChange,
     onError,
   })
+  const PrLine = ({ pr }: { pr: NonNullable<TicketFull['pr']> }) => (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      {pr.url ? (
+        <a
+          href={pr.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 font-medium hover:underline"
+        >
+          PR #{pr.number} <ExternalLink className="size-3 text-muted-foreground" />
+        </a>
+      ) : (
+        <span className="font-medium">PR #{pr.number}</span>
+      )}
+      {pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[pr.queue.status]}</span>}
+      {pr.latestReview && (
+        <ReviewResultButton
+          resultId={pr.latestReview.id}
+          className={`rounded bg-muted px-1 hover:underline ${pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
+          tip={pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
+        >
+          {pr.latestReview.verdict}
+        </ReviewResultButton>
+      )}
+    </div>
+  )
   const Info = ({ info }: { info: TicketGit['info'] }) =>
     info.exists ? (
       <div className="text-xs text-muted-foreground">
@@ -2630,62 +2644,69 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
     )
   return (
     <>
-      <section className="rounded-lg border p-3">
-        <h2 className="mb-2 flex items-center text-sm font-medium">
-          Branch
-          {git?.repo && (
-            <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
-              {git.repo.name}
-            </span>
-          )}
-        </h2>
-        {t.branch ? (
-          <>
-            <div className="inline-flex items-center gap-1 font-mono text-sm">
-              <GitBranch className="size-3.5" /> {t.branch}
-            </div>
-            <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
-            {git?.repo && (
-              <div className="flex min-w-0 items-center gap-1">
-                <PushBadge push={git.info.push} />
-                <RefreshPush projectId={t.projectId} className="-my-1" />
-              </div>
-            )}
-            {git && <Info info={git.info} />}
-          </>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            No branch yet: pick one above, or the agent sets it.
-          </p>
-        )}
-        {t.pr && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-            {t.pr.url ? (
-              <a
-                href={t.pr.url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-medium hover:underline"
-              >
-                PR #{t.pr.number} <ExternalLink className="size-3 text-muted-foreground" />
-              </a>
+      {(git?.repos.length ?? 0) > 1 ? (
+        git!.repos.map((r) => (
+          <section key={r.repo.id} className="rounded-lg border p-3" aria-label={`Branch in ${r.repo.name}`}>
+            <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+              Branch
+              <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
+                {r.repo.name}
+              </span>
+            </h2>
+            {r.branch ? (
+              <>
+                <div className="inline-flex items-center gap-1 font-mono text-sm">
+                  <GitBranch className="size-3.5" /> {r.branch}
+                </div>
+                <div className="text-xs text-muted-foreground">base {r.baseBranch}</div>
+                <div className="flex min-w-0 items-center gap-1">
+                  <PushBadge push={r.info.push} />
+                  {r.primary && <RefreshPush projectId={t.projectId} className="-my-1" />}
+                </div>
+                <Info info={r.info} />
+              </>
             ) : (
-              <span className="font-medium">PR #{t.pr.number}</span>
+              <p className="text-xs text-muted-foreground">
+                No branch yet: pick one above, or the agent sets it.
+              </p>
             )}
-            {t.pr.queue && <span className="text-muted-foreground">{STATUS_LABEL[t.pr.queue.status]}</span>}
-            {t.pr.latestReview && (
-              <ReviewResultButton
-                resultId={t.pr.latestReview.id}
-                className={`rounded bg-muted px-1 hover:underline ${t.pr.latestReview.fresh === false ? 'opacity-60' : ''}`}
-                tip={t.pr.latestReview.fresh === false ? 'review is for an older SHA' : 'latest review'}
-              >
-                {t.pr.latestReview.verdict}
-              </ReviewResultButton>
+            {r.pr && <PrLine pr={r.pr} />}
+            {r.pr?.queue?.open && <PrState pr={r.pr.queue} className="mt-1.5" />}
+          </section>
+        ))
+      ) : (
+        <section className="rounded-lg border p-3">
+          <h2 className="mb-2 flex items-center text-sm font-medium">
+            Branch
+            {git?.repo && (
+              <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
+                {git.repo.name}
+              </span>
             )}
-          </div>
-        )}
-        {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
-      </section>
+          </h2>
+          {t.branch ? (
+            <>
+              <div className="inline-flex items-center gap-1 font-mono text-sm">
+                <GitBranch className="size-3.5" /> {t.branch}
+              </div>
+              <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
+              {git?.repo && (
+                <div className="flex min-w-0 items-center gap-1">
+                  <PushBadge push={git.info.push} />
+                  <RefreshPush projectId={t.projectId} className="-my-1" />
+                </div>
+              )}
+              {git && <Info info={git.info} />}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No branch yet: pick one above, or the agent sets it.
+            </p>
+          )}
+          {t.pr && <PrLine pr={t.pr} />}
+          {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
+        </section>
+      )}
       <section className="rounded-lg border p-3">
         <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
         <p className="mb-2 text-xs text-muted-foreground">
@@ -2700,6 +2721,9 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
               <div className="flex items-center gap-2">
                 <span className="font-medium">{w.name}</span>
                 {w.agent && <Badge variant="secondary">{w.agent}</Badge>}
+                {(git?.repos.length ?? 0) > 1 && 'repo' in w && w.repo && (
+                  <span className="font-mono text-[11px] text-muted-foreground">{w.repo.name}</span>
+                )}
                 <Tip content="remove">
                   <button
                     type="button"
