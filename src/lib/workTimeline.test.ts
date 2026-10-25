@@ -221,7 +221,12 @@ describe('the stalled rule', () => {
   const hb = () => event('heartbeat', '10:00', { agent: 'builder' })
 
   it('flags an active ticket silent for more than the threshold, and only then', () => {
-    expect(build([hb()], '10:31').stalled).toEqual({ since: at('10:00'), minutes: 31, lastAgent: 'builder' })
+    expect(build([hb()], '10:31').stalled).toEqual({
+      since: at('10:00'),
+      minutes: 31,
+      lastAgent: 'builder',
+      lastBy: 'claude',
+    })
     expect(build([hb()], '10:29').stalled).toBeNull()
     expect(build([hb()], '10:30').stalled).toBeNull()
   })
@@ -252,7 +257,26 @@ describe('the stalled rule', () => {
 
   it('names the last agent heard from, not the board', () => {
     const t = build([hb(), event('push', '10:05', { agent: 'board' })], '11:00')
-    expect(t.stalled).toMatchObject({ since: at('10:05'), lastAgent: 'builder' })
+    expect(t.stalled).toMatchObject({ since: at('10:05'), lastAgent: 'builder', lastBy: 'claude' })
+  })
+
+  it('carries who recorded the last event beside the name it claims', () => {
+    // A worker claims another's name: the claim and the signed-in recorder both come through.
+    const claimed = event('heartbeat', '10:00', { agent: 'enrique', by: 'orch/builder-1' })
+    expect(build([claimed], '11:00').stalled).toMatchObject({
+      lastAgent: 'enrique',
+      lastBy: 'orch/builder-1',
+    })
+    // An older event recorded no one: nothing to name.
+    expect(build([event('heartbeat', '10:00', { by: '' })], '11:00').stalled).toMatchObject({
+      lastAgent: 'claude',
+      lastBy: '',
+    })
+    // No agent's event at all: the assignee, recorded by no one.
+    expect(build([], '11:00', { assignee: 'someone', createdAt: at('09:00') }).stalled).toMatchObject({
+      lastAgent: 'someone',
+      lastBy: '',
+    })
   })
 
   it('isStalled is strict at the threshold', () => {

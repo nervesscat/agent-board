@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { Actor } from '#/components/Actor'
+import { Actor, ClaimedActor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
 import { useSettleInstructions } from '#/components/InstructionsHistory'
@@ -258,7 +258,14 @@ const silentMinutes = (since: string) => Math.max(0, Math.floor((Date.now() - Da
 /** A stalled ticket's details, from the Needs you list that names it. */
 function stalledOf(p: ProjectSummary, id: number) {
   const s = p.needsYou.stalled.find((x) => x.ticketId === id)
-  return s ? { since: s.lastSignalAt, minutes: silentMinutes(s.lastSignalAt), lastAgent: s.lastAgent } : null
+  return s
+    ? {
+        since: s.lastSignalAt,
+        minutes: silentMinutes(s.lastSignalAt),
+        lastAgent: s.lastAgent,
+        lastBy: s.lastBy,
+      }
+    : null
 }
 
 function Stale() {
@@ -493,7 +500,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                       {s.lastAgent && (
                         <>
                           {' · last '}
-                          <Actor name={s.lastAgent} />
+                          <ClaimedActor name={s.lastAgent} by={s.lastBy} />
                         </>
                       )}
                     </span>

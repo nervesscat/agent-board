@@ -104,9 +104,41 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
         {name}
         <RoleBadge role={me.role} />
         {me.role === 'worker' && me.parent && (
-          <span className="font-normal whitespace-nowrap text-muted-foreground">under {me.parent}</span>
+          // Kept on one line, cut short with an ellipsis where it cannot fit (the tooltip has the chain).
+          <span className="min-w-0 truncate font-normal text-muted-foreground">under {me.parent}</span>
         )}
       </span>
     </Tip>
+  )
+}
+
+/**
+ * The name a record claims (`name`, which may be free text such as a sub-agent's label) and who
+ * recorded it as signed in (`by`). A role badge goes only on a signed-in identity: when `by` is someone
+ * else, the claimed name is plain text, then "by" and the recorder as `Actor` shows it. When they are
+ * the same, or `by` is unknown (an older record), or the name is the board's own, it is one `Actor`.
+ */
+export function ClaimedActor({
+  name,
+  by,
+  className = '',
+}: {
+  name: string
+  by: string | null | undefined
+  className?: string
+}) {
+  if (!by || by === name || name === 'board') return <Actor name={name} className={className} />
+  return (
+    <>
+      <span data-testid="claimed-name" className={`min-w-0 font-medium break-all ${className}`}>
+        {name}
+      </span>{' '}
+      <span
+        data-testid="event-by"
+        className="inline-flex min-w-0 flex-wrap items-baseline gap-1 text-muted-foreground"
+      >
+        by <Actor name={by} className="min-w-0 flex-wrap break-all" />
+      </span>
+    </>
   )
 }
