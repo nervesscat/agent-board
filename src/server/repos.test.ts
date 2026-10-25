@@ -115,8 +115,8 @@ describe('POST /api/repos', () => {
   })
 
   it("refuses a body with a bad escape, saying the parser's reason", async () => {
-    // A body after a shell collapsed \\ to \: \P is no JSON escape.
-    const res = await call('POST', '/api/repos', String.raw`{"projectId":1,"repoPath":"F:\Programming"}`)
+    // A body after a shell collapsed \\ to \: \c is no JSON escape.
+    const res = await call('POST', '/api/repos', String.raw`{"projectId":1,"repoPath":"C:\code"}`)
     expect(res.status).toBe(400)
     const { error } = (await res.json()) as { error: string }
     expect(error).toMatch(/^body must be JSON: .*escaped character/i)

@@ -17,7 +17,7 @@ describe('localPath', () => {
   it('maps Windows drive paths into WSL, leaves everything else alone', async () => {
     const { localPath } = await import('./uploads')
     expect(localPath('C:\\Users\\me\\shot.png', 'linux')).toBe('/mnt/c/Users/me/shot.png')
-    expect(localPath('F:/work/a b/rec.mp4', 'linux')).toBe('/mnt/f/work/a b/rec.mp4')
+    expect(localPath('D:/work/a b/rec.mp4', 'linux')).toBe('/mnt/d/work/a b/rec.mp4')
     expect(localPath('/home/me/shot.png', 'linux')).toBe('/home/me/shot.png')
     expect(localPath('C:\\Users\\me\\shot.png', 'win32')).toBe('C:\\Users\\me\\shot.png')
   })
