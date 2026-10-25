@@ -4,6 +4,7 @@ import { FolderGit2, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { InstructionsHistory, instructionChangesKey } from '#/components/InstructionsHistory'
 import { LayoutEditor } from '#/components/LayoutEditor'
 import { ListInput } from '#/components/ListInput'
 import { Markdown } from '#/components/Markdown'
@@ -43,7 +44,8 @@ function Settings() {
           <h1 className="text-xl font-semibold tracking-tight">Instructions</h1>
           <p className="text-sm text-muted-foreground">
             What every agent reads (via <code className="rounded bg-muted px-1">get_project</code>) before
-            working here: conventions, how to run things, what never to do. They apply to all its repos.
+            working here: conventions, how to run things, what never to do. They apply to all its repos. You
+            and an orchestrator agent change them; every change is kept below.
           </p>
         </div>
         {/* A new editor per project: an edit never follows the page to another one. */}
@@ -67,6 +69,7 @@ function Settings() {
             . Rename or delete the project: project menu → Manage projects.
           </p>
         </div>
+        <InstructionsHistory key={`history-${id}`} projectId={id} />
       </div>
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
@@ -324,6 +327,7 @@ function Instructions({ projectId, saved }: { projectId: string; saved: string }
     mutationFn: (instructions: string) => patch(`/api/projects/${projectId}`, { instructions }),
     onSuccess: async () => {
       qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: instructionChangesKey(projectId) })
       // Back to reading once the saved text is the one shown.
       await qc.invalidateQueries({ queryKey: ['project', projectId] })
       setEditing(false)

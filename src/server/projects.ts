@@ -6,6 +6,7 @@ import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
 import { MAX_TAG_LENGTH, cleanSuggestions, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
 import { hostToolsForAgents } from './hostTools'
+import { assertMayChangeInstructions, type Changer, setInstructions } from './instructionsHistory'
 import { notFound } from './http'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
@@ -97,21 +98,31 @@ function projectUsedTags(projectId: number) {
 
 export type ProjectFull = ReturnType<typeof getProjectFull>
 
-export function createProject(input: { name: string; instructions?: string }, actor: string) {
-  const row = db
-    .insert(schema.projects)
-    .values({ name: input.name, instructions: input.instructions || '' })
-    .returning()
-    .get()
-  logActivity({
-    projectId: row.id,
-    actor,
-    kind: 'project',
-    text: `created project ${row.name}`,
-    refType: 'project',
-    refId: row.id,
+/**
+ * A new project. Instructions that are not empty are its first change of them (instructionsHistory.ts),
+ * from '' to the text: only `who` as the human or an orchestrator sets them, kept pending for an
+ * orchestrator; a worker is refused and nothing is made. Without `who` the caller is taken for a worker.
+ */
+export function createProject(
+  input: { name: string; instructions?: string },
+  actor: string,
+  who: Changer = { name: actor, role: 'worker' },
+) {
+  const instructions = input.instructions || ''
+  if (instructions) assertMayChangeInstructions(who)
+  return db.transaction(() => {
+    const row = db.insert(schema.projects).values({ name: input.name, instructions: '' }).returning().get()
+    logActivity({
+      projectId: row.id,
+      actor,
+      kind: 'project',
+      text: `created project ${row.name}`,
+      refType: 'project',
+      refId: row.id,
+    })
+    if (instructions) setInstructions(row.id, instructions, who)
+    return withPhases({ ...row, instructions })
   })
-  return withPhases(row)
 }
 
 /** The tags offered under every ticket's tags field, as REST and MCP take them; [] offers none of the project's own. */
@@ -144,7 +155,10 @@ export const LayoutBody = z
 
 /**
  * `defaultPhases`: the names trimmed, null for the built-in list again. `tagSuggestions`: trimmed,
- * blanks and repeats in any casing left out; [] stays empty. `stallMinutes`: how long an active ticket
+ * blanks and repeats in any casing left out; [] stays empty. `instructions` go through their history
+ * (instructionsHistory.ts): only `who` as the human or an orchestrator changes them, and a worker's
+ * patch that has them is refused whole. Without `who` the caller is taken for a worker.
+ * `stallMinutes`: how long an active ticket
  * may go without a work event before it reads as stalled (the caller checks the range). `layout`: kept
  * as it is in effect (`mergeLayout`: unknown ids dropped, locked elements shown), null for the defaults
  * again.
@@ -158,25 +172,31 @@ export function updateProject(
     >
   >,
   actor: string,
+  who: Changer = { name: actor, role: 'worker' },
 ) {
   getProject(id)
-  const { defaultPhases, tagSuggestions, layout, ...rest } = patch
+  const { defaultPhases, tagSuggestions, instructions, layout, ...rest } = patch
+  if (instructions !== undefined) assertMayChangeInstructions(who)
   const set = {
     ...rest,
     ...(defaultPhases !== undefined && { defaultPhases: defaultPhases?.map((name) => name.trim()) ?? null }),
     ...(tagSuggestions !== undefined && { tagSuggestions: cleanSuggestions(tagSuggestions) }),
     ...(layout !== undefined && { layout: layout && mergeLayout(layout) }),
   }
-  const row = db.update(schema.projects).set(set).where(eq(schema.projects.id, id)).returning().get()!
-  logActivity({
-    projectId: id,
-    actor,
-    kind: 'project',
-    text: `updated project ${row.name}`,
-    refType: 'project',
-    refId: id,
+  return db.transaction(() => {
+    if (instructions !== undefined) setInstructions(id, instructions, who)
+    if (Object.keys(set).length === 0) return getProject(id)
+    const row = db.update(schema.projects).set(set).where(eq(schema.projects.id, id)).returning().get()!
+    logActivity({
+      projectId: id,
+      actor,
+      kind: 'project',
+      text: `updated project ${row.name}`,
+      refType: 'project',
+      refId: id,
+    })
+    return withPhases(row)
   })
-  return withPhases(row)
 }
 
 export function deleteProject(id: number, actor: string) {

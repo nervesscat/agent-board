@@ -14,14 +14,21 @@ const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged']
 let dbm: typeof import('#/db')
 let features: typeof import('./features')
 let handle: (request: Request) => Promise<Response>
+let callerOf: typeof import('./auth').callerOf
 beforeAll(async () => {
   dbm = await import('#/db')
   features = await import('./features')
   const { api } = await import('./api')
   const { api: guard } = await import('./http')
-  // As the server answers: an HttpError becomes its status with `{error}`. A bearer token is an agent.
+  ;({ callerOf } = await import('./auth'))
+  // As the server answers: an HttpError becomes its status with `{error}`. A bearer token is an agent
+  // (a worker); an orchestrator is named as the test mode's X-Test-Actor names one.
   const guarded = guard(({ request }: { request: Request }) =>
-    api.handle(request, request.headers.has('authorization') ? 'claude' : 'enrique'),
+    api.handle(
+      request,
+      request.headers.get('x-test-actor')?.replace(/^\w+:/, '') ??
+        (request.headers.has('authorization') ? 'claude' : 'enrique'),
+    ),
   )
   handle = (request) => guarded({ request })
 })
@@ -36,17 +43,24 @@ function newProject(name: string) {
   return id
 }
 
-async function call(method: string, pathname: string, body?: unknown, as: 'human' | 'agent' = 'human') {
-  const res = await handle(
-    new Request(`http://localhost${pathname}`, {
-      method,
-      headers: {
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-        ...(as === 'agent' ? { authorization: 'Bearer token-of-test' } : {}),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
-  )
+async function call(
+  method: string,
+  pathname: string,
+  body?: unknown,
+  as: 'human' | 'agent' | 'orchestrator' = 'human',
+) {
+  const request = new Request(`http://localhost${pathname}`, {
+    method,
+    headers: {
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...(as === 'agent' ? { authorization: 'Bearer token-of-test' } : {}),
+      ...(as === 'orchestrator' ? { 'x-test-actor': 'orchestrator:orch' } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  // Who an orchestrator is, as the middleware records it in test mode.
+  if (as === 'orchestrator') await callerOf(request, { boardEnv: 'test', off: true, human: 'enrique' })
+  const res = await handle(request)
   return { status: res.status, body: (await res.json()) as any }
 }
 
@@ -166,10 +180,18 @@ describe("a project's default phases", () => {
     expect((await call('PATCH', `/api/projects/${p}`, { defaultPhases: twenty })).status).toBe(200)
     expect(await phases(p)).toEqual(twenty)
 
-    // The name and the instructions are patched as before, by either.
+    // The name is patched as before, by either.
     expect((await call('PATCH', `/api/projects/${p}`, { name: 'by agent' }, 'agent')).status).toBe(200)
-    expect((await call('PATCH', `/api/projects/${p}`, { instructions: 'run it' }, 'agent')).status).toBe(200)
     expect((await call('PATCH', `/api/projects/${p}`, { name: 'by human' })).status).toBe(200)
+    // The instructions: the human's or an orchestrator's, never a worker's.
+    const byWorker = await call('PATCH', `/api/projects/${p}`, { instructions: 'by worker' }, 'agent')
+    expect(byWorker.status).toBe(403)
+    expect((await call('GET', `/api/projects/${p}`)).body.instructions).not.toBe('by worker')
+    expect(
+      (await call('PATCH', `/api/projects/${p}`, { instructions: 'by orchestrator' }, 'orchestrator')).status,
+    ).toBe(200)
+    expect((await call('GET', `/api/projects/${p}`)).body.instructions).toBe('by orchestrator')
+    expect((await call('PATCH', `/api/projects/${p}`, { instructions: 'run it' })).status).toBe(200)
     expect((await call('GET', `/api/projects/${p}`)).body).toMatchObject({
       name: 'by human',
       instructions: 'run it',

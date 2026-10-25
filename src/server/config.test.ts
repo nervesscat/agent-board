@@ -125,6 +125,14 @@ describe('authOffBanner', () => {
       /^AUTH OFF: test, signed in as human, do not expose this .*X-Test-Actor/,
     )
   })
+
+  it('names every X-Test-Actor form in test, the orchestrator included', () => {
+    const banner = authOffBanner(readAuthMode({ BOARD_ENV: 'test' }), 'human')
+    for (const form of ['human:<name>', 'agent:<name>', 'orchestrator:<name>']) expect(banner).toContain(form)
+    expect(authOffBanner(readAuthMode({ BOARD_ENV: 'development', AUTH: 'off' }), 'enrique')).not.toContain(
+      'orchestrator',
+    )
+  })
 })
 
 describe('readPort', () => {

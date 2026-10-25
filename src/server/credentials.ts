@@ -75,13 +75,15 @@ export interface TokenHit {
   id: number
   name: string
   lastUsedAt: string | null
+  /** The role the human gave the token: orchestrator, or worker (every token's at first). */
+  role: 'orchestrator' | 'worker'
 }
 
 /** The agent token `token` is: not revoked, not expired. Null otherwise. */
 export function agentTokenOf(sqlite: Database, token: string, now = new Date()): TokenHit | null {
   const row = sqlite
     .prepare(
-      `select id, name, last_used_at as lastUsedAt from agent_tokens
+      `select id, name, last_used_at as lastUsedAt, role from agent_tokens
        where token_hash = ? and revoked_at is null and expires_at > ?`,
     )
     .get(hashSecret(token), now.toISOString()) as TokenHit | undefined

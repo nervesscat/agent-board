@@ -3,14 +3,15 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { z } from 'zod'
 
 import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, RESUME_TEMPLATE } from '#/lib/constants'
-import { listActors } from './actors'
-import { isAgent } from './auth'
+import { listActors, noteActor } from './actors'
+import { asSubIdentity, type Caller, callerInfo } from './auth'
 import { cleanupReport } from './cleanup'
 import { AgentDeleteItems, deleteLeftovers } from './cleanupActions'
 import { dailyReport, today } from './daily'
 import * as features from './features'
 import { galleryShape, listGallery } from './gallery'
 import { HttpError } from './http'
+import { setInstructions } from './instructionsHistory'
 import * as needs from './needs'
 import { isActive, managedPreview, restartPreview, startPreview, stopPreview } from './managedPreview'
 import * as ticketRuns from './ticketRuns'
@@ -25,8 +26,11 @@ import * as work from './workTimeline'
 
 /**
  * The same board, as MCP tools. Stateless streamable HTTP: one server per request, closed over the
- * actor the board signed in and whether it is an agent, so every write is attributed to the agent's
- * token name and the tools that only an agent may call can refuse a human.
+ * caller the board signed in (name, whether it is an agent, its role and parent), so every write is
+ * attributed to the agent's name and the tools that only an agent, or only an orchestrator, may call can
+ * refuse the others. A subagent that shares its orchestrator's connection says who it is with the
+ * `agentName` argument every tool takes (`<the orchestrator's name>/<its own>`), read before the server
+ * is built (agentNameOf): the call is then that sub-identity, a worker.
  */
 
 const text = (data: unknown) => ({
@@ -56,8 +60,10 @@ The rhythm:
 6. Ask and answer with comment. When the human posts on a ticket you work, answer under their post (comment with replyTo, or parentType update), never with a new top-level post: first a reply with your plan, then, once done, a reply with the result and its proofs (files, the preview link); a reply brings their post back to the top of Main. When you cannot go on without the human, comment your question on the ticket and update_ticket to blocked; back to in_progress once answered. That is for when nothing else can go on: when only one step waits on the human, tag that task blocked instead (step 3) and keep working. When it is a choice between clear options (an approach, a trade-off, a scope call), ask_decision instead: the human answers with one click, and the ticket blocks and unblocks by itself. When the human answers a card in the chat rather than on the board, record their answer with answer_decision (the option they picked, and their words verbatim): ask them in the chat first, with AskUserQuestion in Claude Code or the client's equivalent, offering the card's options; if no card exists yet, ask_decision first, since it blocks the ticket. Only the session that talks to the human does this: never a delegated subagent, never with as, never in a run with no human to ask. If their answer matches none of the options, do not relay it: comment it on the card and ask again, or leave the card to the board. When you resume, and between steps, list_my_threads shows every ticket feed or reply thread where someone spoke after you; get_ticket shows each post's reply count and last author. Files on posts and replies come with a local path you can open. While you have tickets in progress or review, watch for feedback without being told: every few minutes call check_inbox with the cursor from your last call (in Claude Code, under /loop); for each new thread read it, fix what it asks the usual way (checks, commit, push, preview), reply in the thread with what changed, and keep the new cursor.
 7. Hand off: before update_ticket to review, every item, in order (the board ticks Pushed, PR, CI, Preview and Merged as their facts hold; Implementation and its steps are ticked by hand): (1) worktree registered (add_workspace), Implementation and its steps ticked; (2) checks green: typecheck, lint, unit tests, and the e2e suite when the repo has one; (3) branch pushed: get_ticket's push.state is pushed (green on the board), not ahead or local-only (red); (4) needs declared for any unmerged branch it builds on (below); (5) PR open and assigned to the human (gh pr create --assignee <their login>, or --assignee @me when you push with their account: GitHub never lets a PR's author be its requested reviewer, and the PR queue lists PRs assigned to them), and update_ticket with its prNumber (a PR's own ticket from the queue, if it has one, is then cancelled: this ticket takes the PR over); while GitHub's checks do not run, comment on the PR "CI run locally: green on <sha>" with the head commit your checks passed on (gh pr comment), which ticks CI, and again after each push; (6) preview running: start_run (or start_preview) and wait for running (a repo with no runs configured: start one the project's way and set_preview); when the change cannot be tried (docs only, a script), say why in the summary; (7) the summary up to date (set_ticket_summary, never a new hand-off post): the PR link, the preview link and what to try there, how it was tested, the e2e result, each review round's verdict, and screenshots for a UI change as files; (8) a resume note if the ticket stays open past the session. update_ticket to review answers with handoff.missing: what the board still sees missing (tasks_open: Implementation, the ticket's tasks and subtasks, its phases and their steps, the hand-off phases included but Merged (merging is the human's): missing while it has none or some of them, its lanes' included, are open; the board ticks Pushed, PR, CI, Preview and Merged from their facts, and its other checks still verify each fact; no_pr, not_pushed, no_preview, no_handoff_post when no agent wrote the summary since the branch's last commit, checks_unknown when the PR's CI is failing or running and no "CI run locally: green" comment names its head); fix each one. Briefing a subagent, put the same list in its brief. When your branch is built on another ticket's open branch, or you merged one in (to get past a conflict), declare it with update_ticket needs: [its id] instead of only writing "builds on" in the PR: the PR queue then says which PR to merge first, and the ticket cannot be done until that branch is merged into its base. get_ticket_git includes lists the tickets whose unmerged work your branch holds. done is the human's call. cancelled is for work that was dropped: say why in a comment. A ticket with lanes goes to review once its lanes are in review, done or cancelled. The human's verdict on a lane or ticket is approvedAt/approvedBy (approved) or disapprovedAt/disapprovedBy (disapproved, which also cancels it; approving a ticket tagged PR, a PR review, also moves it to done); you can read it, never set it. Treat an approved lane as settled and a disapproved one as dropped: ask in its thread before touching either. Archiving is the human's too: archivedAt set means the ticket (lanes included) is finished and off the board, and list_tickets leaves it out unless you pass archived. You may ask for it: request_archive posts the human one Archive / Keep card for done or cancelled top-level tickets, and only their Archive answer archives them; never archive any other way.
 8. Clean up after yourself: once a lane's work is in its parent's branch (or a ticket's in its base), and before moving it to done, delete its local branch once no worktree holds it, and post_update the deleted branch names with their commit hashes (e.g. lane/47 @ 9ec12e8b) so any of them can be restored. Leave its worktrees, and the workspaces registered at them, to the human, who removes them from the Cleanup page. get_ticket_git says whether each branch's work arrived (reach); cleanup_report lists every leftover in the project, and cleanup_delete deletes closed tickets' landed local branches, the board checking each one again as for the human and answering how to restore it: post those branch @ sha lines on the ticket too. Never delete a branch whose reach is unique without the human's go-ahead, nor one cleanup_report marks protected, and never delete branches on origin nor remove worktrees: list them for the human, who does that from the Cleanup page.
-9. Record your work on the ticket's work timeline as you go (the Roadmap and the ticket page draw it; the human sees from it who worked when, who waited on what, and what stalled): heartbeat every few minutes while you work a ticket (in Claude Code under /loop, or between steps), since a ticket in an active stage with no event for longer than its project's stallMinutes (30 by default) reads as stalled in the human's Needs you; start_span when you start a phase (spec, build, review with its round, verify, pr, preview, merge) and end_span when it is done; handoff when you brief a sub-agent (to: its name, and record its own spans with agent: its name) and when it hands back; start_wait with the reason (lock, builder, mcp, human, other) when you cannot go on, and end_wait as soon as you can. Each takes projectId and ticketId, and only a ticket of that project. get_ticket's work lists your open spans and waits to close.
+9. Record your work on the ticket's work timeline as you go (the Roadmap and the ticket page draw it; the human sees from it who worked when, who waited on what, and what stalled): heartbeat every few minutes while you work a ticket (in Claude Code under /loop, or between steps), since a ticket in an active stage with no event for longer than its project's stallMinutes (30 by default) reads as stalled in the human's Needs you; start_span when you start a phase (spec, build, review with its round, verify, pr, preview, merge) and end_span when it is done; handoff when you brief a sub-agent (to: its name, the full agentName it passes such as orch/builder-1, and record its own spans with agent: its name) and when it hands back; start_wait with the reason (lock, builder, mcp, human, other) when you cannot go on, and end_wait as soon as you can. Each takes projectId and ticketId, and only a ticket of that project. get_ticket's work lists your open spans and waits to close.
 10. End of session: for every ticket you leave in progress, blocked or review, set_resume_note with its template filled in (state, done so far, next steps, open questions or blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that another agent can continue without asking. Then the project's report, if it keeps one (get_report_settings: cadence daily or weekly): one report per period, due at the end of the project's shift. list_reports shows which periods are done, missing, upcoming or off; write the current or a missing one as the prompt says, in the shape of the template (its headings, in order), from daily_report for the days it covers, and post_report it (files as absolute paths). reportDue on get_summary and check_inbox says when the human expects it (due soon, or missing): write it then, with the human's go-ahead.
+
+Who is who: every caller has a name, a role and maybe a parent (whoami). The human is the human. An agent token is a worker unless the human made it an orchestrator. A subagent you delegate to that shares your connection is your worker: brief it to pass agentName: "<your whoami name>/<its name>" (e.g. orch/builder-1) on every board call, so its posts, claims and comments show under its own name with you as its parent; a worker session configured on its own sends the header X-Agent-Name: <token name>/<its name> instead (or gets its own worker token, the hard boundary). A sub-identity is always a worker. Only the human and an orchestrator change a project's instructions (set_project_instructions), create a project with instructions or move a repo to another project; a worker asks its orchestrator, and every change shows in the human's Needs you until they review it.
 
 The project's agents: get_project lists them (agents: name, instructions, delegation notes, picture). They are personas the human defined, not connected tools; you work for them. A ticket assigned to one (reserved: true; get_ticket's agent has its instructions) is that agent's alone: claim_ticket with as: <its name>, brief a subagent with its instructions (and the ticket's), and post that work with post_update and comment using as: <its name>, so it shows under the agent's name, via you. Never take a reserved ticket as yourself, reassign it, or work it without the agent's instructions; only the human reassigns it. A thread can wait on an agent too: when someone @mentions it, or replies on its ticket or post, list_my_threads returns that thread with as: <its name>; answer it with comment as: <its name>, in that agent's voice and instructions. Orchestrating: each agent's delegation notes say when to call it, what to give it, what it returns and what comes next. With them you can work a ticket as its orchestrator instead of doing the work yourself: run each step as a subagent briefed with that agent's instructions, the project's instructions and the ticket; post what it returns on the ticket as that agent (as: <its name>, progress: true: it goes to the Agents tab), and keep the ticket's summary current with what the human needs from it; go where its notes say next. The default set (spec, builder, runner, and the review phases env, verify, hunt, refute, merge) is the cycle spec → build → review that tries to break it → (a fix pass by the builder on the confirmed findings, each with the project's checks and a new review, for as many review rounds as the ticket's complexity allows: none for low, one for mid, three for high; round 1 is the first build and its review, so a mid ticket stops after its review, and a review that does not survive after the last round goes to a human decision; a high ticket gets two fix passes; a low ticket has no review, and its checks return the build at most twice; after the second return, when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes to hand-off only with evidence for every criterion) → hand off; the /review-queue skill runs it (/feature-review is its review). The agents' thinking effort follows the complexity too: low for a low ticket, medium for mid and high; the orchestrator passes it as the Agent tool's effort on every agent it starts for the ticket (the ticket agent, the spec agent, the builder and the review's phase agents). Ask the human with ask_decision instead of guessing, never run two builders on one branch, never delegate to an agent without delegation notes, and a persona never answers a decision. The board skill has the full routine.
 
@@ -121,7 +127,16 @@ const REPOS_TEXT =
   "The repos the ticket's work spans, each a repo of the project with its own branch, baseBranch and prNumber; at least one, none twice. The first is the primary: the ticket's repoId, branch, baseBranch and prNumber are its."
 const TAGS = `Short labels the human filters tickets and lanes by: the module the ticket touches (a short name such as Auth, Board, MCP), a kind (Bug, UI, Implementation, Report…) or a severity (Critical, High, Medium, Low, Cosmetic). One or two words each; before tagging, read get_project's tagSuggestions and usedTags (or the tags list_tickets returns) and reuse a tag already there in its exact casing rather than a new spelling; keep them out of the title (no "[High] …").`
 
-function buildServer(actor: string, agent: boolean) {
+const AGENT_NAME = z
+  .string()
+  .optional()
+  .describe(
+    'who makes this call, when you are a subagent (a worker) on your orchestrator\'s connection: "<the orchestrator\'s whoami name>/<your name>", e.g. orch/builder-1 (each name a letter or digit, then letters, digits, ".", "_" or "-"; up to 4 names, 80 characters). Your posts, claims and comments then carry that name, and you are a worker whatever the token is. Leave it out when you are the orchestrator itself or work on your own token; with an X-Agent-Name header it must name the same.',
+  )
+
+function buildServer(caller: Caller, refused: HttpError | null) {
+  const actor = caller.name
+  const agent = caller.kind === 'agent'
   const server = new McpServer({ name: 'agent-board', version: '0.1.0' }, { instructions: INSTRUCTIONS })
   const tool = <S extends z.ZodRawShape>(
     name: string,
@@ -129,19 +144,26 @@ function buildServer(actor: string, agent: boolean) {
     shape: S,
     run: (args: z.infer<z.ZodObject<S>>) => unknown,
   ) => {
-    const cb = (async (args: unknown) => {
+    const cb = (async ({ agentName: _agentName, ...args }: { agentName?: string }) => {
       try {
+        // The request's agentName was refused before the server was built: no tool runs under it.
+        if (refused) throw refused
         // Every file handed to an agent is on this machine to open (with STORAGE=s3, fetched if needed).
         return text(await uploads.ensureLocalFiles(await run(args as z.infer<z.ZodObject<S>>)))
       } catch (err) {
         if (!(err instanceof HttpError)) console.error(`mcp ${name} failed:`, err)
         return fail(err)
       }
-    }) as ToolCallback<S>
-    server.registerTool(name, { description, inputSchema: shape }, cb)
+    }) as unknown as ToolCallback<S & { agentName: typeof AGENT_NAME }>
+    server.registerTool(name, { description, inputSchema: { ...shape, agentName: AGENT_NAME } }, cb)
   }
 
-  tool('whoami', 'The name the board knows you by (your agent token name).', {}, () => ({ actor }))
+  tool(
+    'whoami',
+    "Who the board knows you as: name (your agent token's name, or your sub-identity <token name>/<name> when you pass agentName or send X-Agent-Name), role (orchestrator: also changes the projects' instructions; worker: every other agent, a sub-identity always; human for the human), parent (the name a sub-identity works under, '' otherwise) and token (the name of the credential you signed in with). actor is name, for older callers. An orchestrator hands its name to its subagents: each passes agentName \"<name>/<its own>\" on every call.",
+    {},
+    () => ({ actor, name: actor, role: caller.role, parent: caller.parent, token: caller.token }),
+  )
 
   // projects
   tool(
@@ -152,9 +174,18 @@ function buildServer(actor: string, agent: boolean) {
   )
   tool(
     'get_project',
-    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, and a picture; tickets can be reserved for them), defaultPhases (the top-level phases every new ticket starts with, in order; built in: Implementation, Pushed, PR, CI, Preview, Merged; [] when the project seeds none; only the human changes the list; a top-level task named Pushed, PR, CI, Preview or Merged is ticked by the board, never by hand), tagSuggestions (the tags the human offers for tickets; built in: Bug, UI, Implementation, Report), usedTags (the tags its tickets carry, most used first, each in the casing to reuse), stallMinutes (how many minutes an active ticket may go without a work-timeline event before it reads as stalled; only the human changes it), hostTools (the board's last check of the tools on its machine: checkedAt, and for each of git, gh, claude, node and pnpm its name, found, version, signedIn for gh and ok; one not ok also says what it breaks, the problem and the fix: a feature that needs it fails until the human fixes it; null before the first check ends) and the instructions agents must follow when working on it. Read this before touching a project.",
+    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, and a picture; tickets can be reserved for them), defaultPhases (the top-level phases every new ticket starts with, in order; built in: Implementation, Pushed, PR, CI, Preview, Merged; [] when the project seeds none; only the human changes the list; a top-level task named Pushed, PR, CI, Preview or Merged is ticked by the board, never by hand), tagSuggestions (the tags the human offers for tickets; built in: Bug, UI, Implementation, Report), usedTags (the tags its tickets carry, most used first, each in the casing to reuse), stallMinutes (how many minutes an active ticket may go without a work-timeline event before it reads as stalled; only the human changes it), hostTools (the board's last check of the tools on its machine: checkedAt, and for each of git, gh, claude, node and pnpm its name, found, version, signedIn for gh and ok; one not ok also says what it breaks, the problem and the fix: a feature that needs it fails until the human fixes it; null before the first check ends) and the instructions agents must follow when working on it (only the human and an orchestrator change them: set_project_instructions; a worker asks its orchestrator). Read this before touching a project.",
     { projectId: z.number().int() },
     ({ projectId }) => projects.getProjectFull(projectId),
+  )
+  tool(
+    'set_project_instructions',
+    "Replace the project's instructions (get_project's instructions: what every agent follows on it) with instructions, at once. Only an orchestrator (or the human) may: a worker, any sub-identity included, is refused (ask your orchestrator). Change them when the human asked for it or the project's way of working changed, never to get around a rule. Every change is kept with the text before it, your name and role, shows in the project's activity, and waits in the human's Needs you as \"changed by <you>\" until they mark it reviewed or revert it. Returns {instructions, change}: change is null when the text was already that.",
+    {
+      projectId: z.number().int(),
+      instructions: z.string().max(50_000).describe('the whole new text, markdown'),
+    },
+    ({ projectId, instructions }) => setInstructions(projectId, instructions, caller),
   )
   tool(
     'set_tag_suggestions',
@@ -169,7 +200,7 @@ function buildServer(actor: string, agent: boolean) {
 
   tool(
     'get_summary',
-    "Where a project stands, in one read (every project, one block each, without projectId): reportDue (the project's report while the board is reminding about it: { projectId, project, cadence, period, label, dueAt, alertAt, state due or missing, minutesLeft, negative once overdue }, null otherwise), needsYou (open decisions, PRs waiting on the human's review, threads waiting on the human, tickets in a review stage, stalled: each ticket or lane in an active stage nobody recorded a work-timeline event on for longer than the project's stallMinutes, oldest signal first ({ticketId, title, status, assignee, parent, lastSignalAt, lastAgent}; how long it has been silent is generatedAt minus lastSignalAt), and blockedTasks: each task or subtask tagged blocked on a ticket still being worked, not done, cancelled or archived nor under one that is: taskId, text, reason, parentTask (the text of the task it is a step of, null for a top-level one), ticketId, ticketTitle, status, parent (the ticket it is a lane of); total counts them all), inProgress (tickets in active or blocked stages: assignee, task progress, blockedTasks, lanes, last progress post, preview, since when, stale when no progress post in 24 hours, stalled when silent on the work timeline past the project's stallMinutes), doneToday (tickets that reached a done stage today, PRs that left the queue today, today's activity count), next (the head of the first open stage that is not a backlog, with how many are blocked and in the backlog) and carryingOver (tickets in progress since before today, each with resume: its resume note as a short plain-text excerpt with who wrote it when, noHandoff when nobody left one since the last day it was worked, stale when a progress post came after it, and which day of work this is). A PR's own ticket is in none of these lists: its decisions and threads waiting on the human are in needsYou as PR rows (prTicket true). Today is the board's local day. Read it when starting a session.",
+    "Where a project stands, in one read (every project, one block each, without projectId): reportDue (the project's report while the board is reminding about it: { projectId, project, cadence, period, label, dueAt, alertAt, state due or missing, minutesLeft, negative once overdue }, null otherwise), needsYou (open decisions, PRs waiting on the human's review, threads waiting on the human, tickets in a review stage, stalled: each ticket or lane in an active stage nobody recorded a work-timeline event on for longer than the project's stallMinutes, oldest signal first ({ticketId, title, status, assignee, parent, lastSignalAt, lastAgent, lastBy, lastFrom}; lastAgent is the name the latest event claims, or the assignee when no agent's event names one, lastBy who recorded it as signed in, '' when unknown, lastFrom 'event' or 'assignee': where lastAgent came from; how long it has been silent is generatedAt minus lastSignalAt), instructionChanges (an orchestrator's changes of the project's instructions the human has not reviewed or reverted yet: changeId, projectId, changedBy, role, createdAt, excerpt of the new text, revertable), and blockedTasks: each task or subtask tagged blocked on a ticket still being worked, not done, cancelled or archived nor under one that is: taskId, text, reason, parentTask (the text of the task it is a step of, null for a top-level one), ticketId, ticketTitle, status, parent (the ticket it is a lane of); total counts them all), inProgress (tickets in active or blocked stages: assignee, task progress, blockedTasks, lanes, last progress post, preview, since when, stale when no progress post in 24 hours, stalled when silent on the work timeline past the project's stallMinutes), doneToday (tickets that reached a done stage today, PRs that left the queue today, today's activity count), next (the head of the first open stage that is not a backlog, with how many are blocked and in the backlog) and carryingOver (tickets in progress since before today, each with resume: its resume note as a short plain-text excerpt with who wrote it when, noHandoff when nobody left one since the last day it was worked, stale when a progress post came after it, and which day of work this is). A PR's own ticket is in none of these lists: its decisions and threads waiting on the human are in needsYou as PR rows (prTicket true). Today is the board's local day. Read it when starting a session.",
     { projectId: z.number().int().optional() },
     ({ projectId }) => getSummary(projectId, { refreshPrs: true }),
   )
@@ -228,7 +259,7 @@ function buildServer(actor: string, agent: boolean) {
   // ongoing features
   tool(
     'list_tickets',
-    "Tickets of a project (all its repos; a PR's own ticket, which the board opens for a PR of the queue, is left out: list_prs names it as ticket) with status, assignee, reserved (assigned to one of the project's agents: only that agent works it), repoId, branch, parentId, complexity (low, mid or high: how much review it gets), tags, task progress (own and rolled up over lanes), blockedTasks (its open tasks and subtasks tagged blocked on the human, over the same lanes as the rolled-up progress), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage), startedAt (when work on it last started), resume: whether its resume note holds (at: when it was written, null for none; stale: the work moved on since; noHandoff: it carried over from an earlier day without one; day: which day of work this is), lastSignalAt (the latest of its work-timeline events of any kind, startedAt and createdAt) and stalled ({since, minutes, lastAgent} when it is in an active stage, not waiting on the human, and silent for longer than the project's stallMinutes; null otherwise). status is a stage key (see get_project). needs lists the tickets it needs merged first, each with merged (see get_ticket). Cancelled lanes' tasks are left out of the rolled-up progress. Archived tickets (finished work the human took off the board, lanes with it; archivedAt/archivedBy) are left out unless archived says otherwise.",
+    "Tickets of a project (all its repos; a PR's own ticket, which the board opens for a PR of the queue, is left out: list_prs names it as ticket) with status, assignee, reserved (assigned to one of the project's agents: only that agent works it), repoId, branch, parentId, complexity (low, mid or high: how much review it gets), tags, task progress (own and rolled up over lanes), blockedTasks (its open tasks and subtasks tagged blocked on the human, over the same lanes as the rolled-up progress), lane counts (total, approved, disapproved, byStage: per stage key), and the human's verdict: approvedAt/approvedBy or disapprovedAt/disapprovedBy (a disapproved ticket is moved to the cancelled stage), startedAt (when work on it last started), resume: whether its resume note holds (at: when it was written, null for none; stale: the work moved on since; noHandoff: it carried over from an earlier day without one; day: which day of work this is), lastSignalAt (the latest of its work-timeline events of any kind, startedAt and createdAt) and stalled ({since, minutes, lastAgent, lastBy, lastFrom} when it is in an active stage, not waiting on the human, and silent for longer than the project's stallMinutes; null otherwise). status is a stage key (see get_project). needs lists the tickets it needs merged first, each with merged (see get_ticket). Cancelled lanes' tasks are left out of the rolled-up progress. Archived tickets (finished work the human took off the board, lanes with it; archivedAt/archivedBy) are left out unless archived says otherwise.",
     {
       projectId: z.number().int(),
       parentId: z
@@ -512,7 +543,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   // the work timeline: what you record as you work a ticket (workTimeline.ts)
   const SCOPE =
-    "projectId and ticketId name the ticket: it must be a ticket of that project (another project's is refused with 403 and nothing is written; an archived ticket with 409). agent is who did the work (1 to 60 characters, a sub-agent's name too; you when left out); the board also records you as by. note: up to 500 characters. The board takes the time itself. Nothing goes to the feed or the Daily view, and the ticket is not bumped."
+    "projectId and ticketId name the ticket: it must be a ticket of that project (another project's is refused with 403 and nothing is written; an archived ticket with 409). agent is who did the work (1 to 60 characters, a sub-agent's name too; you when left out: your whoami name, <token>/<name> for a sub-identity); the board also records you as by. note: up to 500 characters. The board takes the time itself. Nothing goes to the feed or the Daily view, and the ticket is not bumped."
   const scoped = { projectId: z.number().int(), ticketId: z.number().int(), ...work.eventBase }
   tool(
     'start_span',
@@ -633,7 +664,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'answer_decision',
-    "Record the human's answer to a decision card, given in the chat, as the orchestrator. Call it only in the session that talks to the human, after you asked them the card's question in the chat (AskUserQuestion in Claude Code, or the client's equivalent) and they answered there. postId: the card's post (get_ticket, or needsYou.decisions in get_summary). option: the index of the option they picked, as the card lists them. words: their answer as they gave it, verbatim. The card is recorded as decided by the human, relayed by you, with their words; the ticket goes back to in progress once nothing else is open. On a request_archive card, Archive then archives its tickets in the human's name. Refused: a human caller; any call with as (one of the project's agents); empty words; an option the card does not have; a post that is not a decision; a card already decided (the human changes it on the board). A delegated subagent never answers a decision either, and the server cannot tell one that calls without as from you: keeping to this is your job.",
+    "Record the human's answer to a decision card, given in the chat, as the orchestrator. Call it only in the session that talks to the human, after you asked them the card's question in the chat (AskUserQuestion in Claude Code, or the client's equivalent) and they answered there. postId: the card's post (get_ticket, or needsYou.decisions in get_summary). option: the index of the option they picked, as the card lists them. words: their answer as they gave it, verbatim. The card is recorded as decided by the human, relayed by you, with their words; the ticket goes back to in progress once nothing else is open. On a request_archive card, Archive then archives its tickets in the human's name. Refused: a human caller; a sub-identity (a call with agentName or X-Agent-Name: a delegated worker); any call with as (one of the project's agents); empty words; an option the card does not have; a post that is not a decision; a card already decided (the human changes it on the board). A delegated subagent never answers a decision either; one that passes agentName is refused, and the server cannot tell one that leaves it out from you: keeping to this is your job.",
     {
       postId: z.number().int().describe("the decision card's post id"),
       option: z
@@ -649,7 +680,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
           'leave it out: a call that sets it is refused, since the orchestrator relays a decision itself',
         ),
     },
-    (args) => features.relayDecision(args.postId, args, actor, { agent }),
+    (args) => features.relayDecision(args.postId, args, actor, { agent, delegated: caller.parent !== '' }),
   )
   tool(
     'edit_post',
@@ -761,7 +792,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'list_actors',
-    "Every name that signs in to the board (connected agents by token name, the human by passkey). The project's own agents are in get_project. Use these exact names for assignee.",
+    "Every name that signs in to the board: {name, kind (agent or human), role (human; orchestrator or worker for an agent, as last seen), parent (the name a sub-identity <token name>/<name> works under, '' otherwise)}. Connected agents by token name and their sub-identities, the human by passkey. The project's own agents are in get_project. Use these exact names for assignee.",
     {},
     () => listActors(),
   )
@@ -821,13 +852,66 @@ It replaces the previous note; each new version is also posted to the ticket's f
   return server
 }
 
+/**
+ * The tool calls' `agentName` in the request's body: undefined for a call without one. A request is one
+ * call in practice; a batch whose calls name different callers is refused whole.
+ */
+async function agentNamesOf(request: Request): Promise<unknown[]> {
+  if (request.method !== 'POST') return []
+  let body: unknown
+  try {
+    body = await request.clone().json()
+  } catch {
+    return []
+  }
+  type Message = { method?: unknown; params?: { arguments?: Record<string, unknown> } }
+  return (Array.isArray(body) ? body : [body])
+    .filter(
+      (m): m is Message => typeof m === 'object' && m !== null && (m as Message).method === 'tools/call',
+    )
+    .map((m) => m.params?.arguments?.agentName)
+}
+
+/**
+ * Who the request's tool calls run as: the signed-in caller, or the sub-identity their agentName names
+ * (asSubIdentity's rules). With X-Agent-Name already making the request a sub-identity, agentName must
+ * name that same one. A human's call is the human's whatever it says.
+ */
+export async function agentNameOf(request: Request, caller: Caller): Promise<Caller> {
+  if (caller.kind === 'human') return caller
+  const names = [...new Set(await agentNamesOf(request))]
+  if (names.length > 1)
+    throw new HttpError(400, 'agentName: every tool call of one request is made by the same caller')
+  const name = names[0]
+  if (typeof name !== 'string') return caller
+  if (caller.parent) {
+    if (name.trim() === caller.name) return caller
+    throw new HttpError(
+      400,
+      `agentName ${name} and X-Agent-Name ${caller.name} disagree: give one of them, or the same name in both`,
+    )
+  }
+  return asSubIdentity(caller, name, 'agentName')
+}
+
 export async function handleMcp(request: Request, actor: string): Promise<Response> {
   // Stateless and JSON-only: each POST is fully answered before the response is returned, nothing outlives the request.
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   })
-  // Whether the caller is an agent comes with the request: the tools that only the orchestrator may call check it.
-  await buildServer(actor, isAgent(request)).connect(transport)
+  // Who calls comes with the request, its agentName included: the tools that only an agent, or only an
+  // orchestrator, may call check it.
+  let caller = callerInfo(request, actor)
+  let refused: HttpError | null = null
+  try {
+    const named = await agentNameOf(request, caller)
+    if (named !== caller) noteActor(named.name, named.kind, named.role, named.parent)
+    caller = named
+  } catch (err) {
+    if (!(err instanceof HttpError)) throw err
+    refused = err
+  }
+  await buildServer(caller, refused).connect(transport)
   return transport.handleRequest(request)
 }
