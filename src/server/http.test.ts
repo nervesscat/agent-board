@@ -24,15 +24,15 @@ const parseError = (text: string) => {
 describe('readJson', () => {
   it('decodes \\\\ escapes to one backslash each', async () => {
     // String.raw keeps the bytes as written: two backslashes per separator, as valid JSON has them.
-    const body = String.raw`{"repoPath":"F:\\Programming\\Python\\x"}`
+    const body = String.raw`{"repoPath":"C:\\code\\python\\x"}`
     expect(Buffer.from(body).filter((b) => b === 0x5c)).toHaveLength(6)
     const read = await readJson(raw(body), z.object({ repoPath: z.string() }))
-    expect(read.repoPath).toBe(['F:', 'Programming', 'Python', 'x'].join('\\'))
+    expect(read.repoPath).toBe(['C:', 'code', 'python', 'x'].join('\\'))
   })
 
   it("says why a body is not JSON: the parser's message, and how a backslash is written", async () => {
-    // What a shell leaves of the body above when it collapses \\ to \: \P is no JSON escape.
-    const body = String.raw`{"repoPath":"F:\Programming"}`
+    // What a shell leaves of the body above when it collapses \\ to \: \c is no JSON escape.
+    const body = String.raw`{"repoPath":"C:\code"}`
     const err = await refusal(raw(body))
     expect(err.status).toBe(400)
     const parserMessage = parseError(body)

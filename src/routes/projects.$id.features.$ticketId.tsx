@@ -23,6 +23,7 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  RefreshCw,
   Scale,
   ScrollText,
   Trash2,
@@ -86,6 +87,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
+import { autoPhaseOf, autoPhaseTip } from '#/lib/autoPhases'
 import { StalledBadge, WorkTimelineBar, WorkTotals, hasWork } from '#/components/WorkTimeline'
 import {
   del,
@@ -1241,16 +1243,31 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const pct = t.progress.total ? Math.round((100 * t.progress.done) / t.progress.total) : 0
   const row = (task: TicketFull['tasks'][number], subtask: boolean) => {
     const blockedSubtasks = subtask ? 0 : t.tasks.filter((s) => s.parentId === task.id && s.blocked).length
+    // A phase the board ticks from git, GitHub or the previews: no tick by hand.
+    const auto = task.auto ? autoPhaseOf(task) : null
     return (
       // A summary's blocked task lands here as #task-<id> (src/lib/reveal.ts).
       <div id={`task-${task.id}`} className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
         <div className="group flex items-center gap-2">
           <Checkbox
             checked={task.done}
+            disabled={auto !== null}
             onCheckedChange={(v) => toggle.mutate({ id: task.id, done: Boolean(v) })}
             aria-label={task.text}
           />
           <span className={task.done ? 'text-muted-foreground line-through' : ''}>{task.text}</span>
+          {auto && (
+            <Tip content={autoPhaseTip(auto)}>
+              <span
+                role="img"
+                tabIndex={0}
+                aria-label="Ticked automatically"
+                className="shrink-0 text-muted-foreground"
+              >
+                <RefreshCw className="size-3.5" />
+              </span>
+            </Tip>
+          )}
           {task.blocked && <span className={BLOCKED_CHIP}>blocked</span>}
           {blockedSubtasks > 0 && (
             <span className={BLOCKED_CHIP}>
@@ -1258,24 +1275,27 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
             </span>
           )}
           <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
-            <button
-              type="button"
-              onClick={() => {
-                if (task.blocked) tag.mutate({ id: task.id, blocked: false })
-                else {
-                  setBlocking(task.id)
-                  setReason('')
-                }
-              }}
-              aria-label={task.blocked ? `Unblock ${task.text}` : `Mark ${task.text} blocked`}
-            >
-              <Hand
-                className={cn(
-                  'size-3.5',
-                  task.blocked ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
-                )}
-              />
-            </button>
+            {/* Tagging a done phase blocked would untick it by hand. */}
+            {!(auto && task.done) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (task.blocked) tag.mutate({ id: task.id, blocked: false })
+                  else {
+                    setBlocking(task.id)
+                    setReason('')
+                  }
+                }}
+                aria-label={task.blocked ? `Unblock ${task.text}` : `Mark ${task.text} blocked`}
+              >
+                <Hand
+                  className={cn(
+                    'size-3.5',
+                    task.blocked ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
+                  )}
+                />
+              </button>
+            )}
             {!subtask && (
               <Tip content="Add a subtask">
                 <button
@@ -1357,7 +1377,8 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       {t.tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off&apos;s
-          (Pushed, PR, CI, Preview, Hand-off post). The concrete steps go under Implementation as subtasks.
+          (Pushed, PR, CI, Preview, Merged, Hand-off post). The concrete steps go under Implementation as
+          subtasks. The board ticks Pushed, PR, CI, Preview and Merged itself.
         </p>
       )}
       <ul className="space-y-1.5">

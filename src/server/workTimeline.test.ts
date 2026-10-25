@@ -139,6 +139,7 @@ const ghPr = (number: number, head: string, mergedAt: string | null): MyGhPr => 
   updatedAt: '2026-10-01T10:00:00Z',
   mergedAt,
   reviews: [],
+  comments: [],
   reviewRequests: [],
   requested: false,
   assigned: false,

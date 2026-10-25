@@ -157,6 +157,8 @@ export interface GhPr {
   reviews: { author: { login: string }; state: string; submittedAt: string; commit?: { oid: string } }[]
   /** Reviews asked for and not given yet: a user (`login`) or a team (`slug`). */
   reviewRequests: { __typename?: string; login?: string; slug?: string }[]
+  /** Its conversation's comments (not review comments): where "CI run locally: green on <sha>" is said. */
+  comments: { author: { login: string }; body: string; createdAt: string }[]
 }
 
 /** A PR of the queue, with the searches that found it. */
@@ -168,7 +170,7 @@ export interface MyGhPr extends GhPr {
 }
 
 const PR_FIELDS =
-  'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,mergedAt,reviews,reviewRequests'
+  'number,title,url,author,headRefName,baseRefName,headRefOid,isDraft,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,updatedAt,mergedAt,reviews,reviewRequests,comments'
 
 /** How many PRs one search returns: open ones, and the recently merged ones. */
 const OPEN_LIMIT = 100

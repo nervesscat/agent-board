@@ -7,7 +7,8 @@ node_modules
 dist
 data/
 .env
-.env.local
+.env.*
+!.env.example
 *.local
 .DS_Store
 __unconfig*

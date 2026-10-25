@@ -309,12 +309,13 @@ and return `STATUS: needs-browser`: the orchestrator runs you again with the bro
 
 ### 7. Hand off
 
-Every item, in order, as the board skill's hand-off checklist says, ticking each hand-off phase of
-the ticket (`set_task_done`) as its step finishes; the board ticks none itself. On a rework round,
-untick the phases the new work redoes first.
+Every item, in order, as the board skill's hand-off checklist says. The board ticks the phases
+Pushed, PR, CI, Preview and Merged itself as their facts hold (a tick by hand is refused); you tick
+Implementation's steps and Hand-off post (`set_task_done`). On a rework round, untick Hand-off post
+first.
 1. Implementation and its subtasks ticked (`set_task_done`); the workspace registered.
-2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`. Tick
-   Pushed.
+2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`, and
+   the board ticks Pushed.
    The push updates `REPO`'s refs: a lock error is retried as **Shared with the other tickets of
    this repo** says.
 3. Any unmerged branch yours builds on: `update_ticket` with `needs`.
@@ -330,14 +331,17 @@ untick the phases the new work redoes first.
    (`ticket` in `list_prs`). Right before, check `list_review_results` (with `sha`) and the ledger for a newer review
    of that SHA: post only when there is none. A newer one that did not survive is not posted over:
    the change did not survive, and its findings go back to the builder (step 5).
-   Tick PR once it is open, and CI once its checks are green.
+   The board ticks PR once it is open, and CI once its checks are green. While GitHub's checks do
+   not run, comment on the PR `CI run locally: green on <sha>` with the head SHA the checks passed
+   on (`gh pr comment`): that ticks CI. Comment again after each push.
 5. The preview: `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
    project's way and `set_preview`. When the change cannot be tried (docs, a script), say why in
    the summary instead.
    The preview's build is a heavy run: take `LOCK` (holder `#<TICKET> preview <ISO time>`) before
    `start_preview` or the project's start, and release it once the preview runs or has failed.
-   Tick Preview once it runs; when the change cannot be tried, remove the Preview phase instead.
+   The board ticks Preview once it runs; when the change cannot be tried, remove the Preview phase
+   instead.
 6. The ticket's summary (`set_ticket_summary`, not a new hand-off post), the one post the human
    reads on top of Main, short and to the point: what the change does and its current state, each
    review round's verdict in one line, the PR link, the preview link and exactly

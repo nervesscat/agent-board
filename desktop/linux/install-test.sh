@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs one Linux package of the desktop app in this throwaway container and checks it as a user
-# would have it (README: "Install"). Run it as root, in a container, never on a machine you keep:
+# would have it (README: "The desktop app"). Run it as root, in a container, never on a machine you keep:
 #
 #   desktop/linux/install-test.sh deb|rpm|pacman|appimage <package file> <port>
 #

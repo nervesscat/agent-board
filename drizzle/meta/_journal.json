@@ -250,8 +250,22 @@
     {
       "idx": 35,
       "version": "6",
-      "when": 1792922037779,
-      "tag": "0035_project_layout",
+      "when": 1792840537817,
+      "tag": "0035_auto_phase_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1792879630282,
+      "tag": "0036_pr_left_as",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1792931201519,
+      "tag": "0037_project_layout",
       "breakpoints": true
     }
   ]

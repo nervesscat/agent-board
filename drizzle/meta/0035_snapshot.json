@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6d120abf-52ee-478b-8955-2ddf3389e9f2",
+  "id": "c3adfcaa-24f4-4fbe-b26d-962dea0b51c0",
   "prevId": "ad6cf17a-2f7e-4d9c-95a3-e6a3d19edbf9",
   "tables": {
     "account": {
@@ -884,13 +884,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": 30
-        },
-        "layout": {
-          "name": "layout",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -1086,6 +1079,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "''"
+        },
+        "local_ci_sha": {
+          "name": "local_ci_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -2332,6 +2332,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "merged_phase_checked": {
+          "name": "merged_phase_checked",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {
