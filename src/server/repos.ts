@@ -1,8 +1,12 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import { and, asc, eq, inArray, isNull, ne, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { logActivity } from './activity'
-import { assertRepo, repoNameWithOwner } from './git'
+import { folderKey } from './cleanup'
+import { assertRepo, originUrl, repoNameWithOwner } from './git'
 import { HttpError, notFound } from './http'
 import { forgetPreview } from './managedPreview'
 import { createProject, getProject } from './projects'
@@ -47,6 +51,135 @@ export function resolveRepo(projectId: number, repoId?: number | null) {
 export function ticketRepo(ticket: Pick<schema.Ticket, 'projectId' | 'repoId'>) {
   if (ticket.repoId) return getRepo(ticket.repoId)
   return listRepos(ticket.projectId)[0] ?? null
+}
+
+/**
+ * The `owner/name` of a github.com remote URL, as git gives it: `https://github.com/o/n(.git)` (a user
+ * before the host allowed), `git@github.com:o/n(.git)` or `ssh://git@github.com(:port)/o/n(.git)`. Null for
+ * any other host or shape.
+ */
+export function githubSlug(url: string): string | null {
+  const m =
+    /^(?:(?:https?|ssh):\/\/(?:[^@/]+@)?github\.com(?::\d+)?\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i.exec(
+      url.trim(),
+    )
+  return m ? `${m[1]}/${m[2]}` : null
+}
+
+/** A GitHub `owner/name`, as `githubRepo` is given. */
+const GITHUB_REPO = /^[\w.-]+\/[\w.-]+$/
+
+/**
+ * Why the repo an agent asks for (`requestRepo`) cannot be added now, or null when it can: its path is an
+ * existing git checkout, given whole; `origin` (the checkout's origin URL, as `originUrl` read it) is
+ * github.com's `githubRepo`, owner and name in any casing; the project has no repo of that name (trimmed,
+ * any casing); and no repo of the board is registered at that folder (`folderKey`: in any spelling, `.`,
+ * `..`, doubled or either slashes, a trailing one, links, and on Windows any casing). Checked when it is
+ * asked and again when the human answers Add, since the checkout or the board may have changed in between.
+ */
+export function repoRequestProblem(req: schema.RepoRequest, origin: string | null): HttpError | null {
+  if (!path.isAbsolute(req.repoPath))
+    return new HttpError(400, `give the checkout's absolute path, not ${req.repoPath}`)
+  try {
+    assertRepo(req.repoPath)
+  } catch (err) {
+    return err as HttpError
+  }
+  if (!fs.statSync(req.repoPath).isDirectory()) return new HttpError(400, `${req.repoPath} is not a folder`)
+  if (!origin) return new HttpError(400, `${req.repoPath} has no origin remote`)
+  const slug = githubSlug(origin)
+  // Any credentials in the URL stay out of the message.
+  const shown = origin.replace(/\/\/[^@/]+@/, '//')
+  if (!slug) return new HttpError(400, `${req.repoPath}'s origin, ${shown}, is not a github.com repository`)
+  if (slug.toLowerCase() !== req.githubRepo.toLowerCase())
+    return new HttpError(400, `${req.repoPath}'s origin is ${slug}, not ${req.githubRepo}`)
+  const named = listRepos(req.projectId).find((r) => r.name.trim().toLowerCase() === req.name.toLowerCase())
+  if (named)
+    return new HttpError(409, `this project already has a repo named ${named.name} (repo ${named.id})`)
+  const key = folderKey(req.repoPath)
+  const there = listRepos().find((r) => folderKey(r.repoPath) === key)
+  if (there)
+    return new HttpError(
+      409,
+      `${req.repoPath} is already registered as repo ${there.id} ${there.name} of project ${getProject(there.projectId).name}`,
+    )
+  return null
+}
+
+/** The checkout's origin URL for `repoRequestProblem`; null when it is no checkout to ask git in. */
+export async function requestOrigin(repoPath: string): Promise<string | null> {
+  if (!path.isAbsolute(repoPath) || !fs.existsSync(`${repoPath}/.git`)) return null
+  return originUrl(repoPath)
+}
+
+/** Whether `text` has a control character (U+0000 to U+001F, or DEL): a line break, a tab, an escape. */
+const hasControl = (text: string) => [...text].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)
+
+/**
+ * The repo an agent asks to add to `projectId`, cleaned (trimmed; an absolute path resolved, so its `.`,
+ * `..` and doubled slashes go; base branch main when left out) and checked (`repoRequestProblem`): what its card names and its Add creates. A problem is thrown.
+ */
+export async function checkRepoRequest(
+  projectId: number,
+  input: { name: string; repoPath: string; githubRepo: string; baseBranch?: string },
+): Promise<schema.RepoRequest> {
+  const repoPath = input.repoPath.trim()
+  const req = {
+    projectId,
+    name: input.name.trim(),
+    // A relative path stays as given, for `repoRequestProblem` to refuse.
+    repoPath: path.isAbsolute(repoPath) ? path.resolve(repoPath) : repoPath,
+    githubRepo: input.githubRepo.trim(),
+    baseBranch: input.baseBranch?.trim() || 'main',
+  }
+  if (!req.name || req.name.length > 100)
+    throw new HttpError(400, 'give the repo a name: 1 to 100 characters')
+  // The card's body quotes the name and base branch: a line break in either would write lines of its own.
+  if (hasControl(req.name)) throw new HttpError(400, 'the repo name is one line, with no control characters')
+  if (!req.repoPath) throw new HttpError(400, "give the checkout's path")
+  // A folder may be named with a line break on Linux; the card would show it as lines of its own.
+  if (hasControl(req.repoPath))
+    throw new HttpError(400, "the checkout's path is one line, with no control characters")
+  if (!GITHUB_REPO.test(req.githubRepo))
+    throw new HttpError(400, `githubRepo is the GitHub owner/name (like acme/shop), not ${req.githubRepo}`)
+  if (req.baseBranch.length > 200) throw new HttpError(400, 'the base branch is 200 characters at most')
+  // As in git, a branch name has no whitespace or control characters.
+  if (/\s/.test(req.baseBranch) || hasControl(req.baseBranch))
+    throw new HttpError(400, 'the base branch is a branch name: no spaces, line breaks or control characters')
+  const problem = repoRequestProblem(req, await requestOrigin(req.repoPath))
+  if (problem) throw problem
+  return req
+}
+
+/**
+ * A repo request's Add: the repo is created as it was asked (its `githubRepo` as checked, not looked up
+ * again with gh). The caller checked it just before (`repoRequestProblem`) and logs it.
+ */
+export function insertRequestedRepo(req: schema.RepoRequest) {
+  const row = db
+    .insert(schema.repos)
+    .values({
+      projectId: req.projectId,
+      name: req.name,
+      repoPath: req.repoPath,
+      githubRepo: req.githubRepo,
+      baseBranch: req.baseBranch,
+    })
+    .returning()
+    .get()
+  // As createRepo: a checkout of the board gets the board's own preview run.
+  seedRepo(row)
+  return row
+}
+
+/** The repo a repo request's Add created already: the same name and folder (`folderKey`) in its project. */
+export function requestedRepo(req: schema.RepoRequest) {
+  const key = folderKey(req.repoPath)
+  return (
+    listRepos(req.projectId).find(
+      (r) => r.name.trim().toLowerCase() === req.name.toLowerCase() && folderKey(r.repoPath) === key,
+    ) ?? null
+  )
 }
 
 const dirName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p

@@ -368,6 +368,51 @@ describe('who is who in test mode: orchestrator:, agent: and sub-identities', ()
     expect(await ok.json()).toMatchObject({ decidedOption: 1, relayedBy: 'orch' })
   })
 
+  it("takes a sub-identity's repo request, refuses its relay of the Add; the orchestrator's adds the repo", async () => {
+    const { execFileSync } = await import('node:child_process')
+    const features = await import('./features')
+    const repos = await import('./repos')
+    const ticket = features.createTicket(projectId, { title: 'Needs a repo' }, 'human')
+    const dir = path.join(tmp, 'sub-identity-repo')
+    fs.mkdirSync(dir)
+    execFileSync('git', ['init', '-q'], { cwd: dir })
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/acme/subrepo'], { cwd: dir })
+    // Asking is open to a worker: the card carries the sub-identity's name.
+    const card = await tool(ORCH, 'add_repo', {
+      ticketId: ticket.id,
+      name: 'subrepo',
+      repoPath: dir,
+      githubRepo: 'acme/subrepo',
+      agentName: 'orch/worker-2',
+    })
+    expect(card).toMatchObject({ author: 'orch/worker-2', decidedAt: null })
+    const added = () => repos.listRepos(projectId).filter((r) => r.name === 'subrepo')
+
+    const refusal = 'only the session that talks to the human relays an answer'
+    const rest = await send(
+      'POST',
+      `/api/updates/${card.id}/decision/relay`,
+      { ...ORCH, 'x-agent-name': 'orch/worker-2' },
+      { option: 0, words: 'add it' },
+    )
+    expect(rest.status).toBe(403)
+    expect(await rest.json()).toEqual({ error: refusal })
+    expect(
+      await tool(ORCH, 'answer_decision', {
+        postId: card.id,
+        option: 0,
+        words: 'add it',
+        agentName: 'orch/worker-2',
+      }),
+    ).toEqual({ error: refusal })
+    expect(features.getPost(card.id)).toMatchObject({ decidedAt: null, relayedBy: '' })
+    expect(added()).toEqual([])
+
+    const ok = await tool(ORCH, 'answer_decision', { postId: card.id, option: 0, words: 'add it' })
+    expect(ok).toMatchObject({ relayedBy: 'orch', repo: { added: { name: 'subrepo' } } })
+    expect(added()).toHaveLength(1)
+  })
+
   it('set_project_instructions: an orchestrator changes them, a worker hears to ask its orchestrator', async () => {
     const projects = await import('./projects')
     const p = projects.createProject({ name: 'rules', instructions: 'old' }, 'human', {

@@ -2,9 +2,17 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterAll, afterEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { worktreeLinks } from './worktreeLinks'
+// The db module opens SQLite at import (worktreeLinks reaches it through cleanup); point it at a
+// throwaway directory before anything loads it, never at the checkout's own data/.
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-'))
+
+let links: typeof import('./worktreeLinks')
+beforeAll(async () => {
+  links = await import('./worktreeLinks')
+})
+const worktreeLinks = (dir: string) => links.worktreeLinks(dir)
 
 const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-links-')))
 const worktree = path.join(tmp, 'wt')

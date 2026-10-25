@@ -390,10 +390,13 @@ describe('0029_ticket_pr_link', () => {
       before.tickets,
     )
     expect(after.tasks).toEqual(before.tasks)
-    // Later migrations add the posts' tab, summary and archive request columns: the rest of each post is
-    // what it was.
+    // Later migrations add the posts' tab, summary, archive request and repo request columns: the rest of
+    // each post is what it was.
     expect(
-      after.updates.map(({ tab: _t, summary: _s, summary_change: _c, archive_tickets: _a, ...rest }) => rest),
+      after.updates.map(
+        ({ tab: _t, summary: _s, summary_change: _c, archive_tickets: _a, repo_request: _r, ...rest }) =>
+          rest,
+      ),
     ).toEqual(before.updates)
     expect(sqlite.prepare('SELECT parent_id FROM tickets WHERE id = ?').get(lane)).toEqual({
       parent_id: feature,
@@ -482,11 +485,14 @@ describe('0030_post_tabs_and_summary', () => {
       card: 'main',
       unknown: 'agents',
     })
-    // Every other column reads as it did (a later migration adds the archive request one); no post is a
-    // summary.
+    // Every other column reads as it did (later migrations add the archive and repo request ones); no post
+    // is a summary.
     const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
     expect(
-      after.map(({ tab: _t, summary: _s, summary_change: _c, archive_tickets: _a, ...rest }) => rest),
+      after.map(
+        ({ tab: _t, summary: _s, summary_change: _c, archive_tickets: _a, repo_request: _r, ...rest }) =>
+          rest,
+      ),
     ).toEqual(before)
     expect(after.every((u) => u.summary === 0 && u.summary_change === '')).toBe(true)
     expect(sqlite.prepare('SELECT update_id FROM attachments').all()).toEqual([{ update_id: progress }])
@@ -567,7 +573,8 @@ describe('0033_archive_requests', () => {
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
     const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
-    expect(after.map(({ archive_tickets: _a, ...rest }) => rest)).toEqual(before)
+    // A later migration adds the repo request column.
+    expect(after.map(({ archive_tickets: _a, repo_request: _r, ...rest }) => rest)).toEqual(before)
     expect(after.map((u) => u.archive_tickets)).toEqual([null])
     expect(sqlite.prepare('SELECT update_id FROM attachments').all()).toEqual([{ update_id: card }])
     sqlite.close()
@@ -965,6 +972,47 @@ describe('0038_multi_repo_tickets_and_runs', () => {
     expect(() =>
       sqlite.prepare("INSERT INTO run_configs (repo_id, name, type) VALUES (?, 'x', 'cron')").run(api),
     ).toThrow(/CHECK constraint/)
+    sqlite.close()
+  })
+})
+
+describe('0041_repo_requests', () => {
+  it('adds the repo request column without rebuilding the posts, so they, their cards and files stay', () => {
+    const sqlite = databaseAt('0040_project_layout')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('repos').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'New repo', 'claude').lastInsertRowid,
+    )
+    const card = Number(
+      sqlite
+        .prepare(
+          'INSERT INTO updates (ticket_id, author, body, decision, archive_tickets) VALUES (?, ?, ?, ?, ?)',
+        )
+        .run(
+          ticket,
+          'claude',
+          'Archive #1?',
+          JSON.stringify([{ label: 'Archive' }, { label: 'Keep' }]),
+          JSON.stringify([ticket]),
+        ).lastInsertRowid,
+    )
+    sqlite
+      .prepare(
+        "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
+      )
+      .run(card)
+    const before = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const after = sqlite.prepare('SELECT * FROM updates ORDER BY id').all() as Record<string, unknown>[]
+    expect(after.map(({ repo_request: _r, ...rest }) => rest)).toEqual(before)
+    expect(after.map((u) => u.repo_request)).toEqual([null])
+    expect(sqlite.prepare('SELECT update_id FROM attachments').all()).toEqual([{ update_id: card }])
     sqlite.close()
   })
 })

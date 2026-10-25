@@ -392,7 +392,7 @@ describe('moving a repo to another project', () => {
   const projectOf = (repo: number) =>
     dbm.db.select().from(dbm.schema.repos).where(eq(dbm.schema.repos.id, repo)).get()!.projectId
 
-  it('PATCH /api/repos/:id with another projectId: an orchestrator and the human, never a worker', async () => {
+  it('PATCH /api/repos/:id: an orchestrator and the human move a repo, never a worker; only the human changes the rest', async () => {
     const from = newProject('from')
     const to = newProject('to')
     const repo = newRepo(from)
@@ -410,15 +410,40 @@ describe('moving a repo to another project', () => {
       })
       expect(projectOf(repo)).toBe(from)
     }
-    // The rest of a repo's patch stays open to a worker, its own projectId again included.
-    expect(
-      (await send('PATCH', `/api/repos/${repo}`, 'agent:w', { name: 'renamed', projectId: from })).status,
-    ).toBe(200)
+    // The rest of a repo's patch is the human's alone: an agent asks with a repo request, an
+    // orchestrator only moves it, and its own projectId again is no move.
+    const humanOnly = {
+      error: 'only the human adds, changes and removes repos; an agent asks with a repo request',
+    }
+    for (const [actor, body] of [
+      ['agent:w', { name: 'renamed', projectId: from }],
+      ['orchestrator:orch', { name: 'renamed' }],
+      ['orchestrator:orch', { projectId: from }],
+      ['orchestrator:orch', { projectId: to, name: 'moved' }],
+      ['orchestrator:orch', { projectId: to, baseBranch: 'dev' }],
+    ] as const) {
+      const res = await send('PATCH', `/api/repos/${repo}`, actor, body)
+      expect(res.status, JSON.stringify(body)).toBe(403)
+      expect(await res.json()).toEqual(humanOnly)
+      expect(projectOf(repo)).toBe(from)
+    }
+    for (const [method, target, body] of [
+      ['POST', '/api/repos', { projectId: to, repoPath: path.join(tmp, 'orch-added') }],
+      ['DELETE', `/api/repos/${repo}`, undefined],
+    ] as const) {
+      const res = await send(method, target, 'orchestrator:orch', body)
+      expect(res.status, method).toBe(403)
+      expect(await res.json()).toEqual(humanOnly)
+    }
+    expect(projectOf(repo)).toBe(from)
 
     expect((await send('PATCH', `/api/repos/${repo}`, 'orchestrator:orch', { projectId: to })).status).toBe(
       200,
     )
     expect(projectOf(repo)).toBe(to)
+    expect(
+      (await send('PATCH', `/api/repos/${repo}`, 'human:enrique', { name: 'renamed', projectId: to })).status,
+    ).toBe(200)
     expect((await send('PATCH', `/api/repos/${repo}`, 'human:enrique', { projectId: from })).status).toBe(200)
     expect(projectOf(repo)).toBe(from)
   })

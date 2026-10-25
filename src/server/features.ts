@@ -29,7 +29,16 @@ import { previewState, previewUrl, type PreviewState } from './preview'
 import { cancelSupersededPrTickets, prTicketStage } from './prTickets'
 import { prForTicket, prStatus, refreshPrsInBackground, withMergeCheck } from './prs'
 import { NO_PUSH, pushStates } from './push'
-import { getRepo, resolveRepo, ticketRepo } from './repos'
+import {
+  checkRepoRequest,
+  getRepo,
+  insertRequestedRepo,
+  repoRequestProblem,
+  requestedRepo,
+  requestOrigin,
+  resolveRepo,
+  ticketRepo,
+} from './repos'
 import { reportDueFor } from './reportDue'
 import { stopRunsFor } from './runs'
 import {
@@ -794,6 +803,13 @@ export function updateTicket(
     changes.push(`branch → ${patch.branch || 'none'}`)
   if (patch.prNumber !== undefined && patch.prNumber !== before.prNumber)
     changes.push(`PR → ${patch.prNumber ? `#${patch.prNumber}` : 'none'}`)
+  if (patch.repoId && patch.repoId !== before.repoId) {
+    const from = ticketRepo(before)
+    if (from?.id !== patch.repoId)
+      changes.push(`moved to repo ${getRepo(patch.repoId).name} from ${from?.name ?? 'none'}`)
+  }
+  if (patch.baseBranch !== undefined && patch.baseBranch !== before.baseBranch)
+    changes.push(`base branch → ${patch.baseBranch}`)
   if (patch.tags && patch.tags.join('\n') !== before.tags.join('\n'))
     changes.push(`tags → ${patch.tags.join(', ') || 'none'}`)
   if (
@@ -827,6 +843,30 @@ export function updateTicket(
   if (!row.prId && (patch.prNumber !== undefined || patch.branch !== undefined || patch.repoId !== undefined))
     takeOverPrTickets(row, actor)
   return row
+}
+
+/**
+ * A ticket moved onto another repo of its own project, at once: its branch is then looked for in that
+ * checkout, and its base branch becomes that repo's (or `baseBranch`, when given; it stays as it is when
+ * the repo does not change). A repo the ticket already spans as one of its other repos becomes its
+ * primary instead, with that repo's own branch, base and PR (updateTicket's plannedPrimary), the old
+ * primary staying as one of its other repos. A repo of another project is refused (resolveRepo), and so
+ * is a PR's own ticket, as updateTicket refuses it. Its lanes keep their own repos.
+ */
+export function setTicketRepo(
+  id: number,
+  input: { repoId: number; baseBranch?: string },
+  actor: string,
+  opts: { agent?: boolean } = {},
+) {
+  const before = getTicket(id)
+  const repo = resolveRepo(before.projectId, input.repoId)
+  const same = ticketRepo(before)?.id === repo.id
+  const spanned = !same && ticketRepoList(before).some((e) => !e.primary && e.repoId === repo.id)
+  const given = input.baseBranch?.trim()
+  // An other repo of the ticket keeps its own base when none is given; a new one starts on the repo's.
+  const baseBranch = given || (same ? before.baseBranch : spanned ? undefined : repo.baseBranch)
+  return updateTicket(id, { repoId: repo.id, ...(baseBranch ? { baseBranch } : {}) }, actor, opts)
 }
 
 /** A ticket that reached a done or cancelled stage has nothing left to preview. */
@@ -1245,6 +1285,113 @@ function archiveWords(result: ArchiveResult | null) {
     : ''
   const not = result.skipped.length ? `\n\nNot archived: ${result.skipped.map((s) => s.why).join('; ')}.` : ''
   return done + already + not
+}
+
+/** The options of a repo request's card, in order: answering the first adds the repo. */
+const REPO_OPTIONS: schema.DecisionOption[] = [
+  { label: 'Add', detail: 'Register the checkout as a repo of this project' },
+  { label: "Don't add", detail: 'Leave the project as it is' },
+]
+
+/**
+ * `text` (one line) as a markdown code span, which shows it literally: its fence is one backtick longer
+ * than the longest run of backticks in it, since a span opened by N backticks closes only on N
+ * (CommonMark), with a space inside each end when it starts or ends with a backtick or a space (one is
+ * stripped from each end).
+ */
+function codeSpan(text: string) {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
+  const fence = '`'.repeat(longest + 1)
+  const pad = /^[` ]|[` ]$/.test(text) ? ' ' : ''
+  return `${fence}${pad}${text}${pad}${fence}`
+}
+
+/**
+ * An agent's request to add a repo to the project of the ticket it names: a decision card for the human,
+ * "Add repo shop?" with Add and Don't add, on that ticket (in its Main tab; it does not block). The repo
+ * is checked first (`checkRepoRequest`: a git checkout whose origin is `githubRepo` on github.com, a name
+ * and a path no repo has yet); one that fails posts no card. Nothing is added until the human answers Add
+ * (decide, or the orchestrator's relay of their chat answer), which checks it all again.
+ */
+export async function requestRepo(
+  ticketId: number,
+  input: { name: string; repoPath: string; githubRepo: string; baseBranch?: string; as?: string },
+  actor: string,
+) {
+  const ticket = getTicket(ticketId)
+  if (input.as !== undefined) actingAs(ticket.projectId, input.as)
+  const req = await checkRepoRequest(ticket.projectId, input)
+  // Every value is the agent's: each is a code span, so none can close its formatting or add markdown.
+  const body = [
+    `Add repo ${codeSpan(req.name)}?`,
+    '',
+    `- Name: ${codeSpan(req.name)}`,
+    `- GitHub: ${codeSpan(req.githubRepo)}`,
+    `- Path: ${codeSpan(req.repoPath)}`,
+    `- Base branch: ${codeSpan(req.baseBranch)}`,
+    '',
+    `Add registers this checkout as a repo of ${getProject(ticket.projectId).name}, checked again first; Don't add changes nothing.`,
+  ].join('\n')
+  return postDecision(
+    ticketId,
+    { body, options: REPO_OPTIONS, as: input.as, block: false, tab: 'main' },
+    actor,
+    { repoRequest: req, did: `asked to add repo ${req.name} (${req.githubRepo}) at ${req.repoPath}` },
+  )
+}
+
+/**
+ * What a repo request's Add has to read before it is answered: the checkout's origin (git answers
+ * asynchronously), for decide and relayDecision to check the request against. Undefined for any other
+ * post or option, or a post that does not exist (the answer then says so itself).
+ */
+export async function answerOrigin(postId: number, option: number): Promise<string | null | undefined> {
+  const post = db.select().from(schema.updates).where(eq(schema.updates.id, postId)).get()
+  if (!post?.repoRequest || option !== 0) return undefined
+  return requestOrigin(post.repoRequest.repoPath)
+}
+
+/**
+ * A repo request answered Add: the repo is created as asked, by `human` (who confirmed it), once it passes
+ * the request's checks again (`origin` is the checkout's origin as read just before: answerOrigin); the
+ * activity says which agent asked (and who relayed the answer from the chat). A repo this card added
+ * already (the same name and path in the project) is as asked: `already`, not an error. A check that
+ * fails now adds nothing, and `refused` says why.
+ */
+function repoRequested(
+  post: schema.Update,
+  human: string,
+  origin: string | null | undefined,
+  relayedBy = '',
+) {
+  const req = post.repoRequest!
+  const already = requestedRepo(req)
+  if (already) return { added: null, already, refused: '' }
+  const problem =
+    origin === undefined
+      ? new HttpError(500, "the checkout's origin was not read")
+      : repoRequestProblem(req, origin)
+  if (problem) return { added: null, already: null, refused: problem.message }
+  const added = insertRequestedRepo(req)
+  logActivity({
+    projectId: req.projectId,
+    actor: human,
+    kind: 'project',
+    text: `added repo ${added.name} (${added.githubRepo}), as ${post.author} asked${relayedBy ? ` (answered in chat, relayed by ${relayedBy})` : ''}`,
+    refType: 'ticket',
+    refId: post.ticketId,
+  })
+  return { added, already: null, refused: '' }
+}
+
+type RepoResult = ReturnType<typeof repoRequested>
+
+/** What an answered repo request did, for the reply under its card. */
+function repoWords(result: RepoResult | null) {
+  if (!result) return ''
+  if (result.added) return `\n\nAdded repo ${result.added.name} (repo ${result.added.id}).`
+  if (result.already) return `\n\nAlready added: repo ${result.already.name} (repo ${result.already.id}).`
+  return `\n\nNot added: ${result.refused}.`
 }
 
 // --- tasks ---
@@ -2280,14 +2427,14 @@ type DecisionInput = {
 }
 
 /**
- * askDecision, and an archive request's card: `archiveTickets` are the tickets its first option archives,
- * `did` the activity line (asked for a decision, by default).
+ * askDecision, and an archive or repo request's card: `archiveTickets` are the tickets its first option
+ * archives, `repoRequest` the repo it adds, `did` the activity line (asked for a decision, by default).
  */
 function postDecision(
   ticketId: number,
   input: DecisionInput,
   actor: string,
-  extra: { archiveTickets?: number[]; did?: string } = {},
+  extra: { archiveTickets?: number[]; repoRequest?: schema.RepoRequest; did?: string } = {},
 ) {
   const options = input.options
     .map((o) => ({ ...o, label: o.label.trim(), detail: o.detail?.trim() || undefined }))
@@ -2303,7 +2450,11 @@ function postDecision(
   })
   const row = db
     .update(schema.updates)
-    .set({ decision: options, archiveTickets: extra.archiveTickets ?? null })
+    .set({
+      decision: options,
+      archiveTickets: extra.archiveTickets ?? null,
+      repoRequest: extra.repoRequest ?? null,
+    })
     .where(eq(schema.updates.id, post.id))
     .returning()
     .get()!
@@ -2335,7 +2486,13 @@ function postDecision(
  * goes to the stage its PR's status gives. Deciding again changes the answer, and drops a relayed one:
  * the card then shows only the human's own decision.
  */
-export function decide(postId: number, option: number, note: string, actor: string) {
+export function decide(
+  postId: number,
+  option: number,
+  note: string,
+  actor: string,
+  opts: { origin?: string | null } = {},
+) {
   const post = getPost(postId)
   if (!post.decision) throw new HttpError(400, `post ${postId} is not a decision`)
   const picked = post.decision[option]
@@ -2357,9 +2514,11 @@ export function decide(postId: number, option: number, note: string, actor: stri
   // and again on a card already answered Archive (a ticket restored since goes back to the archive).
   // Changing it to Keep restores nothing (the human restores from the Archived tab).
   const archive = row.archiveTickets && option === 0 ? archiveRequested(row, actor) : null
-  const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}${archiveWords(archive)}`
+  // A repo request answered Add adds the repo, every time it is (`opts.origin`: answerOrigin).
+  const repo = row.repoRequest && option === 0 ? repoRequested(row, actor, opts.origin) : null
+  const words = `${changed ? 'Changed the decision to' : 'Decided'}: **${picked.label}**${note.trim() ? `\n\n${note.trim()}` : ''}${archiveWords(archive)}${repoWords(repo)}`
   settleDecision(row, actor, words, `decided "${picked.label}"`)
-  return { ...row, archive }
+  return { ...row, archive, repo }
 }
 
 /**
@@ -2376,7 +2535,7 @@ export function relayDecision(
   postId: number,
   input: { option: number; words: string; as?: string },
   actor: string,
-  opts: { agent: boolean; delegated?: boolean },
+  opts: { agent: boolean; delegated?: boolean; origin?: string | null },
 ) {
   if (!opts.agent)
     throw new HttpError(403, 'only a connected agent relays a decision: the human answers the card')
@@ -2410,13 +2569,18 @@ export function relayDecision(
   // The archive is the human's, never the relaying agent's: it goes to the human the board last saw sign in.
   const archive =
     row.archiveTickets && input.option === 0 ? archiveRequested(row, lastHuman() ?? 'human', actor) : null
+  // So is a requested repo.
+  const repo =
+    row.repoRequest && input.option === 0
+      ? repoRequested(row, lastHuman() ?? 'human', opts.origin, actor)
+      : null
   settleDecision(
     row,
     actor,
-    `Decided in chat: **${picked.label}**\n\n${words}${archiveWords(archive)}`,
+    `Decided in chat: **${picked.label}**\n\n${words}${archiveWords(archive)}${repoWords(repo)}`,
     `relayed the decision "${picked.label}"`,
   )
-  return { ...row, archive }
+  return { ...row, archive, repo }
 }
 
 /**
@@ -2514,6 +2678,12 @@ export function editPost(
     throw new HttpError(
       409,
       "an archive request's card names the tickets it archives and is not edited: ask again with request_archive instead",
+    )
+  // So does a repo request's card, with the repo its Add adds.
+  if (patch.body !== undefined && before.repoRequest)
+    throw new HttpError(
+      409,
+      "a repo request's card names the repo it adds and is not edited: ask again with add_repo instead",
     )
   const edited = patch.body !== undefined && patch.body !== before.body
   const row = db

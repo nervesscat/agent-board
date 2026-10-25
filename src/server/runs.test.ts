@@ -894,12 +894,7 @@ describe('a ticket that spans two repos', () => {
       const r = await rowless('c')
       const main = path.join(code, 'aa-c')
       fs.mkdirSync(path.join(main, '.git'), { recursive: true })
-      const created = await call(
-        'POST',
-        '/api/repos',
-        { projectId: r.project, name: 'aa-c', repoPath: main },
-        'agent',
-      )
+      const created = await call('POST', '/api/repos', { projectId: r.project, name: 'aa-c', repoPath: main })
       expect(created.status).toBe(201)
       // Adding a repo stops nothing by itself.
       expect([status(r.ws.id, r.worker.id), status(r.ws.id, r.web.id)]).toEqual(['running', 'running'])
@@ -924,7 +919,7 @@ describe('a ticket that spans two repos', () => {
       useFake()
       const r = await rowless('r')
       const zz = addRepo('zz-r', r.project)
-      const renamed = await call('PATCH', `/api/repos/${zz.id}`, { name: 'aa-r' }, 'agent')
+      const renamed = await call('PATCH', `/api/repos/${zz.id}`, { name: 'aa-r' })
       expect(renamed.status).toBe(200)
       expect([status(r.ws.id, r.worker.id), status(r.ws.id, r.web.id)]).toEqual(['running', 'running'])
       await stillListed(r, 'aa-r')
@@ -955,7 +950,7 @@ describe('a ticket that spans two repos', () => {
       useFake()
       const r = await rowless('i')
       const zz = addRepo('zz-i', r.project)
-      expect((await call('PATCH', `/api/repos/${zz.id}`, { name: 'aa-i' }, 'agent')).status).toBe(200)
+      expect((await call('PATCH', `/api/repos/${zz.id}`, { name: 'aa-i' })).status).toBe(200)
       const other = addRepo('qq-i', r.project)
       const refused = await call('POST', `/api/tickets/${r.t.id}/runs/stop`, { repoId: other.id }, 'agent')
       expect(refused.status).toBe(400)

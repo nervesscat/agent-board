@@ -407,8 +407,18 @@ api.delete('/api/agents/:id', ({ request, params, actor }) => {
 })
 
 // --- repos ---
+// Adding, changing and removing repos is the human's: an agent asks for a repo (repo-request, below), and
+// the human's Add on that card adds it. An orchestrator also moves a repo to another project (PATCH).
+const humanRepos = (request: Request) => {
+  if (isAgent(request))
+    throw new HttpError(
+      403,
+      'only the human adds, changes and removes repos; an agent asks with a repo request',
+    )
+}
 api.get('/api/repos', () => json(repos.listRepos()))
 api.post('/api/repos', async ({ request, actor }) => {
+  humanRepos(request)
   const body = await readJson(
     request,
     z.object({
@@ -432,7 +442,8 @@ api.patch('/api/repos/:id', async ({ request, params, actor }) => {
     }),
   )
   // A move takes the repo's tickets with it, under another project's instructions: a worker asks.
-  if (body.projectId !== undefined && body.projectId !== repos.getRepo(id(params)).projectId) {
+  const moves = body.projectId !== undefined && body.projectId !== repos.getRepo(id(params)).projectId
+  if (moves) {
     const who = callerInfo(request, actor)
     if (who.role === 'worker')
       throw new HttpError(
@@ -440,9 +451,13 @@ api.patch('/api/repos/:id', async ({ request, params, actor }) => {
         `only an orchestrator or the human moves a repo to another project: ask your orchestrator or the human (you are ${who.name}, a worker)`,
       )
   }
+  // An orchestrator moves a repo and nothing more: the rest of the patch is the human's.
+  const changes = body.name !== undefined || body.repoPath !== undefined || body.baseBranch !== undefined
+  if (!moves || changes) humanRepos(request)
   return json(await repos.updateRepo(id(params), body, actor))
 })
-api.delete('/api/repos/:id', ({ params, actor }) => {
+api.delete('/api/repos/:id', ({ request, params, actor }) => {
+  humanRepos(request)
   repos.deleteRepo(id(params), actor)
   return json({ ok: true })
 })
@@ -628,6 +643,30 @@ api.post('/api/projects/:id/tickets/archive-request', async ({ request, params, 
     }),
   )
   return json(features.requestArchive(body.ticketIds, { as: body.as, projectId: id(params) }, actor), 201)
+})
+// An agent asks the human to add a repo to the project of this ticket: a decision card (Add / Don't add) on
+// it, posted once the checkout passes the checks; the repo is added only once the human answers Add.
+api.post('/api/tickets/:id/repo-request', async ({ request, params, actor }) => {
+  if (!isAgent(request)) throw new HttpError(403, 'the human adds repos directly; agents ask here')
+  const body = await readJson(
+    request,
+    z.object({
+      name: z.string().min(1).max(100),
+      repoPath: z.string().min(1).max(1000),
+      githubRepo: z.string().min(1).max(200),
+      baseBranch: z.string().max(200).optional(),
+      as: AgentName.optional(),
+    }),
+  )
+  return json(await features.requestRepo(id(params), body, actor), 201)
+})
+// Moves the ticket onto another repo of its project, at once; its base branch becomes that repo's unless given.
+api.put('/api/tickets/:id/repo', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ repoId: z.number().int(), baseBranch: z.string().max(200).optional() }),
+  )
+  return json(features.setTicketRepo(id(params), body, actor, { agent: isAgent(request) }))
 })
 api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   const body = await readJson(
@@ -862,7 +901,8 @@ api.put('/api/updates/:id/decision', async ({ request, params, actor }) => {
     request,
     z.object({ option: z.number().int().min(0), note: z.string().max(5_000).default('') }),
   )
-  return json(features.decide(id(params), body.option, body.note, actor))
+  const origin = await features.answerOrigin(id(params), body.option)
+  return json(features.decide(id(params), body.option, body.note, actor, { origin }))
 })
 // The orchestrator's record of the human's answer given in the chat: only a connected agent, never as
 // one of the project's agents nor as a sub-identity (features.relayDecision checks these, and that the
@@ -876,10 +916,12 @@ api.post('/api/updates/:id/decision/relay', async ({ request, params, actor }) =
       as: AgentName.optional(),
     }),
   )
+  const origin = await features.answerOrigin(id(params), body.option)
   return json(
     features.relayDecision(id(params), body, actor, {
       agent: isAgent(request),
       delegated: callerInfo(request).parent !== '',
+      origin,
     }),
   )
 })
