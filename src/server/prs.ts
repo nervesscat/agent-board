@@ -28,6 +28,7 @@ import {
   type PrTicketStatus,
 } from './prTickets'
 import { listRepos, ticketRepo } from './repos'
+import { ticketRepoList, ticketRepoRows } from './ticketRepos'
 import { kindOf, listStages } from './stages'
 import { noteBoardEvent } from './workTimeline'
 
@@ -683,21 +684,29 @@ function noteMerge(repo: schema.Repo, pr: schema.Pr) {
 }
 
 /**
- * The board's previews of a merged PR's tickets (and their lanes) have nothing left to show: stop
- * them. A PR that left the queue without the searches finding it merged may also have been closed:
- * GitHub is asked about it, only when it has a preview running.
+ * The runs of a merged PR's tickets (and their lanes) have nothing left to show: stop them, in the
+ * PR's repo only for a ticket that spans several. A ticket names the PR in its primary repo (its own
+ * prNumber or branch) or in another of its repos. A PR that left the queue without the searches
+ * finding it merged may also have been closed: GitHub is asked about it, only when it has a run going.
  */
 async function stopMergedPreviews(repo: schema.Repo, left: schema.Pr[]) {
   const repos = listRepos(repo.projectId)
   const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, repo.projectId)).all()
+  const rows = ticketRepoRows(tickets.map((t) => t.id)).filter((r) => r.repoId === repo.id && r.position > 0)
   for (const pr of left) {
-    const ids = featureTicketsOf(tickets, repos, pr).map((t) => t.id)
+    const named = new Set(featureTicketsOf(tickets, repos, pr).map((t) => t.id))
+    for (const r of rows)
+      if (r.prNumber === pr.number || (r.prNumber === null && !!r.branch && r.branch === pr.headRef))
+        named.add(r.ticketId)
+    // A ticket that spans several repos stops only the runs of this one; any other, all of them.
+    const stops = tickets
+      .filter((t) => named.has(t.id) && !t.prId)
+      .map((t) => ({ id: t.id, only: ticketRepoList(t).length > 1 ? { repoId: repo.id } : {} }))
     if (
-      ids.length &&
-      hasPreviews(ids) &&
+      stops.some((s) => hasPreviews([s.id], s.only)) &&
       (prWasMerged(pr) || (pr.leftAs === null && (await prMerged(repo.repoPath, pr.number))))
     )
-      stopPreviewsFor(ids, `PR #${pr.number} was merged`)
+      for (const s of stops) stopPreviewsFor([s.id], `PR #${pr.number} was merged`, 'board', s.only)
   }
 }
 
