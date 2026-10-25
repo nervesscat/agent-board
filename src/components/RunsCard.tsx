@@ -76,11 +76,12 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
     void refetch()
     onChange()
   }
-  const boardUrls = new Set(
-    (data?.repos ?? []).flatMap((r) => r.runs.flatMap((x) => (x.state?.url ? [x.state.url] : []))),
-  )
+  const boardUrls = new Set([
+    ...(data?.repos ?? []).flatMap((r) => r.runs.flatMap((x) => (x.state?.url ? [x.state.url] : []))),
+    ...(data?.orphaned ?? []).flatMap((o) => (o.state.url ? [o.state.url] : [])),
+  ])
   // The links agents set (a server they started), the lanes' with them; one a run of the board set is
-  // that run's link.
+  // that run's link, an orphaned run's too.
   const links = [
     ...t.workspaces.filter((w) => w.previewUrl).map((w) => ({ ...w, lane: null })),
     ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
