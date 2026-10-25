@@ -22,7 +22,7 @@ describe('RichEditor markdown', () => {
     const md = lines(
       '## The live board',
       '',
-      'The board runs from the main checkout (`F:\\Programming\\WebDev\\agent-board`) on port 47100, built (`pnpm start`). Never switch branches there.',
+      'The board runs from the main checkout (`C:\\code\\agent-board`) on port 47100, built (`pnpm start`). Never switch branches there.',
       '',
       '## Work and previews',
       '',
@@ -51,10 +51,10 @@ describe('RichEditor markdown', () => {
   })
 
   it('escapes markdown characters in plain text so it reads back the same, and stays put after that', () => {
-    const md = 'Plain F:\\Programming\\x, snake_case and 1 < 2 & more: https://example.com/x'
+    const md = 'Plain C:\\code\\x, snake_case and 1 < 2 & more: https://example.com/x'
     const once = roundTrip(md)
     expect(once).toBe(
-      'Plain F:\\\\Programming\\\\x, snake\\_case and 1 &lt; 2 &amp; more: [https://example.com/x](https://example.com/x)',
+      'Plain C:\\\\code\\\\x, snake\\_case and 1 &lt; 2 &amp; more: [https://example.com/x](https://example.com/x)',
     )
     expect(markdown.parse(once)).toEqual(markdown.parse(md))
     expect(roundTrip(once)).toBe(once)

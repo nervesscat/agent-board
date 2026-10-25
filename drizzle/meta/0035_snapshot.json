@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a53fbe9e-f288-49f8-808d-c5b64f4808fb",
+  "id": "c3adfcaa-24f4-4fbe-b26d-962dea0b51c0",
   "prevId": "ad6cf17a-2f7e-4d9c-95a3-e6a3d19edbf9",
   "tables": {
     "account": {
@@ -155,22 +155,6 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'worker'"
-        },
-        "parent": {
-          "name": "parent",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
         }
       },
       "indexes": {},
@@ -231,14 +215,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'worker'"
         }
       },
       "indexes": {
@@ -853,114 +829,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "project_instruction_changes": {
-      "name": "project_instruction_changes",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "old_value": {
-          "name": "old_value",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
-        "new_value": {
-          "name": "new_value",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
-        "changed_by": {
-          "name": "changed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "state": {
-          "name": "state",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'accepted'"
-        },
-        "resolved_by": {
-          "name": "resolved_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
-        "resolved_at": {
-          "name": "resolved_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "revert_of": {
-          "name": "revert_of",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        }
-      },
-      "indexes": {
-        "project_instruction_changes_project": {
-          "name": "project_instruction_changes_project",
-          "columns": ["project_id", "createdAt"],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "project_instruction_changes_project_id_projects_id_fk": {
-          "name": "project_instruction_changes_project_id_projects_id_fk",
-          "tableFrom": "project_instruction_changes",
-          "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "projects": {
       "name": "projects",
       "columns": {
@@ -1211,6 +1079,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "''"
+        },
+        "local_ci_sha": {
+          "name": "local_ci_sha",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -2457,6 +2332,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "merged_phase_checked": {
+          "name": "merged_phase_checked",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         }
       },
       "indexes": {

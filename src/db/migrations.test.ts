@@ -385,7 +385,10 @@ describe('0029_ticket_pr_link', () => {
     expect(after.tickets.map((t) => t.id)).toEqual([feature, lane, daily])
     expect(after.tickets.map((t) => t.pr_id)).toEqual([null, null, null])
     // Every other column is what it was (toEqual leaves an undefined column out of the comparison).
-    expect(after.tickets.map((t) => ({ ...t, pr_id: undefined }))).toEqual(before.tickets)
+    // A later migration adds the Merged phase marker: the rest of each ticket is what it was.
+    expect(after.tickets.map((t) => ({ ...t, pr_id: undefined, merged_phase_checked: undefined }))).toEqual(
+      before.tickets,
+    )
     expect(after.tasks).toEqual(before.tasks)
     // Later migrations add the posts' tab, summary and archive request columns: the rest of each post is
     // what it was.
@@ -583,7 +586,7 @@ describe('0034_work_timeline', () => {
         .run(project, 'Kept', 'claude').lastInsertRowid,
     )
 
-    migrate(drizzle(sqlite), { migrationsFolder: folder })
+    migrate(drizzle(sqlite), { migrationsFolder: migrationsUpTo('0034_work_timeline') })
 
     expect(sqlite.prepare('SELECT stall_minutes FROM projects').all()).toEqual([{ stall_minutes: 30 }])
     expect(sqlite.prepare('SELECT id FROM tickets').all()).toEqual([{ id: ticket }])
@@ -610,6 +613,64 @@ describe('0034_work_timeline', () => {
     // Deleting the ticket takes its events.
     sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(ticket)
     expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_events').get()).toEqual({ n: 0 })
+    sqlite.close()
+  })
+})
+
+describe('0035_auto_phase_state', () => {
+  it('leaves existing tickets to be looked at for Merged, and no PR green by a local run, rows kept', () => {
+    const sqlite = databaseAt('0034_work_timeline')
+    const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'Seeded before Merged', 'claude').lastInsertRowid,
+    )
+    sqlite.prepare('INSERT INTO tasks (ticket_id, text, position) VALUES (?, ?, ?)').run(ticket, 'Pushed', 0)
+    sqlite
+      .prepare(
+        `INSERT INTO prs (project_id, number, title, url, author, head_ref, base_ref, head_sha, updated_at, fetched_at)
+         VALUES (?, 7, 't', 'u', 'a', 'feat', 'main', 'abc', '2026-10-01', '2026-10-01')`,
+      )
+      .run(project)
+    const before = {
+      tickets: sqlite.prepare('SELECT * FROM tickets').all() as Record<string, unknown>[],
+      tasks: sqlite.prepare('SELECT * FROM tasks').all(),
+      prs: sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[],
+    }
+
+    migrate(drizzle(sqlite), { migrationsFolder: migrationsUpTo('0035_auto_phase_state') })
+
+    const tickets = sqlite.prepare('SELECT * FROM tickets').all() as Record<string, unknown>[]
+    const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
+    expect(tickets.map((t) => t.merged_phase_checked)).toEqual([0])
+    expect(prs.map((p) => p.local_ci_sha)).toEqual([null])
+    expect(tickets.map(({ merged_phase_checked: _m, ...rest }) => rest)).toEqual(before.tickets)
+    expect(prs.map(({ local_ci_sha: _l, ...rest }) => rest)).toEqual(before.prs)
+    expect(sqlite.prepare('SELECT * FROM tasks').all()).toEqual(before.tasks)
+    sqlite.close()
+  })
+})
+
+describe('0036_pr_left_as', () => {
+  it('leaves every stored PR without an answer from GitHub, rows kept', () => {
+    const sqlite = databaseAt('0035_auto_phase_state')
+    const project = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('p').lastInsertRowid)
+    const pr = sqlite.prepare(
+      `INSERT INTO prs (project_id, number, title, url, author, head_ref, base_ref, head_sha, updated_at, fetched_at, open, merged_at, closed_at)
+       VALUES (?, ?, 't', 'u', 'a', 'feat', 'main', 'abc', '2026-10-01', '2026-10-01', ?, ?, ?)`,
+    )
+    pr.run(project, 7, 1, null, null)
+    pr.run(project, 8, 0, '2026-10-02', '2026-10-02')
+    // Closed by an older refresh with no merge time: the case GitHub was never asked about.
+    pr.run(project, 9, 0, null, '2026-10-03')
+    const before = sqlite.prepare('SELECT * FROM prs').all()
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
+    expect(prs.map((p) => p.left_as)).toEqual([null, null, null])
+    expect(prs.map(({ left_as: _l, ...rest }) => rest)).toEqual(before)
     sqlite.close()
   })
 })

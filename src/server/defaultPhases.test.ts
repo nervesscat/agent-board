@@ -2,13 +2,14 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-default-phases-'))
 process.env.DATA_DIR = tmp
 
-const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Hand-off post']
+const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged', 'Hand-off post']
 
 let dbm: typeof import('#/db')
 let features: typeof import('./features')
@@ -205,7 +206,7 @@ describe('a new ticket', () => {
     for (const as of ['human', 'agent'] as const) {
       const t = await created(p, { title: `plain ${as}` }, as)
       expect(t.tasks.map((x) => [x.text, x.parentId, x.done])).toEqual(BUILT_IN.map((x) => [x, null, false]))
-      expect(t.progress).toEqual({ done: 0, total: 6 })
+      expect(t.progress).toEqual({ done: 0, total: 7 })
     }
     // In any starting stage.
     const done = await created(p, { title: 'straight to done', status: 'done' })
@@ -219,7 +220,7 @@ describe('a new ticket', () => {
     expect(full.tasks.map((x: Row) => [x.text, x.parentId, x.done])).toEqual(
       BUILT_IN.map((x) => [x, null, false]),
     )
-    expect(full.progress).toEqual({ done: 0, total: 6 })
+    expect(full.progress).toEqual({ done: 0, total: 7 })
   })
 
   it('puts the given plain tasks under the first phase, and given phases right after it', async () => {
@@ -231,9 +232,10 @@ describe('a new ticket', () => {
       'PR',
       'CI',
       'Preview',
+      'Merged',
       'Hand-off post',
     ])
-    expect(steps.progress).toEqual({ done: 0, total: 8 })
+    expect(steps.progress).toEqual({ done: 0, total: 9 })
     const implementation = steps.tasks[0]!
     expect(steps.tasks.filter((x) => x.text === 'a' || x.text === 'b').map((x) => x.parentId)).toEqual([
       implementation.id,
@@ -255,6 +257,7 @@ describe('a new ticket', () => {
       'PR',
       'CI',
       'Preview',
+      'Merged',
       'Hand-off post',
     ])
     expect(tree(full.tasks)).toEqual([
@@ -264,6 +267,7 @@ describe('a new ticket', () => {
       'PR',
       'CI',
       'Preview',
+      'Merged',
       'Hand-off post',
     ])
   })
@@ -304,7 +308,7 @@ describe('a new ticket', () => {
     const p = newProject('lanes')
     const parent = await created(p, { title: 'parent' })
     const rollup = async () => (await call('GET', `/api/tickets/${parent.id}`)).body.rollup
-    expect(await rollup()).toEqual({ done: 0, total: 6 })
+    expect(await rollup()).toEqual({ done: 0, total: 7 })
 
     const lane = await created(p, { title: 'lane', parentId: parent.id, tasks: ['l1', 'l2'] })
     expect(tree(lane.tasks)).toEqual(['l1', 'l2'])
@@ -317,7 +321,7 @@ describe('a new ticket', () => {
       tasks: ['m'],
     })
     expect(tree((await tool('get_ticket', { ticketId: mcpLane.id })).tasks)).toEqual(['m'])
-    expect(await rollup()).toEqual({ done: 0, total: 9 })
+    expect(await rollup()).toEqual({ done: 0, total: 10 })
 
     const seeded = await created(p, {
       title: 'seeded lane',
@@ -331,9 +335,10 @@ describe('a new ticket', () => {
       'PR',
       'CI',
       'Preview',
+      'Merged',
       'Hand-off post',
     ])
-    expect(await rollup()).toEqual({ done: 0, total: 16 })
+    expect(await rollup()).toEqual({ done: 0, total: 18 })
   })
 
   it('keeps its phases working like any task: ticks in step, reword, remove, steps added under one', async () => {
@@ -369,8 +374,8 @@ describe('a new ticket', () => {
     await tool('remove_task', { taskId: implementation.id })
     await tool('add_tasks', { ticketId: t.id, tasks: ['Benchmarks'] })
     const after = (await call('GET', `/api/tickets/${t.id}`)).body as Ticket
-    expect(tree(after.tasks)).toEqual(['Pushed', 'PR', 'CI green', 'Hand-off post', 'Benchmarks'])
-    expect(after.progress).toEqual({ done: 0, total: 5 })
+    expect(tree(after.tasks)).toEqual(['Pushed', 'PR', 'CI green', 'Merged', 'Hand-off post', 'Benchmarks'])
+    expect(after.progress).toEqual({ done: 0, total: 6 })
   })
 
   it('is the only one seeded: tickets made before keep their tasks through every read', async () => {
@@ -389,6 +394,111 @@ describe('a new ticket', () => {
   })
 })
 
+describe('the phases the board ticks', () => {
+  it('are the top-level Pushed, PR, CI, Preview and Merged, by name in any case: auto on every read', async () => {
+    const p = newProject('auto')
+    const t = await created(p, { title: 'auto', tasks: ['CI', 'a'] })
+    // A top-level task reworded into a name is one; a subtask of that name is not.
+    await tool('add_tasks', { ticketId: t.id, tasks: ['  merged '] })
+    const read = (await call('GET', `/api/tickets/${t.id}`)).body as { tasks: (Row & { auto: boolean })[] }
+    expect(read.tasks.map((x) => [x.text, x.parentId === null, x.auto])).toEqual([
+      ['Implementation', true, false],
+      ['CI', false, false],
+      ['a', false, false],
+      ['Pushed', true, true],
+      ['PR', true, true],
+      ['CI', true, true],
+      ['Preview', true, true],
+      ['Merged', true, true],
+      ['Hand-off post', true, false],
+      ['  merged ', true, true],
+    ])
+    const mcp = await tool('get_ticket', { ticketId: t.id })
+    expect(mcp.tasks.filter((x: { auto: boolean }) => x.auto).map((x: Row) => x.text)).toEqual([
+      'Pushed',
+      'PR',
+      'CI',
+      'Preview',
+      'Merged',
+      '  merged ',
+    ])
+  })
+
+  it('cannot be ticked or unticked by hand, over REST as the human or an agent, or over MCP', async () => {
+    const p = newProject('refused')
+    const t = await created(p, { title: 'refused' })
+    const task = (text: string) => t.tasks.find((x) => x.text === text)!
+    const stored = (id: number) =>
+      dbm.db
+        .select()
+        .from(dbm.schema.tasks)
+        .all()
+        .find((x) => x.id === id)!.done
+    for (const phase of ['Pushed', 'PR', 'CI', 'Preview', 'Merged']) {
+      const id = task(phase).id
+      for (const as of ['human', 'agent'] as const)
+        for (const done of [true, false]) {
+          const res = await call('PATCH', `/api/tasks/${id}`, { done }, as)
+          expect(res.status).toBe(400)
+          expect(res.body.error).toContain(`"${phase}" is ticked by the board`)
+          expect(res.body.error).toContain('it cannot be ticked by hand')
+        }
+      for (const [name, args] of [
+        ['set_task_done', { taskId: id }],
+        ['set_task_done', { taskId: id, done: false }],
+        ['update_task', { taskId: id, done: true }],
+      ] as const) {
+        const result = (await rpc('tools/call', { name, arguments: args })) as {
+          isError?: boolean
+          content: { text: string }[]
+        }
+        expect(result.isError).toBe(true)
+        expect(result.content[0]!.text).toContain(`"${phase}" is ticked by the board`)
+      }
+      expect(stored(id)).toBe(false)
+    }
+    // The rule is in the message.
+    expect((await call('PATCH', `/api/tasks/${task('CI').id}`, { done: true })).body.error).toBe(
+      `"CI" is ticked by the board from GitHub (the PR's checks green, or a "CI run locally: green" comment on the head SHA); it cannot be ticked by hand`,
+    )
+    // Rewording into a phase's name with a tick is refused too.
+    const res = await call('PATCH', `/api/tasks/${task('Hand-off post').id}`, { text: 'Preview', done: true })
+    expect(res.status).toBe(400)
+
+    // An open one can be tagged blocked and cleared; a done one cannot be tagged (that would untick it).
+    const ci = task('CI').id
+    expect((await call('PATCH', `/api/tasks/${ci}`, { blocked: true, blockedReason: 'token' })).status).toBe(
+      200,
+    )
+    expect((await call('PATCH', `/api/tasks/${ci}`, { blocked: false })).status).toBe(200)
+    dbm.db.update(dbm.schema.tasks).set({ done: true }).where(eq(dbm.schema.tasks.id, ci)).run()
+    const tagged = await call('PATCH', `/api/tasks/${ci}`, { blocked: true }, 'agent')
+    expect(tagged.status).toBe(400)
+    expect(tagged.body.error).toContain('or reopened by tagging it blocked')
+    expect(stored(ci)).toBe(true)
+
+    // Reworded, it is a manual task again, ticked by hand; removing one works.
+    expect((await call('PATCH', `/api/tasks/${task('PR').id}`, { text: 'PR opened' })).status).toBe(200)
+    expect((await call('PATCH', `/api/tasks/${task('PR').id}`, { done: true })).status).toBe(200)
+    expect(stored(task('PR').id)).toBe(true)
+    expect((await call('DELETE', `/api/tasks/${task('Preview').id}`)).status).toBeLessThan(300)
+    // Hand-off post and Implementation stay ticked by hand.
+    for (const text of ['Implementation', 'Hand-off post'])
+      expect((await call('PATCH', `/api/tasks/${task(text).id}`, { done: true }, 'agent')).status).toBe(200)
+  })
+
+  it("never follow their subtasks' ticks", async () => {
+    const p = newProject('subtasks')
+    const t = await created(p, { title: 'subtasks' })
+    const preview = t.tasks.find((x) => x.text === 'Preview')!
+    const [sub] = await tool('add_tasks', { ticketId: t.id, tasks: ['try it'], parentTaskId: preview.id })
+    await tool('set_task_done', { taskId: sub.id })
+    const read = (await call('GET', `/api/tickets/${t.id}`)).body as Ticket
+    expect(read.tasks.find((x) => x.id === sub.id)!.done).toBe(true)
+    expect(read.tasks.find((x) => x.id === preview.id)!.done).toBe(false)
+  })
+})
+
 describe('what agents are told', () => {
   it('the MCP instructions and tools name the default phases, the opt-out, and no other top level', async () => {
     const init = await rpc('initialize', {
@@ -398,10 +508,21 @@ describe('what agents are told', () => {
     })
     const instructions = init.instructions as string
     expect(instructions).toContain(
-      "A new ticket starts with its project's default phases as its top-level tasks (get_project's defaultPhases; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Hand-off post)",
+      "A new ticket starts with its project's default phases as its top-level tasks (get_project's defaultPhases; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged, Hand-off post)",
     )
     expect(instructions).toContain('the concrete steps of the work go under Implementation as its subtasks')
-    expect(instructions).toContain('tick each hand-off phase as you finish it')
+    // The board ticks the phases that follow git, GitHub and the previews; agents tick the rest.
+    expect(instructions).toContain(
+      'The board ticks the phases Pushed, PR, CI, Preview and Merged itself, from git, GitHub and the previews, and unticks one when its fact stops holding',
+    )
+    expect(instructions).toContain('"CI run locally: green on <sha>"')
+    expect(instructions).toContain(
+      'Nobody ticks those by hand: set_task_done and update_task done on them are refused',
+    )
+    expect(instructions).toContain('Hand-off post is yours')
+    expect(instructions).toContain('the hand-off phases included but Merged')
+    expect(instructions).not.toContain('tick each hand-off phase')
+    expect(instructions).not.toContain('the board ticks nothing itself')
     expect(instructions).toContain('defaultPhases: false opts a ticket out')
     expect(instructions).toContain('then tick Hand-off post')
     // A decision is answered by the human on its card, or relayed by the orchestrator from the chat.
@@ -422,6 +543,11 @@ describe('what agents are told', () => {
     expect(create.inputSchema.properties.defaultPhases.type).toBe('boolean')
     expect(create.inputSchema.properties.tasks.description).toContain('plain texts go under the first phase')
     expect(byName('add_tasks').description).toContain('such as Implementation')
+    expect(byName('get_project').description).toContain('Pushed, PR, CI, Preview, Merged, Hand-off post')
+    expect(byName('create_ticket').description).toContain('Pushed, PR, CI, Preview, Merged, Hand-off post')
+    expect(byName('get_ticket').description).toContain('auto: true on a phase the board ticks itself')
+    for (const name of ['set_task_done', 'update_task'])
+      expect(byName(name).description).toMatch(/Pushed, PR, CI, Preview(,| and) Merged/)
     // Plan, code and tests are steps now, never offered as the top level.
     const all = [instructions, ...tools.map((t) => JSON.stringify(t))].join('\n')
     expect(all).not.toMatch(/plan, code, tests/)

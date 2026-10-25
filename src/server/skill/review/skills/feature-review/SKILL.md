@@ -72,7 +72,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 
 ## Setup
 
-1. `MAIN` = the repo path. `SLUG` = `<repo-dir-name>-<target>` (e.g. `spark-backend-pr-1130`,
+1. `MAIN` = the repo path. `SLUG` = `<repo-dir-name>-<target>` (e.g. `myapp-pr-123`,
    `webapp-diff`). `WORKDIR` = `~/.claude/feature-review/<SLUG>/` (resolve `~` with
    `echo ~`). `WORKTREE` = `WORKDIR/wt`.
    **Claim before you clean.** Another session may be reviewing the same target. A claim

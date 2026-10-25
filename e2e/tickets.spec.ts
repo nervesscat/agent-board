@@ -94,8 +94,8 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
   const card = page.locator('[data-column="backlog"]').getByRole('link', { name: /Fix the login form/ })
   await expect(card).toBeVisible()
   await expect(card).toContainText('High')
-  // The two tasks typed, under Implementation, and the default phases: 8 in all.
-  await expect(card).toContainText('0/8')
+  // The two tasks typed, under Implementation, and the default phases: 9 in all.
+  await expect(card).toContainText('0/9')
 
   const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
   expect(row).toMatchObject({ title: 'Fix the login form', status: 'backlog', createdBy: 'enrique' })
@@ -110,6 +110,7 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
     'PR',
     'CI',
     'Preview',
+    'Merged',
     'Hand-off post',
   ])
 

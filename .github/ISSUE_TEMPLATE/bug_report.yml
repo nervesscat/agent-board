@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in CrossBoard does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A security problem goes through SECURITY.md (a private report), not here.
+        Leave tokens, passkeys, private project names and paths out of what you paste.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Press …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options:
+        - Windows app (installer)
+        - Linux app (AppImage / deb / rpm / pacman)
+        - From a checkout (pnpm start / pnpm dev)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The release (Settings, or the installer's name) or `git rev-parse --short HEAD`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and browser
+      placeholder: Windows 11, Chrome 140
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and screenshots
+      description: The end of data/logs/board.err.log (or the app's logs folder), the browser console, screenshots.
+      render: text
