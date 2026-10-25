@@ -570,6 +570,32 @@ describe('a preview the board runs', () => {
   })
 })
 
+describe('on the work timeline', () => {
+  it('records building, running, failed and stopped as preview events of the ticket', async () => {
+    const fake = useFake()
+    const { t, ws } = ticketWithWorktree()
+    const p = await startRunning(ws.id)
+    await mp.stopPreview(ws.id, 'stopped by claude', 'claude')
+    fake.codes['pnpm build'] = 1
+    mp.startPreview(ws.id, 'claude')
+    await vi.waitFor(() => expect(status(ws.id)).toBe('failed'))
+    const notes = dbm.db
+      .select()
+      .from(dbm.schema.ticketEvents)
+      .where(eq(dbm.schema.ticketEvents.ticketId, t.id))
+      .all()
+      .filter((e) => e.kind === 'preview')
+      .map((e) => [e.note, e.agent])
+    expect(notes).toEqual([
+      ['building', 'board'],
+      [`running ${p.url}`, 'board'],
+      ['stopped: stopped by claude', 'board'],
+      ['building', 'board'],
+      ['failed: pnpm build failed (exit 1)', 'board'],
+    ])
+  })
+})
+
 describe('stops by itself', () => {
   it('when the ticket moves to done or cancelled', async () => {
     useFake()

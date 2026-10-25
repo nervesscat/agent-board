@@ -42,6 +42,8 @@ import type { ProjectAgent } from '#/server/projectAgents'
 import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
 import type { ActorRole, ActorRow } from '#/server/actors'
 import type { AgentTokenRow } from '#/server/tokens'
+import type { ProjectWork, TicketEvent } from '#/server/workTimeline'
+import type { WorkTimeline } from './workTimeline'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
@@ -50,6 +52,9 @@ export type ProjectRow = ReturnType<typeof listProjects>[number]
 
 export type {
   RoadmapTicket,
+  ProjectWork,
+  TicketEvent,
+  WorkTimeline,
   CarryOver,
   DirListing,
   Gallery,
@@ -192,6 +197,12 @@ export type LaneRow = TicketFull['lanes'][number]
 export interface SummaryHistory {
   summary: TicketFull['summary']
   versions: ReturnType<typeof summaryHistory>
+}
+
+/** GET /api/tickets/:id/events: every event of the ticket, newest first, and its work timeline. */
+export interface TicketEvents {
+  events: TicketEvent[]
+  timeline: WorkTimeline
 }
 
 export interface TicketGit {

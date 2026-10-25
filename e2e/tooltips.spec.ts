@@ -921,3 +921,96 @@ test('no native title is left on the main pages', async ({ page, api, human, pro
     expect(await nativeTitles(page), url).toEqual([])
   }
 })
+
+test('scrolling closes an open tooltip, which never lengthens the page, and it opens again after', async ({
+  page,
+  api,
+  project,
+}) => {
+  for (let i = 1; i <= 14; i++) await api.ticket({ title: `Scrolled card ${i}`, status: 'todo' })
+  await page.setViewportSize({ width: 1000, height: 600 })
+  await board(page, project.id)
+  const column = page.locator('[data-column="todo"]')
+  await expect(column.getByRole('link')).toHaveCount(14)
+  // The column scrolls on its own: more cards than fit.
+  expect(await column.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
+
+  // The last card in view, near the window's bottom edge.
+  const links = column.getByRole('link')
+  const last = await links.evaluateAll((els) => {
+    const bottom = window.innerHeight
+    return els.reduce((n, el, i) => (el.getBoundingClientRect().bottom <= bottom ? i : n), 0)
+  })
+  const low = links.nth(last)
+  await expectTooltip(low, /Scrolled card/)
+  // Positioned fixed: the page is no longer and has not scrolled with the tooltip open.
+  expect(
+    await tooltip(page).evaluate((el) => getComputedStyle(el.parentElement as HTMLElement).position),
+  ).toBe('fixed')
+  // The page is as long with the tooltip as without it, measured at the same moment: the board may
+  // still be settling, so a height taken before the hover is no baseline.
+  const [withTip, withoutTip] = await tooltip(page).evaluate((el) => {
+    const positioner = el.parentElement as HTMLElement
+    const open = document.documentElement.scrollHeight
+    positioner.style.display = 'none'
+    const hidden = document.documentElement.scrollHeight
+    positioner.style.display = ''
+    return [open, hidden]
+  })
+  expect(withTip).toBe(withoutTip)
+  expect(await page.evaluate(() => window.scrollY)).toBe(0)
+
+  // The column scrolls under the still pointer: the open tooltip closes at once. The card that comes
+  // under the pointer may open its own after the delay, as a native title would, but only next to it.
+  const box = (await low.boundingBox())!
+  const pointer = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  const before = (await tooltip(page).textContent()) ?? ''
+  await page.mouse.wheel(0, 300)
+  await expect.poll(() => openTooltipTexts(page)).not.toContain(before)
+  await expect.poll(() => column.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  await page.waitForTimeout(PAST_THE_DELAY)
+  await expect.poll(() => tipsBesidePointer(page, pointer)).toBe(true)
+
+  // Scrolling back up closes it too.
+  await page.mouse.wheel(0, -1000)
+  await expect.poll(() => column.evaluate((el) => el.scrollTop)).toBe(0)
+  await expectTooltip(links.nth(1), /Scrolled card/)
+  const up = (await links.nth(1).boundingBox())!
+  const upPointer = { x: up.x + up.width / 2, y: up.y + up.height / 2 }
+  const second = (await tooltip(page).textContent()) ?? ''
+  await page.mouse.wheel(0, 200)
+  await expect.poll(() => openTooltipTexts(page)).not.toContain(second)
+  await page.waitForTimeout(PAST_THE_DELAY)
+  await expect.poll(() => tipsBesidePointer(page, upPointer)).toBe(true)
+
+  // Once scrolling stops, hover and keyboard focus open it again.
+  const again = links.nth(5)
+  await again.scrollIntoViewIfNeeded()
+  await expectTooltip(again, /Scrolled card/)
+  await page.mouse.move(0, 0)
+  await expect(tooltip(page)).toHaveCount(0)
+  await tabTo(again)
+  await expect(tooltip(page)).toBeVisible()
+})
+
+/**
+ * True when no tooltip is open, or the only one open belongs to the element under `pointer` and sits
+ * right beside it: none is left floating where a trigger used to be.
+ */
+function tipsBesidePointer(page: Page, pointer: { x: number; y: number }) {
+  return page.evaluate(({ x, y }) => {
+    const tips = [...document.querySelectorAll<HTMLElement>('[data-slot="tooltip-content"]')]
+    if (tips.length === 0) return true
+    if (tips.length > 1) return false
+    const trigger = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-tip]')
+    if (!trigger) return false
+    const t = trigger.getBoundingClientRect()
+    const b = tips[0].getBoundingClientRect()
+    return b.bottom >= t.top - 24 && b.top <= t.bottom + 24
+  }, pointer)
+}
+
+/** The text of every tooltip open on the page. */
+function openTooltipTexts(page: Page) {
+  return anyTooltip(page).evaluateAll((els) => els.map((el) => el.textContent ?? ''))
+}

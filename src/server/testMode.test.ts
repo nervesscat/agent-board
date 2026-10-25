@@ -315,6 +315,25 @@ describe('who is who in test mode: orchestrator:, agent: and sub-identities', ()
     expect(features.listComments('ticket', ticket.id).length).toBe(before)
   })
 
+  it("records a sub-identity's work timeline under its full name, by MCP and by REST", async () => {
+    const features = await import('./features')
+    const ticket = features.createTicket(projectId, { title: 'Timed' }, 'human')
+    const scope = { projectId, ticketId: ticket.id }
+    const span = await tool(ORCH, 'start_span', { ...scope, phase: 'build', agentName: 'orch/worker-3' })
+    expect(span.event).toMatchObject({ agent: 'orch/worker-3', by: 'orch/worker-3' })
+    // Its own open span is found under its full name, not its parent's.
+    const ended = await tool(ORCH, 'end_span', { ...scope, agentName: 'orch/worker-3' })
+    expect(ended.span.id).toBe(span.event.id)
+    const rest = await send(
+      'POST',
+      `/api/projects/${projectId}/tickets/${ticket.id}/events`,
+      { ...ORCH, 'x-agent-name': 'orch/worker-4' },
+      { kind: 'span_start', phase: 'review' },
+    )
+    expect(rest.status).toBe(201)
+    expect((await rest.json()).event).toMatchObject({ agent: 'orch/worker-4', by: 'orch/worker-4' })
+  })
+
   it("refuses a sub-identity's relay of a decision; the orchestrator's own still works", async () => {
     const features = await import('./features')
     const ticket = features.createTicket(projectId, { title: 'Pick one' }, 'human')

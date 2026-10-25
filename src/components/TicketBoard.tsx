@@ -30,6 +30,7 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
+import { StalledBadge } from '#/components/WorkTimeline'
 import type { Push, TicketRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
@@ -164,11 +165,13 @@ export function TicketBoard({
                       </div>
                       {(t.decisions > 0 ||
                         t.blockedTasks > 0 ||
+                        t.stalled ||
                         t.needs.some((n) => !n.merged) ||
                         hasResumeBadge(t.resume)) && (
                         <div className="mt-1.5 flex flex-wrap gap-1">
                           {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                           {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                          <StalledBadge stalled={t.stalled} focusable={false} />
                           <NeedsBadge needs={t.needs} />
                           <ResumeBadges resume={t.resume} />
                         </div>
@@ -533,6 +536,7 @@ export function TicketList({
                   {t.blockedTasks > 0 && (
                     <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />
                   )}
+                  <StalledBadge stalled={t.stalled} focusable={false} className="ml-2 align-[1px]" />
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
                   {hasResumeBadge(t.resume) && (
                     <span className="ml-2 inline-flex gap-1 align-[1px]">

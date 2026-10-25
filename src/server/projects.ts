@@ -127,10 +127,14 @@ export const TagSuggestions = z
  * blanks and repeats in any casing left out; [] stays empty. `instructions` go through their history
  * (instructionsHistory.ts): only `who` as the human or an orchestrator changes them, and a worker's
  * patch that has them is refused whole. Without `who` the caller is taken for a worker.
+ * `stallMinutes`: how long an active ticket
+ * may go without a work event before it reads as stalled (the caller checks the range).
  */
 export function updateProject(
   id: number,
-  patch: Partial<Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions'>>,
+  patch: Partial<
+    Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'stallMinutes'>
+  >,
   actor: string,
   who: Changer = { name: actor, role: 'worker' },
 ) {
