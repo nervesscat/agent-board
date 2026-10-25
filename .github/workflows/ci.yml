@@ -129,3 +129,89 @@ jobs:
           path: desktop/dist/smoke/
           if-no-files-found: ignore
           retention-days: 14
+
+  # The desktop app's Linux packages (README: "The desktop app"): the AppImage, .deb, .rpm and pacman package,
+  # a smoke test of the unpacked app, then each package installed and checked in a container of its
+  # distribution (desktop/linux/install-test.sh), and the four kept as artifacts of the run.
+  desktop-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Ubuntu 24.04's AppArmor keeps unprivileged programs from making user namespaces, which
+      # Chromium's sandbox needs; the app keeps its sandbox, the runner allows them instead.
+      - name: Allow user namespaces for Chromium's sandbox
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      # rpmbuild for the .rpm, bsdtar for the pacman package, Xvfb for the window, and what Electron
+      # needs to run here (its check of the packed driver, the smoke test).
+      - name: Install the packaging tools
+        run: >-
+          sudo apt-get update && sudo apt-get install -y rpm libarchive-tools xvfb xauth
+          libgtk-3-0t64 libnss3 libgbm1 libasound2t64 libxss1 libxtst6 libnotify4 libsecret-1-0
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the packages
+        run: pnpm desktop:package
+
+      - name: Smoke-test the unpacked app
+        run: xvfb-run -a pnpm desktop:smoke --port 9250
+
+      # The checkout (with node_modules, for the smoke test) and this node go into each container; the
+      # containers run unconfined by seccomp so that Chromium's sandbox can make its namespaces there too.
+      - name: Install and check the .deb (Debian)
+        run: &install >-
+          docker run --rm --shm-size=1g --security-opt seccomp=unconfined
+          -v "$GITHUB_WORKSPACE:/repo" -v "$(dirname "$(command -v node)"):/nodebin:ro"
+          -e REPO=/repo -e NODE=/nodebin/node "$IMAGE"
+          bash -c "bash /repo/desktop/linux/install-test.sh $FORMAT /repo/desktop/dist/$PACKAGE $PORT"
+        env:
+          IMAGE: debian:bookworm
+          FORMAT: deb
+          PACKAGE: agent-board_*_amd64.deb
+          PORT: 9260
+
+      - name: Install and check the .rpm (Fedora)
+        run: *install
+        env:
+          IMAGE: fedora:latest
+          FORMAT: rpm
+          PACKAGE: agent-board-*.x86_64.rpm
+          PORT: 9270
+
+      - name: Install and check the pacman package (Arch)
+        run: *install
+        env:
+          IMAGE: archlinux:latest
+          FORMAT: pacman
+          PACKAGE: agent-board-*.pacman
+          PORT: 9280
+
+      - name: Check the AppImage (Ubuntu)
+        run: *install
+        env:
+          IMAGE: ubuntu:24.04
+          FORMAT: appimage
+          PACKAGE: agent-board-*-x86_64.AppImage
+          PORT: 9290
+
+      - name: Upload the packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-board-linux
+          path: |
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.rpm
+            desktop/dist/*.pacman
+          if-no-files-found: error
+          retention-days: 14
