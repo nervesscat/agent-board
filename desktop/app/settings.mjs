@@ -311,7 +311,7 @@ export function tail(text, max = 1500) {
   return (nl >= 0 ? cut.slice(nl + 1) : cut).trim()
 }
 
-// Linux: what a launch from the desktop does not get on its own (README: "Install").
+// Linux: what a launch from the desktop does not get on its own (README: "The desktop app").
 
 const PATH_START = '__AGENT_BOARD_PATH_START__'
 const PATH_END = '__AGENT_BOARD_PATH_END__'

@@ -1,7 +1,7 @@
 // The desktop app: runs the built board (.output/server/index.mjs) under Electron's own Node, shows it
 // in a window, and keeps a tray icon to open it again or quit. Closing the window leaves the board
 // running for the agents (on Linux, while a tray host shows the icon: closeWindow); Quit stops it and
-// frees its port. README: "Install".
+// frees its port. README: "The desktop app".
 //
 // On Linux it runs natively on Wayland in a Wayland session and on X11 otherwise: Electron's default
 // since 38 (--ozone-platform=auto), so no switch is set here. Its Wayland app_id and X11 WM_CLASS come

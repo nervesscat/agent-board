@@ -395,7 +395,7 @@ human reads dozens of these a day. Screenshots beat paragraphs.
 
 ## Keep the board out of the repo
 
-The board, trazic, habits and any other personal tracking tool are private to the human. Never
+The board and any other personal tracking tool are private to the human. Never
 mention them, their tool names, their URLs or a board ticket, task or project (`#12`, "ticket 12",
 "per the board") in code comments, docs, commit messages, branch names, PR titles or descriptions,
 or issues, and never link or screenshot the board there. Describe the change in the repo's own

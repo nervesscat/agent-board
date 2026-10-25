@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the Linux packages of the desktop app in a container and installs and checks each one in a
-# container of its distribution (README: "Install"), from any machine with Docker, Windows included
+# container of its distribution (README: "The desktop app"), from any machine with Docker, Windows included
 # (Git Bash). It builds what is committed on the checkout's HEAD, never its working tree.
 #
 #   desktop/linux/docker-test.sh build      # node:24-bookworm: pnpm desktop:package, then the smoke

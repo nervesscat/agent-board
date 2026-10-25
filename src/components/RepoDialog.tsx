@@ -144,7 +144,7 @@ export function RepoDialog({
                 id="path"
                 value={repoPath}
                 onChange={(e) => setRepoPath(e.target.value)}
-                placeholder="/home/you/code/… or F:\Programming\…"
+                placeholder="/home/you/code/… or C:\code\…"
                 required
                 className="font-mono"
               />

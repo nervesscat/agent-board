@@ -15,10 +15,10 @@ page): never push, merge, approve or comment on GitHub on its behalf.
 
 ## Keep the board out of the repo
 
-The board, trazic, habits and any other personal tracking tool are private to the human. Nothing
+The board and any other personal tracking tool are private to the human. Nothing
 you write into the repo or onto GitHub may mention them:
 
-- no code comments, docs, READMEs, changelogs or config that name the board, trazic or habits,
+- no code comments, docs, READMEs, changelogs or config that name the board or any such tool,
   their tools (`post_update`, `list_tickets`, …), their URLs (`localhost:47100`), or a
   board ticket, task, update or project (`#12`, "ticket 12", "per the board");
 - no commit messages, branch names, PR titles or PR descriptions that do either;
