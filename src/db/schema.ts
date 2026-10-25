@@ -191,6 +191,13 @@ export const prs = sqliteTable(
     closedAt: text('closed_at'),
     hold: integer({ mode: 'boolean' }).notNull().default(false),
     holdNote: text('hold_note').notNull().default(''),
+    // The head SHA a "CI run locally: green" comment on the PR names, as of the last refresh; null when
+    // no such comment names the head. The CI phase counts it as green while it equals `headSha`.
+    localCiSha: text('local_ci_sha'),
+    // What GitHub said of a PR that left every search while open (MERGED or CLOSED), asked once when
+    // it left; null while the searches see it, or when GitHub could not say. A row closed here with no
+    // merge time and no answer may be a merge the capped searches missed.
+    leftAs: text('left_as').$type<'MERGED' | 'CLOSED'>(),
   },
   (t) => [index('prs_project_number').on(t.projectId, t.number), index('prs_repo').on(t.repoId)],
 )
@@ -245,6 +252,10 @@ export const tickets = sqliteTable(
     resumeAt: text('resume_at'),
     resumeBy: text('resume_by').notNull().default(''),
     resumeSha: text('resume_sha'),
+    // Whether the board has looked at the ticket for a missing Merged phase (added once, before its
+    // Hand-off post, when it has the hand-off phases): set once looked at, and on a new ticket, so a
+    // Merged phase someone removed does not come back.
+    mergedPhaseChecked: integer('merged_phase_checked', { mode: 'boolean' }).notNull().default(false),
     createdAt: now(),
     updatedAt: now(),
   },

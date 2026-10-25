@@ -52,6 +52,7 @@ vi.mock('./git', async (original) => ({
   },
   currentGithubLogin: async () => 'enrique',
   prMerged: async () => false,
+  prStateOf: async () => null,
   repoNameWithOwner: async () => 'acme/app',
 }))
 
@@ -194,6 +195,7 @@ const ghPr = (f: Fixture, over: Partial<MyGhPr> = {}): MyGhPr => ({
   mergedAt: null,
   reviews: [],
   reviewRequests: [],
+  comments: [],
   requested: false,
   assigned: false,
   ...over,

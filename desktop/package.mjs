@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Builds the installer(s) and the unpacked app for the platform it runs on: `pnpm desktop:package`
-// (README: "Install"). x64 only (`--arch x64` or `--arch=x64`, the default; anything else is refused).
+// (README: "The desktop app"). x64 only (`--arch x64` or `--arch=x64`, the default; anything else is refused).
 //
 //   1. builds the board into desktop/.stage/board/.output (never .output, which previews use);
 //   2. copies the migrations beside it (the server reads ./drizzle from its working folder);
@@ -58,7 +58,7 @@ if (!WIN && process.platform !== 'linux')
   fail(`the app is packaged on Windows or Linux, not ${process.platform}`)
 const arch = packageArch(process.argv.slice(2))
 // The driver's probe (step 4) runs the staged binary under this machine's Electron, so the packed arch
-// is this machine's; arm64 is not built (README: "Install").
+// is this machine's; arm64 is not built (README: "The desktop app").
 if (arch !== 'x64') fail(`only x64 is packaged, not "${arch}"`)
 if (process.arch !== 'x64') fail(`this machine is ${process.arch}; the app is packaged on x64 only`)
 

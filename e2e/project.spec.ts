@@ -159,6 +159,8 @@ function prRow(projectId: number, n: number, waitingOn: PrRow['waitingOn'], stat
     closedAt: status === 'done' ? at : null,
     hold: status === 'on_hold',
     holdNote: '',
+    localCiSha: null,
+    leftAs: null,
     status,
     latestReview: null,
     tickets: [],

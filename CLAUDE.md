@@ -1,13 +1,19 @@
 # agent-board
 
-What it is and its API: `README.md`. How agents work through a running board: `AGENTS.md`.
+What it is and its API: `README.md`. How agents work through a running board: `AGENTS.md`. How to
+contribute: `CONTRIBUTING.md`.
+
+The rules below are for whoever runs a board from a checkout of this repo: that checkout (on `main`)
+is the live board on port 47100 with its real data in `data/`, and all work happens in worktrees beside
+it. Without a live board of your own, the worktree, checks and database rules still apply.
 
 ## Branches and releases
 
 - **`dev`** is GitHub's default branch: work branches start from `origin/dev` and their PRs go into
   `dev`.
 - **`main`** is production: what the board in this checkout runs. A release is a PR from `dev` into
-  `main`, merged once it is checked (Checks, below).
+  `main`, merged once it is checked (Checks, below). The desktop installers are published as GitHub
+  Releases: `docs/releasing.md`.
 - **Putting a release live:** `pnpm stop`, `git pull` on `main` here, `pnpm start` (it installs and
   applies migrations as it starts). `data/` is kept across versions.
 - **Development** happens in worktrees, with previews (Running it, below).
@@ -20,9 +26,9 @@ commands**), sent as `Authorization: Bearer <token>`.
 
 ## Desktop app
 
-The installer (`pnpm desktop:package`, README: "Install") is the packaged production board for other
+The installer (`pnpm desktop:package`, README: "The desktop app") is the packaged production board for other
 machines. It installs per user, without admin rights; its data and `config.env` live in
-`%LOCALAPPDATA%gent-board` and are kept on uninstall and on upgrade (install a newer build over
+`%LOCALAPPDATA%\agent-board` and are kept on uninstall and on upgrade (install a newer build over
 it). It needs `git`, `gh` (signed in) and `claude` on `PATH`; `node` and `pnpm` only for previews.
 
 ## Running it

@@ -576,6 +576,7 @@ describe('a ticket that spans two repos', () => {
       mergedAt,
       reviews: [],
       reviewRequests: [],
+      comments: [],
       requested: false,
       assigned: true,
     }) satisfies MyGhPr
