@@ -964,6 +964,102 @@ describe('a ticket that spans two repos', () => {
       expect(((await stopped.json()) as { results: unknown[] }).results).toHaveLength(2)
       expect(runs.activeRuns()).toEqual([])
     })
+
+    it('stop_run stops one orphaned run going from two worktrees of its repo, by name or by id', async () => {
+      useFake()
+      const r = await rowless('two')
+      const ws2 = features.addWorkspace(
+        r.t.id,
+        { name: 'pp2', branch: 'y', path: worktree(r.pp), repoId: r.pp.id },
+        'claude',
+      )
+      const worker2 = (await running(ws2.id, r.worker.id)) && fake.calls.at(-1)!.pid
+      const web2 = (await running(ws2.id, r.web.id)) && fake.calls.at(-1)!.pid
+      addRepo('aa-two', r.project)
+      expect((await runsOf(r.t.id)).orphaned.map((o) => [o.name, o.workspace.id])).toEqual([
+        ['Worker', r.ws.id],
+        ['Web', r.ws.id],
+        ['Worker', ws2.id],
+        ['Web', ws2.id],
+      ])
+
+      // By name: Worker goes from both, Web from neither.
+      const byName = await tool('stop_run', { ticketId: r.t.id, run: 'Worker' })
+      expect(byName.error).toBe(false)
+      expect(JSON.parse(byName.text)).toMatchObject({ status: 'stopped', runName: 'Worker' })
+      expect(fake.killed).toEqual(expect.arrayContaining([r.workerPid, worker2]))
+      expect([status(r.ws.id, r.worker.id), status(ws2.id, r.worker.id)]).toEqual(['stopped', 'stopped'])
+      expect([status(r.ws.id, r.web.id), status(ws2.id, r.web.id)]).toEqual(['running', 'running'])
+
+      // By id with its repo: Web from both.
+      const byId = await tool('stop_run', { ticketId: r.t.id, run: r.web.id, repoId: r.pp.id })
+      expect(byId.error).toBe(false)
+      expect(JSON.parse(byId.text)).toMatchObject({ status: 'stopped', runId: r.web.id })
+      expect(fake.killed).toEqual(expect.arrayContaining([r.webPid, web2]))
+      expect(runs.activeRuns()).toEqual([])
+      expect((await runsOf(r.t.id)).orphaned).toEqual([])
+    })
+
+    it('stop_run refuses a name orphaned runs of two repos share, naming the repos', async () => {
+      useFake()
+      const r = await rowless('rr')
+      // aa sorts first: pp's runs are orphaned, and the ticket runs aa's Worker; then a0 orphans aa's.
+      const aa = addRepo('aa-rr', r.project)
+      const aaWorker = run(aa, { name: 'Worker', type: 'job', start: 'python w.py', healthPath: '' })
+      const wsA = features.addWorkspace(
+        r.t.id,
+        { name: 'aa', branch: 'x', path: worktree(aa), repoId: aa.id },
+        'claude',
+      )
+      const aaPid = (await running(wsA.id, aaWorker.id)) && fake.calls.at(-1)!.pid
+      addRepo('a0-rr', r.project)
+      expect((await runsOf(r.t.id)).orphaned.map((o) => [o.repoName, o.name])).toEqual([
+        [r.pp.name, 'Worker'],
+        [r.pp.name, 'Web'],
+        [aa.name, 'Worker'],
+      ])
+
+      expect(await tool('stop_run', { ticketId: r.t.id, run: 'worker' })).toEqual({
+        error: true,
+        text: `2 repos that are no longer the ticket's have a run named worker going (${r.pp.id} ${r.pp.name}, ${aa.id} ${aa.name}): give repoId, or stop them all`,
+      })
+      expect([status(r.ws.id, r.worker.id), status(wsA.id, aaWorker.id)]).toEqual(['running', 'running'])
+      const one = await tool('stop_run', { ticketId: r.t.id, run: 'Worker', repoId: aa.id })
+      expect(JSON.parse(one.text)).toMatchObject({ status: 'stopped', runId: aaWorker.id })
+      expect(fake.killed).toContain(aaPid)
+      expect(fake.killed).not.toContain(r.workerPid)
+      expect(status(r.ws.id, r.worker.id)).toBe('running')
+    })
+
+    it("stop_run refuses a name two of the ticket's own repos share, though an orphaned run has it too", async () => {
+      useFake()
+      const r = await rowless('own')
+      const aa = addRepo('aa-own', r.project)
+      const qq = addRepo('qq-own', r.project)
+      run(aa, { name: 'Web' })
+      const qqWeb = run(qq, { name: 'Web' })
+      const set = await call('PATCH', `/api/tickets/${r.t.id}`, {
+        repos: [{ repoId: aa.id }, { repoId: qq.id }],
+      })
+      expect(set.status).toBe(200)
+      const wsQ = features.addWorkspace(
+        r.t.id,
+        { name: 'qq', branch: 'x', path: worktree(qq), repoId: qq.id },
+        'claude',
+      )
+      await running(wsQ.id, qqWeb.id)
+      expect((await runsOf(r.t.id)).orphaned.map((o) => o.name)).toEqual(['Worker', 'Web'])
+
+      expect(await tool('stop_run', { ticketId: r.t.id, run: 'Web' })).toEqual({
+        error: true,
+        text: `2 repos have a run named Web (${aa.id} ${aa.name}, ${qq.id} ${qq.name}): give repoId`,
+      })
+      expect([status(r.ws.id, r.web.id), status(wsQ.id, qqWeb.id)]).toEqual(['running', 'running'])
+      // A name only an orphaned run has still reaches it.
+      const worker = await tool('stop_run', { ticketId: r.t.id, run: 'Worker' })
+      expect(JSON.parse(worker.text)).toMatchObject({ status: 'stopped', runName: 'Worker' })
+      expect(fake.killed).toContain(r.workerPid)
+    })
   })
 })
 

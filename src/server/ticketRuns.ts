@@ -261,6 +261,9 @@ export async function stopTicketRuns(ticketId: number, actor: string, opts: { re
   return { results: out }
 }
 
+/** findTicketRun's refusal of a name several of the ticket's repos have a run of. */
+class AmbiguousRun extends HttpError {}
+
 /**
  * One run of the ticket, by its id or its name (any casing), in `repoId` or, without it, in whichever
  * of the ticket's repos has a run so named (refused, naming them, when several do).
@@ -281,7 +284,7 @@ export function findTicketRun(ticketId: number, run: number | string, repoId?: n
       `no run ${typeof run === 'number' ? `#${run}` : run} in ${entries.map((e) => e.name).join(', ') || 'the ticket’s repos'}: list_runs lists them`,
     )
   if (found.length > 1)
-    throw new HttpError(
+    throw new AmbiguousRun(
       400,
       `${found.length} repos have a run named ${run} (${found.map((f) => `${f.entry.repoId} ${f.entry.name}`).join(', ')}): give repoId`,
     )
@@ -304,7 +307,9 @@ export async function startTicketRun(
 
 /**
  * stop_run: one run of the ticket that builds or runs, by id or name: of one of its repos, else one
- * of its orphaned runs (see `OrphanedRun`) so named.
+ * of its orphaned runs (see `OrphanedRun`) so named, from every workspace it goes from. A name several
+ * of its repos have a run of is refused without repoId, orphans or not, as is one several repos it no
+ * longer spans have a run going of.
  */
 export async function stopTicketRun(
   ticketId: number,
@@ -317,7 +322,7 @@ export async function stopTicketRun(
   try {
     found = findTicketRun(ticketId, run, opts.repoId)
   } catch (err) {
-    if (!(err instanceof HttpError)) throw err
+    if (!(err instanceof HttpError) || err instanceof AmbiguousRun) throw err
     refused = err
   }
   if (found && isActive(runState(found.workspace.id, found.config.id)))
@@ -327,13 +332,19 @@ export async function stopTicketRun(
       (!opts.repoId || o.repoId === opts.repoId) &&
       (typeof run === 'number' ? o.runId === run : o.name.toLowerCase() === run.trim().toLowerCase()),
   )
-  if (orphans.length > 1)
+  // A run id, or a name within one repo, is one run config: the same run going from several of the
+  // ticket's workspaces is stopped from all of them.
+  const repos = [...new Map(orphans.map((o) => [o.repoId, o.repoName])).entries()]
+  if (repos.length > 1)
     throw new HttpError(
       400,
-      `${orphans.length} runs named ${run} go for repos that are no longer the ticket's (${orphans.map((o) => `${o.repoId} ${o.repoName}`).join(', ')}): give repoId, or stop them all`,
+      `${repos.length} repos that are no longer the ticket's have a run named ${run} going (${repos.map(([id, name]) => `${id} ${name}`).join(', ')}): give repoId, or stop them all`,
     )
-  const orphan = orphans[0]
-  if (orphan) return stopRun(orphan.workspace.id, orphan.runId, `stopped by ${actor}`, actor)
+  if (orphans.length) {
+    const states: Awaited<ReturnType<typeof stopRun>>[] = []
+    for (const o of orphans) states.push(await stopRun(o.workspace.id, o.runId, `stopped by ${actor}`, actor))
+    return states[0]
+  }
   if (refused) throw refused
   const { config, workspace } = found!
   throw new HttpError(409, `${config.name} does not run from workspace ${workspace.name}`)
