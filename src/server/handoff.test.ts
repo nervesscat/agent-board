@@ -73,7 +73,7 @@ describe('handoffOf', () => {
     expect(none.missing).toEqual([{ code: 'tasks_open', text: expect.stringMatching(/^No tasks/) }])
     // It points to the default phases, with the steps under Implementation.
     expect(none.checks[1]!.text).toBe(
-      'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Merged, Hand-off post), put the steps under Implementation, and tick each step as you finish it (the board ticks Pushed, PR, CI, Preview and Merged itself)',
+      'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Merged), put the steps under Implementation, and tick each step as you finish it (the board ticks Pushed, PR, CI, Preview and Merged itself)',
     )
     expect(handoffOf(facts({ tasks: { done: 3, total: 5 } })).missing).toEqual([
       { code: 'tasks_open', text: '3 of 5 tasks done' },
@@ -443,7 +443,7 @@ describe('moving a ticket to review', () => {
     features.updateTask(task('code').id, { done: true }, 'claude')
     features.updateTask(task('test').id, { done: true }, 'claude')
     // The rest of the hand-off done, none of it ticked by hand: pushed above, the PR with its CI green,
-    // a preview that runs, the post.
+    // a preview that runs.
     features.addWorkspace(t.id, { name: 'wt', branch: 'feat/phases', previewUrl }, 'claude')
     const now = new Date().toISOString()
     db.insert(schema.prs)
@@ -465,7 +465,7 @@ describe('moving a ticket to review', () => {
     await needs.changeTicket(t.id, { prNumber: 13 }, 'claude', { agent: true })
     features.setSummary(t.id, { body: 'Hand-off: PR #13, preview at …' }, 'claude')
     // The board ticks the phases that follow git, GitHub and the previews on its own, at the next read;
-    // Merged and Hand-off post stay open.
+    // Merged stays open.
     await needs.ticketView(t.id)
     expect(ticks()).toEqual({
       Implementation: true,
@@ -476,27 +476,24 @@ describe('moving a ticket to review', () => {
       CI: true,
       Preview: true,
       Merged: false,
-      'Hand-off post': false,
     })
 
-    // The move goes through; the post is all Implementation lacks, and the open Merged (the human's
-    // step) is not counted.
+    // The move goes through with nothing missing: the open Merged (the human's step) is not counted,
+    // and the board's ticks after the summary are not commits, so it still counts.
     const moved = await needs.changeTicket(t.id, { status: 'review' }, 'claude', { agent: true })
     expect(moved.status).toBe('review')
-    expect('handoff' in moved && moved.handoff.missing).toEqual([
-      { code: 'tasks_open', text: '7 of 8 tasks done' },
-    ])
-
-    // Hand-off post ticked by hand: a tick is not a commit, so the summary written before it still counts.
-    features.updateTask(task('Hand-off post').id, { done: true }, 'claude')
+    expect('handoff' in moved && moved.handoff.missing).toEqual([])
     const view = await needs.ticketView(t.id)
     expect(view.handoff!.missing).toEqual([])
     expect(view.handoff!.checks.find((c) => c.code === 'tasks_open')).toMatchObject({
       ok: true,
-      text: '8 of 8 tasks done',
+      text: '7 of 7 tasks done',
     })
-    expect(view.handoff!.checks.find((c) => c.code === 'no_handoff_post')).toMatchObject({ ok: true })
+    expect(view.handoff!.checks.find((c) => c.code === 'no_handoff_post')).toMatchObject({
+      ok: true,
+      label: 'Summary',
+    })
     // The progress bar still counts Merged.
-    expect(view.progress).toEqual({ done: 8, total: 9 })
+    expect(view.progress).toEqual({ done: 7, total: 8 })
   }, 30_000)
 })

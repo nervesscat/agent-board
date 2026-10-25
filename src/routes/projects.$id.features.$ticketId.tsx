@@ -1342,8 +1342,8 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       {t.tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off&apos;s
-          (Pushed, PR, CI, Preview, Merged, Hand-off post). The concrete steps go under Implementation as
-          subtasks. The board ticks Pushed, PR, CI, Preview and Merged itself.
+          (Pushed, PR, CI, Preview, Merged). The concrete steps go under Implementation as subtasks. The board
+          ticks Pushed, PR, CI, Preview and Merged itself.
         </p>
       )}
       <ul className="space-y-1.5">

@@ -311,8 +311,7 @@ and return `STATUS: needs-browser`: the orchestrator runs you again with the bro
 
 Every item, in order, as the board skill's hand-off checklist says. The board ticks the phases
 Pushed, PR, CI, Preview and Merged itself as their facts hold (a tick by hand is refused); you tick
-Implementation's steps and Hand-off post (`set_task_done`). On a rework round, untick Hand-off post
-first.
+Implementation and its steps (`set_task_done`).
 1. Implementation and its subtasks ticked (`set_task_done`); the workspace registered.
 2. `git -C <worktree> push -u origin <branch>`; `get_ticket` → `push.state` is `pushed`, and
    the board ticks Pushed.
@@ -356,7 +355,6 @@ first.
    When a summary is already there (an earlier round, a rework), rewrite it to the state now, with
    `change` saying in one line what changed; the board keeps the earlier versions. Then the result
    reply under each of the human's posts you answered with a plan (step 2), with its proofs.
-   Then tick Hand-off post: a tick is not a commit, so the summary still counts.
 7. `update_ticket` to `review`, and read `handoff.missing` in its answer: fix every item it lists
    and check again (`no_handoff_post`: no summary written since the last commit). `no_preview` may
    stay only when the summary says why.
