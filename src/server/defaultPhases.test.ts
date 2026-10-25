@@ -9,7 +9,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-default-phases-'))
 process.env.DATA_DIR = tmp
 
-const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged', 'Hand-off post']
+const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged']
 
 let dbm: typeof import('#/db')
 let features: typeof import('./features')
@@ -184,7 +184,7 @@ describe('a new ticket', () => {
     for (const as of ['human', 'agent'] as const) {
       const t = await created(p, { title: `plain ${as}` }, as)
       expect(t.tasks.map((x) => [x.text, x.parentId, x.done])).toEqual(BUILT_IN.map((x) => [x, null, false]))
-      expect(t.progress).toEqual({ done: 0, total: 7 })
+      expect(t.progress).toEqual({ done: 0, total: 6 })
     }
     // In any starting stage.
     const done = await created(p, { title: 'straight to done', status: 'done' })
@@ -198,22 +198,14 @@ describe('a new ticket', () => {
     expect(full.tasks.map((x: Row) => [x.text, x.parentId, x.done])).toEqual(
       BUILT_IN.map((x) => [x, null, false]),
     )
-    expect(full.progress).toEqual({ done: 0, total: 7 })
+    expect(full.progress).toEqual({ done: 0, total: 6 })
   })
 
   it('puts the given plain tasks under the first phase, and given phases right after it', async () => {
     const p = newProject('given')
     const steps = await created(p, { title: 'steps', tasks: ['a', 'b'] })
-    expect(tree(steps.tasks)).toEqual([
-      'Implementation → a, b',
-      'Pushed',
-      'PR',
-      'CI',
-      'Preview',
-      'Merged',
-      'Hand-off post',
-    ])
-    expect(steps.progress).toEqual({ done: 0, total: 9 })
+    expect(tree(steps.tasks)).toEqual(['Implementation → a, b', 'Pushed', 'PR', 'CI', 'Preview', 'Merged'])
+    expect(steps.progress).toEqual({ done: 0, total: 8 })
     const implementation = steps.tasks[0]!
     expect(steps.tasks.filter((x) => x.text === 'a' || x.text === 'b').map((x) => x.parentId)).toEqual([
       implementation.id,
@@ -236,7 +228,6 @@ describe('a new ticket', () => {
       'CI',
       'Preview',
       'Merged',
-      'Hand-off post',
     ])
     expect(tree(full.tasks)).toEqual([
       'Implementation → a',
@@ -246,7 +237,6 @@ describe('a new ticket', () => {
       'CI',
       'Preview',
       'Merged',
-      'Hand-off post',
     ])
   })
 
@@ -286,7 +276,7 @@ describe('a new ticket', () => {
     const p = newProject('lanes')
     const parent = await created(p, { title: 'parent' })
     const rollup = async () => (await call('GET', `/api/tickets/${parent.id}`)).body.rollup
-    expect(await rollup()).toEqual({ done: 0, total: 7 })
+    expect(await rollup()).toEqual({ done: 0, total: 6 })
 
     const lane = await created(p, { title: 'lane', parentId: parent.id, tasks: ['l1', 'l2'] })
     expect(tree(lane.tasks)).toEqual(['l1', 'l2'])
@@ -299,7 +289,7 @@ describe('a new ticket', () => {
       tasks: ['m'],
     })
     expect(tree((await tool('get_ticket', { ticketId: mcpLane.id })).tasks)).toEqual(['m'])
-    expect(await rollup()).toEqual({ done: 0, total: 10 })
+    expect(await rollup()).toEqual({ done: 0, total: 9 })
 
     const seeded = await created(p, {
       title: 'seeded lane',
@@ -307,16 +297,8 @@ describe('a new ticket', () => {
       tasks: ['s'],
       defaultPhases: true,
     })
-    expect(tree(seeded.tasks)).toEqual([
-      'Implementation → s',
-      'Pushed',
-      'PR',
-      'CI',
-      'Preview',
-      'Merged',
-      'Hand-off post',
-    ])
-    expect(await rollup()).toEqual({ done: 0, total: 18 })
+    expect(tree(seeded.tasks)).toEqual(['Implementation → s', 'Pushed', 'PR', 'CI', 'Preview', 'Merged'])
+    expect(await rollup()).toEqual({ done: 0, total: 16 })
   })
 
   it('keeps its phases working like any task: ticks in step, reword, remove, steps added under one', async () => {
@@ -352,8 +334,8 @@ describe('a new ticket', () => {
     await tool('remove_task', { taskId: implementation.id })
     await tool('add_tasks', { ticketId: t.id, tasks: ['Benchmarks'] })
     const after = (await call('GET', `/api/tickets/${t.id}`)).body as Ticket
-    expect(tree(after.tasks)).toEqual(['Pushed', 'PR', 'CI green', 'Merged', 'Hand-off post', 'Benchmarks'])
-    expect(after.progress).toEqual({ done: 0, total: 6 })
+    expect(tree(after.tasks)).toEqual(['Pushed', 'PR', 'CI green', 'Merged', 'Benchmarks'])
+    expect(after.progress).toEqual({ done: 0, total: 5 })
   })
 
   it('is the only one seeded: tickets made before keep their tasks through every read', async () => {
@@ -388,7 +370,6 @@ describe('the phases the board ticks', () => {
       ['CI', true, true],
       ['Preview', true, true],
       ['Merged', true, true],
-      ['Hand-off post', true, false],
       ['  merged ', true, true],
     ])
     const mcp = await tool('get_ticket', { ticketId: t.id })
@@ -440,7 +421,10 @@ describe('the phases the board ticks', () => {
       `"CI" is ticked by the board from GitHub (the PR's checks green, or a "CI run locally: green" comment on the head SHA); it cannot be ticked by hand`,
     )
     // Rewording into a phase's name with a tick is refused too.
-    const res = await call('PATCH', `/api/tasks/${task('Hand-off post').id}`, { text: 'Preview', done: true })
+    const res = await call('PATCH', `/api/tasks/${task('Implementation').id}`, {
+      text: 'Preview',
+      done: true,
+    })
     expect(res.status).toBe(400)
 
     // An open one can be tagged blocked and cleared; a done one cannot be tagged (that would untick it).
@@ -460,9 +444,10 @@ describe('the phases the board ticks', () => {
     expect((await call('PATCH', `/api/tasks/${task('PR').id}`, { done: true })).status).toBe(200)
     expect(stored(task('PR').id)).toBe(true)
     expect((await call('DELETE', `/api/tasks/${task('Preview').id}`)).status).toBeLessThan(300)
-    // Hand-off post and Implementation stay ticked by hand.
-    for (const text of ['Implementation', 'Hand-off post'])
-      expect((await call('PATCH', `/api/tasks/${task(text).id}`, { done: true }, 'agent')).status).toBe(200)
+    // Implementation stays ticked by hand.
+    expect(
+      (await call('PATCH', `/api/tasks/${task('Implementation').id}`, { done: true }, 'agent')).status,
+    ).toBe(200)
   })
 
   it("never follow their subtasks' ticks", async () => {
@@ -475,6 +460,23 @@ describe('the phases the board ticks', () => {
     expect(read.tasks.find((x) => x.id === sub.id)!.done).toBe(true)
     expect(read.tasks.find((x) => x.id === preview.id)!.done).toBe(false)
   })
+
+  it('leave Hand-off post a plain name: a list that has it seeds it as a task ticked by hand', async () => {
+    const p = newProject('own post')
+    const list = ['Implementation', 'Pushed', 'Hand-off post']
+    const saved = await call('PATCH', `/api/projects/${p}`, { defaultPhases: list })
+    expect(saved.status).toBe(200)
+    expect(await phases(p)).toEqual(list)
+    const t = await created(p, { title: 'own post' })
+    expect(tree(t.tasks)).toEqual(list)
+    const post = (await tool('get_ticket', { ticketId: t.id })).tasks.find(
+      (x: Row) => x.text === 'Hand-off post',
+    ) as Row & { auto: boolean }
+    expect(post.auto).toBe(false)
+    await tool('set_task_done', { taskId: post.id })
+    const read = (await call('GET', `/api/tickets/${t.id}`)).body as Ticket
+    expect(read.tasks.find((x) => x.id === post.id)!.done).toBe(true)
+  })
 })
 
 describe('what agents are told', () => {
@@ -486,7 +488,7 @@ describe('what agents are told', () => {
     })
     const instructions = init.instructions as string
     expect(instructions).toContain(
-      "A new ticket starts with its project's default phases as its top-level tasks (get_project's defaultPhases; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged, Hand-off post)",
+      "A new ticket starts with its project's default phases as its top-level tasks (get_project's defaultPhases; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged)",
     )
     expect(instructions).toContain('the concrete steps of the work go under Implementation as its subtasks')
     // The board ticks the phases that follow git, GitHub and the previews; agents tick the rest.
@@ -497,12 +499,22 @@ describe('what agents are told', () => {
     expect(instructions).toContain(
       'Nobody ticks those by hand: set_task_done and update_task done on them are refused',
     )
-    expect(instructions).toContain('Hand-off post is yours')
+    expect(instructions).not.toContain('Hand-off post is yours')
+    expect(instructions).toContain('Implementation and its steps are the ones you tick')
     expect(instructions).toContain('the hand-off phases included but Merged')
     expect(instructions).not.toContain('tick each hand-off phase')
     expect(instructions).not.toContain('the board ticks nothing itself')
     expect(instructions).toContain('defaultPhases: false opts a ticket out')
-    expect(instructions).toContain('then tick Hand-off post')
+    expect(instructions).not.toContain('tick Hand-off post')
+    expect(instructions).not.toContain('Hand-off post is ticked by hand')
+    expect(instructions).not.toMatch(/Merged, Hand-off post/)
+    // The summary and its check stay.
+    expect(instructions).toContain(
+      '(7) the summary up to date (set_ticket_summary, never a new hand-off post)',
+    )
+    expect(instructions).toContain(
+      "no_handoff_post when no agent wrote the summary since the branch's last commit",
+    )
     // A decision is answered by the human on its card, or relayed by the orchestrator from the chat.
     expect(instructions).toContain('answer_decision')
     expect(instructions).toContain('never a delegated subagent')
@@ -521,8 +533,15 @@ describe('what agents are told', () => {
     expect(create.inputSchema.properties.defaultPhases.type).toBe('boolean')
     expect(create.inputSchema.properties.tasks.description).toContain('plain texts go under the first phase')
     expect(byName('add_tasks').description).toContain('such as Implementation')
-    expect(byName('get_project').description).toContain('Pushed, PR, CI, Preview, Merged, Hand-off post')
-    expect(byName('create_ticket').description).toContain('Pushed, PR, CI, Preview, Merged, Hand-off post')
+    expect(byName('get_project').description).toContain(
+      'built in: Implementation, Pushed, PR, CI, Preview, Merged; []',
+    )
+    expect(byName('create_ticket').description).toContain(
+      'Implementation, Pushed, PR, CI, Preview, Merged unless',
+    )
+    expect(byName('add_tasks').description).toContain('Pushed, PR, CI, Preview, Merged; the board ticks')
+    for (const name of ['get_project', 'create_ticket', 'add_tasks'])
+      expect(JSON.stringify(byName(name)), name).not.toContain('Hand-off post')
     expect(byName('get_ticket').description).toContain('auto: true on a phase the board ticks itself')
     for (const name of ['set_task_done', 'update_task'])
       expect(byName(name).description).toMatch(/Pushed, PR, CI, Preview(,| and) Merged/)

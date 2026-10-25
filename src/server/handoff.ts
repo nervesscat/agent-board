@@ -101,7 +101,7 @@ export function handoffOf(f: HandoffFacts): Handoff {
     total > 0 && done === total,
     total
       ? `${done} of ${plural(total, 'task')} done`
-      : 'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Merged, Hand-off post), put the steps under Implementation, and tick each step as you finish it (the board ticks Pushed, PR, CI, Preview and Merged itself)',
+      : 'No tasks: add the default phases (Implementation, then Pushed, PR, CI, Preview, Merged), put the steps under Implementation, and tick each step as you finish it (the board ticks Pushed, PR, CI, Preview and Merged itself)',
   )
 
   check(

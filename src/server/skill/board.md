@@ -87,8 +87,8 @@ Then:
   and `stale` says the work moved on (new commits or a newer progress post): check the branch and
   the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
 - A new ticket starts with its project's default phases as its top-level tasks (`get_project` →
-  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged,
-  Hand-off post). Tasks go two levels and no more: put the concrete steps of the work under Implementation
+  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged).
+  Tasks go two levels and no more: put the concrete steps of the work under Implementation
   as its subtasks (`add_tasks` with `parentTaskId` = its id; a subtask takes no subtasks). Remove
   or reword a phase that does not fit (`remove_task`, `update_task`); `add_tasks` adds one at the
   end. A lane starts without phases, since its parent carries the hand-off (`defaultPhases: true`
@@ -113,8 +113,7 @@ Lanes of a ticket you are working are yours to create (next section).
   (a new push unticks it until it is green again), Preview while one of the ticket's workspaces
   runs a preview or its link answers, Merged once the PR or the branch is merged. Nobody ticks
   those by hand: `set_task_done` and `update_task` `done` on them are refused (`get_ticket` marks
-  them `auto: true`). Hand-off post is yours: tick it once the summary is up to date, and on a
-  rework untick it until the summary is updated again. A phase with steps is done exactly when
+  them `auto: true`). Implementation and its steps are yours to tick. A phase with steps is done exactly when
   all its steps are: ticking or unticking a phase does the same to its steps, ticking its last open
   step ticks it, unticking a step unticks it (a phase the board ticks follows its fact, not its
   steps). When the plan changes, `update_task` rewords a task and `remove_task` drops one
@@ -291,7 +290,7 @@ The human should not have to tell you to check comments. While this session has 
 ## 4. Hand off
 
 Before `update_ticket` → `status: review`, every item, in order (the board ticks Pushed, PR, CI,
-Preview and Merged as their facts hold; Hand-off post is ticked by hand):
+Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
 
 1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
 2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
@@ -324,8 +323,7 @@ Preview and Merged as their facts hold; Hand-off post is ticked by hand):
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
    preview link and what to try there**, how it was tested, the e2e result (its summary, or its
    report when something failed), each review round's verdict and, for a UI change, screenshots of
-   what changed, in `files`. Then tick Hand-off post: a tick is not a commit, so the summary still
-   counts.
+   what changed, in `files`.
 8. Resume note if the ticket stays open past the session (`set_resume_note`, see
    [End of session](#5-end-of-session)).
 
