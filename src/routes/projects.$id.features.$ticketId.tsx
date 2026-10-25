@@ -127,7 +127,7 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
-import { type AreaId, defaultLayout, shownIn } from '#/lib/layout'
+import { type AreaId, type Layout, defaultLayout, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -146,8 +146,15 @@ function TicketPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const stages = useStages(id)
-  // Which sections show, in which column and order: the project's layout (the defaults until it loads).
-  const layout = useProject(id).data?.layout ?? defaultLayout()
+  // Which sections show, in which column and order: the project's layout, taken once per ticket shown.
+  // Until it loads no section is drawn, rather than drawn in its default place and moved (a #link would
+  // land on where it was). A layout saved while the ticket is open applies on the next one shown or the
+  // next visit: a section that changed column would be drawn afresh, losing what is typed in it.
+  const project = useProject(id)
+  const live = project.data?.layout ?? (project.isError ? defaultLayout() : undefined)
+  const [kept, setKept] = useState<{ ticketId: string; layout: Layout } | null>(null)
+  const layout = kept?.ticketId === ticketId ? kept.layout : live
+  if (layout && kept?.ticketId !== ticketId) setKept({ ticketId, layout })
   const setFilter = (f: LaneFilter) =>
     navigate({
       to: '/projects/$id/features/$ticketId',
@@ -246,7 +253,7 @@ function TicketPage() {
   const anchor = useAnchor()
   const linkedTo = useLocation({ select: (l) => l.pathname.split('/').at(-1) })
   const drawn = t !== undefined && String(t.id) === ticketId && ticketId === linkedTo
-  useReveal(anchor, { page: ticketId, ready: drawn })
+  useReveal(anchor, { page: ticketId, ready: drawn && layout !== undefined })
   // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
@@ -338,8 +345,8 @@ function TicketPage() {
     'ticket.branch': <BranchPanel t={t} git={git} />,
     'ticket.workspaces': <WorkspacesPanel t={t} git={git} onChange={invalidate} />,
   }
-  const main = shownIn(layout, 'ticket.main').filter((s) => sections[s] != null)
-  const side = shownIn(layout, 'ticket.side').filter((s) => sections[s] != null)
+  const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
+  const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
 
   return (
     <div className="flex flex-col gap-6">

@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 
-import type { Project } from '#/lib/api'
+import type { Project, TicketFull } from '#/lib/api'
 import { expect, ok, seededProject, test } from './fixtures'
 
 const MENU = [
@@ -371,3 +371,117 @@ test('a ticket column with nothing to show on this ticket is not drawn; the othe
   expect((await side.boundingBox())!.width).toBeCloseTo(grid, 0)
 })
 
+/** The project's layout with one ticket section put last in a column. */
+const putLast = (layout: Project['layout'], id: string, area: 'ticket.main' | 'ticket.side') => [
+  ...layout.filter((it) => it.id !== id),
+  { ...layout.find((it) => it.id === id)!, area },
+]
+
+test('a #link into a section the layout moves lands on it when the project loads after the ticket', async ({
+  page,
+  project,
+  human,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 })
+  const base = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
+  // Tasks last in the main column, after a long feed: far from where it is by default.
+  await ok(
+    human.patch(`/api/projects/${project.id}`, {
+      data: { layout: putLast(base, 'ticket.tasks', 'ticket.main') },
+    }),
+  )
+  const ticket = await ok<TicketFull>(
+    human.post(`/api/projects/${project.id}/tickets`, {
+      data: { title: 'Moved tasks', tasks: ['Deploy'], defaultPhases: false },
+    }),
+  )
+  for (let i = 1; i <= 25; i++)
+    await ok(
+      human.post(`/api/tickets/${ticket.id}/updates`, {
+        data: {
+          body: `Post ${i}.
+
+${'A line. '.repeat(40)}`,
+        },
+      }),
+    )
+  const task = (await ok<TicketFull>(human.get(`/api/tickets/${ticket.id}`))).tasks[0]!
+
+  // The project answers only once the ticket has, and a while after.
+  const ticketLoaded = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === `/api/tickets/${ticket.id}` && r.request().method() === 'GET',
+  )
+  let held = false
+  await page.route(`**/api/projects/${project.id}`, async (route) => {
+    if (route.request().method() === 'GET') {
+      held = true
+      await ticketLoaded
+      await new Promise((r) => setTimeout(r, 1500))
+    }
+    await route.fallback()
+  })
+  const projectLoaded = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === `/api/projects/${project.id}` && r.request().method() === 'GET',
+  )
+  await page.goto(`/projects/${project.id}/features/${ticket.id}#task-${task.id}`)
+  await projectLoaded
+  expect(held).toBe(true)
+  // Tasks drawn where the layout has it, after the feed, and the page brought there.
+  const tasks = page.getByRole('region', { name: 'Tasks' })
+  const composer = page.getByRole('textbox', { name: 'New post', exact: true })
+  await expect
+    .poll(async () => (await tasks.boundingBox())!.y - (await composer.boundingBox())!.y)
+    .toBeGreaterThan(0)
+  const row = page.locator(`#task-${task.id}`)
+  await expect(row).toBeInViewport()
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(2000)
+  // And it stays there: nothing moves under the reader once in view.
+  await page.waitForTimeout(1000)
+  await expect(row).toBeInViewport()
+})
+
+test('a layout saved while a ticket is open keeps the page as drawn: an unsent post stays', async ({
+  page,
+  project,
+  human,
+  api,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 })
+  const ticket = await api.ticket({ title: 'Draft kept' })
+  await page.goto(`/projects/${project.id}/features/${ticket.id}`)
+  const main = page.locator('[data-ticket-column="main"]')
+  const side = page.locator('[data-ticket-column="side"]')
+  const composer = page.getByRole('textbox', { name: 'New post', exact: true })
+  await expect(main.locator(composer)).toBeVisible()
+  await composer.click()
+  await page.keyboard.type('Half a thought')
+  await expect(composer).toContainText('Half a thought')
+
+  // Activity moved to the side column elsewhere, and the page refetches the project (back to the tab).
+  const base = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
+  await ok(
+    human.patch(`/api/projects/${project.id}`, {
+      data: { layout: putLast(base, 'ticket.activity', 'ticket.side') },
+    }),
+  )
+  await expect(async () => {
+    const fetched = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === `/api/projects/${project.id}` && r.request().method() === 'GET',
+      { timeout: 2000 },
+    )
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')))
+    const layout = ((await (await fetched).json()) as Project).layout
+    expect(layout.find((it) => it.id === 'ticket.activity')!.area).toBe('ticket.side')
+  }).toPass({ timeout: 20_000 })
+  await page.waitForTimeout(500)
+
+  // The page keeps what it drew: the draft is where it was, as typed.
+  await expect(main.locator(composer)).toBeVisible()
+  await expect(composer).toContainText('Half a thought')
+  await expect(side.locator(composer)).toHaveCount(0)
+
+  // The next visit draws the new layout.
+  await page.goto(`/projects/${project.id}/features/${ticket.id}`)
+  await expect(side.locator(composer)).toBeVisible()
+  await expect(main.locator(composer)).toHaveCount(0)
+})
