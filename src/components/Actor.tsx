@@ -78,12 +78,37 @@ function Picture({ children }: { children: ReactNode }) {
 const ROOT = 'inline-flex min-w-0 max-w-full items-baseline gap-1 font-medium wrap-anywhere'
 
 /**
+ * The name, or with `truncate` the name cut short with an ellipsis where its one line cannot fit, so
+ * that what follows it (the role's badge) keeps its room: for a row that never wraps, such as a
+ * ticket card's. The tooltip keeps the whole name and chain.
+ */
+const Name = ({ name, truncate }: { name: string; truncate?: boolean }) =>
+  truncate ? (
+    <span data-testid="actor-name" className="min-w-0 truncate">
+      {name}
+    </span>
+  ) : (
+    name
+  )
+
+/**
  * Who did it: one of the project's agents gets its picture (and the connected agent it posted `via`),
  * any other name a glyph and its role's badge (Human, Orchestrator, Agent, or Board for what the board
  * recorded itself); a worker sub-identity also
  * says whom it works under. The tooltip has the whole chain, the name first.
  */
-export function Actor({ name, via, className = '' }: { name: string; via?: string; className?: string }) {
+export function Actor({
+  name,
+  via,
+  truncate,
+  className = '',
+}: {
+  name: string
+  via?: string
+  /** Cut the name short on its one line before the badge after it (see `Name`). */
+  truncate?: boolean
+  className?: string
+}) {
   const who = useWho()
   const agent = useProjectAgent(name)
   if (agent)
@@ -95,7 +120,7 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
           <Picture>
             <AgentAvatar agent={agent} />
           </Picture>
-          {agent.name}
+          <Name name={agent.name} truncate={truncate} />
           {via && <span className="min-w-0 font-normal text-muted-foreground">via {via}</span>}
         </span>
       </Tip>
@@ -108,7 +133,7 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
         <Picture>
           <Icon className="size-3.5 text-muted-foreground" />
         </Picture>
-        {name}
+        <Name name={name} truncate={truncate} />
         <RoleBadge role={me.role} />
         {me.role === 'worker' && me.parent && (
           // Kept on one line, cut short with an ellipsis where it cannot fit (the tooltip has the chain).

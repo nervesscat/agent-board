@@ -313,4 +313,52 @@ test.describe('on a phone', () => {
       await worker.dispose()
     }
   })
+
+  test("a deep sub-identity on a board card is cut short: its badge and the card's time stay in view", async ({
+    page,
+    project,
+    api,
+    playwright,
+    baseURL,
+  }, info) => {
+    const orchName = `orch-c${info.workerIndex}`
+    const sub = `${orchName}/builder-with-a-long-sub-identity/importer-lane-one`
+    const worker = await as(playwright, baseURL, `orchestrator:${orchName}`, { 'X-Agent-Name': sub })
+    try {
+      const t = await api.ticket({ title: 'Card with a deep assignee', status: 'in_progress' })
+      await ok(worker.post(`/api/tickets/${t.id}/claim`, { data: {} }))
+
+      await page.goto(`/projects/${project.id}/features?view=board`)
+      const card = page
+        .locator('[data-column="in_progress"]')
+        .getByRole('link', { name: /Card with a deep assignee/ })
+      await card.scrollIntoViewIfNeeded()
+      const actor = card
+        .locator('span[data-slot="tooltip-trigger"][data-role="worker"]')
+        .filter({ hasText: sub })
+      const name = actor.getByTestId('actor-name')
+      const role = actor.locator('[data-role="worker"]').getByText('Agent', { exact: true })
+      const time = card.getByTestId('card-time')
+      await expect(name).toHaveText(sub)
+      await expect(role).toBeVisible()
+      await expect(time).toBeVisible()
+      // The name is cut short on its line, not the badge or the time after it.
+      expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
+      const row = time.locator('..')
+      for (const inner of [role, time]) {
+        await expectInside(inner, card)
+        await expectInside(inner, row)
+      }
+      // The whole name and chain are in the tooltip.
+      await expectTooltip(
+        actor,
+        new RegExp(
+          `^${sub} \\(Agent\\) ← ${orchName}/builder-with-a-long-sub-identity \\(Agent\\) ← ${orchName} `,
+        ),
+      )
+      await page.screenshot({ path: test.info().outputPath('deep-sub-identity-card-390.png') })
+    } finally {
+      await worker.dispose()
+    }
+  })
 })
