@@ -88,9 +88,28 @@ export interface TicketRunsRepo {
   runs: TicketRun[]
 }
 
+/**
+ * A run started from one of the ticket's workspaces that still builds or runs, of a repo that is no
+ * longer one of the ticket's (its fallback repo changed, say): listed so it can be stopped from the
+ * ticket. It cannot start or restart from there again.
+ */
+export interface OrphanedRun {
+  repoId: number
+  repoName: string
+  runId: number
+  name: string
+  type: RunState['runType']
+  workspace: Pick<schema.Workspace, 'id' | 'name' | 'branch' | 'path'>
+  state: RunState
+  /** Why it is not under one of the ticket's repos. */
+  reason: string
+}
+
 export interface TicketRuns {
   ticketId: number
   repos: TicketRunsRepo[]
+  /** Its runs that still go for a repo that is no longer the ticket's (see `OrphanedRun`). */
+  orphaned: OrphanedRun[]
   /** Runs the board builds or runs now, board-wide, and the human's limit on them. */
   inUse: number
   limit: number
@@ -107,7 +126,41 @@ function runOf(ticket: schema.Ticket, config: RunConfig): TicketRun {
   }
 }
 
-/** Every run of every repo of the ticket, grouped by repo in the ticket's order. */
+const workspacesOf = (ticketId: number) =>
+  db
+    .select()
+    .from(schema.workspaces)
+    .where(eq(schema.workspaces.ticketId, ticketId))
+    .all()
+    .sort((a, b) => a.id - b.id)
+
+/** The ticket's runs that build or run from its workspaces for a repo it no longer spans. */
+function orphanedRuns(ticket: schema.Ticket): OrphanedRun[] {
+  const own = new Set(ticketRepoList(ticket).map((e) => e.repoId))
+  return workspacesOf(ticket.id).flatMap((w) =>
+    workspaceRuns(w.id)
+      .filter((r) => isActive(r) && !own.has(r.repoId))
+      .map((r) => {
+        const repo = db.select().from(schema.repos).where(eq(schema.repos.id, r.repoId)).get()
+        const repoName = repo?.name ?? `repo ${r.repoId}`
+        return {
+          repoId: r.repoId,
+          repoName,
+          runId: r.runId,
+          name: r.runName,
+          type: r.runType,
+          workspace: { id: w.id, name: w.name, branch: w.branch, path: w.path },
+          state: r,
+          reason: `${repoName} is no longer one of ticket ${ticket.id}'s repos`,
+        }
+      }),
+  )
+}
+
+/**
+ * Every run of every repo of the ticket, grouped by repo in the ticket's order, and the runs it
+ * started that still go for a repo it no longer spans.
+ */
 export function ticketRuns(ticketId: number): TicketRuns {
   const ticket = getTicket(ticketId)
   return {
@@ -129,6 +182,7 @@ export function ticketRuns(ticketId: number): TicketRuns {
         runs: listRunConfigs(e.repoId).map((c) => runOf(ticket, c)),
       }
     }),
+    orphaned: orphanedRuns(ticket),
     inUse: runsInUse(),
     limit: previewLimit(),
   }
@@ -181,14 +235,16 @@ export function startTicketRuns(ticketId: number, actor: string, opts: { repoId?
   return { results: out }
 }
 
-/** Stop all: every run of the ticket (of one of its repos, given `repoId`) that builds or runs. */
+/**
+ * Stop all: every run started from the ticket's workspaces that builds or runs, the orphaned ones
+ * too (only those of one repo, given `repoId`: one of the ticket's, or one it has orphaned runs of).
+ */
 export async function stopTicketRuns(ticketId: number, actor: string, opts: { repoId?: number } = {}) {
   const ticket = getTicket(ticketId)
-  const repos = new Set(reposOf(ticket, opts.repoId).map((e) => e.repoId))
-  const workspaces = db.select().from(schema.workspaces).where(eq(schema.workspaces.ticketId, ticketId)).all()
-  const active = workspaces
+  if (opts.repoId && !orphanedRuns(ticket).some((o) => o.repoId === opts.repoId)) reposOf(ticket, opts.repoId)
+  const active = workspacesOf(ticketId)
     .flatMap((w) => workspaceRuns(w.id))
-    .filter((r) => isActive(r) && repos.has(r.repoId))
+    .filter((r) => isActive(r) && (!opts.repoId || r.repoId === opts.repoId))
   const out: RunOutcome[] = []
   for (const r of active) {
     const state = await stopRun(r.workspaceId, r.runId, `stopped by ${actor}`, actor)
@@ -246,15 +302,39 @@ export async function startTicketRun(
   return opts.restart ? restartRun(workspace.id, config.id, actor) : startRun(workspace.id, config.id, actor)
 }
 
-/** stop_run: one run of the ticket that builds or runs, by id or name. */
+/**
+ * stop_run: one run of the ticket that builds or runs, by id or name: of one of its repos, else one
+ * of its orphaned runs (see `OrphanedRun`) so named.
+ */
 export async function stopTicketRun(
   ticketId: number,
   run: number | string,
   actor: string,
   opts: { repoId?: number } = {},
 ) {
-  const { config, workspace } = findTicketRun(ticketId, run, opts.repoId)
-  if (!isActive(runState(workspace.id, config.id)))
-    throw new HttpError(409, `${config.name} does not run from workspace ${workspace.name}`)
-  return stopRun(workspace.id, config.id, `stopped by ${actor}`, actor)
+  let found: ReturnType<typeof findTicketRun> | null = null
+  let refused: HttpError | null = null
+  try {
+    found = findTicketRun(ticketId, run, opts.repoId)
+  } catch (err) {
+    if (!(err instanceof HttpError)) throw err
+    refused = err
+  }
+  if (found && isActive(runState(found.workspace.id, found.config.id)))
+    return stopRun(found.workspace.id, found.config.id, `stopped by ${actor}`, actor)
+  const orphans = orphanedRuns(getTicket(ticketId)).filter(
+    (o) =>
+      (!opts.repoId || o.repoId === opts.repoId) &&
+      (typeof run === 'number' ? o.runId === run : o.name.toLowerCase() === run.trim().toLowerCase()),
+  )
+  if (orphans.length > 1)
+    throw new HttpError(
+      400,
+      `${orphans.length} runs named ${run} go for repos that are no longer the ticket's (${orphans.map((o) => `${o.repoId} ${o.repoName}`).join(', ')}): give repoId, or stop them all`,
+    )
+  const orphan = orphans[0]
+  if (orphan) return stopRun(orphan.workspace.id, orphan.runId, `stopped by ${actor}`, actor)
+  if (refused) throw refused
+  const { config, workspace } = found!
+  throw new HttpError(409, `${config.name} does not run from workspace ${workspace.name}`)
 }

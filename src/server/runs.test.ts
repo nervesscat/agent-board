@@ -827,6 +827,144 @@ describe('a ticket that spans two repos', () => {
     expect(state(ws.id, job.id)).toMatchObject({ status: 'stopped', reason: 'bb-f moved to project to-f' })
     expect(runs.activeRuns()).toEqual([])
   })
+
+  describe("a run of a repo that stops being the ticket's without being taken off it", () => {
+    /**
+     * A ticket left with no repo of its own (its only one deleted) that runs the project's first repo,
+     * `pp`, from its worktree of it: Worker (a job) and Web (a preview).
+     */
+    async function rowless(tag: string) {
+      const project = dbm.db
+        .insert(dbm.schema.projects)
+        .values({ name: `rowless ${tag}` })
+        .returning()
+        .get().id
+      const gone = addRepo(`mm-${tag}`, project)
+      const pp = addRepo(`pp-${tag}`, project)
+      const worker = run(pp, { name: 'Worker', type: 'job', start: 'python w.py', healthPath: '' })
+      const web = run(pp, { name: 'Web' })
+      const t = features.createTicket(
+        project,
+        { title: 'left without a repo', status: 'in_progress', repoId: gone.id, branch: 'x' },
+        'claude',
+      )
+      expect((await call('DELETE', `/api/repos/${gone.id}`)).status).toBe(200)
+      expect(features.getTicket(t.id).repoId).toBeNull()
+      const ws = features.addWorkspace(
+        t.id,
+        { name: 'pp', branch: 'x', path: worktree(pp), repoId: pp.id },
+        'claude',
+      )
+      const workerPid = (await running(ws.id, worker.id)) && fake.calls.at(-1)!.pid
+      const webPid = (await running(ws.id, web.id)) && fake.calls.at(-1)!.pid
+      return { project, pp, worker, web, t, ws, workerPid, webPid }
+    }
+
+    const runsOf = async (ticketId: number) =>
+      (await (await call('GET', `/api/tickets/${ticketId}/runs`)).json()) as import('./ticketRuns').TicketRuns
+
+    /** The ticket still shows the runs it started, under no repo of its own; they cannot start again. */
+    async function stillListed(r: Awaited<ReturnType<typeof rowless>>, newFirst: string) {
+      const listed = await runsOf(r.t.id)
+      expect(listed.repos.map((x) => x.name)).toEqual([newFirst])
+      expect(
+        listed.orphaned.map((o) => [o.repoId, o.repoName, o.name, o.workspace.id, o.state.status]),
+      ).toEqual([
+        [r.pp.id, r.pp.name, 'Worker', r.ws.id, 'running'],
+        [r.pp.id, r.pp.name, 'Web', r.ws.id, 'running'],
+      ])
+      expect(listed.orphaned[0]!.reason).toBe(`${r.pp.name} is no longer one of ticket ${r.t.id}'s repos`)
+      expect(listed.inUse).toBe(2)
+      const restart = await call(
+        'POST',
+        `/api/workspaces/${r.ws.id}/runs/${r.worker.id}/restart`,
+        undefined,
+        'agent',
+      )
+      expect(restart.status).toBe(400)
+      expect(await tool('start_run', { ticketId: r.t.id, run: 'Worker', restart: true })).toMatchObject({
+        error: true,
+      })
+      expect(status(r.ws.id, r.worker.id)).toBe('running')
+    }
+
+    it('a repo added that sorts first: the ticket lists them and Stop all stops them', async () => {
+      useFake()
+      const r = await rowless('c')
+      const main = path.join(code, 'aa-c')
+      fs.mkdirSync(path.join(main, '.git'), { recursive: true })
+      const created = await call(
+        'POST',
+        '/api/repos',
+        { projectId: r.project, name: 'aa-c', repoPath: main },
+        'agent',
+      )
+      expect(created.status).toBe(201)
+      // Adding a repo stops nothing by itself.
+      expect([status(r.ws.id, r.worker.id), status(r.ws.id, r.web.id)]).toEqual(['running', 'running'])
+      await stillListed(r, 'aa-c')
+
+      const stopped = await call('POST', `/api/tickets/${r.t.id}/runs/stop`, {}, 'agent')
+      expect(stopped.status).toBe(200)
+      const { results } = (await stopped.json()) as {
+        results: { repoId: number; name: string; ok: boolean }[]
+      }
+      expect(results.map((x) => [x.repoId, x.name, x.ok])).toEqual([
+        [r.pp.id, 'Worker', true],
+        [r.pp.id, 'Web', true],
+      ])
+      expect(fake.killed).toEqual(expect.arrayContaining([r.workerPid, r.webPid]))
+      expect(runs.activeRuns()).toEqual([])
+      const after = await runsOf(r.t.id)
+      expect([after.inUse, after.orphaned]).toEqual([0, []])
+    })
+
+    it('a repo renamed to sort first: the ticket lists them, stops one by name and the rest with Stop all', async () => {
+      useFake()
+      const r = await rowless('r')
+      const zz = addRepo('zz-r', r.project)
+      const renamed = await call('PATCH', `/api/repos/${zz.id}`, { name: 'aa-r' }, 'agent')
+      expect(renamed.status).toBe(200)
+      expect([status(r.ws.id, r.worker.id), status(r.ws.id, r.web.id)]).toEqual(['running', 'running'])
+      await stillListed(r, 'aa-r')
+      const listed = JSON.parse((await tool('list_runs', { ticketId: r.t.id })).text) as {
+        orphaned: { name: string }[]
+      }
+      expect(listed.orphaned.map((o) => o.name)).toEqual(['Worker', 'Web'])
+
+      // stop_run by name, any casing, then Stop all over MCP for the rest.
+      const one = await tool('stop_run', { ticketId: r.t.id, run: 'worker' })
+      expect(one.error).toBe(false)
+      expect(JSON.parse(one.text)).toMatchObject({ status: 'stopped', runName: 'Worker' })
+      expect(fake.killed).toContain(r.workerPid)
+      expect(status(r.ws.id, r.web.id)).toBe('running')
+      const rest = await tool('stop_run', { ticketId: r.t.id, all: true })
+      expect(JSON.parse(rest.text).results.map((x: { name: string }) => x.name)).toEqual(['Web'])
+      expect(fake.killed).toContain(r.webPid)
+      expect(runs.activeRuns()).toEqual([])
+      expect((await runsOf(r.t.id)).inUse).toBe(0)
+      // Nothing of it runs any more: a stop by name is refused again, naming the ticket's repos.
+      expect(await tool('stop_run', { ticketId: r.t.id, run: 'Worker' })).toMatchObject({
+        error: true,
+        text: expect.stringMatching(/no run Worker in aa-r/),
+      })
+    })
+
+    it('Stop all of the old repo by repoId stops them; a repo of neither is still refused', async () => {
+      useFake()
+      const r = await rowless('i')
+      const zz = addRepo('zz-i', r.project)
+      expect((await call('PATCH', `/api/repos/${zz.id}`, { name: 'aa-i' }, 'agent')).status).toBe(200)
+      const other = addRepo('qq-i', r.project)
+      const refused = await call('POST', `/api/tickets/${r.t.id}/runs/stop`, { repoId: other.id }, 'agent')
+      expect(refused.status).toBe(400)
+      expect(status(r.ws.id, r.worker.id)).toBe('running')
+      const stopped = await call('POST', `/api/tickets/${r.t.id}/runs/stop`, { repoId: r.pp.id }, 'agent')
+      expect(stopped.status).toBe(200)
+      expect(((await stopped.json()) as { results: unknown[] }).results).toHaveLength(2)
+      expect(runs.activeRuns()).toEqual([])
+    })
+  })
 })
 
 describe('over REST and MCP', () => {

@@ -10,6 +10,7 @@ import { Tip } from '#/components/ui/tooltip'
 import {
   errorMessage,
   get,
+  type OrphanedRun,
   post,
   type RunOutcome,
   type RunState,
@@ -27,7 +28,8 @@ import { cn } from '#/lib/utils'
  * The ticket's Runs card: every run the human configured for each repo the ticket spans (previews,
  * which answer on a port and have a link, and jobs, which do not), grouped by repo, each with its
  * state, the last lines of its log and Start, Stop and Restart; Start all and Stop all for the whole
- * ticket. Below them, the links agents set on the ticket's workspaces and its lanes' (`set_preview`),
+ * ticket. Runs the ticket started that still go for a repo it no longer spans are listed with Stop
+ * only. Below them, the links agents set on the ticket's workspaces and its lanes' (`set_preview`),
  * with Open and whether they answer. Hidden while the ticket has neither.
  */
 
@@ -62,7 +64,10 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
     queryKey: ['ticket-runs', t.id],
     queryFn: () => get<TicketRuns>(`/api/tickets/${t.id}/runs`),
     refetchInterval: (q) => {
-      const states = (q.state.data?.repos ?? []).flatMap((r) => r.runs.map((x) => x.state))
+      const states = [
+        ...(q.state.data?.repos ?? []).flatMap((r) => r.runs.map((x) => x.state)),
+        ...(q.state.data?.orphaned ?? []).map((o) => o.state),
+      ]
       if (states.some((s) => s?.status === 'building' || s?.status === 'starting')) return 2_000
       return states.some((s) => s?.status === 'running') ? 15_000 : 30_000
     },
@@ -103,11 +108,12 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
     onError: (err) => toast.error(errorMessage(err)),
   })
   const repos = data?.repos ?? []
-  const anyRuns = repos.some((r) => r.runs.length)
+  const orphaned = data?.orphaned ?? []
+  const anyRuns = repos.some((r) => r.runs.length) || orphaned.length > 0
   if (!anyRuns && !links.length) return null
   const runsList = repos.flatMap((r) => r.runs)
   const canStartAll = runsList.some((x) => !runActive(x.state) && x.cannotStart === null)
-  const canStopAll = runsList.some((x) => runActive(x.state))
+  const canStopAll = runsList.some((x) => runActive(x.state)) || orphaned.length > 0
   return (
     <section className="rounded-lg border p-3" aria-label="Runs">
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -179,6 +185,16 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
               )}
             </div>
           ))}
+        {orphaned.length > 0 && (
+          <div className="space-y-2" role="group" aria-label="No longer on this ticket">
+            <h3 className="text-xs font-medium">No longer on this ticket</h3>
+            <ul className="space-y-3">
+              {orphaned.map((o) => (
+                <OrphanedRow key={`${o.workspace.id}-${o.runId}`} run={o} onChange={changed} />
+              ))}
+            </ul>
+          </div>
+        )}
         {links.length > 0 && (
           <div className="space-y-2" role="group" aria-label="Links">
             {anyRuns && <h3 className="text-xs font-medium">Links</h3>}
@@ -318,6 +334,42 @@ function RunRow({ run, onChange }: { run: TicketRun; onChange: () => void }) {
           {s.tail.join('\n')}
         </pre>
       )}
+    </li>
+  )
+}
+
+/** A run the ticket started for a repo it no longer spans: it can only be stopped. */
+function OrphanedRow({ run, onChange }: { run: OrphanedRun; onChange: () => void }) {
+  const stop = useMutation({
+    mutationFn: () => post(`/api/workspaces/${run.workspace.id}/runs/${run.runId}/stop`),
+    onSuccess: onChange,
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  const status = statusOf(run.state)
+  return (
+    <li className="space-y-1.5 text-sm" aria-label={run.name}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">{run.name}</span>
+        <Badge variant="outline" className="h-4 px-1.5 text-[10px] font-normal">
+          {run.type === 'preview' ? 'Preview' : 'Job'}
+        </Badge>
+        <span className="truncate text-xs text-muted-foreground">{run.repoName}</span>
+        <span
+          className={cn(
+            'ml-auto inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px]',
+            status.className,
+          )}
+          data-testid="run-status"
+        >
+          {status.label}
+        </span>
+      </div>
+      <Button variant="outline" size="sm" disabled={stop.isPending} onClick={() => stop.mutate()}>
+        <Square /> Stop
+      </Button>
+      <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+        {run.reason}: it can be stopped, not started again from here.
+      </p>
     </li>
   )
 }

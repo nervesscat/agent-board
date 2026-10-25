@@ -466,7 +466,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'list_runs',
-    "Every run of every repo of the ticket, grouped by repo in the ticket's order (the primary first): repos [{repoId, name, branch, primary, workspace (the ticket's worktree of that repo the runs use: on the repo's branch first, else the newest; null when the ticket has none), workspaceProblem (why there is none), runs [{id, name, type preview | job, install, build, start, env, port (null: auto), healthPath, copyData, workspaceId, state (null when it never ran there; status building | starting | running | failed | stopped, step, port, url (a preview's, once it answers), reason, tail: the last log lines, logs: their paths), cannotStart (why a start would be refused, null when it would start)}]}], and inUse and limit: the runs going board-wide and the human's preview limit. The runs are the human's: you start and stop them, never change what they run.",
+    "Every run of every repo of the ticket, grouped by repo in the ticket's order (the primary first): repos [{repoId, name, branch, primary, workspace (the ticket's worktree of that repo the runs use: on the repo's branch first, else the newest; null when the ticket has none), workspaceProblem (why there is none), runs [{id, name, type preview | job, install, build, start, env, port (null: auto), healthPath, copyData, workspaceId, state (null when it never ran there; status building | starting | running | failed | stopped, step, port, url (a preview's, once it answers), reason, tail: the last log lines, logs: their paths), cannotStart (why a start would be refused, null when it would start)}]}], orphaned [{repoId, repoName, runId, name, type, workspace, state, reason}]: runs started from the ticket's workspaces that still go for a repo the ticket no longer spans (stop_run stops them; they cannot start again), and inUse and limit: the runs going board-wide and the human's preview limit. The runs are the human's: you start and stop them, never change what they run.",
     { ticketId: z.number().int() },
     ({ ticketId }) => ticketRuns.ticketRuns(ticketId),
   )
@@ -487,7 +487,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'stop_run',
-    "Stop one of the ticket's runs that builds or runs (by id or name, as start_run takes it): its processes are killed, its port freed and a preview's link cleared. With all: true (or no run), every run of the ticket (of repoId's only, given) that builds or runs, answering results.",
+    "Stop one of the ticket's runs that builds or runs (by id or name, as start_run takes it): its processes are killed, its port freed and a preview's link cleared. With all: true (or no run), every run of the ticket (of repoId's only, given) that builds or runs, answering results. Its orphaned runs (list_runs) are stopped too, by name or with all.",
     {
       ticketId: z.number().int(),
       run: z.union([z.number().int(), z.string()]).optional().describe("the run's id or name (list_runs)"),

@@ -454,7 +454,10 @@ folder). A preview board (development) starts no runs of its own.
 branch and PR; the first is the primary, whose values the ticket's own `repoId`, `branch`, `baseBranch`
 and `prNumber` always are. Existing tickets have their one repo. The ticket page's Details pick the
 others (with each one's branch), its Branch panel shows one block per repo, and its Runs card every run
-of every repo, grouped by repo.
+of every repo, grouped by repo. A run started from one of the ticket's workspaces that still goes for a
+repo the ticket no longer spans (one with no repo of its own whose fallback, the project's first repo,
+changed) is listed as orphaned (`orphaned` in `GET /api/tickets/:id/runs` and `list_runs`), and Stop
+all and `stop_run` reach it by name, but it cannot start or restart from the ticket.
 
 **The preview limit.** The board builds or runs at most as many runs at once, previews and jobs
 alike, across every project, as the human's preview limit (`previewLimit` in `/api/settings`, 1 to 32,
