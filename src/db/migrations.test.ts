@@ -571,9 +571,52 @@ describe('0033_archive_requests', () => {
   })
 })
 
-describe('0034_multi_repo_tickets_and_runs', () => {
-  it("gives every ticket its repo as a one-repo list, and every workspace its ticket's repo, changing nothing else", () => {
+describe('0034_work_timeline', () => {
+  it('adds the stall threshold without rebuilding projects, and the events table with its checks', () => {
     const sqlite = databaseAt('0033_archive_requests')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('timeline').lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by) VALUES (?, ?, ?)')
+        .run(project, 'Kept', 'claude').lastInsertRowid,
+    )
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    expect(sqlite.prepare('SELECT stall_minutes FROM projects').all()).toEqual([{ stall_minutes: 30 }])
+    expect(sqlite.prepare('SELECT id FROM tickets').all()).toEqual([{ id: ticket }])
+    const fresh = Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('new').lastInsertRowid)
+    expect(sqlite.prepare('SELECT stall_minutes FROM projects WHERE id = ?').get(fresh)).toEqual({
+      stall_minutes: 30,
+    })
+    expect(() => sqlite.prepare('UPDATE projects SET stall_minutes = 0').run()).toThrow(/CHECK/)
+    expect(() => sqlite.prepare('UPDATE projects SET stall_minutes = 1441').run()).toThrow(/CHECK/)
+
+    expect(columns(sqlite, 'ticket_events')).toEqual(
+      expect.arrayContaining(['ticket_id', 'project_id', 'kind', 'agent', 'by', 'ref_id', 'reason', 'at']),
+    )
+    const insert = sqlite.prepare(
+      'INSERT INTO ticket_events (ticket_id, project_id, kind, agent, by, reason) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    insert.run(ticket, project, 'wait_start', 'claude', 'claude', 'lock')
+    expect(() => insert.run(ticket, project, 'nap', 'claude', 'claude', '')).toThrow(/CHECK/)
+    expect(() => insert.run(ticket, project, 'wait_start', 'claude', 'claude', 'coffee')).toThrow(/CHECK/)
+    const indexes = (sqlite.prepare("PRAGMA index_list('ticket_events')").all() as { name: string }[]).map(
+      (i) => i.name,
+    )
+    expect(indexes).toEqual(expect.arrayContaining(['ticket_events_ticket_at', 'ticket_events_project_at']))
+    // Deleting the ticket takes its events.
+    sqlite.prepare('DELETE FROM tickets WHERE id = ?').run(ticket)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM ticket_events').get()).toEqual({ n: 0 })
+    sqlite.close()
+  })
+})
+
+describe('0035_multi_repo_tickets_and_runs', () => {
+  it("gives every ticket its repo as a one-repo list, and every workspace its ticket's repo, changing nothing else", () => {
+    const sqlite = databaseAt('0034_work_timeline')
     const insertProject = sqlite.prepare('INSERT INTO projects (name) VALUES (?)')
     const project = (name: string) => Number(insertProject.run(name).lastInsertRowid)
     const two = project('two repos')

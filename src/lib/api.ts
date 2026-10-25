@@ -42,6 +42,8 @@ import type { PrRow } from '#/server/prs'
 import type { ProjectPush, Push } from '#/server/push'
 import type { ProjectAgent } from '#/server/projectAgents'
 import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
+import type { ProjectWork, TicketEvent } from '#/server/workTimeline'
+import type { WorkTimeline } from './workTimeline'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
@@ -50,6 +52,9 @@ export type ProjectRow = ReturnType<typeof listProjects>[number]
 
 export type {
   RoadmapTicket,
+  ProjectWork,
+  TicketEvent,
+  WorkTimeline,
   CarryOver,
   DirListing,
   Gallery,
@@ -197,6 +202,12 @@ export interface SummaryHistory {
 }
 
 export type GitInfo = BranchInfo & { reach: Reach | null; push: Push }
+
+/** GET /api/tickets/:id/events: every event of the ticket, newest first, and its work timeline. */
+export interface TicketEvents {
+  events: TicketEvent[]
+  timeline: WorkTimeline
+}
 
 export interface TicketGit {
   /** The primary repo, its branch and base, and that branch's state. */

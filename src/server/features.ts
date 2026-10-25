@@ -50,6 +50,7 @@ import {
   stageOf,
 } from './stages'
 import { assertUnattached, attachTo, attachmentView } from './uploads'
+import { noteBoardEvent, noteStageMove } from './workTimeline'
 
 // --- tickets ---
 
@@ -599,6 +600,8 @@ export function createTicket(
     .get()
   syncPrimaryRow(row)
   if (input.repos) writeOtherRepos(row.id, resolveTicketRepos(row, input.repos))
+  noteStageMove(row.id, null, row.status)
+  if (row.prNumber) noteBoardEvent(row.id, 'pr', { note: `PR #${row.prNumber}` })
   if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
   if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
   if (parent) touch(parent.id)
@@ -762,6 +765,9 @@ export function updateTicket(
     .where(eq(schema.tickets.id, id))
     .returning()
     .get()!
+  noteStageMove(id, before.status, row.status)
+  if (row.prNumber !== null && row.prNumber !== before.prNumber)
+    noteBoardEvent(id, 'pr', { note: `PR #${row.prNumber}` })
   const changes: string[] = []
   if (patch.status && patch.status !== before.status) {
     changes.push(`status ${stageOf(stages, before.status).name} → ${stageOf(stages, patch.status).name}`)
@@ -887,6 +893,7 @@ export function claimTicket(
         next.push({ ...r, name: '', baseBranch: '', prNumber: null, primary: false })
     writeOtherRepos(id, resolveTicketRepos(row, next))
   }
+  noteStageMove(id, before.status, row.status)
   if (row.parentId) touch(row.parentId)
   const tookOver = before.assignee && before.assignee !== assignee ? ` from ${before.assignee}` : ''
   if (before.assignee !== assignee || start)
@@ -955,6 +962,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     .returning()
     .get()!
   if (t.parentId) touch(t.parentId)
+  noteStageMove(id, t.status, row.status)
   if (row.status !== t.status) stopIfClosed(row, stages, actor)
   const what = `${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title}`
   logActivity({
@@ -2281,6 +2289,7 @@ function postDecision(
       .set({ status: blocked.key, ...startedPatch(stages, ticket.status, blocked.key, ticket.startedAt) })
       .where(eq(schema.tickets.id, ticketId))
       .run()
+    noteStageMove(ticketId, ticket.status, blocked.key)
   }
   logActivity({
     projectId: ticket.projectId,
@@ -2409,11 +2418,13 @@ function settleDecision(post: { id: number; ticketId: number }, actor: string, r
       ? db.select().from(schema.prs).where(eq(schema.prs.id, ticket.prId)).get()
       : undefined
     const back = (pr && prTicketStage(stages, prStatus(pr))) ?? firstOfKind(stages, 'active')
-    if (back && back.key !== ticket.status)
+    if (back && back.key !== ticket.status) {
       db.update(schema.tickets)
         .set({ status: back.key, ...startedPatch(stages, ticket.status, back.key, ticket.startedAt) })
         .where(eq(schema.tickets.id, ticket.id))
         .run()
+      noteStageMove(ticket.id, ticket.status, back.key)
+    }
   }
   touch(ticket.id)
   logActivity({

@@ -29,6 +29,7 @@ import {
 import { listRepos, ticketRepo } from './repos'
 import { ticketRepoList, ticketRepoRows } from './ticketRepos'
 import { kindOf, listStages } from './stages'
+import { noteBoardEvent } from './workTimeline'
 
 export type PrStatus = 'pending' | 'reviewed' | 'on_hold' | 'done'
 export type ReviewStage = schema.Pr['reviewStage']
@@ -551,6 +552,7 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
         .get()!
       changes.push({ repo, before: existing, after: row })
       if (existing.open && !open) left.push(row)
+      if (!existing.mergedAt && row.mergedAt) noteMerge(repo, row)
     } else
       db.insert(schema.prs)
         .values({ ...values, projectId, repoId: repo.id, number: pr.number })
@@ -574,6 +576,15 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
   left.push(...gone)
   if (left.length) await stopMergedPreviews(repo, left)
   return changes
+}
+
+/** A merge the board saw first now, on the work timeline of the PR's tickets and of its own ticket. */
+function noteMerge(repo: schema.Repo, pr: schema.Pr) {
+  const tickets = db.select().from(schema.tickets).where(eq(schema.tickets.projectId, repo.projectId)).all()
+  const ids = featureTicketsOf(tickets, listRepos(repo.projectId), pr).map((t) => t.id)
+  const own = prTicketOf(tickets, pr.id)
+  for (const id of own ? [...ids, own.id] : ids)
+    noteBoardEvent(id, 'merge', { note: `PR #${pr.number} merged` })
 }
 
 /**

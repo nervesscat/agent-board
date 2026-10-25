@@ -17,6 +17,7 @@ import { HttpError, notFound } from './http'
 import { checkPreview } from './preview'
 import { getRunConfig, listRunConfigs, type RunConfig, seedRepo } from './runConfig'
 import { kindOf, listStages } from './stages'
+import { noteBoardEvent } from './workTimeline'
 
 /**
  * Runs: long-running processes the board starts itself from a ticket's worktree, as the human
@@ -596,6 +597,7 @@ export function startRun(
   all().set(keyOfEntry(e), e)
   save()
   log(e, actor, `started ${article(run.type)}`)
+  notePreview(e, 'building')
   const going = go(e, run)
     .catch((err: unknown) => fail(e, `could not start: ${(err as Error).message ?? err}`, null))
     .finally(() => kept.settling.delete(e))
@@ -855,6 +857,7 @@ async function go(e: Entry, run: RunConfig) {
         .where(eq(schema.workspaces.id, e.workspaceId))
         .run()
       save()
+      notePreview(e, `running ${base}`)
       return
     }
     await new Promise((r) => setTimeout(r, 500))
@@ -904,6 +907,7 @@ function fail(e: Entry, reason: string, from: 'build' | 'server' | null) {
   })
   if (pid) void runner.killTree(pid)
   save()
+  notePreview(e, `failed: ${reason}`)
 }
 
 /**
@@ -929,7 +933,19 @@ export async function stopRun(workspaceId: number, runId: number, reason: string
   if (url) clearUrl(workspaceId, url)
   save()
   log(e, actor, `stopped the ${e.runType} (${reason})`)
+  notePreview(e, `stopped: ${reason}`)
   return view(e)
+}
+
+/**
+ * A preview's states on its ticket's work timeline (building, running, failed, stopped); a run other
+ * than the default Preview says its name. A job has no link to show there and records none.
+ */
+function notePreview(e: Pick<Entry, 'ticketId' | 'runType' | 'runName'>, what: string) {
+  if (e.runType !== 'preview') return
+  noteBoardEvent(e.ticketId, 'preview', {
+    note: e.runName === DEFAULT_RUN.name ? what : `${e.runName} ${what}`,
+  })
 }
 
 /**
