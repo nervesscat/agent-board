@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d027e58a-0372-45f5-a625-5fadb1a731ee",
+  "id": "2232f423-ec68-49c2-9a70-165c6a559db4",
   "prevId": "de6cc025-50a3-4834-b93c-22fac97df2ca",
   "tables": {
     "account": {
@@ -1016,6 +1016,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": 30
+        },
+        "layout": {
+          "name": "layout",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -2876,13 +2883,6 @@
         },
         "archive_tickets": {
           "name": "archive_tickets",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "repo_request": {
-          "name": "repo_request",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

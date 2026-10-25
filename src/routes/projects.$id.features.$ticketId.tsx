@@ -56,7 +56,7 @@ import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
-import { RunsCard } from '#/components/RunsCard'
+import { RunsCard, useTicketRuns } from '#/components/RunsCard'
 import { PrState } from '#/components/PrState'
 import { type FeedTab, RESUME_TEMPLATE } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
@@ -125,6 +125,7 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
+import { type AreaId, type Layout, defaultLayout, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -143,6 +144,15 @@ function TicketPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const stages = useStages(id)
+  // Which sections show, in which column and order: the project's layout, taken once per ticket shown.
+  // Until it loads no section is drawn, rather than drawn in its default place and moved (a #link would
+  // land on where it was). A layout saved while the ticket is open applies on the next one shown or the
+  // next visit: a section that changed column would be drawn afresh, losing what is typed in it.
+  const project = useProject(id)
+  const live = project.data?.layout ?? (project.isError ? defaultLayout() : undefined)
+  const [kept, setKept] = useState<{ ticketId: string; layout: Layout } | null>(null)
+  const layout = kept?.ticketId === ticketId ? kept.layout : live
+  if (layout && kept?.ticketId !== ticketId) setKept({ ticketId, layout })
   const setFilter = (f: LaneFilter) =>
     navigate({
       to: '/projects/$id/features/$ticketId',
@@ -243,7 +253,7 @@ function TicketPage() {
   const anchor = useAnchor()
   const linkedTo = useLocation({ select: (l) => l.pathname.split('/').at(-1) })
   const drawn = t !== undefined && String(t.id) === ticketId && ticketId === linkedTo
-  useReveal(anchor, { page: ticketId, ready: drawn })
+  useReveal(anchor, { page: ticketId, ready: drawn && layout !== undefined })
   // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
@@ -256,11 +266,14 @@ function TicketPage() {
     }
   }, [drawn, anchor, anchoredPost, laneFeed, t])
 
-  if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
-  if (!t) return null
   // Stepping to another ticket, the previous one stays on screen until the new one loads: its git state
   // may come first, and must not show under the previous ticket's branch.
-  const git = t.id === Number(ticketId) ? ticketGit : undefined
+  const git = t && t.id === Number(ticketId) ? ticketGit : undefined
+  // Here, not only in the Runs card: with none to show the card is left out, and its column with it.
+  const runs = useTicketRuns(t, git)
+
+  if (error) return <p className="text-sm text-destructive">{errorMessage(error)}</p>
+  if (!t) return null
 
   /**
    * Record a verdict. Disapproving cancels the lane, which can drop it out of the filtered list, so
@@ -303,6 +316,35 @@ function TicketPage() {
   const openLanes = t.lanes.filter((l) => !isClosed(stageOf(stages, l.status).kind)).length
   const kind = stageOf(stages, t.status).kind
   const lanesWarning = openLanes > 0 && (kind === 'review' || kind === 'done')
+  // null: a section with nothing to show on this ticket. It is left out of its column, so a column
+  // with nothing left to show is not drawn and the other one takes the page's width.
+  const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
+    // Keyed by ticket, so an open editor and its draft do not follow to the next one. Not on a
+    // ticket that is finished or archived.
+    'ticket.resume':
+      t.archivedAt || isClosed(kind) ? null : <ResumeNote key={t.id} t={t} onChange={invalidate} />,
+    'ticket.instructions': (
+      <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+    ),
+    'ticket.tasks': <Tasks t={t} onChange={invalidate} />,
+    'ticket.timeline': <WorkTimelineCard key={t.id} t={t} />,
+    'ticket.lanes': (
+      <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
+    ),
+    'ticket.activity': (
+      <ShownAnchor value={drawn ? anchor : null}>
+        {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
+        <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+      </ShownAnchor>
+    ),
+    'ticket.handoff': t.handoff ? <HandoffCard handoff={t.handoff} git={git} pr={t.pr} /> : null,
+    'ticket.runs': runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
+    'ticket.details': <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />,
+    'ticket.branch': <BranchPanel t={t} git={git} />,
+    'ticket.workspaces': <WorkspacesPanel t={t} git={git} onChange={invalidate} />,
+  }
+  const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
+  const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
 
   return (
     <div className="flex flex-col gap-6">
@@ -439,30 +481,29 @@ function TicketPage() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      {/* One column when the layout leaves the other empty. */}
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-6',
+          main.length > 0 && side.length > 0 && 'lg:grid-cols-[minmax(0,1fr)_18rem]',
+        )}
+      >
         {/* minmax(0,…) and min-w-0: a long line (a lane's last update, a code block) must not
               widen the page */}
-        <div className="min-w-0 space-y-6">
-          {/* Keyed by ticket, so an open editor and its draft do not follow to the next one; one key for
-                both, as siblings sharing a key would leave one of them behind on screen. */}
-          <Fragment key={t.id}>
-            <ResumeNote t={t} onChange={invalidate} />
-            <Instructions t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
-          </Fragment>
-          <Tasks t={t} onChange={invalidate} />
-          <WorkTimelineCard key={`work-${t.id}`} t={t} />
-          <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
-          <ShownAnchor value={drawn ? anchor : null}>
-            {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
-            <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
-          </ShownAnchor>
-        </div>
-        <aside className="min-w-0 space-y-4">
-          {t.handoff && <HandoffCard handoff={t.handoff} git={git} pr={t.pr} />}
-          <RunsCard t={t} git={git} onChange={invalidate} />
-          <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />
-          <GitPanel t={t} git={git} onChange={invalidate} />
-        </aside>
+        {main.length > 0 && (
+          <div data-ticket-column="main" className="min-w-0 space-y-6">
+            {main.map((s) => (
+              <Fragment key={s}>{sections[s]}</Fragment>
+            ))}
+          </div>
+        )}
+        {side.length > 0 && (
+          <aside data-ticket-column="side" className="min-w-0 space-y-4">
+            {side.map((s) => (
+              <Fragment key={s}>{sections[s]}</Fragment>
+            ))}
+          </aside>
+        )}
       </div>
     </div>
   )
@@ -868,8 +909,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
  * is. Edited like the instructions; an empty note starts from the template. On any other open ticket
  * a one-line button writes the first one.
  */
+/** Shown only on a ticket still open and not archived: the page leaves it out otherwise. */
 function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
-  const stages = useStages(t.projectId)
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState('')
   const r = t.resume
@@ -881,7 +922,6 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
-  if (t.archivedAt || isClosed(stageOf(stages, t.status).kind)) return null
   const open = () => {
     setNote(r.note || RESUME_TEMPLATE)
     setEditing(true)
@@ -2592,14 +2632,29 @@ function DecisionCard({ u, onChange }: { u: UpdateRow; onChange: () => void }) {
   )
 }
 
-function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
-  const onError = (err: unknown) => toast.error(errorMessage(err))
-  const remove = useMutation({
-    mutationFn: (id: number) => del(`/api/workspaces/${id}`),
-    onSuccess: onChange,
-    onError,
-  })
-  const PrLine = ({ pr }: { pr: NonNullable<TicketFull['pr']> }) => (
+/** Where a branch's head is: its last commit, how far from the base, how far it has gone. */
+function Info({ info }: { info: TicketGit['info'] }) {
+  return info.exists ? (
+    <div className="text-xs text-muted-foreground">
+      <span className="font-mono">{shortSha(info.sha!)}</span> {info.subject}
+      <div>
+        {info.ahead != null && (
+          <>
+            +{info.ahead} / −{info.behind} vs base ·{' '}
+          </>
+        )}
+        {ago(info.authoredAt)}
+      </div>
+      {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
+    </div>
+  ) : (
+    <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>
+  )
+}
+
+/** A PR of the ticket's: its link, where it is in the queue, its latest review. */
+function PrLine({ pr }: { pr: NonNullable<TicketFull['pr']> }) {
+  return (
     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
       {pr.url ? (
         <a
@@ -2625,27 +2680,14 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
       )}
     </div>
   )
-  const Info = ({ info }: { info: TicketGit['info'] }) =>
-    info.exists ? (
-      <div className="text-xs text-muted-foreground">
-        <span className="font-mono">{shortSha(info.sha!)}</span> {info.subject}
-        <div>
-          {info.ahead != null && (
-            <>
-              +{info.ahead} / −{info.behind} vs base ·{' '}
-            </>
-          )}
-          {ago(info.authoredAt)}
-        </div>
-        {info.reach && <ReachBadge reach={info.reach} className="mt-1" />}
-      </div>
-    ) : (
-      <div className="text-xs text-muted-foreground">branch not in the checkout yet</div>
-    )
-  return (
-    <>
-      {(git?.repos.length ?? 0) > 1 ? (
-        git!.repos.map((r) => (
+}
+
+/** The ticket's branch: its git state and its PR; one panel per repo when it spans several. */
+function BranchPanel({ t, git }: { t: TicketFull; git?: TicketGit }) {
+  if ((git?.repos.length ?? 0) > 1)
+    return (
+      <>
+        {git!.repos.map((r) => (
           <section key={r.repo.id} className="rounded-lg border p-3" aria-label={`Branch in ${r.repo.name}`}>
             <h2 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
               Branch
@@ -2673,50 +2715,57 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
             {r.pr && <PrLine pr={r.pr} />}
             {r.pr?.queue?.open && <PrState pr={r.pr.queue} className="mt-1.5" />}
           </section>
-        ))
-      ) : (
-        <section className="rounded-lg border p-3">
-          <h2 className="mb-2 flex items-center text-sm font-medium">
-            Branch
-            {git?.repo && (
-              <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">
-                {git.repo.name}
-              </span>
-            )}
-          </h2>
-          {t.branch ? (
-            <>
-              <div className="inline-flex items-center gap-1 font-mono text-sm">
-                <GitBranch className="size-3.5" /> {t.branch}
-              </div>
-              <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
-              {git?.repo && (
-                <div className="flex min-w-0 items-center gap-1">
-                  <PushBadge push={git.info.push} />
-                  <RefreshPush projectId={t.projectId} className="-my-1" />
-                </div>
-              )}
-              {git && <Info info={git.info} />}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              No branch yet: pick one above, or the agent sets it.
-            </p>
+        ))}
+      </>
+    )
+  return (
+    <section className="rounded-lg border p-3">
+      <h2 className="mb-2 flex items-center text-sm font-medium">
+        Branch
+        {git?.repo && (
+          <span className="ml-auto font-mono text-xs font-normal text-muted-foreground">{git.repo.name}</span>
+        )}
+      </h2>
+      {t.branch ? (
+        <>
+          <div className="inline-flex items-center gap-1 font-mono text-sm">
+            <GitBranch className="size-3.5" /> {t.branch}
+          </div>
+          <div className="text-xs text-muted-foreground">base {t.baseBranch}</div>
+          {git?.repo && (
+            <div className="flex min-w-0 items-center gap-1">
+              <PushBadge push={git.info.push} />
+              <RefreshPush projectId={t.projectId} className="-my-1" />
+            </div>
           )}
-          {t.pr && <PrLine pr={t.pr} />}
-          {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
-        </section>
+          {git && <Info info={git.info} />}
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">No branch yet: pick one above, or the agent sets it.</p>
       )}
-      <section className="rounded-lg border p-3">
-        <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
-        <p className="mb-2 text-xs text-muted-foreground">
-          Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
-          {t.lanes.length > 0 && ' and its lanes'}.
-        </p>
-        <ul className="space-y-2">
-          {(
-            git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))
-          ).map((w) => (
+      {t.pr && <PrLine pr={t.pr} />}
+      {t.pr?.queue?.open && <PrState pr={t.pr.queue} className="mt-1.5" />}
+    </section>
+  )
+}
+
+/** The worktrees, sub-branches and sandboxes opened for the ticket and its lanes. */
+function WorkspacesPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChange: () => void }) {
+  const remove = useMutation({
+    mutationFn: (id: number) => del(`/api/workspaces/${id}`),
+    onSuccess: onChange,
+    onError: (err: unknown) => toast.error(errorMessage(err)),
+  })
+  return (
+    <section className="rounded-lg border p-3">
+      <h2 className="mb-2 text-sm font-medium">Workspaces</h2>
+      <p className="mb-2 text-xs text-muted-foreground">
+        Worktrees, sub-branches and subagent sandboxes the agents opened for this ticket
+        {t.lanes.length > 0 && ' and its lanes'}.
+      </p>
+      <ul className="space-y-2">
+        {(git?.workspaces ?? t.workspaces.map((w) => ({ ...w, info: null, worktree: null, lane: null }))).map(
+          (w) => (
             <li key={w.id} className="group text-sm">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{w.name}</span>
@@ -2759,12 +2808,12 @@ function GitPanel({ t, git, onChange }: { t: TicketFull; git?: TicketGit; onChan
                 </Tip>
               )}
             </li>
-          ))}
-        </ul>
-        {t.workspaces.length === 0 && !git?.workspaces.length && (
-          <p className="text-xs text-muted-foreground">None yet.</p>
+          ),
         )}
-      </section>
-    </>
+      </ul>
+      {t.workspaces.length === 0 && !git?.workspaces.length && (
+        <p className="text-xs text-muted-foreground">None yet.</p>
+      )}
+    </section>
   )
 }

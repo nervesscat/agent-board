@@ -26,6 +26,7 @@ import {
   type StageKind,
   type FeedTab,
 } from '#/lib/constants'
+import type { SavedLayout } from '#/lib/layout'
 import type { RunType } from '#/lib/runs'
 
 export { COMMENT_PARENTS, STAGE_KINDS, type CommentParent, type StageColor, type StageKind }
@@ -54,6 +55,9 @@ export const projects = sqliteTable('projects', {
   // How many minutes an active ticket may go without a work event before it reads as stalled, 1 to 1440.
   // The migration adds that range as a column CHECK: a table CHECK would have drizzle rebuild projects.
   stallMinutes: integer('stall_minutes').notNull().default(30),
+  // Which of the project's menu pages, Overview cards and ticket sections show, and where. Null is
+  // the defaults; what is handed out is that merged with the elements there are now (`mergeLayout`).
+  layout: text('layout', { mode: 'json' }).$type<SavedLayout>(),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
