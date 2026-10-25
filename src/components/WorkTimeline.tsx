@@ -55,11 +55,19 @@ const HATCH = {
 const phaseName = (s: Pick<TimelineSpan, 'phase' | 'round'>) =>
   s.round !== null ? `${s.phase} round ${s.round}` : s.phase
 
-const spanLabel = (s: TimelineSpan) =>
-  `${phaseName(s)} by ${s.agent}${s.by !== s.agent ? ` (via ${s.by})` : ''}, ${clock(s.start)} to ${s.open ? 'now' : clock(s.end)}, ${spokenDuration(Date.parse(s.end) - Date.parse(s.start))}${s.open ? ', open' : ''}`
+/**
+ * Where a segment ends, in words: `now` only while it is open on a live ticket. On a ticket no longer
+ * worked an open segment ends at the ticket's last event, as the bar draws it, so it gives that time
+ * (its `open` suffix still says it was never closed).
+ */
+const until = (seg: { open: boolean; end: string }, live: boolean) =>
+  seg.open && live ? 'now' : clock(seg.end)
 
-const waitLabel = (w: TimelineWait) =>
-  `wait: ${w.reason} (${w.agent}), ${clock(w.start)} to ${w.open ? 'now' : clock(w.end)}, ${spokenDuration(Date.parse(w.end) - Date.parse(w.start))}${w.open ? ', open' : ''}${w.note ? `: ${w.note}` : ''}`
+export const spanLabel = (s: TimelineSpan, live: boolean) =>
+  `${phaseName(s)} by ${s.agent}${s.by !== s.agent ? ` (via ${s.by})` : ''}, ${clock(s.start)} to ${until(s, live)}, ${spokenDuration(Date.parse(s.end) - Date.parse(s.start))}${s.open ? ', open' : ''}`
+
+export const waitLabel = (w: TimelineWait, live: boolean) =>
+  `wait: ${w.reason} (${w.agent}), ${clock(w.start)} to ${until(w, live)}, ${spokenDuration(Date.parse(w.end) - Date.parse(w.start))}${w.open ? ', open' : ''}${w.note ? `: ${w.note}` : ''}`
 
 /** Spans packed into rows so overlapping ones (an orchestrator's and its sub-agent's) sit apart. */
 function packRows(spans: TimelineSpan[]): TimelineSpan[][] {
@@ -110,7 +118,7 @@ export function WorkTimelineBar({
           {rows.map((row, i) => (
             <div key={i} className={`relative ${rowH}`}>
               {row.map((s) => {
-                const label = spanLabel(s)
+                const label = spanLabel(s, timeline.live)
                 return (
                   <Tip key={s.id} content={label}>
                     <button
@@ -159,7 +167,7 @@ export function WorkTimelineBar({
             )
           })}
           {timeline.waits.map((w) => {
-            const label = waitLabel(w)
+            const label = waitLabel(w, timeline.live)
             return (
               <Tip key={w.id} content={label}>
                 <button
