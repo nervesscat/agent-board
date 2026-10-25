@@ -9,6 +9,7 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  FileText,
   GitPullRequest,
   Hand,
   Hourglass,
@@ -21,10 +22,12 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-import { Actor } from '#/components/Actor'
+import { Actor, ClaimedActor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
+import { useSettleInstructions } from '#/components/InstructionsHistory'
 import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
+import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
@@ -255,7 +258,15 @@ const silentMinutes = (since: string) => Math.max(0, Math.floor((Date.now() - Da
 /** A stalled ticket's details, from the Needs you list that names it. */
 function stalledOf(p: ProjectSummary, id: number) {
   const s = p.needsYou.stalled.find((x) => x.ticketId === id)
-  return s ? { since: s.lastSignalAt, minutes: silentMinutes(s.lastSignalAt), lastAgent: s.lastAgent } : null
+  return s
+    ? {
+        since: s.lastSignalAt,
+        minutes: silentMinutes(s.lastSignalAt),
+        lastAgent: s.lastAgent,
+        lastBy: s.lastBy,
+        lastFrom: s.lastFrom,
+      }
+    : null
 }
 
 function Stale() {
@@ -271,8 +282,9 @@ function Stale() {
 // --- the sections ---
 
 function NeedsYou({ p }: { p: ProjectSummary }) {
-  const { decisions, prs, threads, reviews, blockedTasks, stalled, total } = p.needsYou
+  const { decisions, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } = p.needsYou
   const pid = String(p.project.id)
+  const settle = useSettleInstructions(pid)
   return (
     <Section icon={Inbox} title="Needs you" count={total} scroll>
       {!total ? (
@@ -411,6 +423,61 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               }
             />
           ))}
+          {instructionChanges.map((c) => (
+            <Row
+              key={`i${c.changeId}`}
+              icon={<FileText className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <span>
+                  <Link
+                    to="/projects/$id/settings"
+                    params={{ id: pid }}
+                    hash="instructions-history"
+                    className="hover:underline"
+                  >
+                    Project instructions changed
+                  </Link>{' '}
+                  by <Actor name={c.changedBy} />
+                </span>
+              }
+              meta={
+                <>
+                  {c.excerpt && <span className="min-w-0 truncate">{c.excerpt}</span>}
+                  <span className="shrink-0">{ago(c.createdAt)}</span>
+                  <span className="flex shrink-0 gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      disabled={settle.isPending}
+                      onClick={() => settle.mutate({ id: c.changeId, action: 'review' })}
+                    >
+                      Reviewed
+                    </Button>
+                    <Tip
+                      content={
+                        c.revertable
+                          ? 'Put the instructions back as they were before this change'
+                          : 'The instructions changed again since: revert the later change first'
+                      }
+                    >
+                      <span className="inline-flex">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="xs"
+                          disabled={settle.isPending || !c.revertable}
+                          onClick={() => settle.mutate({ id: c.changeId, action: 'revert' })}
+                        >
+                          Revert
+                        </Button>
+                      </span>
+                    </Tip>
+                  </span>
+                </>
+              }
+            />
+          ))}
           {stalled.map((s) => (
             <Row
               key={`s${s.ticketId}`}
@@ -429,9 +496,21 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                   <StageBadge p={p} status={s.status} />
                   {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
                   <Tip content={`No heartbeat or event since ${clock(s.lastSignalAt)}`}>
-                    <span>
+                    <span className="min-w-0">
                       silent {formatDuration(silentMinutes(s.lastSignalAt) * 60_000)}
-                      {s.lastAgent && ` · last ${s.lastAgent}`}
+                      {s.lastAgent && (
+                        <>
+                          {' · last '}
+                          {s.lastFrom === 'assignee' ? (
+                            // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
+                            <span data-testid="last-assignee" className="font-medium wrap-anywhere">
+                              {s.lastAgent}
+                            </span>
+                          ) : (
+                            <ClaimedActor name={s.lastAgent} by={s.lastBy} />
+                          )}
+                        </>
+                      )}
                     </span>
                   </Tip>
                 </>

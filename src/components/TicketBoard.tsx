@@ -184,9 +184,10 @@ export function TicketBoard({
                               {repoLabel(project, t.repoId)}
                             </span>
                           )}
-                          {t.assignee && <Actor name={t.assignee} className="shrink-0" />}
+                          {/* A long name is cut short before its badge; the branch gives way first. */}
+                          {t.assignee && <Actor name={t.assignee} truncate />}
                           {t.branch && (
-                            <span className="inline-flex min-w-0 items-center gap-1 font-mono">
+                            <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
                               {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
                               <GitBranch className="size-3 shrink-0" />{' '}
                               <span className="truncate">{t.branch}</span>
@@ -316,7 +317,11 @@ function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
 const INFO_ROW =
   'mt-1.5 flex min-w-0 items-center gap-x-2 overflow-hidden text-xs whitespace-nowrap text-muted-foreground'
 
-const Updated = ({ at }: { at: string }) => <span className="ml-auto shrink-0">{ago(at)}</span>
+const Updated = ({ at }: { at: string }) => (
+  <span data-testid="card-time" className="ml-auto shrink-0">
+    {ago(at)}
+  </span>
+)
 
 /**
  * Stretches the element down to the bottom of the window, whatever sits above it on the page. It

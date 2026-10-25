@@ -15,6 +15,32 @@ your identity** on the board (`claude`, `codex`, …): every ticket, update and 
 attributed to it. It signs in for a year unless the human revokes it on that page; then you get 401
 and the human generates new commands.
 
+**Who is who.** Every caller has a name, a role and maybe a parent. MCP `whoami` says yours as
+`{actor, name, role, parent, token}` (`actor` is `name`; `token` the credential you signed in with).
+REST `GET /api/me` answers `{actor, agent, role, parent, boardEnv, authOff}`: `actor` is your name
+(your token's name, or `<token>/<name>` once you send `X-Agent-Name`), and it has no `token` field.
+
+- The human is `human`. An agent token is a `worker` unless the human made it an `orchestrator`
+  (Settings, Agents). The role comes with the token: nothing an agent sends raises it.
+- Only the human and an orchestrator change a project's instructions (`set_project_instructions`,
+  REST `PUT /api/projects/:id/instructions`), create a project with instructions (`POST /api/projects`)
+  or move a repo to another project (`PATCH /api/repos/:id` `{projectId}`). A worker is refused with
+  "ask your orchestrator": tell your orchestrator what should change, or ask the human. Every change
+  is kept with the text before it (a new project's instructions as a change from nothing); an
+  orchestrator's applies at once and shows in the human's Needs you until they mark it reviewed or
+  revert it.
+- **Sub-identities.** A subagent you delegate to shares your MCP connection, and so your token: the
+  board cannot tell it from you unless it says who it is. An orchestrator briefs each worker to pass
+  `agentName: "<your whoami name>/<its name>"` (e.g. `orch/builder-1`) on every board tool call. Its
+  posts, claims and comments then carry that name, with you as its parent, and it is a worker
+  whatever your token is: it cannot change instructions or relay a decision. A worker session
+  configured on its own sends the header `X-Agent-Name: <token name>/<its name>` instead (REST and
+  MCP alike); over REST it takes `<token name>` from `actor` in `GET /api/me` called without the
+  header (e.g. `actor` `orch` gives `X-Agent-Name: orch/builder-1`). The name must start with the token's own name and `/`: up to 4 names, 80 characters,
+  each a letter or digit then letters, digits, `.`, `_` or `-`; anything else is a 400. The hard
+  boundary is a worker token of its own: a subagent that leaves `agentName` out under an
+  orchestrator's token looks like the orchestrator, so keeping to it is the orchestrator's job.
+
 - MCP (preferred): `http://localhost:47100/api/mcp`, streamable HTTP, header
   `Authorization: Bearer <token>`
 - REST: same header against `http://localhost:47100/api/*` (the routes are listed in `README.md`)
@@ -50,7 +76,8 @@ http_headers = { Authorization = "Bearer <token>" }
    `claim_ticket`'s `branch` is the primary's and its `repos` sets each one's branch, `add_workspace`
    takes the `repoId` its worktree is of, and `get_ticket_git` reports every repo.
    Repos are the human's to add, change and remove (`POST`/`PATCH`/`DELETE /api/repos` answer 403
-   to an agent). When the work needs one the project lacks (a new repository you are building), ask
+   to an agent; an orchestrator only moves one to another project, a `PATCH` of `projectId` alone,
+   see "Who is who"). When the work needs one the project lacks (a new repository you are building), ask
    with `add_repo` (step 7); once it is added, `set_ticket_repo` moves your ticket onto it
    (makes it the primary).
    Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
@@ -367,7 +394,8 @@ personas the human sets up on the board's Agents page. A ticket the human assign
   read goes in the summary (`set_ticket_summary`, `as` too) or a reply under their post.
 - Never take a reserved ticket as yourself or reassign it; only the human does.
 - A persona never answers a decision (step 6): the human answers the card, or the orchestrator relays
-  their answer from the chat.
+  their answer from the chat. Nor does a sub-identity: a call with `agentName` or `X-Agent-Name` is
+  refused.
 - `@name` in a thread asks that agent: `list_my_threads` returns threads waiting on an agent with
   `as` set, for you to answer as it.
 
@@ -375,8 +403,9 @@ personas the human sets up on the board's Agents page. A ticket the human assign
 call it, what to give it, what it returns, what comes next. With them you can work a ticket as its
 orchestrator instead of doing the work yourself: each step runs as a subagent briefed with that
 agent's instructions, the project's, and a five-part brief (step 4) holding the ticket's step and
-the hand-off checklist (step 7); its result is posted on the ticket as that agent; the notes pick
-the next agent. Before moving the ticket to
+the hand-off checklist (step 7), and with the `agentName` it passes on every board call
+(`<your whoami name>/<its name>`, Identity and auth above); its result is posted on the ticket as
+that agent; the notes pick the next agent. Before moving the ticket to
 `review`, check every item of that checklist yourself. The Agents page adds a default set (spec, builder, runner, and
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
 → (a fix pass by the builder on the confirmed findings, each with the project's checks and a new
@@ -416,7 +445,8 @@ routine.
   human archives it, like any finished ticket. A PR ticket is in no features list, count or summary
   list; its decisions and threads waiting on the human show in Needs you as PR rows. A PR has no
   comment thread: its discussion is on its ticket.
-- `list_actors` gives the names to use for `assignee`.
+- `list_actors` gives the names to use for `assignee`, each with its kind, role (human,
+  orchestrator, worker) and parent (the name a sub-identity works under).
 - If you review a PR, record it with `post_review_result` (verdict, markdown summary with
   findings, how to test, checks): that is how findings reach the human, as the verdict on the PR
   queue and on the ticket's Branch card, which open the result in full, and as a progress post on

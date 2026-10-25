@@ -183,7 +183,7 @@ test('hovering shows what the title said, and each element stays what it was, wi
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const openedBy = page.locator('span').filter({ hasText: /^opened by / })
   const actor = openedBy.locator('span[data-slot="tooltip-trigger"]')
-  await expectTooltip(actor, `${HUMAN} (you, signed in with a passkey)`)
+  await expectTooltip(actor, `${HUMAN} (Human): you, signed in with a passkey`)
   expect(await tagOf(actor)).toBe('span')
   await expect(openedBy.getByRole('button')).toHaveCount(0)
 
@@ -227,7 +227,7 @@ test('hovering shows what the title said, and each element stays what it was, wi
       .locator('span')
       .filter({ hasText: /^opened by / })
       .locator('span[data-slot="tooltip-trigger"]'),
-    `${AGENT} (agent, signed in with a token)`,
+    `${AGENT} (Agent): an agent, signed in with a token`,
   )
 
   // The project's agents: icon buttons named as their tooltips say.
@@ -697,7 +697,7 @@ test('nested tooltips: the innermost shows, the outer one on its own part, never
   // "by <author> <when>": the author's own tooltip on the name, the time's on the rest of the line.
   const line = page.getByRole('region', { name: 'Resume here' }).getByText(/^by /)
   const author = line.locator('span[data-slot="tooltip-trigger"]')
-  await expectTooltip(author, `${AGENT} (agent, signed in with a token)`)
+  await expectTooltip(author, `${AGENT} (Agent): an agent, signed in with a token`)
   await expect(anyTooltip(page)).toHaveCount(1)
   const when = await page.evaluate(
     (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }),
@@ -708,7 +708,7 @@ test('nested tooltips: the innermost shows, the outer one on its own part, never
   await expect(tooltip(page)).toHaveText(when)
   await expect(tooltip(page)).toHaveCount(1)
   await author.hover()
-  await expect(tooltip(page)).toHaveText(`${AGENT} (agent, signed in with a token)`)
+  await expect(tooltip(page)).toHaveText(`${AGENT} (Agent): an agent, signed in with a token`)
   await expect(tooltip(page)).toHaveCount(1)
 
   // A need's chip, and its remove button inside it.

@@ -2526,18 +2526,21 @@ export function decide(
  * with the human's pick, `relayedBy` the connected agent `actor` and `relayedText` the words as the
  * human gave them. The board cannot see the chat, so it trusts the connected agent's account of it. The
  * relay is refused to a human, to any call with `as` (one of the project's agents), and to a card
- * already decided. A delegated subagent that calls without `as`, with the orchestrator's token, looks
- * the same as the orchestrator here: only the instructions keep it from relaying. The check and the
+ * already decided, and to a sub-identity (`delegated`: a worker that said who it is). A delegated
+ * subagent that calls with the orchestrator's token and names no sub-identity looks the same as the
+ * orchestrator here: only the instructions keep it from relaying. The check and the
  * write are one statement, so two relays cannot both land.
  */
 export function relayDecision(
   postId: number,
   input: { option: number; words: string; as?: string },
   actor: string,
-  opts: { agent: boolean; origin?: string | null },
+  opts: { agent: boolean; delegated?: boolean; origin?: string | null },
 ) {
   if (!opts.agent)
     throw new HttpError(403, 'only a connected agent relays a decision: the human answers the card')
+  // A sub-identity (X-Agent-Name, agentName) is a delegated worker, never the session with the human.
+  if (opts.delegated) throw new HttpError(403, 'only the session that talks to the human relays an answer')
   if (input.as !== undefined)
     throw new HttpError(403, "a decision is relayed by the orchestrator, not as one of the project's agents")
   const words = input.words.trim()

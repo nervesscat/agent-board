@@ -7,6 +7,7 @@ import { dayBounds } from './activity'
 import { listActors } from './actors'
 import { today } from './daily'
 import { gist, listHumanThreads, listTickets } from './features'
+import { pendingInstructionChanges } from './instructionsHistory'
 import { getProject } from './projects'
 import { refreshPrsInBackground } from './prs'
 import { listAgents } from './projectAgents'
@@ -251,6 +252,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
               parent: parentOf(t),
               lastSignalAt: s.since,
               lastAgent: s.lastAgent,
+              lastBy: s.lastBy,
+              lastFrom: s.lastFrom,
             },
           ]
         : []
@@ -407,6 +410,17 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       )
       .get()?.n ?? 0
 
+  // Orchestrators' changes of the project's instructions, applied and waiting on the human's review.
+  const instructionChanges = pendingInstructionChanges(project.id).map((c) => ({
+    changeId: c.id,
+    projectId: c.projectId,
+    changedBy: c.changedBy,
+    role: c.role,
+    createdAt: c.createdAt,
+    excerpt: excerpt(c.newValue),
+    revertable: c.revertable,
+  }))
+
   // --- next: the head of the first open column that lines work up (not a backlog) ---
   const open = stages.filter((s) => s.kind === 'open')
   const nextStage = open.find((s) => !isBacklog(s)) ?? open.at(-1) ?? null
@@ -422,6 +436,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       threads,
       reviews,
       blockedTasks,
+      instructionChanges,
       stalled,
       total:
         decisions.length +
@@ -429,6 +444,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         threads.length +
         reviews.length +
         blockedTasks.length +
+        instructionChanges.length +
         stalled.length,
     },
     inProgress: progress.filter((t) => t.kind !== 'review'),

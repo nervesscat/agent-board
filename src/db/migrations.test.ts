@@ -976,9 +976,9 @@ describe('0038_multi_repo_tickets_and_runs', () => {
   })
 })
 
-describe('0039_repo_requests', () => {
+describe('0040_repo_requests', () => {
   it('adds the repo request column without rebuilding the posts, so they, their cards and files stay', () => {
-    const sqlite = databaseAt('0038_multi_repo_tickets_and_runs')
+    const sqlite = databaseAt('0039_agent_roles_and_instruction_history')
     const project = Number(
       sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('repos').lastInsertRowid,
     )

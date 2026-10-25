@@ -191,7 +191,10 @@ describe('buildTimeline', () => {
     expect(still.totals.blockedOnHumanMs).toBe(45 * MIN)
     // A stage the project no longer has is not blocked.
     const gone = build(
-      [event('stage', '10:00', { agent: 'board', toStage: 'parked' }), event('heartbeat', '10:30')],
+      [
+        event('stage', '10:00', { agent: 'board', by: 'board', toStage: 'parked' }),
+        event('heartbeat', '10:30'),
+      ],
       '10:30',
     )
     expect(gone.blockedStretches).toEqual([])
@@ -201,8 +204,8 @@ describe('buildTimeline', () => {
     const t = build(
       [
         event('handoff', '10:00', { fromAgent: 'orchestrator', toAgent: 'builder-sub-1' }),
-        event('push', '10:05', { agent: 'board', note: 'pushed abc1234' }),
-        event('stage', '10:06', { agent: 'board', toStage: 'review' }),
+        event('push', '10:05', { agent: 'board', by: 'board', note: 'pushed abc1234' }),
+        event('stage', '10:06', { agent: 'board', by: 'board', toStage: 'review' }),
       ],
       '10:10',
     )
@@ -221,7 +224,13 @@ describe('the stalled rule', () => {
   const hb = () => event('heartbeat', '10:00', { agent: 'builder' })
 
   it('flags an active ticket silent for more than the threshold, and only then', () => {
-    expect(build([hb()], '10:31').stalled).toEqual({ since: at('10:00'), minutes: 31, lastAgent: 'builder' })
+    expect(build([hb()], '10:31').stalled).toEqual({
+      since: at('10:00'),
+      minutes: 31,
+      lastAgent: 'builder',
+      lastBy: 'claude',
+      lastFrom: 'event',
+    })
     expect(build([hb()], '10:29').stalled).toBeNull()
     expect(build([hb()], '10:30').stalled).toBeNull()
   })
@@ -243,7 +252,7 @@ describe('the stalled rule', () => {
 
   it('takes the latest of any event, startedAt and createdAt as the last signal', () => {
     expect(build([hb(), event('heartbeat', '10:40')], '11:00').stalled).toBeNull()
-    expect(build([event('push', '10:40', { agent: 'board' })], '11:00').stalled).toBeNull()
+    expect(build([event('push', '10:40', { agent: 'board', by: 'board' })], '11:00').stalled).toBeNull()
     expect(build([hb()], '11:00', { startedAt: at('10:45') }).stalled).toBeNull()
     expect(build([], '09:31', { createdAt: at('09:00') }).stalled).toMatchObject({ minutes: 31 })
     expect(build([hb()], '10:31', {}, 60).stalled).toBeNull()
@@ -251,8 +260,65 @@ describe('the stalled rule', () => {
   })
 
   it('names the last agent heard from, not the board', () => {
-    const t = build([hb(), event('push', '10:05', { agent: 'board' })], '11:00')
-    expect(t.stalled).toMatchObject({ since: at('10:05'), lastAgent: 'builder' })
+    const t = build([hb(), event('push', '10:05', { agent: 'board', by: 'board' })], '11:00')
+    expect(t.stalled).toMatchObject({ since: at('10:05'), lastAgent: 'builder', lastBy: 'claude' })
+  })
+
+  it("counts a worker's event under the name 'board' as the worker's, not the board's", () => {
+    // Recorded by a signed-in worker under the board's name: a claim, so it names the event.
+    const claimed = event('heartbeat', '10:05', { agent: 'board', by: 'claude' })
+    const t = build([hb(), claimed], '11:00')
+    expect(t.stalled).toEqual({
+      since: at('10:05'),
+      minutes: 55,
+      lastAgent: 'board',
+      lastBy: 'claude',
+      lastFrom: 'event',
+    })
+    // Its activity resets the clock like any other event's.
+    expect(
+      build([hb(), event('heartbeat', '10:40', { agent: 'board', by: 'claude' })], '11:00').stalled,
+    ).toBeNull()
+    // The only event, with an assignee: still the event, never the assignee.
+    expect(build([claimed], '11:00', { assignee: 'someone' }).stalled).toMatchObject({
+      lastAgent: 'board',
+      lastBy: 'claude',
+      lastFrom: 'event',
+    })
+    // The board's own, recorded by the board or by no one (older events): skipped.
+    for (const by of ['board', ''])
+      expect(build([hb(), event('push', '10:05', { agent: 'board', by })], '11:00').stalled).toMatchObject({
+        lastAgent: 'builder',
+        lastBy: 'claude',
+        lastFrom: 'event',
+      })
+  })
+
+  it('carries who recorded the last event beside the name it claims', () => {
+    // A worker claims another's name: the claim and the signed-in recorder both come through.
+    const claimed = event('heartbeat', '10:00', { agent: 'enrique', by: 'orch/builder-1' })
+    expect(build([claimed], '11:00').stalled).toMatchObject({
+      lastAgent: 'enrique',
+      lastBy: 'orch/builder-1',
+      lastFrom: 'event',
+    })
+    // An older event recorded no one: nothing to name, but the name still comes from an event.
+    expect(build([event('heartbeat', '10:00', { by: '' })], '11:00').stalled).toMatchObject({
+      lastAgent: 'claude',
+      lastBy: '',
+      lastFrom: 'event',
+    })
+    // No agent's event at all: the assignee, recorded by no one.
+    expect(build([], '11:00', { assignee: 'someone', createdAt: at('09:00') }).stalled).toMatchObject({
+      lastAgent: 'someone',
+      lastBy: '',
+      lastFrom: 'assignee',
+    })
+    // Only the board's own events: still the assignee's name, not an event's.
+    expect(
+      build([event('push', '10:00', { agent: 'board', by: 'board' })], '11:00', { assignee: 'someone' })
+        .stalled,
+    ).toMatchObject({ lastAgent: 'someone', lastBy: '', lastFrom: 'assignee' })
   })
 
   it('isStalled is strict at the threshold', () => {
