@@ -13,7 +13,10 @@ import {
 import {
   COMMENT_PARENTS,
   DEFAULT_COMPLEXITY,
+  EVENT_KINDS,
   STAGE_KINDS,
+  WAIT_REASONS,
+  type EventKind,
   type CommentParent,
   type Complexity,
   type PrCheck,
@@ -48,6 +51,9 @@ export const projects = sqliteTable('projects', {
     .$type<string[]>()
     .notNull()
     .default(['Bug', 'UI', 'Implementation', 'Report']),
+  // How many minutes an active ticket may go without a work event before it reads as stalled, 1 to 1440.
+  // The migration adds that range as a column CHECK: a table CHECK would have drizzle rebuild projects.
+  stallMinutes: integer('stall_minutes').notNull().default(30),
   // Which of the project's menu pages, Overview cards and ticket sections show, and where. Null is
   // the defaults; what is handed out is that merged with the elements there are now (`mergeLayout`).
   layout: text('layout', { mode: 'json' }).$type<SavedLayout>(),
@@ -210,6 +216,46 @@ export const tickets = sqliteTable(
   (t) => [
     index('tickets_parent').on(t.parentId),
     check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high')`),
+  ],
+)
+
+// A ticket's work timeline (src/server/workTimeline.ts): what its agents recorded (spans of a phase,
+// hand-offs, waits, heartbeats) and what the board saw (pushes, the PR, the preview, the merge, stage
+// moves). Always the server's time; never edited.
+export const ticketEvents = sqliteTable(
+  'ticket_events',
+  {
+    id: id(),
+    ticketId: integer('ticket_id')
+      .notNull()
+      .references(() => tickets.id, { onDelete: 'cascade' }),
+    // The ticket's project, kept for the project-wide reads.
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: text().$type<EventKind>().notNull(),
+    // Who did the work: the name the caller gave (a sub-agent's), else the caller; `board` for the board's own.
+    agent: text().notNull(),
+    // Who recorded it: the token or human name that called.
+    by: text().notNull(),
+    phase: text().notNull().default(''),
+    round: integer(),
+    // On span_end and wait_end: the start it closes.
+    refId: integer('ref_id'),
+    fromAgent: text('from_agent').notNull().default(''),
+    toAgent: text('to_agent').notNull().default(''),
+    reason: text().notNull().default(''),
+    note: text().notNull().default(''),
+    // On stage events: the stage keys it moved from ('' when the ticket was created) and to.
+    fromStage: text('from_stage').notNull().default(''),
+    toStage: text('to_stage').notNull().default(''),
+    at: now(),
+  },
+  (t) => [
+    index('ticket_events_ticket_at').on(t.ticketId, t.at),
+    index('ticket_events_project_at').on(t.projectId, t.at),
+    check('ticket_events_kind', sql.raw(`kind IN (${EVENT_KINDS.map((k) => `'${k}'`).join(', ')})`)),
+    check('ticket_events_reason', sql.raw(`reason IN ('', ${WAIT_REASONS.map((k) => `'${k}'`).join(', ')})`)),
   ],
 )
 
@@ -578,6 +624,7 @@ export type Stage = typeof stages.$inferSelect
 export type Repo = typeof repos.$inferSelect
 export type Pr = typeof prs.$inferSelect
 export type Ticket = typeof tickets.$inferSelect
+export type TicketEvent = typeof ticketEvents.$inferSelect
 export type Task = typeof tasks.$inferSelect
 export type Workspace = typeof workspaces.$inferSelect
 export type Update = typeof updates.$inferSelect

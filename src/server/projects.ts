@@ -143,13 +143,18 @@ export const LayoutBody = z
 
 /**
  * `defaultPhases`: the names trimmed, null for the built-in list again. `tagSuggestions`: trimmed,
- * blanks and repeats in any casing left out; [] stays empty. `layout`: kept as it is in effect
- * (`mergeLayout`: unknown ids dropped, locked elements shown), null for the defaults again.
+ * blanks and repeats in any casing left out; [] stays empty. `stallMinutes`: how long an active ticket
+ * may go without a work event before it reads as stalled (the caller checks the range). `layout`: kept
+ * as it is in effect (`mergeLayout`: unknown ids dropped, locked elements shown), null for the defaults
+ * again.
  */
 export function updateProject(
   id: number,
   patch: Partial<
-    Pick<schema.Project, 'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'layout'>
+    Pick<
+      schema.Project,
+      'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'stallMinutes' | 'layout'
+    >
   >,
   actor: string,
 ) {

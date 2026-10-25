@@ -41,6 +41,7 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
     'Resume here',
     'Instructions',
     'Tasks',
+    'Timeline',
     'Lanes',
     'Activity',
   ])
@@ -221,7 +222,15 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   await side
     .filter({ hasText: 'Details' })
     .dragTo(main.filter({ hasText: 'Resume here' }), { targetPosition: { x: 10, y: 3 } })
-  await expect(main).toHaveText(['Details', 'Resume here', 'Instructions', 'Tasks', 'Lanes', 'Activity'])
+  await expect(main).toHaveText([
+    'Details',
+    'Resume here',
+    'Instructions',
+    'Tasks',
+    'Timeline',
+    'Lanes',
+    'Activity',
+  ])
   await expect(side).toHaveText(['Hand-off', 'Preview', 'Branch', 'Workspaces'])
   // And Workspaces to the main column with its button, hidden there.
   await layout.getByRole('button', { name: 'Move Workspaces to the main column' }).click()
@@ -239,6 +248,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
     'Resume here',
     'Instructions',
     'Tasks',
+    'Timeline',
     'Lanes',
     'Activity',
     'Workspaces',
@@ -360,3 +370,4 @@ test('a ticket column with nothing to show on this ticket is not drawn; the othe
   await expect(main).toHaveCount(0)
   expect((await side.boundingBox())!.width).toBeCloseTo(grid, 0)
 })
+

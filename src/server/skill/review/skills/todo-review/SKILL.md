@@ -99,7 +99,13 @@ Loop until nothing is pending or running:
   `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
   as the ticket's complexity sets it: `low` for low, `medium` for mid and high; the ticket agent passes
   the same effort to every agent it starts (spec, builder, the review's phase agents). They run in the background; do
-  not poll. Continue when a completion notification arrives.
+  not poll. Continue when a completion notification arrives. Record each start on the ticket's work
+  timeline: `handoff` with `projectId`, `ticketId` and `to` the ticket agent's name.
+- While runs are in flight, the ticket agents keep their tickets' work timelines (a `heartbeat`
+  every few minutes, `start_span` / `end_span` around each phase, `start_wait` / `end_wait` with the
+  reason, `handoff` to each agent they start). A ticket that reads as stalled (`get_summary` →
+  `needsYou.stalled`, or `stalled` on `list_tickets`) has an agent that stopped saying anything:
+  check on its run (a notification you missed, an agent that died) before anything else.
 - On completion, however the run ended (a result, an error, an agent that died), release the
   ticket's lanes and slot, and remove its repo's test lock `QUEUE/locks/tests-<repo id>/` when the
   lock's `holder.txt` names this ticket: the agent releases it itself, this covers a run that ended

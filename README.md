@@ -104,8 +104,9 @@ the board itself happens in worktrees, never in the main checkout (Development, 
 
 ## Install
 
-The board also comes as a Windows app, CrossBoard: an installer that runs the built board in a
-window of its own, with no checkout, pnpm or node to run. From a checkout:
+The board also comes as a desktop app, CrossBoard, for Windows and Linux: an installer or package
+that runs the built board in a window of its own, with no checkout, pnpm or node to run. Each is
+built on its own platform (x64 only). From a checkout on Windows:
 
 ```
 pnpm install
@@ -113,7 +114,8 @@ pnpm desktop:package   # builds the board, then desktop/dist/agent-board-setup-<
 pnpm desktop:smoke     # runs the unpacked app from a temp folder on port 8240 and checks it (Testing, below)
 ```
 
-CI builds the installer on every pull request (the `agent-board-setup` artifact of the run).
+CI builds the installer on every pull request (the `agent-board-setup` artifact of the run). Linux:
+below (Linux). The rest of this section is the Windows app, and how both behave.
 
 **Installing.** Run `agent-board-setup-<version>.exe`. It installs for you alone, without admin rights,
 into `%LOCALAPPDATA%\Programs\agent-board`, adds CrossBoard to the Start menu and the desktop, and
@@ -160,6 +162,96 @@ sessions).
 registered there. It leaves `%LOCALAPPDATA%\agent-board` alone: delete that folder to remove the data and the
 settings too.
 
+### Linux
+
+The same app, packaged for Linux x64 in four forms: an AppImage (any distribution), a `.deb`
+(Debian, Ubuntu), an `.rpm` (Fedora, openSUSE) and a pacman package (Arch, Omarchy). It behaves as on
+Windows (above), with the differences below. Build them on Linux, from a checkout:
+
+```
+sudo apt install rpm libarchive-tools   # Debian/Ubuntu: rpmbuild for the .rpm, bsdtar for the pacman package
+pnpm install
+pnpm desktop:package   # desktop/dist/agent-board-<version>-x86_64.AppImage, agent-board_<version>_amd64.deb,
+                       # agent-board-<version>.x86_64.rpm, agent-board-<version>.pacman and linux-unpacked/
+pnpm desktop:smoke     # the unpacked app's smoke test; under a display, or xvfb-run -a pnpm desktop:smoke
+```
+
+(Fedora: `sudo dnf install rpm-build bsdtar`; Arch: `sudo pacman -S rpm-tools libarchive`.) The
+script prints the four packages' paths at the end. Only x64 is built: `--arch arm64` is refused.
+`desktop/linux/docker-test.sh all` builds them in a `node:24-bookworm` container instead, from what
+is committed, and installs and checks each in a container of its distribution (Docker only, Windows
+included). CI does the same on every pull request: the `desktop-linux` job keeps the four as the
+`agent-board-linux` artifact.
+
+**Installing**, by distribution (each pulls in what Electron needs from the distribution's own
+repositories, and installs the app in `/opt/CrossBoard` with `agent-board` on `PATH`, a CrossBoard
+entry in the applications menu and its icons):
+
+- **Debian, Ubuntu:** `sudo apt install ./agent-board_<version>_amd64.deb`
+- **Fedora:** `sudo dnf install ./agent-board-<version>.x86_64.rpm`; **openSUSE:**
+  `sudo zypper install ./agent-board-<version>.x86_64.rpm` (built for Fedora's names, untested there)
+- **Arch, Omarchy:** `sudo pacman -U ./agent-board-<version>.pacman`
+- **Any other, or no root:** the AppImage. `chmod +x agent-board-<version>-x86_64.AppImage` and run
+  it. It brings Electron but not what Electron needs from the system (GTK 3, NSS, GBM, ALSA, which a
+  desktop has), and needs FUSE 2 (`libfuse2` on Debian/Ubuntu, `fuse2` on Arch, `fuse-libs` on Fedora); without
+  it, `--appimage-extract` unpacks it into `squashfs-root/`, and `squashfs-root/AppRun` starts it
+  (not `squashfs-root/agent-board`: `AppRun` adds `--no-sandbox` where the system blocks user
+  namespaces, as Ubuntu 24.04 does, and without it Electron stops at start). It adds nothing to the
+  menu by itself.
+
+None is signed, and none updates itself: install a newer one over it (the AppImage: replace the
+file), and the data stays.
+
+**Data and settings** follow the XDG base directories (`XDG_CONFIG_HOME` and `XDG_DATA_HOME` when they
+are set to absolute paths):
+
+- `~/.config/agent-board/config.env`: the settings, as on Windows. A relative `DATA_DIR` is under
+  `~/.local/share/agent-board`.
+- `~/.config/agent-board/electron/`: the window's browser profile.
+- `~/.local/share/agent-board/data/`: the database, uploads and logs (`data/logs/board.out.log`,
+  `board.err.log`).
+
+`AGENT_BOARD_HOME` puts all three in one folder, as on Windows.
+
+**Prerequisites** are those of Windows: `git`, `gh` (signed in) and `claude`, and `pnpm` and `node`
+for managed previews. An app started from the applications menu, a launcher or autostart gets no
+shell's `PATH`, so at each start the app asks your login shell for it (`$SHELL -ilc`, `/bin/sh` without
+`SHELL`; so what `~/.profile`, `~/.bash_profile`, `~/.bashrc` or `~/.zshrc` add, mise, nvm or pnpm's
+setup included, counts as in a terminal), puts it in front of the `PATH` it was started with, adds
+`~/.local/bin`, `~/bin`, `~/.local/share/pnpm`, `~/.local/share/mise/shims` and `~/.volta/bin` where
+they exist, and starts the board with that. A shell that fails, prints no `PATH` or takes more than 5
+seconds is skipped. A tool set up only in a non-login, non-interactive file is not found: put it on
+`PATH` in one of those, or set `PATH` (or `CLAUDE_BIN`) in `config.env`. The folders of a `PATH` set in
+`config.env` (`~/` for the home folder; `$PATH` is not expanded there, and is not needed) go first,
+in front of the login shell's, even when the app was started with a `PATH` of its own.
+
+**Tray, and closing the window.** The tray icon is a StatusNotifierItem: KDE shows it, GNOME with the
+AppIndicator extension, and on Hyprland (Omarchy) waybar's `tray` module (add `"tray"` to a
+`modules-*` list in `~/.config/waybar/config.jsonc` if your bar has none). Closing the window hides it
+while a tray shows the icon, as on Windows; with no tray, nothing could bring the window back, so
+closing it quits the app and stops the board. Either way the window's own menu (press Alt) has Open in
+browser, Start at login and Quit. The app runs natively on Wayland in a Wayland session (Electron's
+default) and under X11 otherwise. Notifications go to your notification daemon (mako, swaync,
+GNOME's, KDE's). Links, Open in browser and previews open in the default browser (`xdg-open`).
+
+**Start at login** (tray menu or window menu; off at first) writes
+`~/.config/autostart/agent-board.desktop`, which starts the installed app, or the AppImage where it is
+when it was turned on (an unpacked one through its `squashfs-root/AppRun`); off removes it. Desktops
+that follow the autostart spec run it (GNOME, KDE, Xfce, and Hyprland started through uwsm, as Omarchy
+starts it, through systemd's `xdg-desktop-autostart.target`); for a Hyprland started otherwise, run the folder from an `exec-once`
+(e.g. `dex -a`), or put `exec-once = agent-board` in `hyprland.conf` instead.
+
+**Uninstalling:** `sudo apt remove agent-board`, `sudo dnf remove agent-board` (`zypper remove`), or
+`sudo pacman -R agent-board`; the AppImage: delete it. Settings and data stay: delete
+`~/.config/agent-board` and `~/.local/share/agent-board` (and the autostart entry, if on) to remove
+them too.
+
+**No Flatpak or Snap.** The board runs `git`, `gh`, `claude`, `node` and `pnpm` from your system in
+your repositories and worktrees, and builds and runs previews there. In Flatpak's sandbox every one of
+those would go through `flatpak-spawn --host` with `--talk-name=org.freedesktop.Flatpak` and the whole
+home folder opened, which leaves the sandbox nothing to keep out, and Flathub does not take apps that
+way. The packages above run it as any program you install.
+
 ## The tools it runs
 
 The board runs tools installed on its machine: `git` (ticket branch and commit status, merged checks,
@@ -167,7 +259,8 @@ cleanup), `gh` signed in with `gh auth login` (the PR queue, CI status, PR ticke
 (`CLAUDE_BIN` with `CLAUDE_ARGS`: generated reports, agents) and `node` with `pnpm` (managed
 previews). It looks for each on the PATH it was started with (on Windows with `PATHEXT`, so
 `pnpm.cmd` counts), and for `claude` at `CLAUDE_BIN`, never through a login shell: a program that
-starts the board with its own PATH gets the same answer it would. The check runs as the board starts
+starts the board with its own PATH gets the same answer it would. The desktop app on Linux starts it with your
+login shell's PATH (Linux, above), so the check sees what a terminal would. The check runs as the board starts
 and again from the warning's **Check again** (`POST /api/host-tools/check`). While one is missing, or
 `gh` is signed out, every page shows a warning naming it, what it breaks and the fix; each can be
 dismissed until the next check finds it still missing. The PR queue, previews, the Cleanup page and
@@ -467,11 +560,41 @@ is also a progress post on the PR's ticket when the PR has one (`ticket` in the 
 `/projects/:id/reviews?result=` links land on the PR queue with that result open. Nothing is posted
 to GitHub.
 
+## Work timeline
+
+Agents record their work on a ticket as they go, through the MCP tools `start_span` / `end_span` (a
+phase: spec, build, review round N, verify, PR, preview, merge, or their own words), `handoff` (to
+another agent, a sub-agent included), `start_wait` / `end_wait` (with a reason: `lock`, `builder`,
+`mcp`, `human`, `other`) and `heartbeat`, or `POST /api/projects/:id/tickets/:ticketId/events`. Each
+names the project, and only a ticket of that project takes it. The board adds what it sees itself: a
+push to the ticket's branch on origin, its PR being set and merged, its preview's states, and every
+move between stages. Every event takes the server's time; none goes to the feed or the Daily view,
+and none bumps the ticket.
+
+The Roadmap draws each ticket's and lane's timeline under its steps (spans as segments by phase, waits
+hatched with their reason, hand-offs as markers, the board's events as dots), and the ticket page has
+a Timeline card with the same bar and the list of events.
+
+- **Totals**, per ticket and per project (its tickets and lanes, archived and PR tickets left out),
+  never overlapping: _blocked on human_ is the `human` waits and the time in a blocked stage (from
+  the stage events); _waiting_ is the other waits outside that; _working_ is the spans outside every
+  wait and outside that, overlapping spans (an orchestrator's and its sub-agent's) counted once. An
+  open span or wait runs to now while the ticket is in an active, blocked or review stage and not
+  archived, and to its last event otherwise.
+- **Stalled**: a ticket (or lane) in an active stage, not archived nor a PR ticket, with no open
+  `human` wait, whose last event of any kind (or its start, or its creation) is more than the
+  project's `stallMinutes` ago (30 by default; Settings → Stalled tickets) reads as stalled. It shows
+  on its card, on the Roadmap, in the ticket lists and in Needs you. Agents keep it off by sending a
+  `heartbeat` every few minutes while they work.
+
 ## REST API
 
 All routes need the board's session cookie or `Authorization: Bearer <token>` (Signing in, above),
 but `/api/health` on this machine and the sign-in calls; JSON in and out. `actor` is the account's
-name, or the agent token's.
+name, or the agent token's. A backslash in a JSON string is written `\\`, so a Windows path is
+`"C:\\code\\repo"`; some shells and tools collapse `\\` to `\` before sending. Where that leaves a
+bad escape (`\c`) the board refuses the body (400 `body must be JSON: …`), but where it leaves a valid
+one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survives them.
 
 | Method       | Path                                                                                                          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -491,6 +614,7 @@ name, or the agent token's.
 | GET          | `/api/agent-setup/review-skills/diff?path=&repoId=`                                                           | one of those files as installed against as served, line endings aside, as git shows it: `{path, status, installed, unreadable, header, hunks[]}`. `path` must be one of the bundle's (else 400/404); `repoId` reads that repo's `.claude`, none `~/.claude` (409 if it can't be read). Old side: the installed copy (`/dev/null` when `missing`); new: the served one. `unreadable`: why a copy there can't be read. Read-only                                                                                                                                                                                                                                                                                                                   |
 | GET/PATCH    | `/api/settings` `{defaultAgent, previewLimit, skillsTracking}`                                                | board-wide preferences (PATCH is the human's only); `previewLimit`: how many previews the board runs at once, 1 to 32, 8 by default; `skillsTracking`: the copy of the review skills the Agents pages show, `global` (`~/.claude`, the default) or `repo` (each repo's own)                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | GET/POST     | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                                                        | projects with their `repos[]`, `stages[]` and `agents[]`; `instructions` is the agents' briefing; `defaultPhases`: a new ticket's phases (GET: the list in effect, built in Implementation, Pushed, PR, CI, Preview, Hand-off post; PATCH a list, `[]` for none, null for the built-in; the human's); `tagSuggestions`: the tags offered under a ticket's tags field (Bug, UI, Implementation, Report until changed; PATCH a list, trimmed, repeats in any casing dropped, `[]` for none; MCP `set_tag_suggestions`); GET's `usedTags`: the tags the project's tickets carry, most used first, in the casing to reuse; `layout`: the pages, cards and ticket sections shown, and where (PATCH `[{id, area, hidden}]`, null resets; the human's)  |
+|              | `stallMinutes` on GET/PATCH `/api/projects/:id`                                                               | how long an active ticket may go without a work-timeline event before it reads as stalled (30 until changed, 1 to 1440); the human's: an agent's PATCH is a 403                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | GET/POST     | `/api/projects/:id/agents` · PATCH/DELETE `/api/agents/:id`                                                   | the project's agents `{name, instructions, delegation, avatarId}` (writes are the human's); a ticket assigned to one is reserved                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | POST         | `/api/projects/:id/agents/defaults`                                                                           | adds the default agents the project lacks (spec, builder, runner, env, verify, hunt, refute, merge), each with instructions and delegation notes; the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | GET/POST     | `/api/projects/:id/stages` · PATCH/DELETE `/api/projects/:id/stages/:stageId`                                 | board columns `{name, kind, color}`; DELETE takes `?moveTo=<key>` when it has tickets (`&force=1` into a done stage past needs not merged)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -508,6 +632,7 @@ name, or the agent token's.
 |              | `handoff` on PATCH to a review stage · on GET in one                                                          | what the hand-off still lacks, as warnings (the move goes through): `{missing: [{code, text}], checks: [{code, label, ok, text}]}`; codes `tasks_open`, `no_pr`, `not_pushed`, `no_preview`, `no_handoff_post` (no summary by an agent since the last commit; a ticket that never had one goes by its agent progress posts), `checks_unknown` (the PR's CI failing or running); `checks` starts with `not_merged`, never missing                                                                                                                                                                                                                                                                                                                 |
 |              | `tasks_open` in `handoff`                                                                                     | Implementation: the tasks and subtasks, the phases and their steps (the hand-off phases and lanes' included); missing while there are none or some are open; agents tick each phase, the board ticks none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 |              | `blockedTasks` on GET `/api/tickets/:id` · on list rows                                                       | its open tasks and subtasks tagged blocked, with those of its lanes that are not cancelled (as the rolled-up progress); its board card shows them                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|              | `stalled` · `lastSignalAt` on GET `/api/tickets/:id` · on list rows; `work` on GET                            | `stalled`: `{since, minutes, lastAgent}` when the ticket reads as stalled (Work timeline, below), else null; `lastSignalAt`: the latest of its events, `startedAt` and `createdAt`; `work`: `{totals, stalled, lastSignalAt, open: {spans, waits}}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | GET          | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=&archived=`                           | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level; `archived=include` or `only`); a PR's own ticket is in none of them (`GET /api/tickets/:id` still reads it)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 |              | `?q=` on the list                                                                                             | text in any casing in the `#id` (`#12` or `12`), title, instructions or thread (posts, replies); name (`#id`, title) matches first; rows say where in `match` (`id`, `title`, `body`, `post`, `reply`) and `snippet` (words around a content hit)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | POST         | `/api/tickets/:id/archive` · `/restore` · `/api/projects/:id/tickets/archive` `{status}`                      | archive a done or cancelled top-level ticket, its lanes with it · put it back · archive a whole done or cancelled stage (the human's)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -537,7 +662,10 @@ name, or the agent token's.
 | POST         | `/api/uploads`                                                                                                | multipart `file`, or JSON `{path}` (local file) or `{name, base64}` → `{id, url}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | GET          | `/api/uploads/:id` · `/api/uploads/:id/info`                                                                  | the file · its metadata with the local `path` (and `windowsPath` under WSL)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | GET          | `/api/projects/:id/gallery?type=&from=&to=&sort=&archived=&cursor=&limit=`                                    | the Gallery: every file on the project's tickets (posts, replies under posts, instructions; not reports', agents' pictures, PRs' tickets, PR or review replies), newest first: `{items, next}`, each with `kind` (`image`, `video`, `pdf`, `docs`, `other`), `ticket {id, title}` (a lane's top one), `lane {id, title}`, `source {kind: post\|reply\|instructions, postId, commentId}`, `anchor` (the `#post-…` link) and the local `path`; `type` kinds comma-separated, `from`/`to` local days inclusive, `sort` `oldest`, `name`, `name-desc` (case-insensitive), `largest`, `smallest` or `type` (kind, then name; ties by id), `archived=include`, `cursor` the last page's `next`, `limit` 60 by default, 200 at most; MCP `list_gallery` |
-| GET          | `/api/projects/:id/roadmap`                                                                                   | the Roadmap: the top-level tickets in an active, blocked or review stage (no archived or PR tickets), last updated first, each `{id, title, assignee, status, branch, updatedAt, tasks}` with its tasks in tree order (`id`, `parentId`, `text`, `done`, `blocked`, `blockedReason`) and `lanes`, its lanes not cancelled, theirs too, each with its `depth` under it                                                                                                                                                                                                                                                                                                                                                                            |
+| GET          | `/api/projects/:id/roadmap`                                                                                   | the Roadmap: the top-level tickets in an active, blocked or review stage (no archived or PR tickets), last updated first, each `{id, title, assignee, status, branch, updatedAt, tasks}` with its tasks in tree order (`id`, `parentId`, `text`, `done`, `blocked`, `blockedReason`) and `lanes`, its lanes not cancelled, theirs too, each with its `depth` under it; every row (ticket and lane) also has `work`, its work timeline (below)                                                                                                                                                                                                                                                                                                    |
+| POST         | `/api/projects/:id/tickets/:ticketId/events`                                                                  | one work-timeline event on a ticket of that project, by `kind`: `span_start` `{phase, round?}`, `span_end` `{spanId?, phase?}`, `handoff` `{from?, to}`, `wait_start` `{reason: lock\|builder\|mcp\|human\|other}`, `wait_end` `{waitId?}`, `heartbeat`; each with `agent?` (who did the work, 1 to 60 characters; the caller by default) and `note?` (500 at most). 201 with what the MCP tool of that name answers; the board's own kinds (`push`, `pr`, `preview`, `merge`, `stage`) are a 400, a ticket of another project a 403, an archived one a 409                                                                                                                                                                                      |
+| GET          | `/api/tickets/:id/events`                                                                                     | `{events, timeline}`: every event of the ticket, newest first, and its timeline `{start, end, live, spans[], waits[], handoffs[], marks[], blockedStretches[], totals, lastSignalAt, stalled}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| GET          | `/api/projects/:id/work`                                                                                      | `{stallMinutes, totals, tickets: [{id, totals, stalled}]}`: working, waiting and blocked-on-human time over the project's tickets and lanes (no archived or PR tickets)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | GET/POST     | `/api/comments?parentType=ticket\|update\|review&parentId=`                                                   | on a ticket: its posts (POST adds one, not progress, `tab` as on updates); else replies (`replyTo` nests; `as`, `@name` as before); a reply has no tab: it shows under its post; `pr` is refused: a PR's discussion is on its ticket                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | GET          | `/api/projects/:id/threads?since=` · `/api/projects/:id/inbox?since=`                                         | `{cursor, threads}` where someone spoke after the caller (with `since`, only newer) · `{count, cursor, threads, reportDue}` without bodies                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | GET          | `/api/projects/:id/reviews`                                                                                   | results                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -568,7 +696,7 @@ pnpm test:e2e        # Playwright against a built board in test mode (Testing, b
 pnpm check:migrations # the drizzle folder and its journal agree
 pnpm bench           # in a worktree: the benchmark (Benchmark, below)
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
-pnpm desktop:package # the Windows installer and the unpacked app in desktop/dist (Install, above)
+pnpm desktop:package # the installer or Linux packages and the unpacked app in desktop/dist (Install, above)
 pnpm desktop:smoke   # runs the unpacked app from a temp folder and checks it (Testing, below)
 ```
 
@@ -606,13 +734,23 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   survives a restart (the window still signed in), that a second launch brings the first window back, that Quit frees the port, that
   `config.env`'s `PORT` and `DATA_DIR` are used, that a busy port (on loopback or on every interface)
   and a `DATA_DIR` or `AGENT_BOARD_HOME` that cannot be made or written are reported in a dialog
-  that ends the app, and that a second launch after a failure is harmless. It never runs on 47100
-  or the live `data/`.
+  that ends the app, and that a second launch after a failure is harmless. On Linux (under a
+  display: `xvfb-run -a`) it also checks that nothing of the app runs after Quit, that the server
+  gets the login shell's PATH (a `.bashrc` in a stand-in home), that Start at login writes and removes
+  the autostart entry, and that closing the window with no tray host ends the app and its server; its
+  dialogs are checked on stderr, and the app is then killed. It never runs on 47100 or the live
+  `data/`. `desktop/linux/install-test.sh` checks an installed package in a throwaway container of its
+  distribution (the smoke test on the installed folder, the desktop entry and icons, the XDG folders,
+  the WM_CLASS, uninstalling), and `desktop/linux/docker-test.sh` runs the build and all of it in
+  Docker (Install, Linux).
 - **CI** (`.github/workflows/ci.yml`, on pull requests and pushes to `main`): install, typecheck,
   lint, migrations, unit tests, build, then the e2e suite on Chromium; when something fails, the
   Playwright report and traces are uploaded as the `playwright-report` artifact. A second job, on
   `windows-latest`, builds the installer, runs the desktop smoke test on the unpacked app and on the
   app as the installer puts it (then uninstalls it), and uploads the installer as `agent-board-setup`.
+  A third, `desktop-linux` on `ubuntu-24.04`, builds the Linux packages, smoke-tests the unpacked app
+  under Xvfb, installs and checks the .deb in Debian, the .rpm in Fedora, the pacman package in Arch
+  and the AppImage in Ubuntu (containers), and uploads the four as `agent-board-linux`.
 
 ## Benchmark
 

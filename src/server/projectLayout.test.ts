@@ -95,6 +95,7 @@ describe("a project's layout", () => {
       'ticket.resume',
       'ticket.instructions',
       'ticket.tasks',
+      'ticket.timeline',
       'ticket.lanes',
       'ticket.activity',
       'ticket.details',

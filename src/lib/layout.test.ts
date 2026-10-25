@@ -84,6 +84,7 @@ describe('mergeLayout', () => {
       'ticket.resume',
       'ticket.instructions',
       'ticket.tasks',
+      'ticket.timeline',
       'ticket.activity',
     ])
   })
@@ -138,6 +139,7 @@ describe('mergeLayout', () => {
       'ticket.resume',
       'ticket.instructions',
       'ticket.tasks',
+      'ticket.timeline',
       'ticket.activity',
     ])
     expect(ids(inArea(merged, 'ticket.side'))).toContain('ticket.lanes')

@@ -20,9 +20,11 @@ import {
   AlertDialogTitle,
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
+import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch } from '#/lib/api'
+import { STALL_MINUTES } from '#/lib/constants'
 import { useProject } from '#/lib/project'
 import { DEFAULT_TAG_SUGGESTIONS, cleanSuggestions } from '#/lib/tags'
 import { addTasks } from '#/lib/tasks'
@@ -67,6 +69,7 @@ function Settings() {
       </div>
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
+      <StallMinutes key={`stall-${id}`} projectId={id} saved={p.stallMinutes} />
       <StagesEditor projectId={id} />
       <LayoutEditor key={`layout-${id}`} projectId={id} saved={p.layout} />
     </div>
@@ -226,6 +229,73 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
             {save.isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>
+      </form>
+    </section>
+  )
+}
+
+/**
+ * How long a ticket in an active stage may go without an event on its work timeline (a heartbeat, a
+ * span, a wait, a push…) before it reads as stalled, on its card, on the Roadmap and in Needs you.
+ */
+function StallMinutes({ projectId, saved }: { projectId: string; saved: number }) {
+  const qc = useQueryClient()
+  const [text, setText] = useState(String(saved))
+  const minutes = Number(text)
+  const valid = Number.isInteger(minutes) && minutes >= STALL_MINUTES.min && minutes <= STALL_MINUTES.max
+  const dirty = valid && minutes !== saved
+  const save = useMutation({
+    mutationFn: (stallMinutes: number) =>
+      patch<{ stallMinutes: number }>(`/api/projects/${projectId}`, { stallMinutes }),
+    onSuccess: async (row) => {
+      setText(String(row.stallMinutes))
+      await qc.invalidateQueries({ queryKey: ['project', projectId] })
+      toast.success('Saved')
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  return (
+    <section aria-label="Stalled tickets" className="max-w-3xl space-y-3">
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight">Stalled tickets</h2>
+        <p className="text-sm text-muted-foreground">
+          A ticket in an active stage reads as stalled once its agents have recorded nothing on its work
+          timeline (a heartbeat, a span, a wait, a hand-off) and the board has seen nothing of it (a push, its
+          PR, its preview) for this long. Agents keep it off by sending a heartbeat every few minutes.
+        </p>
+      </div>
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (dirty && !save.isPending) save.mutate(minutes)
+        }}
+      >
+        <div className="space-y-1">
+          <Label htmlFor="stall-minutes">Stalled after (minutes)</Label>
+          <Input
+            id="stall-minutes"
+            type="number"
+            inputMode="numeric"
+            min={STALL_MINUTES.min}
+            max={STALL_MINUTES.max}
+            step={1}
+            className="w-32"
+            value={text}
+            aria-invalid={!valid}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </div>
+        <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
+          {save.isPending ? 'Saving…' : 'Save'}
+        </Button>
+        <span className="text-xs text-muted-foreground" aria-live="polite">
+          {valid
+            ? dirty
+              ? 'Unsaved changes.'
+              : 'No changes.'
+            : `A whole number from ${STALL_MINUTES.min} to ${STALL_MINUTES.max}.`}
+        </span>
       </form>
     </section>
   )

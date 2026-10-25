@@ -45,6 +45,7 @@ export const LAYOUT_ELEMENTS = [
   { id: 'ticket.resume', label: 'Resume here', area: 'ticket.main', locked: 'Where resume links land' },
   { id: 'ticket.instructions', label: 'Instructions', area: 'ticket.main', locked: "The ticket's own text" },
   { id: 'ticket.tasks', label: 'Tasks', area: 'ticket.main', locked: 'Where blocked-task links land' },
+  { id: 'ticket.timeline', label: 'Timeline', area: 'ticket.main' },
   { id: 'ticket.lanes', label: 'Lanes', area: 'ticket.main' },
   {
     id: 'ticket.activity',

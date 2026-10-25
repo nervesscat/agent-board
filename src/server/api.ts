@@ -7,6 +7,7 @@ import {
   COMPLEXITIES,
   PREVIEW_LIMIT,
   SKILLS_TRACKING,
+  STALL_MINUTES,
   STAGE_COLORS,
   STAGE_KINDS,
   FEED_TABS,
@@ -61,6 +62,7 @@ import { fileStore, parseRange } from './storage'
 import * as tokens from './tokens'
 import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
+import * as work from './workTimeline'
 import * as uploads from './uploads'
 
 const json = (data: unknown, status = 200) => Response.json(data, { status })
@@ -216,9 +218,12 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       instructions: Instructions.optional(),
       defaultPhases: DefaultPhases.optional(),
       tagSuggestions: projects.TagSuggestions.optional(),
+      stallMinutes: z.number().int().min(STALL_MINUTES.min).max(STALL_MINUTES.max).optional(),
       layout: projects.LayoutBody.optional(),
     }),
   )
+  if (body.stallMinutes !== undefined && isAgent(request))
+    throw new HttpError(403, 'only the human sets when a ticket reads as stalled')
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
   if (body.defaultPhases !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's default phases")
@@ -823,6 +828,18 @@ api.get('/api/uploads/:id', async ({ request, params }) => {
 // The roadmap: the top-level tickets being worked, blocked or in review, each with its tasks and its
 // lanes' (not cancelled), read-only.
 api.get('/api/projects/:id/roadmap', async ({ params }) => json(roadmap(id(params))))
+
+// --- the work timeline (workTimeline.ts): agents' spans, hand-offs, waits and heartbeats, the board's own events ---
+// One agent event on a ticket of this project, by kind (span_start, span_end, handoff, wait_start, wait_end,
+// heartbeat); the board's kinds are its own. A ticket of another project is a 403.
+api.post('/api/projects/:id/tickets/:ticketId/events', async ({ request, params, actor }) => {
+  const body = await readJson(request, work.EventBody)
+  return json(work.recordEvent(id(params), id(params, 'ticketId'), body, actor), 201)
+})
+// Every event of a ticket, newest first, and its timeline: spans, waits, hand-offs, marks, totals, stalled.
+api.get('/api/tickets/:id/events', ({ params }) => json(work.ticketTimeline(id(params))))
+// The project's working / waiting / blocked-on-human totals and each ticket's, with its stalled flag.
+api.get('/api/projects/:id/work', ({ params }) => json(work.projectWork(id(params))))
 
 api.get('/api/projects/:id/gallery', async ({ request, params, url }) => {
   const q = url.searchParams

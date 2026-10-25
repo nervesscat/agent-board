@@ -2,3 +2,5 @@
 src/server/skill/review/** text eol=lf
 # Static files served as they are (the favicon is byte for byte the supplied logo file).
 public/** -text
+# Shell scripts run in Linux as they are checked out (the desktop app's container tests).
+*.sh text eol=lf
