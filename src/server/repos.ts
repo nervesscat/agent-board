@@ -110,6 +110,9 @@ export async function requestOrigin(repoPath: string): Promise<string | null> {
   return originUrl(repoPath)
 }
 
+/** Whether `text` has a control character (U+0000 to U+001F, or DEL): a line break, a tab, an escape. */
+const hasControl = (text: string) => [...text].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)
+
 /**
  * The repo an agent asks to add to `projectId`, cleaned (trimmed; an absolute path resolved, so its `.`,
  * `..` and doubled slashes go; base branch main when left out) and checked (`repoRequestProblem`): what its card names and its Add creates. A problem is thrown.
@@ -129,10 +132,15 @@ export async function checkRepoRequest(
   }
   if (!req.name || req.name.length > 100)
     throw new HttpError(400, 'give the repo a name: 1 to 100 characters')
+  // The card's body quotes the name and base branch: a line break in either would write lines of its own.
+  if (hasControl(req.name)) throw new HttpError(400, 'the repo name is one line, with no control characters')
   if (!req.repoPath) throw new HttpError(400, "give the checkout's path")
   if (!GITHUB_REPO.test(req.githubRepo))
     throw new HttpError(400, `githubRepo is the GitHub owner/name (like acme/shop), not ${req.githubRepo}`)
   if (req.baseBranch.length > 200) throw new HttpError(400, 'the base branch is 200 characters at most')
+  // As in git, a branch name has no whitespace or control characters.
+  if (/\s/.test(req.baseBranch) || hasControl(req.baseBranch))
+    throw new HttpError(400, 'the base branch is a branch name: no spaces, line breaks or control characters')
   const problem = repoRequestProblem(req, await requestOrigin(req.repoPath))
   if (problem) throw problem
   return req
