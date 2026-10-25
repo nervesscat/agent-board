@@ -2,11 +2,14 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ASSETS, BUILD_OUTPUTS, REPO, ghCommands, parseArgs, releaseFiles, treeChanges } from './release.mjs'
 
+/** The checkout these tests run in. */
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const all = () => true
 
 describe('releaseFiles', () => {
@@ -211,6 +214,17 @@ describe('treeChanges', () => {
     expect(status(git)).toEqual([' M routeTree.gen.ts', '?? new.ts'])
   })
 
+  it('reports an untracked file even where git status is set not to show untracked files', () => {
+    const git = repo()
+    git('config', 'status.showUntrackedFiles', 'no')
+    fs.writeFileSync(path.join(dir, 'new.ts'), 'n\n')
+    // Plain `git status` hides it here.
+    expect(status(git)).toEqual([])
+
+    expect(treeChanges(dir)).toEqual({ ok: true, changes: ['?? new.ts'], eolOnly: [], buildOutputs: [] })
+    expect(fs.existsSync(path.join(dir, 'new.ts'))).toBe(true)
+  })
+
   // What `vite build` appends to src/routeTree.gen.ts (the repo keeps it out of git).
   const footer = [
     '',
@@ -226,10 +240,16 @@ describe('treeChanges', () => {
     '',
   ].join('\n')
 
-  /** The repo with the real src/routeTree.gen.ts committed, as this checkout has it. */
+  /**
+   * The repo with the real src/routeTree.gen.ts committed, as this checkout's HEAD has it: not the
+   * working copy, which a local build leaves with its Register block appended.
+   */
   function repoWithRouteTree() {
     const git = repo()
-    const routeTree = fs.readFileSync(path.resolve('src/routeTree.gen.ts'), 'utf8')
+    const routeTree = execFileSync('git', ['show', 'HEAD:src/routeTree.gen.ts'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    })
     fs.mkdirSync(path.join(dir, 'src'))
     fs.writeFileSync(path.join(dir, 'src', 'routeTree.gen.ts'), routeTree)
     git('add', '.')

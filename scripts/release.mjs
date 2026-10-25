@@ -124,12 +124,15 @@ export const BUILD_OUTPUTS = ['src/routeTree.gen.ts']
  * a build output (BUILD_OUTPUTS) changed in the working tree only, and a file whose only change is its
  * line endings (on Windows with core.autocrlf a rewrite with LF is the same content to `git diff`).
  * Unless `keep`, those files are checked out again so the tree is clean (scripts/bench/bench.mjs does
- * the same after its build).
+ * the same after its build). Untracked files count whatever `status.showUntrackedFiles` says.
  * @param {string} cwd @param {{ keep?: boolean }} [o]
  * @returns {{ ok: true, changes: string[], eolOnly: string[], buildOutputs: string[] } | { ok: false, err: string }}
  */
 export function treeChanges(cwd, { keep = false } = {}) {
-  const res = spawnSync('git', ['status', '--porcelain', '-z'], { cwd, encoding: 'utf8' })
+  const res = spawnSync('git', ['status', '--porcelain', '-z', '--untracked-files=normal'], {
+    cwd,
+    encoding: 'utf8',
+  })
   if (res.error || res.status !== 0)
     return { ok: false, err: res.error?.message ?? (res.stderr ?? '').trim() }
   const entries = (res.stdout ?? '').split('\0')
