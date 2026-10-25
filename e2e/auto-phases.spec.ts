@@ -43,22 +43,22 @@ test('the phases the board ticks are marked, their boxes off, and nobody ticks t
   const card = page.getByRole('region', { name: 'Tasks' })
   const box = (name: string) => card.getByRole('checkbox', { name, exact: true })
   const marks = card.getByLabel('Ticked automatically')
-  // One mark per automatic phase; Implementation, Hand-off post and a subtask named CI have none.
+  // One mark per automatic phase; Implementation and a subtask named CI have none.
   await expect(marks).toHaveCount(AUTO.length)
   const subtasks = card.getByRole('list', { name: 'Subtasks of Implementation' })
   await expect(subtasks.getByRole('checkbox', { name: 'CI', exact: true })).toBeEnabled()
   await expect(subtasks.getByLabel('Ticked automatically')).toHaveCount(0)
-  for (const name of ['Implementation', 'Hand-off post']) await expect(box(name)).toBeEnabled()
+  await expect(box('Implementation')).toBeEnabled()
   const top = card.locator('> ul > li > div')
   for (const name of AUTO) {
     const row = top.filter({ has: page.getByRole('checkbox', { name, exact: true }) })
     await expect(row.getByRole('checkbox', { name, exact: true })).toBeDisabled()
     await expect(row.getByLabel('Ticked automatically')).toHaveCount(1)
   }
-  for (const name of ['Implementation', 'Hand-off post']) {
-    const row = top.filter({ has: page.getByRole('checkbox', { name, exact: true }) })
-    await expect(row.getByLabel('Ticked automatically')).toHaveCount(0)
-  }
+  const implementation = top.filter({
+    has: page.getByRole('checkbox', { name: 'Implementation', exact: true }),
+  })
+  await expect(implementation.getByLabel('Ticked automatically')).toHaveCount(0)
 
   // The tooltip says what the board checks.
   const ciRow = top.filter({ has: page.getByRole('checkbox', { name: 'CI', exact: true }) })
