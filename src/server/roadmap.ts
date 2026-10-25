@@ -2,8 +2,10 @@ import { asc, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import type { StepTask } from '#/lib/roadmap'
+import type { WorkTimeline } from '#/lib/workTimeline'
 import { listTickets, laneTree } from './features'
 import { kindOf, listStages } from './stages'
+import { timelinesFor } from './workTimeline'
 
 /** The kinds of stage a top-level ticket is in to show on the roadmap: being worked or waiting. */
 const SHOWN = new Set(['active', 'blocked', 'review'])
@@ -17,6 +19,8 @@ export type RoadmapRow = {
   branch: string
   updatedAt: string
   tasks: StepTask[]
+  /** Its work timeline: the agents' spans, waits and hand-offs, the board's marks, totals and stalled. */
+  work: WorkTimeline
 }
 
 /** A top-level ticket with its lanes (theirs too, nearest first, each with its depth under it). */
@@ -24,7 +28,8 @@ export type RoadmapTicket = RoadmapRow & { lanes: (RoadmapRow & { depth: number 
 
 /**
  * The project's roadmap: every top-level ticket in an active, blocked or review stage (archived and
- * PR tickets left out), last updated first, each with its tasks and its lanes' that are not cancelled.
+ * PR tickets left out), last updated first, each with its tasks and work timeline, and its lanes' that are
+ * not cancelled.
  * Read-only, one pass over the project.
  */
 export function roadmap(projectId: number): RoadmapTicket[] {
@@ -54,6 +59,10 @@ export function roadmap(projectId: number): RoadmapTicket[] {
         .orderBy(asc(schema.tasks.position), asc(schema.tasks.id))
         .all()
     : []
+  const timelines = timelinesFor(
+    ids.map((id) => byId.get(id)!),
+    new Date(),
+  )
   const tasksOf = (ticketId: number): StepTask[] => {
     const own = rows.filter((r) => r.ticketId === ticketId)
     return own
@@ -76,6 +85,7 @@ export function roadmap(projectId: number): RoadmapTicket[] {
     branch: t.branch,
     updatedAt: t.updatedAt,
     tasks: tasksOf(t.id),
+    work: timelines.get(t.id)!.timeline,
   })
   return roots.map((t) => ({
     ...row(t),

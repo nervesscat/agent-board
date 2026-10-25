@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4617c25f-4899-4d92-97f6-463efba56807",
+  "id": "ad6cf17a-2f7e-4d9c-95a3-e6a3d19edbf9",
   "prevId": "8aa3ffb6-0e55-449c-843a-d283753a6f24",
   "tables": {
     "account": {
@@ -113,7 +113,9 @@
       "indexes": {
         "activity_created": {
           "name": "activity_created",
-          "columns": ["createdAt"],
+          "columns": [
+            "createdAt"
+          ],
           "isUnique": false
         }
       },
@@ -122,8 +124,12 @@
           "name": "activity_project_id_projects_id_fk",
           "tableFrom": "activity",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -220,7 +226,9 @@
       "indexes": {
         "agent_tokens_token_hash_unique": {
           "name": "agent_tokens_token_hash_unique",
-          "columns": ["token_hash"],
+          "columns": [
+            "token_hash"
+          ],
           "isUnique": true
         }
       },
@@ -303,7 +311,10 @@
       "indexes": {
         "agents_project_name": {
           "name": "agents_project_name",
-          "columns": ["project_id", "name"],
+          "columns": [
+            "project_id",
+            "name"
+          ],
           "isUnique": true
         }
       },
@@ -312,8 +323,12 @@
           "name": "agents_project_id_projects_id_fk",
           "tableFrom": "agents",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -321,8 +336,12 @@
           "name": "agents_avatar_id_attachments_id_fk",
           "tableFrom": "agents",
           "tableTo": "attachments",
-          "columnsFrom": ["avatar_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "avatar_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -419,8 +438,12 @@
           "name": "attachments_update_id_updates_id_fk",
           "tableFrom": "attachments",
           "tableTo": "updates",
-          "columnsFrom": ["update_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "update_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -428,8 +451,12 @@
           "name": "attachments_comment_id_comments_id_fk",
           "tableFrom": "attachments",
           "tableTo": "comments",
-          "columnsFrom": ["comment_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "comment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -437,8 +464,12 @@
           "name": "attachments_ticket_id_tickets_id_fk",
           "tableFrom": "attachments",
           "tableTo": "tickets",
-          "columnsFrom": ["ticket_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -446,8 +477,12 @@
           "name": "attachments_report_id_reports_id_fk",
           "tableFrom": "attachments",
           "tableTo": "reports",
-          "columnsFrom": ["report_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "report_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -528,7 +563,10 @@
       "indexes": {
         "comments_parent": {
           "name": "comments_parent",
-          "columns": ["parent_type", "parent_id"],
+          "columns": [
+            "parent_type",
+            "parent_id"
+          ],
           "isUnique": false
         }
       },
@@ -580,7 +618,9 @@
       "indexes": {
         "enrol_codes_code_hash_unique": {
           "name": "enrol_codes_code_hash_unique",
-          "columns": ["code_hash"],
+          "columns": [
+            "code_hash"
+          ],
           "isUnique": true
         }
       },
@@ -614,8 +654,12 @@
           "name": "origin_looks_repo_id_repos_id_fk",
           "tableFrom": "origin_looks",
           "tableTo": "repos",
-          "columnsFrom": ["repo_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -674,7 +718,10 @@
       "indexes": {
         "origin_ref_moves_repo_seen": {
           "name": "origin_ref_moves_repo_seen",
-          "columns": ["repo_id", "seenAt"],
+          "columns": [
+            "repo_id",
+            "seenAt"
+          ],
           "isUnique": false
         }
       },
@@ -683,8 +730,12 @@
           "name": "origin_ref_moves_repo_id_repos_id_fk",
           "tableFrom": "origin_ref_moves",
           "tableTo": "repos",
-          "columnsFrom": ["repo_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -732,15 +783,22 @@
           "name": "origin_refs_repo_id_repos_id_fk",
           "tableFrom": "origin_refs",
           "tableTo": "repos",
-          "columnsFrom": ["repo_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "origin_refs_repo_id_ref_pk": {
-          "columns": ["repo_id", "ref"],
+          "columns": [
+            "repo_id",
+            "ref"
+          ],
           "name": "origin_refs_repo_id_ref_pk"
         }
       },
@@ -820,7 +878,9 @@
       "indexes": {
         "passkeys_credential_id_unique": {
           "name": "passkeys_credential_id_unique",
-          "columns": ["credential_id"],
+          "columns": [
+            "credential_id"
+          ],
           "isUnique": true
         }
       },
@@ -876,6 +936,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'[\"Bug\",\"UI\",\"Implementation\",\"Report\"]'"
+        },
+        "stall_minutes": {
+          "name": "stall_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 30
         }
       },
       "indexes": {},
@@ -1076,12 +1144,17 @@
       "indexes": {
         "prs_project_number": {
           "name": "prs_project_number",
-          "columns": ["project_id", "number"],
+          "columns": [
+            "project_id",
+            "number"
+          ],
           "isUnique": false
         },
         "prs_repo": {
           "name": "prs_repo",
-          "columns": ["repo_id"],
+          "columns": [
+            "repo_id"
+          ],
           "isUnique": false
         }
       },
@@ -1090,8 +1163,12 @@
           "name": "prs_project_id_projects_id_fk",
           "tableFrom": "prs",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1099,8 +1176,12 @@
           "name": "prs_repo_id_repos_id_fk",
           "tableFrom": "prs",
           "tableTo": "repos",
-          "columnsFrom": ["repo_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1222,8 +1303,12 @@
           "name": "report_settings_project_id_projects_id_fk",
           "tableFrom": "report_settings",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1329,7 +1414,10 @@
       "indexes": {
         "report_settings_changes_project": {
           "name": "report_settings_changes_project",
-          "columns": ["project_id", "createdAt"],
+          "columns": [
+            "project_id",
+            "createdAt"
+          ],
           "isUnique": false
         }
       },
@@ -1338,8 +1426,12 @@
           "name": "report_settings_changes_project_id_projects_id_fk",
           "tableFrom": "report_settings_changes",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1406,7 +1498,10 @@
       "indexes": {
         "reports_project_period": {
           "name": "reports_project_period",
-          "columns": ["project_id", "period"],
+          "columns": [
+            "project_id",
+            "period"
+          ],
           "isUnique": false
         }
       },
@@ -1415,8 +1510,12 @@
           "name": "reports_project_id_projects_id_fk",
           "tableFrom": "reports",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1486,8 +1585,12 @@
           "name": "repos_project_id_projects_id_fk",
           "tableFrom": "repos",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1584,7 +1687,10 @@
       "indexes": {
         "review_results_pr": {
           "name": "review_results_pr",
-          "columns": ["project_id", "pr_number"],
+          "columns": [
+            "project_id",
+            "pr_number"
+          ],
           "isUnique": false
         }
       },
@@ -1593,8 +1699,12 @@
           "name": "review_results_project_id_projects_id_fk",
           "tableFrom": "review_results",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1602,8 +1712,12 @@
           "name": "review_results_repo_id_repos_id_fk",
           "tableFrom": "review_results",
           "tableTo": "repos",
-          "columnsFrom": ["repo_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1662,12 +1776,16 @@
       "indexes": {
         "sessions_token_hash_unique": {
           "name": "sessions_token_hash_unique",
-          "columns": ["token_hash"],
+          "columns": [
+            "token_hash"
+          ],
           "isUnique": true
         },
         "sessions_passkey": {
           "name": "sessions_passkey",
-          "columns": ["passkey_id"],
+          "columns": [
+            "passkey_id"
+          ],
           "isUnique": false
         }
       },
@@ -1676,8 +1794,12 @@
           "name": "sessions_passkey_id_passkeys_id_fk",
           "tableFrom": "sessions",
           "tableTo": "passkeys",
-          "columnsFrom": ["passkey_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "passkey_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1768,7 +1890,10 @@
       "indexes": {
         "stages_project_key": {
           "name": "stages_project_key",
-          "columns": ["project_id", "key"],
+          "columns": [
+            "project_id",
+            "key"
+          ],
           "isUnique": true
         }
       },
@@ -1777,8 +1902,12 @@
           "name": "stages_project_id_projects_id_fk",
           "tableFrom": "stages",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1854,7 +1983,9 @@
       "indexes": {
         "tasks_parent": {
           "name": "tasks_parent",
-          "columns": ["parent_id"],
+          "columns": [
+            "parent_id"
+          ],
           "isUnique": false
         }
       },
@@ -1863,8 +1994,12 @@
           "name": "tasks_ticket_id_tickets_id_fk",
           "tableFrom": "tasks",
           "tableTo": "tickets",
-          "columnsFrom": ["ticket_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1872,8 +2007,12 @@
           "name": "tasks_parent_id_tasks_id_fk",
           "tableFrom": "tasks",
           "tableTo": "tasks",
-          "columnsFrom": ["parent_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "parent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1881,6 +2020,189 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "ticket_events": {
+      "name": "ticket_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "ticket_id": {
+          "name": "ticket_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent": {
+          "name": "agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "by": {
+          "name": "by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phase": {
+          "name": "phase",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "round": {
+          "name": "round",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ref_id": {
+          "name": "ref_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "from_agent": {
+          "name": "from_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "to_agent": {
+          "name": "to_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "from_stage": {
+          "name": "from_stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "to_stage": {
+          "name": "to_stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "at": {
+          "name": "at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        }
+      },
+      "indexes": {
+        "ticket_events_ticket_at": {
+          "name": "ticket_events_ticket_at",
+          "columns": [
+            "ticket_id",
+            "at"
+          ],
+          "isUnique": false
+        },
+        "ticket_events_project_at": {
+          "name": "ticket_events_project_at",
+          "columns": [
+            "project_id",
+            "at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ticket_events_ticket_id_tickets_id_fk": {
+          "name": "ticket_events_ticket_id_tickets_id_fk",
+          "tableFrom": "ticket_events",
+          "tableTo": "tickets",
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ticket_events_project_id_projects_id_fk": {
+          "name": "ticket_events_project_id_projects_id_fk",
+          "tableFrom": "ticket_events",
+          "tableTo": "projects",
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "ticket_events_kind": {
+          "name": "ticket_events_kind",
+          "value": "kind IN ('span_start', 'span_end', 'handoff', 'wait_start', 'wait_end', 'heartbeat', 'push', 'pr', 'preview', 'merge', 'stage')"
+        },
+        "ticket_events_reason": {
+          "name": "ticket_events_reason",
+          "value": "reason IN ('', 'lock', 'builder', 'mcp', 'human', 'other')"
+        }
+      }
     },
     "ticket_needs": {
       "name": "ticket_needs",
@@ -1903,7 +2225,9 @@
       "indexes": {
         "ticket_needs_needs": {
           "name": "ticket_needs_needs",
-          "columns": ["needs_id"],
+          "columns": [
+            "needs_id"
+          ],
           "isUnique": false
         }
       },
@@ -1912,8 +2236,12 @@
           "name": "ticket_needs_ticket_id_tickets_id_fk",
           "tableFrom": "ticket_needs",
           "tableTo": "tickets",
-          "columnsFrom": ["ticket_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1921,15 +2249,22 @@
           "name": "ticket_needs_needs_id_tickets_id_fk",
           "tableFrom": "ticket_needs",
           "tableTo": "tickets",
-          "columnsFrom": ["needs_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "needs_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "ticket_needs_ticket_id_needs_id_pk": {
-          "columns": ["ticket_id", "needs_id"],
+          "columns": [
+            "ticket_id",
+            "needs_id"
+          ],
           "name": "ticket_needs_ticket_id_needs_id_pk"
         }
       },
@@ -2153,7 +2488,9 @@
       "indexes": {
         "tickets_parent": {
           "name": "tickets_parent",
-          "columns": ["parent_id"],
+          "columns": [
+            "parent_id"
+          ],
           "isUnique": false
         }
       },
@@ -2162,8 +2499,12 @@
           "name": "tickets_project_id_projects_id_fk",
           "tableFrom": "tickets",
           "tableTo": "projects",
-          "columnsFrom": ["project_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2171,8 +2512,12 @@
           "name": "tickets_repo_id_repos_id_fk",
           "tableFrom": "tickets",
           "tableTo": "repos",
-          "columnsFrom": ["repo_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "repo_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2180,8 +2525,12 @@
           "name": "tickets_parent_id_tickets_id_fk",
           "tableFrom": "tickets",
           "tableTo": "tickets",
-          "columnsFrom": ["parent_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "parent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2189,8 +2538,12 @@
           "name": "tickets_pr_id_prs_id_fk",
           "tableFrom": "tickets",
           "tableTo": "prs",
-          "columnsFrom": ["pr_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "pr_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2311,13 +2664,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "repo_request": {
-          "name": "repo_request",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "tab": {
           "name": "tab",
           "type": "text",
@@ -2364,8 +2710,12 @@
           "name": "updates_ticket_id_tickets_id_fk",
           "tableFrom": "updates",
           "tableTo": "tickets",
-          "columnsFrom": ["ticket_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2450,8 +2800,12 @@
           "name": "workspaces_ticket_id_tickets_id_fk",
           "tableFrom": "workspaces",
           "tableTo": "tickets",
-          "columnsFrom": ["ticket_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "ticket_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }

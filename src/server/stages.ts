@@ -4,6 +4,7 @@ import { db, schema } from '#/db'
 import { DEFAULT_STAGES, STAGE_KINDS, type StageColor, type StageKind } from '#/lib/constants'
 import { logActivity } from './activity'
 import { HttpError, notFound } from './http'
+import { noteStageMove } from './workTimeline'
 
 export type Stage = schema.Stage
 
@@ -218,6 +219,13 @@ export function deleteStage(projectId: number, id: number, opts: { moveTo?: stri
     target = stages.find((s) => s.key === opts.moveTo && s.id !== id)
     if (!target) throw new HttpError(400, `no other stage "${opts.moveTo}" to move them to`)
   }
+  const moved = target
+    ? db
+        .select({ id: schema.tickets.id })
+        .from(schema.tickets)
+        .where(and(eq(schema.tickets.projectId, projectId), eq(schema.tickets.status, stage.key)))
+        .all()
+    : []
   db.transaction((tx) => {
     if (target)
       tx.update(schema.tickets)
@@ -231,6 +239,7 @@ export function deleteStage(projectId: number, id: number, opts: { moveTo?: stri
         .run()
     tx.delete(schema.stages).where(eq(schema.stages.id, id)).run()
   })
+  for (const t of moved) noteStageMove(t.id, stage.key, target!.key)
   log(
     projectId,
     actor,

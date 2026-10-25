@@ -18,6 +18,14 @@ orchestrator only receives the summary.
 - `BROWSER`: `yes` or `no`.
 - `FRONTEND` (optional): path of the UI repo checkout, passed through as `frontend=<path>`.
 - Flags to pass through: any of `deep`, `keep`, `post`.
+- `PROJECT` and `TICKET` (optional): the board project and ticket the review is for, when the
+  board is connected. A review runs long, so keep the ticket's work timeline: `start_span` with
+  `phase: review` (and its `round` when the brief gives one) at the start, a `heartbeat` every few
+  minutes and between the skill's phases, `start_wait` / `end_wait` with the reason while you wait
+  (`lock` for a test or git lock, `mcp` when the board does not answer), and `end_span` before you
+  return. Each call takes `projectId: PROJECT` and `ticketId: TICKET`. When the brief names who
+  handed you the work, `handoff` back to it as you return. The board being down never stops the
+  review: note it under `NOTES`.
 
 This agent runs unattended and never answers a decision (`answer_decision`): a question for the
 human goes in its result, and the orchestrator asks the human.
