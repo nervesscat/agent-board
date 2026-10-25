@@ -137,6 +137,9 @@ export async function checkRepoRequest(
   // The card's body quotes the name and base branch: a line break in either would write lines of its own.
   if (hasControl(req.name)) throw new HttpError(400, 'the repo name is one line, with no control characters')
   if (!req.repoPath) throw new HttpError(400, "give the checkout's path")
+  // A folder may be named with a line break on Linux; the card would show it as lines of its own.
+  if (hasControl(req.repoPath))
+    throw new HttpError(400, "the checkout's path is one line, with no control characters")
   if (!GITHUB_REPO.test(req.githubRepo))
     throw new HttpError(400, `githubRepo is the GitHub owner/name (like acme/shop), not ${req.githubRepo}`)
   if (req.baseBranch.length > 200) throw new HttpError(400, 'the base branch is 200 characters at most')

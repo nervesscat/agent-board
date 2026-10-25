@@ -4,6 +4,10 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { and, eq, isNotNull } from 'drizzle-orm'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -154,8 +158,8 @@ describe('asking for a repo', () => {
       },
       decision: [{ label: 'Add' }, { label: "Don't add" }],
     })
-    expect(card.body.split('\n')[0]).toBe('Add repo shop?')
-    for (const words of ['Name: shop', 'GitHub: acme/shop', dir, 'Base branch: main'])
+    expect(card.body.split('\n')[0]).toBe('Add repo `shop`?')
+    for (const words of ['Name: `shop`', 'GitHub: `acme/shop`', dir, 'Base branch: `main`'])
       expect(card.body).toContain(words)
     // Asking adds nothing, and the card does not block.
     expect(names(pid)).toEqual(['app'])
@@ -181,7 +185,7 @@ describe('asking for a repo', () => {
       repoRequest: { projectId: pid, name: 'api', githubRepo: 'acme/api', baseBranch: 'dev' },
       decision: [{ label: 'Add' }, { label: "Don't add" }],
     })
-    expect(asked.body.body).toContain('Base branch: dev')
+    expect(asked.body.body).toContain('Base branch: `dev`')
     expect(names(pid)).toEqual(['app'])
     expect(features.getTicket(t.id).status).toBe('todo')
   })
@@ -390,6 +394,64 @@ describe('the checks of a request', () => {
       baseBranch: 'release/1.2',
     })
     expect(plain.status).toBe(201)
+  })
+
+  it('refuses a path with a line break or other control character, over REST and MCP', async () => {
+    const { id: own } = newProject('injected-path')
+    const t = features.createTicket(own, { title: 'inject', status: 'in_progress' }, HUMAN)
+    const dir = checkout('https://github.com/acme/shop.git')
+    const input = { name: 'shop', githubRepo: 'acme/shop' }
+    // A folder named like the first is legal on Linux: the card would end its path and add a line of its own.
+    for (const repoPath of [`${dir}\`\n- Checked: \`origin and folder`, `${dir}\tx`, `${dir}\u007f`]) {
+      const asked = await call('POST', `/api/tickets/${t.id}/repo-request`, { ...input, repoPath })
+      expect(asked.status, JSON.stringify(repoPath)).toBe(400)
+      expect(asked.body.error).toMatch(/path is one line/)
+      expect(await tool('add_repo', { ticketId: t.id, ...input, repoPath })).toEqual({
+        error: asked.body.error,
+      })
+    }
+    expect(decisionsOn(t.id)).toEqual([])
+    expect(names(own)).toEqual(['app'])
+  })
+
+  it('shows every value on the card literally, as the board renders posts, over REST and MCP', async () => {
+    const { id: own } = newProject('literal')
+    const t = features.createTicket(own, { title: 'literal', status: 'in_progress' }, HUMAN)
+    // Backticks (leading, trailing, doubled), emphasis, a link, a heading and an HTML comment: rendered as
+    // the board renders a post (react-markdown with GFM), none may add a list item, link, heading or emphasis.
+    const name = '`*x* [y](http://e.com) <!-- # h ``z'
+    const baseBranch = '`*b*`[x](http://e.com)#h<!--``'
+    const unescape = (html: string) =>
+      html
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#x27;/g, "'")
+        .replace(/&amp;/g, '&')
+    let n = 0
+    for (const via of ['rest', 'mcp'] as const) {
+      // Windows refuses * < > : in a folder name; backticks, brackets and # are legal everywhere.
+      const dir = path.join(tmp, `\`\`a\`b [x](e.com) # h ${via}\``)
+      fs.mkdirSync(dir)
+      execFileSync('git', ['init', '-q'], { cwd: dir })
+      execFileSync('git', ['remote', 'add', 'origin', `https://github.com/acme/lit${++n}`], { cwd: dir })
+      const input = { name: `${name}${n}`, repoPath: dir, githubRepo: `acme/lit${n}`, baseBranch }
+      const card =
+        via === 'rest'
+          ? (await call('POST', `/api/tickets/${t.id}/repo-request`, input)).body
+          : await tool('add_repo', { ticketId: t.id, ...input })
+      expect(card.repoRequest).toMatchObject(input)
+      const html = renderToStaticMarkup(
+        createElement(ReactMarkdown, { remarkPlugins: [remarkGfm] }, card.body as string),
+      )
+      expect(html.match(/<li>/g), html).toHaveLength(4)
+      expect(html).not.toMatch(/<(a|h\d|em|strong|del)\b/)
+      expect(html.startsWith('<p>Add repo <code>')).toBe(true)
+      const codes = [...html.matchAll(/<code>(.*?)<\/code>/g)].map((m) => unescape(m[1]!))
+      expect(codes).toEqual([input.name, input.name, input.githubRepo, dir, baseBranch])
+      const items = [...html.matchAll(/<li>(.*?)<\/li>/g)].map((m) => m[1]!.replace(/<code>.*?<\/code>/, ''))
+      expect(items).toEqual(['Name: ', 'GitHub: ', 'Path: ', 'Base branch: '])
+    }
   })
 })
 

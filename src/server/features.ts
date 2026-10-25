@@ -1294,6 +1294,19 @@ const REPO_OPTIONS: schema.DecisionOption[] = [
 ]
 
 /**
+ * `text` (one line) as a markdown code span, which shows it literally: its fence is one backtick longer
+ * than the longest run of backticks in it, since a span opened by N backticks closes only on N
+ * (CommonMark), with a space inside each end when it starts or ends with a backtick or a space (one is
+ * stripped from each end).
+ */
+function codeSpan(text: string) {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
+  const fence = '`'.repeat(longest + 1)
+  const pad = /^[` ]|[` ]$/.test(text) ? ' ' : ''
+  return `${fence}${pad}${text}${pad}${fence}`
+}
+
+/**
  * An agent's request to add a repo to the project of the ticket it names: a decision card for the human,
  * "Add repo shop?" with Add and Don't add, on that ticket (in its Main tab; it does not block). The repo
  * is checked first (`checkRepoRequest`: a git checkout whose origin is `githubRepo` on github.com, a name
@@ -1308,13 +1321,14 @@ export async function requestRepo(
   const ticket = getTicket(ticketId)
   if (input.as !== undefined) actingAs(ticket.projectId, input.as)
   const req = await checkRepoRequest(ticket.projectId, input)
+  // Every value is the agent's: each is a code span, so none can close its formatting or add markdown.
   const body = [
-    `Add repo ${req.name}?`,
+    `Add repo ${codeSpan(req.name)}?`,
     '',
-    `- Name: ${req.name}`,
-    `- GitHub: ${req.githubRepo}`,
-    `- Path: \`${req.repoPath}\``,
-    `- Base branch: ${req.baseBranch}`,
+    `- Name: ${codeSpan(req.name)}`,
+    `- GitHub: ${codeSpan(req.githubRepo)}`,
+    `- Path: ${codeSpan(req.repoPath)}`,
+    `- Base branch: ${codeSpan(req.baseBranch)}`,
     '',
     `Add registers this checkout as a repo of ${getProject(ticket.projectId).name}, checked again first; Don't add changes nothing.`,
   ].join('\n')
