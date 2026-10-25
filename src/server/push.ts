@@ -15,6 +15,7 @@ import {
   type Refs,
   type Worktree,
 } from './git'
+import { reconcileProject } from './autoPhases'
 import { getProject } from './projects'
 import { recheckMovedPrs } from './prs'
 import { noteOriginRefs } from './pushedToday'
@@ -45,9 +46,13 @@ export interface Push {
   into?: string
   /** When origin's branches were last fetched into the checkout; null when that is not known. */
   checkedAt: string | null
+  /** Set when git could not tell (the refs could not be listed, or a count failed): `none` is no answer. */
+  unknown?: true
 }
 
 export const NO_PUSH: Push = { state: 'none', ahead: 0, behind: 0, checkedAt: null }
+/** What git could not answer: reads show it as no branch, the automatic phases leave it be. */
+const UNKNOWN_PUSH: Push = { ...NO_PUSH, unknown: true }
 
 /** At most one background fetch per repo this often. */
 export const FETCH_EVERY = 5 * 60_000
@@ -256,7 +261,11 @@ export async function pushStates(
     [...new Set(branches)].map(async (branch) => {
       out.set(
         branch,
-        refs && branch ? await pushOf(repoPath, branch, bases.get(branch), refs, checkedAt) : NO_PUSH,
+        !branch
+          ? NO_PUSH
+          : refs
+            ? await pushOf(repoPath, branch, bases.get(branch), refs, checkedAt)
+            : UNKNOWN_PUSH,
       )
     }),
   )
@@ -294,7 +303,7 @@ async function pushOf(
       return { state: 'local-only', ahead, behind: 0, ...at }
     }
   } catch {
-    return { ...NO_PUSH, ...at }
+    return { ...UNKNOWN_PUSH, ...at }
   }
   if (remote) return { state: 'remote-only', ahead: 0, behind: 0, ...at }
   return { ...NO_PUSH, ...at }
@@ -343,14 +352,22 @@ export async function projectPush(projectId: number): Promise<ProjectPush> {
       ),
     ),
   )
+  const rows = tickets.map(({ t, repo }) => ({
+    id: t.id,
+    repoId: repo?.id ?? null,
+    branch: t.branch,
+    push: (repo && states.get(repo.id)?.get(t.branch)) ?? NO_PUSH,
+  }))
+  // The board's poll of its cards: the automatic phases of these tickets follow what it just read.
+  await reconcileProject(projectId, {
+    only: rows.map((r) => r.id),
+    pushes: new Map(rows.filter((r) => r.repoId !== null).map((r) => [r.id, r.push])),
+  }).catch((err: unknown) =>
+    console.error(`ticking the automatic phases of project ${projectId} failed:`, err),
+  )
   return {
     repos: list.map((r) => ({ id: r.id, name: r.name, ...fetchStatus(r.repoPath) })),
-    tickets: tickets.map(({ t, repo }) => ({
-      id: t.id,
-      repoId: repo?.id ?? null,
-      branch: t.branch,
-      push: (repo && states.get(repo.id)?.get(t.branch)) ?? NO_PUSH,
-    })),
+    tickets: rows,
   }
 }
 

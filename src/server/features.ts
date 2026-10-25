@@ -8,8 +8,10 @@ import {
   type FeedTab,
   RESUME_TEMPLATE,
 } from '#/lib/constants'
+import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
+import { reconcileTicket } from './autoPhases'
 import { isHumanName, lastHuman, listActors } from './actors'
 import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
 import { branchHead, NO_BRANCH } from './git'
@@ -332,10 +334,12 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     .where(eq(schema.tasks.ticketId, id))
     .orderBy(asc(schema.tasks.position), asc(schema.tasks.id))
     .all()
-  // One flat list in tree order: each top-level task, then its subtasks.
+  // One flat list in tree order: each top-level task, then its subtasks. `auto`: a phase the board
+  // ticks itself (#/lib/autoPhases), which nobody ticks by hand.
   const tasks = taskRows
     .filter((task) => !task.parentId)
     .flatMap((task) => [task, ...taskRows.filter((sub) => sub.parentId === task.id)])
+    .map((task) => ({ ...task, auto: autoPhaseOf(task) !== null }))
   const workspaces = db.select().from(schema.workspaces).where(eq(schema.workspaces.ticketId, id)).all()
   const updates = db
     .select()
@@ -493,13 +497,20 @@ export function placement(
  * stale as the queue would refresh them.
  */
 export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolean } = {}) {
-  const t = getTicketFull(id, opts)
+  let t = getTicketFull(id, opts)
   const repo = ticketRepo(t)
   const branches = [t.branch, ...t.workspaces.map((w) => w.branch)]
   const push = repo
     ? await pushStates(repo.repoPath, branches, new Map(branches.map((b) => [b, t.baseBranch])))
     : null
   if (t.prNumber || t.branch) refreshPrsInBackground(t.projectId)
+  // The phases the board ticks follow what was just read, before the tasks are handed out (and a ticket
+  // seeded before Merged was built in is looked at for it once).
+  if (
+    (t.tasks.some((task) => task.auto) || !t.mergedPhaseChecked) &&
+    (await reconcileTicket(t, push ? (push.get(t.branch) ?? null) : null, t.workspaces))
+  )
+    t = getTicketFull(id, opts)
   return {
     ...t,
     pr: await withMergeCheck(t.pr),
@@ -558,6 +569,8 @@ export function createTicket(
       tags: cleanTags(input.tags ?? []),
       prNumber: input.prNumber ?? null,
       createdBy: actor,
+      // Seeded with the phases in effect now: Merged is not added to it later.
+      mergedPhaseChecked: true,
     })
     .returning()
     .get()
@@ -1260,9 +1273,12 @@ function getTask(id: number) {
 
 /**
  * A task with subtasks is done exactly when all of them are; one whose last subtask went keeps its
- * own tick. Run inside the transaction that changed the subtasks.
+ * own tick. A phase the board ticks follows its own fact, never its subtasks. Run inside the
+ * transaction that changed the subtasks.
  */
 function settleParent(parentId: number) {
+  const parent = db.select().from(schema.tasks).where(eq(schema.tasks.id, parentId)).get()
+  if (!parent || autoPhaseOf(parent)) return
   const subtasks = db
     .select({ done: schema.tasks.done })
     .from(schema.tasks)
@@ -1347,6 +1363,14 @@ export function addTasks(
 export function updateTask(id: number, patch: { done?: boolean; text?: string } & BlockedTag, actor: string) {
   const task = getTask(id)
   const tag = blockedTag(patch, task)
+  // An automatic phase, or a task this patch rewords into one.
+  const phase =
+    autoPhaseOf(task) ?? (patch.text === undefined ? null : autoPhaseOf({ ...task, text: patch.text }))
+  if (phase && (patch.done !== undefined || (tag?.blocked && task.done)))
+    throw new HttpError(
+      400,
+      `"${phase}" is ticked by the board ${AUTO_PHASE_RULE[phase]}; it cannot be ticked by hand${patch.done === undefined ? ', or reopened by tagging it blocked' : ''}`,
+    )
   if (patch.done && tag?.blocked)
     throw new HttpError(400, 'a done task cannot be blocked: tick it once the human has done their part')
   const done = patch.done ?? (tag?.blocked && task.done ? false : undefined)

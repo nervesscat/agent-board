@@ -17,13 +17,13 @@ let agents: typeof import('./agents')
 beforeAll(async () => {
   agents = await import('./agents')
   const { db, schema } = await import('#/db')
-  const projectId = db.insert(schema.projects).values({ name: 'Spark | web' }).returning().get().id
+  const projectId = db.insert(schema.projects).values({ name: 'Acme | web' }).returning().get().id
   db.insert(schema.repos)
     .values({
       projectId,
       name: 'front',
-      repoPath: '/home/me/spark-frontend/',
-      githubRepo: 'acme/spark-frontend',
+      repoPath: '/home/me/acme-frontend/',
+      githubRepo: 'acme/acme-frontend',
     })
     .run()
 })
@@ -35,7 +35,7 @@ describe('the board skill', () => {
     expect(skill).toMatch(/^---\nname: board\n/)
     expect(skill).toContain('| Folder | GitHub | Checkout | Project | projectId | repoId |')
     expect(skill).toContain(
-      '| `spark-frontend` | `acme/spark-frontend` | `/home/me/spark-frontend/` | `Spark \\| web` | 1 | 1 |',
+      '| `acme-frontend` | `acme/acme-frontend` | `/home/me/acme-frontend/` | `Acme \\| web` | 1 | 1 |',
     )
     expect(skill).toContain(
       'claude mcp add --transport http --scope user board http://localhost:47100/api/mcp',

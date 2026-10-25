@@ -1,4 +1,78 @@
-# agent-board
+# CrossBoard
+
+CrossBoard is a job board you run on your own machine, shared by you and your AI coding agents (Claude
+Code, Codex, opencode, …). You write tickets and review; your agents pick them up through an MCP server,
+split them into tasks and lanes, work in branches and worktrees, post updates with screenshots, ask you
+when they need a decision, and hand the work off with its PR, CI status and a running preview. Around
+that: the PR queue of every repo in a project, the PR reviews your agents record, and a day-by-day log
+with the report each project asks for. It keeps everything in one SQLite file, signs you in with
+passkeys, and reads GitHub and git without ever pushing on your behalf.
+
+![The tickets of a project, by stage](docs/screenshots/board.png)
+
+| A ticket: its tasks, branch and its state on origin                | A project at a glance: what needs you, what is in progress |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| ![A ticket with its tasks and branch](docs/screenshots/ticket.png) | ![The project overview](docs/screenshots/overview.png)     |
+
+## Install
+
+### Download the app
+
+The desktop app runs the board in a window of its own: no checkout, node or pnpm needed.
+
+- **Windows** (x64):
+  [agent-board-setup-x64.exe](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board-setup-x64.exe).
+  It installs for you alone, without admin rights. It is not code-signed yet, so SmartScreen may ask
+  once (More info, Run anyway).
+- **Linux** (x86_64):
+  [AppImage](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board-x86_64.AppImage),
+  [.deb](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board_amd64.deb),
+  [.rpm](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board.x86_64.rpm),
+  [pacman](https://github.com/nervesscat/agent-board/releases/latest/download/agent-board.pacman).
+  The desktop app's Linux section, below, says how to install each on your distribution.
+
+The [latest release](https://github.com/nervesscat/agent-board/releases/latest) has every package,
+and [docs/releasing.md](docs/releasing.md) lists them and how a release is made. The app needs `git`,
+`gh` (signed in with `gh auth login`) and, for generated reports, `claude` on your `PATH`. The desktop
+app, below, has the details: where it keeps its data and settings, and what to do when it cannot start.
+
+### From source
+
+With Node.js 24, pnpm (`corepack enable pnpm`), `git` and `gh`:
+
+```
+git clone https://github.com/nervesscat/agent-board.git
+cd agent-board
+pnpm install
+cp .env.example .env
+pnpm start             # the board on http://localhost:47100, in the background; pnpm stop stops it
+```
+
+## Quick start
+
+1. **Open the board**: the app opens it; from source, `http://localhost:47100/`.
+2. **Create your account**: the first visit goes to `/setup`. Give your name and create a passkey.
+3. **Add a repository** (the path of a local checkout) and the project it belongs to, then pick the
+   project in the top bar. A project can hold several repos.
+4. **Connect your agents**: on Connect agents (`/agents`) pick the CLI, press **Generate commands**, and run the lines it shows in
+   your terminal. They add the board's MCP server with a token of its own
+   (`claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer <token>"`)
+   and install the board skill.
+5. **Hand out work**: write a ticket, then ask your agent to "pick up a ticket". It claims it, posts
+   its progress on the ticket, and hands it off with its PR for you to review. `AGENTS.md` is what
+   agents follow.
+
+## Contributing, security and license
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): set up a checkout, the checks, and pull requests (into `dev`).
+- [SECURITY.md](SECURITY.md): report a vulnerability privately, never in a public issue.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): the Contributor Covenant.
+- [LICENSE](LICENSE): MIT.
+
+The rest of this README is the reference: how the board runs, signing in, the desktop app, other
+devices, test mode, previews, storage, the REST API, development and testing.
+
+## Overview
 
 A local job board shared by one developer and their AI agents (claude, codex, opencode, …).
 Per project (one or more repos): the PR queue of what you review and what you opened, each PR with
@@ -71,21 +145,22 @@ hashes in `data/board.db`.
 
 ## Running it from WSL (projects, git, gh and claude live there)
 
-Keep this checkout as the source of truth and run a clone inside the distro:
+When your projects, `git`, `gh` and `claude` live in WSL, run the board there, from a clone inside
+the distro:
 
 ```bash
 # inside WSL, once
-git clone /mnt/f/Programming/WebDev/agent-board ~/agent-board && cd ~/agent-board
+git clone https://github.com/nervesscat/agent-board.git ~/agent-board && cd ~/agent-board
 cp .env.example .env   # set CLAUDE_BIN=$HOME/.local/bin/claude
 corepack enable pnpm   # or: npm i -g pnpm
 pnpm install
 curl -fsSL https://claude.ai/install.sh | bash && claude   # log in once; `gh auth login` likewise
 ```
 
-Repo paths are then Linux paths (`/home/you/spark-repos/spark-backend`), the board spawns
+Repo paths are then Linux paths (`/home/you/code/myapp`), the board spawns
 the WSL `claude`, and WSL's port 47100 is forwarded to Windows `localhost`, so the browser and its
-passkeys work unchanged. `pnpm start` inside WSL starts it; after a change here,
-`git -C ~/agent-board pull` puts it live (and `pnpm start` again when dependencies or migrations changed).
+passkeys work unchanged. `pnpm start` inside WSL starts it;
+`git -C ~/agent-board pull` puts a new version live (and `pnpm start` again when dependencies or migrations changed).
 
 ## Running the board
 
@@ -102,7 +177,7 @@ dependencies or adds a migration needs `pnpm start` again (migrations apply as i
 the board itself happens in worktrees, never in the main checkout (Development, below). Logs:
 `data/logs/board.out.log`, `board.err.log`.
 
-## Install
+## The desktop app
 
 The board also comes as a desktop app, CrossBoard, for Windows and Linux: an installer or package
 that runs the built board in a window of its own, with no checkout, pnpm or node to run. Each is
@@ -601,7 +676,7 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | GET          | `/api/agent-setup/review-skills/status` · `?projectId=`                                                       | whether those files are installed as served: `{files, global, repos[]}`. `global` is the user-wide `~/.claude` of the machine the board runs on (`CLAUDE_HOME`): `{path, installTo, status, files[]}`, where `installTo` is the folder its install line targets when `CLAUDE_HOME` names one other than `~/.claude`, else null (the line installs into `~/.claude`). Each of `repos` is a repo's own `.claude` (every repo, or the project's) with its project, `repoPath`, `status` and `files[]`. A `status` is `none` (no copy; a repo then uses `~/.claude`), `current`, `outdated` or `unreachable`; each file is `{path, status}`                                                                                                          |
 | GET          | `/api/agent-setup/review-skills/diff?path=&repoId=`                                                           | one of those files as installed against as served, line endings aside, as git shows it: `{path, status, installed, unreadable, header, hunks[]}`. `path` must be one of the bundle's (else 400/404); `repoId` reads that repo's `.claude`, none `~/.claude` (409 if it can't be read). Old side: the installed copy (`/dev/null` when `missing`); new: the served one. `unreadable`: why a copy there can't be read. Read-only                                                                                                                                                                                                                                                                                                                   |
 | GET/PATCH    | `/api/settings` `{defaultAgent, previewLimit, skillsTracking}`                                                | board-wide preferences (PATCH is the human's only); `previewLimit`: how many previews the board runs at once, 1 to 32, 8 by default; `skillsTracking`: the copy of the review skills the Agents pages show, `global` (`~/.claude`, the default) or `repo` (each repo's own)                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| GET/POST     | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                                                        | projects with their `repos[]`, `stages[]` and `agents[]`; `instructions` is the agents' briefing; `defaultPhases`: a new ticket's phases (GET: the list in effect, built in Implementation, Pushed, PR, CI, Preview, Hand-off post; PATCH a list, `[]` for none, null for the built-in; the human's); `tagSuggestions`: the tags offered under a ticket's tags field (Bug, UI, Implementation, Report until changed; PATCH a list, trimmed, repeats in any casing dropped, `[]` for none; MCP `set_tag_suggestions`); GET's `usedTags`: the tags the project's tickets carry, most used first, in the casing to reuse                                                                                                                            |
+| GET/POST     | `/api/projects` · GET/PATCH/DELETE `/api/projects/:id`                                                        | projects with their `repos[]`, `stages[]` and `agents[]`; `instructions` is the agents' briefing; `defaultPhases`: a new ticket's phases (GET: the list in effect, built in Implementation, Pushed, PR, CI, Preview, Merged, Hand-off post; PATCH a list, `[]` for none, null for the built-in; the human's); `tagSuggestions`: the tags offered under a ticket's tags field (Bug, UI, Implementation, Report until changed; PATCH a list, trimmed, repeats in any casing dropped, `[]` for none; MCP `set_tag_suggestions`); GET's `usedTags`: the tags the project's tickets carry, most used first, in the casing to reuse                                                                                                                    |
 |              | `stallMinutes` on GET/PATCH `/api/projects/:id`                                                               | how long an active ticket may go without a work-timeline event before it reads as stalled (30 until changed, 1 to 1440); the human's: an agent's PATCH is a 403                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | GET/POST     | `/api/projects/:id/agents` · PATCH/DELETE `/api/agents/:id`                                                   | the project's agents `{name, instructions, delegation, avatarId}` (writes are the human's); a ticket assigned to one is reserved                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | POST         | `/api/projects/:id/agents/defaults`                                                                           | adds the default agents the project lacks (spec, builder, runner, env, verify, hunt, refute, merge), each with instructions and delegation notes; the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -617,8 +692,8 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 |              | `needs[]` on create and PATCH · `force` on PATCH                                                              | the tickets whose branches must be merged into its base first (same project, no cycles); GET returns `needs[]` with `merged` and `neededBy[]`, the list `needs[]`. A move to a done stage is a 409 (`code: needs`) while one is not merged; `force: true` (the human's only) marks it done anyway, logged                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 |              | `resume` on GET `/api/tickets/:id` · on list rows                                                             | the resume note with `at`, `by`, `sha`, `commitsSince`, `stale`, `noHandoff`, `day` · rows: `at`, `stale`, `noHandoff`, `day`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 |              | `summary` on GET `/api/tickets/:id` · `tab` on its `updates[]`                                                | the summary (`body`, `change`, `at`, `by`, `via`, `attachments`, `postId`, `versions`; `fallback: true` while none was written and the newest agent progress post stands in; null with neither) · each post's tab of the feed: `agents` for progress posts, posts made `as` a project agent and resume notes; `main` for the human's posts, decision cards, questions to the human and the summary                                                                                                                                                                                                                                                                                                                                               |
-|              | `handoff` on PATCH to a review stage · on GET in one                                                          | what the hand-off still lacks, as warnings (the move goes through): `{missing: [{code, text}], checks: [{code, label, ok, text}]}`; codes `tasks_open`, `no_pr`, `not_pushed`, `no_preview`, `no_handoff_post` (no summary by an agent since the last commit; a ticket that never had one goes by its agent progress posts), `checks_unknown` (the PR's CI failing or running); `checks` starts with `not_merged`, never missing                                                                                                                                                                                                                                                                                                                 |
-|              | `tasks_open` in `handoff`                                                                                     | Implementation: the tasks and subtasks, the phases and their steps (the hand-off phases and lanes' included); missing while there are none or some are open; agents tick each phase, the board ticks none                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|              | `handoff` on PATCH to a review stage · on GET in one                                                          | what the hand-off still lacks, as warnings (the move goes through): `{missing: [{code, text}], checks: [{code, label, ok, text}]}`; codes `tasks_open`, `no_pr`, `not_pushed`, `no_preview`, `no_handoff_post` (no summary by an agent since the last commit; a ticket that never had one goes by its agent progress posts), `checks_unknown` (the PR's CI failing or running, with no `CI run locally: green` comment naming its head); `checks` starts with `not_merged`, never missing                                                                                                                                                                                                                                                        |
+|              | `tasks_open` in `handoff`                                                                                     | Implementation: the tasks and subtasks, the phases and their steps (the hand-off phases and lanes' included, Merged aside: merging is the human's); missing while there are none or some are open; the board ticks Pushed, PR, CI, Preview and Merged itself, agents the rest                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 |              | `blockedTasks` on GET `/api/tickets/:id` · on list rows                                                       | its open tasks and subtasks tagged blocked, with those of its lanes that are not cancelled (as the rolled-up progress); its board card shows them                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 |              | `stalled` · `lastSignalAt` on GET `/api/tickets/:id` · on list rows; `work` on GET                            | `stalled`: `{since, minutes, lastAgent}` when the ticket reads as stalled (Work timeline, below), else null; `lastSignalAt`: the latest of its events, `startedAt` and `createdAt`; `work`: `{totals, stalled, lastSignalAt, open: {spans, waits}}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | GET          | `/api/projects/:id/tickets?status=todo,blocked&assignee=&q=&tag=&parent=&archived=`                           | filters (`status` takes stage keys, names or kinds; `assignee=` empty for unassigned; `parent=root` for top level; `archived=include` or `only`); a PR's own ticket is in none of them (`GET /api/tickets/:id` still reads it)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -637,7 +712,7 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | GET          | `/api/projects/:id/previews`                                                                                  | its tickets' previews (archived aside), running first: `{previews: [{workspace, ticket, url, check, managed, cannotStart, linkStop, running}], inUse, limit}`; `check`: the link answers (null off this machine); `linkStop`: why its server is not stoppable, null if it is; reads only                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | POST         | `/api/projects/:id/previews/stop`                                                                             | Stop all, humans only: the previews the board runs and the links it may stop (see Previews): `{stopped: [{workspaceId, ticketId, kind, port, pids?, freed?}], skipped: [{workspaceId, ticketId, reason}]}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | DELETE       | `/api/uploads/unattached`                                                                                     | delete the unattached uploads older than a day now `{deleted, bytes, failed}` (the human's)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| POST         | `/api/tickets/:id/tasks` `{tasks[], parentTaskId?}` · PATCH/DELETE `/api/tasks/:id`                           | the to-do list, two levels and no more: the phases (Implementation, then the hand-off's), the concrete steps as their subtasks (`parentTaskId`: a phase, mostly Implementation); ticking a task ticks its subtasks, the last subtask ticked ticks its task; deleting a task deletes its subtasks                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| POST         | `/api/tickets/:id/tasks` `{tasks[], parentTaskId?}` · PATCH/DELETE `/api/tasks/:id`                           | the to-do list, two levels and no more: the phases (Implementation, then the hand-off's), the concrete steps as their subtasks (`parentTaskId`: a phase, mostly Implementation); ticking a task ticks its subtasks, the last subtask ticked ticks its task; deleting a task deletes its subtasks; every task reads `auto`: true on a phase the board ticks itself (below)                                                                                                                                                                                                                                                                                                                                                                        |
 |              | `blocked`, `blockedReason` on PATCH `/api/tasks/:id` · on `{text, …}` items                                   | the blocked tag: the task waits on the human, the reason says what they must do (up to 500 characters, only with `blocked: true`; `blocked: false` clears both); every task reads both (`false`, `''` untagged); agents and the human alike                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 |              | ticks and the blocked tag                                                                                     | ticking a task done clears its tag, and that of the subtasks it ticks and of a parent its last subtask ticks; tagging a done task reopens it; `{done: true, blocked: true}` is a 400. A blocked task still counts as open and never moves the ticket                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | POST         | `/api/tickets/:id/workspaces` `{name, branch?, path?, agent?, previewUrl?}` · DELETE `/api/workspaces/:id`    | worktrees / sub-branches / subagents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -686,7 +761,7 @@ pnpm test:e2e        # Playwright against a built board in test mode (Testing, b
 pnpm check:migrations # the drizzle folder and its journal agree
 pnpm bench           # in a worktree: the benchmark (Benchmark, below)
 pnpm db:generate     # after editing src/db/schema.ts; migrations in ./drizzle apply at boot
-pnpm desktop:package # the installer or Linux packages and the unpacked app in desktop/dist (Install, above)
+pnpm desktop:package # the installer or Linux packages and the unpacked app in desktop/dist (The desktop app, above)
 pnpm desktop:smoke   # runs the unpacked app from a temp folder and checks it (Testing, below)
 ```
 
@@ -810,6 +885,30 @@ read from the checkout's `origin/*` refs, so the board fetches each repo in the 
 every 5 minutes (never prompting, never holding up a request); `checkedAt` is the last fetch, and
 the refresh action fetches at once. The board pushes nothing but the origin deletions the human
 confirms on the Cleanup page.
+
+**Phases the board ticks.** A top-level task named Pushed, PR, CI, Preview or Merged (trimmed, any
+case; a subtask of that name is an ordinary task) follows a fact, and reads `auto: true`:
+
+- Pushed: the ticket's branch is `pushed` (origin may be ahead), `remote-only` or `merged`;
+- PR: the PR it names with `prNumber`, else the newest on its branch, is open or merged in the PR
+  queue (closed without merging unticks it; a PR the queue never saw is no PR);
+- CI: that PR's checks pass, or a comment on it whose first line is `CI run locally: green` names a
+  7 to 40 character prefix of its head SHA (`CI run locally: green on <sha>`; stored per PR at each
+  refresh as `local_ci_sha`), so a new push unticks it;
+- Preview: one of the ticket's own workspaces has a preview the board runs, or a link that answers
+  (one off this machine is taken on trust);
+- Merged: the PR is merged, or the branch is `merged`.
+
+The board reconciles them on every ticket read, on the project's push poll
+(`/api/projects/:id/push`) and after each PR refresh, writing only the ticks that differ, each logged
+as `board`. A fact it cannot read (git cannot list the refs, no repo, PRs never refreshed) changes
+nothing, and once Merged holds or the ticket is in a done stage it only ticks, never unticks.
+Archived tickets and PR tickets are left alone. `PATCH /api/tasks/:id` with `done` on one, or
+`blocked: true` on a done one, is a 400 naming the phase and its rule, for the human and agents
+alike (MCP `set_task_done` and `update_task` too); rewording or removing it still works. A ticket
+seeded before Merged was built in gets it once, before its Hand-off post, when it has the other
+phases and its project's list has Merged (`merged_phase_checked` remembers it was looked at). The
+hand-off's `tasks_open` leaves Merged out.
 
 **Pushed today** (`GET /api/projects/:id/pushed-today`) counts what reached origin on the local day:
 each time the board reads a checkout's copy of origin's branches it records which of them moved
