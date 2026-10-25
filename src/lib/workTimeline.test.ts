@@ -226,6 +226,7 @@ describe('the stalled rule', () => {
       minutes: 31,
       lastAgent: 'builder',
       lastBy: 'claude',
+      lastFrom: 'event',
     })
     expect(build([hb()], '10:29').stalled).toBeNull()
     expect(build([hb()], '10:30').stalled).toBeNull()
@@ -266,17 +267,25 @@ describe('the stalled rule', () => {
     expect(build([claimed], '11:00').stalled).toMatchObject({
       lastAgent: 'enrique',
       lastBy: 'orch/builder-1',
+      lastFrom: 'event',
     })
-    // An older event recorded no one: nothing to name.
+    // An older event recorded no one: nothing to name, but the name still comes from an event.
     expect(build([event('heartbeat', '10:00', { by: '' })], '11:00').stalled).toMatchObject({
       lastAgent: 'claude',
       lastBy: '',
+      lastFrom: 'event',
     })
     // No agent's event at all: the assignee, recorded by no one.
     expect(build([], '11:00', { assignee: 'someone', createdAt: at('09:00') }).stalled).toMatchObject({
       lastAgent: 'someone',
       lastBy: '',
+      lastFrom: 'assignee',
     })
+    // Only the board's own events: still the assignee's name, not an event's.
+    expect(
+      build([event('push', '10:00', { agent: 'board', by: 'board' })], '11:00', { assignee: 'someone' })
+        .stalled,
+    ).toMatchObject({ lastAgent: 'someone', lastBy: '', lastFrom: 'assignee' })
   })
 
   it('isStalled is strict at the threshold', () => {

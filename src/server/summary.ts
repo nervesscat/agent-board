@@ -253,6 +253,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
               lastSignalAt: s.since,
               lastAgent: s.lastAgent,
               lastBy: s.lastBy,
+              lastFrom: s.lastFrom,
             },
           ]
         : []

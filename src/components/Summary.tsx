@@ -264,6 +264,7 @@ function stalledOf(p: ProjectSummary, id: number) {
         minutes: silentMinutes(s.lastSignalAt),
         lastAgent: s.lastAgent,
         lastBy: s.lastBy,
+        lastFrom: s.lastFrom,
       }
     : null
 }
@@ -495,12 +496,19 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                   <StageBadge p={p} status={s.status} />
                   {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
                   <Tip content={`No heartbeat or event since ${clock(s.lastSignalAt)}`}>
-                    <span>
+                    <span className="min-w-0">
                       silent {formatDuration(silentMinutes(s.lastSignalAt) * 60_000)}
                       {s.lastAgent && (
                         <>
                           {' · last '}
-                          <ClaimedActor name={s.lastAgent} by={s.lastBy} />
+                          {s.lastFrom === 'assignee' ? (
+                            // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
+                            <span data-testid="last-assignee" className="font-medium wrap-anywhere">
+                              {s.lastAgent}
+                            </span>
+                          ) : (
+                            <ClaimedActor name={s.lastAgent} by={s.lastBy} />
+                          )}
                         </>
                       )}
                     </span>

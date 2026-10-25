@@ -71,6 +71,13 @@ function Picture({ children }: { children: ReactNode }) {
 }
 
 /**
+ * The name's box never grows past the line it sits on, nor holds its flex row open at its full width
+ * (`min-w-0`): a deep sub-identity is one long word, so the name (a text node of its own, on the
+ * line of the text around it) breaks anywhere, and the "under" part is cut short. The tooltip keeps the whole chain.
+ */
+const ROOT = 'inline-flex min-w-0 max-w-full items-baseline gap-1 font-medium wrap-anywhere'
+
+/**
  * Who did it: one of the project's agents gets its picture (and the connected agent it posted `via`),
  * any other name a glyph and its role's badge (Human, Orchestrator, Agent, or Board for what the board
  * recorded itself); a worker sub-identity also
@@ -84,12 +91,12 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
       <Tip
         content={`${agent.name} (one of the project's agents${via ? `, posted via ${chainOf(via, who)}` : ''})`}
       >
-        <span className={`inline-flex items-baseline gap-1 font-medium ${className}`}>
+        <span className={`${ROOT} ${className}`}>
           <Picture>
             <AgentAvatar agent={agent} />
           </Picture>
           {agent.name}
-          {via && <span className="font-normal text-muted-foreground">via {via}</span>}
+          {via && <span className="min-w-0 font-normal text-muted-foreground">via {via}</span>}
         </span>
       </Tip>
     )
@@ -97,7 +104,7 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
   const Icon = me.kind === 'board' ? Cog : me.kind === 'agent' ? Bot : User
   return (
     <Tip content={me.role === 'board' ? how(me) : `${chainOf(name, who)}: ${how(me)}`}>
-      <span className={`inline-flex items-baseline gap-1 font-medium ${className}`} data-role={me.role}>
+      <span className={`${ROOT} ${className}`} data-role={me.role}>
         <Picture>
           <Icon className="size-3.5 text-muted-foreground" />
         </Picture>
@@ -116,8 +123,13 @@ export function Actor({ name, via, className = '' }: { name: string; via?: strin
  * The name a record claims (`name`, which may be free text such as a sub-agent's label) and who
  * recorded it as signed in (`by`). A role badge goes only on a signed-in identity: when `by` is someone
  * else, the claimed name is plain text, then "by" and the recorder as `Actor` shows it. When they are
- * the same, or `by` is unknown (an older record), or the name is the board's own, it is one `Actor`.
+ * the same, or `by` is unknown (an older record), it is one `Actor`. The board's own events are
+ * recorded by the board (`by` 'board'); an event someone else recorded under the name 'board' is a
+ * claim like any other, so it never gets the Board badge.
  */
+export const claimedShape = (name: string, by: string | null | undefined): 'actor' | 'claimed' =>
+  !by || by === name ? 'actor' : 'claimed'
+
 export function ClaimedActor({
   name,
   by,
@@ -127,7 +139,7 @@ export function ClaimedActor({
   by: string | null | undefined
   className?: string
 }) {
-  if (!by || by === name || name === 'board') return <Actor name={name} className={className} />
+  if (!by || claimedShape(name, by) === 'actor') return <Actor name={name} className={className} />
   return (
     <>
       <span data-testid="claimed-name" className={`min-w-0 font-medium break-all ${className}`}>

@@ -1,8 +1,9 @@
-import type { APIRequestContext, Page } from '@playwright/test'
+import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { ActorRow, AgentTokenRow, TicketFull } from '#/lib/api'
+import { inDatabase } from './db'
 import { HUMAN } from './env'
-import { expect, expectTooltip, ok, openFeedTab, test } from './fixtures'
+import { expect, expectTooltip, ok, openFeedTab, section, test } from './fixtures'
 
 type Playwright = { request: { newContext: (o: object) => Promise<APIRequestContext> } }
 
@@ -16,6 +17,14 @@ const badge = (scope: ReturnType<Page['locator']>, text: string) => scope.getByT
 /** Whether the page itself scrolls sideways. */
 const scrollsSideways = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
+
+/** That `inner` lies within `outer`'s left and right edges. */
+async function expectInside(inner: Locator, outer: Locator) {
+  const a = (await inner.boundingBox())!
+  const b = (await outer.boundingBox())!
+  expect(a.x).toBeGreaterThanOrEqual(b.x - 1)
+  expect(a.x + a.width).toBeLessThanOrEqual(b.x + b.width + 1)
+}
 
 test('posts, replies and the assignee show who is who: Human, Orchestrator, Agent under its parent', async ({
   page,
@@ -226,6 +235,82 @@ test.describe('on a phone', () => {
       expect(await scrollsSideways(page)).toBe(false)
     } finally {
       await Promise.all([sub.dispose(), orch.dispose()])
+    }
+  })
+
+  test('a deep sub-identity stays inside its post, its Summary, the Assignee field and the Overview rows', async ({
+    page,
+    project,
+    api,
+    playwright,
+    baseURL,
+  }, info) => {
+    const orchName = `orch-w${info.workerIndex}`
+    const sub = `${orchName}/builder-with-a-long-sub-identity/importer-lane-one`
+    const worker = await as(playwright, baseURL, `orchestrator:${orchName}`, { 'X-Agent-Name': sub })
+    try {
+      const t = await api.ticket({ title: 'Narrow names', status: 'in_progress' })
+      await ok(worker.post(`/api/tickets/${t.id}/claim`, { data: {} }))
+      await ok(
+        worker.post(`/api/tickets/${t.id}/updates`, {
+          data: { body: 'A post by the worker.', progress: false },
+        }),
+      )
+      await ok(worker.put(`/api/tickets/${t.id}/summary`, { data: { body: 'Where it stands.' } }))
+      await ok(
+        worker.post(`/api/projects/${project.id}/tickets/${t.id}/events`, { data: { kind: 'heartbeat' } }),
+      )
+      // Silent for 40 minutes: it is in progress and stalled on the Overview.
+      inDatabase((db) => {
+        db.prepare(
+          "update ticket_events set at = strftime('%Y-%m-%dT%H:%M:%fZ', at, '-40 minutes') where ticket_id = ?",
+        ).run(t.id)
+        db.prepare(
+          `update tickets set "createdAt" = strftime('%Y-%m-%dT%H:%M:%fZ', "createdAt", '-40 minutes'), started_at = strftime('%Y-%m-%dT%H:%M:%fZ', started_at, '-40 minutes') where id = ?`,
+        ).run(t.id)
+      })
+      const actorIn = (scope: Locator) =>
+        scope
+          .locator('span[data-slot="tooltip-trigger"][data-role="worker"]')
+          .filter({ hasText: sub })
+          .first()
+
+      await page.goto(`/projects/${project.id}/features/${t.id}`)
+      await openFeedTab(page, 'Main')
+      const post = page.getByRole('article').filter({ hasText: 'A post by the worker.' })
+      const summary = page.getByRole('article', { name: 'Summary' })
+      const field = page.locator('#assignee')
+      await expect(actorIn(post)).toBeVisible()
+      await expect(actorIn(summary)).toBeVisible()
+      await expect(field).toContainText(sub)
+      expect(await scrollsSideways(page)).toBe(false)
+      await expectInside(actorIn(post), post)
+      await expectInside(actorIn(summary), summary)
+      await expectInside(field.getByText(sub, { exact: true }), field)
+      // The whole chain is still in the tooltip.
+      await expectTooltip(
+        actorIn(post),
+        new RegExp(
+          `^${sub} \\(Agent\\) ← ${orchName}/builder-with-a-long-sub-identity \\(Agent\\) ← ${orchName} `,
+        ),
+      )
+
+      await page.goto(`/projects/${project.id}`)
+      const needsYou = section(page, 'Needs you')
+      const stalled = needsYou
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Narrow names` }) })
+      const working = section(page, 'In progress')
+        .getByRole('listitem')
+        .filter({ has: page.getByRole('link', { name: /Narrow names/ }) })
+      await expect(actorIn(stalled)).toBeVisible()
+      await expect(actorIn(working)).toBeVisible()
+      expect(await scrollsSideways(page)).toBe(false)
+      await expectInside(actorIn(stalled), needsYou)
+      await expectInside(actorIn(working), section(page, 'In progress'))
+      await page.screenshot({ path: test.info().outputPath('deep-sub-identity-overview-390.png') })
+    } finally {
+      await worker.dispose()
     }
   })
 })

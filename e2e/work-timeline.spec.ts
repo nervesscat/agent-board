@@ -260,6 +260,68 @@ test('a stalled row names who recorded the last event: a claimed name gets no ba
   await expect(row.locator('[data-role]:not([data-testid="event-by"] *)')).toHaveCount(0)
 })
 
+test("a worker's event under the name 'board' is a claim: no Board badge, and who recorded it", async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Board claims', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'board' })
+  await record(agent, project, t.id, { kind: 'heartbeat', agent: 'board' })
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Timeline' })
+  await card.getByRole('button', { name: 'Show heartbeats' }).click()
+  const items = card.getByRole('list', { name: 'Events' }).getByRole('listitem')
+  for (const text of ['heartbeat', 'started build']) {
+    const row = items.filter({
+      hasText: new RegExp(`\\d(\\s*[AP]M)?\\s*board\\s*by\\s*claude\\s*Agent\\s*${text}$`),
+    })
+    await expect(row).toHaveCount(1)
+    await expect(row.getByTestId('claimed-name')).toHaveText('board')
+    await expect(row.getByTestId('event-by')).toContainText(/^by\s*claude\s*Agent$/)
+    await expect(row.locator('[data-role="board"]')).toHaveCount(0)
+    await expect(row.locator('[data-role]:not([data-testid="event-by"] *)')).toHaveCount(0)
+  }
+  // The board's own event keeps its badge.
+  const created = items.filter({ hasText: 'created in In progress' })
+  await expect(created.locator('[data-role="board"]').first()).toContainText(/^board\s*Board$/)
+  await expect(created.getByTestId('event-by')).toHaveCount(0)
+})
+
+test('a stalled row with no agent heard from names the assignee as plain text, with no badge', async ({
+  page,
+  project,
+  human,
+  playwright,
+  baseURL,
+}, info) => {
+  const name = `quiet-agent-${info.workerIndex}`
+  // A name that signs in as an agent, so a badge would show if the row used Actor.
+  const signedIn = await as(playwright, baseURL, `agent:${name}`)
+  try {
+    await ok(signedIn.get('/api/me'))
+    const t = await create(human, project, {
+      title: 'Assigned, silent',
+      status: 'in_progress',
+      assignee: name,
+    })
+    age(t.id, 40)
+
+    await page.goto(`/projects/${project.id}`)
+    const row = section(page, 'Needs you')
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Assigned, silent` }) })
+    await expect(row).toContainText(new RegExp(`silent 4\\dm · last ${name}$`))
+    await expect(row.getByTestId('last-assignee')).toHaveText(name)
+    await expect(row.locator('[data-role]')).toHaveCount(0)
+    await expect(row.getByTestId('event-by')).toHaveCount(0)
+  } finally {
+    await signedIn.dispose()
+  }
+})
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
