@@ -1195,3 +1195,29 @@ describe('after a restart', () => {
     expect(after.calls).toEqual([])
   })
 })
+
+describe('on the work timeline', () => {
+  it("records a preview run's states under its name, and nothing of a job", async () => {
+    useFake()
+    const repo = addRepo('timeline')
+    const web = run(repo, { name: 'Web' })
+    const worker = run(repo, { name: 'Worker', type: 'job', start: 'python w.py', healthPath: '' })
+    const { t, ws } = ticketIn(repo)
+    const s = await running(ws.id, web.id)
+    await running(ws.id, worker.id)
+    await runs.stopRun(ws.id, web.id, 'stopped by claude', 'claude')
+    await runs.stopRun(ws.id, worker.id, 'stopped by claude', 'claude')
+    const notes = dbm.db
+      .select()
+      .from(dbm.schema.ticketEvents)
+      .where(eq(dbm.schema.ticketEvents.ticketId, t.id))
+      .all()
+      .filter((e) => e.kind === 'preview')
+      .map((e) => [e.note, e.agent])
+    expect(notes).toEqual([
+      ['Web building', 'board'],
+      [`Web running ${s.url}`, 'board'],
+      ['Web stopped: stopped by claude', 'board'],
+    ])
+  })
+})
