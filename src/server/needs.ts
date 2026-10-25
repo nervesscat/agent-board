@@ -443,10 +443,8 @@ export async function newTicket(
   const { needs = [], defaultPhases, ...rest } = input
   const ids = checkNeeds({ id: null, projectId }, needs)
   if (ids.length && rest.status) {
-    const { repo, baseBranch } = features.placement(projectId, {
-      ...rest,
-      repoId: rest.repoId ?? rest.repos?.[0]?.repoId,
-    })
+    // Judged against the repo and base the ticket is created with.
+    const { repo, baseBranch } = features.placement(projectId, features.newTicketPrimary(rest))
     const to = resolveStage(listStages(projectId), rest.status).key
     await guardDone({ id: null, projectId, repoId: repo.id, baseBranch }, to, ids, opts)
   }

@@ -477,3 +477,70 @@ describe('needs, when the primary changes in the same write as the move to done'
     }
   }, 60_000)
 })
+
+describe('needs of a ticket created straight into done with repos', () => {
+  it('are judged against the repo and base the ticket is created with', async () => {
+    const own = dbm.db.insert(dbm.schema.projects).values({ name: 'needs-create' }).returning().get().id
+    // Repo c: feat/dev-only is merged into dev and not main, feat/main-only into main and not dev.
+    const dir = path.join(tmp, 'code', 'needs-c')
+    fs.mkdirSync(dir, { recursive: true })
+    git(dir, 'init', '-q', '-b', 'main')
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n')
+    git(dir, 'add', '.')
+    git(dir, 'commit', '-q', '-m', 'base')
+    git(dir, 'branch', 'dev')
+    for (const [branch, into] of [
+      ['feat/dev-only', 'dev'],
+      ['feat/main-only', 'main'],
+    ] as const) {
+      git(dir, 'checkout', '-q', '-b', branch, 'main')
+      fs.writeFileSync(path.join(dir, `${into}.txt`), `${branch}\n`)
+      git(dir, 'add', '.')
+      git(dir, 'commit', '-q', '-m', `work on ${branch}`)
+      git(dir, 'checkout', '-q', into)
+      git(dir, 'merge', '-q', '--no-ff', '-m', `merge ${branch}`, branch)
+    }
+    git(dir, 'checkout', '-q', 'main')
+    const repo = (name: string, repoPath: string) =>
+      dbm.db.insert(dbm.schema.repos).values({ projectId: own, name, repoPath }).returning().get().id
+    const a = repo('needs-ca', checkout('needs-ca', 'feat/ca'))
+    const c = repo('needs-c', dir)
+    const create = (data: Record<string, unknown>) =>
+      call(
+        'POST',
+        `/api/projects/${own}/tickets`,
+        { title: 'needs', status: 'in_progress', ...data },
+        'agent',
+      )
+    const devOnly = (await create({ repoId: c, branch: 'feat/dev-only' })).body
+    const mainOnly = (await create({ repoId: c, branch: 'feat/main-only' })).body
+    const count = () =>
+      dbm.db.select().from(dbm.schema.tickets).where(eq(dbm.schema.tickets.projectId, own)).all().length
+    const onDev = { repos: [{ repoId: c, branch: 't-c', baseBranch: 'dev' }], status: 'done' }
+
+    // Merged into main only: refused, naming dev, the base the ticket would have; nothing is stored.
+    for (const extra of [{}, { repoId: a }]) {
+      const before = count()
+      const res = await create({ ...onDev, ...extra, needs: [mainOnly.id] })
+      expect(res.status, JSON.stringify(res.body)).toBe(409)
+      expect(res.body.error).toMatch(`needs #${mainOnly.id} (branch feat/main-only) merged into dev`)
+      expect(count()).toBe(before)
+    }
+
+    // Merged into dev only: created, done, on c's dev; a repoId beside repos is the stored repo's.
+    for (const extra of [{}, { repoId: a }]) {
+      const res = await create({ ...onDev, ...extra, needs: [devOnly.id] })
+      expect(res.status, JSON.stringify(res.body)).toBe(201)
+      expect(res.body).toMatchObject({ repoId: c, baseBranch: 'dev', status: 'done' })
+    }
+
+    // Over MCP the same.
+    const viaMcp = await tool('create_ticket', {
+      projectId: own,
+      title: 'needs',
+      ...onDev,
+      needs: [mainOnly.id],
+    })
+    expect(viaMcp).toMatchObject({ error: true, text: expect.stringMatching(/merged into dev/) })
+  }, 60_000)
+})

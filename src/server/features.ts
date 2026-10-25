@@ -509,6 +509,32 @@ export async function getTicketWithPush(id: number, opts: { laneUpdates?: boolea
   }
 }
 
+/**
+ * A new ticket's own fields as `createTicket` stores them: with `repos`, the first is the primary, its
+ * repo, and its branch, base and PR where the input gives none. What a create into a done stage
+ * judges its needs against too.
+ */
+export function newTicketPrimary<
+  T extends {
+    repoId?: number | null
+    branch?: string
+    baseBranch?: string
+    prNumber?: number | null
+    repos?: TicketRepoInput[]
+  },
+>(input: T): T {
+  const first = input.repos?.[0]
+  if (input.repos && !first) throw new HttpError(400, 'repos: a ticket has at least one repo')
+  if (!first) return input
+  return {
+    ...input,
+    repoId: first.repoId,
+    branch: input.branch || first.branch,
+    baseBranch: input.baseBranch || first.baseBranch,
+    prNumber: input.prNumber !== undefined ? input.prNumber : first.prNumber,
+  }
+}
+
 export function createTicket(
   projectId: number,
   input: {
@@ -534,16 +560,7 @@ export function createTicket(
   },
   actor: string,
 ) {
-  const first = input.repos?.[0]
-  if (input.repos && !first) throw new HttpError(400, 'repos: a ticket has at least one repo')
-  if (first)
-    input = {
-      ...input,
-      repoId: first.repoId,
-      branch: input.branch || first.branch,
-      baseBranch: input.baseBranch || first.baseBranch,
-      prNumber: input.prNumber !== undefined ? input.prNumber : first.prNumber,
-    }
+  input = newTicketPrimary(input)
   const { parent, repo, baseBranch } = placement(projectId, input)
   // Checked before the ticket exists: a bad repo does not leave a ticket behind without them.
   if (input.repos)
