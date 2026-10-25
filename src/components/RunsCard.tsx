@@ -8,6 +8,7 @@ import { Badge } from '#/components/ui/badge'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import {
+  type AlsoRunning,
   errorMessage,
   get,
   type OrphanedRun,
@@ -28,8 +29,8 @@ import { cn } from '#/lib/utils'
  * The ticket's Runs card: every run the human configured for each repo the ticket spans (previews,
  * which answer on a port and have a link, and jobs, which do not), grouped by repo, each with its
  * state, the last lines of its log and Start, Stop and Restart; Start all and Stop all for the whole
- * ticket. Runs the ticket started that still go for a repo it no longer spans are listed with Stop
- * only. Below them, the links agents set on the ticket's workspaces and its lanes' (`set_preview`),
+ * ticket. Runs the ticket started that still go for a repo it no longer spans, and runs of its repos
+ * also going from another of its worktrees than the one their row shows, are listed with Stop only. Below them, the links agents set on the ticket's workspaces and its lanes' (`set_preview`),
  * with Open and whether they answer. Hidden while the ticket has neither.
  */
 
@@ -67,6 +68,7 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
       const states = [
         ...(q.state.data?.repos ?? []).flatMap((r) => r.runs.map((x) => x.state)),
         ...(q.state.data?.orphaned ?? []).map((o) => o.state),
+        ...(q.state.data?.alsoRunning ?? []).map((o) => o.state),
       ]
       if (states.some((s) => s?.status === 'building' || s?.status === 'starting')) return 2_000
       return states.some((s) => s?.status === 'running') ? 15_000 : 30_000
@@ -78,10 +80,12 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   }
   const boardUrls = new Set([
     ...(data?.repos ?? []).flatMap((r) => r.runs.flatMap((x) => (x.state?.url ? [x.state.url] : []))),
-    ...(data?.orphaned ?? []).flatMap((o) => (o.state.url ? [o.state.url] : [])),
+    ...[...(data?.orphaned ?? []), ...(data?.alsoRunning ?? [])].flatMap((o) =>
+      o.state.url ? [o.state.url] : [],
+    ),
   ])
   // The links agents set (a server they started), the lanes' with them; one a run of the board set is
-  // that run's link, an orphaned run's too.
+  // that run's link, an orphaned run's or one also running from another workspace too.
   const links = [
     ...t.workspaces.filter((w) => w.previewUrl).map((w) => ({ ...w, lane: null })),
     ...(git?.workspaces ?? []).filter((w) => w.lane && w.previewUrl),
@@ -110,11 +114,12 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   })
   const repos = data?.repos ?? []
   const orphaned = data?.orphaned ?? []
-  const anyRuns = repos.some((r) => r.runs.length) || orphaned.length > 0
+  const alsoRunning = data?.alsoRunning ?? []
+  const anyRuns = repos.some((r) => r.runs.length) || orphaned.length > 0 || alsoRunning.length > 0
   if (!anyRuns && !links.length) return null
   const runsList = repos.flatMap((r) => r.runs)
   const canStartAll = runsList.some((x) => !runActive(x.state) && x.cannotStart === null)
-  const canStopAll = runsList.some((x) => runActive(x.state)) || orphaned.length > 0
+  const canStopAll = runsList.some((x) => runActive(x.state)) || orphaned.length > 0 || alsoRunning.length > 0
   return (
     <section className="rounded-lg border p-3" aria-label="Runs">
       <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -191,7 +196,27 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
             <h3 className="text-xs font-medium">No longer on this ticket</h3>
             <ul className="space-y-3">
               {orphaned.map((o) => (
-                <OrphanedRow key={`${o.workspace.id}-${o.runId}`} run={o} onChange={changed} />
+                <OrphanedRow
+                  key={`${o.workspace.id}-${o.runId}`}
+                  run={o}
+                  hint="it can be stopped, not started again from here"
+                  onChange={changed}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
+        {alsoRunning.length > 0 && (
+          <div className="space-y-2" role="group" aria-label="Also running">
+            <h3 className="text-xs font-medium">Also running</h3>
+            <ul className="space-y-3">
+              {alsoRunning.map((o) => (
+                <OrphanedRow
+                  key={`${o.workspace.id}-${o.runId}`}
+                  run={o}
+                  hint="it can be stopped here; its row starts the one it shows"
+                  onChange={changed}
+                />
               ))}
             </ul>
           </div>
@@ -339,8 +364,19 @@ function RunRow({ run, onChange }: { run: TicketRun; onChange: () => void }) {
   )
 }
 
-/** A run the ticket started for a repo it no longer spans: it can only be stopped. */
-function OrphanedRow({ run, onChange }: { run: OrphanedRun; onChange: () => void }) {
+/**
+ * A run going from one of the ticket's workspaces that no repo row shows: one for a repo the ticket no
+ * longer spans, or one also running from another worktree of its repo. It can only be stopped here.
+ */
+function OrphanedRow({
+  run,
+  hint,
+  onChange,
+}: {
+  run: OrphanedRun | AlsoRunning
+  hint: string
+  onChange: () => void
+}) {
   const stop = useMutation({
     mutationFn: () => post(`/api/workspaces/${run.workspace.id}/runs/${run.runId}/stop`),
     onSuccess: onChange,
@@ -369,7 +405,7 @@ function OrphanedRow({ run, onChange }: { run: OrphanedRun; onChange: () => void
         <Square /> Stop
       </Button>
       <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-        {run.reason}: it can be stopped, not started again from here.
+        {run.reason}: {hint}.
       </p>
     </li>
   )

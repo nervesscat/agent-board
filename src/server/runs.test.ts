@@ -1144,6 +1144,75 @@ describe('over REST and MCP', () => {
 })
 
 // Last: this loads the module afresh, as a restarted board would.
+describe('one run going from two worktrees of a repo of the ticket', () => {
+  async function twice(tag: string) {
+    const repo = addRepo(`twice-${tag}`)
+    const web = run(repo, { name: 'Web' })
+    const { t, ws } = ticketIn(repo, { branch: 'feat' })
+    const ws2 = features.addWorkspace(t.id, { name: 'wt2', branch: 'other', path: worktree(repo) }, 'claude')
+    for (const w of [ws, ws2]) {
+      const started = await call('POST', `/api/workspaces/${w.id}/runs/${web.id}/start`, {}, 'agent')
+      expect(started.status).toBe(202)
+      await vi.waitFor(() => expect(status(w.id, web.id)).toBe('running'))
+    }
+    const listed = (await (await call('GET', `/api/tickets/${t.id}/runs`)).json()) as TicketRunsView
+    const row = listed.repos[0]!.runs[0]!
+    const other = row.workspaceId === ws.id ? ws2 : ws
+    return { repo, web, t, ws, ws2, listed, row, other }
+  }
+  type TicketRunsView = import('./ticketRuns').TicketRuns
+
+  it('lists the one its row does not show under alsoRunning, with its workspace and link', async () => {
+    useFake()
+    const r = await twice('list')
+    expect(r.row.state?.status).toBe('running')
+    expect(r.listed.orphaned).toEqual([])
+    expect(
+      r.listed.alsoRunning.map((o) => [o.repoId, o.runId, o.name, o.workspace.id, o.state.status]),
+    ).toEqual([[r.repo.id, r.web.id, 'Web', r.other.id, 'running']])
+    const also = r.listed.alsoRunning[0]!
+    expect(also.state.url).toBe(state(r.other.id, r.web.id)!.url)
+    expect(also.reason).toBe(
+      `Web of ${r.repo.name} also goes from workspace ${r.other.name}; its row shows workspace ${r.row.workspaceId === r.ws.id ? r.ws.name : r.ws2.name}`,
+    )
+    // list_runs says the same.
+    const viaMcp = JSON.parse((await tool('list_runs', { ticketId: r.t.id })).text) as TicketRunsView
+    expect(viaMcp.alsoRunning.map((o) => o.workspace.id)).toEqual([r.other.id])
+  })
+
+  it('stop_run by name stops it from both worktrees', async () => {
+    useFake()
+    const r = await twice('name')
+    const stopped = await tool('stop_run', { ticketId: r.t.id, run: 'web' })
+    expect(stopped.error).toBe(false)
+    // The answer is the run its row shows.
+    expect(JSON.parse(stopped.text)).toMatchObject({
+      status: 'stopped',
+      workspaceId: r.row.workspaceId,
+      runId: r.web.id,
+    })
+    expect([status(r.ws.id, r.web.id), status(r.ws2.id, r.web.id)]).toEqual(['stopped', 'stopped'])
+    const after = (await (await call('GET', `/api/tickets/${r.t.id}/runs`)).json()) as TicketRunsView
+    expect(after.alsoRunning).toEqual([])
+    expect(runs.activeRuns()).toEqual([])
+  })
+
+  it('Stop all stops both', async () => {
+    useFake()
+    const r = await twice('all')
+    const stopped = await call('POST', `/api/tickets/${r.t.id}/runs/stop`, {}, 'agent')
+    expect(stopped.status).toBe(200)
+    const { results } = (await stopped.json()) as { results: { workspaceId: number; ok: boolean }[] }
+    expect(results.map((x) => [x.workspaceId, x.ok]).sort()).toEqual(
+      [
+        [r.ws.id, true],
+        [r.ws2.id, true],
+      ].sort(),
+    )
+    expect(runs.activeRuns()).toEqual([])
+  })
+})
+
 describe('after a restart', () => {
   it('a preview remembered from before runs were configurable is its default run’s, stopped', async () => {
     const repo = addRepo('agent-board-legacy')

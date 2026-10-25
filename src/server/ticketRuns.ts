@@ -105,11 +105,20 @@ export interface OrphanedRun {
   reason: string
 }
 
+/**
+ * A run of one of the ticket's own repos that builds or runs from one of the ticket's workspaces other
+ * than the one its repo row shows (a second worktree of the repo it was started from by workspace, say):
+ * listed so it can be stopped from the ticket. Its row starts and restarts the one the row shows.
+ */
+export type AlsoRunning = OrphanedRun
+
 export interface TicketRuns {
   ticketId: number
   repos: TicketRunsRepo[]
   /** Its runs that still go for a repo that is no longer the ticket's (see `OrphanedRun`). */
   orphaned: OrphanedRun[]
+  /** Its own repos' runs going from a workspace other than the one their row shows (see `AlsoRunning`). */
+  alsoRunning: AlsoRunning[]
   /** Runs the board builds or runs now, board-wide, and the human's limit on them. */
   inUse: number
   limit: number
@@ -134,27 +143,65 @@ const workspacesOf = (ticketId: number) =>
     .all()
     .sort((a, b) => a.id - b.id)
 
+/** Every run that builds or runs from one of the ticket's workspaces, with that workspace. */
+const activeOf = (ticketId: number) =>
+  workspacesOf(ticketId).flatMap((w) =>
+    workspaceRuns(w.id)
+      .filter((r) => isActive(r))
+      .map((r) => ({ w, r })),
+  )
+
+const repoNameOf = (repoId: number) =>
+  db.select().from(schema.repos).where(eq(schema.repos.id, repoId)).get()?.name ?? `repo ${repoId}`
+
+function goingRun(w: schema.Workspace, r: RunState, repoName: string, reason: string): OrphanedRun {
+  return {
+    repoId: r.repoId,
+    repoName,
+    runId: r.runId,
+    name: r.runName,
+    type: r.runType,
+    workspace: { id: w.id, name: w.name, branch: w.branch, path: w.path },
+    state: r,
+    reason,
+  }
+}
+
 /** The ticket's runs that build or run from its workspaces for a repo it no longer spans. */
 function orphanedRuns(ticket: schema.Ticket): OrphanedRun[] {
   const own = new Set(ticketRepoList(ticket).map((e) => e.repoId))
-  return workspacesOf(ticket.id).flatMap((w) =>
-    workspaceRuns(w.id)
-      .filter((r) => isActive(r) && !own.has(r.repoId))
-      .map((r) => {
-        const repo = db.select().from(schema.repos).where(eq(schema.repos.id, r.repoId)).get()
-        const repoName = repo?.name ?? `repo ${r.repoId}`
-        return {
-          repoId: r.repoId,
-          repoName,
-          runId: r.runId,
-          name: r.runName,
-          type: r.runType,
-          workspace: { id: w.id, name: w.name, branch: w.branch, path: w.path },
-          state: r,
-          reason: `${repoName} is no longer one of ticket ${ticket.id}'s repos`,
-        }
-      }),
-  )
+  return activeOf(ticket.id)
+    .filter(({ r }) => !own.has(r.repoId))
+    .map(({ w, r }) => {
+      const repoName = repoNameOf(r.repoId)
+      return goingRun(w, r, repoName, `${repoName} is no longer one of ticket ${ticket.id}'s repos`)
+    })
+}
+
+/**
+ * The runs of the ticket's own repos that build or run from one of its workspaces other than the one
+ * their repo row shows (`runWorkspace`, which takes a workspace running the run first): every run
+ * going from the ticket is then either in a row, orphaned, or here.
+ */
+function alsoRunningRuns(ticket: schema.Ticket): AlsoRunning[] {
+  const own = new Set(ticketRepoList(ticket).map((e) => e.repoId))
+  const shown = new Map<number, schema.Workspace | null>()
+  const shownOf = (repoId: number, runId: number) => {
+    if (!shown.has(runId)) shown.set(runId, runWorkspace(ticket, repoId, runId).workspace)
+    return shown.get(runId)!
+  }
+  return activeOf(ticket.id)
+    .filter(({ r }) => own.has(r.repoId) && shownOf(r.repoId, r.runId)?.id !== r.workspaceId)
+    .map(({ w, r }) => {
+      const repoName = repoNameOf(r.repoId)
+      const row = shownOf(r.repoId, r.runId)
+      return goingRun(
+        w,
+        r,
+        repoName,
+        `${r.runName} of ${repoName} also goes from workspace ${w.name}; its row ${row ? `shows workspace ${row.name}` : 'has no workspace'}`,
+      )
+    })
 }
 
 /**
@@ -183,6 +230,7 @@ export function ticketRuns(ticketId: number): TicketRuns {
       }
     }),
     orphaned: orphanedRuns(ticket),
+    alsoRunning: alsoRunningRuns(ticket),
     inUse: runsInUse(),
     limit: previewLimit(),
   }
@@ -269,6 +317,14 @@ class AmbiguousRun extends HttpError {}
  * of the ticket's repos has a run so named (refused, naming them, when several do).
  */
 export function findTicketRun(ticketId: number, run: number | string, repoId?: number) {
+  const { ticket, config } = findTicketRunConfig(ticketId, run, repoId)
+  const { workspace, reason } = runWorkspace(ticket, config.repoId, config.id)
+  if (!workspace) throw new HttpError(400, reason ?? 'no workspace')
+  return { ticket, config, workspace }
+}
+
+/** findTicketRun's run config, whether or not the ticket has a workspace to run it from. */
+function findTicketRunConfig(ticketId: number, run: number | string, repoId?: number) {
   const ticket = getTicket(ticketId)
   const entries = reposOf(ticket, repoId)
   const found = entries.flatMap((e) =>
@@ -288,10 +344,7 @@ export function findTicketRun(ticketId: number, run: number | string, repoId?: n
       400,
       `${found.length} repos have a run named ${run} (${found.map((f) => `${f.entry.repoId} ${f.entry.name}`).join(', ')}): give repoId`,
     )
-  const { config } = found[0]!
-  const { workspace, reason } = runWorkspace(ticket, config.repoId, config.id)
-  if (!workspace) throw new HttpError(400, reason ?? 'no workspace')
-  return { ticket, config, workspace }
+  return { ticket, config: found[0]!.config }
 }
 
 /** start_run: one run of the ticket, by id or name; with `restart`, a running one is restarted. */
@@ -307,7 +360,8 @@ export async function startTicketRun(
 
 /**
  * stop_run: one run of the ticket that builds or runs, by id or name: of one of its repos, else one
- * of its orphaned runs (see `OrphanedRun`) so named, from every workspace it goes from. A name several
+ * of its orphaned runs (see `OrphanedRun`) so named, from every one of the ticket's workspaces it goes
+ * from (`alsoRunning` included). A name several
  * of its repos have a run of is refused without repoId, orphans or not, as is one several repos it no
  * longer spans have a run going of.
  */
@@ -317,16 +371,29 @@ export async function stopTicketRun(
   actor: string,
   opts: { repoId?: number } = {},
 ) {
-  let found: ReturnType<typeof findTicketRun> | null = null
+  let found: (ReturnType<typeof findTicketRunConfig> & ReturnType<typeof runWorkspace>) | null = null
   let refused: HttpError | null = null
   try {
-    found = findTicketRun(ticketId, run, opts.repoId)
+    const { ticket, config } = findTicketRunConfig(ticketId, run, opts.repoId)
+    found = { ticket, config, ...runWorkspace(ticket, config.repoId, config.id) }
   } catch (err) {
     if (!(err instanceof HttpError) || err instanceof AmbiguousRun) throw err
     refused = err
   }
-  if (found && isActive(runState(found.workspace.id, found.config.id)))
-    return stopRun(found.workspace.id, found.config.id, `stopped by ${actor}`, actor)
+  if (found) {
+    // A run of one of the ticket's repos is one run config: stopped from every one of the ticket's
+    // workspaces it goes from (alsoRunning's too), the one its row shows first (its state is the answer).
+    const { config, workspace } = found
+    const going = activeOf(ticketId)
+      .filter(({ r }) => r.runId === config.id)
+      .sort((a, b) => Number(b.w.id === workspace?.id) - Number(a.w.id === workspace?.id))
+    if (going.length) {
+      const states: Awaited<ReturnType<typeof stopRun>>[] = []
+      for (const { r } of going)
+        states.push(await stopRun(r.workspaceId, r.runId, `stopped by ${actor}`, actor))
+      return states[0]
+    }
+  }
   const orphans = orphanedRuns(getTicket(ticketId)).filter(
     (o) =>
       (!opts.repoId || o.repoId === opts.repoId) &&
@@ -346,6 +413,7 @@ export async function stopTicketRun(
     return states[0]
   }
   if (refused) throw refused
-  const { config, workspace } = found!
+  const { config, workspace, reason } = found!
+  if (!workspace) throw new HttpError(400, reason ?? 'no workspace')
   throw new HttpError(409, `${config.name} does not run from workspace ${workspace.name}`)
 }

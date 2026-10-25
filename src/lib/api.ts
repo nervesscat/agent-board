@@ -33,7 +33,14 @@ import type { Handoff } from '#/server/handoff'
 import type { HostTool, HostTools } from '#/server/hostTools'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { RunState } from '#/server/runs'
-import type { OrphanedRun, RunOutcome, TicketRun, TicketRuns, TicketRunsRepo } from '#/server/ticketRuns'
+import type {
+  AlsoRunning,
+  OrphanedRun,
+  RunOutcome,
+  TicketRun,
+  TicketRuns,
+  TicketRunsRepo,
+} from '#/server/ticketRuns'
 import type { PreviewState } from '#/server/preview'
 import type { LinkStopped, StopAll } from '#/server/linkPreview'
 import type { ProjectPreview, ProjectPreviews } from '#/server/projectPreviews'
@@ -69,6 +76,7 @@ export type {
   RunOutcome,
   RunState,
   OrphanedRun,
+  AlsoRunning,
   TicketRun,
   TicketRuns,
   TicketRunsRepo,

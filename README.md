@@ -458,8 +458,11 @@ of every repo, grouped by repo. A run started from one of the ticket's workspace
 repo the ticket no longer spans (one with no repo of its own whose fallback, the project's first repo,
 changed) is listed as orphaned (`orphaned` in `GET /api/tickets/:id/runs` and `list_runs`), and Stop
 all and `stop_run` reach it by name (from every workspace of the ticket it goes from), but it cannot
-start or restart from the ticket. A name that several of the ticket's repos, or several repos it no
-longer spans, have a run of needs `repoId`.
+start or restart from the ticket. A run of one of its repos going from another of its worktrees than
+the one its row shows (started there by workspace) is listed under `alsoRunning`, with that workspace,
+its link and Stop; `stop_run` by name stops a run from every worktree of the ticket it goes from. A
+name that several of the ticket's repos, or several repos it no longer spans, have a run of needs
+`repoId`.
 
 **The preview limit.** The board builds or runs at most as many runs at once, previews and jobs
 alike, across every project, as the human's preview limit (`previewLimit` in `/api/settings`, 1 to 32,
