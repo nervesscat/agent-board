@@ -343,6 +343,27 @@ describe('over MCP', () => {
     })
   })
 
+  it('an empty repos list is refused as such, a repoId given with it or not', async () => {
+    const t = (
+      await ticket({
+        repos: [
+          { repoId: back.id, branch: 'feat/back' },
+          { repoId: front.id, branch: 'feat/front' },
+        ],
+      })
+    ).body
+    const rest = await call('PATCH', `/api/tickets/${t.id}`, { repos: [], repoId: back.id })
+    expect([rest.status, rest.body.error]).toEqual([400, 'repos: a ticket has at least one repo'])
+    expect(await tool('update_ticket', { ticketId: t.id, repos: [], repoId: back.id })).toEqual({
+      error: true,
+      text: 'repos: a ticket has at least one repo',
+    })
+    expect(repoRows(t.id)).toEqual([
+      [back.id, 'feat/back', 0],
+      [front.id, 'feat/front', 1],
+    ])
+  })
+
   it('update_ticket and create_ticket take repos', async () => {
     const created = await tool('create_ticket', {
       projectId,

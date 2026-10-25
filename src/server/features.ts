@@ -697,6 +697,8 @@ export function plannedPrimary(
   if (reposInput) {
     if (before.prId)
       throw new HttpError(400, `ticket ${before.id} is PR #${before.prNumber}'s: its repos cannot change`)
+    // Refused as such before a repoId given with it is looked for in it.
+    if (!reposInput.length) throw new HttpError(400, 'repos: a ticket has at least one repo')
     // A repoId given with the list names its primary: that entry goes first, the rest keep their order.
     let ordered = reposInput
     if (fields.repoId !== undefined) {
