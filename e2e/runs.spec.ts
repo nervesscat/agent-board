@@ -68,6 +68,9 @@ test(
     // The settings' Runs section: the preview, a refused port first (nothing saved), then the job.
     await page.goto(`/projects/${project.id}/settings`)
     const section = page.getByRole('region', { name: 'Runs' })
+    // It says agents change runs too, as they did above.
+    await expect(section).toContainText('Agents start and stop them, and can add, change and delete them too')
+    await expect(section).not.toContainText('only you change')
     const repoRuns = section.getByRole('group', { name: `Runs of ${repo.name}` })
     await expect(repoRuns).toContainText('No runs')
     await repoRuns.getByRole('button', { name: 'Add run' }).click()
