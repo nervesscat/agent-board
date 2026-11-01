@@ -15,7 +15,9 @@ import {
  * honour safely, a board without sign-in on anything but loopback or on the live board's port, and a
  * PUBLIC_ORIGIN it cannot trust, then says loudly when sign-in is off, and that such a board ignores the
  * entrance. Under `vite dev` Vite owns the address, so vite.config.ts checks it before it listens; this
- * still refuses a bad BOARD_ENV / AUTH or entrance there and prints the banner.
+ * still refuses a bad BOARD_ENV / AUTH or entrance there and prints the banner. There, BOARD_ENV, AUTH and
+ * PUBLIC_ORIGIN are in process.env as Vite's loadEnv reads .env (src/server/devEnv.ts), so this, the
+ * checks of vite.config.ts and the request guard see one value; the built server reads no .env.
  */
 export default definePlugin(() => {
   try {

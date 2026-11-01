@@ -147,6 +147,8 @@ export const authOffBanner = (auth: AuthMode, name: string) =>
 
 // --- the tailnet entrance: the board on this machine's tailnet name, through `tailscale serve`. ---
 // README: "Using it from other devices". Off unless PUBLIC_ORIGIN is set, and never with sign-in off.
+// Under `vite dev` PUBLIC_ORIGIN, BOARD_ENV and AUTH reach process.env as Vite's loadEnv reads .env, not
+// as Nitro's loader does (devEnv.ts); every other key here is Nitro's. The built server reads no .env.
 
 export interface PublicEntrance {
   /** PUBLIC_ORIGIN: the board as other devices open it, `https://<machine>.<tailnet>.ts.net`. */
