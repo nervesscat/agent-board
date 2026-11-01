@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { ExternalLink, GitMerge, PauseCircle, PlayCircle, RefreshCw, Ticket } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -26,7 +26,7 @@ import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
-import { recall, remember, useRestoreRemembered } from '#/lib/remembered'
+import { recall, remember, useRestoreRemembered, whenArrived } from '#/lib/remembered'
 import { anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 
 const FILTER_KEYS = ['me', 'others'] as const
@@ -131,6 +131,7 @@ function PrQueue() {
   // The anchor this page last showed.
   const lastAnchor = useRef<string | null>(null)
   const back = cameBack()
+  const router = useRouter()
   useEffect(() => {
     const hash = anchor?.hash ?? null
     if (lastAnchor.current !== hash) {
@@ -150,8 +151,18 @@ function PrQueue() {
       setTab(linked.status)
     }
     if (staying !== null && switchedFor.current !== anchor.hash) {
-      switchedFor.current = anchor.hash
-      if (!inFilter(linked, staying)) showFilter(linked.waitingOn)
+      const hash = anchor.hash
+      if (inFilter(linked, staying)) {
+        switchedFor.current = hash
+        return
+      }
+      // Once the move to the page has finished, as the remembered filter (`whenArrived`): the PRs may
+      // be drawn from the cache as it mounts. A render before then that changes what this reads waits
+      // again.
+      return whenArrived(router, () => {
+        switchedFor.current = hash
+        showFilter(linked.waitingOn)
+      })
     }
   }, [anchor, linked, staying, back])
   const suffix = FILTERS.find((f) => f.key === filter)!.label.toLowerCase()

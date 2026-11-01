@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute, useRouter } from '@tanstack/react-router'
 import { GitBranch, Layers, RefreshCw, Square } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -32,7 +32,7 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type ProjectPreview, type ProjectPreviews, type StopAll } from '#/lib/api'
 import { useProject } from '#/lib/project'
-import { recall, remember } from '#/lib/remembered'
+import { recall, remember, whenArrived } from '#/lib/remembered'
 import {
   ALL_STAGES,
   countByStage,
@@ -101,12 +101,16 @@ function Previews() {
   // included while the page stays mounted (a stage may have been picked since, in another tab too), for
   // another project, and once its stages have changed. The stage read goes in the URL, and a stage the
   // project does not have leaves it; the default stays out of it. The URL takes the value just read,
-  // not the one this render holds, which can be older.
+  // not the one this render holds, which can be older. Read once the move to the page has finished,
+  // like any remembered choice (`whenArrived`).
+  const router = useRouter()
   useEffect(() => {
     if (!stagesKnown || urlNamesStage) return
-    const value = recall(storageKey, stageKeys)
-    setRemembered({ key: storageKey, value })
-    if (value !== inUrl) navigate({ search: (s) => ({ ...s, stage: value }), replace: true })
+    return whenArrived(router, () => {
+      const value = recall(storageKey, stageKeys)
+      setRemembered({ key: storageKey, value })
+      if (value !== inUrl) navigate({ search: (s) => ({ ...s, stage: value }), replace: true })
+    })
   }, [storageKey, stagesKnown, urlNamesStage, inUrl, stageKeys.join()])
   const recalled = remembered?.key === storageKey ? remembered.value : null
   const known = stagesKnown && (urlNamesStage || recalled !== null)
