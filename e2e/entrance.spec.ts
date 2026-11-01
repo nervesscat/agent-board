@@ -1,3 +1,5 @@
+import http from 'node:http'
+
 import type { Project } from '#/lib/api'
 import { e2eEnv } from './env'
 import { expect, ok, test } from './fixtures'
@@ -76,4 +78,66 @@ test('a write with the session cookie from another origin gets 403 and changes n
     data: { name: 'write without an Origin' },
   })
   expect(agent.status()).toBe(201)
+})
+
+/**
+ * A request sent as written, its target included: Playwright's request.get('//x') would take `//x` for a
+ * protocol-relative URL and send `/` to the host x, so a target starting with `//` goes through node:http.
+ */
+function raw(target: string, headers: Record<string, string>) {
+  return new Promise<{ status: number; location: string | undefined; body: string }>((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, path: target, headers }, (res) => {
+      let body = ''
+      res.setEncoding('utf8')
+      res.on('data', (chunk: string) => (body += chunk))
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, location: res.headers.location, body }))
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+const SLASHED = ['//evil.example/api/me', '//api/me', '//devbox.example-tailnet.ts.net/', '///api/me']
+
+test('a target starting with // meets the guard first: a foreign Host gets its 403, never a redirect', async () => {
+  for (const host of ['evil.example', 'devbox.example-tailnet.ts.net', `192.168.1.20:${port}`])
+    for (const target of SLASHED) {
+      const res = await raw(target, { Host: host })
+      const label = `${host} ${target}`
+      expect(res.status, label).toBe(403)
+      expect(res.location, label).toBeUndefined()
+      expect(JSON.parse(res.body), label).toEqual({
+        error: `the board does not answer for the host ${JSON.stringify(host)}`,
+      })
+    }
+})
+
+test('a target starting with // through a proxy, or Funnel, gets the guard’s 403 on a loopback Host too', async () => {
+  const refused: [Record<string, string>, RegExp][] = [
+    [{ 'Tailscale-Funnel-Request': '?1' }, /Funnel/],
+    [{ 'X-Forwarded-For': '100.101.102.103' }, /never through a proxy/],
+    [{ Forwarded: 'for=100.101.102.103;proto=https' }, /never through a proxy/],
+    [{ 'Tailscale-User-Login': 'someone@example.com' }, /never through a proxy/],
+  ]
+  for (const [headers, error] of refused)
+    for (const host of [`127.0.0.1:${port}`, `localhost:${port}`])
+      for (const target of SLASHED) {
+        const res = await raw(target, { ...headers, Host: host })
+        const label = `${JSON.stringify(headers)} ${host} ${target}`
+        expect(res.status, label).toBe(403)
+        expect(res.location, label).toBeUndefined()
+        expect(res.body, label).not.toContain('"actor"')
+        expect(JSON.parse(res.body).error, label).toMatch(error)
+      }
+})
+
+test('a target starting with // on this machine stays on the board’s own origin', async () => {
+  for (const host of [`127.0.0.1:${port}`, `localhost:${port}`])
+    for (const target of SLASHED) {
+      const res = await raw(target, { Host: host })
+      const label = `${host} ${target}`
+      expect(res.status, label).toBeLessThan(500)
+      if (res.location !== undefined)
+        expect(new URL(res.location, `http://${host}`).origin, label).toBe(`http://${host}`)
+    }
 })

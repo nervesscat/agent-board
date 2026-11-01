@@ -1,4 +1,14 @@
-import { expandPath, type PublicEntrance, readAuthMode, readPort, readServedEntrance } from './config.ts'
+import {
+  type AuthMode,
+  authMode,
+  config,
+  expandPath,
+  type PublicEntrance,
+  readAuthMode,
+  readPort,
+  readServedEntrance,
+  servedEntrance,
+} from './config.ts'
 import { isBearer, sessionCookieName } from './credentials.ts'
 
 /**
@@ -15,6 +25,10 @@ import { isBearer, sessionCookieName } from './credentials.ts'
  *   ignored, as if absent.
  * - A write that carries the board's session cookie must come from one of the board's own origins: a
  *   page on another port of localhost gets that cookie too.
+ *
+ * On the board's own server it runs twice, with one verdict: in src/server.ts, before the framework
+ * answers anything (it turns a target starting with `//` into a 308 to the URL it makes of it, Host and
+ * all, ahead of its request middleware), and again in the sign-in middleware (auth.ts `admit`).
  */
 
 /** What the guard reads of a request's headers: web Headers fit, and so does devEntrance.ts's view of Node's. */
@@ -114,6 +128,28 @@ function crossSiteWrite(req: GuardRequest, cfg: GuardConfig): string | null {
 }
 
 const refuse = (status: number, error: string): Verdict => ({ allow: false, status, error })
+
+/** The address the request's connection came from, where the server can tell (srvx's Node request). */
+export function peerOf(request: Request): string | undefined {
+  type NodeRequest = { runtime?: { node?: { req?: { socket?: { remoteAddress?: string } } } } }
+  return (request as NodeRequest).runtime?.node?.req?.socket?.remoteAddress
+}
+
+/** The guard on a request to the board's own server, with the settings this process runs with. */
+export function guardBoardRequest(
+  request: Request,
+  auth: AuthMode = authMode(),
+  entrance: PublicEntrance | null = servedEntrance(),
+): Verdict {
+  return guardRequest(
+    { method: request.method, headers: request.headers, peer: peerOf(request) },
+    { authOff: auth.off, port: config.port, entrance, dataDir: config.dataDir },
+  )
+}
+
+/** A refusal's answer: its status, and the reason as JSON. */
+export const refusalResponse = (verdict: { status: number; error: string }) =>
+  Response.json({ error: verdict.error }, { status: verdict.status })
 
 export function guardRequest(req: GuardRequest, cfg: GuardConfig): Verdict {
   if (req.headers.get('tailscale-funnel-request') !== null)

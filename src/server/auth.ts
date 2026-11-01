@@ -7,12 +7,14 @@ import { type AuthMode, authMode, config, type PublicEntrance, servedEntrance } 
 import { agentTokenOf, bearerToken, isBearer, readCookie, sessionCookieName } from './credentials'
 import {
   cameThroughEntrance,
-  guardRequest,
+  guardBoardRequest,
   isLoopbackPeer,
   isSignInPath,
   localSite,
   loginLocation,
+  peerOf,
   publicSite,
+  refusalResponse,
   type SignInSite,
   SIGN_IN_PAGES,
   wantsHtml,
@@ -63,11 +65,7 @@ const agent = (name: string, role: 'orchestrator' | 'worker'): Caller => ({
   token: name,
 })
 
-/** The address the request's connection came from, where the server can tell (srvx's Node request). */
-export function peerOf(request: Request): string | undefined {
-  type NodeRequest = { runtime?: { node?: { req?: { socket?: { remoteAddress?: string } } } } }
-  return (request as NodeRequest).runtime?.node?.req?.socket?.remoteAddress
-}
+export { peerOf }
 
 /**
  * Where a request signs in: the public origin when it came through the tailnet entrance, else this
@@ -287,11 +285,8 @@ export async function admit(
   entrance: PublicEntrance | null = servedEntrance(),
 ): Promise<Admission> {
   const refuse = (response: Response): Admission => ({ kind: 'refuse', response })
-  const verdict = guardRequest(
-    { method: request.method, headers: request.headers, peer: peerOf(request) },
-    { authOff: auth.off, port: config.port, entrance, dataDir: config.dataDir },
-  )
-  if (!verdict.allow) return refuse(Response.json({ error: verdict.error }, { status: verdict.status }))
+  const verdict = guardBoardRequest(request, auth, entrance)
+  if (!verdict.allow) return refuse(refusalResponse(verdict))
   if (auth.off) {
     // Nobody signs in: the sign-in pages have nothing to do, and the endpoints say so themselves.
     if (SIGN_IN_PAGES.has(pathname)) return refuse(redirectTo('/'))
