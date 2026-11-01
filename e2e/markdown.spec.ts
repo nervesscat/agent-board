@@ -190,3 +190,40 @@ test('Shift+Enter breaks the line inside one paragraph, saved as a hard break an
   expect(rendered.lineHeight).toBe(typed.lineHeight)
   expect(Math.abs(rendered.heights[0]! - typed.heights[0]!)).toBeLessThanOrEqual(1)
 })
+
+test('a wide table scrolls inside its own column; a narrow one fits as before', async ({ page, api }) => {
+  const cols = Array.from({ length: 14 }, (_, i) => `Column header number ${i + 1}`)
+  const wide = [
+    `| ${cols.join(' | ')} |`,
+    `| ${cols.map(() => '---').join(' | ')} |`,
+    `| ${cols.map((c) => `${c} value that is long`).join(' | ')} |`,
+  ].join('\n')
+  const narrow = '| A | B |\n| - | - |\n| 1 | 2 |'
+  const t = await api.ticket({ title: 'Wide table', body: `${wide}\n\nBetween.\n\n${narrow}` })
+  await page.setViewportSize({ width: 1400, height: 900 })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const instructions = page.getByRole('region', { name: 'Instructions' })
+  const scrolls = instructions.locator('[data-md-table-scroll]')
+  await expect(scrolls).toHaveCount(2)
+
+  const measure = (el: Locator) =>
+    el.evaluate((box) => ({
+      scrollWidth: box.scrollWidth,
+      clientWidth: box.clientWidth,
+      right: box.getBoundingClientRect().right,
+      tableInside: box.firstElementChild?.tagName === 'TABLE',
+    }))
+  const region = await instructions.boundingBox()
+  const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth)
+
+  const w = await measure(scrolls.first())
+  expect(w.tableInside).toBe(true)
+  expect(w.scrollWidth).toBeGreaterThan(w.clientWidth)
+  expect(w.right).toBeLessThanOrEqual(region!.x + region!.width + 0.5)
+  // Nothing on the page is pushed sideways by it.
+  expect(pageWidth).toBeLessThanOrEqual(1400)
+
+  const n = await measure(scrolls.nth(1))
+  expect(n.tableInside).toBe(true)
+  expect(n.scrollWidth).toBe(n.clientWidth)
+})
