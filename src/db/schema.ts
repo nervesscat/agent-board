@@ -118,9 +118,9 @@ export const repos = sqliteTable('repos', {
   createdAt: now(),
 })
 
-// A run of a repo, as the human configures it in the project's settings: what the board starts from a
-// ticket's worktree of the repo (src/server/runs.ts). A preview answers on a port, a job has none.
-// Agents read these, never write them: the commands come from the human alone.
+// A run of a repo, as the human configures it in the project's settings or an agent through MCP: what
+// the board starts from a ticket's worktree of the repo (src/server/runs.ts). A preview answers on a
+// port, a job has none. createdBy is whoever added it.
 export const runConfigs = sqliteTable(
   'run_configs',
   {

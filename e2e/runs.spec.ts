@@ -3,7 +3,7 @@ import path from 'node:path'
 import type { Page } from '@playwright/test'
 
 import type { RunConfig, TicketFull, TicketRuns, Workspace } from '#/lib/api'
-import { e2eEnv, git } from './env'
+import { AGENT, e2eEnv, git } from './env'
 import { BOARD_RUNS, expect, ok, test } from './fixtures'
 
 /*
@@ -56,11 +56,14 @@ test(
       human.post(`/api/tickets/${t.id}/workspaces`, { data: { name: 'wt', branch, path: worktree } }),
     )
 
-    // An agent configures nothing: only the human writes a repo's runs.
-    const refused = await agent.post(`/api/repos/${repo.id}/runs`, {
-      data: { name: 'Evil', type: 'job', start: 'node -e "process.exit()"' },
+    // An agent writes a repo's runs too: it adds one and deletes it again, under its own name.
+    const added = await agent.post(`/api/repos/${repo.id}/runs`, {
+      data: { name: 'Agent job', type: 'job', start: 'node -e "process.exit()"' },
     })
-    expect(refused.status()).toBe(403)
+    expect(added.status()).toBe(201)
+    const agentRun = (await added.json()) as RunConfig
+    expect(agentRun).toMatchObject({ name: 'Agent job', type: 'job', createdBy: AGENT })
+    expect((await agent.delete(`/api/runs/${agentRun.id}`)).status()).toBe(200)
 
     // The settings' Runs section: the preview, a refused port first (nothing saved), then the job.
     await page.goto(`/projects/${project.id}/settings`)

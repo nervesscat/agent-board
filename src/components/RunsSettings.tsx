@@ -28,8 +28,9 @@ import { RUN_PORTS, type RunConfigInput, type RunType, runConfigProblem } from '
 /**
  * The project's runs, per repo: what the board starts from a ticket's worktree of each repo. A preview
  * answers on a port (the board checks its health path, and the ticket gets its link); a job is a
- * background worker with no link. Only the human writes them: agents start and stop them by name, and
- * what runs is always what is saved here. Its own section of the project's settings.
+ * background worker with no link. Agents start and stop them by name, and add, change and delete them
+ * too (each change in the project's activity); what runs is always what is saved here. Its own section of
+ * the project's settings.
  */
 export function RunsSettings({ projectId }: { projectId: string }) {
   const { data: p } = useProject(projectId)

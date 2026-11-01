@@ -1139,6 +1139,183 @@ describe('over REST and MCP', () => {
   })
 })
 
+describe('agents configure runs over MCP', () => {
+  const agentRuns = (repoId: number) =>
+    dbm.db
+      .select()
+      .from(dbm.schema.runConfigs)
+      .where(eq(dbm.schema.runConfigs.repoId, repoId))
+      .orderBy(dbm.schema.runConfigs.position)
+      .all()
+  const activityOf = (repoId: number) =>
+    dbm.db
+      .select()
+      .from(dbm.schema.activity)
+      .where(eq(dbm.schema.activity.refId, repoId))
+      .all()
+      .filter((a) => a.refType === 'repo')
+      .map((a) => ({ projectId: a.projectId, actor: a.actor, kind: a.kind, text: a.text }))
+
+  it('lists add_run, update_run and delete_run, each taking agentName', async () => {
+    const res = await call('POST', '/api/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' }, 'agent')
+    const { result } = (await res.json()) as {
+      result: { tools: { name: string; description: string; inputSchema: { properties: object } }[] }
+    }
+    for (const name of ['add_run', 'update_run', 'delete_run']) {
+      const t = result.tools.find((x) => x.name === name)
+      expect(t, name).toBeDefined()
+      expect(t!.description.length).toBeGreaterThan(40)
+      expect(t!.inputSchema.properties).toHaveProperty('agentName')
+    }
+  })
+
+  it('adds a run with the REST defaults, changes and deletes any run, the human’s too, each in the activity', async () => {
+    useFake()
+    const repo = addRepo('agent-made')
+    const human = run(repo, { name: 'Web', env: { API_URL: 'x' } })
+    const added = await tool('add_run', {
+      repoId: repo.id,
+      name: 'Worker',
+      type: 'job',
+      start: 'python w.py',
+    })
+    expect(added.error).toBe(false)
+    const worker = JSON.parse(added.text)
+    expect(worker).toMatchObject({
+      repoId: repo.id,
+      name: 'Worker',
+      type: 'job',
+      start: 'python w.py',
+      port: null,
+      healthPath: '',
+      position: 1,
+      createdBy: 'claude',
+    })
+    const site = JSON.parse(
+      (await tool('add_run', { repoId: repo.id, name: 'Site', type: 'preview', start: 'node site.js' })).text,
+    )
+    expect(site).toMatchObject({ port: null, healthPath: '/', position: 2, createdBy: 'claude' })
+    expect(agentRuns(repo.id).map((r) => [r.name, r.createdBy])).toEqual([
+      ['Web', 'enrique'],
+      ['Worker', 'claude'],
+      ['Site', 'claude'],
+    ])
+
+    // The human's run: what it runs changes, the rest stays; a change of type takes that type's own port.
+    const changed = await tool('update_run', {
+      runId: human.id,
+      start: 'node server.js --agent',
+      port: 47160,
+    })
+    expect(changed.error).toBe(false)
+    expect(JSON.parse(changed.text)).toMatchObject({
+      id: human.id,
+      start: 'node server.js --agent',
+      port: 47160,
+      env: { API_URL: 'x' },
+      createdBy: 'enrique',
+    })
+    expect(rc.getRunConfig(human.id)).toMatchObject({ start: 'node server.js --agent', port: 47160 })
+    const toJob = JSON.parse(
+      (await tool('update_run', { runId: human.id, type: 'job', name: 'Web job' })).text,
+    )
+    expect(toJob).toMatchObject({
+      type: 'job',
+      name: 'Web job',
+      port: null,
+      healthPath: '',
+      env: { API_URL: 'x' },
+    })
+    expect(rc.getRunConfig(human.id)).toMatchObject({ type: 'job', port: null, healthPath: '' })
+
+    const deleted = await tool('delete_run', { runId: human.id })
+    expect(deleted.error).toBe(false)
+    expect(JSON.parse(deleted.text)).toMatchObject({ id: human.id, name: 'Web job' })
+    expect(agentRuns(repo.id).map((r) => r.name)).toEqual(['Worker', 'Site'])
+
+    expect(activityOf(repo.id).filter((a) => a.actor === 'claude')).toEqual(
+      [
+        `added the job run Worker to repo ${repo.name}`,
+        `added the preview run Site to repo ${repo.name}`,
+        `changed the run Web of repo ${repo.name}`,
+        `changed the run Web (now Web job) of repo ${repo.name}`,
+        `removed the run Web job from repo ${repo.name}`,
+      ].map((text) => ({ projectId, actor: 'claude', kind: 'project', text })),
+    )
+  })
+
+  it('refuses what REST refuses, with the field, and stores nothing; an unknown repo or run is not found', async () => {
+    const repo = addRepo('agent-checked')
+    const worker = run(repo, { name: 'Worker', type: 'job', start: 'python w.py', healthPath: '' })
+    const before = agentRuns(repo.id)
+    const add = (over: Record<string, unknown>) =>
+      tool('add_run', { repoId: repo.id, name: 'Web', type: 'preview', start: 'node s.js', ...over })
+    const bad: [() => Promise<{ error: boolean; text: string }>, string][] = [
+      [() => add({ name: '' }), 'name: give the run a name'],
+      [() => add({ name: 'WORKER' }), 'name: the repo already has a run named Worker'],
+      [() => add({ type: 'cron' }), 'type: preview or job'],
+      [() => add({ start: '  ' }), 'start: give the command that starts it'],
+      [() => add({ env: { 'NOT OK': '1' } }), 'env: NOT OK is not a variable name (letters, digits, _)'],
+      [() => add({ env: { PORT: '3000' } }), 'env: PORT is set by the board itself'],
+      [() => add({ port: 47100 }), 'port: auto, or a port from 47101 to 47199'],
+      [() => add({ port: 47200 }), 'port: auto, or a port from 47101 to 47199'],
+      [() => add({ healthPath: 'up' }), 'healthPath: a path starting with /'],
+      [() => add({ type: 'job', port: 47120 }), 'port: a job has no port'],
+      [() => add({ type: 'job', healthPath: '/' }), 'healthPath: a job has no health path'],
+      [() => tool('update_run', { runId: worker.id, port: 47150 }), 'port: a job has no port'],
+      [() => tool('update_run', { runId: worker.id, name: '' }), 'name: give the run a name'],
+      [() => tool('add_run', { repoId: 999_999, name: 'X', type: 'job', start: 'x' }), 'repo not found'],
+      [() => tool('update_run', { runId: 999_999, start: 'x' }), 'run not found'],
+      [() => tool('delete_run', { runId: 999_999 }), 'run not found'],
+    ]
+    for (const [send, message] of bad) expect(await send()).toEqual({ error: true, text: message })
+    expect(agentRuns(repo.id)).toEqual(before)
+  })
+
+  it('a run an agent adds lists and starts like the human’s, and delete_run stops it first', async () => {
+    useFake()
+    const repo = addRepo('agent-runs')
+    const { t, ws, dir } = ticketIn(repo)
+    const made = await tool('add_run', {
+      repoId: repo.id,
+      name: 'Api',
+      type: 'preview',
+      build: 'npm run build',
+      start: 'npm start',
+      env: { MODE: 'agent' },
+      port: 47170,
+    })
+    const api = JSON.parse(made.text)
+    const listed = JSON.parse((await tool('list_runs', { ticketId: t.id })).text)
+    expect(listed.repos[0].runs).toMatchObject([{ id: api.id, name: 'Api', start: 'npm start', port: 47170 }])
+    const started = await tool('start_run', { ticketId: t.id, run: 'api' })
+    expect(JSON.parse(started.text)).toMatchObject({ status: 'building', runId: api.id })
+    await vi.waitFor(() => expect(status(ws.id, api.id)).toBe('running'))
+    const inWorktree = fake.calls.filter((c) => c.cwd === dir)
+    expect(inWorktree.map((c) => [c.command, c.shell])).toEqual([
+      ['npm run build', true],
+      ['npm start', true],
+    ])
+    const server = inWorktree.at(-1)!
+    expect(server.env).toMatchObject({ MODE: 'agent', PORT: '47170' })
+    expect(state(ws.id, api.id)!.port).toBe(47170)
+
+    expect((await tool('delete_run', { runId: api.id })).error).toBe(false)
+    await vi.waitFor(() => expect(state(ws.id, api.id)).toBeNull())
+    expect(fake.killed).toContain(server.pid)
+    expect(agentRuns(repo.id)).toEqual([])
+    const stopped = dbm.db
+      .select()
+      .from(dbm.schema.activity)
+      .where(eq(dbm.schema.activity.refId, t.id))
+      .all()
+      .map((a) => a.text)
+    expect(stopped).toContainEqual(
+      expect.stringMatching(/^stopped the preview \(its run was removed from the settings\)/),
+    )
+  })
+})
+
 // Last: this loads the module afresh, as a restarted board would.
 describe('one run going from two worktrees of a repo of the ticket', () => {
   async function twice(tag: string) {
