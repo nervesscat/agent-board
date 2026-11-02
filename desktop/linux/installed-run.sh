@@ -70,9 +70,10 @@ check "its PATH has $HOME/tools from ~/.bashrc ($server_path)" \
 check "gh on that PATH is the one in $HOME/tools" \
   bash -c "[ \"\$(PATH='$server_path' command -v gh)\" = '$HOME/tools/gh' ]"
 
+# The window, whatever page it shows: titled CrossBoard as it opens, then by its page ("Set up · CrossBoard").
 wm=''
 for _ in $(seq 1 60); do
-  wm=$(xwininfo -root -tree | grep -E '"CrossBoard": \(' | head -n 1)
+  wm=$(xwininfo -root -tree | LC_ALL=C grep -E '[" ]CrossBoard": \(' | head -n 1)
   [ -n "$wm" ] && break
   sleep 0.5
 done
