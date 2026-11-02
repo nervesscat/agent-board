@@ -69,9 +69,9 @@ type Followed = Pick<AnyRouter, 'latestLocation' | 'stores'> & { history: Router
  *
  * Only when the reader is leaving an entry they can come back to, and the one the router keeps the
  * place for: not on a replace (the entry it leaves is gone from the history), and not while the last
- * move is still loading (a page putting a remembered filter in its URL as it first shows). The router
- * keeps the place for the entry it last finished loading, which is then the page the reader left: it
- * would keep the window of the page now shown for it, and Back to it would land there.
+ * move is still loading (the reader moving on before the page shown has loaded). The router keeps the
+ * place for the entry it last finished loading, which is then the page the reader left: it would keep
+ * the window of the page now shown for it, and Back to it would land there.
  */
 export function followHistory(router: Followed) {
   if (typeof window === 'undefined') return
