@@ -381,8 +381,10 @@ PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net
 ```
 
 `PUBLIC_ORIGIN` is the board as your devices open it, and its host the name their passkeys are for.
-The board refuses to start with a value it cannot trust (http, a port, a path, a wildcard or an IP).
-Then `pnpm start`. `pnpm tailnet` prints the value for this machine.
+The board refuses to start with a value it cannot trust (http, a port, a path, a wildcard or an IP),
+and `pnpm tailnet` refuses it too. A reference in it (`${NAME}`, `${NAME:-default}`) is expanded as
+Vite reads `.env`: a name defined nowhere is empty. Then `pnpm start`. `pnpm tailnet` prints the value
+for this machine.
 An earlier setup's `GATE_URL`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` lines are no longer read:
 delete them.
 
@@ -424,8 +426,9 @@ Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board'
   `/src/*`, `public/` files); no WebSocket opens there (hot reload is for this machine's browsers). A
   `Tailscale-User-*` header is never a sign-in.
 - Only the board's own hosts: a request whose `Host` is not `localhost`, `127.0.0.1` or `[::1]` (any
-  port) or the `PUBLIC_ORIGIN` host gets a 403, and a write carrying the session cookie must come from
-  `http://localhost:<PORT>`, `http://127.0.0.1:<PORT>`, `http://[::1]:<PORT>` or `PUBLIC_ORIGIN`.
+  port) or the `PUBLIC_ORIGIN` host gets a 403, whatever its path (one starting with `//` included),
+  and a write carrying the session cookie must come from `http://localhost:<PORT>`,
+  `http://127.0.0.1:<PORT>`, `http://[::1]:<PORT>` or `PUBLIC_ORIGIN`.
 - Previews stay on this machine: board-run previews never get `PUBLIC_ORIGIN`, `pnpm dev` copies get it
   empty, and a board with sign-in off (test mode, `AUTH=off`) ignores it and refuses every request a
   proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`). Their `http://127.0.0.1:<port>` links
