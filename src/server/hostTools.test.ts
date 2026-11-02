@@ -57,6 +57,13 @@ function envWith(PATH: string): NodeJS.ProcessEnv {
 const cmdEcho = (line: string) => (line ? `echo ${line.replace(/[\^&<>|]/g, '^$&')}` : 'echo.')
 
 /**
+ * A shell command that prints `lines` (to stderr after `to` = `' >&2'`) with the shell's own printf: a
+ * fake runs with only its folder on PATH, so `cat` and `grep` are not there to call.
+ */
+const shPrint = (lines: string[], to = '') =>
+  lines.length ? `printf '%s\\n' ${lines.map((l) => `'${l.replace(/'/g, `'\\''`)}'`).join(' ')}${to}` : ':'
+
+/**
  * A fake gh whose `gh auth status` exits with `exit` and prints `said` to stderr, after the request log
  * `debug` when it runs with GH_DEBUG=api (as gh does).
  */
@@ -88,13 +95,8 @@ function fakeGh(auth: { exit: number; said: string[]; debug?: string[] }) {
       [
         '#!/bin/sh',
         'if [ "$1" != "auth" ]; then echo "gh version 2.98.0"; exit 0; fi',
-        `if [ "$GH_DEBUG" = "api" ]; then cat >&2 <<'DEBUG'`,
-        ...debug,
-        'DEBUG',
-        'fi',
-        "cat >&2 <<'SAID'",
-        ...auth.said,
-        'SAID',
+        `if [ "$GH_DEBUG" = "api" ]; then ${shPrint(debug, ' >&2')}; fi`,
+        shPrint(auth.said, ' >&2'),
         `exit ${auth.exit}`,
         '',
       ].join('\n'),
@@ -227,13 +229,9 @@ describe('the check', () => {
           '#!/bin/sh',
           'if [ "$1" != "auth" ]; then echo "gh version 2.98.0"; exit 0; fi',
           `echo "$@" > '${args}'`,
-          "cat <<'GOOD'",
-          ...good,
-          'GOOD',
-          `if grep -q -- '--active' '${args}' && grep -q -- '--hostname github.com' '${args}'; then exit 0; fi`,
-          "cat >&2 <<'OTHERS'",
-          ...others,
-          'OTHERS',
+          shPrint(good),
+          'case " $* " in *" --active "*) case " $* " in *" --hostname github.com "*) exit 0 ;; esac ;; esac',
+          shPrint(others, ' >&2'),
           'exit 1',
           '',
         ].join('\n'),

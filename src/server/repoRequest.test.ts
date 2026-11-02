@@ -349,11 +349,12 @@ describe('the checks of a request', () => {
         message: expect.stringContaining('already registered as repo'),
       })
     }
-    // A request stored with such a spelling is held to the same check.
+    // A request stored with such a spelling is held to the same check. Its `..` goes through a folder
+    // that exists: on POSIX a path through a missing one does not exist, and was refused when asked.
     const stored = {
       projectId: pid,
       name: 'other',
-      repoPath: `${p}/x/../${b}/.`,
+      repoPath: `${r}/../${b}/.`,
       githubRepo: 'acme/registered',
       baseBranch: 'main',
     }
