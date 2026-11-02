@@ -444,22 +444,86 @@ describe('who is who in test mode: orchestrator:, agent: and sub-identities', ()
     ])
   })
 
-  it("refuses an orchestrator and a sub-identity a repo's run settings; the human writes them", async () => {
+  it("lets an orchestrator and a sub-identity write a repo's runs under their own names, as the human does", async () => {
     const { db, schema } = await import('#/db')
+    const { eq } = await import('drizzle-orm')
     const repo = db.select().from(schema.repos).all()[0]!
-    const run = { name: 'web', type: 'preview', start: 'node server.js' }
-    for (const headers of [ORCH, { ...ORCH, 'x-agent-name': 'orch/worker-6' }]) {
-      const res = await send('POST', `/api/repos/${repo.id}/runs`, headers, run)
-      expect(res.status, JSON.stringify(headers)).toBe(403)
-      expect(await res.json()).toEqual({ error: "only the human configures a repo's runs" })
-    }
-    expect(db.select().from(schema.runConfigs).all()).toEqual([])
-    const made = await send('POST', `/api/repos/${repo.id}/runs`, { 'x-test-actor': 'human:qa' }, run)
+    const SUB = { ...ORCH, 'x-agent-name': 'orch/worker-6' }
+    const made = await send('POST', `/api/repos/${repo.id}/runs`, SUB, {
+      name: 'web',
+      type: 'preview',
+      start: 'node server.js',
+    })
     expect(made.status).toBe(201)
-    const { id: runId } = (await made.json()) as { id: number }
-    expect((await send('PATCH', `/api/runs/${runId}`, ORCH, { name: 'x' })).status).toBe(403)
-    expect((await send('DELETE', `/api/runs/${runId}`, ORCH)).status).toBe(403)
-    expect((await send('PUT', `/api/repos/${repo.id}/runs/order`, ORCH, { ids: [runId] })).status).toBe(403)
+    const run = (await made.json()) as { id: number; createdBy: string }
+    expect(run.createdBy).toBe('orch/worker-6')
+    const human = await send(
+      'POST',
+      `/api/repos/${repo.id}/runs`,
+      { 'x-test-actor': 'human:qa' },
+      {
+        name: 'worker',
+        type: 'job',
+        start: 'node worker.js',
+      },
+    )
+    expect(human.status).toBe(201)
+    const { id: humanRun } = (await human.json()) as { id: number }
+    const changed = await send('PATCH', `/api/runs/${humanRun}`, ORCH, { start: 'node worker.js --once' })
+    expect(changed.status).toBe(200)
+    expect(await changed.json()).toMatchObject({ start: 'node worker.js --once', createdBy: 'qa' })
+    expect(
+      (await send('PUT', `/api/repos/${repo.id}/runs/order`, SUB, { ids: [humanRun, run.id] })).status,
+    ).toBe(200)
+    expect((await send('DELETE', `/api/runs/${run.id}`, ORCH)).status).toBe(200)
+    // Over MCP too: a sub-identity passing agentName adds, changes and deletes under its name.
+    const added = await tool(ORCH, 'add_run', {
+      repoId: repo.id,
+      name: 'Api',
+      type: 'preview',
+      start: 'node api.js',
+      agentName: 'orch/worker-6',
+    })
+    expect(added).toMatchObject({ name: 'Api', createdBy: 'orch/worker-6' })
+    expect(
+      await tool(ORCH, 'update_run', { runId: added.id, port: 47150, agentName: 'orch/worker-6' }),
+    ).toMatchObject({
+      port: 47150,
+    })
+    expect(await tool(ORCH, 'delete_run', { runId: added.id, agentName: 'orch/worker-6' })).toMatchObject({
+      id: added.id,
+    })
+    expect(
+      await tool(ORCH, 'add_run', {
+        repoId: repo.id,
+        name: 'x',
+        type: 'job',
+        start: 'x',
+        agentName: 'nobody/x',
+      }),
+    ).toMatchObject({
+      error: expect.any(String),
+    })
+    const activity = db
+      .select({ actor: schema.activity.actor, text: schema.activity.text })
+      .from(schema.activity)
+      .where(eq(schema.activity.refType, 'repo'))
+      .all()
+      .filter((a) => / run/.test(a.text))
+    expect(activity).toEqual(
+      expect.arrayContaining([
+        { actor: 'orch/worker-6', text: `added the preview run web to repo ${repo.name}` },
+        { actor: 'orch', text: `changed the run worker of repo ${repo.name}` },
+        { actor: 'orch/worker-6', text: `reordered the runs of repo ${repo.name}` },
+        { actor: 'orch', text: `removed the run web from repo ${repo.name}` },
+        { actor: 'orch/worker-6', text: `added the preview run Api to repo ${repo.name}` },
+        { actor: 'orch/worker-6', text: `changed the run Api of repo ${repo.name}` },
+        { actor: 'orch/worker-6', text: `removed the run Api from repo ${repo.name}` },
+      ]),
+    )
+    expect(db.select({ name: schema.runConfigs.name }).from(schema.runConfigs).all()).toEqual([
+      { name: 'worker' },
+    ])
     db.delete(schema.runConfigs).run()
   })
 

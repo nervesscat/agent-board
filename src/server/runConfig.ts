@@ -9,9 +9,11 @@ import { logActivity } from './activity'
 import { HttpError, notFound } from './http'
 
 /**
- * The runs of each repo, as the human configures them in the project's settings: what the board may
- * start from a ticket's worktree of the repo (src/server/runs.ts). Only the human writes them; agents
- * start and stop them, and what runs is always what is stored here.
+ * The runs of each repo, as the human configures them in the project's settings and agents with the MCP
+ * add_run, update_run and delete_run: what the board may start from a ticket's worktree of the repo
+ * (src/server/runs.ts). Every write, whoever makes it, goes through here with the same checks and is in
+ * the project's activity under its author's name; what runs is always what is stored here, never what a
+ * start request carries.
  */
 
 export type RunConfig = schema.RunConfig
