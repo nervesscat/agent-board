@@ -70,12 +70,23 @@ check "its PATH has $HOME/tools from ~/.bashrc ($server_path)" \
 check "gh on that PATH is the one in $HOME/tools" \
   bash -c "[ \"\$(PATH='$server_path' command -v gh)\" = '$HOME/tools/gh' ]"
 
-wm=''
-for _ in $(seq 1 60); do
-  wm=$(xwininfo -root -tree | grep -E '"CrossBoard": \(' | head -n 1)
-  [ -n "$wm" ] && break
+# The window, found by its title and not its class, so that the WM_CLASS check below can fail: titled
+# CrossBoard as it opens, then by its page ("Set up · CrossBoard" on this fresh home). xwininfo prints a
+# title it cannot show in its locale as "(failure in conversion from UTF8_STRING to ...)", and this
+# launch's bare environment has no LANG, so it runs in C.UTF-8 (built into glibc since 2.35, in Debian,
+# Ubuntu, Fedora and Arch alike). It waits for the page's title, so that the check runs on the window
+# as the user gets it: up to 60 s after /api/health answered (twice the 30 s it had before, for CI's
+# 4-vCPU runner, where the window and its page come up slower than on a desktop), and over as soon as
+# the title shows. A window that never gets past "CrossBoard" is still checked, with a note.
+wm='' page=''
+for _ in $(seq 1 120); do
+  windows=$(LC_ALL=C.UTF-8 xwininfo -root -tree 2>/dev/null)
+  page=$(printf '%s\n' "$windows" | LC_ALL=C grep -E ' · CrossBoard": \(' | head -n 1)
+  [ -z "$wm" ] && wm=$(printf '%s\n' "$windows" | LC_ALL=C grep -E '"CrossBoard": \(' | head -n 1)
+  [ -n "$page" ] && break
   sleep 0.5
 done
+if [ -n "$page" ]; then wm=$page; else echo "note: the window's title never went past CrossBoard in 60 s"; fi
 check "the window's WM_CLASS is agent-board, as the entry's StartupWMClass ($wm)" \
   bash -c "printf '%s' '$wm' | grep -qE '\\(\"[^\"]*\" \"agent-board\"\\)'"
 

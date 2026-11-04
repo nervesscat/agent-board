@@ -1,7 +1,8 @@
 /**
- * Runs: the long-running processes the board starts from a ticket's worktree, as the human configures
- * them per repo in the project's settings. A preview answers on a port (the board checks its health
- * path) and has a link to open; a job is a background worker with no link (a queue worker, a watcher).
+ * Runs: the long-running processes the board starts from a ticket's worktree, as the human (in the
+ * project's settings) or an agent (MCP add_run, update_run) configures them per repo. A preview
+ * answers on a port (the board checks its health path) and has a link to open; a job is a background
+ * worker with no link (a queue worker, a watcher).
  * Shared by the server, which checks every write with `runConfigProblem`, and the settings form, which
  * shows the same message before it saves.
  */
@@ -16,7 +17,7 @@ export const MAX_RUN_NAME = 60
 export const MAX_RUN_COMMAND = 2000
 export const MAX_RUN_ENV = 50
 
-/** A run as the human configures it. `port` null is "auto": the first free port from 47101. */
+/** A run as it is configured. `port` null is "auto": the first free port from 47101. */
 export interface RunConfigInput {
   name: string
   type: RunType

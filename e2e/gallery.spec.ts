@@ -41,15 +41,23 @@ const dayButton = (page: Page, name: 'From' | 'To') =>
   page.getByRole('button', { name: new RegExp(`^${name}\\b`) })
 const calendar = (page: Page) => page.locator('[data-slot="popover-content"]')
 
-/** Picks `day` (YYYY-MM-DD) in the From or To date picker, going back a month or two to reach it. */
-async function pickDay(page: Page, name: 'From' | 'To', day: string) {
+/**
+ * Opens the From or To date picker on the month of `day` (YYYY-MM-DD), going back a month or two to
+ * reach it, and returns that day's button.
+ */
+async function openOn(page: Page, name: 'From' | 'To', day: string) {
   await dayButton(page, name).click()
   const cell = calendar(page).locator(`td[data-day="${day}"]:not([data-outside]) button`)
   for (let back = 0; back < 3 && !(await cell.isVisible()); back++)
     await calendar(page)
       .getByRole('button', { name: /previous month/i })
       .click()
-  await cell.click()
+  return cell
+}
+
+/** Picks `day` (YYYY-MM-DD) in the From or To date picker. */
+async function pickDay(page: Page, name: 'From' | 'To', day: string) {
+  await (await openOn(page, name, day)).click()
   await expect(calendar(page)).toHaveCount(0)
 }
 
@@ -161,8 +169,10 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   await postWith(agent, old.id, [archivedFile.id])
   await ok(human.post(`/api/tickets/${old.id}/archive`))
   // All uploaded on one local day, a minute apart in this order: the day filters and the order then
-  // hold in any time zone and at any hour the test runs, midnight too.
-  const day = shiftDate(localDate(), -10)
+  // hold in any time zone and at any hour the test runs, midnight too. The 15th of last month: the
+  // days around it, and three days before it, are in its month whatever today's date is.
+  const now = new Date()
+  const day = localDate(new Date(now.getFullYear(), now.getMonth() - 1, 15))
   for (const [i, f] of [...files, archivedFile].entries()) uploadedAt(f.id, new Date(`${day}T12:0${i}:00`))
 
   await gallery(page, project.id)
@@ -198,11 +208,9 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   await pickDay(page, 'From', day)
   await expect(page).toHaveURL(new RegExp(`from=${day}`))
   // To cannot be before From: the day before it is off.
-  await dayButton(page, 'To').click()
+  await openOn(page, 'To', day)
   await expect(
-    calendar(page)
-      .locator(`td[data-day="${shiftDate(day, -1)}"] button`)
-      .first(),
+    calendar(page).locator(`td[data-day="${shiftDate(day, -1)}"]:not([data-outside]) button`),
   ).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(calendar(page)).toHaveCount(0)
@@ -210,11 +218,9 @@ test('the type, day and archived filters live in the URL, survive a reload, and 
   await expect(page).toHaveURL(new RegExp(`to=${day}`))
   await expect(tiles(page)).toHaveCount(2)
   // And From cannot be after To.
-  await dayButton(page, 'From').click()
+  await openOn(page, 'From', day)
   await expect(
-    calendar(page)
-      .locator(`td[data-day="${shiftDate(day, 1)}"] button`)
-      .first(),
+    calendar(page).locator(`td[data-day="${shiftDate(day, 1)}"]:not([data-outside]) button`),
   ).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(calendar(page)).toHaveCount(0)

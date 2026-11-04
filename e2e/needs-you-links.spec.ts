@@ -1152,12 +1152,16 @@ test('Forward to a PR the reader scrolled away from returns to where they left i
  * The Overview, longer than the window and scrolled down, with what this browser remembers already
  * set: the page the reader leaves by `link`, clicked where it is (a click that scrolls it into view
  * would move the place being left). Returns where the reader left the Overview.
+ *
+ * The scroll is told two frames before the click, or with `sameFrame` it comes in the same frame as
+ * the click: the browser tells of it only once the router has started the move.
  */
 async function leaveOverview(
   page: Page,
   project: Project,
   remembered: Record<string, string>,
   link: Locator,
+  { sameFrame = false } = {},
 ) {
   // Needs you scrolls within a card of its own height, so a short window makes the page the longer.
   await page.setViewportSize({ width: 1280, height: 360 })
@@ -1171,6 +1175,16 @@ async function leaveOverview(
       .first(),
   ).toBeVisible()
   await expect(link).toBeAttached()
+  if (sameFrame) {
+    const left = await link.evaluate((a: HTMLElement) => {
+      window.scrollTo(0, 400)
+      const y = window.scrollY
+      a.click()
+      return y
+    })
+    expect(left).toBe(400)
+    return left
+  }
   const left = await scrollTo(page, 400)
   expect(left).toBe(400)
   // The scroll told before the link is followed.
@@ -1241,6 +1255,130 @@ test('Back from Ongoing features, its view remembered, returns to where the read
   )
   await expect(page).toHaveURL(new RegExp(`/features\\?view=list$`))
   await expect(page.getByRole('heading', { name: 'Ongoing features' })).toBeVisible()
+  await expectBackAt(page, project, left)
+})
+
+/**
+ * The same, with the scroll in the same frame as the click: the page puts what this browser remembers
+ * in its URL only once the router has finished the move to it, so the place kept for the Overview is
+ * where the reader left it, not the top of the page that follows.
+ */
+test('Back from the PR queue, its filter remembered, scrolled as the link is clicked, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { 'prs.filter': 'others' },
+    page.getByRole('navigation').getByRole('link', { name: 'PR queue' }),
+    { sameFrame: true },
+  )
+  await expect(page).toHaveURL(new RegExp(`/prs\\?filter=others$`))
+  await expect(page.getByRole('tab', { name: /^Waiting on others/ })).toHaveAttribute('aria-selected', 'true')
+  await expectBackAt(page, project, left)
+})
+
+test('Back from Ongoing features, its view remembered, scrolled as the link is clicked, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { 'features.view': 'list' },
+    page.getByRole('navigation').getByRole('link', { name: 'Ongoing features' }),
+    { sameFrame: true },
+  )
+  await expect(page).toHaveURL(new RegExp(`/features\\?view=list$`))
+  await expect(page.getByRole('heading', { name: 'Ongoing features' })).toBeVisible()
+  await expectBackAt(page, project, left)
+})
+
+test('Back from a PR to review, under a filter remembered that hides it, scrolled as the link is clicked, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  const target = manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { 'prs.filter': 'others' },
+    needsYou(page).getByRole('link', { name: `Review PR #${target.number} Review me last` }),
+    { sameFrame: true },
+  )
+  await expect(page).toHaveURL(new RegExp(`filter=me#pr-${target.id}$`))
+  await expectRevealed(page, page.locator(`#pr-${target.id}`), topBar(page))
+  await expectBackAt(page, project, left)
+})
+
+test('Back from Previews, its stage remembered, scrolled as the link is clicked, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { [`previews.stage.${project.id}`]: 'done' },
+    page.getByRole('navigation').getByRole('link', { name: 'Previews', exact: true }),
+    { sameFrame: true },
+  )
+  await expect(page).toHaveURL(new RegExp(`/previews\\?stage=done$`))
+  await expect(page.getByRole('heading', { name: 'Previews' })).toBeVisible()
+  await expectBackAt(page, project, left)
+})
+
+test("Back from the project's Agents, its shell remembered, scrolled as the link is clicked, returns to where the reader left the Overview", async ({
+  page,
+  project,
+}) => {
+  manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { 'agents.shell': 'powershell' },
+    page.locator(`a[href="/projects/${project.id}/agents"]`),
+    { sameFrame: true },
+  )
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/agents\\?shell=powershell$`))
+  await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible()
+  await expectBackAt(page, project, left)
+})
+
+test('Back from Connect agents, its shell remembered, scrolled as the link is clicked, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    { 'agents.shell': 'powershell' },
+    page.locator('header a[href="/agents"]'),
+    { sameFrame: true },
+  )
+  await expect(page).toHaveURL(/\/\/[^/]+\/agents\?shell=powershell$/)
+  await expect(page.getByRole('heading', { name: 'Connect agents' })).toBeVisible()
+  await expectBackAt(page, project, left)
+})
+
+test('Back from the PR queue, nothing remembered, scrolled as the link is clicked, returns to where the reader left the Overview', async ({
+  page,
+  project,
+}) => {
+  manyPrs(project)
+  const left = await leaveOverview(
+    page,
+    project,
+    {},
+    page.getByRole('navigation').getByRole('link', { name: 'PR queue' }),
+    { sameFrame: true },
+  )
+  await expect(page.getByRole('tab', { name: /^To review/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/prs$`))
   await expectBackAt(page, project, left)
 })
 

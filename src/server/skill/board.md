@@ -221,19 +221,22 @@ Lanes of a ticket you are working are yours to create (next section).
 - **Previews:** when the change can be tried (a page, an API), give the human a preview and put
   its link with what to try in the summary; say that what they post there stays in the copy. Keep
   it running while the ticket is in `review`.
-  - A repo with runs (the human configures them per repo in the project's settings: previews with
-    a link, jobs without; a checkout of the board has its `Preview`): the board runs them.
-    `add_workspace` with your worktree's `path` and `branch` (a worktree next to the main
-    checkout, `../<repo>-<branch>`; `repoId` for a repo other than the ticket's primary), then
-    `list_runs` and `start_run` by name (`all: true` for every run). It returns at once;
-    `list_runs` shows each run (`building`, `starting`, `running` with its `url`, or `failed` with
-    the last log lines and the log paths). You name a run, never a command: what runs is the
-    human's config. Do not run `pnpm dev` in your session for it: that dies with your session.
-    `start_run` with `restart: true` rebuilds after more commits; `stop_run` stops it, and the
-    board stops it by itself once the PR is merged or the ticket is done, cancelled, archived or
-    its workspace removed. `start_preview` / `stop_preview` still act on the first preview run.
-    The human's preview limit (8 by default) caps how many runs the board runs at once; a start
-    beyond it is refused with the limit.
+  - A repo with runs (configured per repo, by the human in the project's settings or by you with
+    `add_run` / `update_run` / `delete_run`: previews with a link, jobs without; a checkout of the
+    board has its `Preview`): the board runs them. `add_workspace` with your worktree's `path` and
+    `branch` (a worktree next to the main checkout, `../<repo>-<branch>`; `repoId` for a repo other
+    than the ticket's primary), then `list_runs` and `start_run` by name (`all: true` for every
+    run). It returns at once; `list_runs` shows each run (`building`, `starting`, `running` with its
+    `url`, or `failed` with the last log lines and the log paths). `start_run` takes a run's name,
+    never a command: what runs is the run's stored config. A repo that lacks the run you need:
+    `add_run` it (its `repoId`, name, type and commands), or fix one with `update_run` and drop one
+    with `delete_run` (it stops first); each change is in the project's activity under your name. Do
+    not run `pnpm dev` in your session for it: that dies with your session. `start_run` with
+    `restart: true` rebuilds after more commits; `stop_run` stops it, and the board stops it by
+    itself once the PR is merged or the ticket is done, cancelled, archived or its workspace
+    removed. `start_preview` / `stop_preview` still act on the first preview run. The human's
+    preview limit (8 by default) caps how many runs the board runs at once; a start beyond it is
+    refused with the limit.
   - A repo with no runs: start your branch from your worktree on a free port, with a copy of the data
     rather than the real one (the project's `instructions` say how), then `set_preview` with the
     `workspaceId` and `previewUrl` once it answers (or `previewUrl` on `add_workspace` when it

@@ -182,30 +182,34 @@ http_headers = { Authorization = "Bearer <token>" }
    **Previews:** when the change can be tried (a page, an API), have a preview the human can open
    before anything is merged, and post its link with what to try. Say that what the human posts
    there stays in a copy of the data. Keep it running while the ticket is in review.
-   - **A repo with runs: the board runs them.** The human configures each repo's runs in the
-     project's settings: a preview answers on a port and gets a link, a job is a background worker
-     with no link; a checkout of the board has its `Preview` (install when the lockfile changed,
-     build, a copy of the live data, the build on a free port from 47101 with sign-in off). Register
-     your worktree (`add_workspace` with its `path` and `branch`, and `repoId` for a repo other than
-     the ticket's primary; it must sit next to the repo's main checkout, like
-     `../agent-board-<branch>`), then `list_runs` shows every run of every repo of the ticket and
-     `start_run` starts one by name (`all: true` starts them all). It returns at once; `list_runs`
-     follows it `building` → `starting` → `running`, or `failed` with the last log lines (`logs`
-     has the paths), and a running preview sets the workspace's `previewUrl`. `start_run` with
-     `restart: true` rebuilds after you push more work, `stop_run` stops it. You name a run, never a
-     command, env or port: what runs is the human's config. `start_preview` / `stop_preview` still
-     work on the workspace's first preview run. The board runs as many at once, previews and jobs
-     alike, as the human's preview limit (8 by default); a start beyond it is refused with the
-     limit, so stop the ones you no longer need. The board stops them by itself when the PR is
-     merged (in that repo), the ticket moves to done or cancelled or is archived, the repo is taken
-     off the ticket, or the workspace is removed, and when the board itself stops (it does not start
-     them again). Do not run `pnpm dev` in your session for the human: it dies with your session and
-     the dev server behaves differently from the build.
-   - **A repo with no runs:** start your branch from your worktree on a free port, with a copy of the
-     data rather than the real one (the project's instructions say how), and register its link on
-     the workspace (`set_preview`, or `previewUrl` on `add_workspace`); the ticket page shows it on
-     its Runs card with an Open button and whether it is running. Stop it once the ticket is
-     merged or dropped, and clear it (`set_preview` with `previewUrl: ""`). The human can stop it
+   - **A repo with runs: the board runs them.** Each repo's runs are configured in the project's
+     settings by the human, or by you with `add_run`, `update_run` and `delete_run`: a preview
+     answers on a port and gets a link, a job is a background worker with no link; a checkout of the
+     board has its `Preview` (install when the lockfile changed, build, a copy of the live data, the
+     build on a free port from 47101 with sign-in off). Register your worktree (`add_workspace` with
+     its `path` and `branch`, and `repoId` for a repo other than the ticket's primary; it must sit
+     next to the repo's main checkout, like `../agent-board-<branch>`), then `list_runs` shows every
+     run of every repo of the ticket and `start_run` starts one by name (`all: true` starts them
+     all). It returns at once; `list_runs` follows it `building` → `starting` → `running`, or
+     `failed` with the last log lines (`logs` has the paths), and a running preview sets the
+     workspace's `previewUrl`. `start_run` with `restart: true` rebuilds after you push more work,
+     `stop_run` stops it. `start_run` takes a run's name, never a command, env or port: what runs is
+     the run's stored config. A repo that lacks the run you need: add it (`add_run` with its
+     `repoId`, name, type and commands), change one (`update_run`) or delete one (`delete_run`,
+     which stops it first); they act on every run of the repo, the human's included, and each change
+     is in the project's activity under your name. `start_preview` / `stop_preview` still work on
+     the workspace's first preview run. The board runs as many at once, previews and jobs alike, as
+     the human's preview limit (8 by default); a start beyond it is refused with the limit, so stop
+     the ones you no longer need. The board stops them by itself when the PR is merged (in that
+     repo), the ticket moves to done or cancelled or is archived, the repo is taken off the ticket,
+     or the workspace is removed, and when the board itself stops (it does not start them again). Do
+     not run `pnpm dev` in your session for the human: it dies with your session and the dev server
+     behaves differently from the build.
+   - **A repo with no runs, when you do not add one:** start your branch from your worktree on a
+     free port, with a copy of the data rather than the real one (the project's instructions say
+     how), and register its link on the workspace (`set_preview`, or `previewUrl` on
+     `add_workspace`); the ticket page shows it on its Runs card with an Open button and whether it
+     is running. Stop it once the ticket is merged or dropped, and clear it (`set_preview` with `previewUrl: ""`). The human can stop it
      from the project's Previews page when it listens on loopback and runs from the workspace's
      worktree; the link stays, as not running.
 

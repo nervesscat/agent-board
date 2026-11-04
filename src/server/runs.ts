@@ -15,7 +15,7 @@ import { authMode, config, uploadsDir } from './config'
 import { toolProblem } from './hostTools'
 import { HttpError, notFound } from './http'
 import { checkPreview } from './preview'
-import { getRunConfig, listRunConfigs, type RunConfig, seedRepo } from './runConfig'
+import { deleteRunConfig, getRunConfig, listRunConfigs, type RunConfig, seedRepo } from './runConfig'
 import { kindOf, listStages } from './stages'
 import { noteBoardEvent } from './workTimeline'
 
@@ -1067,6 +1067,13 @@ export function forgetWorkspaceRuns(workspaceId: number, actor: string) {
 /** The run config is going: stop it wherever it runs and forget it. Call before the row is deleted. */
 export function forgetRunConfig(runId: number, actor: string) {
   forget((e) => e.runId === runId, 'its run was removed from the settings', actor)
+}
+
+/** Delete a run config, the human's or an agent's, stopping it wherever it builds or runs first. */
+export function removeRunConfig(runId: number, actor: string) {
+  getRunConfig(runId)
+  forgetRunConfig(runId, actor)
+  return deleteRunConfig(runId, actor)
 }
 
 /** The repo is going: stop its runs and forget them. Call before the row is deleted. */

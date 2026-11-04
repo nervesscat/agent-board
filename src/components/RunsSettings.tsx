@@ -28,8 +28,9 @@ import { RUN_PORTS, type RunConfigInput, type RunType, runConfigProblem } from '
 /**
  * The project's runs, per repo: what the board starts from a ticket's worktree of each repo. A preview
  * answers on a port (the board checks its health path, and the ticket gets its link); a job is a
- * background worker with no link. Only the human writes them: agents start and stop them by name, and
- * what runs is always what is saved here. Its own section of the project's settings.
+ * background worker with no link. Agents start and stop them by name, and add, change and delete them
+ * too (each change in the project's activity); what runs is always what is saved here. Its own section of
+ * the project's settings.
  */
 export function RunsSettings({ projectId }: { projectId: string }) {
   const { data: p } = useProject(projectId)
@@ -42,8 +43,9 @@ export function RunsSettings({ projectId }: { projectId: string }) {
           What the board starts from a ticket's worktree of each repo, from the ticket's Runs card or when an
           agent asks: a <strong>preview</strong> answers on a port and gets a link to open, a{' '}
           <strong>job</strong> is a background worker with no link. Each runs its install (only when the
-          lockfile changed), its build, then its start command, in the worktree. Agents start and stop them;
-          only you change what they run.
+          lockfile changed), its build, then its start command, in the worktree. Agents start and stop them,
+          and can add, change and delete them too: each change shows in the project's activity under the
+          agent's name.
         </p>
       </div>
       {p.repos.length === 0 && <p className="text-sm text-muted-foreground">The project has no repos yet.</p>}

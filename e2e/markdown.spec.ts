@@ -190,3 +190,101 @@ test('Shift+Enter breaks the line inside one paragraph, saved as a hard break an
   expect(rendered.lineHeight).toBe(typed.lineHeight)
   expect(Math.abs(rendered.heights[0]! - typed.heights[0]!)).toBeLessThanOrEqual(1)
 })
+
+test('a wide table scrolls inside its own column; a narrow one fits as before', async ({ page, api }) => {
+  const cols = Array.from({ length: 14 }, (_, i) => `Column header number ${i + 1}`)
+  const wide = [
+    `| ${cols.join(' | ')} |`,
+    `| ${cols.map(() => '---').join(' | ')} |`,
+    `| ${cols.map((c) => `${c} value that is long`).join(' | ')} |`,
+  ].join('\n')
+  const narrow = '| A | B |\n| - | - |\n| 1 | 2 |'
+  const t = await api.ticket({ title: 'Wide table', body: `${wide}\n\nBetween.\n\n${narrow}` })
+  await page.setViewportSize({ width: 1400, height: 900 })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const instructions = page.getByRole('region', { name: 'Instructions' })
+  const scrolls = instructions.locator('[data-md-table-scroll]')
+  await expect(scrolls).toHaveCount(2)
+
+  const measure = (el: Locator) =>
+    el.evaluate((box) => ({
+      scrollWidth: box.scrollWidth,
+      clientWidth: box.clientWidth,
+      right: box.getBoundingClientRect().right,
+      tableInside: box.firstElementChild?.tagName === 'TABLE',
+    }))
+  const region = await instructions.boundingBox()
+  const pageWidth = await page.evaluate(() => document.documentElement.scrollWidth)
+
+  const w = await measure(scrolls.first())
+  expect(w.tableInside).toBe(true)
+  expect(w.scrollWidth).toBeGreaterThan(w.clientWidth)
+  expect(w.right).toBeLessThanOrEqual(region!.x + region!.width + 0.5)
+  // Nothing on the page is pushed sideways by it.
+  expect(pageWidth).toBeLessThanOrEqual(1400)
+
+  const n = await measure(scrolls.nth(1))
+  expect(n.tableInside).toBe(true)
+  expect(n.scrollWidth).toBe(n.clientWidth)
+})
+
+test('a wide table keeps readable columns and scrolls sideways; the page does not', async ({ page, api }) => {
+  const head = [
+    'Ticket',
+    'Branch',
+    'Base',
+    'Pushed',
+    'PR',
+    'CI',
+    'Preview',
+    'Reviewer',
+    'Last update',
+    'Notes',
+  ]
+  const note = 'Waiting on the reviewer to look again at the migration before the release can go out'
+  const row = (i: number) =>
+    `| #${i} | \`dependabot/npm_and_yarn/some-long-package-name-${i}\` | dev | yes | #${i} | green | up | claude | today | ${note} |`
+  const wide = [`| ${head.join(' | ')} |`, `|${head.map(() => ' --- |').join('')}`, row(1), row(2)].join('\n')
+  const t = await api.ticket({ title: 'Natural table', body: wide })
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const box = page.getByRole('region', { name: 'Instructions' }).locator('[data-md-table-scroll]')
+  await expect(box).toHaveCount(1)
+
+  const m = await box.evaluate((el) => {
+    const notes = [...el.querySelectorAll('tbody tr')].map((tr) =>
+      tr.lastElementChild!.getBoundingClientRect(),
+    )
+    const ths = [...el.querySelectorAll('thead th')].map((th) => th.getBoundingClientRect())
+    return {
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      noteWidth: notes[0]!.width,
+      noteHeight: notes[0]!.height,
+      headerHeights: ths.map((r) => r.height),
+      headerTops: ths.map((r) => r.top),
+      lineHeight: parseFloat(getComputedStyle(el.querySelector('td')!).lineHeight),
+    }
+  })
+  expect(m.scrollWidth).toBeGreaterThan(m.clientWidth)
+  // The sentence column is wider than a few words, so its rows stay a few lines tall.
+  expect(m.noteWidth).toBeGreaterThan(200)
+  expect(m.noteHeight).toBeLessThan(m.lineHeight * 5)
+  // Header cells all start on the same line with none wrapped taller than the rest.
+  expect(new Set(m.headerTops.map(Math.round)).size).toBe(1)
+  expect(Math.max(...m.headerHeights) - Math.min(...m.headerHeights)).toBeLessThanOrEqual(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280)
+})
+
+test('a short table still fills its column as before', async ({ page, api }) => {
+  const t = await api.ticket({ title: 'Short table', body: '| A | B |\n| - | - |\n| 1 | 2 |' })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const box = page.getByRole('region', { name: 'Instructions' }).locator('[data-md-table-scroll]')
+  const m = await box.evaluate((el) => ({
+    box: el.clientWidth,
+    scroll: el.scrollWidth,
+    table: el.firstElementChild!.getBoundingClientRect().width,
+  }))
+  expect(m.scroll).toBe(m.box)
+  expect(Math.abs(m.table - m.box)).toBeLessThanOrEqual(1)
+})

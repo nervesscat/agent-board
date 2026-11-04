@@ -68,6 +68,12 @@ export function Markdown({ children, className = '' }: { children: string; class
               )
             return <a {...props} target="_blank" rel="noreferrer" />
           },
+          // A wide table scrolls sideways in its own box instead of pushing past the column it is in.
+          table: ({ node: _n, ...props }) => (
+            <div data-md-table-scroll className="max-w-full overflow-x-auto">
+              <table {...props} />
+            </div>
+          ),
           img: ({ node: _n, ...props }) => (
             <img
               {...props}
