@@ -60,7 +60,8 @@ const time = (iso: string) => Date.parse(iso)
  */
 export function summaryWritten(f: SummaryFacts): boolean {
   const after = time(f.lastCommitAt ?? f.since)
-  const fresh = (u: SummaryFacts['posts'][number]) => !f.humans.includes(u.author) && time(u.createdAt) >= after
+  const fresh = (u: SummaryFacts['posts'][number]) =>
+    !f.humans.includes(u.author) && time(u.createdAt) >= after
   if (f.posts.some((u) => u.summary)) return f.posts.some((u) => u.summary && fresh(u))
   return Boolean(summaryStandIn(f.posts.filter(fresh), f.humans))
 }
@@ -223,7 +224,9 @@ export function reconcileAutoPhases(ticketId: number, rules: AutoTicks): boolean
 type Workspace = { previewUrl: string; managedPreview: ManagedPreview | null }
 
 /** Every running preview counts: one the board runs, or a link that answers (one off this machine is taken on trust). */
-export async function workspacePreviews(workspaces: Workspace[]): Promise<{ url: string; running: boolean }[]> {
+export async function workspacePreviews(
+  workspaces: Workspace[],
+): Promise<{ url: string; running: boolean }[]> {
   return Promise.all(
     workspaces
       .filter((w) => w.previewUrl || w.managedPreview?.status === 'running')
