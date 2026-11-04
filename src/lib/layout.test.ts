@@ -45,7 +45,6 @@ describe('the catalogue', () => {
       'ticket.instructions',
       'ticket.tasks',
       'ticket.activity',
-      'ticket.handoff',
     ])
   })
 })

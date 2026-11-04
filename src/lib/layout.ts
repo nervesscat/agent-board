@@ -53,7 +53,6 @@ export const LAYOUT_ELEMENTS = [
     area: 'ticket.main',
     locked: 'Decisions and threads that wait on you are here',
   },
-  { id: 'ticket.handoff', label: 'Hand-off', area: 'ticket.side', locked: 'Where review links land' },
   { id: 'ticket.runs', label: 'Runs', area: 'ticket.side' },
   { id: 'ticket.details', label: 'Details', area: 'ticket.side' },
   { id: 'ticket.branch', label: 'Branch', area: 'ticket.side' },

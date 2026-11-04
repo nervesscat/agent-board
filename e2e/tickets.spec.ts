@@ -95,7 +95,7 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
   await expect(card).toBeVisible()
   await expect(card).toContainText('High')
   // The two tasks typed, under Implementation, and the default phases: 9 in all.
-  await expect(card).toContainText('0/8')
+  await expect(card).toContainText('0/9')
 
   const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
   expect(row).toMatchObject({ title: 'Fix the login form', status: 'backlog', createdBy: 'enrique' })

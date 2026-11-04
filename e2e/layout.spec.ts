@@ -46,7 +46,6 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
     'Activity',
   ])
   await expect(tiles(layout, 'Ticket page, side column')).toHaveText([
-    'Hand-off',
     'Runs',
     'Details',
     'Branch',
@@ -231,7 +230,7 @@ test('dragging reorders the Overview and moves a ticket section to the other col
     'Lanes',
     'Activity',
   ])
-  await expect(side).toHaveText(['Hand-off', 'Runs', 'Branch', 'Workspaces'])
+  await expect(side).toHaveText(['Runs', 'Branch', 'Workspaces'])
   // And Workspaces to the main column with its button, hidden there.
   await layout.getByRole('button', { name: 'Move Workspaces to the main column' }).click()
   await expect(layout.getByRole('button', { name: 'Move Workspaces to the side column' })).toBeFocused()
@@ -334,11 +333,11 @@ test('a ticket column with nothing to show on this ticket is not drawn; the othe
   const base = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
   // Sent as is: the server checks it.
   const arrange = (layout: unknown) => ok(human.patch(`/api/projects/${project.id}`, { data: { layout } }))
-  // A new ticket: no hand-off, no runs, still open.
+  // A new ticket: no runs, still open.
   const ticket = await api.ticket({ title: 'Nothing on the side' })
   const url = `/projects/${project.id}/features/${ticket.id}`
 
-  // Details, Branch and Workspaces hidden: Hand-off and Runs are left there, with nothing to show.
+  // Details, Branch and Workspaces hidden: Runs is left there, with nothing to show.
   const hidden = ['ticket.details', 'ticket.branch', 'ticket.workspaces']
   await arrange(base.map((it) => (hidden.includes(it.id) ? { ...it, hidden: true } : it)))
   await page.goto(url)
@@ -347,7 +346,7 @@ test('a ticket column with nothing to show on this ticket is not drawn; the othe
   await expect(side).toHaveCount(0)
   expect((await main.boundingBox())!.width).toBeCloseTo(grid, 0)
 
-  // Runs hidden too: Hand-off alone, still nothing.
+  // Runs hidden too: nothing left there at all.
   await arrange(base.map((it) => ([...hidden, 'ticket.runs'].includes(it.id) ? { ...it, hidden: true } : it)))
   await page.reload()
   ;({ grid, main, side } = await columns(page))
@@ -483,4 +482,26 @@ test('a layout saved while a ticket is open keeps the page as drawn: an unsent p
   await page.goto(`/projects/${project.id}/features/${ticket.id}`)
   await expect(side.locator(composer)).toBeVisible()
   await expect(main.locator(composer)).toHaveCount(0)
+})
+
+test('a layout saved with the Hand-off card still loads, without it', async ({ page, project, human }) => {
+  const base = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
+  // As a board saved it while the card was there: Hand-off first in the side column.
+  const saved = [
+    ...base.filter((it) => it.area !== 'ticket.side'),
+    { id: 'ticket.handoff', area: 'ticket.side', hidden: false },
+    ...base.filter((it) => it.area === 'ticket.side'),
+  ]
+  const res = await human.patch(`/api/projects/${project.id}`, { data: { layout: saved } })
+  expect(res.status()).toBe(200)
+  const stored = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
+  expect(stored.map((it) => it.id)).not.toContain('ticket.handoff')
+  expect(stored).toEqual(base)
+  await page.goto(`/projects/${project.id}/settings`)
+  await expect(tiles(editor(page), 'Ticket page, side column')).toHaveText([
+    'Runs',
+    'Details',
+    'Branch',
+    'Workspaces',
+  ])
 })

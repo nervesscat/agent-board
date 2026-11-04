@@ -3,7 +3,7 @@ import type { Locator } from '@playwright/test'
 import type { Project, TicketFull } from '#/lib/api'
 import { expect, ok, test } from './fixtures'
 
-const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged']
+const BUILT_IN = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Summary', 'Merged']
 
 /** The phases listed in the section, in order. */
 const listed = (section: Locator) =>
@@ -35,7 +35,7 @@ test('the human sets the default phases on the Settings page, and new tickets st
   await section.screenshot({ path: test.info().outputPath('default-phases.png') })
 
   // Removed with ×, every one but Implementation and PR.
-  for (const name of ['Pushed', 'CI', 'Preview', 'Merged']) {
+  for (const name of ['Pushed', 'CI', 'Preview', 'Summary', 'Merged']) {
     await section.getByRole('button', { name: `Remove ${name}` }).click()
   }
   await expect(listed(section)).toHaveText(['Implementation', 'PR'])

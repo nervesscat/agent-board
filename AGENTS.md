@@ -100,17 +100,20 @@ http_headers = { Authorization = "Bearer <token>" }
    day without one.
 3. **Break it down**: a new ticket starts with its project's default phases as its top-level
    tasks (`get_project` → `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR,
-   CI, Preview, Merged). Tasks go two levels and no more: the concrete steps of the
+   CI, Preview, Summary, Merged). Tasks go two levels and no more: the concrete steps of the
    work go under Implementation as its subtasks (`add_tasks` with `parentTaskId` = its id; a
    subtask takes no subtasks). `set_task_done` as you finish each step. **The board ticks Pushed,
-   PR, CI, Preview and Merged itself**, from git, GitHub and the previews, and unticks one when its
-   fact stops holding:
+   PR, CI, Preview, Summary and Merged itself**, from git, GitHub, the previews and the ticket's
+   posts, and unticks one when its fact stops holding:
    - Pushed: the branch is on origin with every local commit (a new commit not pushed unticks it);
    - PR: a PR for the ticket (its `prNumber`, else its branch) is open or merged;
    - CI: the PR's GitHub checks are green on its head, or a PR comment whose first line is
      `CI run locally: green on <sha>` names its head commit (a new push unticks it until it is
      green again);
    - Preview: one of the ticket's workspaces runs a preview, or its preview link answers;
+   - Summary: an agent wrote or updated the summary (`set_ticket_summary`) after the branch's last
+     commit (a new commit unticks it until the summary is rewritten; a ticket that never had a
+     summary goes by an agent's progress post since then);
    - Merged: the PR is merged, or the branch was merged into its base.
 
    Nobody ticks those by hand: `set_task_done` and `update_task` `done` on them are refused, and
@@ -261,7 +264,8 @@ http_headers = { Authorization = "Bearer <token>" }
      events (pushes, the PR, the preview, the merge, stage moves); nothing of this goes to the feed
      or the Daily view.
 7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
-   PR, CI, Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
+   PR, CI, Preview, Summary and Merged as their facts hold; Implementation and its steps are ticked
+   by hand):
    1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
    2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
       project's instructions say how; here `pnpm test:e2e`).
@@ -295,17 +299,13 @@ http_headers = { Authorization = "Bearer <token>" }
       changed for a UI change in `files`.
    8. Resume note if the ticket stays open past the session (step 9).
 
-   `update_ticket` to `review` answers with `handoff.missing`: what the board still sees missing,
-   each a `code` and a `text` (`tasks_open`: Implementation, the ticket's tasks and subtasks, its
-   phases and their steps, the hand-off phases included but Merged, which is the human's: missing
-   while it has none, or while some of them, its lanes' included, are open; the other checks still verify each fact themselves; `no_pr`, `not_pushed`, `no_preview`,
-   `no_handoff_post`: no summary written by an agent since the branch's last commit (on a ticket
-   that never had a summary, an agent's progress post since then still counts), `checks_unknown`:
-   the PR's CI is failing or still running, and no `CI run locally: green` comment names its head). The move goes through anyway: fix each one.
-   `handoff.checks` lists every item with `ok`, first `not_merged` (Merged: the PR merged on
-   GitHub, or the branch merged into its base), which is never in `missing`: merging is the
-   human's. `get_ticket` returns the same `handoff`
-   while the ticket is in review, and its page shows it as a Hand-off card.
+   `update_ticket` to `review` answers with `open`: every task and subtask still open, the
+   ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text,
+   auto}`. Merged is left out: merging is the human's. `auto: true` marks a phase the board ticks
+   from its fact (Pushed, PR, CI, Preview, Summary): settle it by making the fact hold (push, open
+   the PR, get CI green, start the preview, rewrite the summary after your last commit), never by a
+   tick. The move goes through anyway: fix each one; `open: []` means nothing is left. `get_ticket`
+   returns the same `open` while the ticket is in review.
 
    `done` is the human's call unless the instructions say otherwise. A ticket with lanes goes to
    `review` once its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was

@@ -119,7 +119,7 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
 
 1. **`handed-off`**: the ticket is in a `review` stage, `push.state` is `pushed`, `pr` is set,
    the PR's CI has finished and passed (`gh pr checks <number>`; still running: wait for it),
-   and `handoff.missing` is empty, or holds only `no_preview` with a summary saying why the
+   and `open` is empty, or holds only the Preview phase with a summary saying why the
    change cannot be tried. The ticket's summary (`summary` on `get_ticket`, `fallback: false`:
    the hand-off is the summary the agent wrote, not a separate post) has
    screenshots in its attachments when the change has a UI, and a "Tested" part that names the

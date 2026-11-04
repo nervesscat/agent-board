@@ -545,7 +545,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
             <Row
               key={`r${t.id}`}
               icon={<Eye />}
-              title={<TicketLink p={p} id={t.id} title={t.title} hash="handoff" />}
+              title={<TicketLink p={p} id={t.id} title={t.title} hash="tasks" />}
               meta={
                 <>
                   <StageBadge p={p} status={t.status} />
