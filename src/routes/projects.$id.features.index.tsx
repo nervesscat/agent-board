@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { Archive, BrushCleaning, Columns3, List, Search, Tags, X } from 'lucide-react'
+import { cn } from 'cn'
+import { Archive, BrushCleaning, Columns3, List, Loader2, Search, Tags, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
@@ -9,10 +10,20 @@ import { toastHandoff } from '#/components/Handoff'
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/components/PushDot'
+import { tagTextClass } from '#/components/Tag'
 import { ArchivedList, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxScroller,
+  ComboboxTrigger,
+  ComboboxValue,
+} from '#/components/ui/combobox'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
@@ -247,10 +258,22 @@ function Features() {
   )
 }
 
+/** How long the tag filter's search waits for the typing to pause before it asks the server, in ms. */
+const TAG_SEARCH_DELAY = 200
+/** "All tags": no tag at all, so no tag, whatever it is spelled, can be taken for it. */
+const ALL_TAGS = { all: true } as const
+type TagChoice = string | typeof ALL_TAGS
+const tagLabel = (c: TagChoice) => (typeof c === 'string' ? c : 'All tags')
+/** Every page of the tag filter's list, under one key per project: dropped whenever it opens. */
+const tagsKey = (projectId: string) => ['projectTags', projectId] as const
+
 /**
  * The tag the Board and the List are narrowed to (`?tag=`): the project's suggestions and the tags its
  * tickets carry, most used first. A tag from a link that none of them has is offered too. `count` is how
  * many tickets the view shows with it (none while a search is still loading).
+ *
+ * Its popup lists them a page at a time from the server (GET /api/projects/:id/tags), the next one when
+ * the end of the list comes into view, and searches them all there. Each is written in its chip's colour.
  */
 function TagFilter({
   projectId,
@@ -263,31 +286,112 @@ function TagFilter({
   value: string
   onChange: (tag: string) => void
 }) {
+  const qc = useQueryClient()
   const { data: project } = useProject(projectId)
+  // The tag picked, in the casing the project uses for it: what the trigger shows and the list holds.
   const tags = tagChoices(project?.tagSuggestions ?? [], project?.usedTags ?? [], [])
   const current = tags.find((t) => t.toLowerCase() === value.toLowerCase()) ?? value
-  const all = value && !tags.includes(current) ? [current, ...tags] : tags
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  // The search the server is asked for: the field's text once the typing pauses.
+  const [searched, setSearched] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setSearched(query.trim()), TAG_SEARCH_DELAY)
+    return () => clearTimeout(timer)
+  }, [query])
+  // One list per search: a page answered for an older one lands under its own key, never in this list.
+  const {
+    data,
+    error,
+    isPending,
+    refetch,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+  } = useInfiniteQuery({
+    queryKey: [...tagsKey(projectId), searched, current],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ offset: String(pageParam) })
+      if (searched) params.set('q', searched)
+      if (current) params.set('include', current)
+      return get<{ tags: string[]; next: number | null }>(`/api/projects/${projectId}/tags?${params}`)
+    },
+    initialPageParam: 0,
+    getNextPageParam: (last) => last.next ?? undefined,
+    enabled: open,
+  })
+  const shown = data?.pages.flatMap((p) => p.tags) ?? []
+  // Typed but not asked yet, or asked and not answered: the list says nothing about this search yet.
+  const waiting = query.trim() !== searched || isPending
+  const choices: TagChoice[] = [ALL_TAGS, ...(waiting ? [] : shown)]
   return (
     <div className="flex min-w-0 items-center gap-1">
-      <Select
-        // "All tags" is no value at all (null), so no tag, whatever it is spelled, can be taken for it.
-        value={value ? current : null}
-        onValueChange={(v) => onChange(v ?? '')}
-        items={Object.fromEntries(all.map((t) => [t, t]))}
+      <Combobox<TagChoice>
+        value={value ? current : ALL_TAGS}
+        onValueChange={(v) => onChange(typeof v === 'string' ? v : '')}
+        items={choices}
+        filteredItems={choices}
+        inputValue={query}
+        onInputValueChange={setQuery}
+        open={open}
+        onOpenChange={(next) => {
+          // Opened, it starts over from the first page, fresh from the server.
+          if (next) qc.removeQueries({ queryKey: tagsKey(projectId) })
+          setOpen(next)
+        }}
+        // Closed, the search goes.
+        onOpenChangeComplete={(isOpen) => {
+          if (isOpen) return
+          setQuery('')
+          setSearched('')
+        }}
+        itemToStringLabel={tagLabel}
+        itemToStringValue={(c) => (typeof c === 'string' ? c : '')}
       >
-        <SelectTrigger size="sm" aria-label="Filter by tag" className="max-w-56 min-w-0">
+        <ComboboxTrigger
+          size="sm"
+          aria-label="Filter by tag"
+          className={cn('max-w-56 min-w-0', !value && 'text-muted-foreground')}
+        >
           <Tags className="text-muted-foreground" />
-          <SelectValue placeholder="All tags" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={null}>All tags</SelectItem>
-          {all.map((t) => (
-            <SelectItem key={t} value={t}>
-              {t}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+          <ComboboxValue />
+        </ComboboxTrigger>
+        <ComboboxContent aria-label="Tags">
+          <ComboboxInput placeholder="Search tags" aria-label="Search tags" />
+          <ComboboxScroller>
+            <ComboboxList>
+              <ComboboxItem value={ALL_TAGS}>All tags</ComboboxItem>
+              {!waiting &&
+                shown.map((t) => (
+                  <ComboboxItem
+                    key={t}
+                    value={t}
+                    className="duration-200 animate-in fade-in-0 slide-in-from-top-1 motion-reduce:animate-none"
+                  >
+                    <span className={tagTextClass(t)}>{t}</span>
+                  </ComboboxItem>
+                ))}
+            </ComboboxList>
+            {error && !isFetchNextPageError ? (
+              <TagsError onRetry={() => void refetch()} />
+            ) : waiting ? (
+              <MoreTags loading />
+            ) : (
+              <>
+                {shown.length === 0 && (
+                  <p className="px-1.5 py-1 text-sm text-muted-foreground">No tags match</p>
+                )}
+                {isFetchNextPageError ? (
+                  <TagsError onRetry={() => void fetchNextPage()} />
+                ) : (
+                  hasNextPage && <MoreTags loading={isFetchingNextPage} onNear={() => void fetchNextPage()} />
+                )}
+              </>
+            )}
+          </ComboboxScroller>
+        </ComboboxContent>
+      </Combobox>
       {value && (
         <>
           {count !== undefined && (
@@ -308,6 +412,50 @@ function TagFilter({
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * The end of the tag filter's list while it holds more: "Loading tags…" while a page is on its way, and
+ * once it nears the bottom of the list's scroller, a call for the next page (`onNear`), as the
+ * Gallery's MoreFiles does.
+ */
+function MoreTags({ loading, onNear }: { loading: boolean; onNear?: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const near = useRef(onNear)
+  useEffect(() => {
+    near.current = onNear
+  })
+  useEffect(() => {
+    const el = ref.current
+    if (!el || loading) return
+    const io = new IntersectionObserver(([e]) => e?.isIntersecting && near.current?.(), {
+      root: el.closest('[data-slot="combobox-scroller"]'),
+      rootMargin: '0px 0px 32px 0px',
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [loading])
+  return (
+    <div ref={ref} data-slot="more-tags" className="flex min-h-7 items-center justify-center" role="status">
+      {loading && (
+        <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" /> Loading tags…
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** A page of the tag filter's list the server did not give: said quietly, with a way to ask again. */
+function TagsError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <p className="flex items-center gap-2 px-1.5 py-1 text-xs text-muted-foreground" role="status">
+      Couldn't load tags.
+      <button type="button" className="underline hover:text-foreground" onClick={onRetry}>
+        Retry
+      </button>
+    </p>
   )
 }
 

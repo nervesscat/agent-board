@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { db, schema } from '#/db'
 import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
-import { MAX_TAG_LENGTH, cleanSuggestions, usedTags } from '#/lib/tags'
+import { MAX_TAG_LENGTH, cleanSuggestions, matchTags, tagChoices, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
 import { hostToolsForAgents } from './hostTools'
 import { assertMayChangeInstructions, type Changer, setInstructions } from './instructionsHistory'
@@ -97,6 +97,41 @@ function projectUsedTags(projectId: number) {
 }
 
 export type ProjectFull = ReturnType<typeof getProjectFull>
+
+/** How many tags a page of `projectTags` holds unless asked for fewer, and the most it holds. */
+export const TAGS_PAGE = 20
+export const TAGS_PAGE_MAX = 50
+
+export const TagsQuery = z.object({
+  q: z.string().max(200).default(''),
+  include: z.string().max(200).default(''),
+  offset: z.number().int().min(0).default(0),
+  // More than a page holds is a page that full, not a mistake.
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .default(TAGS_PAGE)
+    .transform((n) => Math.min(n, TAGS_PAGE_MAX)),
+})
+export type TagsQuery = z.input<typeof TagsQuery>
+
+/**
+ * One page of the tags the project offers to filter by, as the tag filter lists them: its suggestions,
+ * then the tags its tickets carry (most used first), each once in the casing to reuse (`tagChoices`).
+ * `include`, a tag none of those is in any casing (one from a link), goes first. `q` keeps the tags
+ * holding it in any casing (`matchTags`). `next` is the offset of the page after, null after the last.
+ */
+export function projectTags(projectId: number, query: TagsQuery = {}) {
+  const { q, include, offset, limit } = TagsQuery.parse(query)
+  const project = getProject(projectId)
+  const tags = tagChoices(project.tagSuggestions, projectUsedTags(projectId), [])
+  const extra = include.trim()
+  const known = !extra || tags.some((t) => t.toLowerCase() === extra.toLowerCase())
+  const matching = matchTags(known ? tags : [extra, ...tags], q)
+  const end = offset + limit
+  return { tags: matching.slice(offset, end), next: end < matching.length ? end : null }
+}
 
 /**
  * A new project. Instructions that are not empty are its first change of them (instructionsHistory.ts),

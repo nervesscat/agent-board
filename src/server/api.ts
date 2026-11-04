@@ -266,6 +266,22 @@ api.post('/api/projects', async ({ request, actor }) => {
   return json(projects.createProject(body, actor, callerInfo(request)), 201)
 })
 api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
+// One page of the tags the project offers to filter by (the tag filter's list): `{tags, next}`.
+api.get('/api/projects/:id/tags', ({ params, url }) => {
+  const q = url.searchParams
+  const num = (k: string) => (q.get(k) ? Number(q.get(k)) : undefined)
+  const page = query(
+    projects.TagsQuery,
+    {
+      q: q.get('q') ?? undefined,
+      include: q.get('include') ?? undefined,
+      offset: num('offset'),
+      limit: num('limit'),
+    },
+    'query',
+  )
+  return json(projects.projectTags(id(params), page))
+})
 // The phases every new ticket of the project starts with; null goes back to the built-in list.
 const DefaultPhases = z.array(z.string().trim().min(1).max(500)).max(20).nullable()
 api.patch('/api/projects/:id', async ({ request, params, actor }) => {
