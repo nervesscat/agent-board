@@ -122,8 +122,8 @@ test('the Settings page shows the refusal of a list the server will not take, an
   await page.goto(`/projects/${project.id}/settings`)
   const section = page.getByRole('region', { name: 'Default phases' })
   const field = section.getByRole('textbox', { name: 'New phase' })
-  // Pasted lines add one phase each: 6 built in and 15 more, over the 20 allowed.
-  const more = Array.from({ length: 15 }, (_, i) => `Phase ${i + 1}`)
+  // Pasted lines add one phase each: 7 built in and 14 more, over the 20 allowed.
+  const more = Array.from({ length: 14 }, (_, i) => `Phase ${i + 1}`)
   await field.focus()
   await field.evaluate((el, text) => {
     const data = new DataTransfer()
