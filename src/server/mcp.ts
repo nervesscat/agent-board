@@ -178,14 +178,15 @@ function buildServer(caller: Caller, refused: HttpError | null) {
   )
   tool(
     'find_project',
-    "The project and repo of the checkout you are in, from the board as it is now: give githubRepo (your origin URL as git remote get-url origin prints it, or owner/name), folder (the checkout's folder name) and path (git rev-parse --show-toplevel), at least one. Matched by the GitHub slug (any casing) first, then the path (slashes either way, a trailing one, and C:\\… the same as /mnt/c/…; a path inside a repo's checkout, such as a worktree nested in it, counts as that repo), then the folder name, then a folder beside a checkout named like it (<folder>-<branch>); a worktree is found by its slug, and an ssh origin on another host (an ssh-config alias of GitHub) is read for its owner/name. Returns only what matched, never other projects: match 'one' (projectId, projectName, repoId, repo), 'repos' (several repos of one project: ask which, or take it from the ticket), 'ambiguous' (candidates in several projects: ask the human, do not pick) or 'none' (no board project for this repo: stop using the board for it, do not guess or create one); by says what matched (githubRepo, path, inside, folder or beside), message what to do, and weak: true marks a hit that may be another repository (a slug read from a host that is not github.com, a repo whose GitHub repo is another than yours, a folder beside a checkout): confirm with the human.",
+    "The project and repo of the checkout you are in, from the board as it is now: give githubRepo (your origin URL as git remote get-url origin prints it, or owner/name), folder (the checkout's folder name) and path (git rev-parse --show-toplevel), at least one. Matched by the GitHub slug (any casing) first, then the path (slashes either way, a trailing one, and C:\\… the same as /mnt/c/…; a path inside a repo's checkout, such as a worktree nested in it, counts as that repo), then the folder name, then a folder beside a checkout named like it (<folder>-<branch>); a worktree is found by its slug, and an ssh origin on another host (an ssh-config alias of GitHub) is read for its owner/name. Returns only what matched, never other projects: match 'one' (projectId, projectName, repoId, repo), 'repos' (several repos of one project: ask which, or take it from the ticket), 'ambiguous' (candidates in several projects: ask the human, do not pick) or 'none' (no board project for this repo: stop using the board for it, do not guess or create one); by says what matched (githubRepo, path, inside, folder or beside), message what to do, and weak: true marks a hit that may be another repository (a slug read from a host that is not github.com, a repo whose GitHub repo is another than yours, a path that only holds a repo's checkout, a folder beside a checkout): confirm with the human.",
     {
       githubRepo: z
         .string()
+        .max(2_000)
         .optional()
         .describe('your origin URL (git remote get-url origin), or owner/name'),
-      folder: z.string().optional().describe("the checkout's folder name"),
-      path: z.string().optional().describe("the checkout's path (git rev-parse --show-toplevel)"),
+      folder: z.string().max(4_000).optional().describe("the checkout's folder name"),
+      path: z.string().max(4_000).optional().describe("the checkout's path (git rev-parse --show-toplevel)"),
     },
     (where) => findProject(where),
   )

@@ -261,6 +261,51 @@ describe('find_project', () => {
     })
     expect(one(found)).toMatchObject({ by: 'inside', repoId: ids.repo['tools-wsl'] })
     expect(found).not.toHaveProperty('weak')
+    // Nor is its ssh form: owner/name read from a host that is not github.com is no GitHub origin to doubt by.
+    const ssh = (
+      await find({ githubRepo: 'git@gitlab.com:acme/lib.git', path: '/mnt/d/Code/wsl-one/.wt-pr3' })
+    ).found
+    expect(one(ssh)).toMatchObject({ by: 'inside', repoId: ids.repo['tools-wsl'] })
+    expect(ssh).not.toHaveProperty('weak')
+  })
+
+  it('marks as weak a path that holds one repo’s checkout but is not it', async () => {
+    // /mnt/d/Code holds only tools-wsl, which has no GitHub repo: the agent may be in a repo around it.
+    for (const args of [
+      { githubRepo: 'git@github.com:me/dotfiles.git', path: '/mnt/d/Code', folder: 'Code' },
+      { path: '/mnt/d/Code' },
+      { path: 'D:\\Code\\' },
+    ]) {
+      const { found, text } = await find(args)
+      expect(one(found)).toMatchObject({ by: 'path', repoId: ids.repo['tools-wsl'], weak: true })
+      expect(found.message).toContain('holds it')
+      expect(found.message).toContain('confirm with the human')
+      onlyMentions(text, ['tools-wsl'])
+    }
+    // The checkout's own path is no such doubt.
+    expect((await find({ path: '/mnt/d/Code/wsl-one' })).found).not.toHaveProperty('weak')
+  })
+
+  it('refuses an over-long input, and reads a long run of slashes at once', async () => {
+    for (const args of [
+      { path: '/'.repeat(4_001) },
+      { folder: '/'.repeat(4_001) },
+      { githubRepo: 'a'.repeat(2_001) },
+    ]) {
+      const result = await rpc('tools/call', { name: 'find_project', arguments: args })
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).not.toContain('internal error')
+    }
+    const { folderOf } = await import('./findProject')
+    const started = performance.now()
+    expect(folderOf(`${'/'.repeat(100_000)}x${'\\/'.repeat(100_000)}`)).toBe('x')
+    expect(folderOf('/'.repeat(100_000))).toBe('/'.repeat(100_000))
+    expect(performance.now() - started).toBeLessThan(200)
+    // A trailing run within the limit is still the checkout's path.
+    expect(one((await find({ path: `/mnt/d/Code/wsl-one${'/'.repeat(3_000)}` })).found)).toMatchObject({
+      by: 'path',
+      repoId: ids.repo['tools-wsl'],
+    })
   })
 
   it('finds a repo by its folder name without a slug, or when the slug matches nothing', async () => {

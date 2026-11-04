@@ -98,12 +98,13 @@ export function checkoutKey(p: string): string {
 }
 
 /** The last segment of a path, either slash, a trailing one ignored. */
-export const folderOf = (p: string) =>
-  p
-    .trim()
-    .replace(/[\\/]+$/, '')
-    .split(/[\\/]/)
-    .pop() || p.trim()
+export function folderOf(p: string) {
+  const s = p.trim()
+  // Trailing slashes stripped by a scan from the end: a regex for them backtracks over a long run.
+  let end = s.length
+  while (end > 0 && (s[end - 1] === '/' || s[end - 1] === '\\')) end--
+  return s.slice(0, end).split(/[\\/]/).pop() || s
+}
 
 const repoShape = (r: schema.Repo): Repo => ({
   id: r.id,
@@ -190,7 +191,8 @@ export function findProject(where: Where): Found {
   // A hit that may be another repository than the agent's is returned marked as weak, never taken
   // silently: a slug read from an ssh host that is not github.com; a path or folder hit on a repo whose
   // GitHub repo is another than the one given; a path inside a checkout whose GitHub repo the origin does
-  // not confirm; and a folder beside a checkout, which only its name ties to it.
+  // not confirm; a path that only holds one checkout; and a folder beside a checkout, which only its name
+  // ties to it.
   const cautions: string[] = []
   if (by === 'githubRepo' && alias)
     cautions.push(
@@ -198,15 +200,21 @@ export function findProject(where: Where): Found {
     )
   // A path inside a checkout is checked against any origin given, even one that reads as no GitHub repo (a
   // clone nested in another repo's checkout is another repository); a GitHub origin also does not confirm
-  // a repo with no GitHub repo on the board.
+  // a repo with no GitHub repo on the board. A slug guessed from another ssh host is no GitHub origin: the
+  // host may as well be GitLab's as an alias of GitHub.
   const checked = by === 'inside' ? !!given.githubRepo : !!slug && (by === 'path' || by === 'folder')
   if (checked) {
-    const others = hits.filter((r) => (r.githubRepo ? !sameSlug(r) : by === 'inside' && !!slug))
+    const others = hits.filter((r) => (r.githubRepo ? !sameSlug(r) : by === 'inside' && !!slug && !alias))
     if (others.length)
       cautions.push(
         `your origin is ${slug ?? withoutCredentials(given.githubRepo)}, but ${others.map((r) => `${r.name} is ${r.githubRepo ?? 'no GitHub repo'}`).join(', ')} on the board: this may be another repository ${by === 'inside' ? 'checked out inside it' : `with the same ${by}`}`,
       )
   }
+  // A path holding one checkout is not that checkout: the agent may be in another repository around it.
+  if (by === 'path' && hits.length === 1 && !atPath(hits[0]!))
+    cautions.push(
+      `your path ${given.path} is not the checkout of ${hits[0]!.name} but holds it (${hits[0]!.repoPath}): you may be in another repository that contains it`,
+    )
   if (by === 'beside')
     cautions.push(
       `your checkout only sits beside ${hits.map((r) => r.repoPath).join(', ')} with a name that starts like it: it may be a worktree of it, or another repository`,
