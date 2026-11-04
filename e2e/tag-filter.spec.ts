@@ -169,6 +169,30 @@ test('the search narrows the tags in any casing, over every tag, and says when n
   await expect(options(page)).toHaveCount(21)
 })
 
+test('a search longer than any tag says none match, without asking the server', async ({ page, project }) => {
+  const long = 'x'.repeat(201)
+  const asked: string[] = []
+  await page.route(TAGS, async (route) => {
+    asked.push(searchOf(route.request().url()))
+    await route.continue()
+  })
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await filter(page).click()
+  await expect(options(page)).toHaveText(['All tags', 'Bug', 'UI', 'Implementation', 'Report'])
+  await search(page).fill(long)
+  await expect(search(page)).toHaveValue(long)
+  await expect(page.getByText('No tags match')).toBeVisible()
+  await expect(options(page)).toHaveText(['All tags'])
+  await expect(page.getByText("Couldn't load tags.")).toHaveCount(0)
+  await expect(loading(page)).toHaveCount(0)
+  // One character past the longest a tag can be is not asked either.
+  await search(page).fill('x'.repeat(41))
+  await expect(page.getByText('No tags match')).toBeVisible()
+  await search(page).fill('bug')
+  await expect(options(page)).toHaveText(['All tags', 'Bug'])
+  expect(asked).toEqual(['', 'bug'])
+})
+
 test("a search's late answer never replaces a newer search's list", async ({ page, project, api, human }) => {
   await ok(human.patch(`/api/projects/${project.id}`, { data: { tagSuggestions: MANY } }))
   await api.ticket({ title: 'Tagged', status: 'todo', tags: ['Bug'] })

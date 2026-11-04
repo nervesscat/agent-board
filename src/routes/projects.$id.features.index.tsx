@@ -30,7 +30,7 @@ import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, patch, post, type CleanupReport, type Push, type TicketRow } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
-import { tagChoices } from '#/lib/tags'
+import { MAX_TAG_LENGTH, matchTags, tagChoices } from '#/lib/tags'
 import { type TicketsScope, keepSearchRows, ticketsKey, ticketsQuery } from '#/lib/tickets'
 
 const VIEWS = ['board', 'list', 'archived'] as const
@@ -299,6 +299,9 @@ function TagFilter({
     const timer = setTimeout(() => setSearched(query.trim()), TAG_SEARCH_DELAY)
     return () => clearTimeout(timer)
   }, [query])
+  // A search longer than any tag can be matches none: it is not asked (the server refuses a long one),
+  // and only a longer tag from a link could hold it.
+  const asked = searched.length <= MAX_TAG_LENGTH
   // One list per search: a page answered for an older one lands under its own key, never in this list.
   const {
     data,
@@ -320,18 +323,19 @@ function TagFilter({
     },
     initialPageParam: '',
     getNextPageParam: (last) => last.next ?? undefined,
-    enabled: open,
+    enabled: open && asked,
   })
   // Each tag once in any casing, whatever the pages hold: an option is keyed by its tag.
   const shown = useMemo(() => {
+    if (!asked) return matchTags(current ? [current] : [], searched)
     const seen = new Set<string>()
     return (data?.pages.flatMap((p) => p.tags) ?? []).filter((t) => {
       const key = t.toLowerCase()
       return !seen.has(key) && Boolean(seen.add(key))
     })
-  }, [data])
+  }, [asked, current, searched, data])
   // Typed but not asked yet, or asked and not answered: the list says nothing about this search yet.
-  const waiting = query.trim() !== searched || isPending
+  const waiting = query.trim() !== searched || (asked && isPending)
   const choices: TagChoice[] = [ALL_TAGS, ...(waiting ? [] : shown)]
   return (
     <div className="flex min-w-0 items-center gap-1">
