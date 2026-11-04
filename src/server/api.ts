@@ -177,7 +177,7 @@ api.get('/api/actors', () => json(listActors()))
 // Signing in with passkeys, signing out, and the devices section (authApi.ts).
 authRoutes(api)
 
-// --- the agent tokens Connect agents makes, lists and revokes (tokens.ts): the human's alone ---
+// --- the agent tokens Connect an agent makes, lists and revokes (tokens.ts): the human's alone ---
 const TokenName = z
   .string()
   .trim()

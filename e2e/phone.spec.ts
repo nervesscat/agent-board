@@ -106,7 +106,7 @@ test("a ticket's feed tabs, a long summary with its history open and long lane c
   expect(box.x + box.width).toBeLessThanOrEqual(390)
 })
 
-test('no sideways scroll at 390px on the Overview, Daily (with a report), Previews, Cleanup and Agents pages', async ({
+test('no sideways scroll at 390px on the Overview, Daily (with a report), Previews, Cleanup, Connect an agent and Team pages', async ({
   page,
   api,
   human,
@@ -300,9 +300,9 @@ test('the top bar folds its pages into a menu that opens', async ({ page }) => {
   await expect(page.getByRole('banner').getByRole('link', { name: 'Daily' })).toBeHidden()
   await page.getByRole('button', { name: 'Pages' }).click()
   const menu = page.getByRole('dialog')
-  for (const name of ['Repositories', 'Daily', 'Agents', 'Settings'])
+  for (const name of ['Repositories', 'Daily', 'Connect', 'Settings'])
     await expect(menu.getByRole('link', { name })).toBeVisible()
-  await menu.getByRole('link', { name: 'Agents' }).click()
+  await menu.getByRole('link', { name: 'Connect' }).click()
   await expect(page).toHaveURL(/\/agents$/)
   await expect(menu).toBeHidden()
 })

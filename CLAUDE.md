@@ -21,7 +21,7 @@ it. Without a live board of your own, the worktree, checks and database rules st
 ## Sign-in
 
 The human has a passkey account, made once at `/setup` on this machine, then `/login` (README:
-"Signing in"). Agents never sign in: each uses a token the board issues (Agents page, **Generate
+"Signing in"). Agents never sign in: each uses a token the board issues (Connect an agent page, **Generate
 commands**), sent as `Authorization: Bearer <token>`.
 
 ## Desktop app

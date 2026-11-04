@@ -1344,11 +1344,12 @@ test("Back from the project's Agents, its shell remembered, scrolled as the link
     { sameFrame: true },
   )
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/agents\\?shell=powershell$`))
-  await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible()
+  await expect(page.getByText('The roles agents work as in this project.')).toBeVisible()
   await expectBackAt(page, project, left)
 })
 
-test('Back from Connect agents, its shell remembered, scrolled as the link is clicked, returns to where the reader left the Overview', async ({
+test('Back from Connect an agent, its shell remembered, scrolled as the link is clicked, returns to where the reader left the Overview', async ({
   page,
   project,
 }) => {
@@ -1361,7 +1362,7 @@ test('Back from Connect agents, its shell remembered, scrolled as the link is cl
     { sameFrame: true },
   )
   await expect(page).toHaveURL(/\/\/[^/]+\/agents\?shell=powershell$/)
-  await expect(page.getByRole('heading', { name: 'Connect agents' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Connect an agent' })).toBeVisible()
   await expectBackAt(page, project, left)
 })
 

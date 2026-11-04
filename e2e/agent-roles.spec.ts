@@ -127,7 +127,7 @@ test('Settings > Agents: each token with its role, the Orchestrator switch, its 
     })
 
     await page.goto('/settings')
-    const agents = page.getByRole('region', { name: 'Agents' })
+    const agents = page.getByRole('region', { name: 'Agent tokens' })
     const row = agents.getByRole('listitem', { name: `Agent ${name}` })
     await expect(badge(row, 'Agent').first()).toBeVisible()
     const subs = row.getByRole('list', { name: `Working under ${name}` })
@@ -148,7 +148,7 @@ test('Settings > Agents: each token with its role, the Orchestrator switch, its 
     const tokens = await ok<AgentTokenRow[]>(human.get('/api/agent-tokens'))
     expect(tokens.find((t) => t.id === token.id)).toMatchObject({ role: 'orchestrator' })
 
-    // Connect agents shows the role, read-only.
+    // Connect an agent shows the role, read-only.
     await page.goto('/agents?shell=bash')
     const listed = page
       .getByRole('list', { name: 'Agent tokens' })
@@ -191,7 +191,7 @@ test('an agent never sees the Agents section, nor can it change a role', async (
   await page.setExtraHTTPHeaders({ 'X-Test-Actor': 'agent:claude' })
   await page.goto('/settings')
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible()
-  await expect(page.getByRole('region', { name: 'Agents' })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Agent tokens' })).toHaveCount(0)
 })
 
 test.describe('on a phone', () => {
@@ -221,7 +221,7 @@ test.describe('on a phone', () => {
       )
       await page.goto('/settings')
       await expect(
-        page.getByRole('region', { name: 'Agents' }).getByRole('listitem', { name: `Agent ${name}` }),
+        page.getByRole('region', { name: 'Agent tokens' }).getByRole('listitem', { name: `Agent ${name}` }),
       ).toBeVisible()
       expect(await scrollsSideways(page)).toBe(false)
 
