@@ -76,7 +76,7 @@ test("a project's repositories page lists and manages only that project's repos"
   // Added here, it goes to this project.
   await page.getByRole('button', { name: 'New repository' }).click()
   const add = page.getByRole('dialog', { name: 'New repository' })
-  await expect(add.getByLabel('Project')).toHaveText(project.name)
+  await expect(add.getByLabel('Project').locator('[data-slot="select-value"]')).toHaveText(project.name)
   await add.getByLabel('Repository path').fill(backslashCheckout('mine'))
   await add.getByLabel('Name').fill(mine)
   await add.getByRole('button', { name: 'Add repository' }).click()

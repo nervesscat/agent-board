@@ -86,7 +86,7 @@ test('the New repository dialog adds a checkout typed with backslashes, at exact
   await page.getByRole('button', { name: 'New repository' }).click()
   const dialog = page.getByRole('dialog', { name: 'New repository' })
   // The page's project is the one the repo goes to.
-  await expect(dialog.getByLabel('Project')).toHaveText(name)
+  await expect(dialog.getByLabel('Project').locator('[data-slot="select-value"]')).toHaveText(name)
   await dialog.getByLabel('Repository path').fill(repoPath)
   await dialog.getByLabel('Name').fill(name)
   await dialog.getByRole('button', { name: 'Add repository' }).click()
