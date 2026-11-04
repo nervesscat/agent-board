@@ -110,6 +110,7 @@ test('creates a ticket from the New ticket dialog', async ({ page, project, huma
     'PR',
     'CI',
     'Preview',
+    'Summary',
     'Merged',
   ])
 

@@ -133,14 +133,16 @@ test('dragging a ticket to In review on the board moves it with no hand-off warn
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.locator('[data-column="in_progress"]').getByRole('link', { name: /Dragged to review/ })
   await expect(card).toBeVisible()
-  // The drag events a browser sends, with one DataTransfer.
+  // The drag events a browser sends, with one DataTransfer; dragend goes to the element dragged, which
+  // the move takes out of its column.
   const dataTransfer = await page.evaluateHandle(() => new DataTransfer())
+  const dragged = (await card.elementHandle())!
   const column = page.locator('[data-column="review"]')
-  await card.dispatchEvent('dragstart', { dataTransfer })
+  await dragged.dispatchEvent('dragstart', { dataTransfer })
   await column.dispatchEvent('dragenter', { dataTransfer })
   await column.dispatchEvent('dragover', { dataTransfer })
   await column.dispatchEvent('drop', { dataTransfer })
-  await card.dispatchEvent('dragend', { dataTransfer })
+  await dragged.dispatchEvent('dragend', { dataTransfer })
   await expect(column.getByRole('link', { name: /Dragged to review/ })).toBeVisible()
   await expect.poll(async () => (await api.getTicket(t.id)).status).toBe('review')
   await noHandoffToast(page)
