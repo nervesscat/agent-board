@@ -296,6 +296,18 @@
   margin-top: 0.25em;
 }
 
+/* Tables in rendered markdown sit in their own scroll box (Markdown.tsx). The typography plugin
+   sets them 100% wide, so a wide one squeezes every column to its narrowest word before it
+   overflows. Instead it takes its natural width (never less than the box, so a short one looks as
+   before) and scrolls sideways, each cell capped so a sentence wraps at a readable width. */
+.prose :where([data-md-table-scroll] > table) {
+  width: max-content;
+  min-width: 100%;
+}
+.prose :where([data-md-table-scroll] > table) :where(th, td) {
+  max-width: 40ch;
+}
+
 /* The rich text editor (TipTap): the placeholder of an empty editor, and checklists drawn as
    checkboxes beside their text rather than as bullets. */
 .tiptap p.is-editor-empty:first-child::before {
