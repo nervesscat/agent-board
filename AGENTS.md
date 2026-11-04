@@ -47,8 +47,7 @@ REST `GET /api/me` answers `{actor, agent, role, parent, boardEnv, authOff}`: `a
 
 Connect once per client. The board's Connect agents page (`http://localhost:47100/agents`) has these
 ready to copy for Claude Code, Codex and OpenCode, with the token filled in, plus a one-line
-install of the board skill (generated with the current projects and repos; install it again after
-adding one):
+install of the board skill (installed once: agents find their project with `find_project`):
 
 ```
 # Claude Code
