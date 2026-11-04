@@ -159,6 +159,77 @@ describe('find_project', () => {
     onlyMentions(text, ['shop-back'])
   })
 
+  it('reads owner/name with a trailing .git or slash as the slug it names', async () => {
+    for (const githubRepo of ['acme/shop-back.git', 'acme/shop-back/', 'ACME/shop-back.git/']) {
+      expect(one((await find({ githubRepo, folder: '.wt-pr14' })).found)).toMatchObject({
+        by: 'githubRepo',
+        repoId: ids.repo['shop-back'],
+      })
+      // From the main checkout too, with no warning that it may be another repository.
+      const { found } = await find({ githubRepo, folder: 'back' })
+      expect(one(found)).toMatchObject({ by: 'githubRepo', repoId: ids.repo['shop-back'] })
+      expect(found).not.toHaveProperty('weak')
+    }
+  })
+
+  it('reads owner/name from an ssh origin on another host, an alias of GitHub, as a weak match', async () => {
+    for (const githubRepo of [
+      'git@github-work:acme/shop-back.git',
+      'git@github.com-work:acme/shop-back',
+      'ssh://git@gh-alias:2222/acme/shop-back.git',
+    ]) {
+      const { found, text } = await find({ githubRepo, folder: '.wt-pr14', path: '/home/me/.wt-pr14' })
+      expect(one(found)).toMatchObject({ by: 'githubRepo', repoId: ids.repo['shop-back'], weak: true })
+      expect(found.message).toContain('not github.com')
+      expect(found.message).toContain('confirm with the human')
+      onlyMentions(text, ['shop-back'])
+    }
+    // Another user at github.com itself is GitHub: a plain match.
+    const { found } = await find({ githubRepo: 'org-12@github.com:acme/shop-back.git' })
+    expect(one(found)).toMatchObject({ by: 'githubRepo', repoId: ids.repo['shop-back'] })
+    expect(found).not.toHaveProperty('weak')
+    // An alias whose owner/name is on no repo: no project, saying how the origin was read.
+    const none = (await find({ githubRepo: 'git@github-work:acme/nowhere.git', folder: '.wt-x' })).found
+    expect(none).toMatchObject({ match: 'none' })
+    expect(none.message).toContain('read as acme/nowhere')
+  })
+
+  it('finds a worktree nested in a repo’s checkout by its path, also for a repo with no GitHub repo', async () => {
+    // tools-wsl has no GitHub repo on the board, so no slug can find its worktrees.
+    for (const p of [
+      '/mnt/d/Code/wsl-one/.wt-pr14',
+      'D:\\Code\\wsl-one\\.wt-pr14\\',
+      '/mnt/d/Code/wsl-one/a/b',
+    ]) {
+      const { found, text } = await find({ path: p })
+      expect(one(found)).toMatchObject({ by: 'inside', repoId: ids.repo['tools-wsl'] })
+      expect(found).not.toHaveProperty('weak')
+      onlyMentions(text, ['tools-wsl'])
+    }
+    // With a GitHub origin the board cannot confirm, it is found but weak.
+    const { found } = await find({
+      githubRepo: 'git@github.com:acme/wsl-one.git',
+      folder: '.wt-pr14',
+      path: '/mnt/d/Code/wsl-one/.wt-pr14',
+    })
+    expect(one(found)).toMatchObject({ by: 'inside', repoId: ids.repo['tools-wsl'], weak: true })
+    expect(found.message).toContain('no GitHub repo')
+    // A worktree nested in a repo with a GitHub repo, given that slug, is found by the slug.
+    expect(
+      one((await find({ githubRepo: 'acme/shop-front', path: '/home/me/shop/front/.wt-pr3' })).found).by,
+    ).toBe('githubRepo')
+  })
+
+  it('finds a worktree beside a repo’s checkout, named <folder>-<branch>, as a weak match', async () => {
+    const { found, text } = await find({ path: '/mnt/d/Code/wsl-one-fix-login' })
+    expect(one(found)).toMatchObject({ by: 'beside', repoId: ids.repo['tools-wsl'], weak: true })
+    expect(found.message).toContain('beside')
+    onlyMentions(text, ['tools-wsl'])
+    // Only beside it: the same name in another folder, or a name that merely starts alike, is no match.
+    expect((await find({ path: '/mnt/d/Other/wsl-one-fix-login' })).found.match).toBe('none')
+    expect((await find({ path: '/mnt/d/Code/wsl-onex' })).found.match).toBe('none')
+  })
+
   it('finds a repo by its folder name without a slug, or when the slug matches nothing', async () => {
     expect(one((await find({ folder: 'tools-cli' })).found)).toMatchObject({
       by: 'folder',

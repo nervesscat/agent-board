@@ -39,12 +39,13 @@ Find the repo you are in (its origin from `git remote get-url origin`, and its p
 `githubRepo` (the origin URL or `owner/name`), `folder` (the path's last segment) and `path`. It
 answers from the board as it is now with only the project and repo that match (`projectId`,
 `repoId`), by the GitHub slug first, then the path, then the folder name; the same repo checked out
-on Windows and in WSL, or a worktree of it (e.g. `.wt-pr14`), is found by its slug.
+on Windows and in WSL, or a worktree of it (e.g. `.wt-pr14`), is found by its slug, or by its path
+inside or beside the repo's checkout.
 
 - `match: "repos"`, a folder holding several repos of one project: that is the project; ask which
   repo (or take it from the ticket) before passing a `repoId`.
 - `match: "ambiguous"`, repos in several projects: ask the human which one; do not pick.
-- `weak: true`: the folder or path matched a repo with another GitHub slug; confirm with the human.
+- `weak: true`: the match may be another repository (its `message` says why); confirm with the human.
 - `match: "none"`: say the repo has no board project and stop using the board for it. Do not
   guess from other projects and do not create one.
 

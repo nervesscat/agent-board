@@ -51,14 +51,34 @@ export type Found =
     }
   | { match: 'none'; message: string }
 
-type By = 'githubRepo' | 'path' | 'folder'
+/**
+ * What matched: the GitHub slug, the path (equal to a repo's, or holding several), a path `inside` a
+ * repo's checkout (a worktree nested in it), the folder name, or a folder `beside` a repo's checkout whose
+ * name starts with the repo's (a worktree next to it, `<folder>-<branch>`).
+ */
+type By = 'githubRepo' | 'path' | 'inside' | 'folder' | 'beside'
 
-const GITHUB_REPO = /^[\w.-]+\/[\w.-]+$/
+const OWNER_NAME = /^([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/
+/** An ssh origin on any host: `[user@]host:o/n(.git)` or `ssh://[user@]host[:port]/o/n(.git)`. */
+const SSH_ORIGIN =
+  /^(?:ssh:\/\/(?:[^@/]+@)?([^/:@]+)(?::\d+)?\/|(?:[^@/:]+@)?([^/:@]+):)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i
 
-/** `owner/name` from either an `owner/name` or a github.com origin URL; null for anything else. */
-export function slugOf(given: string): string | null {
+/**
+ * The `owner/name` of what the agent gave as its origin: an `owner/name` (a trailing `.git` or `/` aside),
+ * a github.com URL, or an ssh origin on another host, which is how an ssh-config alias of GitHub
+ * (`git@github-work:o/n.git`) reads. `alias` is that other host: the slug is then only a guess. Null for
+ * anything else (an https URL of another host).
+ */
+export function originOf(given: string): { slug: string | null; alias: string | null } {
   const s = given.trim()
-  return GITHUB_REPO.test(s) ? s : githubSlug(s)
+  const own = OWNER_NAME.exec(s)
+  if (own) return { slug: `${own[1]}/${own[2]}`, alias: null }
+  const github = githubSlug(s)
+  if (github) return { slug: github, alias: null }
+  const ssh = SSH_ORIGIN.exec(s)
+  if (!ssh) return { slug: null, alias: null }
+  const host = (ssh[1] ?? ssh[2])!
+  return { slug: `${ssh[3]}/${ssh[4]}`, alias: host.toLowerCase() === 'github.com' ? null : host }
 }
 
 /**
@@ -104,26 +124,34 @@ export function findProject(where: Where): Found {
       400,
       'give at least one of githubRepo (git remote get-url origin), folder or path (git rev-parse --show-toplevel)',
     )
-  const slug = given.githubRepo ? slugOf(given.githubRepo) : null
+  const { slug, alias } = given.githubRepo ? originOf(given.githubRepo) : { slug: null, alias: null }
   const repos = listRepos()
+  const sameSlug = (r: schema.Repo) => !!slug && r.githubRepo?.toLowerCase() === slug.toLowerCase()
 
   const key = given.path ? checkoutKey(given.path) : ''
+  const parentOf = (k: string) => k.slice(0, k.lastIndexOf('/'))
   const atPath = (r: schema.Repo) => !!key && checkoutKey(r.repoPath) === key
   const under = (r: schema.Repo) => !!key && checkoutKey(r.repoPath).startsWith(`${key}/`)
+  const inside = (r: schema.Repo) => !!key && key.startsWith(`${checkoutKey(r.repoPath)}/`)
   // The folder the agent named, else the last segment of its path: the same repo checked out on Windows
   // and in WSL, or on another machine, sits under another path with the same folder name.
   const named = given.folder || given.path
   const folder = named ? folderOf(named).toLowerCase() : ''
   const inFolder = (r: schema.Repo) => !!folder && folderOf(r.repoPath).toLowerCase() === folder
+  const beside = (r: schema.Repo) =>
+    !!key &&
+    key.includes('/') &&
+    parentOf(checkoutKey(r.repoPath)) === parentOf(key) &&
+    folder.startsWith(`${folderOf(r.repoPath).toLowerCase()}-`)
 
   let hits: schema.Repo[] = []
   let by: By | null = null
   if (slug) {
-    hits = repos.filter((r) => r.githubRepo?.toLowerCase() === slug.toLowerCase())
+    hits = repos.filter(sameSlug)
     by = 'githubRepo'
     // The same GitHub repo registered more than once: the checkout's own path or folder picks among them.
     if (hits.length > 1) {
-      const narrowed = [atPath, inFolder].map((f) => hits.filter(f)).find((h) => h.length)
+      const narrowed = [atPath, inside, inFolder].map((f) => hits.filter(f)).find((h) => h.length)
       if (narrowed) hits = narrowed
     }
   }
@@ -131,29 +159,55 @@ export function findProject(where: Where): Found {
     for (const [test, kind] of [
       [atPath, 'path'],
       [under, 'path'],
+      [inside, 'inside'],
       [inFolder, 'folder'],
+      [beside, 'beside'],
     ] as const) {
       hits = repos.filter(test)
       by = kind
       if (hits.length) break
     }
+    // Checkouts nested in one another: the path belongs to the innermost.
+    if (by === 'inside' && hits.length > 1) {
+      const depth = (r: schema.Repo) => checkoutKey(r.repoPath).length
+      const deepest = Math.max(...hits.map(depth))
+      hits = hits.filter((r) => depth(r) === deepest)
+    }
   }
-  if (!hits.length || !by) return { match: 'none', message: noProject(given, slug) }
+  if (!hits.length || !by) return { match: 'none', message: noProject(given, slug, alias) }
 
-  // A hit by path or folder on a repo whose GitHub repo is another than the one given may be another
-  // repository that only shares the folder: it is returned, marked as weak, never taken silently.
-  const others =
-    slug && by !== 'githubRepo'
-      ? hits.filter((r) => r.githubRepo && r.githubRepo.toLowerCase() !== slug.toLowerCase())
-      : []
-  const weak = others.length ? { weak: true as const } : {}
-  const caution = others.length
-    ? ` Careful: your origin is ${slug}, but ${others.map((r) => `${r.name} is ${r.githubRepo}`).join(', ')} on the board: this may be another repository with the same ${by}; confirm with the human before using it.`
+  // A hit that may be another repository than the agent's is returned marked as weak, never taken
+  // silently: a slug read from an ssh host that is not github.com; a path or folder hit on a repo whose
+  // GitHub repo is another than the one given; a path inside a checkout whose GitHub repo the origin does
+  // not confirm; and a folder beside a checkout, which only its name ties to it.
+  const cautions: string[] = []
+  if (by === 'githubRepo' && alias)
+    cautions.push(
+      `your origin's host is ${alias}, not github.com, so ${slug} is read from its path only: this may be another repository`,
+    )
+  if (slug && (by === 'path' || by === 'folder' || by === 'inside')) {
+    const others = hits.filter((r) => (by === 'inside' ? !sameSlug(r) : r.githubRepo && !sameSlug(r)))
+    if (others.length)
+      cautions.push(
+        `your origin is ${slug}, but ${others.map((r) => `${r.name} is ${r.githubRepo ?? 'no GitHub repo'}`).join(', ')} on the board: this may be another repository ${by === 'inside' ? 'checked out inside it' : `with the same ${by}`}`,
+      )
+  }
+  if (by === 'beside')
+    cautions.push(
+      `your checkout only sits beside ${hits.map((r) => r.repoPath).join(', ')} with a name that starts like it: it may be a worktree of it, or another repository`,
+    )
+  const weak = cautions.length ? { weak: true as const } : {}
+  const caution = cautions.length
+    ? ` Careful: ${cautions.join('; ')}; confirm with the human before using it.`
     : ''
 
   const names = projectNames([...new Set(hits.map((r) => r.projectId))])
   const what =
-    by === 'githubRepo' ? `GitHub repo ${slug}` : by === 'path' ? `path ${given.path}` : `folder ${folder}`
+    by === 'githubRepo'
+      ? `GitHub repo ${slug}`
+      : by === 'path' || by === 'inside'
+        ? `path ${given.path}`
+        : `folder ${folder}`
   if (names.size > 1) {
     return {
       match: 'ambiguous',
@@ -202,12 +256,19 @@ function projectNames(ids: number[]) {
   return new Map(rows.map((p) => [p.id, p.name]))
 }
 
-function noProject(given: { githubRepo: string; folder: string; path: string }, slug: string | null) {
+function noProject(
+  given: { githubRepo: string; folder: string; path: string },
+  slug: string | null,
+  alias: string | null,
+) {
+  const origin = given.githubRepo.replace(/\/\/[^@/]+@/, '//')
   const asked = [
     given.githubRepo &&
-      (slug
+      (slug && !alias
         ? `GitHub repo ${slug}`
-        : `origin ${given.githubRepo.replace(/\/\/[^@/]+@/, '//')} (not a GitHub repo)`),
+        : slug
+          ? `origin ${origin} (read as ${slug})`
+          : `origin ${origin} (not a GitHub repo)`),
     given.folder && `folder ${given.folder}`,
     given.path && `path ${given.path}`,
   ].filter(Boolean)
