@@ -23,6 +23,7 @@ const MODULES = {
   'nav.agents': '/projects/$id/agents',
   'nav.daily': '/projects/$id/daily',
   'nav.cleanup': '/projects/$id/cleanup',
+  'nav.repositories': '/projects/$id/repositories',
   'nav.settings': '/projects/$id/settings',
 } as const satisfies Record<AreaId<'nav'>, string>
 
@@ -48,7 +49,7 @@ function ProjectLayout() {
             {project && !project.repos.length && (
               <li className="text-xs text-muted-foreground">
                 No repos yet.{' '}
-                <Link to="/repositories" className="underline">
+                <Link to="/projects/$id/repositories" params={{ id }} className="underline">
                   Add one
                 </Link>
               </li>

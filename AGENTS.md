@@ -75,7 +75,7 @@ http_headers = { Authorization = "Bearer <token>" }
    `branch`, `baseBranch`, `prNumber`). `repos` on `create_ticket` and `update_ticket` sets the list,
    `claim_ticket`'s `branch` is the primary's and its `repos` sets each one's branch, `add_workspace`
    takes the `repoId` its worktree is of, and `get_ticket_git` reports every repo.
-   Repos are the human's to add, change and remove (`POST`/`PATCH`/`DELETE /api/repos` answer 403
+   Repos are the human's to add, change and remove, on each project's Repositories page (`POST`/`PATCH`/`DELETE /api/repos` answer 403
    to an agent; an orchestrator only moves one to another project, a `PATCH` of `projectId` alone,
    see "Who is who"). When the work needs one the project lacks (a new repository you are building), ask
    with `add_repo` (step 7); once it is added, `set_ticket_repo` moves your ticket onto it

@@ -52,8 +52,9 @@ pnpm start             # the board on http://localhost:47100, in the background;
 
 1. **Open the board**: the app opens it; from source, `http://localhost:47100/`.
 2. **Create your account**: the first visit goes to `/setup`. Give your name and create a passkey.
-3. **Add a repository** (the path of a local checkout) and the project it belongs to, then pick the
-   project in the top bar. A project can hold several repos.
+3. **Create a project** from the project menu in the top bar, then **add a repository** (the path of
+   a local checkout) on the project's **Repositories** page, in its menu. A project can hold several
+   repos; editing one there moves it to another project.
 4. **Connect your agents**: on Connect agents (`/agents`) pick the CLI, press **Generate commands**, and run the lines it shows in
    your terminal. They add the board's MCP server with a token of its own
    (`claude mcp add --transport http board http://localhost:47100/api/mcp --header "Authorization: Bearer <token>"`)
@@ -105,8 +106,9 @@ Open `http://localhost:47100/` on this machine: with no account yet the board se
 Give your name (filled in with the name the board knew you by, if any) and create a passkey; you are
 signed in. Setup works once, and only on this machine.
 
-Add a repository (path of a local checkout) and the project it belongs to, pick the project in the
-top bar, and you are on. A project can hold several repos; its modules show them all together.
+Create a project from the project menu in the top bar and add a repository (path of a local
+checkout) on its **Repositories** page, and you are on. A project can hold several repos; its
+modules show them all together. `/repositories`, the board-wide page it replaces, leads home.
 
 Agents: each one connects with an agent token (its name is the agent's name on the board) and
 follows `AGENTS.md`. Connect agents (`/agents`) makes the token: pick the CLI, press **Generate
