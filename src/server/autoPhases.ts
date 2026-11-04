@@ -1,10 +1,13 @@
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { type AutoPhase, autoPhaseOf } from '#/lib/autoPhases'
+import { listActors } from './actors'
 import { logActivity } from './activity'
-import { workspacePreviews } from './handoff'
+import { summaryStandIn } from './features'
+import { lastCommitAt } from './git'
 import { managedPreview, type ManagedPreview } from './managedPreview'
+import { isLocalUrl, previewState } from './preview'
 import { getProject } from './projects'
 import { autoPrRow, ciGreen, prsKnown, prWasMerged } from './prs'
 import { type Push, pushStates } from './push'
@@ -12,8 +15,8 @@ import { listRepos, ticketRepo } from './repos'
 import { kindOf, listStages } from './stages'
 
 /**
- * The hand-off phases the board ticks itself (`#/lib/autoPhases`): each follows a fact of git, GitHub or
- * the previews, ticked while it holds and unticked once a read shows it stopped holding. The facts are
+ * The hand-off phases the board ticks itself (`#/lib/autoPhases`): each follows a fact of git, GitHub,
+ * the previews or the ticket's posts, ticked while it holds and unticked once a read shows it stopped holding. The facts are
  * read where the board already looks (a ticket's read, the project's push poll, each PR refresh), and
  * only the phases whose tick differs are written, each logged as the board's.
  */
@@ -31,6 +34,35 @@ export interface AutoFacts {
   pr: Pick<schema.Pr, 'open' | 'mergedAt' | 'leftAs' | 'checks' | 'headSha' | 'localCiSha'> | null | undefined
   /** Whether a preview of one of the ticket's own workspaces runs, or its link answers. */
   preview: boolean
+  /** Whether the summary was written after the last commit (summaryWritten); null when not read. */
+  summary: boolean | null
+}
+
+/** What the Summary phase goes by, from the ticket, git and its posts. */
+export interface SummaryFacts {
+  /** When the branch's last commit was made; null without a branch, or when git cannot tell. */
+  lastCommitAt: string | null
+  /** What the summary must come after when there is no commit to go by: when work last started. */
+  since: string
+  /** The ticket's own posts (not its lanes'); `summary` marks the versions of its summary. */
+  posts: { author: string; progress: boolean; handoff: boolean; summary: boolean; createdAt: string }[]
+  /** The names the human signs in under: what they write does not count. */
+  humans: string[]
+}
+
+const time = (iso: string) => Date.parse(iso)
+
+/**
+ * Whether the ticket's summary is up to date: a version of it written by an agent at or after the
+ * branch's last commit (or, with no commit to go by, since work started). A ticket whose summary was
+ * never written goes by what stands for one (the post summaryStandIn picks): any progress post by an
+ * agent since then, a resume note's versions aside. Once a summary exists only the summary counts.
+ */
+export function summaryWritten(f: SummaryFacts): boolean {
+  const after = time(f.lastCommitAt ?? f.since)
+  const fresh = (u: SummaryFacts['posts'][number]) => !f.humans.includes(u.author) && time(u.createdAt) >= after
+  if (f.posts.some((u) => u.summary)) return f.posts.some((u) => u.summary && fresh(u))
+  return Boolean(summaryStandIn(f.posts.filter(fresh), f.humans))
 }
 
 /** Each phase's rule: ticked, unticked, or null when its facts are not known (the tick stays). */
@@ -49,6 +81,7 @@ export function autoPhaseRules(f: AutoFacts): AutoTicks {
     PR: pr === undefined ? null : live,
     CI: pr === undefined ? null : pr ? live && ciGreen(pr) : false,
     Preview: f.preview,
+    Summary: f.summary,
     // Either fact holding is enough; neither holding counts only when both were read.
     Merged: prMerged || pushMerged ? true : pr === undefined || f.push === null ? null : false,
   }
@@ -189,14 +222,58 @@ export function reconcileAutoPhases(ticketId: number, rules: AutoTicks): boolean
 
 type Workspace = { previewUrl: string; managedPreview: ManagedPreview | null }
 
+/** Every running preview counts: one the board runs, or a link that answers (one off this machine is taken on trust). */
+export async function workspacePreviews(workspaces: Workspace[]): Promise<{ url: string; running: boolean }[]> {
+  return Promise.all(
+    workspaces
+      .filter((w) => w.previewUrl || w.managedPreview?.status === 'running')
+      .map(async (w) => {
+        const url = w.managedPreview?.url ?? w.previewUrl
+        if (w.managedPreview?.status === 'running') return { url, running: true }
+        if (!isLocalUrl(w.previewUrl)) return { url, running: true }
+        return { url, running: (await previewState(w.previewUrl)).running }
+      }),
+  )
+}
+
+type FactsTicket = Pick<
+  schema.Ticket,
+  'id' | 'projectId' | 'repoId' | 'prNumber' | 'branch' | 'createdAt' | 'startedAt'
+>
+
+/**
+ * The Summary phase's facts, read only for a ticket that has the phase: its own posts, and when its
+ * branch's last commit was made (when git cannot tell, work's start stands in, as without a branch).
+ */
+async function summaryFacts(t: FactsTicket, repoPath: string | null): Promise<SummaryFacts | null> {
+  if (!topLevelTasks(t.id).some((task) => autoPhaseOf(task) === 'Summary')) return null
+  const posts = db
+    .select({
+      author: schema.updates.author,
+      progress: schema.updates.progress,
+      handoff: schema.updates.handoff,
+      summary: schema.updates.summary,
+      createdAt: schema.updates.createdAt,
+    })
+    .from(schema.updates)
+    .where(eq(schema.updates.ticketId, t.id))
+    .orderBy(desc(schema.updates.createdAt), desc(schema.updates.id))
+    .all()
+  return {
+    lastCommitAt: repoPath && t.branch ? await lastCommitAt(repoPath, t.branch).catch(() => null) : null,
+    since: t.startedAt ?? t.createdAt,
+    posts,
+    humans: listActors().flatMap((a) => (a.kind === 'human' ? [a.name] : [])),
+  }
+}
+
 /** The facts for a ticket, given its branch's push state as just read (null when there is no repo). */
-async function factsOf(
-  t: Pick<schema.Ticket, 'projectId' | 'repoId' | 'prNumber' | 'branch' | 'createdAt'>,
-  push: Push | null,
-  workspaces: Workspace[],
-): Promise<AutoFacts> {
+async function factsOf(t: FactsTicket, push: Push | null, workspaces: Workspace[]): Promise<AutoFacts> {
   const repo = ticketRepo(t)
-  const previews = await workspacePreviews(workspaces)
+  const [previews, summary] = await Promise.all([
+    workspacePreviews(workspaces),
+    summaryFacts(t, repo?.repoPath ?? null),
+  ])
   return {
     push: repo && push && !push.unknown ? push : null,
     pr: !repo
@@ -207,6 +284,7 @@ async function factsOf(
           ? autoPrRow(t, repo.id)
           : undefined,
     preview: previews.some((p) => p.running),
+    summary: summary ? summaryWritten(summary) : null,
   }
 }
 
@@ -215,10 +293,7 @@ async function factsOf(
  * workspaces with their previews. True when a task changed.
  */
 export async function reconcileTicket(
-  t: Pick<
-    schema.Ticket,
-    'id' | 'projectId' | 'repoId' | 'prNumber' | 'branch' | 'createdAt' | 'archivedAt' | 'prId'
-  >,
+  t: FactsTicket & Pick<schema.Ticket, 'archivedAt' | 'prId'>,
   push: Push | null,
   workspaces: Workspace[],
 ): Promise<boolean> {

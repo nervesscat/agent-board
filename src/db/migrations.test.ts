@@ -798,7 +798,8 @@ describe('0037_drop_handoff_post_phase', () => {
       expect(progress('ticket_id = ?', most)).toEqual({ done: 4, total: 7 })
       expect(progress(rollup, full, full)).toEqual({ done: 4, total: 5 })
 
-      migrate(drizzle(sqlite), { migrationsFolder: folder })
+      // Up to this migration only: a later one (0042_summary_phase) adds a phase to these tickets.
+      migrate(drizzle(sqlite), { migrationsFolder: migrationsUpTo('0037_drop_handoff_post_phase') })
 
       expect(rows("parent_id IS NULL AND lower(trim(text)) = 'hand-off post'")).toEqual([])
       expect(rows('parent_id IS NOT NULL AND parent_id NOT IN (SELECT id FROM tasks)')).toEqual([])
@@ -1013,6 +1014,210 @@ describe('0041_repo_requests', () => {
     expect(after.map(({ repo_request: _r, ...rest }) => rest)).toEqual(before)
     expect(after.map((u) => u.repo_request)).toEqual([null])
     expect(sqlite.prepare('SELECT update_id FROM attachments').all()).toEqual([{ update_id: card }])
+    sqlite.close()
+  })
+})
+
+describe('0042_summary_phase', () => {
+  it('adds Summary to open tickets with the hand-off phases, before Merged, and to lists equal to the built-in one', () => {
+    const sqlite = databaseAt('0041_repo_requests')
+    const project = (phases: string | null) =>
+      Number(
+        sqlite.prepare('INSERT INTO projects (name, default_phases) VALUES (?, ?)').run('p', phases)
+          .lastInsertRowid,
+      )
+    const builtIn = project(null)
+    const oldList = project('["Implementation","Pushed","PR","CI","Preview","Merged"]')
+    const spaced = project('[" implementation ","PUSHED","pr","Ci","preview\\n","merged"]')
+    const removed = project('["Implementation","Pushed","PR","Merged"]')
+    const renamed = project('["Implementation","Pushed","PR","CI","Demo","Merged"]')
+    const reordered = project('["Implementation","PR","Pushed","CI","Preview","Merged"]')
+    const added = project('["Implementation","Pushed","PR","CI","Preview","Merged","Docs"]')
+    const none = project('[]')
+    const stage = sqlite.prepare('INSERT INTO stages (project_id, key, name, kind) VALUES (?, ?, ?, ?)')
+    for (const [key, kind] of [
+      ['todo', 'open'],
+      ['in_progress', 'active'],
+      ['review', 'review'],
+      ['done', 'done'],
+      ['cancelled', 'cancelled'],
+      ['shipped', 'done'],
+    ])
+      stage.run(builtIn, key, key, kind)
+
+    const ticket = (
+      title: string,
+      extra: { status?: string; archivedAt?: string; parentId?: number; prId?: number } = {},
+    ) =>
+      Number(
+        sqlite
+          .prepare(
+            'INSERT INTO tickets (project_id, title, created_by, status, archived_at, parent_id, pr_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          )
+          .run(
+            builtIn,
+            title,
+            'claude',
+            extra.status ?? 'in_progress',
+            extra.archivedAt ?? null,
+            extra.parentId ?? null,
+            extra.prId ?? null,
+          ).lastInsertRowid,
+      )
+    const task = (ticketId: number, text: string, position: number, done = false, parentId?: number) =>
+      Number(
+        sqlite
+          .prepare('INSERT INTO tasks (ticket_id, text, position, done, parent_id) VALUES (?, ?, ?, ?, ?)')
+          .run(ticketId, text, position, done ? 1 : 0, parentId ?? null).lastInsertRowid,
+      )
+    /** Seeded as addTasks does: the steps take positions after their phase, the phases after them. */
+    const phased = (ticketId: number, phases: string[], doneUpTo = 0) => {
+      let position = 0
+      for (const [i, text] of phases.entries()) {
+        const id = task(ticketId, text, position++, i < doneUpTo)
+        if (text === 'Implementation') task(ticketId, 'step', position++, i < doneUpTo, id)
+      }
+    }
+    const BUILT_IN_OLD = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Merged']
+
+    const open = ticket('Open')
+    phased(open, BUILT_IN_OLD, 3)
+    const inReview = ticket('In review', { status: 'review' })
+    phased(inReview, BUILT_IN_OLD, 5)
+    const noMerged = ticket('No Merged')
+    phased(noMerged, ['Implementation', 'Pushed', 'PR'])
+    // Merged sharing its position with an earlier phase (older rows): Summary still lands between them.
+    const shared = ticket('Shared positions')
+    task(shared, 'Implementation', 0)
+    task(shared, 'Preview', 1)
+    task(shared, ' MERGED ', 1)
+    task(shared, 'Notes', 2)
+    // Not touched: these.
+    const hasSummary = ticket('Has Summary')
+    phased(hasSummary, ['Implementation', 'Pushed', ' summary ', 'Merged'])
+    // A step named Summary is an ordinary task: the ticket still gets the phase.
+    const subSummary = ticket('Summary as a step only')
+    const subImpl = task(subSummary, 'Implementation', 0)
+    task(subSummary, 'Summary', 1, false, subImpl)
+    task(subSummary, 'Merged', 2)
+    const done = ticket('Done', { status: 'done' })
+    phased(done, BUILT_IN_OLD, 6)
+    const shipped = ticket('Shipped', { status: 'shipped' })
+    phased(shipped, BUILT_IN_OLD, 6)
+    const cancelled = ticket('Cancelled', { status: 'cancelled' })
+    phased(cancelled, BUILT_IN_OLD)
+    const archived = ticket('Archived', { archivedAt: '2026-10-01' })
+    phased(archived, BUILT_IN_OLD)
+    // A PR's own ticket, from the queue.
+    const repo = Number(
+      sqlite
+        .prepare("INSERT INTO repos (project_id, name, repo_path) VALUES (?, 'r', '/code/r')")
+        .run(builtIn).lastInsertRowid,
+    )
+    const prRow = Number(
+      sqlite
+        .prepare(
+          "INSERT INTO prs (project_id, repo_id, number, title, url, author, head_ref, base_ref, head_sha, updated_at, fetched_at) VALUES (?, ?, 7, 't', 'u', 'a', 'h', 'main', 's', 'x', 'x')",
+        )
+        .run(builtIn, repo).lastInsertRowid,
+    )
+    const prTicket = ticket('A PR', { prId: prRow })
+    phased(prTicket, BUILT_IN_OLD)
+    const lane = ticket('Lane without phases', { parentId: open })
+    task(lane, 'Implementation', 0)
+    task(lane, 'Write it', 1)
+    const plain = ticket('No tasks')
+
+    const tasks = () => sqlite.prepare('SELECT * FROM tasks ORDER BY id').all() as Record<string, unknown>[]
+    const before = {
+      tasks: tasks(),
+      tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all(),
+      lists: sqlite.prepare('SELECT id, default_phases FROM projects ORDER BY id').all(),
+    }
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const order = (ticketId: number) =>
+      (
+        sqlite
+          .prepare('SELECT text FROM tasks WHERE ticket_id = ? AND parent_id IS NULL ORDER BY position, id')
+          .all(ticketId) as { text: string }[]
+      ).map((r) => r.text)
+    const phases = ['Implementation', 'Pushed', 'PR', 'CI', 'Preview', 'Summary', 'Merged']
+    const tree = (ticketId: number) =>
+      (
+        sqlite
+          .prepare('SELECT text, parent_id FROM tasks WHERE ticket_id = ? ORDER BY position, id')
+          .all(ticketId) as { text: string; parent_id: number | null }[]
+      ).map((r) => (r.parent_id ? `- ${r.text}` : r.text))
+    expect(order(open)).toEqual(phases)
+    expect(order(inReview)).toEqual(phases)
+    expect(order(noMerged)).toEqual(['Implementation', 'Pushed', 'PR', 'Summary'])
+    expect(order(shared)).toEqual(['Implementation', 'Preview', 'Summary', ' MERGED ', 'Notes'])
+    expect(tree(subSummary)).toEqual(['Implementation', '- Summary', 'Summary', 'Merged'])
+    // A step keeps its place under its phase, in the tree as the page reads it.
+    expect(tree(open)).toEqual([
+      'Implementation',
+      '- step',
+      'Pushed',
+      'PR',
+      'CI',
+      'Preview',
+      'Summary',
+      'Merged',
+    ])
+    // Added unticked, never blocked, once.
+    const summaries = sqlite
+      .prepare(
+        "SELECT ticket_id, done, blocked, blocked_reason FROM tasks WHERE text = 'Summary' AND parent_id IS NULL ORDER BY ticket_id",
+      )
+      .all()
+    expect(summaries).toEqual(
+      [open, inReview, noMerged, shared, subSummary].map((ticket_id) => ({
+        ticket_id,
+        done: 0,
+        blocked: 0,
+        blocked_reason: '',
+      })),
+    )
+    // Every row that was there is there, as it was but for the positions that made room.
+    const after = tasks()
+    const moved = new Set([open, inReview, shared, subSummary])
+    expect(after.slice(0, before.tasks.length).map(({ position: _p, ...rest }) => rest)).toEqual(
+      before.tasks.map(({ position: _p, ...rest }) => rest),
+    )
+    expect(
+      after
+        .slice(0, before.tasks.length)
+        .filter((t) => !moved.has(t.ticket_id as number))
+        .map((t) => t.position),
+    ).toEqual(before.tasks.filter((t) => !moved.has(t.ticket_id as number)).map((t) => t.position))
+    expect(after).toHaveLength(before.tasks.length + 5)
+    for (const id of [hasSummary, done, shipped, cancelled, archived, prTicket, lane, plain])
+      expect(after.filter((t) => t.ticket_id === id)).toEqual(before.tasks.filter((t) => t.ticket_id === id))
+    expect(sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()).toEqual(before.tickets)
+
+    const list = (id: number) =>
+      (
+        sqlite.prepare('SELECT default_phases FROM projects WHERE id = ?').get(id) as {
+          default_phases: string | null
+        }
+      ).default_phases
+    expect(list(builtIn)).toBeNull()
+    expect(JSON.parse(list(oldList)!)).toEqual(phases)
+    expect(JSON.parse(list(spaced)!)).toEqual([
+      ' implementation ',
+      'PUSHED',
+      'pr',
+      'Ci',
+      'preview\n',
+      'Summary',
+      'merged',
+    ])
+    const lists = new Map(
+      (before.lists as { id: number; default_phases: string | null }[]).map((r) => [r.id, r.default_phases]),
+    )
+    for (const id of [removed, renamed, reordered, added, none]) expect(list(id)).toBe(lists.get(id))
     sqlite.close()
   })
 })
