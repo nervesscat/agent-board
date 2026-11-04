@@ -312,16 +312,24 @@ function TagFilter({
   } = useInfiniteQuery({
     queryKey: [...tagsKey(projectId), searched, current],
     queryFn: ({ pageParam }) => {
-      const params = new URLSearchParams({ offset: String(pageParam) })
+      const params = new URLSearchParams()
+      if (pageParam) params.set('cursor', pageParam)
       if (searched) params.set('q', searched)
       if (current) params.set('include', current)
-      return get<{ tags: string[]; next: number | null }>(`/api/projects/${projectId}/tags?${params}`)
+      return get<{ tags: string[]; next: string | null }>(`/api/projects/${projectId}/tags?${params}`)
     },
-    initialPageParam: 0,
+    initialPageParam: '',
     getNextPageParam: (last) => last.next ?? undefined,
     enabled: open,
   })
-  const shown = data?.pages.flatMap((p) => p.tags) ?? []
+  // Each tag once in any casing, whatever the pages hold: an option is keyed by its tag.
+  const shown = useMemo(() => {
+    const seen = new Set<string>()
+    return (data?.pages.flatMap((p) => p.tags) ?? []).filter((t) => {
+      const key = t.toLowerCase()
+      return !seen.has(key) && Boolean(seen.add(key))
+    })
+  }, [data])
   // Typed but not asked yet, or asked and not answered: the list says nothing about this search yet.
   const waiting = query.trim() !== searched || isPending
   const choices: TagChoice[] = [ALL_TAGS, ...(waiting ? [] : shown)]

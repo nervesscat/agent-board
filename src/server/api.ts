@@ -275,7 +275,7 @@ api.get('/api/projects/:id/tags', ({ params, url }) => {
     {
       q: q.get('q') ?? undefined,
       include: q.get('include') ?? undefined,
-      offset: num('offset'),
+      cursor: q.get('cursor') ?? undefined,
       limit: num('limit'),
     },
     'query',

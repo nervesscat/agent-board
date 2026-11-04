@@ -42,9 +42,9 @@ async function expectBoundedAndScrolling(page: Page) {
   expect(popup!.height).toBeLessThan(b.viewport)
 }
 
-/** The tag filter's pages from the server; `offset` 0 is the first. */
+/** The tag filter's pages from the server; no `cursor` is the first. */
 const TAGS = '**/api/projects/*/tags?*'
-const offsetOf = (url: string) => Number(new URL(url).searchParams.get('offset') ?? 0)
+const cursorOf = (url: string) => new URL(url).searchParams.get('cursor') ?? ''
 const searchOf = (url: string) => new URL(url).searchParams.get('q') ?? ''
 const loading = (page: Page) => page.getByRole('status').filter({ hasText: 'Loading tags…' })
 
@@ -55,11 +55,11 @@ test('many tags scroll inside the tag filter, a page at a time from the server, 
 }) => {
   await ok(human.patch(`/api/projects/${project.id}`, { data: { tagSuggestions: MANY } }))
   // The pages after the first are held a moment, long enough to see them loading.
-  const asked: number[] = []
+  const asked: string[] = []
   await page.route(TAGS, async (route) => {
-    const offset = offsetOf(route.request().url())
-    asked.push(offset)
-    if (offset > 0) await new Promise((r) => setTimeout(r, 600))
+    const cursor = cursorOf(route.request().url())
+    asked.push(cursor)
+    if (cursor) await new Promise((r) => setTimeout(r, 600))
     await route.continue()
   })
   await page.goto(`/projects/${project.id}/features?view=board`)
@@ -68,7 +68,7 @@ test('many tags scroll inside the tag filter, a page at a time from the server, 
   await expect(options(page)).toHaveCount(21)
   await expect(options(page).first()).toHaveText('All tags')
   await expect(options(page).last()).toHaveText('Module 20')
-  expect(asked).toEqual([0])
+  expect(asked).toEqual([''])
   await expectBoundedAndScrolling(page)
   // The tags come in with an animation.
   await expect(page.getByRole('option', { name: 'Module 1', exact: true })).not.toHaveCSS(
@@ -86,7 +86,9 @@ test('many tags scroll inside the tag filter, a page at a time from the server, 
   await expect(options(page)).toHaveCount(51)
   // All there: nothing more to load, and no page asked twice.
   await expect(page.locator('[data-slot="more-tags"]')).toHaveCount(0)
-  expect(asked).toEqual([0, 20, 40])
+  expect(asked).toHaveLength(3)
+  expect(asked[0]).toBe('')
+  expect(new Set(asked).size).toBe(3)
   const last = page.getByRole('option', { name: 'Module 50' })
   await last.scrollIntoViewIfNeeded()
   await expect(last).toBeInViewport()

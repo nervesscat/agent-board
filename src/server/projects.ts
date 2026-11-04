@@ -1,3 +1,5 @@
+import { deflateRawSync, inflateRawSync } from 'node:zlib'
+
 import { asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -102,10 +104,37 @@ export type ProjectFull = ReturnType<typeof getProjectFull>
 export const TAGS_PAGE = 20
 export const TAGS_PAGE_MAX = 50
 
+/**
+ * Where a page of `projectTags` goes on from: the tags the pages before it gave, each in lower case,
+ * packed into a URL-safe string. Empty is the first page.
+ */
+const tagsCursor = (sent: readonly string[]) =>
+  sent.length ? deflateRawSync(JSON.stringify(sent.map((t) => t.toLowerCase()))).toString('base64url') : ''
+
+// Unpacked, a cursor holds a few kilobytes at most: more is no cursor `tagsCursor` made.
+const CURSOR_MAX_BYTES = 1 << 20
+
+const TagsCursor = z
+  .string()
+  .max(65_536)
+  .regex(/^[\w-]*$/, 'not a cursor')
+  .transform((raw, ctx) => {
+    if (!raw) return new Set<string>()
+    try {
+      const text = inflateRawSync(Buffer.from(raw, 'base64url'), { maxOutputLength: CURSOR_MAX_BYTES })
+      const sent = z.array(z.string()).safeParse(JSON.parse(text.toString('utf8')))
+      if (sent.success) return new Set(sent.data)
+    } catch {
+      // Not packed by `tagsCursor`: said below.
+    }
+    ctx.addIssue({ code: 'custom', message: 'not a cursor' })
+    return z.NEVER
+  })
+
 export const TagsQuery = z.object({
   q: z.string().max(200).default(''),
   include: z.string().max(200).default(''),
-  offset: z.number().int().min(0).default(0),
+  cursor: TagsCursor.prefault(''),
   // More than a page holds is a page that full, not a mistake.
   limit: z
     .number()
@@ -120,17 +149,24 @@ export type TagsQuery = z.input<typeof TagsQuery>
  * One page of the tags the project offers to filter by, as the tag filter lists them: its suggestions,
  * then the tags its tickets carry (most used first), each once in the casing to reuse (`tagChoices`).
  * `include`, a tag none of those is in any casing (one from a link), goes first. `q` keeps the tags
- * holding it in any casing (`matchTags`). `next` is the offset of the page after, null after the last.
+ * holding it in any casing (`matchTags`). `next` is the cursor of the page after, null after the last.
+ *
+ * The list is built again for every page, and its order moves when a ticket's tags change, so a page
+ * is not a slice at an offset (that would give a tag that moved down again and miss one that moved
+ * up): the cursor carries the tags already given, and a page is the first `limit` of the others. No
+ * tag comes twice in any casing, and every tag still offered comes before `next` is null.
  */
-export function projectTags(projectId: number, query: TagsQuery = {}) {
-  const { q, include, offset, limit } = TagsQuery.parse(query)
+export function projectTags(
+  projectId: number,
+  { q, include, cursor: sent, limit }: z.output<typeof TagsQuery>,
+) {
   const project = getProject(projectId)
   const tags = tagChoices(project.tagSuggestions, projectUsedTags(projectId), [])
   const extra = include.trim()
   const known = !extra || tags.some((t) => t.toLowerCase() === extra.toLowerCase())
-  const matching = matchTags(known ? tags : [extra, ...tags], q)
-  const end = offset + limit
-  return { tags: matching.slice(offset, end), next: end < matching.length ? end : null }
+  const rest = matchTags(known ? tags : [extra, ...tags], q).filter((t) => !sent.has(t.toLowerCase()))
+  const page = rest.slice(0, limit)
+  return { tags: page, next: rest.length > limit ? tagsCursor([...sent, ...page]) : null }
 }
 
 /**

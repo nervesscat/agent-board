@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { deflateRawSync } from 'node:zlib'
 
 import { beforeAll, describe, expect, it } from 'vitest'
 
@@ -57,7 +58,7 @@ function send(target: string, token: string | null = TOKEN) {
   )
 }
 
-type Page = { tags: string[]; next: number | null }
+type Page = { tags: string[]; next: string | null }
 async function page(target: string): Promise<Page> {
   const res = await send(target)
   expect(res.status, target).toBe(200)
@@ -73,16 +74,19 @@ function newTicket(projectId: number, tags: string[]) {
   dbm.db.insert(dbm.schema.tickets).values({ projectId, title: 'A ticket', createdBy: 'claude', tags }).run()
 }
 
-/** Every page of `target` (no `offset` in it), following `next`, with `limit` each. */
+/** `target` with the page `cursor` asks for (none: the first) and `limit`. */
+function at(target: string, cursor: string | null, limit?: number) {
+  const params = new URLSearchParams()
+  if (cursor) params.set('cursor', cursor)
+  if (limit) params.set('limit', String(limit))
+  const sep = target.includes('?') ? '&' : '?'
+  return params.size ? `${target}${sep}${params}` : target
+}
+
+/** Every page of `target` (no `cursor` in it), following `next`, with `limit` each. */
 async function allPages(target: string, limit?: number) {
-  const pages: Page[] = []
-  let offset: number | null = 0
-  while (offset !== null) {
-    const sep = target.includes('?') ? '&' : '?'
-    const p = await page(`${target}${sep}offset=${offset}${limit ? `&limit=${limit}` : ''}`)
-    pages.push(p)
-    offset = p.next
-  }
+  const pages: Page[] = [await page(at(target, null, limit))]
+  while (pages.at(-1)!.next !== null) pages.push(await page(at(target, pages.at(-1)!.next, limit)))
   return pages
 }
 
@@ -103,13 +107,12 @@ describe('GET /api/projects/:id/tags', () => {
 
   it('pages through every tag in the order the filter shows them, without gaps or repeats', async () => {
     const first = await page(`/api/projects/${main}/tags`)
-    expect(first).toEqual({ tags: MANY.slice(0, 20), next: 20 })
-    const second = await page(`/api/projects/${main}/tags?offset=20`)
-    expect(second).toEqual({ tags: MANY.slice(20, 40), next: 40 })
-    const last = await page(`/api/projects/${main}/tags?offset=40`)
+    expect(first.tags).toEqual(MANY.slice(0, 20))
+    expect(first.next).toMatch(/^[\w-]+$/)
+    const second = await page(at(`/api/projects/${main}/tags`, first.next))
+    expect(second.tags).toEqual(MANY.slice(20, 40))
+    const last = await page(at(`/api/projects/${main}/tags`, second.next))
     expect(last).toEqual({ tags: [...MANY.slice(40), 'ui', 'Bug'], next: null })
-    // Past the end: nothing, and no more.
-    expect(await page(`/api/projects/${main}/tags?offset=60`)).toEqual({ tags: [], next: null })
 
     for (const limit of [7, 20, 50]) {
       const pages = await allPages(`/api/projects/${main}/tags`, limit)
@@ -157,6 +160,44 @@ describe('GET /api/projects/:id/tags', () => {
     expect(await page(`/api/projects/${main}/tags?include=Zeta&q=bug`)).toEqual({ tags: ['Bug'], next: null })
   })
 
+  it('follows next without a repeat or a gap while the order moves under it', async () => {
+    // Used tags only, most used first: high 3, Bug 2, then once each in the order first seen.
+    const moving = newProject('Moving', [])
+    for (const tags of [
+      ['high', 'Bug', 'Extra A'],
+      ['high', 'Bug', 'UI'],
+      ['high', 'Extra B', 'critical'],
+      ['Extra C', 'low'],
+    ])
+      newTicket(moving, tags)
+    const target = `/api/projects/${moving}/tags`
+    const before = ['high', 'Bug', 'Extra A', 'UI', 'Extra B', 'critical', 'Extra C', 'low']
+    expect((await allPages(target)).flatMap((p) => p.tags)).toEqual(before)
+
+    const first = await page(at(target, null, 3))
+    expect(first.tags).toEqual(['high', 'Bug', 'Extra A'])
+    // Between the pages, a tag of the next page and one further on move up past the first page's
+    // end, and one in another casing moves up most: page 1 at the same offset would now end there.
+    newTicket(moving, ['Extra C', 'UI', 'EXTRA b'])
+    newTicket(moving, ['Extra C', 'extra b'])
+    newTicket(moving, ['extra b'])
+    const rest = [first]
+    while (rest.at(-1)!.next !== null) rest.push(await page(at(target, rest.at(-1)!.next, 3)))
+    const tags = rest.flatMap((p) => p.tags)
+    expect(new Set(tags.map((t) => t.toLowerCase())).size).toBe(tags.length)
+    const keys = (list: string[]) => list.map((t) => t.toLowerCase()).sort()
+    expect(keys(tags)).toEqual(keys(before))
+    // The pages after the first hold the rest in the order the list has now (where the first page's
+    // offset would give 'UI', 'Extra A', 'critical', 'low': 'Extra A' again, 'extra b' and 'Extra C' never).
+    expect(tags.slice(3)).toEqual(['extra b', 'Extra C', 'UI', 'critical', 'low'])
+    // A tag new since the first page comes too, once, after those not given yet.
+    newTicket(moving, ['brand new'])
+    expect(await page(at(target, rest[1].next, 50))).toEqual({
+      tags: ['critical', 'low', 'brand new'],
+      next: null,
+    })
+  })
+
   it("gives only the project's own tags", async () => {
     const tags = (await allPages(`/api/projects/${main}/tags`)).flatMap((p) => p.tags)
     expect(tags).not.toContain('Secret')
@@ -171,16 +212,18 @@ describe('GET /api/projects/:id/tags', () => {
   it('clamps the limit to 50 and refuses what is no page', async () => {
     const big = await page(`/api/projects/${main}/tags?limit=1000`)
     expect(big.tags).toEqual(MANY)
-    expect(big.next).toBe(50)
+    expect(big.next).not.toBeNull()
     expect((await page(`/api/projects/${main}/tags?limit=1`)).tags).toEqual(['Module 1'])
     for (const bad of [
       'limit=0',
       'limit=-3',
       'limit=2.5',
       'limit=ten',
-      'offset=-1',
-      'offset=1.5',
-      'offset=x',
+      'cursor=x',
+      'cursor=%21%21',
+      `cursor=${Buffer.from('[1]').toString('base64url')}`,
+      `cursor=${deflateRawSync('{"tags":["a"]}').toString('base64url')}`,
+      `cursor=${deflateRawSync('[1]').toString('base64url')}`,
     ]) {
       const res = await send(`/api/projects/${main}/tags?${bad}`)
       expect(res.status, bad).toBe(400)
