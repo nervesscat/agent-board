@@ -230,6 +230,39 @@ describe('find_project', () => {
     expect((await find({ path: '/mnt/d/Code/wsl-onex' })).found.match).toBe('none')
   })
 
+  it('takes the checkout’s own path over owner/name read from an ssh host that is not github.com', async () => {
+    // A GitLab clone registered at its path, with no GitHub repo, whose owner/name a GitHub repo shares.
+    const { found, text } = await find({
+      githubRepo: 'git@gitlab.com:acme/shop-back.git',
+      path: '/mnt/d/Code/wsl-one',
+    })
+    expect(one(found)).toMatchObject({ by: 'path', repoId: ids.repo['tools-wsl'] })
+    onlyMentions(text, ['tools-wsl'])
+    // So does the checkout it is nested in.
+    expect(
+      one(
+        (await find({ githubRepo: 'git@gitlab.com:acme/shop-back.git', path: '/mnt/d/Code/wsl-one/.wt-1' }))
+          .found,
+      ),
+    ).toMatchObject({ by: 'inside', repoId: ids.repo['tools-wsl'] })
+  })
+
+  it('marks as weak a path inside a checkout whose GitHub repo the origin given contradicts', async () => {
+    // A clone of another host nested in a GitHub repo's checkout, e.g. a vendored library.
+    for (const githubRepo of ['https://gitlab.com/other/lib.git', 'git@gitlab.com:other/lib.git']) {
+      const { found } = await find({ githubRepo, folder: 'lib', path: '/home/me/shop/back/vendor/lib' })
+      expect(one(found)).toMatchObject({ by: 'inside', repoId: ids.repo['shop-back'], weak: true })
+      expect(found.message).toContain('checked out inside it')
+    }
+    // A worktree of a repo with no GitHub repo, given its own non-GitHub origin, is nothing to doubt.
+    const { found } = await find({
+      githubRepo: 'https://gitlab.com/acme/wsl-one.git',
+      path: '/mnt/d/Code/wsl-one/.wt-pr14',
+    })
+    expect(one(found)).toMatchObject({ by: 'inside', repoId: ids.repo['tools-wsl'] })
+    expect(found).not.toHaveProperty('weak')
+  })
+
   it('finds a repo by its folder name without a slug, or when the slug matches nothing', async () => {
     expect(one((await find({ folder: 'tools-cli' })).found)).toMatchObject({
       by: 'folder',

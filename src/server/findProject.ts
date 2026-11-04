@@ -146,7 +146,18 @@ export function findProject(where: Where): Found {
 
   let hits: schema.Repo[] = []
   let by: By | null = null
-  if (slug) {
+  // A slug read from an ssh host that is not github.com is only a guess: the checkout's own path, or the
+  // checkout it sits in, wins over it.
+  if (alias)
+    for (const [test, kind] of [
+      [atPath, 'path'],
+      [inside, 'inside'],
+    ] as const) {
+      hits = repos.filter(test)
+      by = kind
+      if (hits.length) break
+    }
+  if (slug && !hits.length) {
     hits = repos.filter(sameSlug)
     by = 'githubRepo'
     // The same GitHub repo registered more than once: the checkout's own path or folder picks among them.
@@ -167,12 +178,12 @@ export function findProject(where: Where): Found {
       by = kind
       if (hits.length) break
     }
-    // Checkouts nested in one another: the path belongs to the innermost.
-    if (by === 'inside' && hits.length > 1) {
-      const depth = (r: schema.Repo) => checkoutKey(r.repoPath).length
-      const deepest = Math.max(...hits.map(depth))
-      hits = hits.filter((r) => depth(r) === deepest)
-    }
+  }
+  // Checkouts nested in one another: the path belongs to the innermost.
+  if (by === 'inside' && hits.length > 1) {
+    const depth = (r: schema.Repo) => checkoutKey(r.repoPath).length
+    const deepest = Math.max(...hits.map(depth))
+    hits = hits.filter((r) => depth(r) === deepest)
   }
   if (!hits.length || !by) return { match: 'none', message: noProject(given, slug, alias) }
 
@@ -185,11 +196,15 @@ export function findProject(where: Where): Found {
     cautions.push(
       `your origin's host is ${alias}, not github.com, so ${slug} is read from its path only: this may be another repository`,
     )
-  if (slug && (by === 'path' || by === 'folder' || by === 'inside')) {
-    const others = hits.filter((r) => (by === 'inside' ? !sameSlug(r) : r.githubRepo && !sameSlug(r)))
+  // A path inside a checkout is checked against any origin given, even one that reads as no GitHub repo (a
+  // clone nested in another repo's checkout is another repository); a GitHub origin also does not confirm
+  // a repo with no GitHub repo on the board.
+  const checked = by === 'inside' ? !!given.githubRepo : !!slug && (by === 'path' || by === 'folder')
+  if (checked) {
+    const others = hits.filter((r) => (r.githubRepo ? !sameSlug(r) : by === 'inside' && !!slug))
     if (others.length)
       cautions.push(
-        `your origin is ${slug}, but ${others.map((r) => `${r.name} is ${r.githubRepo ?? 'no GitHub repo'}`).join(', ')} on the board: this may be another repository ${by === 'inside' ? 'checked out inside it' : `with the same ${by}`}`,
+        `your origin is ${slug ?? withoutCredentials(given.githubRepo)}, but ${others.map((r) => `${r.name} is ${r.githubRepo ?? 'no GitHub repo'}`).join(', ')} on the board: this may be another repository ${by === 'inside' ? 'checked out inside it' : `with the same ${by}`}`,
       )
   }
   if (by === 'beside')
@@ -256,12 +271,15 @@ function projectNames(ids: number[]) {
   return new Map(rows.map((p) => [p.id, p.name]))
 }
 
+/** An origin URL as it may be shown back: any `user:password@` after `//` dropped. */
+const withoutCredentials = (origin: string) => origin.replace(/\/\/[^@/]+@/, '//')
+
 function noProject(
   given: { githubRepo: string; folder: string; path: string },
   slug: string | null,
   alias: string | null,
 ) {
-  const origin = given.githubRepo.replace(/\/\/[^@/]+@/, '//')
+  const origin = withoutCredentials(given.githubRepo)
   const asked = [
     given.githubRepo &&
       (slug && !alias
