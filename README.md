@@ -118,8 +118,9 @@ ticked by itself once the board sees it done:
    in your repo run `claude` and say `/board pick up the next ticket`.
 
 Until every step has been done once or you dismiss it, the top bar keeps a **Getting started · 2/4**
-button that opens the list. This browser remembers the dismissal or the completion, per user; the
-same holds in the desktop app.
+button that opens the list. This browser remembers the dismissal or the completion, per user (in its
+storage: another browser shows the button again until it too sees 4 of 4 or a dismissal); the same
+holds in the desktop app.
 
 Create a project from the project menu in the top bar and add a repository (path of a local
 checkout) on its **Repositories** page, and you are on. A project can hold several repos; its

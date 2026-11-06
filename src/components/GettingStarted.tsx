@@ -4,6 +4,7 @@ import { CheckCircle2, Circle, Plus, RefreshCw, Rocket, X } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
+import { Empty } from '#/components/Empty'
 import { NewProject } from '#/components/ProjectSwitcher'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
@@ -43,24 +44,30 @@ function useOnboarding() {
     enabled: human,
   })
   const settled = <T,>(q: { data: T | undefined; isError: boolean }) => (q.isError ? null : q.data)
-  const steps = stepsOf({ tools: settled(tools), projects: settled(projects), tokens: settled(tokens) })
+  // Who is asking decides whether the tokens can be read at all: until /api/me answers they are
+  // loading, and when it fails (or an agent is asking) they count as failed, not loading for good.
+  const tokensFact = human ? settled(tokens) : me.isPending ? undefined : null
+  const steps = stepsOf({ tools: settled(tools), projects: settled(projects), tokens: tokensFact })
   const done = steps.filter((s) => s.done).length
   const user = me.data?.actor ?? ''
 
-  // Read after mount: the server's render has no storage (src/lib/remembered.ts).
-  const [remembered, setRemembered] = useState<Remembered | null>(null)
+  // Read after mount: the server's render has no storage (src/lib/remembered.ts). Kept with the user
+  // it was read for, so the entry waits for it instead of showing for one frame before it is read.
+  const [recalled, setRecalled] = useState<{ user: string; value: Remembered | null } | null>(null)
   useEffect(() => {
-    if (user) setRemembered(recallOnboarding(user))
+    if (user) setRecalled({ user, value: recallOnboarding(user) })
   }, [user])
+  const read = recalled !== null && recalled.user === user
+  const remembered = read ? recalled.value : null
   const remember = (value: Remembered) => {
-    setRemembered(value)
+    setRecalled({ user, value })
     if (user) rememberOnboarding(user, value)
   }
   // Once every step holds, it is done for good: a fact that stops holding later does not bring it back.
   const complete = done === steps.length
   useEffect(() => {
-    if (complete && user && remembered !== 'done') remember('done')
-  }, [complete, user, remembered])
+    if (complete && read && remembered !== 'done') remember('done')
+  }, [complete, read, remembered])
 
   return {
     human,
@@ -68,9 +75,9 @@ function useOnboarding() {
     done,
     remembered,
     remember,
-    pending: steps.some((s) => s.pending) || me.isPending,
+    agent: Boolean(me.data?.agent),
+    pending: steps.some((s) => s.pending) || me.isPending || (Boolean(user) && !read),
     tools: settled(tools),
-    toolsError: tools.error,
     projects: projects.data ?? [],
     errors: { tools: tools.error, project: projects.error, agent: tokens.error, ticket: projects.error },
   }
@@ -82,6 +89,9 @@ type Onboarding = ReturnType<typeof useOnboarding>
 export function GettingStarted() {
   const o = useOnboarding()
   const create = useCreateProject()
+  // The steps are the human's to take; an agent's view keeps the plain empty state.
+  if (o.agent)
+    return <Empty>No projects yet. The human creates the first one from Getting started on Home.</Empty>
   return (
     <Card aria-labelledby="getting-started-title">
       <CardHeader>

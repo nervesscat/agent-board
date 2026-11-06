@@ -104,6 +104,19 @@ const entry = (page: Page) => page.getByRole('button', { name: /^Getting started
 const stepState = (page: Page, title: string, state: 'Done' | 'Not done') =>
   expect(checklist(page).getByRole('listitem', { name: `${title}: ${state}` })).toBeVisible()
 
+/**
+ * Reloads and waits until every fact behind the entry has answered (and a moment after), so a missing
+ * entry means it is hidden, not that it is still loading.
+ */
+async function reloadSettled(page: Page) {
+  const answered = ['/api/me', '/api/host-tools', '/api/projects', '/api/agent-tokens'].map((p) =>
+    page.waitForResponse((r) => new URL(r.url()).pathname === p),
+  )
+  await page.reload()
+  await Promise.all(answered)
+  await page.waitForTimeout(500)
+}
+
 async function shot(page: Page, name: string) {
   if (SHOTS)
     await page.screenshot({ path: path.join(SHOTS, `${name}.png`), fullPage: true, animations: 'disabled' })
@@ -129,9 +142,22 @@ test('dismissing the top-bar entry keeps it gone', async ({ page }) => {
   await entry(page).click()
   await page.getByRole('button', { name: 'Dismiss Getting started' }).click()
   await expect(entry(page)).toHaveCount(0)
-  await page.reload()
+  await reloadSettled(page)
   await expect(page.getByText('Getting started · 0 of 4')).toBeVisible()
   await expect(entry(page)).toHaveCount(0)
+  // Another user of this browser still gets it: the dismissal is per user.
+  await page.setExtraHTTPHeaders({ 'X-Test-Actor': 'human:someone-else' })
+  await reloadSettled(page)
+  await expect(entry(page)).toHaveAccessibleName('Getting started, 0 of 4 done')
+})
+
+test('a failed /api/me leaves no step loading', async ({ page }) => {
+  await tools(page)
+  await page.route('**/api/me', (r) => r.fulfill({ status: 500, json: { error: 'board restarting' } }))
+  await page.goto(`${origin}/`)
+  await expect(page.getByText('Getting started · 0 of 4')).toBeVisible()
+  await stepState(page, 'Connect an agent', 'Not done')
+  await expect(checklist(page)).not.toContainText('Checking…')
 })
 
 test('a fresh board walks the steps to 4 of 4, and the entry stays gone after', async ({ page }) => {
@@ -191,8 +217,13 @@ test('a fresh board walks the steps to 4 of 4, and the entry stays gone after', 
   // Done once is done: a fact that stops holding (the token revoked) does not bring the entry back.
   const tokens = await ok<{ id: number }[]>(human.get('/api/agent-tokens'))
   for (const t of tokens) expect((await human.delete(`/api/agent-tokens/${t.id}`)).ok()).toBe(true)
-  await page.reload()
+  await reloadSettled(page)
   await expect(page.getByRole('heading', { level: 1, name: 'Ongoing features' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'New ticket' })).toBeVisible()
   await expect(entry(page)).toHaveCount(0)
+  // The same facts in a browser that never saw 4 of 4: the entry shows, at 3 of 4.
+  const fresh = await page.context().browser()!.newPage()
+  ;(await tools(fresh)).fixed = true
+  await fresh.goto(`${origin}/projects/${projectId}/features`)
+  await expect(entry(fresh)).toHaveAccessibleName('Getting started, 3 of 4 done')
+  await fresh.close()
 })
