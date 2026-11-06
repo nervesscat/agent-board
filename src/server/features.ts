@@ -457,7 +457,7 @@ function summaryOf(own: Post[], humans: string[], files: schema.Attachment[]) {
 /**
  * The post shown as the summary of a ticket that has none yet, from its posts newest first: the newest
  * progress post by an agent that is not a resume note's version (what a hand-off post was before the
- * summary). The hand-off check goes by the same post until a summary is written.
+ * summary). The Summary phase goes by the same post until a summary is written.
  */
 export const summaryStandIn = <T extends Pick<Post, 'author' | 'progress' | 'handoff' | 'summary'>>(
   own: T[],
@@ -1949,7 +1949,7 @@ export const MAX_SUMMARY_CHANGE = 200
  * the proofs (files). Each write is a new version, kept with the earlier ones as its history; `change`
  * says in one line what changed since the last one (needed from the second version on). Like a new
  * post by its writer it bumps the ticket and reaches the inboxes, so a rewrite is never silent. It is
- * what the hand-off's no_handoff_post check reads.
+ * what the Summary phase the board ticks reads (autoPhases.summaryWritten).
  */
 export function setSummary(
   ticketId: number,

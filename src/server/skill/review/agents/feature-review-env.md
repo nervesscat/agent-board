@@ -85,6 +85,19 @@ result, and the orchestrator asks the human.
 4. Determine the exact test command that runs from `WORKTREE` with the chosen
    interpreter, for example `cd WORKTREE && MAIN/venv/Scripts/python -m pytest tests/unit`.
    Run the fastest smoke test the runbook offers to confirm the command works.
+   Then write the **scoped checks**: the commands that run only what the change touches,
+   with the changed files from `00-focus.md` filled in. The typecheck covers the whole
+   project (it cannot be scoped soundly). Lint and the formatter take the changed files only.
+   The migration check (for example `pnpm check:migrations`) runs when the schema or a
+   migration changed. The unit tests are only those related to the changed files, with
+   `--testTimeout=30000`, for example `vitest related <files> --run --testTimeout=30000`,
+   `jest --findRelatedTests <files>`, or the `pytest` files that test them. The end-to-end tests
+   are only the spec files that cover the changed pages or server routes, with `--workers=1`,
+   for example `playwright test <spec files> --workers=1`, and none when the diff touches
+   neither. Use the project's own commands where it has them. Also record whether
+   CI runs the full suite on pull requests (the project's CI config, such as
+   `.github/workflows/`): it is where the full suite is proven. When no CI does, write
+   `none`: the review then runs the full suite locally.
 5. **Seed.** If the app is up and the project has a seed script or fixture loader, run it
    against the review's data service so the UI and the API have accounts and data.
    Record the accounts and passwords it creates in `00-env.md`.
@@ -122,6 +135,14 @@ result, and the orchestrator asks the human.
 ## Commands (run from the worktree)
 - Tests: <exact command>
 - Smoke result: <one line>
+
+## Scoped checks (run from the worktree)
+- Typecheck: <command, whole project>
+- Lint and format: <command on the changed files>
+- Migrations: <command> | none: no schema or migration changed
+- Unit tests: <command on the tests related to the changed files> | none related
+- End-to-end: <command on the spec files covering the changed pages or routes> | none: the diff touches no page or route
+- CI: <workflow> runs the full suite on pull requests | none: run the full suite locally
 
 ## Unavailable
 - <service or capability>: <reason>. Criteria that need it must be recorded UNVERIFIED.

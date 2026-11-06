@@ -1,6 +1,6 @@
 ---
 name: feature-review-merge
-description: "Checks whether a change will have problems against the latest base branch: fetches base, merges it locally into the review worktree without committing, runs the test suite on the merged tree, records conflicts or new failures, and restores the worktree. Nothing is ever pushed or committed. Used by the /feature-review skill as Phase 3b."
+description: "Checks whether a change will have problems against the latest base branch: fetches base, merges it locally into the review worktree without committing, runs the scoped checks on the merged tree, records conflicts or new failures, and restores the worktree. Nothing is ever pushed or committed. Used by the /feature-review skill as Phase 3b."
 ---
 
 # Feature Review: Merge Check Agent
@@ -14,9 +14,9 @@ branch in the developer's checkout beyond fetching.
 
 `WORKTREE` (detached at the commit under review, clean), `MAIN` (the developer's
 checkout, fetch only), `WORKDIR`, `HEAD_SHA`, `BASE` (the base branch name), and paths to
-`00-env.md` (test command and interpreter), `00-focus.md` (start from it; read outside it only
+`00-env.md` (scoped checks, test command and interpreter), `00-focus.md` (start from it; read outside it only
 to follow a reference from it), `02-verification.md` (test results at head, for comparison), and
-your output file `05-merge.md`.
+your output file `05-merge.md`. Optionally the word `scoped`.
 
 This agent never answers a decision (`answer_decision`): a question for the human goes in its
 result, and the orchestrator asks the human.
@@ -39,8 +39,12 @@ result, and the orchestrator asks the human.
      `git merge --abort`. Result `CONFLICTS`.
    - Clean: continue.
 5. If a dependency manifest differs between `HEAD_SHA` and the merged tree, note it: the
-   tests below run with the head's environment, which may not match. Run the full suite
-   once with the test command from `00-env.md` on the merged tree. Compare failures with
+   tests below run with the head's environment, which may not match. Run the scoped checks
+   from `00-env.md` once on the merged tree. Here the changed files are the overlapping files
+   (step 3), plus the branch's own (`git diff --name-only <merge-base> HEAD_SHA`). That scoped
+   run on the merged tree is the merge check; CI on the merged PR covers the rest. When
+   `00-env.md` says no CI runs the full suite (`CI: none`) and your prompt does not say `scoped`,
+   run the full suite once with the test command instead. Compare failures with
    the head run in `02-verification.md`. Failures that were not present at head are
    **new**. Result `TESTS FAIL AFTER MERGE` with the new failures, or `NO ISSUE`. If the
    test command is unavailable, result `UNVERIFIED (tests could not run)` with the merge
@@ -59,7 +63,7 @@ result, and the orchestrator asks the human.
 - Head: <HEAD_SHA>, behind base by <n> commits | up to date
 - Overlapping files: <list> | none
 - Merge: clean | conflicts in <files> | not attempted (up to date)
-- Tests on merged tree: <command>: pass | new failures: <list> | not run: <reason>
+- Tests on merged tree: <scoped | full>, <commands>: pass | new failures: <list> | not run: <reason>
 - Dependency caveat: <manifest changed on base, tests used head environment> | none
 - Worktree restored: yes, HEAD = <sha>, status clean | NO: <what is left>
 - Result: NO ISSUE | CONFLICTS | TESTS FAIL AFTER MERGE | UNVERIFIED (<reason>)

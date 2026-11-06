@@ -91,3 +91,9 @@ export function cleanSuggestions(suggestions: readonly string[]): string[] {
   }
   return out
 }
+
+/** The tags whose name holds `query` (trimmed) in any casing, in their order; all of them for none. */
+export function matchTags(tags: readonly string[], query: string): string[] {
+  const q = query.trim().toLowerCase()
+  return q ? tags.filter((t) => t.toLowerCase().includes(q)) : [...tags]
+}

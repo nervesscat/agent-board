@@ -9,7 +9,7 @@ const SCOPES = {
   root: '?parent=root',
   /** Top-level archived tickets: the features page's Archived tab. */
   archived: '?parent=root&archived=only',
-  /** Every ticket not archived, lanes included: the Agents page's reservations. */
+  /** Every ticket not archived, lanes included: the Team page's reservations. */
   all: '',
 } as const
 

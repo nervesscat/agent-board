@@ -1,10 +1,10 @@
 /**
- * The hand-off phases the board ticks itself, from git, GitHub and the previews: a top-level task named
+ * The hand-off phases the board ticks itself, from git, GitHub, the previews and the ticket's posts: a top-level task named
  * one of these (trimmed, any case) is ticked while its fact holds and unticked when it stops holding,
  * and nobody ticks it by hand. A subtask of the same name is an ordinary task, and so is a phase
  * reworded away from these names. Implementation and its steps stay ticked by hand.
  */
-export const AUTO_PHASES = ['Pushed', 'PR', 'CI', 'Preview', 'Merged'] as const
+export const AUTO_PHASES = ['Pushed', 'PR', 'CI', 'Preview', 'Summary', 'Merged'] as const
 
 export type AutoPhase = (typeof AUTO_PHASES)[number]
 
@@ -22,6 +22,7 @@ export const AUTO_PHASE_RULE: Record<AutoPhase, string> = {
   PR: 'from GitHub (an open or merged PR for the ticket)',
   CI: `from GitHub (the PR's checks green, or a "CI run locally: green" comment on the head SHA)`,
   Preview: "from the previews (one of the ticket's workspaces runs a preview, or its preview link answers)",
+  Summary: "from the ticket's posts (an agent wrote or updated its summary after the branch's last commit)",
   Merged: 'from GitHub and git (the PR merged, or the branch merged into its base)',
 }
 

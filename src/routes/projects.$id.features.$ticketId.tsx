@@ -50,7 +50,6 @@ import { BranchSelect } from '#/components/BranchSelect'
 import { StatusSelect } from '#/components/StatusSelect'
 import { Attachments } from '#/components/Attachments'
 import { Empty } from '#/components/Empty'
-import { HandoffCard, toastHandoff } from '#/components/Handoff'
 import { Markdown } from '#/components/Markdown'
 import { NeedsField, NeedsStatus, toastRefusal } from '#/components/Needs'
 import { NewTicket } from '#/components/NewTicket'
@@ -189,10 +188,7 @@ function TicketPage() {
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const update = useMutation({
     mutationFn: (p: Record<string, unknown>) => patch(`/api/tickets/${ticketId}`, p),
-    onSuccess: (res) => {
-      invalidate()
-      toastHandoff(res)
-    },
+    onSuccess: invalidate,
     // A move to done refused for a need not merged yet comes with the human's way past it.
     onError: (err, p) => toastRefusal(err, () => update.mutate({ ...p, force: true })),
   })
@@ -337,7 +333,6 @@ function TicketPage() {
         <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
       </ShownAnchor>
     ),
-    'ticket.handoff': t.handoff ? <HandoffCard handoff={t.handoff} git={git} pr={t.pr} /> : null,
     'ticket.runs': runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
     'ticket.details': <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />,
     'ticket.branch': <BranchPanel t={t} git={git} />,
@@ -1354,7 +1349,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
   const pct = t.progress.total ? Math.round((100 * t.progress.done) / t.progress.total) : 0
   const row = (task: TicketFull['tasks'][number], subtask: boolean) => {
     const blockedSubtasks = subtask ? 0 : t.tasks.filter((s) => s.parentId === task.id && s.blocked).length
-    // A phase the board ticks from git, GitHub or the previews: no tick by hand.
+    // A phase the board ticks from git, GitHub, the previews or the posts: no tick by hand.
     const auto = task.auto ? autoPhaseOf(task) : null
     return (
       // A summary's blocked task lands here as #task-<id> (src/lib/reveal.ts).
@@ -1475,7 +1470,12 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
     )
   }
   return (
-    <section className="rounded-lg border p-4" aria-label="Tasks">
+    // A link lands on it as #tasks (src/lib/reveal.ts), below the ticket page's stuck header.
+    <section
+      id="tasks"
+      className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-4"
+      aria-label="Tasks"
+    >
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-medium">Tasks</h2>
         <span className="text-xs tabular-nums text-muted-foreground">
@@ -1488,8 +1488,8 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
       {t.tasks.length === 0 && (
         <p className="text-sm text-muted-foreground">
           No tasks yet. Add the phases a new ticket starts with: Implementation, then the hand-off&apos;s
-          (Pushed, PR, CI, Preview, Merged). The concrete steps go under Implementation as subtasks. The board
-          ticks Pushed, PR, CI, Preview and Merged itself.
+          (Pushed, PR, CI, Preview, Summary, Merged). The concrete steps go under Implementation as subtasks.
+          The board ticks Pushed, PR, CI, Preview, Summary and Merged itself.
         </p>
       )}
       <ul className="space-y-1.5">

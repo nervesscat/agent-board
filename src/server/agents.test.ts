@@ -5,6 +5,7 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { AGENT_CLIENTS } from '#/lib/constants'
 import type { ReviewSkillsStatus, SkillFileDiff } from './agents'
 
 // The db module opens SQLite at import; point it at a throwaway directory before anything loads it.
@@ -29,17 +30,37 @@ beforeAll(async () => {
 })
 
 describe('the board skill', () => {
-  it('fills in the board URL and a table of every repo', () => {
+  it('fills in the board URL and carries no projects or repos', () => {
     const skill = agents.renderSkill('claude')
     expect(skill).not.toMatch(/\{\{[A-Z_]+\}\}/)
     expect(skill).toMatch(/^---\nname: board\n/)
-    expect(skill).toContain('| Folder | GitHub | Checkout | Project | projectId | repoId |')
-    expect(skill).toContain(
-      '| `acme-frontend` | `acme/acme-frontend` | `/home/me/acme-frontend/` | `Acme \\| web` | 1 | 1 |',
-    )
+    expect(skill).not.toContain('acme-frontend')
+    expect(skill).not.toContain('Acme | web')
+    expect(skill).not.toContain('| projectId | repoId |')
     expect(skill).toContain(
       'claude mcp add --transport http --scope user board http://localhost:47100/api/mcp',
     )
+  })
+
+  it('has every CLI find its project with find_project, and never list_projects', () => {
+    for (const client of AGENT_CLIENTS) {
+      const skill = agents.renderSkill(client)
+      const section = skill.slice(skill.indexOf('## 1. Your project'), skill.indexOf('## 2. Pick up work'))
+      expect(skill, client).not.toMatch(/\{\{[A-Z_]+\}\}/)
+      expect(section, client).toContain('call `find_project` with')
+      expect(section, client).toContain('`git remote get-url origin`')
+      expect(section, client).toContain('`git rev-parse --show-toplevel`')
+      expect(section, client).toContain('Do not call `list_projects`')
+      expect(section, client).toContain("never read or\nwrite another project's tickets")
+      expect(section, client).toContain('ask which\n  repo')
+      expect(section, client).toContain('ask the human which one; do not pick')
+      expect(section, client).toContain(
+        'say the repo has no board project and stop using the board for it. Do not\n  guess from other projects and do not create one.',
+      )
+      // Nothing in it can go stale: no table to check the project against, nothing to copy again.
+      expect(skill, client).not.toContain('the table')
+      expect(skill, client).not.toContain('copy the skill again')
+    }
   })
 
   it('points each CLI at its own MCP setup', () => {

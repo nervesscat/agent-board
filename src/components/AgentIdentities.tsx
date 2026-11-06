@@ -58,15 +58,15 @@ export function AgentIdentities() {
     (actors.data ?? []).filter((a) => a.kind === 'agent' && a.name.startsWith(`${token}/`))
 
   return (
-    <section aria-label="Agents" className="space-y-2">
-      <h2 className="text-sm font-medium">Agents</h2>
+    <section aria-label="Agent tokens" className="space-y-2">
+      <h2 className="text-sm font-medium">Agent tokens</h2>
       <p className="text-sm text-muted-foreground">
         Who is who: each agent token is an identity on the board, a worker unless you make it an orchestrator.
         Its subagents that name themselves under it are listed with it, always as workers.
       </p>
       {tokens.error && <p className="text-xs text-destructive">{errorMessage(tokens.error)}</p>}
       {tokens.data?.length === 0 && (
-        <p className="text-xs text-muted-foreground">No agent tokens yet: Connect agents makes them.</p>
+        <p className="text-xs text-muted-foreground">No agent tokens yet: Connect an agent makes them.</p>
       )}
       {!!tokens.data?.length && (
         <ul className="divide-y rounded-md border text-sm">
@@ -111,7 +111,8 @@ export function AgentIdentities() {
                         <AlertDialogTitle>Revoke {t.name}&apos;s token?</AlertDialogTitle>
                         <AlertDialogDescription>
                           The agent using it, and every subagent working under it, is refused from its next
-                          request on. Generate commands again on Connect agents to connect it with a new one.
+                          request on. Generate commands again on Connect an agent to connect it with a new
+                          one.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>

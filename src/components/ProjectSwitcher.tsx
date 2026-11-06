@@ -163,7 +163,7 @@ function NewProject({
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>
             <DialogDescription>
-              A project groups repositories. Add its repos from the Repositories page.
+              A project groups repositories. Add its repos from its Repositories page.
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -184,7 +184,7 @@ function NewProject({
   )
 }
 
-/** Rename and delete projects in one place. Repos are added and moved on the Repositories page. */
+/** Rename and delete projects in one place. Repos are added and moved on each project's Repositories page. */
 function ManageProjects({
   open,
   onOpenChange,
@@ -202,7 +202,7 @@ function ManageProjects({
         <DialogHeader>
           <DialogTitle>Projects</DialogTitle>
           <DialogDescription>
-            Rename or delete a project. Add, move or remove its repos on the Repositories page.
+            Rename or delete a project. Add, move or remove its repos on its Repositories page.
           </DialogDescription>
         </DialogHeader>
         <ul className="max-h-[60vh] divide-y overflow-y-auto rounded-md border">

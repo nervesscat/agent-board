@@ -9,7 +9,7 @@ import { HttpError } from './http'
 import { getAccount } from './passkeys'
 
 /**
- * The agent tokens the board issues: Connect agents' "Generate commands" makes one, and its commands carry
+ * The agent tokens the board issues: Connect an agent's "Generate commands" makes one, and its commands carry
  * it as `Authorization: Bearer <token>` (README: "Signing in"). A token's name is the agent's name
  * on the board. Kept as its hash only, so the token itself is shown once, when it is made; it signs in for
  * a year (AGENT_TOKEN_DAYS), until then unless revoked. Only the signed-in human makes, lists and revokes

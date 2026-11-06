@@ -63,11 +63,8 @@ export function Summary({ projectId }: { projectId?: number }) {
   if (!data.projects.length)
     return (
       <Empty>
-        No projects yet. Start on the{' '}
-        <Link to="/repositories" className="underline">
-          Repositories page
-        </Link>
-        : add a checkout and the project it belongs to.
+        No projects yet. Create one from the project menu in the top bar, then add its checkouts on the
+        project's Repositories page.
       </Empty>
     )
   if (projectId) return <ProjectBlock p={data.projects[0]!} />
@@ -545,7 +542,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
             <Row
               key={`r${t.id}`}
               icon={<Eye />}
-              title={<TicketLink p={p} id={t.id} title={t.title} hash="handoff" />}
+              title={<TicketLink p={p} id={t.id} title={t.title} hash="tasks" />}
               meta={
                 <>
                   <StageBadge p={p} status={t.status} />

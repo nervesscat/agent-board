@@ -2,7 +2,7 @@ import type { Project, TicketFull } from '#/lib/api'
 import { inDatabase } from './db'
 import { expect, expectTooltip, ok, test } from './fixtures'
 
-const AUTO = ['Pushed', 'PR', 'CI', 'Preview', 'Merged']
+const AUTO = ['Pushed', 'PR', 'CI', 'Preview', 'Summary', 'Merged']
 
 /** An open PR row as a refresh from GitHub would leave it (e2e has no GitHub), on `branch`. */
 function seedPr(project: Project, number: number, branch: string) {

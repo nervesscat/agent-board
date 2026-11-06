@@ -34,7 +34,7 @@ function BoardSettings() {
         <p className="text-sm text-muted-foreground">
           The one{' '}
           <Link to="/agents" className="underline hover:text-foreground">
-            Connect agents
+            Connect an agent
           </Link>{' '}
           opens on, showing only its commands.
         </p>

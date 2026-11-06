@@ -382,7 +382,7 @@ function pages(p) {
     },
     agents: { name: 'agents', url: `/projects/${P}/agents`, ready: h1('Agents') },
     // The other routes, for their bundles.
-    agentsSetup: { name: 'agents setup', url: '/agents', ready: h1('Connect agents') },
+    agentsSetup: { name: 'agents setup', url: '/agents', ready: h1('Connect an agent') },
     daily: { name: 'daily', url: '/daily', ready: h1() },
     repositories: { name: 'repositories', url: '/repositories', ready: h1() },
     settings: { name: 'settings', url: '/settings', ready: h1() },
