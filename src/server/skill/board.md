@@ -94,7 +94,8 @@ Then:
   and `stale` says the work moved on (new commits or a newer progress post): check the branch and
   the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
 - A new ticket starts with its project's default phases as its top-level tasks (`get_project` →
-  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Merged).
+  `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Summary,
+  Merged).
   Tasks go two levels and no more: put the concrete steps of the work under Implementation
   as its subtasks (`add_tasks` with `parentTaskId` = its id; a subtask takes no subtasks). Remove
   or reword a phase that does not fit (`remove_task`, `update_task`); `add_tasks` adds one at the
@@ -102,7 +103,7 @@ Then:
   on `create_ticket` seeds it anyway), and `defaultPhases: false` opts a ticket out.
 - No tasks yet (an older ticket, a lane, one opted out) → the phases the same way: `add_tasks` with
   the names from `defaultPhases`, then the steps under the first. The human's progress bar is these
-  tasks and subtasks, all counted, and together they are the hand-off's Implementation item.
+  tasks and subtasks, all counted, and the open ones are what a move to review answers with (`open`).
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
 `repoId` and, when the human says how much review it gets, `complexity` (`low`, `mid` or `high`;
@@ -112,13 +113,17 @@ Lanes of a ticket you are working are yours to create (next section).
 
 ## 3. While working
 
-- `set_task_done` as each step finishes. The board ticks the phases Pushed, PR, CI, Preview and
-  Merged itself, from git, GitHub and the previews, and unticks one when its fact stops holding:
+- `set_task_done` as each step finishes. The board ticks the phases Pushed, PR, CI, Preview, Summary
+  and Merged itself, from git, GitHub, the previews and the ticket's posts, and unticks one when its
+  fact stops holding:
   Pushed while the branch is on origin with every local commit (a new commit not pushed unticks
   it), PR while a PR for the ticket is open or merged, CI while the PR's checks are green on its
   head or a PR comment whose first line is `CI run locally: green on <sha>` names its head commit
   (a new push unticks it until it is green again), Preview while one of the ticket's workspaces
-  runs a preview or its link answers, Merged once the PR or the branch is merged. Nobody ticks
+  runs a preview or its link answers, Summary while an agent wrote or updated the summary
+  (`set_ticket_summary`) after the branch's last commit (a new commit unticks it until the summary
+  is rewritten; a ticket that never had a summary goes by an agent's progress post since then),
+  Merged once the PR or the branch is merged. Nobody ticks
   those by hand: `set_task_done` and `update_task` `done` on them are refused (`get_ticket` marks
   them `auto: true`). Implementation and its steps are yours to tick. A phase with steps is done exactly when
   all its steps are: ticking or unticking a phase does the same to its steps, ticking its last open
@@ -317,7 +322,7 @@ The human should not have to tell you to check comments. While this session has 
 ## 4. Hand off
 
 Before `update_ticket` → `status: review`, every item, in order (the board ticks Pushed, PR, CI,
-Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
+Preview, Summary and Merged as their facts hold; Implementation and its steps are ticked by hand):
 
 1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
 2. Checks green locally, on what the change touches: the typecheck of the whole project (it
@@ -362,15 +367,13 @@ Preview and Merged as their facts hold; Implementation and its steps are ticked 
 8. Resume note if the ticket stays open past the session (`set_resume_note`, see
    [End of session](#5-end-of-session)).
 
-`update_ticket` → `review` then answers with `handoff.missing`: what the board still sees missing,
-each a `code` with a `text`: `tasks_open` (Implementation, the ticket's tasks and subtasks, its
-phases and their steps, the hand-off phases included but Merged, which is the human's: missing
-while it has none, or while some of them, its lanes' included, are open; the other checks still
-verify each fact themselves), `no_pr`, `not_pushed`, `no_preview`,
-`no_handoff_post` (no summary written by an agent since the branch's last commit; on a ticket that
-never had a summary, an agent's progress post since then still counts), `checks_unknown` (the
-PR's CI is failing or still running, and no `CI run locally: green` comment names its head). The move goes through anyway: fix each one. `get_ticket` returns the same `handoff` while
-the ticket is in review, and its page shows it as a Hand-off card.
+`update_ticket` → `review` then answers with `open`: every task and subtask still open, the
+ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text, auto}`.
+Merged is left out: merging is the human's. `auto: true` marks a phase the board ticks from its fact
+(Pushed, PR, CI, Preview, Summary): settle it by making the fact hold (push, open the PR, get CI
+green, start the preview, rewrite the summary after your last commit), never by a tick. The move goes
+through anyway: fix each one; `open: []` means nothing is left. `get_ticket` returns the same `open`
+while the ticket is in review, and its page shows them on the Tasks card.
 
 After that:
 

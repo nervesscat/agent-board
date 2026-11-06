@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef } from 'react'
  * page's data has drawn it, the page scrolls it into view (below a stuck header, by its scroll margin)
  * and marks it for a moment with `data-revealed` (styled in styles.css).
  *
- * An anchor is an element's id (`post-12`, `pr-3`, `handoff`, `resume`, `reply-40`), or for a reply in
+ * An anchor is an element's id (`post-12`, `pr-3`, `tasks`, `resume`, `reply-40`), or for a reply in
  * a thread that loads only once opened, the element that holds the thread and the reply's id:
  * `post-12-reply-40` is `reply-40` in the thread of `post-12`. So the URL alone says which thread to
  * open, and where to land if the reply is gone.

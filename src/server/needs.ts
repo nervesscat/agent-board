@@ -6,7 +6,7 @@ import { logActivity } from './activity'
 import { baseChain, baseRefs, branchRef, gitCache, type GitCache, memo, reachOf, refSha } from './cleanup'
 import * as features from './features'
 import { holdsWorkOf, type Reach } from './git'
-import { type Handoff, ticketHandoff } from './handoff'
+import { type OpenTask, openTasks } from './openTasks'
 import { HttpError } from './http'
 import { getProject } from './projects'
 import { listRepos } from './repos'
@@ -212,7 +212,7 @@ async function needsFor(rows: Ticket[], ctx: Context) {
 
 /**
  * The ticket page's read: `getTicketWithPush` with what it needs (each with `merged`), what needs it, its
- * resume note under `resume`, and in a review stage `handoff`: what the hand-off still lacks.
+ * resume note under `resume`, and in a review stage `open`: what its tasks still have open (openTasks).
  */
 export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {}) {
   const full = await features.getTicketWithPush(id, opts)
@@ -229,14 +229,14 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
       return t ? [{ id: t.id, title: t.title, branch: t.branch, prNumber: t.prNumber, status: t.status }] : []
     })
   // A PR's own ticket has no hand-off: its PR is reviewed on the queue, not handed off.
-  const handoff: Handoff | null =
-    kindOf(ctx.stages, full.status) === 'review' && !full.prId ? await ticketHandoff(full) : null
+  const open: OpenTask[] | null =
+    kindOf(ctx.stages, full.status) === 'review' && !full.prId ? openTasks(full.id) : null
   const { timeline } = timelinesFor([full]).get(full.id)!
   return withResume({
     ...full,
     needs,
     neededBy,
-    handoff,
+    open,
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
     work: workOf(timeline),
@@ -399,7 +399,7 @@ type Patch = Parameters<typeof features.updateTicket>[1]
 /**
  * `updateTicket` with the needs rule: `needs` replaces what the ticket needs, and a move to a done stage
  * is refused while one is not merged, unless the human sends `force` (logged). A move to a review stage
- * answers with `handoff` too: what the hand-off still lacks, as warnings.
+ * answers with `open` too: what its tasks still have open (openTasks). Never refused for them.
  */
 export async function changeTicket(
   id: number,
@@ -432,8 +432,11 @@ export async function changeTicket(
     { behavior: 'immediate' },
   )
   logOverride(row, unmet, actor)
-  if (patch.status && !row.prId && kindOf(listStages(row.projectId), row.status) === 'review')
-    return { ...row, handoff: await ticketHandoff(await features.getTicketWithPush(id)) }
+  // Into review: the phases the board ticks are read first, so what is still open is up to date.
+  if (patch.status && !row.prId && kindOf(listStages(row.projectId), row.status) === 'review') {
+    await features.getTicketWithPush(id)
+    return { ...row, open: openTasks(id) }
+  }
   return row
 }
 

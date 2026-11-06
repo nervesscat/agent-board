@@ -44,6 +44,7 @@ let needs: typeof import('./needs')
 let auto: typeof import('./autoPhases')
 let prs: typeof import('./prs')
 let push: typeof import('./push')
+let noteActor: typeof import('./actors').noteActor
 beforeAll(async () => {
   fs.mkdirSync(origin)
   gitIn(origin, 'init', '-q', '--bare', '-b', 'main')
@@ -62,6 +63,7 @@ beforeAll(async () => {
   auto = await import('./autoPhases')
   prs = await import('./prs')
   push = await import('./push')
+  ;({ noteActor } = await import('./actors'))
 }, 60_000)
 
 /** A commit on `branch` (made from main when it does not exist), leaving main checked out. */
@@ -119,6 +121,16 @@ const setTick = (ticketId: number, text: string, done: boolean) =>
     .update(dbm.schema.tasks)
     .set({ done })
     .where(eq(dbm.schema.tasks.id, taskOf(ticketId, text).id))
+    .run()
+/**
+ * Move the ticket's posts an hour back, so a commit made now comes after them (git keeps whole seconds:
+ * a commit in the same second as a post would not read as newer).
+ */
+const backdateSummaries = (ticketId: number) =>
+  dbm.db
+    .update(dbm.schema.updates)
+    .set({ createdAt: new Date(Date.now() - 3_600_000).toISOString() })
+    .where(eq(dbm.schema.updates.ticketId, ticketId))
     .run()
 /** A ticket read, as the page and get_ticket read it: the phases reconcile on it. */
 const read = (ticketId: number) => needs.ticketView(ticketId)
@@ -185,14 +197,16 @@ const failingRun = {
 }
 
 describe('autoPhaseOf', () => {
-  it('is a top-level task named Pushed, PR, CI, Preview or Merged, trimmed, in any case', async () => {
+  it('is a top-level task named Pushed, PR, CI, Preview, Summary or Merged, trimmed, in any case', async () => {
     const { autoPhaseOf } = await import('#/lib/autoPhases')
     expect(autoPhaseOf({ parentId: null, text: 'Pushed' })).toBe('Pushed')
+    expect(autoPhaseOf({ parentId: null, text: ' summary ' })).toBe('Summary')
+    expect(autoPhaseOf({ parentId: 5, text: 'Summary' })).toBeNull()
     expect(autoPhaseOf({ parentId: null, text: ' ci ' })).toBe('CI')
     expect(autoPhaseOf({ parentId: null, text: 'MERGED' })).toBe('Merged')
     expect(autoPhaseOf({ parentId: null, text: 'pr' })).toBe('PR')
     expect(autoPhaseOf({ parentId: null, text: 'preview' })).toBe('Preview')
-    for (const text of ['Implementation', 'Hand-off post', 'CI green', 'PR opened', ''])
+    for (const text of ['Implementation', 'Hand-off post', 'CI green', 'PR opened', 'Summary post', ''])
       expect(autoPhaseOf({ parentId: null, text })).toBeNull()
     expect(autoPhaseOf({ parentId: 3, text: 'CI' })).toBeNull()
   })
@@ -212,15 +226,15 @@ describe('autoPhaseRules', () => {
 
   it('Pushed: pushed (behind too), remote-only or merged; ahead, local-only and none untick; unknown stays', () => {
     const pushed = (state: import('./push').PushState) =>
-      auto.autoPhaseRules({ push: { state }, pr: null, preview: false }).Pushed
+      auto.autoPhaseRules({ push: { state }, pr: null, preview: false, summary: null }).Pushed
     for (const state of ['pushed', 'remote-only', 'merged'] as const) expect(pushed(state)).toBe(true)
     for (const state of ['ahead', 'local-only', 'none'] as const) expect(pushed(state)).toBe(false)
-    expect(auto.autoPhaseRules({ push: null, pr: null, preview: false }).Pushed).toBeNull()
+    expect(auto.autoPhaseRules({ push: null, pr: null, preview: false, summary: null }).Pushed).toBeNull()
   })
 
   it('PR: open or merged; closed without merging or none untick; unknown stays', () => {
     const rule = (pr: ReturnType<typeof row> | null | undefined) =>
-      auto.autoPhaseRules({ push: { state: 'pushed' }, pr, preview: false }).PR
+      auto.autoPhaseRules({ push: { state: 'pushed' }, pr, preview: false, summary: null }).PR
     expect(rule(row())).toBe(true)
     expect(rule(row({ open: false, mergedAt: '2026-10-01T00:00:00Z' }))).toBe(true)
     expect(rule(row({ open: false, leftAs: 'MERGED' }))).toBe(true)
@@ -231,18 +245,22 @@ describe('autoPhaseRules', () => {
 
   it('a PR closed with no merge time that GitHub has not called closed is unknown: PR, CI and Merged stay', () => {
     const gone = row({ open: false, checks: pass })
-    expect(auto.autoPhaseRules({ push: { state: 'pushed' }, pr: gone, preview: false })).toMatchObject({
+    expect(
+      auto.autoPhaseRules({ push: { state: 'pushed' }, pr: gone, preview: false, summary: null }),
+    ).toMatchObject({
       PR: null,
       CI: null,
       Merged: null,
     })
     // The branch merged still says Merged.
-    expect(auto.autoPhaseRules({ push: { state: 'merged' }, pr: gone, preview: false }).Merged).toBe(true)
+    expect(
+      auto.autoPhaseRules({ push: { state: 'merged' }, pr: gone, preview: false, summary: null }).Merged,
+    ).toBe(true)
   })
 
   it('CI: green checks, or the local-green SHA equal to the head; failing or pending checks untick', () => {
     const rule = (pr: ReturnType<typeof row> | null | undefined) =>
-      auto.autoPhaseRules({ push: { state: 'pushed' }, pr, preview: false }).CI
+      auto.autoPhaseRules({ push: { state: 'pushed' }, pr, preview: false, summary: null }).CI
     expect(rule(row({ checks: pass }))).toBe(true)
     expect(rule(row({ checks: [{ name: 'c', state: 'fail', url: null }] }))).toBe(false)
     expect(rule(row({ checks: [{ name: 'c', state: 'pending', url: null }] }))).toBe(false)
@@ -261,10 +279,14 @@ describe('autoPhaseRules', () => {
   })
 
   it('Preview follows the previews; Merged: the PR merged or the branch merged, unknown unless one holds', () => {
-    expect(auto.autoPhaseRules({ push: null, pr: undefined, preview: true }).Preview).toBe(true)
-    expect(auto.autoPhaseRules({ push: null, pr: undefined, preview: false }).Preview).toBe(false)
-    const merged = (f: Omit<import('./autoPhases').AutoFacts, 'preview'>) =>
-      auto.autoPhaseRules({ ...f, preview: false }).Merged
+    expect(auto.autoPhaseRules({ push: null, pr: undefined, preview: true, summary: null }).Preview).toBe(
+      true,
+    )
+    expect(auto.autoPhaseRules({ push: null, pr: undefined, preview: false, summary: null }).Preview).toBe(
+      false,
+    )
+    const merged = (f: Omit<import('./autoPhases').AutoFacts, 'preview' | 'summary'>) =>
+      auto.autoPhaseRules({ ...f, preview: false, summary: null }).Merged
     expect(merged({ push: { state: 'pushed' }, pr: row({ open: false, mergedAt: 'x' }) })).toBe(true)
     expect(merged({ push: { state: 'pushed' }, pr: row({ open: false, leftAs: 'MERGED' }) })).toBe(true)
     expect(merged({ push: { state: 'pushed' }, pr: row({ open: false, leftAs: 'CLOSED' }) })).toBe(false)
@@ -274,6 +296,82 @@ describe('autoPhaseRules', () => {
     expect(merged({ push: { state: 'pushed' }, pr: null })).toBe(false)
     expect(merged({ push: null, pr: row() })).toBeNull()
     expect(merged({ push: { state: 'pushed' }, pr: undefined })).toBeNull()
+  })
+})
+
+describe('the Summary rule', () => {
+  const COMMIT_AT = '2026-01-10T12:00:00.000Z'
+  const summary = (author: string, createdAt: string) => ({
+    author,
+    progress: false,
+    handoff: false,
+    summary: true,
+    createdAt,
+  })
+  type Post = import('./autoPhases').SummaryFacts['posts'][number]
+  const post = (author: string, createdAt: string, extra: Partial<Post> = {}) => ({
+    author,
+    progress: true,
+    handoff: false,
+    summary: false,
+    createdAt,
+    ...extra,
+  })
+  const written = (over: Partial<import('./autoPhases').SummaryFacts> = {}) =>
+    auto.summaryWritten({
+      lastCommitAt: COMMIT_AT,
+      since: '2026-01-09T09:00:00.000Z',
+      posts: [summary('claude', '2026-01-10T13:00:00.000Z')],
+      humans: ['enrique'],
+      ...over,
+    })
+
+  it('is the rule autoPhaseRules ticks Summary by, and unknown when not read', () => {
+    const rule = (s: boolean | null) =>
+      auto.autoPhaseRules({ push: null, pr: undefined, preview: false, summary: s }).Summary
+    expect(rule(true)).toBe(true)
+    expect(rule(false)).toBe(false)
+    expect(rule(null)).toBeNull()
+  })
+
+  it('only a summary an agent wrote at or after the last commit counts', () => {
+    expect(written()).toBe(true)
+    expect(written({ posts: [summary('claude', COMMIT_AT)] })).toBe(true)
+    expect(written({ posts: [] })).toBe(false)
+    // Written before the last commit, or by the human.
+    expect(written({ posts: [summary('claude', '2026-01-10T11:00:00.000Z')] })).toBe(false)
+    expect(written({ posts: [summary('enrique', '2026-01-10T13:00:00.000Z')] })).toBe(false)
+    // Any version after the commit counts, an older one before it too.
+    expect(
+      written({
+        posts: [
+          summary('enrique', '2026-01-10T14:00:00.000Z'),
+          summary('claude', '2026-01-10T13:00:00.000Z'),
+        ],
+      }),
+    ).toBe(true)
+    // Once there is a summary only the summary counts: a progress post after the commit does not.
+    expect(
+      written({
+        posts: [post('claude', '2026-01-10T13:00:00.000Z'), summary('claude', '2026-01-10T11:00:00.000Z')],
+      }),
+    ).toBe(false)
+  })
+
+  it('without a summary ever written, an agent progress post after the last commit stands in, a resume note does not', () => {
+    expect(written({ posts: [post('claude', '2026-01-10T13:00:00.000Z')] })).toBe(true)
+    // Before the last commit; the human's, a discussion post, a resume note do not.
+    expect(written({ posts: [post('claude', '2026-01-10T11:00:00.000Z')] })).toBe(false)
+    expect(written({ posts: [post('enrique', '2026-01-10T13:00:00.000Z')] })).toBe(false)
+    expect(written({ posts: [post('claude', '2026-01-10T13:00:00.000Z', { progress: false })] })).toBe(false)
+    expect(written({ posts: [post('claude', '2026-01-10T13:00:00.000Z', { handoff: true })] })).toBe(false)
+  })
+
+  it('with no commit to go by (no branch, or git cannot tell), goes by when work started', () => {
+    const noCommit = { lastCommitAt: null }
+    expect(written({ ...noCommit, posts: [summary('claude', '2026-01-09T08:00:00.000Z')] })).toBe(false)
+    expect(written({ ...noCommit, posts: [summary('claude', '2026-01-09T10:00:00.000Z')] })).toBe(true)
+    expect(written({ ...noCommit, posts: [post('claude', '2026-01-09T10:00:00.000Z')] })).toBe(true)
   })
 })
 
@@ -400,7 +498,7 @@ describe('the board ticking the phases', () => {
     expect(stored.headSha).toBe(head)
     // Ticked by the refresh itself, before any read.
     expect(ticks(t.id).CI).toBe(true)
-    expect((await read(t.id)).handoff).toBeNull()
+    expect((await read(t.id)).open).toBeNull()
 
     // A new push: the comment names an older head, so CI is unticked until it is green again.
     found = [
@@ -470,6 +568,57 @@ describe('the board ticking the phases', () => {
     expect(ticks(t.id)).toMatchObject({ Preview: true, Merged: true, PR: true })
   }, 30_000)
 
+  it('Summary: ticked by an agent summary after the last commit, unticked by a newer commit, ticked again; frozen once merged', async () => {
+    const { projectId, repoId } = newProject()
+    noteActor('enrique', 'human')
+    commitOn('feat/summary', 'summary-1.txt')
+    const t = await newTicket(projectId, { branch: 'feat/summary', prNumber: 101 })
+    const activity = () =>
+      dbm.db
+        .select()
+        .from(dbm.schema.activity)
+        .where(and(eq(dbm.schema.activity.refType, 'ticket'), eq(dbm.schema.activity.refId, t.id)))
+        .all()
+        .filter((a) => a.text.includes('"Summary"'))
+        .map((a) => [a.actor, a.text])
+    await read(t.id)
+    expect(ticks(t.id).Summary).toBe(false)
+
+    // The human's summary does not count.
+    features.setSummary(t.id, { body: 'Looks fine?' }, 'enrique')
+    await read(t.id)
+    expect(ticks(t.id).Summary).toBe(false)
+
+    features.setSummary(
+      t.id,
+      { body: 'What it does, the PR, the preview.', change: 'the hand-off' },
+      'claude',
+    )
+    const view = await read(t.id)
+    expect(view.tasks.find((x) => x.text === 'Summary')).toMatchObject({ done: true, auto: true })
+    expect(activity()).toEqual([['board', `completed "Summary" on #${t.id} t`]])
+
+    // A commit after it: the summary is behind the work.
+    backdateSummaries(t.id)
+    commitOn('feat/summary', 'summary-2.txt')
+    expect((await read(t.id)).tasks.find((x) => x.text === 'Summary')!.done).toBe(false)
+    expect(activity().at(-1)).toEqual(['board', `reopened "Summary" on #${t.id} t`])
+
+    // A new version brings it back.
+    features.setSummary(t.id, { body: 'Updated for the new commit.', change: 'the new commit' }, 'claude')
+    await read(t.id)
+    expect(ticks(t.id).Summary).toBe(true)
+
+    // Once merged, a later commit leaves it ticked.
+    prRow(projectId, repoId, 101, { open: false, mergedAt: new Date().toISOString() })
+    await read(t.id)
+    expect(ticks(t.id).Merged).toBe(true)
+    backdateSummaries(t.id)
+    commitOn('feat/summary', 'summary-3.txt')
+    await read(t.id)
+    expect(ticks(t.id)).toMatchObject({ Summary: true, Merged: true })
+  }, 60_000)
+
   it('in a done stage only ticks: a stopped preview leaves Preview ticked', async () => {
     const { projectId } = newProject()
     const t = await newTicket(projectId)
@@ -507,7 +656,14 @@ describe('the board ticking the phases', () => {
     await read(t.id)
     expect(activity().length).toBe(before + 1)
     expect(
-      auto.reconcileAutoPhases(t.id, { Pushed: null, PR: true, CI: null, Preview: null, Merged: null }),
+      auto.reconcileAutoPhases(t.id, {
+        Pushed: null,
+        PR: true,
+        CI: null,
+        Preview: null,
+        Summary: null,
+        Merged: null,
+      }),
     ).toBe(false)
   })
 
@@ -765,7 +921,7 @@ describe('Merged on tickets seeded before it', () => {
   })
 })
 
-describe("the hand-off's Implementation item", () => {
+describe('what is open in review', () => {
   it("leaves out the open Merged phases, the ticket's and its lanes'; the progress still counts them", async () => {
     const { projectId } = newProject()
     const { updateProject } = await import('./projects')
@@ -780,12 +936,7 @@ describe("the hand-off's Implementation item", () => {
     for (const id of [t.id, lane.id])
       features.updateTask(taskOf(id, 'Implementation').id, { done: true }, 'claude')
     const moved = await needs.changeTicket(t.id, { status: 'review' }, 'claude', { agent: true })
-    const handoff = 'handoff' in moved ? moved.handoff : null
-    expect(handoff!.missing.map((m) => m.code)).not.toContain('tasks_open')
-    expect(handoff!.checks.find((c) => c.code === 'tasks_open')).toMatchObject({
-      ok: true,
-      text: '2 of 2 tasks done',
-    })
+    expect('open' in moved && moved.open).toEqual([])
     const view = await read(t.id)
     expect(view.rollup).toEqual({ done: 2, total: 4 })
     expect(ticks(t.id).Merged).toBe(false)
@@ -804,6 +955,21 @@ describe('without anyone reading the ticket', () => {
     await prs.refreshPrs(projectId)
     expect(ticks(t.id)).toMatchObject({ PR: true, Merged: true })
   })
+
+  it('the push poll and the PR refresh tick Summary, with no read in between', async () => {
+    const { projectId } = newProject()
+    commitOn('feat/summary-poll', 'summary-poll.txt')
+    const t = await newTicket(projectId, { branch: 'feat/summary-poll' })
+    features.setSummary(t.id, { body: 'Written, never read back.' }, 'claude')
+    expect(ticks(t.id).Summary).toBe(false)
+    await auto.reconcileProject(projectId)
+    expect(ticks(t.id).Summary).toBe(true)
+    // A new commit, then the project's push poll.
+    backdateSummaries(t.id)
+    commitOn('feat/summary-poll', 'summary-poll-2.txt')
+    await push.projectPush(projectId)
+    expect(ticks(t.id).Summary).toBe(false)
+  }, 30_000)
 
   it("the project's push poll ticks Pushed", async () => {
     const { projectId } = newProject()
