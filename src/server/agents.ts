@@ -17,6 +17,8 @@ import { HttpError, notFound } from './http'
 import { getProject, listProjects } from './projects'
 import { getRepo } from './repos'
 import rawTemplate from './skill/board.md?raw'
+import boardMcpScript from '../../scripts/board-mcp.mjs?raw'
+import { restSection } from './skill/rest'
 
 // Agents get the skill with LF line endings, also from a Windows checkout where the file has CRLF.
 const template = rawTemplate.replace(/\r\n/g, '\n')
@@ -83,10 +85,33 @@ const MCP_HINT: Record<AgentClient, (url: string) => string> = {
  * The SKILL.md for `client`: the same instructions for every CLI. It carries no projects or repos: an
  * agent asks the board for its own (`find_project`), so a copy stays right as the board changes.
  */
-export function renderSkill(client: AgentClient): string {
-  const url = config.boardUrl
-  return template.replaceAll('{{BOARD_URL}}', url).replace('{{MCP_HINT}}', MCP_HINT[client](url))
+export function renderSkill(
+  client: AgentClient,
+  transport: SkillTransport = 'mcp',
+  url: string = config.boardUrl,
+): string {
+  if (transport === 'mcp')
+    return template.replaceAll('{{BOARD_URL}}', url).replace('{{MCP_HINT}}', MCP_HINT[client](url))
+  // The same skill for a session without the MCP tools: each tool named stays, its route is in the table.
+  const rest = template
+    .replace('MCP server "board")', 'REST API, no MCP tools)')
+    .replace(
+      /Its tools come from the `board` MCP\nserver\.[^]*?If they are missing, or the board answers 401/,
+      "This copy is for a session without the `board` MCP\ntools: wherever it names a tool, call that tool's REST route (Without the board's MCP tools: REST,\nbelow). If the board answers 401",
+    )
+    .replace(' {{MCP_HINT}}', '')
+    .replace(
+      '\n## Keep the board out of the repo\n',
+      () => `\n${restSection('{{BOARD_URL}}')}\n## Keep the board out of the repo\n`,
+    )
+  return rest.replaceAll('{{BOARD_URL}}', url)
 }
+
+export const SKILL_TRANSPORTS = ['mcp', 'rest'] as const
+export type SkillTransport = (typeof SKILL_TRANSPORTS)[number]
+
+/** `scripts/board-mcp.mjs`: the board's MCP tools over stdio, for a client that reaches the board through a proxy. */
+export const boardMcpBridge = (): string => boardMcpScript.replace(/\r\n/g, '\n')
 
 /** What the Connect an agent page builds its commands from. */
 export function agentSetup() {

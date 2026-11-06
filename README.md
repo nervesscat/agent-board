@@ -437,6 +437,108 @@ Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board'
   do not open on other devices.
 - `HOST` stays `127.0.0.1`: nothing listens off this machine but Tailscale.
 
+### Cloud agents
+
+An agent in a cloud session (Claude Code on the web, for one) runs on a machine of its own, outside
+your tailnet, and its MCP servers connect as the session starts, before anything it runs. It reaches
+the board the way your devices do, on the tailnet name, as a Tailscale node of its own that it brings
+up itself, with an agent token. Three things need it: the board's MCP tools (the `board-mcp` bridge,
+or the REST copy of the board skill), the skills, and previews of its branches (the board fetches them).
+
+**1. In the Tailscale admin console**
+
+- A tag for these nodes, `tag:cloud-agent`, that you own (Access controls, `tagOwners`).
+- An access rule that lets the tag reach the board's machine, on 443 only, and nothing else (no other
+  rule may name the tag or `*` as its source):
+
+  ```json
+  "hosts": { "board": "<the board machine's 100.x.y.z>" },
+  "grants": [{ "src": ["tag:cloud-agent"], "dst": ["board"], "ip": ["tcp:443"] }]
+  ```
+
+- An auth key (Settings, Keys, **Generate auth key**): reusable, **ephemeral** (a session's node goes
+  when it disconnects), pre-approved when device approval is on, tagged `tag:cloud-agent`, with an
+  expiry you renew.
+
+**2. The cloud environment** (its settings, where the session's environment is edited)
+
+- Secrets: `TS_AUTHKEY` (the auth key) and `BOARD_TOKEN` (an agent token: Connect an agent,
+  **Generate commands**), plus the variable `BOARD_URL=https://<machine>.<tailnet>.ts.net`. Never put a
+  key or token in a prompt, a repo, a post or a setup script.
+- Network: allow Tailscale's control and relay servers when the environment limits network access.
+- Setup script. It runs once, as the environment is built, without the secrets, and nothing it starts
+  is still running when a session starts; so it only installs:
+
+  ```sh
+  curl -fsSL https://tailscale.com/install.sh | sh
+  curl -fsSL -o /usr/local/lib/board-mcp.mjs \
+    https://raw.githubusercontent.com/nervesscat/agent-board/main/scripts/board-mcp.mjs
+  cat > /usr/local/bin/tailnet-up <<'EOF'
+  #!/bin/sh
+  # Tailscale in userspace, its HTTP proxy on localhost:1055; prints "board 401" once the board answers.
+  S=/tmp/tailscaled.sock
+  pgrep -x tailscaled >/dev/null || { tailscaled --tun=userspace-networking --state=mem: --socket=$S \
+    --outbound-http-proxy-listen=localhost:1055 >/tmp/tailscaled.log 2>&1 & }
+  for i in $(seq 1 20); do
+    tailscale --socket=$S status >/dev/null 2>&1 && break
+    tailscale --socket=$S up --authkey="$TS_AUTHKEY" --hostname=cloud-agent --accept-dns=false \
+      --timeout=15s >/dev/null 2>&1 && break
+    sleep 2
+  done
+  c=000
+  for i in $(seq 1 15); do
+    c=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -x http://localhost:1055 "$BOARD_URL/api/health")
+    [ "$c" = 401 ] && break
+    sleep 2
+  done
+  echo "board $c"
+  EOF
+  chmod +x /usr/local/bin/tailnet-up
+  claude mcp add --scope user board -e BOARD_PROXY=http://localhost:1055 -e BOARD_UP=tailnet-up \
+    -- node /usr/local/lib/board-mcp.mjs
+  ```
+
+**3. The board's MCP tools: `board-mcp`.** `scripts/board-mcp.mjs` (also served at
+`/api/agent-setup/board-mcp`) is a stdio MCP server with no dependencies but Node: each message it
+reads is posted to `$BOARD_URL/api/mcp` with `Authorization: Bearer $BOARD_TOKEN`, through
+`BOARD_PROXY` (an HTTP proxy that tunnels with CONNECT, as Tailscale's userspace proxy does), and each
+answer is written back. Before its first request it runs `BOARD_UP`, so the tailnet comes up when
+Claude starts the server, not after (about ten seconds from nothing, inside Claude Code's 30-second
+start limit; `MCP_TIMEOUT=60000` gives it more). When a request cannot connect it runs `BOARD_UP`
+again and retries once; a request the board may have read is never sent twice. `BOARD_AGENT_NAME`
+sends `X-Agent-Name`. Check it in a new session: `claude mcp list` shows `board: … Connected`, and the
+`mcp__board__*` tools are there. If `board` is not listed, the environment did not keep the user
+config the setup script wrote: run that `claude mcp add` line in the session, then start a new
+conversation, or use the REST copy of the skill below.
+
+**4. The skills.** In the session, after `tailnet-up`:
+
+```sh
+b() { curl -fsS -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" "$@"; }
+mkdir -p ~/.claude/skills/board
+b "$BOARD_URL/api/agent-setup/skill?client=claude" -o ~/.claude/skills/board/SKILL.md
+b "$BOARD_URL/api/agent-setup/review-skills" | tar -x -C ~/.claude
+```
+
+Without the MCP tools, fetch `?client=claude&transport=rest` instead: the same skill, with a section
+that gives each tool's REST route and how to call it (`curl -x http://localhost:1055 …`). Fetched
+through `PUBLIC_ORIGIN`, the skill names the board by that origin. The review skills say what to do in
+a session that has no board tools, does not offer their agent types (a general-purpose agent reads the
+agent file as its instructions), or gives a subagent no Agent tool (it runs the phases itself).
+
+**5. Previews.** The board runs previews from worktrees on its own machine, and a cloud session's
+worktree is not there. Push the branch, then `preview_branch` (REST `POST
+/api/tickets/:id/branch-preview`): the board fetches the branch from the repo's origin into a
+detached worktree of its own beside the main checkout (`<checkout>-preview-<branch>`), registers it on
+the ticket and runs the repo's preview there, as `start_preview` does. After the next push, call it
+again: the worktree moves to the new head and the preview builds again. The board makes no branch and
+moves no worktree but its own; Cleanup removes it once the ticket is closed.
+
+**What holds**: the tag reaches the board's machine on 443 and nothing else on your tailnet; every
+request there needs the agent token (revoke it on Connect an agent, the key in the admin console);
+ephemeral nodes leave the tailnet with their session; a preview stays on the board's machine, as every
+board-run preview does.
+
 ## Test mode
 
 `BOARD_ENV` says what a running board is, and so whether anyone signs in:
@@ -758,6 +860,7 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | PATCH        | `/api/agent-tokens/:id`                                                                                             | `{role}`: `orchestrator` or `worker`; the token's next request has it, and its name's `/api/actors` row at once; the human's (an agent gets 403); 404 for a revoked or unknown token                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | GET · POST   | `/api/host-tools` · `/api/host-tools/check`                                                                         | the last check of the tools the board runs (below) `{checkedAt, tools[]}`: per tool `name, found, path, version, ok, breaks, problem, fix` (gh also `signedIn`); GET waits for the startup check when it has not ended · POST checks again                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | GET          | `/api/agent-setup` · `/api/agent-setup/skill?client=claude\|codex\|opencode`                                        | the board's URL for the Connect an agent page · the board skill as a SKILL.md (agents find their project with `find_project`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| GET          | `/api/agent-setup/skill?transport=rest` · `/api/agent-setup/board-mcp`                                              | the board skill for a session without the board's MCP tools, each tool's REST route in it (fetched through `PUBLIC_ORIGIN`, it names that origin) · the stdio MCP bridge, `board-mcp.mjs` (Cloud agents, above)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | GET          | `/api/agent-setup/review-skills` · `?list`                                                                          | the feature-review, review-queue and todo-review skills with their agents, as a tar to extract into `~/.claude` · the paths it holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | GET          | `/api/agent-setup/review-skills/status` · `?projectId=`                                                             | whether those files are installed as served: `{files, global, repos[]}`. `global` is the user-wide `~/.claude` of the machine the board runs on (`CLAUDE_HOME`): `{path, installTo, status, files[]}`, where `installTo` is the folder its install line targets when `CLAUDE_HOME` names one other than `~/.claude`, else null (the line installs into `~/.claude`). Each of `repos` is a repo's own `.claude` (every repo, or the project's) with its project, `repoPath`, `status` and `files[]`. A `status` is `none` (no copy; a repo then uses `~/.claude`), `current`, `outdated` or `unreachable`; each file is `{path, status}`                                                                                                                                                                                   |
 | GET          | `/api/agent-setup/review-skills/diff?path=&repoId=`                                                                 | one of those files as installed against as served, line endings aside, as git shows it: `{path, status, installed, unreadable, header, hunks[]}`. `path` must be one of the bundle's (else 400/404); `repoId` reads that repo's `.claude`, none `~/.claude` (409 if it can't be read). Old side: the installed copy (`/dev/null` when `missing`); new: the served one. `unreadable`: why a copy there can't be read. Read-only                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -812,6 +915,7 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | POST         | `/api/tickets/:id/runs/start` · `/stop` `{repoId?}`                                                                 | Start all (every run that does not run yet) · Stop all (every one going), of one repo with `repoId`: `{results: [{repoId, runId, name, workspaceId, ok, reason, state}]}`, one refused does not stop the rest                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | POST/GET     | `/api/workspaces/:id/runs/:runId/start` · `/stop` · `/restart` · GET `/log?name=build\|server`                      | one run from that workspace: 202 building · 409 when it does not run · stop and start again · its logs; a body is never read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | POST/GET     | `/api/workspaces/:id/preview/start` · `/stop` · `/restart` · GET `/preview/log?name=build\|server`                  | the board builds and runs the workspace's worktree as a preview (see Previews) · stop it · stop and build again · its logs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| POST         | `/api/tickets/:id/branch-preview` `{branch?, repoId?}`                                                              | a preview of a branch pushed from another machine (MCP `preview_branch`): fetched from the repo's origin into a detached worktree of the board's own beside the main checkout (`<checkout>-preview-<branch>`), registered as a workspace of the ticket, and the repo's preview run started there: 202 `{workspace, branch, sha, path, preview}`. Again after a push, that worktree moves to the new head and builds again. `branch` is the ticket's when left out; 404 when origin has no such branch, 409 when that folder is on a branch, has changes or is not a worktree of the repo                                                                                                                                                                                                                                  |
 | POST         | `/api/workspaces/:id/preview/stop-link`                                                                             | stop the server behind the link, humans only, when it runs from the workspace's worktree (see Previews): `{workspaceId, ticketId, kind: 'link', port, pids, freed}`; 400 or 409 with why otherwise                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | POST         | `/api/tickets/:id/updates` `{body, attachmentIds[], as?, progress?, tab?}`                                          | a post on the ticket's feed (`progress` default true); `as` posts under one of the project's agents (agents only); `tab` `main` or `agents` puts it in that tab, else the board picks (below)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | POST/DELETE  | `/api/tickets/:id/attachments` `{attachmentIds}` · `/api/tickets/:id/attachments/:attachmentId`                     | files that go with the ticket's instructions (uploads first); `GET /api/tickets/:id` lists them as `attachments`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
