@@ -50,13 +50,15 @@ export function logProcessEnd(write: Write = writeStderr) {
   g[HOOKED] = true
   for (const signal of LOGGED_SIGNALS) {
     const onSignal = () => {
+      process.off(signal, onSignal)
       write(`${processLine(`received ${signal}`)}\n`)
-      // Ours was the only handler: the signal does what it would have done without it (SIGHUP ends the
-      // process). Nitro's graceful shutdown is still listening for SIGINT and SIGTERM, so those are left
-      // to it.
+      // Nothing else handles it: the signal does what it would have done without this (SIGHUP ends the
+      // process). Otherwise it is theirs: Nitro's graceful shutdown (SIGINT, SIGTERM), Vite's close.
       if (process.listenerCount(signal) === 0) process.kill(process.pid, signal)
     }
-    process.once(signal, onSignal)
+    // In front of the listeners already there: one added with `once` takes itself off as it runs, and
+    // would no longer be counted once it had.
+    process.prependListener(signal, onSignal)
   }
   // A monitor sees an uncaught exception before whatever handles it, and changes nothing.
   process.on('uncaughtExceptionMonitor', (err, origin) => {

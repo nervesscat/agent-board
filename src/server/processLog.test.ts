@@ -62,6 +62,25 @@ describe('logProcessEnd', () => {
     expect(lines[2]).toMatch(/board pid \d+ exiting code=0 /)
   })
 
+  it('SIGTERM with a once-listener there before it (as Vite has): left to that listener, not re-raised', async () => {
+    const script =
+      `process.once('SIGTERM', () => setTimeout(() => { console.error('closed'); process.exit(0) }, 100))\n` +
+      `const { logProcessEnd } = await import(${JSON.stringify(MODULE)})\nlogProcessEnd()\n` +
+      `setInterval(() => {}, 1000); console.log('ready')`
+    const child = spawn(process.execPath, ['--input-type=module', '--no-warnings', '-e', script], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stderr = ''
+    child.stderr.on('data', (c) => (stderr += String(c)))
+    child.stdout.on('data', (c) => String(c).includes('ready') && child.kill('SIGTERM'))
+    const [code, signal] = await new Promise<[number | null, NodeJS.Signals | null]>((resolve) =>
+      child.on('close', (c, s) => resolve([c, s])),
+    )
+    expect([code, signal]).toEqual([0, null])
+    expect(stderr).toMatch(/received SIGTERM uptime=/)
+    expect(stderr).toContain('closed')
+  })
+
   it('SIGHUP with nothing else listening still ends the process by the signal, after its line', async () => {
     const r = await run(`setInterval(() => {}, 1000); console.log('ready')`, 'SIGHUP')
     expect(r.signal).toBe('SIGHUP')
