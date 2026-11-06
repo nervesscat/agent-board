@@ -320,8 +320,16 @@ Before `update_ticket` → `status: review`, every item, in order (the board tic
 Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
 
 1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
-2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
-   project instructions say how, e.g. `pnpm test:e2e`).
+2. Checks green locally, on what the change touches: the typecheck of the whole project (it
+   cannot be scoped soundly); lint and the formatter on the changed files only; only the unit
+   tests related to the changed files (e.g. `vitest related <files> --run`,
+   `jest --findRelatedTests <files>`, the `pytest` files that test them); only the end-to-end spec
+   files covering the changed pages or server routes (e.g. `playwright test <spec files>`), none
+   when the diff touches neither. The project instructions say which commands. The full suite runs
+   in CI: its checks green on the head are still required (`checks_unknown`, below), and a
+   failure CI finds after the push is fixed like a local one. A repo with no CI that runs the full
+   suite on pull requests keeps the full local run: all its checks, and its end-to-end tests when
+   it has them (e.g. `pnpm test:e2e`).
 3. Branch pushed: `get_ticket` → `push.state` is `pushed` (a green dot on the board). `ahead`
    (commits only here) or `local-only` (not on origin) is red: push, then check again. (`merged`:
    gone from origin because its PR was merged into the base.)

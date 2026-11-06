@@ -42,7 +42,9 @@ refute, merge) will try to break what you built. Build so it survives that.
 
 - Read the code around what you change first, and match it: naming, comment density, idiom.
 - Every acceptance criterion gets a way to check it: a test where the project has tests for that
-  layer, else the exact steps. Run the project's checks (typecheck, lint, tests) before you finish.
+  layer, else the exact steps. Before you finish, run the project's checks on what the change
+  touches: the typecheck of the whole project, lint and the formatter on the changed files, and
+  only the tests related to them (the full suites run in CI).
 - On a fix round, fix each finding at its cause and add the test that reproduces its scenario; do
   not change what the finding did not touch. A finding you believe is wrong: say why, with
   \`path:line\`, and leave it for the orchestrator to settle. Never quietly skip one.

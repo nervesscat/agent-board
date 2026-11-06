@@ -73,7 +73,7 @@ on its own branch. What they still share is guarded by step, not for the whole r
 | Shared | Guard | Rule in |
 |---|---|---|
 | the main checkout's git (`fetch`, `worktree add` and `remove`, the push updating its refs) | a git command that meets another one's `.lock` waits and runs again; never deletes the lock; a lock error is never the ticket's failure | `todo-review-ticket`, "Shared with the other tickets of this repo"; `/feature-review` Setup |
-| the machine's CPU: two test suites of one repo at once make its tests flaky | the repo's **test lock** `QUEUE/locks/tests-<repo id>/`: only its holder runs the repo's heavy runs (checks, test suite, end-to-end suite, a build); the ticket agent holds it from its gate through its review | `todo-review-ticket`, same section |
+| the machine's CPU: two test runs of one repo at once make its tests flaky | the repo's **test lock** `QUEUE/locks/tests-<repo id>/`: only its holder runs the repo's heavy runs (checks, unit and end-to-end tests, scoped or full, a build); the ticket agent holds it from its gate through its review | `todo-review-ticket`, same section |
 
 Rules:
 1. Tickets of the same repo may run at the same time, up to `parallel`. Only the lanes above keep
