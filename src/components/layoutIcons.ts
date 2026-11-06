@@ -38,6 +38,7 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'nav.agents': Bot,
   'nav.daily': CalendarDays,
   'nav.cleanup': BrushCleaning,
+  'nav.repositories': FolderGit2,
   'nav.settings': Settings,
   'overview.needsYou': Inbox,
   'overview.inProgress': Play,

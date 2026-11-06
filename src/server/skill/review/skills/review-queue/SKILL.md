@@ -155,8 +155,8 @@ Each PR is re-queued at most once.
 
 ## On the board
 
-When the board's MCP tools are available and a repo belongs to a board project (the board skill's
-table, or `list_projects`), the board is the queue, and the project's agents are the team.
+When the board's MCP tools are available and a repo belongs to a board project (`find_project`
+with its origin, folder and path), the board is the queue, and the project's agents are the team.
 
 **Read the team first.** `get_project` → `agents`: each has `instructions` (its brief) and
 `delegation` (when to call it, what to give it, what it returns, what comes next). The delegation

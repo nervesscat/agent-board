@@ -21,7 +21,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 
 | Token | Meaning | Default |
 |---|---|---|
-| `project=<id>` | the board project | the project of the repo in the current directory (the board skill's table, or `list_projects` matched by repo path or GitHub slug) |
+| `project=<id>` | the board project | the project of the repo in the current directory (`find_project` with its origin, folder and path) |
 | a number | work only these ticket ids, in this order | every eligible To do ticket |
 | `parallel=N` | maximum tickets in flight, 1 to 3, tickets of the same repo included | 2 |
 | `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round | `auto` |
@@ -73,7 +73,7 @@ on its own branch. What they still share is guarded by step, not for the whole r
 | Shared | Guard | Rule in |
 |---|---|---|
 | the main checkout's git (`fetch`, `worktree add` and `remove`, the push updating its refs) | a git command that meets another one's `.lock` waits and runs again; never deletes the lock; a lock error is never the ticket's failure | `todo-review-ticket`, "Shared with the other tickets of this repo"; `/feature-review` Setup |
-| the machine's CPU: two test suites of one repo at once make its tests flaky | the repo's **test lock** `QUEUE/locks/tests-<repo id>/`: only its holder runs the repo's heavy runs (checks, test suite, end-to-end suite, a build); the ticket agent holds it from its gate through its review | `todo-review-ticket`, same section |
+| the machine's CPU: two test runs of one repo at once make its tests flaky | the repo's **test lock** `QUEUE/locks/tests-<repo id>/`: only its holder runs the repo's heavy runs (checks, unit and end-to-end tests, scoped or full, a build); the ticket agent holds it from its gate through its review | `todo-review-ticket`, same section |
 
 Rules:
 1. Tickets of the same repo may run at the same time, up to `parallel`. Only the lanes above keep

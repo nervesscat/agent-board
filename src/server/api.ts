@@ -209,7 +209,7 @@ api.delete('/api/agent-tokens/:id', ({ request, params }) => {
 
 // --- connecting agents: board settings, and the skill each CLI installs ---
 api.get('/api/agent-setup', () => json(agents.agentSetup()))
-// The board skill as a SKILL.md, with today's projects and repos; the install commands curl this.
+// The board skill as a SKILL.md (no projects in it: agents call find_project); the install commands curl this.
 api.get('/api/agent-setup/skill', ({ url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
   return new Response(agents.renderSkill(client), {
@@ -266,6 +266,22 @@ api.post('/api/projects', async ({ request, actor }) => {
   return json(projects.createProject(body, actor, callerInfo(request)), 201)
 })
 api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
+// One page of the tags the project offers to filter by (the tag filter's list): `{tags, next}`.
+api.get('/api/projects/:id/tags', ({ params, url }) => {
+  const q = url.searchParams
+  const num = (k: string) => (q.get(k) ? Number(q.get(k)) : undefined)
+  const page = query(
+    projects.TagsQuery,
+    {
+      q: q.get('q') ?? undefined,
+      include: q.get('include') ?? undefined,
+      cursor: q.get('cursor') ?? undefined,
+      limit: num('limit'),
+    },
+    'query',
+  )
+  return json(projects.projectTags(id(params), page))
+})
 // The phases every new ticket of the project starts with; null goes back to the built-in list.
 const DefaultPhases = z.array(z.string().trim().min(1).max(500)).max(20).nullable()
 api.patch('/api/projects/:id', async ({ request, params, actor }) => {

@@ -29,22 +29,24 @@ terms. If the ticket's text has something the PR needs (the why, how to test), r
 own words instead of pointing at the ticket. Board updates and comments may, of course, talk about
 the repo, branches and PRs freely; the rule only runs the other way.
 
-## 1. Your project: look it up here, nowhere else
+## 1. Your project: ask the board with `find_project`, nowhere else
 
 Work only in the project of the repo you are in. Do not call `list_projects`, and never read or
 write another project's tickets, PRs, reviews or daily log.
 
-Find the repo you are in (the folder name of `git rev-parse --show-toplevel`, or the working
-folder, and its GitHub slug from `git remote get-url origin`), then take its project from this
-table. The same repo may be checked out on Windows and in WSL, under another path: match the folder
-name or the GitHub slug, and both map to the same ids.
+Find the repo you are in (its origin from `git remote get-url origin`, and its path from
+`git rev-parse --show-toplevel`, or the working folder), then call `find_project` with
+`githubRepo` (the origin URL or `owner/name`), `folder` (the path's last segment) and `path`. It
+answers from the board as it is now with only the project and repo that match (`projectId`,
+`repoId`), by the GitHub slug first, then the path, then the folder name; the same repo checked out
+on Windows and in WSL, or a worktree of it (e.g. `.wt-pr14`), is found by its slug, or by its path
+inside or beside the repo's checkout.
 
-{{PROJECT_TABLE}}
-
-- A folder holding several repos of one project: that is the project; ask which repo (or take it
-  from the ticket) before passing a `repoId`.
-- A worktree of one of these repos (e.g. `.wt-pr14`) belongs to that repo.
-- Not in the table: say the repo has no board project and stop using the board for it. Do not
+- `match: "repos"`, a folder holding several repos of one project: that is the project; ask which
+  repo (or take it from the ticket) before passing a `repoId`.
+- `match: "ambiguous"`, repos in several projects: ask the human which one; do not pick.
+- `weak: true`: the match may be another repository (its `message` says why); confirm with the human.
+- `match: "none"`: say the repo has no board project and stop using the board for it. Do not
   guess from other projects and do not create one.
 
 Then:
@@ -56,8 +58,7 @@ Then:
    orchestrator what should change. If you were briefed with an `agentName`
    (`<orchestrator>/<you>`), pass it on **every** board call: it makes your posts, claims and
    comments yours, as a worker under the orchestrator.
-2. `get_project` with your `projectId`, and check its `name` matches the table (if not, the table
-   is stale: tell the human to copy the skill again from the board). Its `instructions` override
+2. `get_project` with your `projectId`. Its `instructions` override
    your defaults for every repo in it. Its `stages` are the board's columns, each with a `key`, a
    `name` and a `kind` (`open`, `active`, `blocked`, `review`, `done`, `cancelled`); a ticket's
    `status` is a stage key. Wherever a status is asked for you can also pass a kind, which means
@@ -191,7 +192,7 @@ Lanes of a ticket you are working are yours to create (next section).
   `answer_decision` after asking them in the chat); Keep leaves them. The card is never edited:
   ask again instead. Never try to archive any
   other way.
-- Repos: only the human adds, changes and removes them (an orchestrator also moves one to another
+- Repos: only the human adds, changes and removes them, on each project's Repositories page (an orchestrator also moves one to another
   project). When the work needs a repo the project
   lacks (a new repository you are building), `add_repo` with your ticket, the repo's name, its
   checkout's absolute path, its GitHub `owner/name` (what `git remote get-url origin` points at)
@@ -324,8 +325,16 @@ Before `update_ticket` → `status: review`, every item, in order (the board tic
 Preview, Summary and Merged as their facts hold; Implementation and its steps are ticked by hand):
 
 1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
-2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
-   project instructions say how, e.g. `pnpm test:e2e`).
+2. Checks green locally, on what the change touches: the typecheck of the whole project (it
+   cannot be scoped soundly); lint and the formatter on the changed files only; only the unit
+   tests related to the changed files (e.g. `vitest related <files> --run`,
+   `jest --findRelatedTests <files>`, the `pytest` files that test them); only the end-to-end spec
+   files covering the changed pages or server routes (e.g. `playwright test <spec files>`), none
+   when the diff touches neither. The project instructions say which commands. The full suite runs
+   in CI: its checks green on the head are still required (`checks_unknown`, below), and a
+   failure CI finds after the push is fixed like a local one. A repo with no CI that runs the full
+   suite on pull requests keeps the full local run: all its checks, and its end-to-end tests when
+   it has them (e.g. `pnpm test:e2e`).
 3. Branch pushed: `get_ticket` → `push.state` is `pushed` (a green dot on the board). `ahead`
    (commits only here) or `local-only` (not on origin) is red: push, then check again. (`merged`:
    gone from origin because its PR was merged into the base.)

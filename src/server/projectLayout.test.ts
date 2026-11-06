@@ -73,13 +73,14 @@ describe("a project's layout", () => {
     const res = await call('PATCH', `/api/projects/${p}`, { layout })
     expect(res.status, JSON.stringify(res.body)).toBe(200)
     const nav = inArea(res.body.layout, 'nav')
-    // The pages it left out, each after the one before it by default: Agents to Instructions after
+    // The pages it left out, each after the one before it by default: Agents to Instructions (Repositories among them) after
     // Gallery, PR queue to Previews after Overview, which shows though it was sent hidden.
     expect(nav.map((it) => it.id)).toEqual([
       'nav.gallery',
       'nav.agents',
       'nav.daily',
       'nav.cleanup',
+      'nav.repositories',
       'nav.settings',
       'nav.overview',
       'nav.prs',

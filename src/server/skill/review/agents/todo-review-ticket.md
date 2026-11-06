@@ -1,6 +1,6 @@
 ---
 name: todo-review-ticket
-description: "Works one board ticket from To do to hand-off, unattended: claims it, builds it with the project's builder agent (and its spec agent, unless the ticket is low), reviews the branch with /feature-review at a depth scaled to the change for the rounds its complexity sets (mid one, high up to three; low gets no review) until it survives, checks the proof itself, then pushes, opens the PR, starts a preview and posts screenshots; blocks only for what only the human can provide. Returns a fixed nine-line result. Used by the /todo-review skill, one agent per ticket."
+description: "Works one board ticket from To do to hand-off, unattended: claims it, builds it with the project's builder agent (and its spec agent, unless the ticket is low), runs scoped checks, reviews the branch with /feature-review at a depth scaled to the change for the rounds its complexity sets (mid one, high up to three; low gets no review) until it survives, checks the proof itself, then pushes, opens the PR, waits for GitHub CI to pass the full suites, starts a preview and posts screenshots; blocks only for what only the human can provide. Returns a fixed nine-line result. Used by the /todo-review skill, one agent per ticket."
 ---
 
 # Todo Review: Ticket Agent
@@ -84,9 +84,10 @@ starts clean. Locked again: `STATUS: error`, as above. A review that judged the 
 not remove its worktree for a lock (it says so; `LEFTOVER.md` in its folder) counts as usual:
 the next review of the branch removes that worktree.
 
-**The machine's CPU, for heavy runs.** Two test suites of one repo at once make its tests flaky,
+**The machine's CPU, for heavy runs.** Two test runs of one repo at once make its tests flaky,
 and a result seen then proves nothing either way. **Heavy runs** are the project's checks
-(typecheck, lint, the test suite), its end-to-end suite, and a build (the preview's included).
+(typecheck, lint, unit tests), its end-to-end tests, scoped or full, and a build (the preview's
+included).
 Only the holder of `LOCK` starts one in this repo.
 - **Take it**: create the folder with a plain `mkdir LOCK` (never `mkdir -p` or `-Force`: the
   create must fail when the folder exists), then write `LOCK/holder.txt` with
@@ -102,10 +103,15 @@ Only the holder of `LOCK` starts one in this repo.
 - **Who holds it, when**: your builder, for each heavy run it starts (step 3), released right after
   that run; you, from your gate's checks (step 4) through the end of the review (step 5; for a low
   ticket, until the gate passes), released
-  when `/feature-review` returns, because its phases run the suite (verify, the refutation's
+  when `/feature-review` returns, because its phases run the checks (verify, the refutation's
   reproductions, the merge check) and do not take the lock themselves; you, from `start_preview`
-  until the preview runs or fails (step 7). Nothing you hold while you wait for `LOCK` is
-  something its holder waits on, so the wait always ends.
+  until the preview runs or fails (step 7); you, for the full local run where GitHub CI does not
+  run (step 7). Nothing you hold while you wait for `LOCK` is something its holder waits on, so
+  the wait always ends.
+
+**Local test flags.** A loaded machine fails short timeouts by itself. Locally, unit tests run with
+`--testTimeout=30000` and end-to-end specs with `--workers=1`. The full unit and end-to-end suites
+run on GitHub CI, never locally, except the one full run step 7 makes where CI does not run.
 
 ## The work timeline
 
@@ -212,11 +218,13 @@ is no diff yet). Then:
 
 Spawn a subagent briefed with the **builder** agent's `instructions`, the project's `instructions`,
 the ticket, `WORKDIR/01-spec.md`, and a brief in the same four parts. Focus: the spec's Surfaces
-and their tests. Known: the worktree and branch, the project's check commands, `PORTS`, the repo's
+and their tests. Known: the worktree and branch, the project's check commands scoped as the gate
+runs them (step 4, item 1) with the **Local test flags**, never the full unit or end-to-end suite
+(GitHub CI runs those on the PR), `PORTS`, the repo's
 rule on what it may mention, and the test lock's rule as written in **Shared with the other
 tickets of this repo** (the `LOCK` path, the holder line `#<TICKET> builder <ISO time>`, take it
 before each heavy run and release it right after). Done when: every criterion has its check, the
-checks pass, and the work is committed on the branch, never pushed. Return: the commits, what
+scoped checks pass, and the work is committed on the branch, never pushed. Return: the commits, what
 changed per criterion or finding, the checks run with their results. On a later round the brief
 carries the findings and failed criteria to fix, each with its scenario, and the Focus is only
 their `path:line` and their tests: the builder does not re-read or rework the rest of the change.
@@ -226,7 +234,7 @@ When it returns, release `LOCK` if `holder.txt` still names your ticket. Post it
 **Low: the builder codes and verifies itself.** Its brief is the same, with the ticket's instructions in
 place of `WORKDIR/01-spec.md` and its criteria in place of the spec's Surfaces. It is done when every
 criterion is checked by a test that runs the real code (not a mock) or by running the real code, and
-the checks pass; the work is committed on the branch. Its return gives the evidence per criterion: the
+the scoped checks pass; the work is committed on the branch. Its return gives the evidence per criterion: the
 test's name, or the command and what it showed.
 
 ### 4. Your own gate, before every review
@@ -236,8 +244,17 @@ review: it releases `LOCK` when the gate passes). Whenever the gate sends the ch
 builder, release `LOCK` first.
 
 From the worktree:
-1. Run the project's checks (typecheck, lint, unit tests, and the end-to-end suite when the
-   project has one). A failure goes back to the builder with its output. A gate return uses up no review
+1. Run the project's checks on what the change touches
+   (`git diff --name-only origin/BASE...<branch>`), and nothing more: the typecheck of the whole
+   project (it cannot be scoped soundly); lint and the formatter on the changed files only (e.g.
+   `prettier --check <files>`); the migration check (e.g. `pnpm check:migrations`) when the schema
+   or a migration changed; only the unit tests related to the changed files, with
+   `--testTimeout=30000` (e.g. `vitest related <files> --run --testTimeout=30000`,
+   `jest --findRelatedTests <files>`, the `pytest` files that test them); only the end-to-end spec
+   files for the pages or flows the change touches, with `--workers=1` (e.g.
+   `playwright test <spec files> --workers=1`), none when it touches neither. Use the project's own
+   commands where it has them. Never the full unit or end-to-end suite here: GitHub CI runs both on
+   the PR, and CI green on the final head is required before hand-off (step 7). A failure goes back to the builder with its output. A gate return uses up no review
    round. A run sends the change back at most twice, on every level. After the second return, when the
    checks still fail, or, for a low ticket, when a criterion still has no evidence (step 5), post what
    fails or is unproven, `ask_decision` (keep going or drop) and stop: `BLOCKER: decision`. A failure
@@ -274,8 +291,9 @@ findings. Then release `LOCK` and go on to step 6 with that review.
 
 Otherwise, still holding `LOCK` (rewrite its holder line to `#<TICKET> review <ISO time>`), run
 `/feature-review` through the Skill tool, unattended:
-`repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, plus `light` when the depth
-is `light` and `deep` when it is `deep` (nothing more for `standard`). It reviews the branch's
+`repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, then `scoped`, plus `light` when the depth
+is `light` and `deep` when it is `deep` (nothing more for `standard`). With `scoped`, its phases
+run only the scoped checks, since CI runs the full suites on the PR. It reviews the branch's
 commits in a worktree of its own, posts its phases on the ticket, and writes `review.md` and
 `summary.md`. When it would ask a question, go on with the spec's assumption and note it. When it
 returns, however it ended, release `LOCK`.
@@ -320,19 +338,27 @@ Implementation and its steps (`set_task_done`).
 3. Any unmerged branch yours builds on: `update_ticket` with `needs`.
 4. The PR, the project's way (its instructions say how it is assigned), titled and described in
    the repo's own terms (no ticket numbers or board links where the repo forbids them), and `update_ticket` with
-   its `prNumber`. Then wait for the PR's CI to finish (`gh pr checks <number> --watch`): CI runs
-   on another platform than yours, and a failure there is a failed check like any other, fixed
-   through the builder before you hand off, never waved through as flaky without a rerun that
-   passes. Only when a review ran (mid and high) and the PR's head SHA is the SHA whose review survived,
+   its `prNumber`. Then wait for the PR's CI on the final head to finish (`gh pr checks <number> --watch`, in
+   calls under the Bash tool's 10-minute limit): CI runs the full unit and end-to-end suites, the
+   part your scoped gate left out, on another platform than yours. CI green on the final head is
+   required before hand-off. A failure there goes back to the builder like a gate failure (step 4),
+   fixed before you hand off, never waved through as flaky without a rerun that passes. Only when a review ran (mid and high) and the PR's head SHA is the SHA whose review survived,
    record that review on the PR's ticket so the review queue does not run it again: `post_review_result`
    with its verdict, its `summary.md` as `summaryMd`, the `sha`, its checks and counts, and `repoId` when
    the project has several repos. It also posts the summary there as a progress post, on the PR's ticket
    (`ticket` in `list_prs`). Right before, check `list_review_results` (with `sha`) and the ledger for a newer review
    of that SHA: post only when there is none. A newer one that did not survive is not posted over:
    the change did not survive, and its findings go back to the builder (step 5).
-   The board ticks PR once it is open, and CI once its checks are green. While GitHub's checks do
-   not run, comment on the PR `CI run locally: green on <sha>` with the head SHA the checks passed
-   on (`gh pr comment`): that ticks CI. Comment again after each push.
+   The board ticks PR once it is open, and CI once its checks are green.
+   **Where GitHub CI does not run** (no workflow runs on pull requests, or the PR's runs do not
+   start: no checks some 10 minutes after the push, or runs that fail in seconds with no step run,
+   such as a billing lock on a private repo), run the full local suite instead, once, at the final
+   head, holding `LOCK` (holder `#<TICKET> full-suite <ISO time>`): all the project's checks, its
+   whole unit suite with `--testTimeout=30000`, and its whole end-to-end suite. Then stop the
+   end-to-end servers your worktree left and release `LOCK`. A failure goes back to the builder
+   like a gate failure. When it passes, comment on the PR `CI run locally: green on <sha>` with
+   that head SHA (`gh pr comment`): that ticks CI. After each later push, run it again and comment
+   again.
 5. The preview: `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
    project's way and `set_preview`. When the change cannot be tried (docs, a script), say why in

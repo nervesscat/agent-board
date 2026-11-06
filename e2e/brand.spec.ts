@@ -37,7 +37,7 @@ test('the tab is titled CrossBoard on every page', async ({ page, api, project }
 })
 
 test('the top bar links home with the CrossBoard lockup', async ({ page }) => {
-  await page.goto('/repositories')
+  await page.goto(`/projects/${seededProject().id}/repositories`)
   await expect(page.getByRole('heading', { name: 'Repositories' })).toBeVisible()
   const home = homeLink(page)
   await expect(home).toHaveCount(1)
@@ -179,7 +179,10 @@ test('with the test mode badge the top bar fits every width from 640 to 768px wi
 }) => {
   for (const width of [640, 676, 683, 700, 720, 727, 767, 768]) {
     await page.setViewportSize({ width, height: 800 })
-    for (const url of ['/repositories', `/projects/${seededProject().id}/prs`]) {
+    for (const url of [
+      `/projects/${seededProject().id}/repositories`,
+      `/projects/${seededProject().id}/prs`,
+    ]) {
       const at = `${width}px ${url}`
       await page.goto(url)
       await expect(page.getByRole('main').getByRole('heading').first(), at).toBeVisible()
