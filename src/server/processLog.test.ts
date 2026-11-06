@@ -68,6 +68,17 @@ describe('logProcessEnd', () => {
     expect(r.stderr).toMatch(/received SIGHUP uptime=/)
   })
 
+  it('hooks in once per process, even from a fresh copy of the module (a dev reload)', async () => {
+    const again = JSON.stringify(`${MODULE}?reloaded`)
+    const r = await run(
+      `const m = await import(${again}); m.logProcessEnd()\n` +
+        `setInterval(() => {}, 1000); console.log('ready')`,
+      'SIGHUP',
+    )
+    expect(r.signal).toBe('SIGHUP')
+    expect(r.stderr.match(/received SIGHUP/g)).toHaveLength(1)
+  })
+
   it('SIGINT with nothing else listening still ends the process by the signal', async () => {
     const r = await run(`setInterval(() => {}, 1000); console.log('ready')`, 'SIGINT')
     expect(r.signal).toBe('SIGINT')

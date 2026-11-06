@@ -39,12 +39,15 @@ export function errorStack(err: unknown): string {
   }
 }
 
-let hooked = false
+// On globalThis: under `vite dev` the server's modules, and the plugin that calls this, run again on
+// each reload in the same process, and each run would add its listeners again.
+const HOOKED = Symbol.for('agent-board.processLog.hooked')
 
 /** Hooks the lines in, once per process. `write` is for the tests. */
 export function logProcessEnd(write: Write = writeStderr) {
-  if (hooked) return
-  hooked = true
+  const g = globalThis as { [HOOKED]?: boolean }
+  if (g[HOOKED]) return
+  g[HOOKED] = true
   for (const signal of LOGGED_SIGNALS) {
     const onSignal = () => {
       write(`${processLine(`received ${signal}`)}\n`)
