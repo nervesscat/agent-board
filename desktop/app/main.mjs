@@ -1,7 +1,8 @@
 // The desktop app: runs the built board (.output/server/index.mjs) under Electron's own Node, shows it
 // in a window, and keeps a tray icon to open it again or quit. Closing the window leaves the board
 // running for the agents (on Linux, while a tray host shows the icon: closeWindow); Quit stops it and
-// frees its port. README: "The desktop app".
+// frees its port. A server that dies on its own once the board has answered is started again, with
+// waits between tries and a cap (onServerExit). README: "The desktop app".
 //
 // On Linux it runs natively on Wayland in a Wayland session and on X11 otherwise: Electron's default
 // since 38 (--ozone-platform=auto), so no switch is set here. Its Wayland app_id and X11 WM_CLASS come
@@ -12,7 +13,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, shell, Tray } from 'electron'
 
 import {
   appFolders,
@@ -22,11 +23,13 @@ import {
   CONFIG_FILE,
   configTemplate,
   ensureWritableDir,
+  exitReason,
   isPortFree,
   nearestFolder,
   portBusyMessage,
   readConfigFile,
   resolveSettings,
+  restartPlan,
   setAutostart,
   SettingsError,
   tail,
@@ -81,8 +84,16 @@ let trayShown = !LINUX
 let quitting = false
 // A failure is being shown: the first one only.
 let failed = false
-// The end of the server's error output, for the dialog when it stops.
+// The end of the server's error output since it last started, for the dialog when it stops.
 let serverErr = ''
+// The board has answered once: from then on a server that exits on its own is restarted.
+let ready = false
+// The exits counted towards the cap, and since when the server has answered (restartPlan).
+let restarts = { exits: 0, healthySince: /** @type {number | null} */ (null) }
+/** @type {ReturnType<typeof setTimeout> | null} */
+let restartTimer = null
+// The window's page failed to load while the board was down: it is loaded again once it answers.
+let pageFailed = false
 
 if (homeError) {
   void app
@@ -105,6 +116,8 @@ if (homeError) {
   app.on('window-all-closed', () => {})
   app.on('before-quit', (event) => {
     quitting = true
+    if (restartTimer) clearTimeout(restartTimer)
+    restartTimer = null
     if (!server) return
     event.preventDefault()
     void stopServer().then(() => app.quit())
@@ -163,7 +176,9 @@ async function start() {
     )
   }
   startServer()
-  if (!(await waitUntilUp())) return
+  if (!(await waitUntilUp(server))) return
+  ready = true
+  restarts.healthySince = Date.now()
   console.log(`agent-board desktop: the board answers on ${settings.url}`)
   if (LINUX) trayShown = await trayHostPresent()
   createTray()
@@ -173,6 +188,7 @@ async function start() {
 
 function startServer() {
   const logs = path.join(settings.dataDir, 'logs')
+  serverErr = ''
   const out = fs.createWriteStream(path.join(logs, 'board.out.log'), { flags: 'a' })
   const err = fs.createWriteStream(path.join(logs, 'board.err.log'), { flags: 'a' })
   // The server's output goes on to the app's own too, for whoever started it from a terminal. Nobody
@@ -210,19 +226,99 @@ function startServer() {
     if (server === proc) server = null
     if (!quitting) void fatal('The board cannot start.', `${errorText(e)}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
   })
-  proc.on('exit', (code) => {
+  proc.on('exit', (code, signal) => {
     if (server === proc) server = null
-    if (quitting) return
-    const detail = `It exited${code === null ? '' : ` with code ${code}`}.\n\n${tail(serverErr) || '(no output)'}`
-    void fatal('The board stopped.', `${detail}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
+    if (!quitting) onServerExit(code, signal)
+  })
+  // Its output has all arrived: the log files of this start are closed.
+  proc.once('close', () => {
+    out.end()
+    err.end()
   })
 }
 
-/** Polls /api/health until the board answers, the server exits, or a minute passes. */
-async function waitUntilUp() {
+/**
+ * The server exited on its own. Before the board has ever answered, that is a failure to start,
+ * shown at once; after, it is started again (restartServer) after a wait that grows with each exit,
+ * until restartPlan gives up: then the board stopped, with the end of its last error output.
+ * @param {number | null} code
+ * @param {NodeJS.Signals | null} signal
+ */
+function onServerExit(code, signal) {
+  const logs = path.join(settings.dataDir, 'logs')
+  const reason = exitReason(code, signal)
+  const plan = ready ? restartPlan(restarts, Date.now()) : { exits: 0, delay: null }
+  restarts = { exits: plan.exits, healthySince: null }
+  if (plan.delay === null) {
+    const tried = plan.exits > 1 ? ` It was started again ${plan.exits - 1} times.` : ''
+    const exited = code === null && !signal ? 'It exited.' : `It exited with ${reason}.`
+    const detail = `${exited}${tried}\n\n${tail(serverErr) || '(no output)'}`
+    void fatal('The board stopped.', `${detail}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
+    return
+  }
+  const note = `the board's server exited (${reason}); starting it again in ${plan.delay / 1000} s`
+  console.error(`agent-board desktop: ${note}`)
+  appendLog(logs, note)
+  tray?.setToolTip(`${app.getName()}: restarting the board (${reason})`)
+  restartTimer = setTimeout(() => void restartServer(reason), plan.delay)
+}
+
+/**
+ * Starts the server again after it exited with `reason` and, once it answers, says so without
+ * blocking anyone (the tray's tooltip, a notification) and loads the window again if its page failed
+ * while the board was down; an open page catches up by itself. Its exit, if it dies again, is
+ * onServerExit's.
+ * @param {string} reason
+ */
+async function restartServer(reason) {
+  restartTimer = null
+  if (quitting) return
+  startServer()
+  if (!(await waitUntilUp(server))) return
+  restarts.healthySince = Date.now()
+  const at = new Date().toLocaleTimeString()
+  console.log(`agent-board desktop: the board answers again on ${settings.url} (it had exited: ${reason})`)
+  appendLog(path.join(settings.dataDir, 'logs'), `the board answers again on ${settings.url}`)
+  tray?.setToolTip(`${app.getName()}: ${settings.url} (restarted at ${at} after ${reason})`)
+  if (Notification.isSupported())
+    new Notification({
+      title: app.getName(),
+      body: `The board restarted (${reason}).`,
+      icon: icon(),
+      silent: true,
+    }).show()
+  if (pageFailed && win && !win.isDestroyed()) {
+    pageFailed = false
+    win.webContents.reload()
+  }
+}
+
+/**
+ * A line from the app itself in the server's error log, for whoever reads it later. A log that refuses
+ * the write is no reason to fail.
+ * @param {string} logs
+ * @param {string} text
+ */
+function appendLog(logs, text) {
+  try {
+    fs.appendFileSync(
+      path.join(logs, 'board.err.log'),
+      `[agent-board desktop ${new Date().toISOString()}] ${text}\n`,
+    )
+  } catch {
+    // not written
+  }
+}
+
+/**
+ * Polls /api/health until the board answers, `proc` (the server just started) exits, or a minute
+ * passes.
+ * @param {import('node:child_process').ChildProcess | null} proc
+ */
+async function waitUntilUp(proc) {
   const health = `http://127.0.0.1:${settings.port}/api/health`
   for (const until = Date.now() + READY_MS; Date.now() < until; ) {
-    if (!server) return false
+    if (!proc || server !== proc) return false
     try {
       const res = await fetch(health, { signal: AbortSignal.timeout(2000) })
       if (res.ok) return true
@@ -340,6 +436,11 @@ function createWindow() {
     event.preventDefault()
     if (process.platform === 'win32') win?.hide()
     else void closeWindow()
+  })
+  // A page that could not load (the board down for a restart) is loaded again by restartServer; an
+  // aborted load (a navigation that replaced it) is no failure.
+  win.webContents.on('did-fail-load', (_event, code, _description, _url, mainFrame) => {
+    if (mainFrame && code !== -3) pageFailed = true
   })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)

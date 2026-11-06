@@ -19,6 +19,8 @@ import {
   DEFAULT_PORT,
   desktopExecArg,
   ensureWritableDir,
+  exitReason,
+  HEALTHY_RESET_MS,
   isPortFree,
   LOGIN_SHELL_MS,
   loginShellPath,
@@ -29,6 +31,9 @@ import {
   portBusyMessage,
   readConfigFile,
   resolveSettings,
+  RESTART_DELAYS_MS,
+  RESTART_LIMIT,
+  restartPlan,
   runCapture,
   setAutostart,
   SettingsError,
@@ -800,6 +805,56 @@ describe('trayHostPresent', () => {
   it('is false with no session bus (both fail)', async () => {
     const { run } = fakeRunner(() => ({ code: 1, stdout: '' }))
     expect(await trayHostPresent(run, {})).toBe(false)
+  })
+})
+
+describe('restartPlan', () => {
+  it('waits 1, 2, 5, 10 and 30 s before the restarts of a server that never comes up, then gives up', () => {
+    let state = { exits: 0, healthySince: /** @type {number | null} */ (null) }
+    /** @type {(number | null)[]} */
+    const delays = []
+    for (let i = 0; i <= RESTART_LIMIT; i++) {
+      const plan = restartPlan(state, 1000 * i)
+      delays.push(plan.delay)
+      state = { exits: plan.exits, healthySince: null }
+    }
+    expect(delays).toEqual([1000, 2000, 5000, 10_000, 30_000, null])
+    expect(RESTART_DELAYS_MS).toHaveLength(RESTART_LIMIT)
+  })
+
+  it('counts the exits of a server that dies a while after each start, however far apart', () => {
+    let state = { exits: 0, healthySince: /** @type {number | null} */ (null) }
+    let now = 0
+    /** @type {(number | null)[]} */
+    const delays = []
+    for (let i = 0; i <= RESTART_LIMIT; i++) {
+      const plan = restartPlan(state, now)
+      delays.push(plan.delay)
+      // Up again after the wait, and answering for four minutes before it dies again.
+      state = { exits: plan.exits, healthySince: now + (plan.delay ?? 0) }
+      now += (plan.delay ?? 0) + HEALTHY_RESET_MS - 60_000
+    }
+    expect(delays.at(-1)).toBeNull()
+  })
+
+  it('forgets the earlier exits once the server has answered for five minutes', () => {
+    expect(restartPlan({ exits: RESTART_LIMIT, healthySince: 0 }, HEALTHY_RESET_MS)).toEqual({
+      exits: 1,
+      delay: 1000,
+    })
+    expect(restartPlan({ exits: RESTART_LIMIT, healthySince: 0 }, HEALTHY_RESET_MS - 1)).toEqual({
+      exits: RESTART_LIMIT + 1,
+      delay: null,
+    })
+  })
+})
+
+describe('exitReason', () => {
+  it('names the exit code, else the signal', () => {
+    expect(exitReason(1, null)).toBe('exit code 1')
+    expect(exitReason(0, null)).toBe('exit code 0')
+    expect(exitReason(null, 'SIGKILL')).toBe('signal SIGKILL')
+    expect(exitReason(null, null)).toBe('no exit code')
   })
 })
 

@@ -17,6 +17,9 @@
 //   - a busy port, on loopback or on every interface, is reported (in a dialog, and on stderr, where
 //     this reads it), and so are a DATA_DIR and an AGENT_BOARD_HOME that cannot be made or
 //     written; closing the dialog ends the app with exit 1;
+//   - a server killed while the app runs is started again on the same port, with no dialog, and
+//     one that then fails on every start ends, after the restarts' cap, in the stopped board's dialog
+//     with its error output;
 //   - a second launch after a failure, its window closed, raises nothing in the first copy;
 //   - on Linux: the server gets the login shell's PATH (from a .bashrc in a stand-in home), Start at
 //     login writes and removes the autostart entry, and closing the window with no tray host ends the
@@ -364,12 +367,11 @@ try {
     app.process().stderr?.on('data', (d) => (said += d))
     check(await waitHealthy(port), '/api/health answers 200')
     await app.firstWindow()
-    const serverPid = boardServer()
-    check(serverPid > 0, `the board's server is found (${serverPid})`)
-    if (serverPid) process.kill(serverPid, 'SIGKILL')
-    for (const until = Date.now() + 20_000; Date.now() < until && !said.includes('The board stopped.'); )
-      await sleep(200)
-    check(said.includes('The board stopped.'), 'the stopped board is reported')
+    await restartsAndGivesUp(
+      app,
+      () => said,
+      (pid) => process.kill(pid, 'SIGKILL'),
+    )
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close()).catch(() => {})
     await sleep(1000)
     const again = spawn(exe, [], { env: appEnv({ PORT: String(port), DATA_DIR: dataDir }), stdio: 'ignore' })
@@ -393,12 +395,11 @@ try {
     await app.firstWindow()
     // The main process itself, which owns the windows (what Playwright started may be another).
     const pid = await app.evaluate(() => process.pid)
-    const serverPid = boardServer()
-    check(serverPid > 0, `the board's server is found (${serverPid})`)
-    if (serverPid) spawnSync('taskkill', ['/PID', String(serverPid), '/F'], { stdio: 'ignore' })
-    for (const until = Date.now() + 20_000; Date.now() < until && !said.includes('The board stopped.'); )
-      await sleep(200)
-    check(said.includes('The board stopped.'), 'the stopped board is reported')
+    await restartsAndGivesUp(
+      app,
+      () => said,
+      (serverPid) => spawnSync('taskkill', ['/PID', String(serverPid), '/F'], { stdio: 'ignore' }),
+    )
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close())
     await sleep(1000)
     const again = spawn(exe, [], { env: appEnv({ PORT: String(port), DATA_DIR: dataDir }), stdio: 'ignore' })
@@ -434,6 +435,53 @@ try {
 
 console.log(failed ? '\nsmoke test FAILED' : '\nsmoke test passed')
 process.exit(failed ? 1 : 0)
+
+/**
+ * The server killed while the app runs: it is started again and the board answers on the same port
+ * within 15 s, with the window still there and no dialog. Then, its entry point moved away so that
+ * every start fails at once, killed again: after the restarts' cap the app reports the board stopped
+ * (in its dialog, and on stderr, where `said` reads it) with the failed start's error output. The
+ * entry point is put back; the app is left on its dialog.
+ * @param {import('@playwright/test').ElectronApplication} app
+ * @param {() => string} said The app's stderr so far.
+ * @param {(pid: number) => void} kill
+ */
+async function restartsAndGivesUp(app, said, kill) {
+  const first = boardServer()
+  check(first > 0, `the board's server is found (${first})`)
+  if (!first) return
+  kill(first)
+  const killedAt = Date.now()
+  for (const until = killedAt + 15_000; Date.now() < until && (await health(port)) !== 200; ) await sleep(200)
+  const back = (Date.now() - killedAt) / 1000
+  const again = boardServer()
+  check(
+    (await health(port)) === 200 && again > 0 && again !== first,
+    `killed, the server is started again and the board answers on :${port} (${back.toFixed(1)} s, pid ${first} -> ${again})`,
+  )
+  check(said().includes('starting it again in 1 s'), 'the restart is said on stderr')
+  check(!said().includes('The board stopped.'), 'no dialog: the board did not read as stopped')
+  const windows = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
+  check(windows === 1, `the window is still there (${windows})`)
+
+  const entry = path.join(appDir, 'resources', 'board', '.output', 'server', 'index.mjs')
+  const moved = `${entry}.moved`
+  fs.renameSync(entry, moved)
+  try {
+    kill(again)
+    // The waits of the five restarts (1 + 2 + 5 + 10 + 30 s), and each failed start.
+    for (const until = Date.now() + 120_000; Date.now() < until && !said().includes('The board stopped.'); )
+      await sleep(500)
+    check(
+      said().includes('The board stopped.'),
+      'a server that fails on every start is reported, after the cap',
+    )
+    check(said().includes('It was started again 5 times.'), 'after five restarts')
+    check(/Cannot find module/.test(said().split('The board stopped.').at(-1) ?? ''), 'with its error output')
+  } finally {
+    fs.renameSync(moved, entry)
+  }
+}
 
 /**
  * Starts the app with `extra` and expects it to report `text` (in its dialog, and on stderr, where this

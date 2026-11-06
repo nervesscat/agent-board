@@ -311,6 +311,38 @@ export function tail(text, max = 1500) {
   return (nl >= 0 ? cut.slice(nl + 1) : cut).trim()
 }
 
+/** The waits before each restart of a server that exited on its own, the last one repeated. */
+export const RESTART_DELAYS_MS = [1000, 2000, 5000, 10_000, 30_000]
+/** The restarts tried in a row before the app gives up and shows the board stopped. */
+export const RESTART_LIMIT = 5
+/** How long the server must keep answering for its earlier exits to be forgotten. */
+export const HEALTHY_RESET_MS = 5 * 60_000
+
+/**
+ * What to do when the server exits on its own: restart it after `delay` ms, or give up (`delay` null)
+ * once it has exited more than RESTART_LIMIT times without staying up for HEALTHY_RESET_MS in
+ * between. The exits are counted since that last long stretch rather than in a fixed window: with the
+ * 30 s wait, a server that dies a minute after every start would never fill a two-minute window and
+ * would be restarted for ever.
+ * @param {{ exits: number, healthySince: number | null }} state `exits`: the count so far;
+ *   `healthySince`: when it last began answering /api/health, null if it never did since its last exit.
+ * @param {number} now
+ * @returns {{ exits: number, delay: number | null }} The new count, and the wait.
+ */
+export function restartPlan({ exits, healthySince }, now) {
+  const count = (healthySince !== null && now - healthySince >= HEALTHY_RESET_MS ? 0 : exits) + 1
+  if (count > RESTART_LIMIT) return { exits: count, delay: null }
+  return { exits: count, delay: RESTART_DELAYS_MS[Math.min(count, RESTART_DELAYS_MS.length) - 1] }
+}
+
+/**
+ * How an exit reads in the app's messages: `exit code 1`, `signal SIGKILL`, or `no exit code`.
+ * @param {number | null} code
+ * @param {NodeJS.Signals | null} signal
+ */
+export const exitReason = (code, signal) =>
+  code !== null ? `exit code ${code}` : signal ? `signal ${signal}` : 'no exit code'
+
 // Linux: what a launch from the desktop does not get on its own (README: "The desktop app").
 
 const PATH_START = '__AGENT_BOARD_PATH_START__'
