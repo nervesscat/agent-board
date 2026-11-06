@@ -186,7 +186,7 @@ Lanes of a ticket you are working are yours to create (next section).
   `answer_decision` after asking them in the chat); Keep leaves them. The card is never edited:
   ask again instead. Never try to archive any
   other way.
-- Repos: only the human adds, changes and removes them (an orchestrator also moves one to another
+- Repos: only the human adds, changes and removes them, on each project's Repositories page (an orchestrator also moves one to another
   project). When the work needs a repo the project
   lacks (a new repository you are building), `add_repo` with your ticket, the repo's name, its
   checkout's absolute path, its GitHub `owner/name` (what `git remote get-url origin` points at)

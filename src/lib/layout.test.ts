@@ -106,11 +106,46 @@ describe('mergeLayout', () => {
       'nav.agents',
       'nav.daily',
       'nav.cleanup',
+      'nav.repositories',
       'nav.settings',
     ])
     expect(nav.find((it) => it.id === 'nav.roadmap')!.hidden).toBe(false)
     // The other areas, absent from what was saved, are the defaults.
     expect(inArea(mergeLayout(saved), 'overview')).toEqual(inArea(defaultLayout(), 'overview'))
+  })
+
+  it('shows Repositories in a menu saved before it was in the menu, after Cleanup', () => {
+    // Saved before the Repositories page moved into the project's menu: Settings first, Daily hidden.
+    const saved: SavedLayout = [
+      { id: 'nav.settings', area: 'nav' },
+      { id: 'nav.overview', area: 'nav' },
+      { id: 'nav.prs', area: 'nav' },
+      { id: 'nav.features', area: 'nav' },
+      { id: 'nav.roadmap', area: 'nav' },
+      { id: 'nav.previews', area: 'nav' },
+      { id: 'nav.gallery', area: 'nav' },
+      { id: 'nav.agents', area: 'nav' },
+      { id: 'nav.daily', area: 'nav', hidden: true },
+      { id: 'nav.cleanup', area: 'nav' },
+    ]
+    const merged = mergeLayout(saved)
+    expect(shownIn(merged, 'nav')).toEqual([
+      'nav.settings',
+      'nav.overview',
+      'nav.prs',
+      'nav.features',
+      'nav.roadmap',
+      'nav.previews',
+      'nav.gallery',
+      'nav.agents',
+      'nav.cleanup',
+      'nav.repositories',
+    ])
+    expect(merged.find((it) => it.id === 'nav.repositories')).toEqual({
+      id: 'nav.repositories',
+      area: 'nav',
+      hidden: false,
+    })
   })
 
   it('puts a missing element first in its area when nothing before it in the default order is there', () => {
@@ -207,7 +242,7 @@ describe('moveInLayout', () => {
     const down = moveInLayout(defaultLayout(), 'nav.overview', 'nav', 2)
     expect(shownIn(down, 'nav').slice(0, 3)).toEqual(['nav.prs', 'nav.overview', 'nav.features'])
     // To the end.
-    const end = moveInLayout(defaultLayout(), 'nav.overview', 'nav', 10)
+    const end = moveInLayout(defaultLayout(), 'nav.overview', 'nav', inArea(defaultLayout(), 'nav').length)
     expect(shownIn(end, 'nav').at(-1)).toBe('nav.overview')
   })
 
