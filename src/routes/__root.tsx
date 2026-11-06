@@ -76,7 +76,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
  */
 const PAGES = [
   { to: '/daily', label: 'Daily' },
-  { to: '/agents', label: 'Agents' },
+  { to: '/agents', label: 'Connect' },
   { to: '/settings', label: 'Settings' },
 ] as const
 

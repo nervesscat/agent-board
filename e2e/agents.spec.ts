@@ -24,7 +24,7 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   const reviewLine = page.getByText(/^\$t = Join-Path .*-C "\$HOME\\\.claude"; Remove-Item \$t$/)
 
   await page.goto('/agents')
-  await expect(page.getByRole('heading', { name: 'Connect agents' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Connect an agent' })).toBeVisible()
   // The skill's install line and the review skills' each have a picker; bash until one is picked.
   await expect(tabs(bash)).toHaveCount(2)
   for (const tab of await tabs(bash).all()) await expect(tab).toHaveAttribute('aria-selected', 'true')
@@ -42,7 +42,7 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   await expect(reviewLine).toBeVisible()
 
   // Without one in the URL, the shell this browser remembers comes back, and the URL says so: here and
-  // on a project's Agents page.
+  // on a project's Team page.
   await page.goto('/agents')
   await expect(page).toHaveURL(/[?&]shell=powershell(&|$)/)
   await expect(page.getByText(/^New-Item -ItemType Directory/)).toBeVisible()
@@ -77,7 +77,7 @@ test('Generate commands makes a token per agent, fills it into every command, li
   const tokens = page.getByRole('list', { name: 'Agent tokens' })
 
   await page.goto('/agents?shell=bash')
-  await expect(page.getByRole('heading', { name: 'Connect agents' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Connect an agent' })).toBeVisible()
   // Nothing is made on load, and there is no field to paste a token into.
   await expect(page.getByLabel('Agent token', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Makes a token for this agent')).toContainText('1 year')
@@ -128,7 +128,7 @@ test('Generate commands makes a token per agent, fills it into every command, li
   await expect(page.getByText(renamed.token)).toHaveCount(0)
   expect(mints).toHaveLength(AGENT_CLIENTS.length + 1)
 
-  // A project's Agents page makes one for the review skills' lines.
+  // A project's Team page makes one for the review skills' lines.
   await page.goto(`/projects/${project.id}/agents?shell=bash`)
   await expect(page.getByLabel('Agent name')).toHaveValue('claude')
   await expect(shown(reviewSkillsInstall('bash', boardUrl, ''))).toBeVisible()
@@ -314,12 +314,12 @@ type Tracking = 'global' | 'repo'
 const track = (human: APIRequestContext, skillsTracking: Tracking) =>
   ok<{ skillsTracking: Tracking }>(human.patch('/api/settings', { data: { skillsTracking } }))
 
-// Which copy the Agents pages track is one setting for the whole board, and the user-wide .claude is one
+// Which copy the Connect an agent and Team pages track is one setting for the whole board, and the user-wide .claude is one
 // folder: the tests that set either run one after another.
-test.describe('the copy of the review skills the Agents pages track', () => {
+test.describe('the copy of the review skills the Connect an agent and Team pages track', () => {
   test.describe.configure({ mode: 'serial' })
 
-  test('Global until another is picked, kept across reloads, and the same on both Agents pages', async ({
+  test('Global until another is picked, kept across reloads, and the same on both the Connect an agent and Team pages', async ({
     page,
     human,
     agent,
@@ -370,15 +370,15 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await page.reload()
     await shows('global')
 
-    // Both Agents pages show the one choice, also when moving between them without a reload.
+    // Connect an agent and Team both show the one choice, also when moving between them without a reload.
     await page.goto(`/projects/${project.id}/agents`)
     await shows('global')
     await page.evaluate(() => Object.assign(window, { stillHere: true }))
     await tab('By repo').click()
     await saved('repo')
-    await page.getByRole('banner').getByRole('link', { name: 'Agents', exact: true }).click()
+    await page.getByRole('banner').getByRole('link', { name: 'Connect', exact: true }).click()
     await expect(page).toHaveURL(/^http:\/\/[^/]+\/agents(\?|$)/)
-    await expect(page.getByRole('heading', { name: 'Connect agents' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Connect an agent' })).toBeVisible()
     await shows('repo')
     await tab('Global').click()
     await saved('global')
@@ -462,7 +462,7 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await expect(entry.getByText('Up to date', { exact: true })).toBeVisible()
     emptyHome()
 
-    // A project's Agents page shows the same copy.
+    // A project's Team page shows the same copy.
     await drifted(human, claude)
     await page.goto(`/projects/${seededProject().id}/agents`)
     await expect(
@@ -529,7 +529,7 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     await expect(repos.getByText(/^\$t = Join-Path|^mkdir -p/)).toHaveCount(0)
     expect(fs.readFileSync(path.join(claude, 'skills', 'x', 'SKILL.md'), 'utf8')).toBe('Not the bundle.\n')
 
-    // A project's Agents page lists its repos only.
+    // A project's Team page lists its repos only.
     await page.goto(`/projects/${project.id}/agents`)
     const own = page.getByRole('region', { name: 'In your repos' }).getByRole('listitem')
     await expect(own).toHaveCount(2)
@@ -773,7 +773,7 @@ test.describe('the copy of the review skills the Agents pages track', () => {
     expect(looks.dark!.context.color).not.toBe(looks.light!.context.color)
   })
 
-  test('a project with no repos says so on its Agents page', async ({ page, human }) => {
+  test('a project with no repos says so on its Team page', async ({ page, human }) => {
     await track(human, 'repo')
     const empty = await ok<Project>(human.post('/api/projects', { data: { name: 'No repos here' } }))
     const errors: string[] = []

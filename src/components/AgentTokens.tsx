@@ -112,8 +112,8 @@ export function AgentTokenList() {
       </h2>
       <p className="text-xs text-muted-foreground">
         The tokens the commands above carry, each with its role: a worker, or an orchestrator, which also
-        changes the projects' instructions (set in Settings, Agents). Revoke one and the agent using it is
-        signed out at its next request.
+        changes the projects' instructions (set in Settings, Agent tokens). Revoke one and the agent using it
+        is signed out at its next request.
       </p>
       {tokens.error && <p className="text-xs text-destructive">{errorMessage(tokens.error)}</p>}
       {tokens.data?.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}

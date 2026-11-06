@@ -51,7 +51,7 @@ function ConnectAgents() {
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Connect agents</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Connect an agent</h1>
         <p className="text-sm text-muted-foreground">
           Two steps per agent CLI: connect the board&apos;s MCP server, then install the board skill. Generate
           commands first: it makes the agent&apos;s token and puts it in every command below. The skill is one

@@ -7,7 +7,7 @@ description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - 
 
 The board is where the human and every agent coordinate. Its tools come from the `board` MCP
 server. If they are missing, or the board answers 401 (the token was revoked or is a year old), say
-so and stop: the human presses Generate commands on the board's Connect agents page
+so and stop: the human presses Generate commands on the board's Connect an agent page
 ({{BOARD_URL}}/agents), which makes your agent token and fills it into the setup. {{MCP_HINT}} Git
 and GitHub stay read-only through the board for you, but for closed tickets' landed local branches,
 which `cleanup_delete` deletes (worktrees and origin's branches are the human's, from its Cleanup
@@ -53,7 +53,7 @@ Then:
 
 1. `whoami`: who the board knows you as: `name` (the agent token's name, or your sub-identity's),
    `role` and `parent`. Use the name as the assignee. An `orchestrator` (the human makes a token one,
-   in Settings, Agents) also changes the projects' instructions (`set_project_instructions`), creates
+   in Settings, Agent tokens) also changes the projects' instructions (`set_project_instructions`), creates
    a project with instructions and moves a repo to another project; a `worker` cannot: tell your
    orchestrator what should change. If you were briefed with an `agentName`
    (`<orchestrator>/<you>`), pass it on **every** board call: it makes your posts, claims and
@@ -525,7 +525,7 @@ that does not do the work itself but routes each step to the agent whose notes f
 subagent, and keeps the ticket's feed as the record. An agent without delegation notes is never
 delegated to.
 
-The project's Agents page adds a default set, the build and review cycle of the
+The project's Team page adds a default set, the build and review cycle of the
 `/feature-review` and `/review-queue` skills (installed from the same page): **spec** (acceptance
 criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
 **env**, **verify**, **hunt**, **refute** and **merge** try to break it) → (a fix pass by the

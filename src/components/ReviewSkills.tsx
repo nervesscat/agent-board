@@ -28,7 +28,7 @@ import type {
 } from '#/server/agents'
 
 /**
- * The shell the install lines are for, on a page whose route takes `?shell=` (Connect agents, a
+ * The shell the install lines are for, on a page whose route takes `?shell=` (Connect an agent, a
  * project's Agents): the one in the URL, else the one this browser remembers, else bash. Storage is
  * read only after mount, so the server's render and the browser's agree (as with the PR queue filter).
  * Returns the shell and how to pick another, which the URL and this browser keep.
@@ -115,7 +115,7 @@ export function ReviewSkills({
 
 /**
  * Which copy the page tracks, a board-wide setting: the one in the settings cache (shared with the
- * Settings page and the other Agents page), or the one being saved. Undefined until the settings load.
+ * Settings page and the other of Connect an agent and Team), or the one being saved. Undefined until the settings load.
  */
 function useSkillsTracking() {
   const qc = useQueryClient()
