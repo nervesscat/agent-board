@@ -11,7 +11,15 @@ import { HttpError } from './http'
 import { getProject } from './projects'
 import { listRepos } from './repos'
 import { withResume, withResumeBriefs } from './resume'
-import { deleteStage, firstOfKind, kindOf, listStages, resolveStage, stageOf } from './stages'
+import {
+  deleteStage,
+  firstOfKind,
+  kindOf,
+  listStages,
+  projectWorkStage,
+  resolveStage,
+  stageOf,
+} from './stages'
 import { stalledFor, timelinesFor, workOf } from './workTimeline'
 
 /**
@@ -419,7 +427,10 @@ export async function changeTicket(
     baseBranch: primary.baseBranch || before.baseBranch,
     from: before.status,
   }
-  const to = patch.status ? resolveStage(listStages(before.projectId), patch.status).key : before.status
+  const stages = listStages(before.projectId)
+  const to = patch.status
+    ? resolveStage(stages, patch.status, projectWorkStage(before.projectId, stages)).key
+    : before.status
   const unmet = await guardDone(subject, to, ids, { force, agent: opts.agent })
   // The needs and the update land together: an update that is refused leaves the needs as they were.
   const row = db.transaction(
@@ -469,7 +480,8 @@ export async function newTicket(
   if (ids.length && rest.status) {
     // Judged against the repo and base the ticket is created with.
     const { repo, baseBranch } = features.placement(projectId, features.newTicketPrimary(rest))
-    const to = resolveStage(listStages(projectId), rest.status).key
+    const stages = listStages(projectId)
+    const to = resolveStage(stages, rest.status, projectWorkStage(projectId, stages)).key
     await guardDone({ id: null, projectId, repoId: repo.id, baseBranch }, to, ids, opts)
   }
   const seeded = defaultPhases ?? !rest.parentId
@@ -496,7 +508,7 @@ export async function judgeTicket(
     verdict === 'approved' && pr
       ? firstOfKind(stages, 'done')?.key
       : verdict === null && opts.reopenTo
-        ? resolveStage(stages, opts.reopenTo).key
+        ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages)).key
         : undefined
   const unmet =
     to && features.verdictOf(t) !== verdict

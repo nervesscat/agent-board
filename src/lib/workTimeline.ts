@@ -135,8 +135,9 @@ export function subtract(from: Interval[], minus: Interval[]): Interval[] {
 }
 
 /**
- * The three totals, disjoint: blocked-on-human is the human waits and the blocked stretches; waiting
- * is the other waits outside that; working is the spans outside every wait and outside that.
+ * The three totals, disjoint: blocked-on-human is the human waits and the blocked stretches; working is
+ * the spans outside that, whoever's (a sub-agent's span under its orchestrator's wait on it is work);
+ * waiting is the other waits outside every span and outside that, the time nothing on the ticket moved.
  */
 export function totals(
   spans: Interval[],
@@ -144,14 +145,11 @@ export function totals(
   blocked: Interval[],
 ): WorkTotals {
   const human = union([...waits.filter((w) => w.reason === 'human').map((w) => w.interval), ...blocked])
+  const working = subtract(spans, human)
   const waiting = subtract(
-    waits.filter((w) => w.reason !== 'human').map((w) => w.interval),
-    human,
-  )
-  const working = subtract(
     subtract(
+      waits.filter((w) => w.reason !== 'human').map((w) => w.interval),
       spans,
-      waits.map((w) => w.interval),
     ),
     human,
   )

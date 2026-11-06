@@ -82,8 +82,10 @@ http_headers = { Authorization = "Bearer <token>" }
    Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
    (`open`, `active`, `blocked`, `review`, `done`, `cancelled`). A ticket's `status` is a stage key;
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
-   `in_progress` mean `open` and `active`). Below, `todo`, `in_progress`, `blocked`, `review`,
-   `done` and `cancelled` mean the project's stage of that kind.
+   `in_progress` mean `open` and `active`). A kind means the project's stage of that kind: for
+   `open` the start stage (the last open stage), for `active` the stage work starts in (the
+   project's `workStage`, else the first active stage), for any other kind the first stage of that
+   kind. Below, `todo`, `in_progress`, `blocked`, `review`, `done` and `cancelled` mean exactly that.
 2. **Pick up work**: starting a session, `get_summary` with your `projectId` shows where the project
    stands in one read (waiting on the human, in progress, done today, next, carrying over). Take work
    from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to

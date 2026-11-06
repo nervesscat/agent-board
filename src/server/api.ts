@@ -294,6 +294,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       tagSuggestions: projects.TagSuggestions.optional(),
       stallMinutes: z.number().int().min(STALL_MINUTES.min).max(STALL_MINUTES.max).optional(),
       layout: projects.LayoutBody.optional(),
+      workStage: z.string().min(1).max(100).nullable().optional(),
     }),
   )
   if (body.stallMinutes !== undefined && isAgent(request))
@@ -301,6 +302,9 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
   if (body.defaultPhases !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's default phases")
+  // Where claiming puts a ticket is part of the stages, which are the human's.
+  if (body.workStage !== undefined && isAgent(request))
+    throw new HttpError(403, 'only the human sets the stage work starts in')
   // Which pages, cards and sections the human sees, and where: theirs to arrange.
   if (body.layout !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's layout")
