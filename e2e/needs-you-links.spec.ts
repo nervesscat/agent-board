@@ -1555,6 +1555,9 @@ test('a reply drawn late is not scrolled to once the reader has scrolled the pag
   await slowReplies(page, 3_000)
   await page.goto(`/projects/${project.id}/features/${t.id}#post-${thread.post}-reply-${thread.reply}`)
   await feedDrawn(page)
+  // The browser's own scroll anchoring may nudge the page a few pixels when the late reply grows the
+  // feed above the window (the sticky sidebar makes this likelier); that is not the board scrolling.
+  await page.addStyleTag({ content: '*{overflow-anchor:none!important}' })
   expect(await scrollTo(page, 1200)).toBe(1200)
   await expect(reply(page, thread.reply)).toHaveCount(1)
   await page.waitForTimeout(1_000)
