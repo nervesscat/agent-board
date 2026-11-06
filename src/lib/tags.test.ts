@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addTags,
   cleanSuggestions,
+  matchTags,
   MAX_TAG_LENGTH,
   MAX_TAGS,
   normalizeTag,
@@ -127,5 +128,25 @@ describe('cleanSuggestions', () => {
 
   it('keeps an empty list empty', () => {
     expect(cleanSuggestions([])).toEqual([])
+  })
+})
+
+describe('matchTags', () => {
+  const tags = ['Bug', 'UI', 'Module 1', 'module 2', 'Submodule']
+
+  it('keeps the tags holding the text in any casing, in their order', () => {
+    expect(matchTags(tags, 'mod')).toEqual(['Module 1', 'module 2', 'Submodule'])
+    expect(matchTags(tags, 'MOD')).toEqual(['Module 1', 'module 2', 'Submodule'])
+    expect(matchTags(tags, 'ule 2')).toEqual(['module 2'])
+  })
+
+  it('ignores whitespace around the text, and keeps every tag for none', () => {
+    expect(matchTags(tags, '  ui ')).toEqual(['UI'])
+    expect(matchTags(tags, '')).toEqual(tags)
+    expect(matchTags(tags, '   ')).toEqual(tags)
+  })
+
+  it('keeps none when nothing holds the text', () => {
+    expect(matchTags(tags, 'zzzz')).toEqual([])
   })
 })

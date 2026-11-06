@@ -52,8 +52,9 @@ function Agents() {
     <div className="max-w-3xl space-y-6">
       <div className="flex items-start gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Agents</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl font-semibold tracking-tight">Team</h1>
+          <p className="text-sm text-muted-foreground">The roles agents work as in this project.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
             The specialists this project's work can go to. Assign a ticket to one and it is reserved for it: a
             connected agent (claude, codex…) works it as that agent, briefed with its instructions, and posts
             under its name. Mention <code className="rounded bg-muted px-1">@name</code> in a thread to ask

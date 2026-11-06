@@ -66,7 +66,7 @@ function Settings() {
           </ul>
           <p className="text-xs text-muted-foreground">
             Repos:{' '}
-            <Link to="/repositories" className="underline hover:text-foreground">
+            <Link to="/projects/$id/repositories" params={{ id }} className="underline hover:text-foreground">
               Repositories page
             </Link>
             . Rename or delete the project: project menu → Manage projects.

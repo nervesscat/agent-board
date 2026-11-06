@@ -200,9 +200,10 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tasks">Initial tasks</Label>
+            {/* Not `tasks`: the ticket page's Tasks card has that id, and a lane is made on that page. */}
+            <Label htmlFor="new-ticket-tasks">Initial tasks</Label>
             <ListInput
-              id="tasks"
+              id="new-ticket-tasks"
               value={tasks}
               onChange={setTasks}
               text={taskText}

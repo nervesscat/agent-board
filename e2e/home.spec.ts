@@ -119,13 +119,11 @@ test('Home and Overview sum up the work: what needs you, in progress, done today
   await mine.getByRole('link', { name: project.name }).click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
 
-  // The repositories have a page of their own.
-  await page.goto('/repositories')
+  // The project's repositories have a page in its menu.
+  await page.locator('aside nav').getByRole('link', { name: 'Repositories' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/repositories$`))
   await expect(page.getByRole('heading', { level: 1, name: 'Repositories' })).toBeVisible()
-  const repo = page
-    .getByRole('button')
-    .filter({ hasText: project.name })
-    .filter({ hasText: project.repos[0]!.repoPath })
+  const repo = page.getByRole('button').filter({ hasText: project.repos[0]!.repoPath })
   await expect(repo).toBeVisible()
   await expect(repo).toContainText(project.repos[0]!.repoPath)
 })
