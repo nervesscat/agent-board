@@ -29,6 +29,7 @@ export const LAYOUT_ELEMENTS = [
   { id: 'nav.agents', label: 'Team', area: 'nav' },
   { id: 'nav.daily', label: 'Daily', area: 'nav' },
   { id: 'nav.cleanup', label: 'Cleanup', area: 'nav' },
+  { id: 'nav.repositories', label: 'Repositories', area: 'nav' },
   {
     id: 'nav.settings',
     label: 'Instructions',

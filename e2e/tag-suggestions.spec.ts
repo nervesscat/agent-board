@@ -285,7 +285,7 @@ test('a tag spelled like a placeholder value is filtered on as any other', async
   await api.ticket({ title: 'Plain', status: 'todo' })
   await page.goto(`/projects/${project.id}/features?view=list`)
   const filter = page.getByRole('combobox', { name: 'Filter by tag' })
-  const shown = filter.locator('[data-slot="select-value"]')
+  const shown = filter.locator('[data-slot="combobox-value"]')
   await expect(shown).toHaveText('All tags')
   await filter.click()
   await page.getByRole('option', { name: '__all__' }).click()

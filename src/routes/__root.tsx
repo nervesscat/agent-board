@@ -72,10 +72,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 /**
  * The board-wide pages, on the right of the top bar. Under `md` they fold into a menu: between `sm` and
- * `md` the lockup, the auth-off badge, the project switcher and the four links do not fit on one row.
+ * `md` the lockup, the auth-off badge, the project switcher and the three links do not fit on one row.
  */
 const PAGES = [
-  { to: '/repositories', label: 'Repositories' },
   { to: '/daily', label: 'Daily' },
   { to: '/agents', label: 'Connect' },
   { to: '/settings', label: 'Settings' },

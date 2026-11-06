@@ -38,8 +38,13 @@ result, and the orchestrator asks the human.
 - A criterion is `UNVERIFIED` when you could not execute it and could not trace it with
   confidence. State the reason, copied from `00-env.md` when it is an unavailable
   service. Never guess a result.
-- Run the full test suite once with the command from `00-env.md` and record the result: it
-  is the review's only run at head. If tests fail, read each failing test and decide whether it
+- Run the scoped checks once with the commands from `00-env.md` (**Scoped checks**) and record
+  the result: the typecheck, lint and format on the changed files, the migration check when it
+  applies, the unit tests related to them, and the end-to-end specs covering the changed pages or
+  routes (none when the diff touches neither). It is the review's only run at head. The full
+  suite runs in CI on the pull request. When `00-env.md` says no CI runs it (`CI: none`) and your
+  prompt does not say `scoped`, run the full suite once instead, with the test command. If tests
+  fail, read each failing test and decide whether it
   exercises the changed code. If it does not, record it as pre-existing. If it does,
   it is a `FAIL` with the test output as evidence.
 - Browser criteria: only when the browser flag is `yes` and a browser tool is available.
@@ -76,7 +81,7 @@ Write to the output path, starting with the heading:
 - Evidence: ...
 
 ## Test suite
-[command, pass and fail counts, pre-existing failures with a one-line reason each]
+[scoped or full, each command, pass and fail counts, pre-existing failures with a one-line reason each]
 
 ## Unverified
 - <criterion>: <reason>

@@ -47,8 +47,7 @@ REST `GET /api/me` answers `{actor, agent, role, parent, boardEnv, authOff}`: `a
 
 Connect once per client. The board's Connect an agent page (`http://localhost:47100/agents`) has these
 ready to copy for Claude Code, Codex and OpenCode, with the token filled in, plus a one-line
-install of the board skill (generated with the current projects and repos; install it again after
-adding one):
+install of the board skill (installed once: agents find their project with `find_project`):
 
 ```
 # Claude Code
@@ -75,7 +74,7 @@ http_headers = { Authorization = "Bearer <token>" }
    `branch`, `baseBranch`, `prNumber`). `repos` on `create_ticket` and `update_ticket` sets the list,
    `claim_ticket`'s `branch` is the primary's and its `repos` sets each one's branch, `add_workspace`
    takes the `repoId` its worktree is of, and `get_ticket_git` reports every repo.
-   Repos are the human's to add, change and remove (`POST`/`PATCH`/`DELETE /api/repos` answer 403
+   Repos are the human's to add, change and remove, on each project's Repositories page (`POST`/`PATCH`/`DELETE /api/repos` answer 403
    to an agent; an orchestrator only moves one to another project, a `PATCH` of `projectId` alone,
    see "Who is who"). When the work needs one the project lacks (a new repository you are building), ask
    with `add_repo` (step 7); once it is added, `set_ticket_repo` moves your ticket onto it
@@ -263,8 +262,15 @@ http_headers = { Authorization = "Bearer <token>" }
 7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
    PR, CI, Preview and Merged as their facts hold; Implementation and its steps are ticked by hand):
    1. Worktree registered (`add_workspace`), Implementation and its steps ticked.
-   2. Checks green: typecheck, lint, unit tests, and the end-to-end suite when the repo has one (the
-      project's instructions say how; here `pnpm test:e2e`).
+   2. Checks green locally, on what the change touches: the typecheck of the whole project (it
+      cannot be scoped soundly); lint and the formatter on the changed files only; only the unit
+      tests related to the changed files (e.g. `vitest related <files> --run`); only the
+      end-to-end spec files covering the changed pages or server routes (e.g.
+      `playwright test <spec files>`), none when the diff touches neither. The project's
+      instructions say which commands. The full suite runs in CI: its checks green on the head are
+      still required, and a failure CI finds after the push is fixed like a local one. A repo with
+      no CI that runs the full suite on pull requests keeps the full local run: all its checks, and
+      its end-to-end tests when it has them (here `pnpm test:e2e`).
    3. Branch pushed: `get_ticket` → `push.state` is `pushed` (green on the board), not `ahead` or
       `local-only` (red; `ahead` counts the commits only you have). `get_ticket_git` gives the same
       `push` for every workspace's branch. (`merged`: gone from origin because its PR was merged

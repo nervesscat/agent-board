@@ -2,7 +2,7 @@
 name: feature-review
 description: "Reviews one feature or change for correctness, reliability and security using a spec -> env -> verify -> hunt -> refute protocol built to produce zero false positives. The code under review runs from its own worktree at the exact commit, on servers the review starts itself; every finding needs a concrete failure scenario and must survive an adversarial refutation pass; an empty result is valid and comes with proof of what was checked."
 user-invocable: true
-argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [post]"
+argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [scoped] [post]"
 ---
 
 # Feature Review
@@ -66,6 +66,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `ports=<from>-<to>` | range to allocate from when a default port is busy | `8100-8199` |
 | `browser=yes\|no` | whether browser automation may be used | `yes` |
 | `frontend=<path>` | main checkout of the UI repo that talks to this backend; the env agent starts its dev server against the review backend and the verify agent drives it | none |
+| `scoped` | run only the scoped checks even where no CI runs the full suite (`CI: none`): the caller runs the full suite once at the final head | off |
 | `post` | post the report as a PR comment when the target is a PR | off |
 | `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high) | the session's |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
@@ -143,7 +144,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 Every agent prompt from here on includes: `MAIN`, `WORKTREE`, `WORKDIR`, `SLUG`, the
 absolute paths of the files it reads and writes, the full text of the contract, and the path of
 `00-focus.md` with this rule: start from it; read outside it only to follow a reference from it.
-Agents treat `WORKTREE` as the repo root.
+With `scoped`, it also includes the word `scoped`. Agents treat `WORKTREE` as the repo root.
 
 ## Phase 1: Spec (1 agent)
 
@@ -202,8 +203,12 @@ Spawn in a single message:
 Each prompt includes paths to `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`,
 `00-focus.md`, `checklists.md`, its output paths, and the browser flag; the hunt's also names its
 checklist sections from the strategy table. Agents use the test command, interpreter, and base
-URLs from `00-env.md` and start no servers of their own. Verify runs the full test suite, once:
-the only run at head. The hunt runs only targeted tests (the focus file's tests, or a probe for
+URLs from `00-env.md` and start no servers of their own. Verify runs the scoped checks from
+`00-env.md`, once: the only run at head. They cover what the change affects: the whole
+project's typecheck, lint and format on the changed files, the unit tests related to them, and the
+end-to-end specs covering the changed pages or routes. The full suite runs in CI on the pull
+request; where no CI runs it (`CI: none` in `00-env.md`), verify runs the full suite locally
+instead, unless `scoped` was given (the caller then runs it once at the final head). The hunt runs only targeted tests (the focus file's tests, or a probe for
 one candidate), never the full suite.
 
 Wait for all. Then build the refutation input, `03-all-candidates.md`:
@@ -242,8 +247,10 @@ suite. Wait for it.
 Runs after every other agent has finished, because it temporarily changes the worktree.
 Spawn `feature-review-merge` with `HEAD_SHA`, the base branch name, and paths to
 `00-env.md`, `00-focus.md`, `02-verification.md`, and the output path `05-merge.md`. It runs the
-full suite once, on the merged tree. Wait for it. Read
-its `Result` line and its `Worktree restored` line; if the worktree was not restored,
+scoped checks once, on the merged tree, over the files both the branch and the base changed since
+the merge base plus the branch's own: that scoped run is the merge check, and CI on the merged PR
+covers the rest (the full suite instead, where no CI runs it and `scoped` was not given). Wait for
+it. Read its `Result` line and its `Worktree restored` line; if the worktree was not restored,
 run `git -C WORKTREE reset --hard <commit>` yourself before continuing. For `diff`,
 `staged`, and path targets the base is `HEAD`, so the result is `NO ISSUE (up to date)`
 without spawning the agent.
@@ -284,7 +291,7 @@ without spawning the agent.
    | Check | YES when | otherwise NO, reason says |
    |---|---|---|
    | Is this reliable? | verdict is `SHIP` | the finding IDs, or "not verified: <reason>" |
-   | Did you make sure this works and is running? | every acceptance criterion is `PASS` by execution, not traced (an `instructions` criterion read where its reader gets it and quoted is execution), and the test suite ran and passed apart from pre-existing failures | which criteria are unverified or failed, and why |
+   | Did you make sure this works and is running? | every acceptance criterion is `PASS` by execution, not traced (an `instructions` criterion read where its reader gets it and quoted is execution), and verify's test run (scoped, or full where no CI runs it) passed apart from pre-existing failures | which criteria are unverified or failed, and why |
    | Will this have any issue with the latest version of the base branch? | this one is inverted: **NO** when the merge check result is `NO ISSUE`; **YES** for `CONFLICTS`, `TESTS FAIL AFTER MERGE`, or `UNVERIFIED` | the conflicting files, the new failures, or "not verified: <reason>" |
 4. Append one line to `~/.claude/feature-review/ledger.jsonl`:
    `{"repo": "<origin url, or MAIN path if none>", "target": "<pr N | branch | diff>", "sha": "<commit>", "verdict": "<verdict>", "confirmed": n, "plausible": n, "refuted": n, "unverified": n, "merge": "<merge result>", "checks": {"reliable": "YES|NO", "works": "YES|NO", "base_issue": "YES|NO"}, "stale": bool, "path": "<WORKDIR>/review.md", "at": "<ISO timestamp>"}`

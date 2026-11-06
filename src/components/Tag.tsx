@@ -30,6 +30,13 @@ export function tagClass(tag: string) {
   return PALETTE[h % PALETTE.length]!
 }
 
+/** Only the text colour of a tag's chip (light and dark), for its name written outside a chip. */
+export const tagTextClass = (tag: string) =>
+  tagClass(tag)
+    .split(' ')
+    .filter((c) => /^(dark:)?text-/.test(c))
+    .join(' ')
+
 /** Severity tags first (critical → cosmetic), then the rest alphabetically. */
 export function compareTags(a: string, b: string) {
   const ra = SEVERITY[a.toLowerCase()]?.rank ?? 9
