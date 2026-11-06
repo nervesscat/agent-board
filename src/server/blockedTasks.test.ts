@@ -393,8 +393,8 @@ describe('ticks and the tag', () => {
 })
 
 describe('what the tag leaves alone', () => {
-  it('counts as open: progress, rollup and the hand-off are as for an untagged open task', async () => {
-    const { handoffOf } = await import('./handoff')
+  it('counts as open: progress, rollup and what is open in review are as for an untagged open task', async () => {
+    const { openTasks } = await import('./openTasks')
     const t = ticket('open', [{ text: 'a', subtasks: ['a1', 'a2'] }])
     features.updateTask(byText(t.id, 'a1').id, { done: true }, 'claude')
     const counts = () => {
@@ -406,26 +406,10 @@ describe('what the tag leaves alone', () => {
     // Its only open task is blocked.
     features.updateTask(byText(t.id, 'a2').id, { blocked: true, blockedReason: 'Sign the release' }, 'claude')
     expect(counts()).toEqual(before)
-    const handoff = handoffOf({
-      branch: 'b',
-      tasks: features.getTicketFull(t.id).rollup,
-      pr: { number: 1, ci: 'passing', merged: false },
-      push: { state: 'pushed', ahead: 0 },
-      previews: [{ url: 'http://localhost:47101', running: true }],
-      lastCommitAt: null,
-      since: '2026-01-01T00:00:00.000Z',
-      posts: [
-        {
-          author: 'claude',
-          progress: false,
-          handoff: false,
-          summary: true,
-          createdAt: '2026-01-02T00:00:00.000Z',
-        },
-      ],
-      humans: [],
-    })
-    expect(handoff.missing.map((m) => m.code)).toContain('tasks_open')
+    expect(openTasks(t.id)).toEqual([
+      { taskId: byText(t.id, 'a').id, ticketId: t.id, text: 'a', auto: false },
+      { taskId: byText(t.id, 'a2').id, ticketId: t.id, text: 'a2', auto: false },
+    ])
   })
 
   it('never moves the ticket nor opens or answers a decision', () => {

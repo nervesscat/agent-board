@@ -329,8 +329,8 @@ describe('PR tickets', () => {
     expect((await needs.ticketView(own.id)).id).toBe(own.id)
     const moved = await needs.changeTicket(own.id, { status: 'review' }, 'enrique', { agent: false })
     expect(moved.status).toBe('review')
-    expect(moved).not.toHaveProperty('handoff')
-    expect((await needs.ticketView(own.id)).handoff).toBeNull()
+    expect(moved).not.toHaveProperty('open')
+    expect((await needs.ticketView(own.id)).open).toBeNull()
   })
 
   it('keeps a refused PATCH whole: the needs it came with are not stored either', async () => {

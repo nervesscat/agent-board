@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
-import { toastHandoff } from '#/components/Handoff'
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/components/PushDot'
@@ -103,8 +102,6 @@ function Features() {
       )
       return { before }
     },
-    // A move to review goes through; the board says what the hand-off still lacks.
-    onSuccess: toastHandoff,
     onError: (err, v, ctx) => {
       qc.setQueryData(key, ctx?.before)
       toastRefusal(err, () => move.mutate({ ...v, force: true }))

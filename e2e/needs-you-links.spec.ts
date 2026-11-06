@@ -214,15 +214,23 @@ test('a reply to a reply lands on itself, marked alone', async ({ page, project,
   await expect(post(page, ids.post)).not.toHaveAttribute('data-revealed')
 })
 
-test('a ticket in review lands on its hand-off card', async ({ page, project, api, human }) => {
+test('a ticket in review lands on its Tasks card; there is no Hand-off card', async ({
+  page,
+  project,
+  api,
+  human,
+}) => {
   const t = await longTicket(api, human, 'Ready for a look', 'review')
   await overview(page, project)
   const link = needsYou(page).getByRole('link', { name: `#${t.id} Ready for a look`, exact: true })
-  await expect(link).toHaveAttribute('href', `/projects/${project.id}/features/${t.id}#handoff`)
+  await expect(link).toHaveAttribute('href', `/projects/${project.id}/features/${t.id}#tasks`)
   await link.click()
-  const card = page.getByRole('region', { name: 'Hand-off' })
-  await expect(card).toHaveAttribute('id', 'handoff')
+  await expect(page).toHaveURL(new RegExp(`/features/${t.id}#tasks$`))
+  const card = page.getByRole('region', { name: 'Tasks' })
+  await expect(card).toHaveAttribute('id', 'tasks')
   await expectRevealed(page, card)
+  await expect(page.getByRole('region', { name: 'Hand-off' })).toHaveCount(0)
+  await page.screenshot({ path: test.info().outputPath('needs-you-review-lands-on-tasks.png') })
 })
 
 test('a second entry on a ticket already loaded lands on its own target', async ({
@@ -1614,17 +1622,17 @@ test('going to another ticket with an anchor, nothing on the one still shown is 
       ).__TSR_ROUTER__.navigate({
         href,
       }),
-    `/projects/${project.id}/features/${b.id}#handoff`,
+    `/projects/${project.id}/features/${b.id}#tasks`,
   )
-  await expect(page).toHaveURL(new RegExp(`/features/${b.id}#handoff$`))
+  await expect(page).toHaveURL(new RegExp(`/features/${b.id}#tasks$`))
   await page.waitForTimeout(1_000)
   await expect(page.getByRole('heading', { level: 1 })).toContainText('First in review')
   expect(await scrollY(page)).toBe(1500)
   expect(await marks(page)).toEqual([])
 
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Second in review')
-  await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
-  expect(await marks(page)).toEqual([{ id: 'handoff', shown: `#${b.id} Second in review` }])
+  await expectRevealed(page, page.getByRole('region', { name: 'Tasks' }))
+  expect(await marks(page)).toEqual([{ id: 'tasks', shown: `#${b.id} Second in review` }])
 })
 
 for (const cached of [true, false])
@@ -1636,8 +1644,8 @@ for (const cached of [true, false])
   }) => {
     const a = await longTicket(api, human, 'Stepped to', 'review')
     const b = await longTicket(api, human, 'Linked first', 'review')
-    await page.goto(`/projects/${project.id}/features/${b.id}#handoff`)
-    await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
+    await page.goto(`/projects/${project.id}/features/${b.id}#tasks`)
+    await expectRevealed(page, page.getByRole('region', { name: 'Tasks' }))
     await expectMarkGone(page)
     // The reader scrolls away from it, then steps to the other ticket in the column by its key.
     const left = await scrollTo(page, 1200)
@@ -1672,7 +1680,7 @@ for (const cached of [true, false])
       )
     }
     await page.goBack()
-    await expect(page).toHaveURL(new RegExp(`/features/${b.id}#handoff$`))
+    await expect(page).toHaveURL(new RegExp(`/features/${b.id}#tasks$`))
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Linked first')
     await expect.poll(() => scrollY(page)).toBe(left)
     await page.waitForTimeout(1_000)
@@ -1739,7 +1747,7 @@ test.describe('on a phone', () => {
     expect(await noSidewaysScroll(page)).toBe(true)
   })
 
-  test('a ticket in review lands on its hand-off card, past the feed', async ({
+  test('a ticket in review lands on its Tasks card, below the stuck header', async ({
     page,
     project,
     api,
@@ -1750,9 +1758,9 @@ test.describe('on a phone', () => {
     await needsYou(page)
       .getByRole('link', { name: `#${t.id} Review on a phone`, exact: true })
       .click()
-    await expectRevealed(page, page.getByRole('region', { name: 'Hand-off' }))
-    // Below the feed at this width: well down the page.
-    expect(await scrollY(page)).toBeGreaterThan(page.viewportSize()!.height)
+    await expectRevealed(page, page.getByRole('region', { name: 'Tasks' }))
+    // Below the instructions at this width: scrolled down to it.
+    expect(await scrollY(page)).toBeGreaterThan(0)
     expect(await noSidewaysScroll(page)).toBe(true)
   })
 })

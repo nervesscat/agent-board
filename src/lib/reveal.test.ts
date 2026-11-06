@@ -5,7 +5,7 @@ import { KEY_ENTRIES, anchorId, cameBack, followHistory, parseAnchor } from './r
 describe('parseAnchor', () => {
   it('names an element by its id', () => {
     expect(parseAnchor('post-12')).toEqual({ hash: 'post-12', target: 'post-12', holder: null })
-    expect(parseAnchor('handoff')).toEqual({ hash: 'handoff', target: 'handoff', holder: null })
+    expect(parseAnchor('tasks')).toEqual({ hash: 'tasks', target: 'tasks', holder: null })
     expect(parseAnchor('reply-40')).toEqual({ hash: 'reply-40', target: 'reply-40', holder: null })
   })
 
