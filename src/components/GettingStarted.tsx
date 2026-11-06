@@ -117,7 +117,7 @@ export function GettingStartedEntry() {
             render={<Button variant="outline" size="sm" className="shrink-0" />}
             aria-label={`Getting started, ${o.done} of ${o.steps.length} done`}
           >
-            <Rocket data-icon="inline-start" />
+            <Rocket data-icon="inline-start" className="hidden sm:block" />
             <span className="hidden lg:inline">Getting started ·</span> {o.done}/{o.steps.length}
           </PopoverTrigger>
         </Tip>

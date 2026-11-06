@@ -106,6 +106,21 @@ Open `http://localhost:47100/` on this machine: with no account yet the board se
 Give your name (filled in with the name the board knew you by, if any) and create a passkey; you are
 signed in. Setup works once, and only on this machine.
 
+Home then shows **Getting started**, four steps, each with the button or link that does it and
+ticked by itself once the board sees it done:
+
+1. **Tools on this machine**: `git`, `gh` (signed in) and `claude` on the board's PATH (`node` and
+   `pnpm` only for previews), each missing one with its fix and **Check again**.
+2. **Create a project and add its first repository**: **New project**, then **New repository** on
+   its Repositories page (the checkout's folder, its GitHub repo, its base branch).
+3. **Connect an agent**: **Generate commands** on Connect an agent, run in your terminal.
+4. **Write a first ticket and hand it to the agent**: a ticket on the project's Features page, then
+   in your repo run `claude` and say `/board pick up the next ticket`.
+
+Until every step has been done once or you dismiss it, the top bar keeps a **Getting started · 2/4**
+button that opens the list. This browser remembers the dismissal or the completion, per user; the
+same holds in the desktop app.
+
 Create a project from the project menu in the top bar and add a repository (path of a local
 checkout) on its **Repositories** page, and you are on. A project can hold several repos; its
 modules show them all together. `/repositories`, the board-wide page it replaces, leads home.
