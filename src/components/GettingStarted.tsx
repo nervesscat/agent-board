@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Empty } from '#/components/Empty'
 import { NewProject } from '#/components/ProjectSwitcher'
 import { Button } from '#/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Tip } from '#/components/ui/tooltip'
 import { type AgentTokenRow, errorMessage, get, type HostTools, type Me, post } from '#/lib/api'
@@ -85,15 +85,23 @@ function useOnboarding() {
 
 type Onboarding = ReturnType<typeof useOnboarding>
 
-/** Home on a board without projects: the checklist in place of an empty page. */
-export function GettingStarted() {
+/** Whether the entry shows: the board has answered, and the steps are neither done once nor dismissed. */
+const entryShown = (o: Onboarding) => o.human && !o.pending && !o.remembered && o.done < o.steps.length
+
+/**
+ * The checklist as a card. On Home without projects it stands in for an empty page; with
+ * `dismissable` (Home on a phone, where the top bar has no room for the entry) it shows only while the
+ * entry would, with a Dismiss of its own.
+ */
+export function GettingStarted({ dismissable = false }: { dismissable?: boolean }) {
   const o = useOnboarding()
   const create = useCreateProject()
+  if (dismissable && !entryShown(o)) return create.dialog
   // The steps are the human's to take; an agent's view keeps the plain empty state.
   if (o.agent)
     return <Empty>No projects yet. The human creates the first one from Getting started on Home.</Empty>
   return (
-    <Card aria-labelledby="getting-started-title">
+    <Card id="getting-started" aria-labelledby="getting-started-title">
       <CardHeader>
         <CardTitle id="getting-started-title" className="text-base">
           Getting started · {o.done} of {o.steps.length}
@@ -101,6 +109,11 @@ export function GettingStarted() {
         <CardDescription>
           Four steps before an agent works on this board. Each ticks itself once it is done.
         </CardDescription>
+        {dismissable ? (
+          <CardAction>
+            <DismissButton onClick={() => o.remember('dismissed')} />
+          </CardAction>
+        ) : null}
       </CardHeader>
       <CardContent>
         <Checklist o={o} onNewProject={create.start} />
@@ -118,16 +131,16 @@ export function GettingStartedEntry() {
   const o = useOnboarding()
   const [open, setOpen] = useState(false)
   const create = useCreateProject(() => setOpen(false))
-  if (!o.human || o.pending || o.remembered || o.done === o.steps.length) return create.dialog
+  if (!entryShown(o)) return create.dialog
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <Tip content="The steps to start working on this board">
           <PopoverTrigger
-            render={<Button variant="outline" size="sm" className="shrink-0" />}
+            render={<Button variant="outline" size="sm" className="hidden shrink-0 md:inline-flex" />}
             aria-label={`Getting started, ${o.done} of ${o.steps.length} done`}
           >
-            <Rocket data-icon="inline-start" className="hidden sm:block" />
+            <Rocket data-icon="inline-start" />
             <span className="hidden lg:inline">Getting started ·</span> {o.done}/{o.steps.length}
           </PopoverTrigger>
         </Tip>
@@ -139,26 +152,45 @@ export function GettingStartedEntry() {
               </p>
               <p className="text-xs text-muted-foreground">Each step ticks itself once it is done.</p>
             </div>
-            <Tip content="Hide Getting started for good">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Dismiss Getting started"
-                onClick={() => {
-                  setOpen(false)
-                  o.remember('dismissed')
-                }}
-              >
-                <X />
-              </Button>
-            </Tip>
+            <DismissButton
+              onClick={() => {
+                setOpen(false)
+                o.remember('dismissed')
+              }}
+            />
           </div>
           <Checklist o={o} onGo={() => setOpen(false)} onNewProject={create.start} />
         </PopoverContent>
       </Popover>
       {create.dialog}
     </>
+  )
+}
+
+function DismissButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Tip content="Hide Getting started for good">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Dismiss Getting started"
+        onClick={onClick}
+      >
+        <X />
+      </Button>
+    </Tip>
+  )
+}
+
+/** The entry on screens too narrow for it in the top bar: an item of the Pages menu, to Home's card. */
+export function GettingStartedMenuItem({ className, onGo }: { className: string; onGo: () => void }) {
+  const o = useOnboarding()
+  if (!entryShown(o)) return null
+  return (
+    <Link to="/" hash="getting-started" onClick={onGo} className={className}>
+      Getting started · {o.done}/{o.steps.length}
+    </Link>
   )
 }
 

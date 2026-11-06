@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 
 import { CrossBoardMark } from '#/components/CrossBoardMark'
 import { Gallery } from '#/components/Gallery'
-import { GettingStartedEntry } from '#/components/GettingStarted'
+import { GettingStartedEntry, GettingStartedMenuItem } from '#/components/GettingStarted'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
@@ -144,7 +144,10 @@ function AuthOffBadge() {
   )
 }
 
-/** The same pages behind one button, for screens too narrow to list them. */
+const MENU_ITEM =
+  'flex w-full items-center rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground [&.active]:bg-muted [&.active]:text-foreground'
+
+/** The same pages behind one button, for screens too narrow to list them, and Getting started's entry. */
 function PagesMenu() {
   const [open, setOpen] = useState(false)
   return (
@@ -155,14 +158,10 @@ function PagesMenu() {
       >
         <Menu />
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-44 gap-0 p-1">
+      <PopoverContent align="end" className="w-52 gap-0 p-1">
+        <GettingStartedMenuItem className={MENU_ITEM} onGo={() => setOpen(false)} />
         {PAGES.map((p) => (
-          <Link
-            key={p.to}
-            to={p.to}
-            onClick={() => setOpen(false)}
-            className="flex w-full items-center rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground [&.active]:bg-muted [&.active]:text-foreground"
-          >
+          <Link key={p.to} to={p.to} onClick={() => setOpen(false)} className={MENU_ITEM}>
             {p.label}
           </Link>
         ))}

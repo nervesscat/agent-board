@@ -197,11 +197,22 @@ test('a fresh board walks the steps to 4 of 4, and the entry stays gone after', 
   await page.getByRole('button', { name: 'Generate commands' }).click()
   await expect(entry(page)).toHaveAccessibleName('Getting started, 3 of 4 done')
 
-  // 4. A first ticket, from the project's Features page.
-  await entry(page).click()
+  // On a phone the entry is an item of the Pages menu, leading to Home's card; the page keeps its width.
   await page.setViewportSize({ width: 390, height: 844 })
+  await expect(entry(page)).toBeHidden()
+  await page.getByRole('button', { name: 'Pages' }).click()
+  await page.getByRole('link', { name: 'Getting started · 3/4' }).click()
+  await expect(page).toHaveURL(/\/#getting-started$/)
+  await expect(page.getByText('Getting started · 3 of 4')).toBeVisible()
+  await stepState(page, 'Connect an agent', 'Done')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   await shot(page, '2-midway-phone')
   await page.setViewportSize({ width: 1280, height: 720 })
+  // Home's card is for phones: on a wide screen the entry stands for it.
+  await expect(page.getByText('Getting started · 3 of 4')).toBeHidden()
+
+  // 4. A first ticket, from the project's Features page.
+  await entry(page).click()
   await checklist(page).getByRole('link', { name: 'Write a ticket' }).click()
   await expect(page).toHaveURL(new RegExp(`/projects/${projectId}/features`))
   await page.getByRole('button', { name: 'New ticket' }).click()

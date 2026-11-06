@@ -65,6 +65,10 @@ export function Summary({ projectId }: { projectId?: number }) {
   if (projectId) return <ProjectBlock p={data.projects[0]!} />
   return (
     <div className="space-y-10">
+      {/* The top bar's Getting started entry folds into the Pages menu on a phone, which leads here. */}
+      <div className="empty:hidden md:hidden">
+        <GettingStarted dismissable />
+      </div>
       {data.projects.map((p) => (
         <section key={p.project.id} className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
