@@ -336,6 +336,21 @@ export function restartPlan({ exits, healthySince }, now) {
 }
 
 /**
+ * Runs `run` after `delay` ms and hands whatever it throws or rejects with to `fail`. A restart must
+ * end somewhere: spawn throws at once for some errors (ENOMEM, EPERM) instead of emitting 'error',
+ * and a timer's dropped promise would turn that into an unhandled rejection, leaving the app open
+ * with no board behind it and nothing more to come.
+ * @param {number} delay
+ * @param {() => unknown} run
+ * @param {(err: unknown) => void} fail
+ */
+export function runLater(delay, run, fail) {
+  return setTimeout(() => {
+    void (async () => run())().catch(fail)
+  }, delay)
+}
+
+/**
  * How an exit reads in the app's messages: `exit code 1`, `signal SIGKILL`, or `no exit code`.
  * @param {number | null} code
  * @param {NodeJS.Signals | null} signal

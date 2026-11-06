@@ -30,6 +30,7 @@ import {
   readConfigFile,
   resolveSettings,
   restartPlan,
+  runLater,
   setAutostart,
   SettingsError,
   tail,
@@ -260,7 +261,14 @@ function onServerExit(code, signal) {
   console.error(`agent-board desktop: ${note}`)
   appendLog(logs, note)
   tray?.setToolTip(`${app.getName()}: restarting the board (${reason})`)
-  restartTimer = setTimeout(() => void restartServer(reason), plan.delay)
+  restartTimer = runLater(
+    plan.delay,
+    () => restartServer(reason),
+    (err) => {
+      if (!quitting)
+        void fatal('The board cannot start.', `${errorText(err)}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
+    },
+  )
 }
 
 /**

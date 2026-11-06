@@ -3,7 +3,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   appFolders,
@@ -34,6 +34,7 @@ import {
   RESTART_DELAYS_MS,
   RESTART_LIMIT,
   restartPlan,
+  runLater,
   runCapture,
   setAutostart,
   SettingsError,
@@ -846,6 +847,44 @@ describe('restartPlan', () => {
       exits: RESTART_LIMIT + 1,
       delay: null,
     })
+  })
+})
+
+describe('runLater', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** Runs `run` through runLater and returns what reached `fail`. */
+  async function failures(/** @type {() => unknown} */ run) {
+    vi.useFakeTimers()
+    /** @type {unknown[]} */
+    const failed = []
+    runLater(1000, run, (err) => failed.push(err))
+    await vi.advanceTimersByTimeAsync(999)
+    expect(failed).toEqual([])
+    await vi.advanceTimersByTimeAsync(1)
+    return failed
+  }
+
+  it('hands a synchronous throw to fail rather than leaving it unhandled', async () => {
+    const err = Object.assign(new Error('spawn ENOMEM'), { code: 'ENOMEM' })
+    expect(
+      await failures(() => {
+        throw err
+      }),
+    ).toEqual([err])
+  })
+
+  it('hands a rejection to fail', async () => {
+    const err = new Error('later')
+    expect(await failures(() => Promise.reject(err))).toEqual([err])
+  })
+
+  it('calls nothing more when the run succeeds', async () => {
+    let ran = 0
+    expect(await failures(async () => void ran++)).toEqual([])
+    expect(ran).toBe(1)
   })
 })
 
