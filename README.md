@@ -222,8 +222,8 @@ them just the same. Managed previews of a board worktree also need `pnpm` and `n
 
 **Data and settings** live in `%LOCALAPPDATA%\agent-board`:
 
-- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`), what `data/`
-  is in a checkout.
+- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`,
+  `desktop.log`), what `data/` is in a checkout.
 - `config.env`: the settings, `KEY=value` as in `.env`, read at each start. The first start writes it
   with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
   like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and the tailnet
@@ -239,6 +239,17 @@ such as `pnpm start` from a checkout, also wants 47100) offers to open `config.e
 `PORT` there, or stop the other one; a data folder or app folder that cannot be used (a `DATA_DIR`
 or `AGENT_BOARD_HOME` on a missing drive, say) names it and what to change; a board that fails to
 start shows the end of its log and offers the logs folder.
+
+**How the board stopped** outlives that dialog. The app adds a line to `logs/desktop.log` each time
+it starts the board's server and each time the server exits, however it ends:
+`2026-11-04T20:33:47.853Z server pid 5901 exited signal=SIGKILL code=null uptime=16832s quitting=false`
+(`quitting=true`: the app was stopping it). Past 1 MB the log moves to `desktop.log.1`, the one before
+it going. The dialog names the signal that killed the server ("It was killed by SIGKILL at …"). The
+server itself, under the app and under `pnpm start` alike, writes a timestamped line to
+`board.err.log` when it is sent SIGTERM, SIGINT or SIGHUP (`… board pid 5901 received SIGTERM
+uptime=16832s maxrss=412MB`, its peak memory), when an error escapes (with its stack), and as it
+exits; which process sent a signal is not something it can tell. A server killed by SIGKILL (the
+out-of-memory killer, say) writes nothing itself, so only the app's line tells of it.
 
 **Signing in.** The window signs in with the board's own passkeys, as a browser does (First run and
 Signing in, above): on a fresh data folder it opens on `/setup`, where you give your name and create
@@ -298,7 +309,7 @@ are set to absolute paths):
   `~/.local/share/agent-board`.
 - `~/.config/agent-board/electron/`: the window's browser profile.
 - `~/.local/share/agent-board/data/`: the database, uploads and logs (`data/logs/board.out.log`,
-  `board.err.log`).
+  `board.err.log`, `desktop.log`).
 
 `AGENT_BOARD_HOME` puts all three in one folder, as on Windows.
 

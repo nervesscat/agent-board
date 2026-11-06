@@ -33,6 +33,7 @@ import {
   trayHostPresent,
   withLoginPath,
 } from './settings.mjs'
+import { exitLine, exitSentence, logServer, spawnFailedLine, startLine } from './serverLog.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const LINUX = process.platform === 'linux'
@@ -195,6 +196,8 @@ function startServer() {
     // Elsewhere than Windows, a process group of its own: stopServer ends it with what it started.
     detached: process.platform !== 'win32',
   })
+  const startedAt = Date.now()
+  if (server.pid) logServer(logs, startLine({ pid: server.pid }))
   server.stdout?.on('data', (chunk) => {
     out.write(chunk)
     process.stdout.write(chunk)
@@ -208,12 +211,14 @@ function startServer() {
   // It could not be started at all (its folder gone, say): no 'exit' follows.
   proc.on('error', (e) => {
     if (server === proc) server = null
+    if (!proc.pid) logServer(logs, spawnFailedLine({ error: errorText(e) }))
     if (!quitting) void fatal('The board cannot start.', `${errorText(e)}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
   })
-  proc.on('exit', (code) => {
+  proc.on('exit', (code, signal) => {
     if (server === proc) server = null
+    logServer(logs, exitLine({ pid: proc.pid, code, signal, startedAt, quitting }))
     if (quitting) return
-    const detail = `It exited${code === null ? '' : ` with code ${code}`}.\n\n${tail(serverErr) || '(no output)'}`
+    const detail = `${exitSentence(code, signal)}\n\n${tail(serverErr) || '(no output)'}`
     void fatal('The board stopped.', `${detail}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
   })
 }
