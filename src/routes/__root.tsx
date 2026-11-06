@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 
 import { CrossBoardMark } from '#/components/CrossBoardMark'
 import { Gallery } from '#/components/Gallery'
+import { GettingStartedEntry } from '#/components/GettingStarted'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
@@ -102,7 +103,10 @@ function App() {
           </Tip>
           <AuthOffBadge />
           <ProjectSwitcher />
-          <div className="ml-auto hidden items-center gap-5 md:flex">
+          <div className="ml-auto flex shrink-0 items-center">
+            <GettingStartedEntry />
+          </div>
+          <div className="hidden items-center gap-5 md:flex">
             {PAGES.map((p) => (
               <Link
                 key={p.to}
@@ -146,7 +150,7 @@ function PagesMenu() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        render={<Button variant="ghost" size="icon" className="ml-auto md:hidden" />}
+        render={<Button variant="ghost" size="icon" className="md:hidden" />}
         aria-label="Pages"
       >
         <Menu />
