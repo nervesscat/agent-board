@@ -167,8 +167,9 @@ export function entranceUpgradeGuard(cfg: GuardConfig) {
 }
 
 /**
- * The plugin vite.config.ts puts first. Its settings are read as the server is configured, after Nitro
- * loaded .env into process.env (`env` stands in for that in tests).
+ * The plugin vite.config.ts puts first. Its settings are read from process.env as the server is
+ * configured, once .env is loaded: BOARD_ENV, AUTH and PUBLIC_ORIGIN as Vite's loadEnv reads them
+ * (devEnv.ts), the rest by Nitro (`env` stands in for that in tests).
  */
 export function entranceGuard(options: { env?: () => Record<string, string | undefined> } = {}): Plugin {
   return {

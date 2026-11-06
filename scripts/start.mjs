@@ -15,6 +15,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { isMainCheckout } from './checkout.mjs'
+import { boardAddress } from './dotenv.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 process.chdir(root)
@@ -23,17 +24,9 @@ const args = process.argv.slice(2)
 for (const arg of args)
   if (!['--fg', '--stop'].includes(arg)) fail(`unknown option ${arg}; use --fg or --stop`)
 
-function env(key, fallback) {
-  const line = fs.existsSync('.env')
-    ? fs
-        .readFileSync('.env', 'utf8')
-        .split(/\r?\n/)
-        .find((l) => l.startsWith(`${key}=`))
-    : undefined
-  return line?.slice(key.length + 1).trim() || fallback
-}
-const port = Number(env('PORT', '47100'))
-const host = env('HOST', '127.0.0.1')
+// PORT and HOST as the board's .env gives them (an inline comment is no part of a value): the port
+// `pnpm tailnet` serves.
+const { port, host } = boardAddress()
 const logs = path.join('data', 'logs')
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))

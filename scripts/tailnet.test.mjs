@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url'
 import { loadEnv } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { readPublicEntrance } from '../src/server/config.ts'
+import { readPublicEntrance, StartupError } from '../src/server/config.ts'
+import { boardAddress, readDotenv } from './dotenv.mjs'
 
 const helper = path.join(path.dirname(fileURLToPath(import.meta.url)), 'tailnet.mjs')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-tailnet-'))
@@ -198,6 +199,19 @@ describe('pnpm tailnet', slow, () => {
     }
   })
 
+  it('serves the port pnpm start runs the board on, for the same .env', async () => {
+    const port = portOf(signingIn)
+    for (const eol of ['\n', '\r\n']) {
+      const res = await run([], { dotenv: { PORT: `"${port}" # the board`, ...entrance() }, eol })
+      // scripts/start.mjs starts the board on this address...
+      expect(boardAddress(readDotenv(path.join(res.dir, '.env')))).toEqual({ port, host: '127.0.0.1' })
+      // ...and the helper serves that port.
+      expect(res.code, res.stderr).toBe(0)
+      expect(res.stdout).toContain(`tailscale serve --bg --https=443 http://127.0.0.1:${port}\n`)
+      expect(res.stderr).toBe('')
+    }
+  })
+
   it('expands ${NAME} and $NAME in .env as the board does, from a line above or below, LF or CRLF', async () => {
     const port = portOf(signingIn)
     for (const eol of ['\n', '\r\n'])
@@ -369,18 +383,54 @@ describe('pnpm tailnet refuses', slow, () => {
       ['--target', `http://127.0.0.1:${port + 1}`],
       ['--target', `http://127.0.0.1:${port}/admin`],
       ['--target', 'not a url'],
+      // An empty port is http's own, 80: never the board's.
+      ['--target', 'http://127.0.0.1:'],
     ]) {
       const res = await run(args, { dotenv: { PORT: port, ...entrance() } })
       expect(res.code, `${args}`).toBe(1)
       expect(res.stderr).toMatch(/board|loopback|path/)
+      expect(res.stdout, `${args}`).not.toContain('tailscale serve')
       expect(res.calls, `${args}`).toEqual([])
     }
+    const empty = await run(['--target', 'http://127.0.0.1:'], { dotenv: { PORT: port, ...entrance() } })
+    expect(empty.stderr).toContain(`http://127.0.0.1: is not the board's port`)
+    expect(empty.stderr).toContain(`127.0.0.1:${port} (PORT in .env)`)
     // PORT unset: the board is on 47100, and nothing else is.
     const preview = await run(['--port', '47101'])
     expect(preview.code).toBe(1)
     expect(preview.stderr).toContain("--port 47101 is not the board's port")
     expect(preview.stderr).toContain('127.0.0.1:47100')
     expect(preview.calls).toEqual([])
+  })
+
+  it('a PUBLIC_ORIGIN the board refuses to start with, as the board reads it, and prints no command', async () => {
+    const port = portOf(signingIn)
+    for (const [origin, value] of [
+      [`http://${NAME}`, `http://${NAME}`],
+      [`https://${NAME}:8443`, `https://${NAME}:8443`],
+      [`https://${NAME}:443`, `https://${NAME}:443`],
+      [`https://${NAME}/board`, `https://${NAME}/board`],
+      [`https://${NAME}/?x=1`, `https://${NAME}/?x=1`],
+      ['https://*.example-tailnet.ts.net', 'https://*.example-tailnet.ts.net'],
+      ['https://100.101.102.103', 'https://100.101.102.103'],
+      ['https://[fd7a:115c:a1e0::1]', 'https://[fd7a:115c:a1e0::1]'],
+      ['https://localhost', 'https://localhost'],
+      [NAME, NAME],
+      // A name defined nowhere is empty, as the board reads .env: no host is left.
+      ['https://${TAILNET_TEST_UNDEFINED}', 'https://'],
+      ['"https://${TAILNET_TEST_UNDEFINED}" # note', 'https://'],
+    ]) {
+      const res = await run([], { dotenv: { PORT: port, PUBLIC_ORIGIN: origin } })
+      // The board refuses to start with it...
+      expect(() => boardEntrance(res.dir), origin).toThrow(StartupError)
+      expect(() => boardEntrance(res.dir), origin).toThrow(`got "${value}"`)
+      // ...and so does the helper: no command, and what to change.
+      expect(res.code, `${origin}: ${res.stdout}`).toBe(1)
+      expect(res.stdout, origin).not.toContain('tailscale serve')
+      expect(res.stderr, origin).toContain(`.env has PUBLIC_ORIGIN="${value}", which the board refuses`)
+      expect(res.stderr, origin).toContain(`Set PUBLIC_ORIGIN=https://${NAME}`)
+      onlyReads(res.calls)
+    }
   })
 
   it('a board that answers /api/me without signing in: its sign-in is off', async () => {

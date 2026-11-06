@@ -1,4 +1,4 @@
-import { defineConfig, loadEnv, type Plugin } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
 import viteReact from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -12,6 +12,7 @@ import {
   StartupError,
 } from './src/server/config.ts'
 import { endConnectionGone } from './src/server/connectionGone.ts'
+import { adoptCheckedEnv } from './src/server/devEnv.ts'
 import { entranceGuard } from './src/server/devEntrance.ts'
 
 /**
@@ -33,7 +34,8 @@ const apiIsNeverAnAsset = (): Plugin => ({
 /**
  * `vite dev` listens before Nitro's plugins run, so the sign-in-off checks of src/server/startup.ts on
  * where it listens happen here, on Vite's own host and port: loopback only, never the live port. So does
- * its refusal of a PUBLIC_ORIGIN it cannot trust (README: "Using it from other devices").
+ * its refusal of a PUBLIC_ORIGIN it cannot trust (README: "Using it from other devices"). BOARD_ENV, AUTH
+ * and PUBLIC_ORIGIN are in process.env as Vite's loadEnv reads them (adoptCheckedEnv, below).
  */
 const refuseUnsafeAuth = (): Plugin => ({
   name: 'agent-board:refuse-unsafe-auth',
@@ -77,12 +79,11 @@ const connectionGoneIsNotAnError = (): Plugin => ({
 
 /**
  * The host `vite dev` answers besides loopback: the tailnet entrance's public host, once PUBLIC_ORIGIN
- * is valid and sign-in is on; otherwise none. Never `true`, never a wildcard. Nitro loads .env only after
- * this file has run, so it is read here as Vite reads it (the shell's values win, as they do in Nitro).
+ * is valid and sign-in is on; otherwise none. Never `true`, never a wildcard.
  */
-function allowedHosts(mode: string): string[] {
+function allowedHosts(): string[] {
   try {
-    const entrance = readServedEntrance(loadEnv(mode, process.cwd(), ''))
+    const entrance = readServedEntrance(process.env)
     return entrance ? [entrance.host] : []
   } catch (err) {
     // A PUBLIC_ORIGIN it cannot trust: refuseUnsafeAuth stops the start and says why.
@@ -91,44 +92,56 @@ function allowedHosts(mode: string): string[] {
   }
 }
 
-export default defineConfig(({ mode }) => ({
-  resolve: { tsconfigPaths: true },
-  plugins: [
-    refuseUnsafeAuth(),
-    // Ahead of Nitro's and Vite's own middlewares: Vite's files and its WebSocket are behind it too.
-    entranceGuard(),
-    apiIsNeverAnAsset(),
-    nitro({
-      plugins: [
-        './src/server/startup.ts',
-        './src/server/plugins/uploadSweep.ts',
-        './src/server/plugins/hostTools.ts',
-        './src/server/plugins/seedRuns.ts',
-      ],
-      // Loaded from node_modules, not bundled: its certificate code (@peculiar/x509, tsyringe) needs
-      // reflect-metadata to run first, an order bundling breaks.
-      traceDeps: ['@simplewebauthn/server'],
-      // The e2e suite builds into its own folder, so the live board's .output is never touched.
-      ...(process.env.BOARD_BUILD_DIR && { output: { dir: process.env.BOARD_BUILD_DIR } }),
-    }),
-    tailwindcss(),
-    // No dev stylesheet of TanStack Start's (/@tanstack-start/styles.css): it is given a precedence, so
-    // React puts it at the top of the head, and the inline KEY_ENTRIES after it (src/lib/reveal.ts) would
-    // not run until it had loaded. It holds the CSS that routes import as modules, and none does: the
-    // app's CSS is the link in src/routes/__root.tsx, which Vite serves and hot-reloads as it is. Builds
-    // never had it.
-    tanstackStart({ dev: { ssrStyles: { enabled: false } } }),
-    viteReact(),
-    connectionGoneIsNotAnError(),
-  ],
-  ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
-  server: {
-    // The board writes its database, uploads and logs under data/ all the time; none of it is code. Nor
-    // is what the benchmark keeps in .bench/ (its builds, copies of the data and results), nor the desktop
-    // app's staged board and installer (desktop/.stage, desktop/dist).
-    watch: {
-      ignored: ['**/data/**', '**/.output*/**', '**/.bench/**', '**/desktop/.stage/**', '**/desktop/dist/**'],
+export default defineConfig(({ mode }) => {
+  // Before Nitro's plugin loads .env (its config hook): from here on the startup checks, the request
+  // guard and the board's runtime read BOARD_ENV, AUTH and PUBLIC_ORIGIN as loadEnv gives them
+  // (src/server/devEnv.ts says why, and what still comes from Nitro's loader).
+  adoptCheckedEnv(mode, process.cwd())
+  return {
+    resolve: { tsconfigPaths: true },
+    plugins: [
+      refuseUnsafeAuth(),
+      // Ahead of Nitro's and Vite's own middlewares: Vite's files and its WebSocket are behind it too.
+      entranceGuard(),
+      apiIsNeverAnAsset(),
+      nitro({
+        plugins: [
+          './src/server/startup.ts',
+          './src/server/plugins/uploadSweep.ts',
+          './src/server/plugins/hostTools.ts',
+          './src/server/plugins/seedRuns.ts',
+        ],
+        // Loaded from node_modules, not bundled: its certificate code (@peculiar/x509, tsyringe) needs
+        // reflect-metadata to run first, an order bundling breaks.
+        traceDeps: ['@simplewebauthn/server'],
+        // The e2e suite builds into its own folder, so the live board's .output is never touched.
+        ...(process.env.BOARD_BUILD_DIR && { output: { dir: process.env.BOARD_BUILD_DIR } }),
+      }),
+      tailwindcss(),
+      // No dev stylesheet of TanStack Start's (/@tanstack-start/styles.css): it is given a precedence, so
+      // React puts it at the top of the head, and the inline KEY_ENTRIES after it (src/lib/reveal.ts) would
+      // not run until it had loaded. It holds the CSS that routes import as modules, and none does: the
+      // app's CSS is the link in src/routes/__root.tsx, which Vite serves and hot-reloads as it is. Builds
+      // never had it.
+      tanstackStart({ dev: { ssrStyles: { enabled: false } } }),
+      viteReact(),
+      connectionGoneIsNotAnError(),
+    ],
+    ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
+    server: {
+      // The board writes its database, uploads and logs under data/ all the time; none of it is code. Nor
+      // is what the benchmark keeps in .bench/ (its builds, copies of the data and results), nor the desktop
+      // app's staged board and installer (desktop/.stage, desktop/dist).
+      watch: {
+        ignored: [
+          '**/data/**',
+          '**/.output*/**',
+          '**/.bench/**',
+          '**/desktop/.stage/**',
+          '**/desktop/dist/**',
+        ],
+      },
+      allowedHosts: allowedHosts(),
     },
-    allowedHosts: allowedHosts(mode),
-  },
-}))
+  }
+})

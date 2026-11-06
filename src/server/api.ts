@@ -18,8 +18,8 @@ import * as agents from './agents'
 import { roadmap } from './roadmap'
 import * as runConfig from './runConfig'
 import {
-  forgetRunConfig,
   isActive as runActive,
+  removeRunConfig,
   restartRun,
   runLog,
   runState,
@@ -135,7 +135,7 @@ const TicketPatch = z.object({
     .max(20)
     .optional(),
 })
-// A run of a repo as the human configures it; runConfigProblem (src/lib/runs.ts) checks the rest.
+// A run of a repo, as the human or an agent configures it; runConfigProblem (src/lib/runs.ts) checks the rest.
 const RunBody = z.object({
   name: z.string().max(200),
   type: z.string().max(20),
@@ -147,10 +147,6 @@ const RunBody = z.object({
   healthPath: z.string().max(1_000).optional(),
   copyData: z.boolean().optional(),
 })
-// The commands are the human's alone: an agent reads them and starts runs, never writes them.
-const humanRuns = (request: Request) => {
-  if (isAgent(request)) throw new HttpError(403, "only the human configures a repo's runs")
-}
 /** An optional JSON body: none (or an empty one) is `{}`. */
 const optionalJson = async <T extends z.ZodType>(request: Request, schema: T): Promise<z.infer<T>> =>
   (await request.clone().text()).trim() ? readJson(request, schema) : schema.parse({})
@@ -181,7 +177,7 @@ api.get('/api/actors', () => json(listActors()))
 // Signing in with passkeys, signing out, and the devices section (authApi.ts).
 authRoutes(api)
 
-// --- the agent tokens Connect agents makes, lists and revokes (tokens.ts): the human's alone ---
+// --- the agent tokens Connect an agent makes, lists and revokes (tokens.ts): the human's alone ---
 const TokenName = z
   .string()
   .trim()
@@ -213,7 +209,7 @@ api.delete('/api/agent-tokens/:id', ({ request, params }) => {
 
 // --- connecting agents: board settings, and the skill each CLI installs ---
 api.get('/api/agent-setup', () => json(agents.agentSetup()))
-// The board skill as a SKILL.md, with today's projects and repos; the install commands curl this.
+// The board skill as a SKILL.md (no projects in it: agents call find_project); the install commands curl this.
 api.get('/api/agent-setup/skill', ({ url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
   return new Response(agents.renderSkill(client), {
@@ -270,6 +266,22 @@ api.post('/api/projects', async ({ request, actor }) => {
   return json(projects.createProject(body, actor, callerInfo(request)), 201)
 })
 api.get('/api/projects/:id', ({ params }) => json(projects.getProjectFull(id(params))))
+// One page of the tags the project offers to filter by (the tag filter's list): `{tags, next}`.
+api.get('/api/projects/:id/tags', ({ params, url }) => {
+  const q = url.searchParams
+  const num = (k: string) => (q.get(k) ? Number(q.get(k)) : undefined)
+  const page = query(
+    projects.TagsQuery,
+    {
+      q: q.get('q') ?? undefined,
+      include: q.get('include') ?? undefined,
+      cursor: q.get('cursor') ?? undefined,
+      limit: num('limit'),
+    },
+    'query',
+  )
+  return json(projects.projectTags(id(params), page))
+})
 // The phases every new ticket of the project starts with; null goes back to the built-in list.
 const DefaultPhases = z.array(z.string().trim().min(1).max(500)).max(20).nullable()
 api.patch('/api/projects/:id', async ({ request, params, actor }) => {
@@ -462,10 +474,10 @@ api.delete('/api/repos/:id', ({ request, params, actor }) => {
   return json({ ok: true })
 })
 // --- runs: what the board starts from a ticket's worktree of a repo (previews and jobs) ---
-// A repo's runs, in order: anyone signed in reads them; only the human writes them.
+// A repo's runs, in order: anyone signed in reads and writes them (an agent too: the MCP add_run,
+// update_run and delete_run do the same), each write in the project's activity under the caller's name.
 api.get('/api/repos/:id/runs', ({ params }) => json(runConfig.listRunConfigs(id(params))))
 api.post('/api/repos/:id/runs', async ({ request, params, actor }) => {
-  humanRuns(request)
   const body = await readJson(request, RunBody)
   return json(
     runConfig.createRunConfig(id(params), body as Parameters<typeof runConfig.createRunConfig>[1], actor),
@@ -474,23 +486,18 @@ api.post('/api/repos/:id/runs', async ({ request, params, actor }) => {
 })
 // Body: every run id of the repo, in the new order.
 api.put('/api/repos/:id/runs/order', async ({ request, params, actor }) => {
-  humanRuns(request)
   const body = await readJson(request, z.object({ ids: z.array(z.number().int()) }))
   return json(runConfig.reorderRunConfigs(id(params), body.ids, actor))
 })
 api.patch('/api/runs/:id', async ({ request, params, actor }) => {
-  humanRuns(request)
   const body = await readJson(request, RunBody.partial())
   return json(
     runConfig.updateRunConfig(id(params), body as Parameters<typeof runConfig.updateRunConfig>[1], actor),
   )
 })
 // Whatever runs of it stops first.
-api.delete('/api/runs/:id', ({ request, params, actor }) => {
-  humanRuns(request)
-  runConfig.getRunConfig(id(params))
-  forgetRunConfig(id(params), actor)
-  runConfig.deleteRunConfig(id(params), actor)
+api.delete('/api/runs/:id', ({ params, actor }) => {
+  removeRunConfig(id(params), actor)
   return json({ ok: true })
 })
 

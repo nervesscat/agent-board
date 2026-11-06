@@ -7,7 +7,7 @@ import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { MAX_TAG_LENGTH } from '#/lib/tags'
 import { AGENT, e2eEnv, git, HUMAN } from './env'
 import { pdf, png } from './files'
-import { expect, expectTooltip, ok, test, tooltip } from './fixtures'
+import { expect, expectTooltip, ok, seededProject, test, tooltip } from './fixtures'
 
 // A daily report left missing shows its reminder on every later test's pages once its shift has ended,
 // so each test here turns its project's reports off when it is done (as `quiet()` does in dailyPage.ts).
@@ -489,7 +489,7 @@ test('a button disabled for a reason says why on hover, and stays disabled', asy
 })
 
 test('the folder picker says why Up is off at the top folder, over its dialog', async ({ page }) => {
-  await page.goto('/repositories')
+  await page.goto(`/projects/${seededProject().id}/repositories`)
   await page.getByRole('button', { name: 'New repository' }).click()
   await page.getByRole('button', { name: 'Browse…' }).click()
   const picker = page.getByRole('dialog', { name: 'Choose the checkout' })
@@ -544,7 +544,7 @@ test('the folder picker opened from the keyboard shows no tooltip, and one Escap
   page,
 }) => {
   // From the repository dialog: Up and Home, with their tooltips, come before the path.
-  await page.goto('/repositories')
+  await page.goto(`/projects/${seededProject().id}/repositories`)
   await page.getByRole('button', { name: 'New repository' }).click()
   const repo = page.getByRole('dialog', { name: 'New repository' })
   const browse = repo.getByRole('button', { name: 'Browse…' })
@@ -578,7 +578,7 @@ test.describe('on a touch screen', () => {
     page,
   }) => {
     // Focus on the path's text field would raise a phone's keyboard, unasked.
-    await page.goto('/repositories')
+    await page.goto(`/projects/${seededProject().id}/repositories`)
     await page.getByRole('button', { name: 'New repository' }).tap()
     const repo = page.getByRole('dialog', { name: 'New repository' })
     await repo.getByRole('button', { name: 'Browse…' }).tap()

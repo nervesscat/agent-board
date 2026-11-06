@@ -8,13 +8,14 @@
 //   pnpm tailnet --target http://127.0.0.1:47100    # likewise with the whole target
 //
 // It refuses while Tailscale Funnel is on (that is the internet, not your tailnet), a target that is
-// not the board on loopback (PORT in .env, 47100 by default: never a preview or a pnpm dev copy), and
-// a board that answers /api/me without signing in (its sign-in is off). TAILSCALE_BIN names the CLI to
-// ask (default `tailscale`; a .mjs or .js file runs with node).
+// not the board on loopback (PORT in .env, 47100 by default: never a preview or a pnpm dev copy), a
+// PUBLIC_ORIGIN in .env the board refuses to start with, and a board that answers /api/me without
+// signing in (its sign-in is off). TAILSCALE_BIN names the CLI to ask (default `tailscale`; a .mjs or
+// .js file runs with node).
 import { execFileSync } from 'node:child_process'
-import fs from 'node:fs'
 import http from 'node:http'
-import { parseEnv } from 'node:util'
+
+import { boardAddress, readDotenv } from './dotenv.mjs'
 
 const USAGE = 'usage: pnpm tailnet [--port <the board port>] [--target http://127.0.0.1:<the board port>]'
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]'])
@@ -26,54 +27,27 @@ function fail(message) {
   process.exit(1)
 }
 
-/**
- * The values in .env in the current folder (the board's checkout, as pnpm runs this), as the board reads
- * them with Vite's loadEnv (vite.config.ts): parsed by node:util's parseEnv, so an inline `# comment` is not
- * part of a value, then `${NAME}` and `$NAME` expanded with dotenv-expand's rules, from the file's other
- * values (above or below) and from the environment; a name defined in neither is empty. Where the shell also
- * sets a name .env defines, .env's value stands: `pnpm start` runs the board on .env's PORT, whatever the
- * shell says.
- */
-function readDotenv(file = '.env') {
-  if (!fs.existsSync(file)) return {}
-  const values = parseEnv(fs.readFileSync(file, 'utf8'))
-  const shell = Object.fromEntries(Object.entries(process.env).filter(([key]) => !Object.hasOwn(values, key)))
-  for (const key in values) values[key] = expandValue(values[key], shell, values).replace(/\\\$/g, '$')
-  return values
-}
+// A host name of two labels or more, the last one starting with a letter: no wildcard, no IP literal.
+const HOST_NAME =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
 /**
- * One value with its references expanded, step for step as dotenv-expand does in Vite's loadEnv, defaults
- * (`${NAME:-default}` and its kin) included: `values` are the file's, those above this one already expanded.
- * Names are looked up on an object of their own, so `${constructor}` is a name like any other.
+ * PUBLIC_ORIGIN as the board takes it, by the rules of readPublicEntrance in src/server/config.ts (its
+ * tests hold the two to the same answers): null when it is not set, its origin (in lower case, no trailing
+ * slash) when the board serves it, and false when the board refuses to start with it: http, a port, a
+ * path, a wildcard, an IP, or no host at all (`https://${UNSET}`).
  */
-function expandValue(value, shell, values) {
-  const env = Object.assign(Object.create(null), values, shell)
-  const reference = /(?<!\\)\$\{([^{}]+)\}|(?<!\\)\$([A-Za-z_]\w*)/g
-  const seen = new Set()
-  let result = value
-  let match
-  while ((match = reference.exec(result)) !== null) {
-    seen.add(result)
-    const [template, braced, bare] = match
-    const expression = braced || bare
-    const operator = expression.match(/(:\+|\+|:-|-)/)?.[0] ?? null
-    const [key, ...rest] = expression.split(operator)
-    const alternate = operator === ':+' || operator === '+'
-    const fallback = alternate && !env[key] ? '' : rest.join(operator)
-    const found = alternate ? null : env[key]
-    result = result.replace(template, found && !seen.has(found) ? found : fallback)
-    if (result === values[key]) break
-    reference.lastIndex = 0
-  }
-  return result
+function boardOrigin(raw) {
+  const value = raw?.trim() ?? ''
+  if (!value) return null
+  const url = parseUrl(value)
+  const trusted =
+    url?.protocol === 'https:' &&
+    !url.port &&
+    value.replace(/\/$/, '').toLowerCase() === url.origin &&
+    HOST_NAME.test(url.hostname)
+  return trusted ? url.origin : false
 }
-
-/**
- * PUBLIC_ORIGIN as the board takes it (readPublicEntrance in src/server/config.ts): trimmed, without a
- * trailing slash, in lower case.
- */
-const originOf = (raw) => raw?.trim().replace(/\/$/, '').toLowerCase()
 
 function readArgs(argv) {
   const args = {}
@@ -174,7 +148,7 @@ function meStatus(port) {
 
 const args = readArgs(process.argv.slice(2))
 const dotenv = readDotenv()
-const boardPort = Number(dotenv.PORT || '47100')
+const boardPort = boardAddress(dotenv).port
 const onlyTheBoard = `only the board goes on the tailnet, on 127.0.0.1:${boardPort} (PORT in .env), never a preview or a pnpm dev copy`
 
 // --- the target: the board on loopback, nothing else ---
@@ -227,11 +201,18 @@ if (me === 200)
   )
 
 const url = `https://${name}`
+// A PUBLIC_ORIGIN the board refuses to start with: no command for a board that will not run.
+const have = boardOrigin(dotenv.PUBLIC_ORIGIN)
+if (have === false)
+  fail(
+    `.env has PUBLIC_ORIGIN="${dotenv.PUBLIC_ORIGIN.trim()}", which the board refuses to start with: it must be ` +
+      'https://<machine>.<tailnet>.ts.net (https, a host name, no IP, no wildcard, no port and no path). ' +
+      `Set PUBLIC_ORIGIN=${url}, then pnpm start and run this again. Nothing was run.`,
+  )
 const warnings = []
 if (me === null) warnings.push(`nothing answers on 127.0.0.1:${boardPort} yet: start the board (pnpm start)`)
 if (!status.CertDomains?.includes(name))
   warnings.push(`no HTTPS certificate for ${name}: turn on HTTPS certificates in the Tailscale admin console`)
-const have = originOf(dotenv.PUBLIC_ORIGIN)
 if (have !== url)
   warnings.push(
     `.env has ${have ? `PUBLIC_ORIGIN=${have}` : 'no PUBLIC_ORIGIN'}: set PUBLIC_ORIGIN=${url}, then pnpm start`,

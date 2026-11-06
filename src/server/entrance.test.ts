@@ -2,11 +2,12 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import type { PublicEntrance } from './config'
+import { type PublicEntrance, readAuthMode } from './config'
 import {
   boardOrigins,
   cameThroughEntrance,
   type GuardConfig,
+  guardBoardRequest,
   guardConfig,
   guardRequest,
   hostOf,
@@ -15,6 +16,7 @@ import {
   localSite,
   loginLocation,
   publicSite,
+  refusalResponse,
 } from './entrance'
 
 const PUBLIC = 'devbox.example-tailnet.ts.net'
@@ -305,5 +307,54 @@ describe('guardConfig', () => {
       dataDir: path.resolve('data'),
     })
     expect(() => guardConfig({ PUBLIC_ORIGIN: 'http://devbox' })).toThrow(/PUBLIC_ORIGIN must be/)
+  })
+})
+
+describe('the guard on a request to the board itself', () => {
+  const production = readAuthMode({})
+  const test = readAuthMode({ BOARD_ENV: 'test' })
+  /** A web request as srvx's Node server hands it on, with the connection it came on. */
+  const web = (target: string, headers: Record<string, string>, peer = '127.0.0.1') =>
+    Object.assign(new Request(target, { headers }), {
+      runtime: { node: { req: { socket: { remoteAddress: peer } } } },
+    })
+
+  it('gives the verdict guardRequest gives for its method, headers and peer', () => {
+    const cases: [Request, PublicEntrance | null][] = [
+      [web('http://evil.example//evil.example/api/me', { host: 'evil.example' }), entrance],
+      [web(`http://${PUBLIC}/`, { host: PUBLIC, ...SERVE }), entrance],
+      [web(`http://${PUBLIC}/`, { host: PUBLIC, ...SERVE }), null],
+      [web('http://127.0.0.1:47100//api/me', { host: '127.0.0.1:47100' }), null],
+      [
+        web(
+          'http://127.0.0.1:47100/',
+          { host: '127.0.0.1:47100', 'x-forwarded-for': '1.2.3.4' },
+          '192.168.1.20',
+        ),
+        null,
+      ],
+    ]
+    for (const [req, served] of cases)
+      for (const auth of [production, test]) {
+        const cfg = { authOff: auth.off, port: 47100, entrance: auth.off ? null : served, dataDir }
+        const peer = (req as unknown as { runtime: { node: { req: { socket: { remoteAddress: string } } } } })
+          .runtime.node.req.socket.remoteAddress
+        expect(guardBoardRequest(req, auth, cfg.entrance), req.url).toEqual(
+          guardRequest({ method: req.method, headers: req.headers, peer }, cfg),
+        )
+      }
+  })
+
+  it('answers a refusal with its status and reason', async () => {
+    const verdict = guardBoardRequest(
+      web('http://evil.example//api/me', { host: 'evil.example' }),
+      production,
+      null,
+    )
+    expect(verdict).toMatchObject({ allow: false, status: 403 })
+    if (verdict.allow) return
+    const res = refusalResponse(verdict)
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'the board does not answer for the host "evil.example"' })
   })
 })

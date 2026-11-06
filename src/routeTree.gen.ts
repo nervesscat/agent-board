@@ -23,6 +23,7 @@ import { Route as ProjectsIdDailyRouteImport } from './routes/projects.$id.daily
 import { Route as ProjectsIdGalleryRouteImport } from './routes/projects.$id.gallery'
 import { Route as ProjectsIdPreviewsRouteImport } from './routes/projects.$id.previews'
 import { Route as ProjectsIdPrsRouteImport } from './routes/projects.$id.prs'
+import { Route as ProjectsIdRepositoriesRouteImport } from './routes/projects.$id.repositories'
 import { Route as ProjectsIdReviewsRouteImport } from './routes/projects.$id.reviews'
 import { Route as ProjectsIdRoadmapRouteImport } from './routes/projects.$id.roadmap'
 import { Route as ProjectsIdSettingsRouteImport } from './routes/projects.$id.settings'
@@ -99,6 +100,11 @@ const ProjectsIdPrsRoute = ProjectsIdPrsRouteImport.update({
   path: '/prs',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
+const ProjectsIdRepositoriesRoute = ProjectsIdRepositoriesRouteImport.update({
+  id: '/repositories',
+  path: '/repositories',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 const ProjectsIdReviewsRoute = ProjectsIdReviewsRouteImport.update({
   id: '/reviews',
   path: '/reviews',
@@ -119,12 +125,11 @@ const ProjectsIdFeaturesIndexRoute = ProjectsIdFeaturesIndexRouteImport.update({
   path: '/features/',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
-const ProjectsIdFeaturesTicketIdRoute =
-  ProjectsIdFeaturesTicketIdRouteImport.update({
-    id: '/features/$ticketId',
-    path: '/features/$ticketId',
-    getParentRoute: () => ProjectsIdRoute,
-  } as any)
+const ProjectsIdFeaturesTicketIdRoute = ProjectsIdFeaturesTicketIdRouteImport.update({
+  id: '/features/$ticketId',
+  path: '/features/$ticketId',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -140,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
+  '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
@@ -160,6 +166,7 @@ export interface FileRoutesByTo {
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
+  '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
@@ -182,6 +189,7 @@ export interface FileRoutesById {
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
+  '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
@@ -205,6 +213,7 @@ export interface FileRouteTypes {
     | '/projects/$id/gallery'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
+    | '/projects/$id/repositories'
     | '/projects/$id/reviews'
     | '/projects/$id/roadmap'
     | '/projects/$id/settings'
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/projects/$id/gallery'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
+    | '/projects/$id/repositories'
     | '/projects/$id/reviews'
     | '/projects/$id/roadmap'
     | '/projects/$id/settings'
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/projects/$id/gallery'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
+    | '/projects/$id/repositories'
     | '/projects/$id/reviews'
     | '/projects/$id/roadmap'
     | '/projects/$id/settings'
@@ -364,6 +375,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdPrsRouteImport
       parentRoute: typeof ProjectsIdRoute
     }
+    '/projects/$id/repositories': {
+      id: '/projects/$id/repositories'
+      path: '/repositories'
+      fullPath: '/projects/$id/repositories'
+      preLoaderRoute: typeof ProjectsIdRepositoriesRouteImport
+      parentRoute: typeof ProjectsIdRoute
+    }
     '/projects/$id/reviews': {
       id: '/projects/$id/reviews'
       path: '/reviews'
@@ -409,6 +427,7 @@ interface ProjectsIdRouteChildren {
   ProjectsIdGalleryRoute: typeof ProjectsIdGalleryRoute
   ProjectsIdPreviewsRoute: typeof ProjectsIdPreviewsRoute
   ProjectsIdPrsRoute: typeof ProjectsIdPrsRoute
+  ProjectsIdRepositoriesRoute: typeof ProjectsIdRepositoriesRoute
   ProjectsIdReviewsRoute: typeof ProjectsIdReviewsRoute
   ProjectsIdRoadmapRoute: typeof ProjectsIdRoadmapRoute
   ProjectsIdSettingsRoute: typeof ProjectsIdSettingsRoute
@@ -424,6 +443,7 @@ const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
   ProjectsIdGalleryRoute: ProjectsIdGalleryRoute,
   ProjectsIdPreviewsRoute: ProjectsIdPreviewsRoute,
   ProjectsIdPrsRoute: ProjectsIdPrsRoute,
+  ProjectsIdRepositoriesRoute: ProjectsIdRepositoriesRoute,
   ProjectsIdReviewsRoute: ProjectsIdReviewsRoute,
   ProjectsIdRoadmapRoute: ProjectsIdRoadmapRoute,
   ProjectsIdSettingsRoute: ProjectsIdSettingsRoute,
@@ -432,9 +452,7 @@ const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
   ProjectsIdFeaturesIndexRoute: ProjectsIdFeaturesIndexRoute,
 }
 
-const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(
-  ProjectsIdRouteChildren,
-)
+const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(ProjectsIdRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -445,6 +463,4 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSplatRoute: ApiSplatRoute,
   ProjectsIdRoute: ProjectsIdRouteWithChildren,
 }
-export const routeTree = rootRouteImport
-  ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+export const routeTree = rootRouteImport._addFileChildren(rootRouteChildren)._addFileTypes<FileRouteTypes>()

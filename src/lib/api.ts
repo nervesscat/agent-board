@@ -30,7 +30,6 @@ import type { DeleteItem, DeleteKind, DeleteResult } from '#/server/cleanupActio
 import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
 import type { Gallery, GalleryFile } from '#/server/gallery'
-import type { Handoff } from '#/server/handoff'
 import type { HostTool, HostTools } from '#/server/hostTools'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { RunState } from '#/server/runs'
@@ -69,7 +68,6 @@ export type {
   DirListing,
   Gallery,
   GalleryFile,
-  Handoff,
   HostTool,
   HostTools,
   ManagedPreview,

@@ -23,7 +23,7 @@ test('a body written by hand with \\\\ separators adds the repo at exactly that 
   const listed = await ok<Repo[]>(human.get('/api/repos'))
   expect(listed.find((r) => r.id === created.id)?.repoPath).toBe(repoPath)
 
-  await page.goto('/repositories')
+  await page.goto(`/projects/${project.id}/repositories`)
   await expect(card(page, name).locator('[data-slot="card-content"] .font-mono')).toHaveText(repoPath)
 })
 
@@ -58,7 +58,7 @@ test('the edit dialog moves a repo to a checkout typed with backslashes, at exac
     }),
   )
   const repoPath = backslashCheckout('edit-to')
-  await page.goto('/repositories')
+  await page.goto(`/projects/${created.id}/repositories`)
   await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0)
   await card(page, name).click()
   const dialog = page.getByRole('dialog', { name: `Edit ${name}` })
@@ -78,17 +78,15 @@ test('the New repository dialog adds a checkout typed with backslashes, at exact
 }, info) => {
   const repoPath = backslashCheckout('dialog-backslash')
   const name = `dialog-backslash-${info.workerIndex}-${Date.now()}`
-  await page.goto('/repositories')
+  // A project of its own, so no other test's project gains a second repo.
+  const created = await ok<{ id: number }>(human.post('/api/projects', { data: { name } }))
+  await page.goto(`/projects/${created.id}/repositories`)
   // The skeleton goes once the content is drawn: a click before that is lost, as the content is replaced.
   await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0)
   await page.getByRole('button', { name: 'New repository' }).click()
   const dialog = page.getByRole('dialog', { name: 'New repository' })
-  // A project of its own, so no other test's project gains a second repo.
-  if (await dialog.getByLabel('Project').count()) {
-    await dialog.getByLabel('Project').click()
-    await page.getByRole('option', { name: 'New project…' }).click()
-  }
-  await dialog.getByPlaceholder('Project name').fill(name)
+  // The page's project is the one the repo goes to.
+  await expect(dialog.getByLabel('Project').locator('[data-slot="select-value"]')).toHaveText(name)
   await dialog.getByLabel('Repository path').fill(repoPath)
   await dialog.getByLabel('Name').fill(name)
   await dialog.getByRole('button', { name: 'Add repository' }).click()

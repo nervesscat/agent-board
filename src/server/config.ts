@@ -52,7 +52,7 @@ export const config = {
   claudeArgs: readClaudeArgs(process.env.CLAUDE_ARGS),
   claudeTimeoutMs: readClaudeTimeout(process.env.CLAUDE_TIMEOUT_MS),
   // The user-wide .claude folder on this machine the review skills are checked in, and installed into by
-  // its line on the Agents pages.
+  // its line on the Connect an agent and Team pages.
   claudeHome: expandPath(env('CLAUDE_HOME', '~/.claude')),
   // Where attachment files live: 'local' (data/uploads) or 's3' (MinIO or any S3-compatible store).
   storage: env('STORAGE', 'local') === 's3' ? ('s3' as const) : ('local' as const),
@@ -147,6 +147,8 @@ export const authOffBanner = (auth: AuthMode, name: string) =>
 
 // --- the tailnet entrance: the board on this machine's tailnet name, through `tailscale serve`. ---
 // README: "Using it from other devices". Off unless PUBLIC_ORIGIN is set, and never with sign-in off.
+// Under `vite dev` PUBLIC_ORIGIN, BOARD_ENV and AUTH reach process.env as Vite's loadEnv reads .env, not
+// as Nitro's loader does (devEnv.ts); every other key here is Nitro's. The built server reads no .env.
 
 export interface PublicEntrance {
   /** PUBLIC_ORIGIN: the board as other devices open it, `https://<machine>.<tailnet>.ts.net`. */

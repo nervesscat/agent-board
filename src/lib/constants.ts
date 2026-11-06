@@ -68,12 +68,12 @@ export const readPreviewLimit = (value: unknown): number =>
     ? value
     : PREVIEW_LIMIT.default
 
-/** The agent CLIs the Connect agents page has setup for; the first is the default until one is picked. */
+/** The agent CLIs the Connect an agent page has setup for; the first is the default until one is picked. */
 export const AGENT_CLIENTS = ['claude', 'codex', 'opencode'] as const
 export type AgentClient = (typeof AGENT_CLIENTS)[number]
 
 /**
- * Which copy of the review skills the Agents pages track: the user-wide `~/.claude` on the board's
+ * Which copy of the review skills the Connect an agent and Team pages track: the user-wide `~/.claude` on the board's
  * machine (the first, the default until one is picked), or each repo's own `.claude`.
  */
 export const SKILLS_TRACKING = ['global', 'repo'] as const

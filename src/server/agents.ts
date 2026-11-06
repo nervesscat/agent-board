@@ -24,11 +24,11 @@ const template = rawTemplate.replace(/\r\n/g, '\n')
 // --- settings (board-wide preferences) ---
 
 export interface Settings {
-  /** The agent CLI the Connect agents page opens on. */
+  /** The agent CLI the Connect an agent page opens on. */
   defaultAgent: AgentClient
   /** How many previews the board builds or runs at once, board-wide (`PREVIEW_LIMIT`). */
   previewLimit: number
-  /** The copy of the review skills the Agents pages show: `~/.claude` (global) or each repo's own. */
+  /** The copy of the review skills the Connect an agent and Team pages show: `~/.claude` (global) or each repo's own. */
   skillsTracking: SkillsTracking
 }
 
@@ -69,7 +69,7 @@ export function updateSettings(patch: Partial<Settings>): Settings {
 
 /**
  * Where each CLI finds the MCP server hint the skill gives when the board's tools are missing. `<token>`
- * stays a placeholder: the skill is the same file for every agent, and Connect agents' commands carry
+ * stays a placeholder: the skill is the same file for every agent, and Connect an agent's commands carry
  * the token itself.
  */
 const MCP_HINT: Record<AgentClient, (url: string) => string> = {
@@ -79,40 +79,16 @@ const MCP_HINT: Record<AgentClient, (url: string) => string> = {
   opencode: () => '(OpenCode: an `mcp.board` entry in `~/.config/opencode/opencode.json`.)',
 }
 
-const cell = (s: string) => s.replace(/\|/g, '\\|')
-const folderOf = (repoPath: string) =>
-  repoPath
-    .replace(/[\\/]+$/, '')
-    .split(/[\\/]/)
-    .pop() || repoPath
-
-/** Every repo the board knows, with the ids an agent needs: the skill's lookup table. */
-export function projectTable(): string {
-  const rows = listProjects().flatMap((p) =>
-    p.repos.map((r) => [
-      `\`${cell(folderOf(r.repoPath))}\``,
-      r.githubRepo ? `\`${cell(r.githubRepo)}\`` : '—',
-      `\`${cell(r.repoPath)}\``,
-      `\`${cell(p.name)}\``,
-      String(p.id),
-      String(r.id),
-    ]),
-  )
-  if (!rows.length) return '_No repos on the board yet._'
-  const head = ['Folder', 'GitHub', 'Checkout', 'Project', 'projectId', 'repoId']
-  return [head, head.map(() => '---'), ...rows].map((r) => `| ${r.join(' | ')} |`).join('\n')
-}
-
-/** The SKILL.md for `client`: the same instructions for every CLI, with today's projects and repos. */
+/**
+ * The SKILL.md for `client`: the same instructions for every CLI. It carries no projects or repos: an
+ * agent asks the board for its own (`find_project`), so a copy stays right as the board changes.
+ */
 export function renderSkill(client: AgentClient): string {
   const url = config.boardUrl
-  return template
-    .replaceAll('{{BOARD_URL}}', url)
-    .replace('{{MCP_HINT}}', MCP_HINT[client](url))
-    .replace('{{PROJECT_TABLE}}', projectTable())
+  return template.replaceAll('{{BOARD_URL}}', url).replace('{{MCP_HINT}}', MCP_HINT[client](url))
 }
 
-/** What the Connect agents page builds its commands from. */
+/** What the Connect an agent page builds its commands from. */
 export function agentSetup() {
   return { boardUrl: config.boardUrl, settings: getSettings() }
 }

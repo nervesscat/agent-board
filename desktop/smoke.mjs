@@ -238,7 +238,10 @@ try {
 
   check(await quit(app), 'Quit ends the app')
   check(await isPortFree(port), `the port :${port} is free after Quit`)
-  if (LINUX) check(appProcesses().length === 0, `nothing of the app runs after Quit (${appProcesses()})`)
+  if (LINUX) {
+    const left = await appLeftOver()
+    check(left.length === 0, `nothing of the app runs after Quit (${left.join(', ')})`)
+  }
 
   // 2. Restart on the same data: the project is still there.
   console.log('\n2. restart on the same data')
@@ -536,7 +539,8 @@ async function linuxDesktop() {
     check(proc.exitCode !== null, `with no tray host, closing the window ends the app (${proc.exitCode})`)
   }
   check(await isPortFree(port), `the port :${port} is free`)
-  check(appProcesses().length === 0, `nothing of the app runs, its server neither (${appProcesses()})`)
+  const left = await appLeftOver()
+  check(left.length === 0, `nothing of the app runs, its server neither (${left.join(', ')})`)
 }
 
 /**
@@ -557,6 +561,22 @@ async function endApp(proc) {
       // gone already
     }
   for (const until = Date.now() + 10_000; Date.now() < until && appProcesses().length; ) await sleep(200)
+}
+
+/**
+ * Linux: what of this run's copy of the app still runs once it has had 10 s to end, each as its PID and
+ * command line. Quit waits for the main process only; its Chromium helpers end a moment after it.
+ * @returns {Promise<string[]>}
+ */
+async function appLeftOver() {
+  for (const until = Date.now() + 10_000; Date.now() < until && appProcesses().length; ) await sleep(200)
+  return appProcesses().map((pid) => {
+    try {
+      return `${pid} ${fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').join(' ').trim()}`
+    } catch {
+      return `${pid}`
+    }
+  })
 }
 
 /**
