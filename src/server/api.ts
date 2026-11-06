@@ -209,7 +209,7 @@ api.delete('/api/agent-tokens/:id', ({ request, params }) => {
 
 // --- connecting agents: board settings, and the skill each CLI installs ---
 api.get('/api/agent-setup', () => json(agents.agentSetup()))
-// The board skill as a SKILL.md, with today's projects and repos; the install commands curl this.
+// The board skill as a SKILL.md (no projects in it: agents call find_project); the install commands curl this.
 api.get('/api/agent-setup/skill', ({ url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
   return new Response(agents.renderSkill(client), {

@@ -29,22 +29,24 @@ terms. If the ticket's text has something the PR needs (the why, how to test), r
 own words instead of pointing at the ticket. Board updates and comments may, of course, talk about
 the repo, branches and PRs freely; the rule only runs the other way.
 
-## 1. Your project: look it up here, nowhere else
+## 1. Your project: ask the board with `find_project`, nowhere else
 
 Work only in the project of the repo you are in. Do not call `list_projects`, and never read or
 write another project's tickets, PRs, reviews or daily log.
 
-Find the repo you are in (the folder name of `git rev-parse --show-toplevel`, or the working
-folder, and its GitHub slug from `git remote get-url origin`), then take its project from this
-table. The same repo may be checked out on Windows and in WSL, under another path: match the folder
-name or the GitHub slug, and both map to the same ids.
+Find the repo you are in (its origin from `git remote get-url origin`, and its path from
+`git rev-parse --show-toplevel`, or the working folder), then call `find_project` with
+`githubRepo` (the origin URL or `owner/name`), `folder` (the path's last segment) and `path`. It
+answers from the board as it is now with only the project and repo that match (`projectId`,
+`repoId`), by the GitHub slug first, then the path, then the folder name; the same repo checked out
+on Windows and in WSL, or a worktree of it (e.g. `.wt-pr14`), is found by its slug, or by its path
+inside or beside the repo's checkout.
 
-{{PROJECT_TABLE}}
-
-- A folder holding several repos of one project: that is the project; ask which repo (or take it
-  from the ticket) before passing a `repoId`.
-- A worktree of one of these repos (e.g. `.wt-pr14`) belongs to that repo.
-- Not in the table: say the repo has no board project and stop using the board for it. Do not
+- `match: "repos"`, a folder holding several repos of one project: that is the project; ask which
+  repo (or take it from the ticket) before passing a `repoId`.
+- `match: "ambiguous"`, repos in several projects: ask the human which one; do not pick.
+- `weak: true`: the match may be another repository (its `message` says why); confirm with the human.
+- `match: "none"`: say the repo has no board project and stop using the board for it. Do not
   guess from other projects and do not create one.
 
 Then:
@@ -56,8 +58,7 @@ Then:
    orchestrator what should change. If you were briefed with an `agentName`
    (`<orchestrator>/<you>`), pass it on **every** board call: it makes your posts, claims and
    comments yours, as a worker under the orchestrator.
-2. `get_project` with your `projectId`, and check its `name` matches the table (if not, the table
-   is stale: tell the human to copy the skill again from the board). Its `instructions` override
+2. `get_project` with your `projectId`. Its `instructions` override
    your defaults for every repo in it. Its `stages` are the board's columns, each with a `key`, a
    `name` and a `kind` (`open`, `active`, `blocked`, `review`, `done`, `cancelled`); a ticket's
    `status` is a stage key. Wherever a status is asked for you can also pass a kind, which means

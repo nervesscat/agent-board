@@ -10,6 +10,7 @@ import { cleanupReport } from './cleanup'
 import { AgentDeleteItems, deleteLeftovers } from './cleanupActions'
 import { dailyReport, today } from './daily'
 import * as features from './features'
+import { findProject } from './findProject'
 import { galleryShape, listGallery } from './gallery'
 import { HttpError } from './http'
 import { setInstructions } from './instructionsHistory'
@@ -52,7 +53,7 @@ const fail = (err: unknown) => ({
 /** Sent to every client on connect, so agents in any repo know the rhythm without reading AGENTS.md. */
 const INSTRUCTIONS = `The board is where the human and every agent coordinate work. You read work from it and report back to it. Git and GitHub are read-only through the board for you, but for closed tickets' landed local branches, which cleanup_delete deletes (worktrees and origin's branches are the human's, from its Cleanup page): never push, merge, approve or comment on GitHub on its behalf.
 
-Work only in the project of the repo you are in, and never read or write another project's tickets, PRs, reviews or daily log. If a board skill or the repo's own instructions name your projectId, use it directly. Only otherwise, call list_projects once and pick the project whose repos include yours (match the GitHub slug from git remote get-url origin, then the folder name; the board may list Linux paths while you are on Windows); if none does, do not use the board for this repo.
+Work only in the project of the repo you are in, and never read or write another project's tickets, PRs, reviews or daily log. If a board skill or the repo's own instructions name your projectId, use it directly. Only otherwise, call find_project with your checkout's origin (git remote get-url origin), folder name and path (git rev-parse --show-toplevel): it answers with only the project and repo that match, never the list (do not call list_projects to find yours); if it finds none, do not use the board for this repo.
 
 The rhythm:
 1. get_project before touching it; its instructions override your defaults. Its stages are the board's columns, in order, each with a key, a name and a kind (open, active, blocked, review, done, cancelled). A ticket's status is a stage key; wherever status is asked for you can also give a stage's name or a kind (the first stage of that kind; todo and in_progress mean open and active). Below, todo, in_progress, blocked, review, done and cancelled mean the stage of that kind.
@@ -174,6 +175,20 @@ function buildServer(caller: Caller, refused: HttpError | null) {
     'All projects on the board, each with its repos (id, name, checkout path, GitHub slug, base branch).',
     {},
     () => projects.listProjects(),
+  )
+  tool(
+    'find_project',
+    "The project and repo of the checkout you are in, from the board as it is now: give githubRepo (your origin URL as git remote get-url origin prints it, or owner/name), folder (the checkout's folder name) and path (git rev-parse --show-toplevel), at least one. Matched by the GitHub slug (any casing) first, then the path (slashes either way, a trailing one, and C:\\… the same as /mnt/c/…; a path inside a repo's checkout, such as a worktree nested in it, counts as that repo), then the folder name, then a folder beside a checkout named like it (<folder>-<branch>); a worktree is found by its slug, and an ssh origin on another host (an ssh-config alias of GitHub) is read for its owner/name. Returns only what matched, never other projects: match 'one' (projectId, projectName, repoId, repo), 'repos' (several repos of one project: ask which, or take it from the ticket), 'ambiguous' (candidates in several projects: ask the human, do not pick) or 'none' (no board project for this repo: stop using the board for it, do not guess or create one); by says what matched (githubRepo, path, inside, folder or beside), message what to do, and weak: true marks a hit that may be another repository (a slug read from a host that is not github.com, a repo whose GitHub repo is another than yours, a path that only holds a repo's checkout, a folder beside a checkout): confirm with the human.",
+    {
+      githubRepo: z
+        .string()
+        .max(2_000)
+        .optional()
+        .describe('your origin URL (git remote get-url origin), or owner/name'),
+      folder: z.string().max(4_000).optional().describe("the checkout's folder name"),
+      path: z.string().max(4_000).optional().describe("the checkout's path (git rev-parse --show-toplevel)"),
+    },
+    (where) => findProject(where),
   )
   tool(
     'get_project',
