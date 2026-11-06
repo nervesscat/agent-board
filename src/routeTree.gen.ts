@@ -125,12 +125,11 @@ const ProjectsIdFeaturesIndexRoute = ProjectsIdFeaturesIndexRouteImport.update({
   path: '/features/',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
-const ProjectsIdFeaturesTicketIdRoute =
-  ProjectsIdFeaturesTicketIdRouteImport.update({
-    id: '/features/$ticketId',
-    path: '/features/$ticketId',
-    getParentRoute: () => ProjectsIdRoute,
-  } as any)
+const ProjectsIdFeaturesTicketIdRoute = ProjectsIdFeaturesTicketIdRouteImport.update({
+  id: '/features/$ticketId',
+  path: '/features/$ticketId',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -453,9 +452,7 @@ const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
   ProjectsIdFeaturesIndexRoute: ProjectsIdFeaturesIndexRoute,
 }
 
-const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(
-  ProjectsIdRouteChildren,
-)
+const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(ProjectsIdRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -466,16 +463,4 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSplatRoute: ApiSplatRoute,
   ProjectsIdRoute: ProjectsIdRouteWithChildren,
 }
-export const routeTree = rootRouteImport
-  ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
+export const routeTree = rootRouteImport._addFileChildren(rootRouteChildren)._addFileTypes<FileRouteTypes>()
