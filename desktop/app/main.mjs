@@ -37,6 +37,7 @@ import {
   trayHostPresent,
   withLoginPath,
 } from './settings.mjs'
+import { exitLine, exitSentence, logServer, spawnFailedLine, startLine } from './serverLog.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const LINUX = process.platform === 'linux'
@@ -212,6 +213,8 @@ function startServer() {
     // Elsewhere than Windows, a process group of its own: stopServer ends it with what it started.
     detached: process.platform !== 'win32',
   })
+  const startedAt = Date.now()
+  if (server.pid) logServer(logs, startLine({ pid: server.pid }))
   server.stdout?.on('data', (chunk) => {
     out.write(chunk)
     process.stdout.write(chunk)
@@ -225,10 +228,12 @@ function startServer() {
   // It could not be started at all (its folder gone, say): no 'exit' follows.
   proc.on('error', (e) => {
     if (server === proc) server = null
+    if (!proc.pid) logServer(logs, spawnFailedLine({ error: errorText(e) }))
     if (!quitting) void fatal('The board cannot start.', `${errorText(e)}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
   })
   proc.on('exit', (code, signal) => {
     if (server === proc) server = null
+    logServer(logs, exitLine({ pid: proc.pid, code, signal, startedAt, quitting }))
     if (!quitting) onServerExit(code, signal)
   })
   // Its output has all arrived: the log files of this start are closed.
@@ -252,8 +257,7 @@ function onServerExit(code, signal) {
   restarts = { exits: plan.exits, healthySince: null }
   if (plan.delay === null) {
     const tried = plan.exits > 1 ? ` It was started again ${plan.exits - 1} times.` : ''
-    const exited = code === null && !signal ? 'It exited.' : `It exited with ${reason}.`
-    const detail = `${exited}${tried}\n\n${tail(serverErr) || '(no output)'}`
+    const detail = `${exitSentence(code, signal)}${tried}\n\n${tail(serverErr) || '(no output)'}`
     void fatal('The board stopped.', `${detail}\n\nLogs: ${logs}`, logs, OPEN_LOGS)
     return
   }

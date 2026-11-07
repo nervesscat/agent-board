@@ -227,8 +227,8 @@ them just the same. Managed previews of a board worktree also need `pnpm` and `n
 
 **Data and settings** live in `%LOCALAPPDATA%\agent-board`:
 
-- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`), what `data/`
-  is in a checkout.
+- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`,
+  `desktop.log`), what `data/` is in a checkout.
 - `config.env`: the settings, `KEY=value` as in `.env`, read at each start. The first start writes it
   with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
   like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and the tailnet
@@ -244,6 +244,17 @@ such as `pnpm start` from a checkout, also wants 47100) offers to open `config.e
 `PORT` there, or stop the other one; a data folder or app folder that cannot be used (a `DATA_DIR`
 or `AGENT_BOARD_HOME` on a missing drive, say) names it and what to change; a board that fails to
 start shows the end of its log and offers the logs folder.
+
+**How the board stopped** outlives that dialog. The app adds a line to `logs/desktop.log` each time
+it starts the board's server and each time the server exits, however it ends:
+`2026-11-04T20:33:47.853Z server pid 5901 exited signal=SIGKILL code=null uptime=16832s quitting=false`
+(`quitting=true`: the app was stopping it). Past 1 MB the log moves to `desktop.log.1`, the one before
+it going. The dialog names the signal that killed the server ("It was killed by SIGKILL at …"). The
+server itself, under the app and under `pnpm start` alike, writes a timestamped line to
+`board.err.log` when it is sent SIGTERM, SIGINT or SIGHUP (`… board pid 5901 received SIGTERM
+uptime=16832s maxrss=412MB`, its peak memory), when an error escapes (with its stack), and as it
+exits; which process sent a signal is not something it can tell. A server killed by SIGKILL (the
+out-of-memory killer, say) writes nothing itself, so only the app's line tells of it.
 
 **Signing in.** The window signs in with the board's own passkeys, as a browser does (First run and
 Signing in, above): on a fresh data folder it opens on `/setup`, where you give your name and create
@@ -303,7 +314,7 @@ are set to absolute paths):
   `~/.local/share/agent-board`.
 - `~/.config/agent-board/electron/`: the window's browser profile.
 - `~/.local/share/agent-board/data/`: the database, uploads and logs (`data/logs/board.out.log`,
-  `board.err.log`).
+  `board.err.log`, `desktop.log`).
 
 `AGENT_BOARD_HOME` puts all three in one folder, as on Windows.
 
@@ -441,6 +452,98 @@ Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board'
   proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`). Their `http://127.0.0.1:<port>` links
   do not open on other devices.
 - `HOST` stays `127.0.0.1`: nothing listens off this machine but Tailscale.
+
+### Cloud agents
+
+A project's agents can run in Claude Code cloud sessions (claude.ai/code) instead of on this machine,
+and reach the board over the same tailnet. This is the setup as it works today; the parts marked
+_(planned)_ change once the board supports cloud sessions directly.
+
+**1. The board machine**: the steps above (`PUBLIC_ORIGIN`, then `tailscale serve`, tailnet only,
+never Funnel). Check it from another tailnet device: `https://<machine>.<tailnet>.ts.net/api/health`
+answers **401** (host accepted, sign-in required). A 403 means the host is not `PUBLIC_ORIGIN`.
+
+**2. Two keys**:
+
+- A **Tailscale auth key** (`tskey-…`): reusable, ephemeral, pre-approved and **tagged** (e.g.
+  `tag:agent`), with an access rule that lets `tag:agent` reach only this machine on 443. An untagged
+  key joins as you and can reach every device of yours.
+- A **board agent token** (`<token>`): Connect an agent, **Generate commands**.
+
+Rotate both when the work is done.
+
+**3. The cloud environment** (claude.ai/code, the environment selector, add or edit an environment):
+
+- **Repositories**: the project's repos.
+- **Network access**: Full, or Custom with `*.tailscale.com`, `*.tailscale.io` and
+  `pkgs.tailscale.com` added to the defaults.
+- **Environment variables** (`.env` format): `TS_AUTHKEY=tskey-…` and `BOARD_TOKEN=<token>`. Not
+  **Network secrets**: the egress proxy adds those to requests to a host, and the board's traffic goes
+  inside the Tailscale tunnel, which the proxy never sees.
+- **Setup script**: below. It runs once, as root, and its result is cached: files it writes persist,
+  processes do not. So each session starts Tailscale again (`tailnet-up`), and the script must never
+  fail or hang, or every session breaks (a `curl -f` right after starting Tailscale exits 7 before the
+  tunnel is up).
+
+```bash
+set +e
+# Tailscale, in userspace mode; each session runs tailnet-up again, since setup processes do not survive.
+curl -fsSL https://tailscale.com/install.sh | sh
+cat > /usr/local/bin/tailnet-up <<'EOT'
+#!/bin/sh
+S=/tmp/tailscaled.sock
+pgrep -x tailscaled >/dev/null || { tailscaled --tun=userspace-networking --state=mem: --socket=$S --outbound-http-proxy-listen=localhost:1055 --socks5-server=localhost:1055 >/tmp/tailscaled.log 2>&1 & }
+for i in $(seq 1 20); do
+  tailscale --socket=$S status >/dev/null 2>&1 && break
+  tailscale --socket=$S up --authkey="$TS_AUTHKEY" --hostname=cloud-agent --accept-dns=false --timeout=15s >/dev/null 2>&1 && break
+  sleep 2
+done
+c=000
+for i in $(seq 1 15); do
+  c=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -x http://localhost:1055 https://<machine>.<tailnet>.ts.net/api/health)
+  [ "$c" = 401 ] && break
+  sleep 2
+done
+echo "board $c"
+EOT
+cat > /usr/local/bin/board-skills <<'EOT'
+#!/bin/sh
+# The board skill and the review skills (todo-review, feature-review, review-queue and their agents), from the board.
+B=https://<machine>.<tailnet>.ts.net
+mkdir -p ~/.claude/skills/board
+curl -fs -m 30 -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" "$B/api/agent-setup/skill?client=claude" -o ~/.claude/skills/board/SKILL.md
+curl -fs -m 60 -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" "$B/api/agent-setup/review-skills" | tar -x -C ~/.claude
+ls ~/.claude/skills
+EOT
+chmod +x /usr/local/bin/tailnet-up /usr/local/bin/board-skills
+timeout 90 tailnet-up && timeout 120 board-skills
+exit 0
+```
+
+Sandboxes have no `/dev/net/tun`, so Tailscale runs in userspace mode and the tailnet is reached
+through its proxy: `curl -x http://localhost:1055 …`.
+
+**4. Running the work**
+
+- **Board access is REST, not MCP** _(planned: MCP tools in cloud sessions)_: `claude mcp add` in the
+  setup script does not persist, and Tailscale is not up yet when Claude connects its MCP servers.
+  Agents call `/api/*` (REST API, below) with
+  `curl -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" https://<machine>.<tailnet>.ts.net/api/…`.
+  The skills name MCP tools, so a session's prompt says to use the matching REST endpoint for each
+  _(planned: a REST variant of the skills)_.
+- **Launching sessions** from an orchestrator (a local Claude Code session): `RemoteTrigger` `create`
+  a one-time routine (`run_once_at`) with `job_config.ccr.environment_id`, the prompt as the first
+  user event, `session_context.sources` set to the repo, and `allowed_tools`. Follow it with
+  `list_runs` and `get_run_log`, and message a running session with `SendMessage` (one way). Nothing
+  is pasted by hand.
+- **The environment ID** (`env_…`) is not shown in the UI: create a throwaway routine in that
+  environment (Routines, New routine, pick the environment, any prompt, API trigger), and
+  `RemoteTrigger list` shows its `environment_id`.
+- **A ticket's prompt** starts with `tailnet-up` (it must print `board 401`) and `board-skills` when
+  the skills are missing, then the ticket's work (or `/todo-review` for it, with the REST endpoint for
+  each board tool the skill names), the PR into the base branch, the summary, and the move to review.
+- **Previews** do not run from cloud sessions: a board-run preview builds a worktree on this machine,
+  and the session's branch is only on the remote _(planned: previews from remote branches)_.
 
 ## Test mode
 
