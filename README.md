@@ -222,8 +222,8 @@ them just the same. Managed previews of a board worktree also need `pnpm` and `n
 
 **Data and settings** live in `%LOCALAPPDATA%\agent-board`:
 
-- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`), what `data/`
-  is in a checkout.
+- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`,
+  `desktop.log`), what `data/` is in a checkout.
 - `config.env`: the settings, `KEY=value` as in `.env`, read at each start. The first start writes it
   with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
   like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and the tailnet
@@ -239,6 +239,17 @@ such as `pnpm start` from a checkout, also wants 47100) offers to open `config.e
 `PORT` there, or stop the other one; a data folder or app folder that cannot be used (a `DATA_DIR`
 or `AGENT_BOARD_HOME` on a missing drive, say) names it and what to change; a board that fails to
 start shows the end of its log and offers the logs folder.
+
+**How the board stopped** outlives that dialog. The app adds a line to `logs/desktop.log` each time
+it starts the board's server and each time the server exits, however it ends:
+`2026-11-04T20:33:47.853Z server pid 5901 exited signal=SIGKILL code=null uptime=16832s quitting=false`
+(`quitting=true`: the app was stopping it). Past 1 MB the log moves to `desktop.log.1`, the one before
+it going. The dialog names the signal that killed the server ("It was killed by SIGKILL at …"). The
+server itself, under the app and under `pnpm start` alike, writes a timestamped line to
+`board.err.log` when it is sent SIGTERM, SIGINT or SIGHUP (`… board pid 5901 received SIGTERM
+uptime=16832s maxrss=412MB`, its peak memory), when an error escapes (with its stack), and as it
+exits; which process sent a signal is not something it can tell. A server killed by SIGKILL (the
+out-of-memory killer, say) writes nothing itself, so only the app's line tells of it.
 
 **Signing in.** The window signs in with the board's own passkeys, as a browser does (First run and
 Signing in, above): on a fresh data folder it opens on `/setup`, where you give your name and create
@@ -298,7 +309,7 @@ are set to absolute paths):
   `~/.local/share/agent-board`.
 - `~/.config/agent-board/electron/`: the window's browser profile.
 - `~/.local/share/agent-board/data/`: the database, uploads and logs (`data/logs/board.out.log`,
-  `board.err.log`).
+  `board.err.log`, `desktop.log`).
 
 `AGENT_BOARD_HOME` puts all three in one folder, as on Windows.
 
@@ -439,13 +450,18 @@ Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board'
 
 ### Cloud agents
 
-An agent in a cloud session (Claude Code on the web, for one) runs on a machine of its own, outside
-your tailnet, and its MCP servers connect as the session starts, before anything it runs. It reaches
-the board the way your devices do, on the tailnet name, as a Tailscale node of its own that it brings
-up itself, with an agent token. Three things need it: the board's MCP tools (the `board-mcp` bridge,
-or the REST copy of the board skill), the skills, and previews of its branches (the board fetches them).
+A project's agents can run in Claude Code cloud sessions (claude.ai/code) instead of on this machine.
+A cloud session runs on a machine of its own, outside your tailnet, and its MCP servers connect as the
+session starts, before anything it runs. It reaches the board the way your devices do, on the tailnet
+name, as a Tailscale node of its own that it brings up itself, with an agent token. Three things need
+it: the board's MCP tools (the `board-mcp` bridge, or the REST copy of the board skill), the skills,
+and previews of its branches (the board fetches them).
 
-**1. In the Tailscale admin console**
+**1. The board machine**: the steps above (`PUBLIC_ORIGIN`, then `tailscale serve`, tailnet only,
+never Funnel). Check it from another tailnet device: `https://<machine>.<tailnet>.ts.net/api/health`
+answers **401** (host accepted, sign-in required). A 403 means the host is not `PUBLIC_ORIGIN`.
+
+**2. In the Tailscale admin console, and on the board**
 
 - A tag for these nodes, `tag:cloud-agent`, that you own (Access controls, `tagOwners`).
 - An access rule that lets the tag reach the board's machine, on 443 only, and nothing else (no other
@@ -456,49 +472,74 @@ or the REST copy of the board skill), the skills, and previews of its branches (
   "grants": [{ "src": ["tag:cloud-agent"], "dst": ["board"], "ip": ["tcp:443"] }]
   ```
 
-- An auth key (Settings, Keys, **Generate auth key**): reusable, **ephemeral** (a session's node goes
-  when it disconnects), pre-approved when device approval is on, tagged `tag:cloud-agent`, with an
-  expiry you renew.
+- A **Tailscale auth key** (`tskey-…`; Settings, Keys, **Generate auth key**): reusable, **ephemeral**
+  (a session's node goes when it disconnects), pre-approved when device approval is on, **tagged**
+  `tag:cloud-agent`, with an expiry you renew. An untagged key joins as you and can reach every device
+  of yours.
+- A **board agent token** (`<token>`): Connect an agent, **Generate commands**.
 
-**2. The cloud environment** (its settings, where the session's environment is edited)
+Rotate both when the work is done. Never put a key or token in a prompt, a repo, a post or a setup
+script.
 
-- Secrets: `TS_AUTHKEY` (the auth key) and `BOARD_TOKEN` (an agent token: Connect an agent,
-  **Generate commands**), plus the variable `BOARD_URL=https://<machine>.<tailnet>.ts.net`. Never put a
-  key or token in a prompt, a repo, a post or a setup script.
-- Network: allow Tailscale's control and relay servers when the environment limits network access.
-- Setup script. It runs once, as the environment is built, without the secrets, and nothing it starts
-  is still running when a session starts; so it only installs:
+**3. The cloud environment** (claude.ai/code, the environment selector, add or edit an environment):
 
-  ```sh
-  curl -fsSL https://tailscale.com/install.sh | sh
-  curl -fsSL -o /usr/local/lib/board-mcp.mjs \
-    https://raw.githubusercontent.com/nervesscat/agent-board/main/scripts/board-mcp.mjs
-  cat > /usr/local/bin/tailnet-up <<'EOF'
-  #!/bin/sh
-  # Tailscale in userspace, its HTTP proxy on localhost:1055; prints "board 401" once the board answers.
-  S=/tmp/tailscaled.sock
-  pgrep -x tailscaled >/dev/null || { tailscaled --tun=userspace-networking --state=mem: --socket=$S \
-    --outbound-http-proxy-listen=localhost:1055 >/tmp/tailscaled.log 2>&1 & }
-  for i in $(seq 1 20); do
-    tailscale --socket=$S status >/dev/null 2>&1 && break
-    tailscale --socket=$S up --authkey="$TS_AUTHKEY" --hostname=cloud-agent --accept-dns=false \
-      --timeout=15s >/dev/null 2>&1 && break
-    sleep 2
-  done
-  c=000
-  for i in $(seq 1 15); do
-    c=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -x http://localhost:1055 "$BOARD_URL/api/health")
-    [ "$c" = 401 ] && break
-    sleep 2
-  done
-  echo "board $c"
-  EOF
-  chmod +x /usr/local/bin/tailnet-up
-  claude mcp add --scope user board -e BOARD_PROXY=http://localhost:1055 -e BOARD_UP=tailnet-up \
-    -- node /usr/local/lib/board-mcp.mjs
-  ```
+- **Repositories**: the project's repos.
+- **Network access**: Full, or Custom with `*.tailscale.com`, `*.tailscale.io` and
+  `pkgs.tailscale.com` added to the defaults.
+- **Environment variables** (`.env` format): `TS_AUTHKEY=tskey-…`, `BOARD_TOKEN=<token>` and
+  `BOARD_URL=https://<machine>.<tailnet>.ts.net`. Not **Network secrets**: the egress proxy adds those
+  to requests to a host, and the board's traffic goes inside the Tailscale tunnel, which the proxy
+  never sees.
+- **Setup script**: below. It runs once, as root, and its result is cached: files it writes persist,
+  processes do not. So each session starts Tailscale again (`tailnet-up`), and the script must never
+  fail or hang, or every session breaks (a `curl -f` right after starting Tailscale exits 7 before the
+  tunnel is up).
 
-**3. The board's MCP tools: `board-mcp`.** `scripts/board-mcp.mjs` (also served at
+```bash
+set +e
+# Tailscale, in userspace mode; each session runs tailnet-up again, since setup processes do not survive.
+curl -fsSL https://tailscale.com/install.sh | sh
+cat > /usr/local/bin/tailnet-up <<'EOT'
+#!/bin/sh
+# Tailscale in userspace, its HTTP proxy on localhost:1055; prints "board 401" once the board answers.
+S=/tmp/tailscaled.sock
+pgrep -x tailscaled >/dev/null || { tailscaled --tun=userspace-networking --state=mem: --socket=$S --outbound-http-proxy-listen=localhost:1055 --socks5-server=localhost:1055 >/tmp/tailscaled.log 2>&1 & }
+for i in $(seq 1 20); do
+  tailscale --socket=$S status >/dev/null 2>&1 && break
+  tailscale --socket=$S up --authkey="$TS_AUTHKEY" --hostname=cloud-agent --accept-dns=false --timeout=15s >/dev/null 2>&1 && break
+  sleep 2
+done
+c=000
+for i in $(seq 1 15); do
+  c=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -x http://localhost:1055 "$BOARD_URL/api/health")
+  [ "$c" = 401 ] && break
+  sleep 2
+done
+echo "board $c"
+EOT
+cat > /usr/local/bin/board-skills <<'EOT'
+#!/bin/sh
+# From the board: the MCP bridge, the board skill (REST copy with `board-skills rest`) and the review
+# skills (todo-review, feature-review, review-queue and their agents).
+b() { curl -fs -m 60 -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" "$@"; }
+t=; [ "$1" = rest ] && t='&transport=rest'
+mkdir -p ~/.claude/skills/board /usr/local/lib
+b "$BOARD_URL/api/agent-setup/board-mcp" -o /usr/local/lib/board-mcp.mjs
+b "$BOARD_URL/api/agent-setup/skill?client=claude$t" -o ~/.claude/skills/board/SKILL.md
+b "$BOARD_URL/api/agent-setup/review-skills" | tar -x -C ~/.claude
+ls ~/.claude/skills
+EOT
+chmod +x /usr/local/bin/tailnet-up /usr/local/bin/board-skills
+timeout 90 tailnet-up && timeout 120 board-skills
+claude mcp add --scope user board -e BOARD_PROXY=http://localhost:1055 -e BOARD_UP=tailnet-up \
+  -- node /usr/local/lib/board-mcp.mjs
+exit 0
+```
+
+Sandboxes have no `/dev/net/tun`, so Tailscale runs in userspace mode and the tailnet is reached
+through its proxy: `curl -x http://localhost:1055 …`.
+
+**4. The board's MCP tools: `board-mcp`.** `scripts/board-mcp.mjs` (also served at
 `/api/agent-setup/board-mcp`) is a stdio MCP server with no dependencies but Node: each message it
 reads is posted to `$BOARD_URL/api/mcp` with `Authorization: Bearer $BOARD_TOKEN`, through
 `BOARD_PROXY` (an HTTP proxy that tunnels with CONNECT, as Tailscale's userspace proxy does), and each
@@ -507,32 +548,39 @@ Claude starts the server, not after (about ten seconds from nothing, inside Clau
 start limit; `MCP_TIMEOUT=60000` gives it more). When a request cannot connect it runs `BOARD_UP`
 again and retries once; a request the board may have read is never sent twice. `BOARD_AGENT_NAME`
 sends `X-Agent-Name`. Check it in a new session: `claude mcp list` shows `board: … Connected`, and the
-`mcp__board__*` tools are there. If `board` is not listed, the environment did not keep the user
-config the setup script wrote: run that `claude mcp add` line in the session, then start a new
-conversation, or use the REST copy of the skill below.
+`mcp__board__*` tools are there.
 
-**4. The skills.** In the session, after `tailnet-up`:
+**5. Board access over REST**, when `board` is not listed (the environment did not keep the user
+config the setup script wrote): after `tailnet-up`, run `board-skills rest`. That is the same board
+skill, with a section that gives each tool's REST route and how to call it
+(`curl -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" $BOARD_URL/api/…`; REST API,
+below). Fetched through `PUBLIC_ORIGIN`, the skill names the board by that origin. The review skills
+say what to do in a session that has no board tools, does not offer their agent types (a
+general-purpose agent reads the agent file as its instructions), or gives a subagent no Agent tool (it
+runs the phases itself).
 
-```sh
-b() { curl -fsS -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" "$@"; }
-mkdir -p ~/.claude/skills/board
-b "$BOARD_URL/api/agent-setup/skill?client=claude" -o ~/.claude/skills/board/SKILL.md
-b "$BOARD_URL/api/agent-setup/review-skills" | tar -x -C ~/.claude
-```
-
-Without the MCP tools, fetch `?client=claude&transport=rest` instead: the same skill, with a section
-that gives each tool's REST route and how to call it (`curl -x http://localhost:1055 …`). Fetched
-through `PUBLIC_ORIGIN`, the skill names the board by that origin. The review skills say what to do in
-a session that has no board tools, does not offer their agent types (a general-purpose agent reads the
-agent file as its instructions), or gives a subagent no Agent tool (it runs the phases itself).
-
-**5. Previews.** The board runs previews from worktrees on its own machine, and a cloud session's
+**6. Previews.** The board runs previews from worktrees on its own machine, and a cloud session's
 worktree is not there. Push the branch, then `preview_branch` (REST `POST
 /api/tickets/:id/branch-preview`): the board fetches the branch from the repo's origin into a
 detached worktree of its own beside the main checkout (`<checkout>-preview-<branch>`), registers it on
 the ticket and runs the repo's preview there, as `start_preview` does. After the next push, call it
 again: the worktree moves to the new head and the preview builds again. The board makes no branch and
 moves no worktree but its own; Cleanup removes it once the ticket is closed.
+
+**7. Running the work**
+
+- **Launching sessions** from an orchestrator (a local Claude Code session): `RemoteTrigger` `create`
+  a one-time routine (`run_once_at`) with `job_config.ccr.environment_id`, the prompt as the first
+  user event, `session_context.sources` set to the repo, and `allowed_tools`. Follow it with
+  `list_runs` and `get_run_log`, and message a running session with `SendMessage` (one way). Nothing
+  is pasted by hand.
+- **The environment ID** (`env_…`) is not shown in the UI: create a throwaway routine in that
+  environment (Routines, New routine, pick the environment, any prompt, API trigger), and
+  `RemoteTrigger list` shows its `environment_id`.
+- **A ticket's prompt** starts with `tailnet-up` (it must print `board 401`), and `board-skills` (or
+  `board-skills rest` without the MCP tools) when the skills are missing, then the ticket's work (or
+  `/todo-review` for it), the push, `preview_branch` for a preview, the PR into the base branch, the
+  summary, and the move to review.
 
 **What holds**: the tag reaches the board's machine on 443 and nothing else on your tailnet; every
 request there needs the agent token (revoke it on Connect an agent, the key in the admin console);
