@@ -216,6 +216,11 @@ always asks who is signed in), waits until it answers, and opens a window on
 `http://localhost:<PORT>/`. Its tray icon has Open, Open in browser and Quit. Closing the window
 keeps the board running for your agents (`http://localhost:<PORT>/api/mcp`, as in `AGENTS.md`);
 Quit stops it and frees the port. One copy runs at a time: starting it again brings its window back.
+If the board's server dies once it has answered, the app starts it again on the same port, waiting
+1, 2, 5, 10 and then 30 s between tries, with the window and tray kept; a notification and the tray's
+tooltip say it restarted, and `board.err.log` notes each exit. After five restarts with no five
+minutes of the board answering in between, it gives up and says the board stopped, with the end of
+its error output. A server that fails before it first answers is reported at once.
 
 **Prerequisites.** `git`, `gh` (signed in) and `claude` on `PATH`, as for a checkout: the board runs
 them just the same. Managed previews of a board worktree also need `pnpm` and `node`.
@@ -996,7 +1001,9 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   survives a restart (the window still signed in), that a second launch brings the first window back, that Quit frees the port, that
   `config.env`'s `PORT` and `DATA_DIR` are used, that a busy port (on loopback or on every interface)
   and a `DATA_DIR` or `AGENT_BOARD_HOME` that cannot be made or written are reported in a dialog
-  that ends the app, and that a second launch after a failure is harmless. On Linux (under a
+  that ends the app, that a server killed while the app runs is started again on the same port with
+  no dialog, and one that then fails on every start ends in the stopped board's dialog after the
+  restarts' cap, and that a second launch after a failure is harmless. On Linux (under a
   display: `xvfb-run -a`) it also checks that nothing of the app runs after Quit, that the server
   gets the login shell's PATH (a `.bashrc` in a stand-in home), that Start at login writes and removes
   the autostart entry, and that closing the window with no tray host ends the app and its server; its
