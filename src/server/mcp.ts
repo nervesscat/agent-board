@@ -6,6 +6,7 @@ import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, RESUME_TEMPLATE } from '#/lib
 import type { RunConfigInput } from '#/lib/runs'
 import { listActors, noteActor } from './actors'
 import { asSubIdentity, type Caller, callerInfo } from './auth'
+import { previewBranch } from './branchPreview'
 import { cleanupReport } from './cleanup'
 import { AgentDeleteItems, deleteLeftovers } from './cleanupActions'
 import { dailyReport, today } from './daily'
@@ -504,6 +505,20 @@ It replaces the previous note; each new version is also posted to the ticket's f
     },
     ({ workspaceId, restart }) =>
       restart ? restartPreview(workspaceId, actor) : startPreview(workspaceId, actor),
+  )
+  tool(
+    'preview_branch',
+    "A board-run preview of a branch this machine has no worktree of, such as one pushed from a cloud session or another computer: the board fetches branch from the repo's origin into a detached worktree of its own next to the repo's main checkout (<checkout>-preview-<branch>), registers it as a workspace of the ticket (repoId: one of its repos, the primary when left out) and starts the repo's preview run from it, as start_preview does. branch defaults to the ticket's branch for that repo. Call it again after a new push: the same worktree moves to the branch's new head and the preview builds again. Returns {workspace, branch, sha, path, preview}; get_ticket (the workspace's managedPreview) follows it to running. Refused when origin has no such branch, or when that folder exists but is not the board's clean, detached worktree of the repo.",
+    {
+      ticketId: z.number().int(),
+      branch: z
+        .string()
+        .max(255)
+        .optional()
+        .describe("the branch on origin; the ticket's branch when left out"),
+      repoId: z.number().int().optional().describe("the ticket's repo; the primary when left out"),
+    },
+    ({ ticketId, ...rest }) => previewBranch(ticketId, rest, actor),
   )
   tool(
     'stop_preview',

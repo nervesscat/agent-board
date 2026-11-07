@@ -15,6 +15,25 @@ Keep your own context small: read only each agent's result lines and the tickets
 This skill needs the board's MCP tools (`get_project`, `list_tickets`, `get_ticket`, …). Without
 them, stop and say so.
 
+## In a session without the board's tools, agent types or the Agent tool
+
+A cloud session, or any client that reaches the board only through a proxy, may lack what this skill
+names. Go on as below, and say in the run's summary which of these applied:
+
+- **No `board` MCP tools**: start them with the `board-mcp` bridge (the board's README, "Cloud
+  agents"), or call each tool's REST route instead: the board skill served with `?transport=rest`
+  (`<board>/api/agent-setup/skill?transport=rest`) lists every tool with its route. The agent token
+  comes from the environment, never from a prompt, and is never printed.
+- **The agent types (`todo-review-ticket`, `feature-review-*`) are not offered**: their files are in
+  `~/.claude/agents/`, but the session did not load them. Start a general-purpose agent whose prompt
+  says to read `~/.claude/agents/<type>.md` (everything after its frontmatter) as its instructions,
+  followed by the brief this skill gives it, at the same effort.
+- **No Agent tool** (a subagent cannot start subagents): run each phase yourself, in order, following
+  its agent file as your own instructions; phases this skill runs in parallel run one after the other.
+- **No board-run preview of your worktree** (the board's machine cannot see it): push the branch, then
+  `preview_branch` (`POST /api/tickets/:id/branch-preview`): the board fetches the branch into a
+  worktree of its own and runs the repo's preview there.
+
 ## Arguments
 
 Parse `$ARGUMENTS` as space-separated tokens:
