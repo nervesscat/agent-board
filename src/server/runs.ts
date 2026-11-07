@@ -489,14 +489,22 @@ function isTicketRepo(ticket: schema.Ticket, repo: schema.Repo) {
  * ticket, a repo the ticket does not span, a path that is not a worktree of its repo the board may act
  * on, one being removed. Null when runs may start there.
  */
-export function workspaceCannotRun(workspaceId: number): string | null {
+/** What stands in the way of any run for the ticket, whatever the workspace; null when nothing does. */
+export function ticketCannotRun(ticketId: number): string | null {
   if (authMode().boardEnv === 'development')
     return 'runs are started by the live board (or a test-mode one), not by a preview'
-  const ws = getWorkspace(workspaceId)
-  const ticket = ticketOf(ws.ticketId)
+  const ticket = ticketOf(ticketId)
   if (ticket.archivedAt) return 'the ticket is archived'
   const kind = kindOf(listStages(ticket.projectId), ticket.status)
   if (kind === 'done' || kind === 'cancelled') return `the ticket is ${kind}`
+  return null
+}
+
+export function workspaceCannotRun(workspaceId: number): string | null {
+  const ws = getWorkspace(workspaceId)
+  const refused = ticketCannotRun(ws.ticketId)
+  if (refused) return refused
+  const ticket = ticketOf(ws.ticketId)
   const repoId = workspaceRepoId(ws)
   const repo = repoId
     ? (db.select().from(schema.repos).where(eq(schema.repos.id, repoId)).get() ?? null)

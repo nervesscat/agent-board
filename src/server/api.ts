@@ -31,9 +31,10 @@ import { addDefaultAgents } from './defaultAgents'
 import { AGENT_ROLES, listActors } from './actors'
 import { callerInfo, isAgent } from './auth'
 import { authRoutes } from './authApi'
+import { previewBranch } from './branchPreview'
 import { cleanupReport } from './cleanup'
 import { DeleteItems, deleteLeftovers } from './cleanupActions'
-import { authMode } from './config'
+import { authMode, servedEntrance } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
 import { GalleryQuery, listGallery } from './gallery'
@@ -210,10 +211,26 @@ api.delete('/api/agent-tokens/:id', ({ request, params }) => {
 // --- connecting agents: board settings, and the skill each CLI installs ---
 api.get('/api/agent-setup', () => json(agents.agentSetup()))
 // The board skill as a SKILL.md (no projects in it: agents call find_project); the install commands curl this.
-api.get('/api/agent-setup/skill', ({ url }) => {
+api.get('/api/agent-setup/skill', ({ request, url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
-  return new Response(agents.renderSkill(client), {
+  // transport=rest: the same skill for a session without the board's MCP tools, each tool's route in it.
+  const transport = z.enum(agents.SKILL_TRANSPORTS).catch('mcp').parse(url.searchParams.get('transport'))
+  // Fetched through the tailnet entrance: the skill names the board as that caller reaches it.
+  const entrance = servedEntrance()
+  const host = request.headers.get('host')?.toLowerCase().replace(/:\d+$/, '')
+  const boardUrl = entrance && host === entrance.host ? entrance.origin : undefined
+  return new Response(agents.renderSkill(client, transport, boardUrl), {
     headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
+// The stdio MCP bridge (scripts/board-mcp.mjs) a cloud session saves as board-mcp.mjs and runs with node.
+api.get('/api/agent-setup/board-mcp', () => {
+  return new Response(agents.boardMcpBridge(), {
+    headers: {
+      'content-type': 'text/javascript; charset=utf-8',
+      'content-disposition': 'attachment; filename="board-mcp.mjs"',
+      'cache-control': 'no-store',
+    },
   })
 })
 // feature-review, review-queue, todo-review and their agents, as a tar to extract into ~/.claude.
@@ -790,6 +807,15 @@ api.post('/api/workspaces/:id/preview/stop-link', async ({ request, params, acto
 api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
   json(await restartPreview(id(params), actor), 202),
 )
+// A branch the board has no worktree of (pushed from another machine): fetched from origin into a
+// detached worktree of the board's own beside the checkout, registered and previewed (branchPreview.ts).
+api.post('/api/tickets/:id/branch-preview', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ branch: z.string().max(255).optional(), repoId: z.number().int().optional() }),
+  )
+  return json(await previewBranch(id(params), body, actor), 202)
+})
 // ?name=build (install and build) or server.
 api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
   const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))

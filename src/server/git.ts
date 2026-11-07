@@ -9,7 +9,9 @@ import { HttpError } from './http'
 /**
  * The board never writes to GitHub, and writes to git only for the human's Cleanup actions:
  * `removeWorktree`, `deleteLocalBranch` and `deleteOriginBranch`, each run once the human confirmed it
- * on the Cleanup page and the server checked again that the work landed (`cleanupActions.ts`). Every
+ * on the Cleanup page and the server checked again that the work landed (`cleanupActions.ts`), and for a
+ * branch preview (`branchPreview.ts`): `fetchOriginBranch`, `addDetachedWorktree` and `checkoutDetached`,
+ * which only ever make or move a detached worktree of the board's own and never a branch. Every
  * other command here is a read, but for `fetchOrigin`, which only refreshes the checkout's copy of
  * origin's branches: the allowlist below is the whole vocabulary, and nothing else in the codebase
  * spawns `git` or `gh` but the check of the host's tools (`hostTools.ts`: `--version` and
@@ -435,6 +437,67 @@ export async function fetchOrigin(repoPath: string, timeoutMs: number): Promise<
     timeout: timeoutMs,
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' },
   })
+}
+
+const NO_PROMPT = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' }
+
+/** Whether `branch` is a branch name git takes (`git check-ref-format --branch`), never an option. */
+export async function validBranchName(repoPath: string, branch: string): Promise<boolean> {
+  if (!branch || branch.startsWith('-') || branch !== branch.trim()) return false
+  return git(repoPath, ['check-ref-format', '--branch', branch]).then(
+    () => true,
+    () => false,
+  )
+}
+
+/**
+ * Refreshes `origin/<branch>` alone, from origin, and returns the commit it is at; null when origin has
+ * no such branch. Like `fetchOrigin` it touches no local branch or worktree and never prompts.
+ */
+export async function fetchOriginBranch(
+  repoPath: string,
+  branch: string,
+  timeoutMs: number,
+): Promise<string | null> {
+  const ref = `refs/remotes/origin/${branch}`
+  try {
+    await run('git', ['fetch', '--quiet', '--no-tags', 'origin', `+refs/heads/${branch}:${ref}`], {
+      cwd: repoPath,
+      windowsHide: true,
+      timeout: timeoutMs,
+      env: NO_PROMPT,
+    })
+  } catch (err) {
+    if (/couldn't find remote ref|could not find remote ref/i.test(gitSaid(err))) return null
+    throw err
+  }
+  return (
+    (await git(repoPath, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]).catch(() => '')) || null
+  )
+}
+
+/** A new worktree at `worktreePath`, detached at `sha`: no branch is made or checked out. */
+export async function addDetachedWorktree(
+  repoPath: string,
+  worktreePath: string,
+  sha: string,
+): Promise<void> {
+  await git(repoPath, ['worktree', 'add', '--detach', '--', worktreePath, sha])
+}
+
+/** Moves a detached worktree to `sha` (`git checkout --detach`); git refuses when that would lose a change. */
+export async function checkoutDetached(worktreePath: string, sha: string): Promise<void> {
+  await git(worktreePath, ['checkout', '--quiet', '--detach', sha])
+}
+
+/** The worktree's HEAD: its branch (`refs/heads/<name>`), or null when it is detached. */
+export async function headBranch(worktreePath: string): Promise<string | null> {
+  return (await git(worktreePath, ['symbolic-ref', '--quiet', 'HEAD']).catch(() => '')) || null
+}
+
+/** The commit the worktree is at. */
+export async function headSha(worktreePath: string): Promise<string> {
+  return git(worktreePath, ['rev-parse', 'HEAD'])
 }
 
 /** Origin's default branch (`refs/remotes/origin/HEAD`); null when the checkout does not know it. */
