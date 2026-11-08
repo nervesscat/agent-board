@@ -41,22 +41,23 @@ function age(ticketId: number, minutes: number) {
 }
 
 /**
- * A ticket in progress with a lane: a build span by the agent, a hand-off to a sub-agent, a 20-minute
- * wait on the test lock, and then 40 minutes of silence, so it reads as stalled. The lane has nothing.
+ * A ticket in progress with a lane: a 20-minute wait on the test lock with nothing else going on, then
+ * a hand-off to a sub-agent and a build span by the agent, and then 40 minutes of silence, so it reads
+ * as stalled. The lane has nothing.
  */
 async function workedTicket(human: APIRequestContext, agent: APIRequestContext, project: Project) {
   const t = await create(human, project, { title: 'Ship the importer', status: 'in_progress' })
   const lane = await create(human, project, { title: 'Importer docs', status: 'in_progress', parentId: t.id })
-  await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
+  await record(agent, project, t.id, { kind: 'wait_start', reason: 'lock', note: 'test lock' })
+  age(t.id, 20)
+  await record(agent, project, t.id, { kind: 'wait_end' })
   await record(agent, project, t.id, {
     kind: 'handoff',
     agent: 'orchestrator',
     from: 'orchestrator',
     to: 'builder-sub-1',
   })
-  await record(agent, project, t.id, { kind: 'wait_start', reason: 'lock', note: 'test lock' })
-  age(t.id, 20)
-  await record(agent, project, t.id, { kind: 'wait_end' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
   age(t.id, 40)
   return { t, lane }
 }
@@ -119,7 +120,7 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
 
   // From the keyboard: Tab reaches the span, which has its story as its name and shows its tooltip.
   // It started an hour back and is still open.
-  const named = ticket.getByRole('button', { name: /^build by claude, .* to now, 1 h( \d+ min)?, open$/ })
+  const named = ticket.getByRole('button', { name: /^build by claude, .* to now, 4\d min, open$/ })
   await expect(named).toHaveCount(1)
   await ticket.getByRole('button', { name: '1 lane' }).focus()
   for (let i = 0; i < 6 && !(await named.evaluate((el) => el === document.activeElement)); i++)
@@ -164,7 +165,8 @@ test('the ticket page has a Timeline card with the bar, the totals and the event
   const items = events.getByRole('listitem')
   await expect(items.first()).toContainText(/^3 heartbeats, last /)
   await expect(items.filter({ hasText: /^\S+\s*claude\s*Agent\s*heartbeat$/ })).toHaveCount(0)
-  await expect(items.nth(1)).toContainText('stopped waiting: lock')
+  await expect(items.nth(2)).toContainText('handoff orchestrator → builder-sub-1')
+  await expect(items.nth(3)).toContainText('stopped waiting: lock')
   await card.getByRole('button', { name: 'Show heartbeats' }).click()
   await expect(items.filter({ hasText: /claude\s*Agent\s*heartbeat$/ })).toHaveCount(3)
   // Each event names its agent as everywhere else: with the role badge.
@@ -199,6 +201,50 @@ test('the ticket page has a Timeline card with the bar, the totals and the event
   await expect(empty).toContainText('No work recorded yet.')
   // Its creation is an event: the list has that one line.
   await expect(empty.getByRole('list', { name: 'Events' })).toContainText('created in To do')
+  expect(errors).toEqual([])
+})
+
+test('a delegated build reads as working: the builder’s span under the orchestrator’s wait on it', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const errors = errorsOn(page)
+  const t = await create(human, project, { title: 'Delegated build', status: 'in_progress' })
+  // The orchestrator hands the build to its builder and waits on it; the builder works the whole time.
+  await record(agent, project, t.id, { kind: 'handoff', from: 'orchestrator', to: 'builder-sub-1' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'builder-sub-1' })
+  await record(agent, project, t.id, { kind: 'wait_start', reason: 'builder', agent: 'orchestrator' })
+  age(t.id, 30)
+  await record(agent, project, t.id, { kind: 'heartbeat', agent: 'builder-sub-1' })
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Timeline' })
+  const bar = card.getByTestId('work-timeline')
+  await expect(card.getByLabel('Totals')).toContainText('Working 30m · Waiting 0m · Blocked on human 0m')
+  // The build is drawn as work, the wait on its own row, and nothing hatches the span.
+  await expect(bar.getByRole('group', { name: 'Spans' }).locator('[data-kind="span"]')).toHaveText('build')
+  await expect(bar.getByRole('group', { name: 'Waits' }).locator('[data-kind="wait"]')).toHaveAttribute(
+    'data-reason',
+    'builder',
+  )
+  await expect(bar.locator('[data-kind="human-overlay"]')).toHaveCount(0)
+  await card.screenshot({ path: test.info().outputPath('delegated-build-timeline.png') })
+
+  // A wait on the human still wins over the work under it, and is hatched over the span.
+  const { waitId } = await record(agent, project, t.id, {
+    kind: 'wait_start',
+    reason: 'human',
+    agent: 'orchestrator',
+  })
+  age(t.id, 10)
+  await record(agent, project, t.id, { kind: 'wait_end', waitId, agent: 'orchestrator' })
+  await page.reload()
+  await expect(card.getByLabel('Totals')).toContainText('Working 30m · Waiting 0m · Blocked on human 10m')
+  await expect(bar.getByRole('group', { name: 'Spans' }).locator('[data-kind="human-overlay"]')).toHaveCount(
+    1,
+  )
   expect(errors).toEqual([])
 })
 

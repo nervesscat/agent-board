@@ -9,7 +9,7 @@ import { MAX_TAG_LENGTH, cleanSuggestions, matchTags, tagChoices, usedTags } fro
 import { logActivity } from './activity'
 import { hostToolsForAgents } from './hostTools'
 import { assertMayChangeInstructions, type Changer, setInstructions } from './instructionsHistory'
-import { notFound } from './http'
+import { HttpError, notFound } from './http'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
 import { listStages } from './stages'
@@ -230,7 +230,8 @@ export const LayoutBody = z
  * blanks and repeats in any casing left out; [] stays empty. `instructions` go through their history
  * (instructionsHistory.ts): only `who` as the human or an orchestrator changes them, and a worker's
  * patch that has them is refused whole. Without `who` the caller is taken for a worker.
- * `stallMinutes`: how long an active ticket
+ * `workStage`: the key of the active stage work starts in (claiming, a status `in_progress` or
+ * `active`), null for the first active stage; anything else is a 400. `stallMinutes`: how long an active ticket
  * may go without a work event before it reads as stalled (the caller checks the range). `layout`: kept
  * as it is in effect (`mergeLayout`: unknown ids dropped, locked elements shown), null for the defaults
  * again.
@@ -240,7 +241,7 @@ export function updateProject(
   patch: Partial<
     Pick<
       schema.Project,
-      'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'stallMinutes' | 'layout'
+      'name' | 'instructions' | 'defaultPhases' | 'tagSuggestions' | 'stallMinutes' | 'layout' | 'workStage'
     >
   >,
   actor: string,
@@ -249,6 +250,14 @@ export function updateProject(
   getProject(id)
   const { defaultPhases, tagSuggestions, instructions, layout, ...rest } = patch
   if (instructions !== undefined) assertMayChangeInstructions(who)
+  if (rest.workStage != null) {
+    const stage = listStages(id).find((s) => s.key === rest.workStage)
+    if (stage?.kind !== 'active')
+      throw new HttpError(
+        400,
+        `workStage: "${rest.workStage}" is not an active stage of this project; give an active stage's key, or null for the first active stage`,
+      )
+  }
   const set = {
     ...rest,
     ...(defaultPhases !== undefined && { defaultPhases: defaultPhases?.map((name) => name.trim()) ?? null }),
