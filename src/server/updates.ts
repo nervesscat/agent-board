@@ -38,7 +38,12 @@ export interface DesktopChannel {
 type Op = 'state' | 'check' | 'install' | 'settings'
 interface Pending {
   resolve: (state: UpdatesState) => void
-  reject: (err: Error) => void
+  /**
+   * Refuses the request with the app's status and message. Made by ask(), in the copy of this module
+   * the routes use, so the HttpError it throws is the class the routes' api() wrapper checks for: the
+   * listener (the plugin's copy) does not build one, which that check would miss.
+   */
+  refuse: (status: number, message: string) => void
   timer: ReturnType<typeof setTimeout>
 }
 
@@ -83,6 +88,9 @@ export function listenForDesktop(channel: DesktopChannel = process as DesktopCha
   if (typeof channel.send !== 'function' || kept.listening.has(channel)) return
   kept.listening.add(channel)
   kept.listened = true
+  // The server ends on SIGTERM by closing its HTTP server, which waits for the requests in flight: one
+  // waiting for the hello would hold it for HELLO_WAIT_MS, so the wait ends with the shutdown too.
+  process.once('SIGTERM', endHelloWait)
   channel.on('message', (message) => {
     if (!isRecord(message) || message.channel !== BRIDGE) return
     if (message.hello === true) {
@@ -97,11 +105,9 @@ export function listenForDesktop(channel: DesktopChannel = process as DesktopCha
     if (message.ok === true && isRecord(message.state))
       waiting.resolve(message.state as unknown as UpdatesState)
     else
-      waiting.reject(
-        new HttpError(
-          typeof message.status === 'number' ? message.status : 500,
-          typeof message.error === 'string' ? message.error : 'the desktop app refused the request',
-        ),
+      waiting.refuse(
+        typeof message.status === 'number' ? message.status : 500,
+        typeof message.error === 'string' ? message.error : 'the desktop app refused the request',
       )
   })
   channel.channel?.unref()
@@ -114,7 +120,11 @@ function ask(channel: DesktopChannel, op: Op, body?: unknown): Promise<UpdatesSt
       pending.delete(id)
       reject(new HttpError(504, 'the desktop app did not answer about its updates'))
     }, BRIDGE_TIMEOUT_MS)
-    pending.set(id, { resolve, reject, timer })
+    pending.set(id, {
+      resolve,
+      refuse: (status, message) => reject(new HttpError(status, message)),
+      timer,
+    })
     channel.send!({ channel: BRIDGE, id, op, body }, (err) => {
       if (!err) return
       pending.delete(id)
@@ -122,6 +132,12 @@ function ask(channel: DesktopChannel, op: Op, body?: unknown): Promise<UpdatesSt
       reject(new HttpError(503, `the desktop app could not be reached: ${err.message}`))
     })
   })
+}
+
+/** Ends the wait for the hello for everyone: the server is stopping, and the app is not coming. */
+function endHelloWait() {
+  kept.gaveUp = true
+  kept.greeting?.greeted()
 }
 
 /**
