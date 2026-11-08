@@ -20,6 +20,8 @@ export type TimelineEvent = {
   fromAgent: string
   toAgent: string
   reason: string
+  /** On a wait_start: the agent the work was handed to; null or left out when none was named. */
+  on?: string | null
   note: string
   fromStage: string
   toStage: string
@@ -40,6 +42,8 @@ export type TimelineWait = {
   id: number
   reason: string
   agent: string
+  /** The agent the wait hands the work to (a delegated wait, counted as working); null when none. */
+  on: string | null
   note: string
   start: string
   end: string
@@ -48,6 +52,25 @@ export type TimelineWait = {
 export type TimelineHandoff = { id: number; at: string; from: string; to: string; note: string }
 export type TimelineMark = { id: number; kind: EventKind; at: string; note: string }
 export type WorkTotals = { workingMs: number; waitingMs: number; blockedOnHumanMs: number }
+/** The latest agent event (heartbeats included): when, who, what it was and what it said. */
+export type LastHeard = {
+  at: string
+  agent: string
+  by: string
+  kind: EventKind
+  phase: string
+  reason: string
+  note: string
+}
+/**
+ * What a ticket is doing now, for a list row or the Overview: its open spans (phase, agent, since), its
+ * open waits (reason, agent, `on`, since) and who was last heard from.
+ */
+export type Activity = {
+  spans: { phase: string; agent: string; since: string }[]
+  waits: { reason: string; agent: string; on: string | null; since: string }[]
+  lastHeard: LastHeard | null
+}
 /**
  * Since when an active ticket has been silent, for how many whole minutes, and who was heard from last:
  * `lastAgent` is the name the latest event claims (free text, or the assignee when no agent recorded
@@ -77,6 +100,7 @@ export type WorkTimeline = {
   totals: WorkTotals
   lastSignalAt: string
   stalled: Stalled | null
+  lastHeard: LastHeard | null
 }
 
 /** What the timeline needs of the ticket itself. */
@@ -221,7 +245,15 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
         ...endOf(e),
       })
     else if (e.kind === 'wait_start')
-      waits.push({ id: e.id, reason: e.reason, agent: e.agent, note: e.note, start: e.at, ...endOf(e) })
+      waits.push({
+        id: e.id,
+        reason: e.reason,
+        agent: e.agent,
+        on: e.on ?? null,
+        note: e.note,
+        start: e.at,
+        ...endOf(e),
+      })
     else if (e.kind === 'handoff')
       handoffs.push({ id: e.id, at: e.at, from: e.fromAgent, to: e.toAgent, note: e.note })
     else if (e.kind === 'stage') stageMoves.push(e)
@@ -239,8 +271,10 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
   })
 
   const interval = (s: { start: string; end: string }) => clip(Date.parse(s.start), Date.parse(s.end))
+  // A delegated wait (`on` named) is work handed to another agent: it counts as working, like a span.
+  const delegated = waits.filter((w) => w.on).map(interval)
   const sums = totals(
-    spans.map(interval),
+    [...spans.map(interval), ...delegated],
     waits.map((w) => ({ interval: interval(w), reason: w.reason })),
     blockedStretches.map(interval),
   )
@@ -261,6 +295,17 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
   const lastAgent = lastEvent?.agent ?? o.ticket.assignee
   const lastBy = lastEvent?.by ?? ''
   const lastFrom: Stalled['lastFrom'] = lastEvent ? 'event' : 'assignee'
+  const lastHeard: LastHeard | null = lastEvent
+    ? {
+        at: lastEvent.at,
+        agent: lastEvent.agent,
+        by: lastEvent.by,
+        kind: lastEvent.kind,
+        phase: lastEvent.phase,
+        reason: lastEvent.reason,
+        note: lastEvent.note,
+      }
+    : null
   return {
     start: startMs === null ? null : iso(startMs),
     end: endMs === null ? null : iso(endMs),
@@ -281,6 +326,20 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
           lastFrom,
         }
       : null,
+    lastHeard,
+  }
+}
+
+/** A timeline's activity: its open spans and waits, and who was last heard from. */
+export function activityOf(timeline: WorkTimeline): Activity {
+  return {
+    spans: timeline.spans
+      .filter((s) => s.open)
+      .map((s) => ({ phase: s.phase, agent: s.agent, since: s.start })),
+    waits: timeline.waits
+      .filter((w) => w.open)
+      .map((w) => ({ reason: w.reason, agent: w.agent, on: w.on, since: w.start })),
+    lastHeard: timeline.lastHeard,
   }
 }
 

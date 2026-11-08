@@ -2,6 +2,7 @@ import { asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
+import { activityOf } from '#/lib/workTimeline'
 import { logActivity } from './activity'
 import { baseChain, baseRefs, branchRef, gitCache, type GitCache, memo, reachOf, refSha } from './cleanup'
 import * as features from './features'
@@ -20,7 +21,7 @@ import {
   resolveStage,
   stageOf,
 } from './stages'
-import { stalledFor, timelinesFor, workOf } from './workTimeline'
+import { timelinesFor, workOf } from './workTimeline'
 
 /**
  * What a ticket needs merged before it can be done: other tickets of the project whose branches have
@@ -252,20 +253,25 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
 }
 
 /**
- * `listTickets` with each ticket's needs, met or not, whether its resume note holds (`resume`), and
- * whether it reads as stalled with when it was last heard from (the work timeline).
+ * `listTickets` with each ticket's needs, met or not, whether its resume note holds (`resume`), whether it
+ * reads as stalled with when it was last heard from (the work timeline), and its activity: the spans and
+ * waits still open and who was last heard from.
  */
 export async function ticketRows(projectId: number, filter: features.TicketFilter = {}) {
   const rows = features.listTickets(projectId, filter)
   const needs = await needsFor(rows, context(projectId))
-  const signals = stalledFor(rows)
+  const timelines = timelinesFor(rows)
   return withResumeBriefs(
-    rows.map((t) => ({
-      ...t,
-      needs: needs.get(t.id) ?? [],
-      stalled: signals.get(t.id)!.stalled,
-      lastSignalAt: signals.get(t.id)!.lastSignalAt,
-    })),
+    rows.map((t) => {
+      const { timeline } = timelines.get(t.id)!
+      return {
+        ...t,
+        needs: needs.get(t.id) ?? [],
+        stalled: timeline.stalled,
+        lastSignalAt: timeline.lastSignalAt,
+        activity: activityOf(timeline),
+      }
+    }),
   )
 }
 

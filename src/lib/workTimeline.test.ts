@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_STAGES } from './constants'
 import {
+  activityOf,
   buildTimeline,
   formatDuration,
   isStalled,
@@ -281,6 +282,92 @@ describe('buildTimeline', () => {
     const t = build([], '10:00')
     expect(t).toMatchObject({ start: null, end: null, spans: [], waits: [], lastSignalAt: at('09:00') })
     expect(t.totals).toEqual({ workingMs: 0, waitingMs: 0, blockedOnHumanMs: 0 })
+  })
+})
+
+describe('delegated waits', () => {
+  it('counts a wait with on as working, a wait without it as waiting, as before', () => {
+    const delegated = build([event('wait_start', '10:00', { reason: 'builder', on: 'builder' })], '10:30')
+    expect(delegated.totals).toEqual({ workingMs: 30 * MIN, waitingMs: 0, blockedOnHumanMs: 0 })
+    expect(delegated.waits[0]).toMatchObject({ on: 'builder', reason: 'builder' })
+
+    const plain = build([event('wait_start', '10:00', { reason: 'builder' })], '10:30')
+    expect(plain.totals).toEqual({ workingMs: 0, waitingMs: 30 * MIN, blockedOnHumanMs: 0 })
+    expect(plain.waits[0]).toMatchObject({ on: null })
+  })
+
+  it('still counts a delegated wait on the human as blocked on human', () => {
+    const t = build([event('wait_start', '10:00', { reason: 'human', on: 'builder' })], '10:30')
+    expect(t.totals).toEqual({ workingMs: 0, waitingMs: 0, blockedOnHumanMs: 30 * MIN })
+  })
+})
+
+describe('lastHeard', () => {
+  it('is the latest agent event, a heartbeat included, with its note', () => {
+    const t = build(
+      [
+        event('span_start', '10:00', { agent: 'claude', phase: 'build' }),
+        event('heartbeat', '10:20', { agent: 'builder', note: 'running the tests' }),
+      ],
+      '10:30',
+    )
+    expect(t.lastHeard).toEqual({
+      at: at('10:20'),
+      agent: 'builder',
+      by: 'claude',
+      kind: 'heartbeat',
+      phase: '',
+      reason: '',
+      note: 'running the tests',
+    })
+  })
+
+  it('picks the latest by time, whatever the order given, and skips the board', () => {
+    const later = event('heartbeat', '10:40', { agent: 'builder', note: 'done' })
+    const t = build(
+      [
+        later,
+        event('push', '10:50', { agent: 'board', by: 'board' }),
+        event('span_start', '10:05', { agent: 'claude', phase: 'build' }),
+      ],
+      '11:00',
+    )
+    expect(t.lastHeard).toMatchObject({ at: at('10:40'), kind: 'heartbeat', note: 'done' })
+  })
+
+  it('is none when there are no events, or only the board has recorded some', () => {
+    expect(build([], '10:00').lastHeard).toBeNull()
+    expect(
+      build([event('stage', '09:30', { agent: 'board', by: 'board', toStage: 'in_progress' })], '10:00')
+        .lastHeard,
+    ).toBeNull()
+  })
+})
+
+describe('activityOf', () => {
+  it('lists the open spans and waits and lastHeard, in this shape', () => {
+    const span = event('span_start', '10:00', { agent: 'claude', phase: 'build', round: 1 })
+    const delegated = event('wait_start', '10:10', { agent: 'claude', reason: 'builder', on: 'builder' })
+    const lock = event('wait_start', '10:12', { agent: 'claude', reason: 'lock' })
+    const lockEnd = event('wait_end', '10:13', { agent: 'claude', reason: 'lock', refId: lock.id })
+    const beat = event('heartbeat', '10:20', { agent: 'claude', note: 'waiting on the builder' })
+    expect(activityOf(build([span, delegated, lock, lockEnd, beat], '10:30'))).toEqual({
+      spans: [{ phase: 'build', agent: 'claude', since: at('10:00') }],
+      waits: [{ reason: 'builder', agent: 'claude', on: 'builder', since: at('10:10') }],
+      lastHeard: {
+        at: at('10:20'),
+        agent: 'claude',
+        by: 'claude',
+        kind: 'heartbeat',
+        phase: '',
+        reason: '',
+        note: 'waiting on the builder',
+      },
+    })
+  })
+
+  it('is empty for a ticket without events', () => {
+    expect(activityOf(build([], '10:00'))).toEqual({ spans: [], waits: [], lastHeard: null })
   })
 })
 

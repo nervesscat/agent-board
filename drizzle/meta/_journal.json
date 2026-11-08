@@ -309,6 +309,13 @@
       "when": 1794002352110,
       "tag": "0043_project_work_stage",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1794112790009,
+      "tag": "0044_work_event_on",
+      "breakpoints": true
     }
   ]
 }
