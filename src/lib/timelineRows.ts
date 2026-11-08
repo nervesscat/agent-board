@@ -195,14 +195,16 @@ export function agentTree(t: WorkTimeline): { agent: string; parent: string | nu
     const from = t.handoffs.find((h) => h.to === a && h.from !== a && known.has(h.from))?.from
     parent.set(a, by ?? from ?? null)
   }
+  // Break each cycle where it closes: the node whose parent is already on the walk becomes a root. An
+  // agent that only hangs off a cycle keeps its parent.
   for (const a of agents) {
-    const seen = new Set([a])
+    const path = [a]
     for (let p = parent.get(a) ?? null; p !== null; p = parent.get(p) ?? null) {
-      if (seen.has(p)) {
-        parent.set(a, null)
+      if (path.includes(p)) {
+        parent.set(path.at(-1)!, null)
         break
       }
-      seen.add(p)
+      path.push(p)
     }
   }
   const byTime = (x: string, y: string) => firstAt.get(x)! - firstAt.get(y)! || (x < y ? -1 : x > y ? 1 : 0)
@@ -244,9 +246,11 @@ export function summarize(t: WorkTimeline, rows: AgentRow[], axis: Axis): string
     for (const [target, ms] of byTarget) parts.push(`waited ${spokenDuration(unionMs(ms))} on ${target}`)
     return `${r.agent || 'unnamed'} ${parts.join(', ')}`
   })
-  const n = working.length
+  const doers = working.filter((r) => r.items.some((i) => i.kind === 'span')).length
+  const n = doers || working.length
   const over = spokenDuration(axis.end - axis.start)
-  return `Work by ${n} agent${n === 1 ? '' : 's'} over ${over}: ${clauses.join('; ')}.${t.live ? ' Still going.' : ''}`
+  const who = doers ? 'Work by' : 'Activity by'
+  return `${who} ${n} agent${n === 1 ? '' : 's'} over ${over}: ${clauses.join('; ')}.${t.live ? ' Still going.' : ''}`
 }
 
 /** The whole chart as the view draws it: rows, marks, blocked bands, the creation mark and the summary. */

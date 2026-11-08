@@ -117,6 +117,18 @@ describe('agent rows', () => {
     expect(tree[1]!.depth).toBe(1)
   })
 
+  it('keeps an agent that only hangs off a cycle under its parent', () => {
+    const t = timeline({
+      spans: [span(1, 'a', 'b', '10:03', '10:10')],
+      handoffs: [handoff(2, 'b', 'c', '10:01'), handoff(3, 'c', 'b', '10:02')],
+    })
+    const tree = agentTree(t)
+    const depthOf = (name: string) => tree.find((r) => r.agent === name)!
+    expect(depthOf('a').parent).toBe('b')
+    expect(depthOf('a').depth).toBe(depthOf('b').depth + 1)
+    expect(tree.map((r) => r.agent).sort()).toEqual(['a', 'b', 'c'])
+  })
+
   it('orders siblings by their first event', () => {
     const t = timeline({
       spans: [
@@ -301,7 +313,7 @@ describe('the summary sentence', () => {
       end: iso('10:44'),
     })
     expect(buildChart(t, ms('10:44')).summary).toBe(
-      'Work by 2 agents over 44 min: orchestrator waited 44 min on builder, delegated; builder worked 43 min.',
+      'Work by 1 agent over 44 min: orchestrator waited 44 min on builder, delegated; builder worked 43 min.',
     )
   })
 
