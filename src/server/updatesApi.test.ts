@@ -94,7 +94,11 @@ function fakeApp() {
 
 describe('the update routes on a board run from a checkout', () => {
   it('tell the human how a checkout updates, and have nothing to check or install', async () => {
-    const res = await call('GET', '/api/updates', 'human:qa')
+    // With no channel to an app, nothing to wait for: the answer comes at once.
+    const res = await Promise.race([
+      call('GET', '/api/updates', 'human:qa'),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('it waited')), 500)),
+    ])
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(await res.json()).toEqual({ mode: 'checkout' })
@@ -116,12 +120,33 @@ describe('the update routes on a board run from a checkout', () => {
   })
 })
 
+describe('the update routes before the desktop app says hello', () => {
+  it("wait for the hello, as the page's poll does when it reaches a restarted server first, then pass the app's answer on", async () => {
+    const app = fakeApp()
+    updates.listenForDesktop(app.channel)
+    let answered = false
+    const state = call('GET', '/api/updates', 'human:qa').then((res) => {
+      answered = true
+      return res
+    })
+    const check = call('POST', '/api/updates/check', 'human:qa')
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(answered).toBe(false)
+    expect(app.asked).toEqual([])
+    app.channel.emit('message', { channel: updates.BRIDGE, hello: true })
+    const res = await state
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual(desktopState())
+    expect((await check).status).toBe(200)
+    expect(app.asked.map((a) => a.op).sort()).toEqual(['check', 'state'])
+  })
+})
+
 describe('the update routes under the desktop app', () => {
   let app: ReturnType<typeof fakeApp>
   beforeAll(() => {
     app = fakeApp()
     updates.listenForDesktop(app.channel)
-    // Until the app says hello, the board answers as a checkout's.
     app.channel.emit('message', { channel: updates.BRIDGE, hello: true })
   })
 
