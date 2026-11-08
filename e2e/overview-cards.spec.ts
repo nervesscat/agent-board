@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
 import { expect, section, test } from './fixtures'
+import { workedTicket } from './workTimeline'
 
 /**
  * Needs you and In progress, side by side on the Overview, are as tall as each other whatever they
@@ -81,4 +82,33 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await content(needsYou).evaluate((el) => el.scrollTo(0, 200))
   await needsYou.scrollIntoViewIfNeeded()
   await shot(page, 'phone')
+})
+
+test("a stalled ticket says why and since when on Needs you, in the badge's words, on the board and in the list too", async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const { t } = await workedTicket(human, agent, project)
+  const title = new RegExp(`#${t.id} Ship the importer`)
+
+  await page.goto(`/projects/${project.id}`)
+  const row = section(page, 'Needs you')
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` }) })
+  await expect(row).toContainText(
+    /Stalled 4\dm: no heartbeat or event since \d{1,2}:\d{2}\s*[AP]M · last claude/,
+  )
+  await expect(row).not.toContainText('silent')
+  // The In progress row carries the same badge, with its words in the tooltip.
+  const progress = section(page, 'In progress')
+    .getByRole('listitem')
+    .filter({ hasText: `#${t.id} Ship the importer` })
+  await expect(progress.getByTestId('stalled')).toContainText(/Stalled 4\dm/)
+
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await expect(page.getByRole('link', { name: title }).getByTestId('stalled')).toContainText(/Stalled 4\dm/)
+  await page.getByRole('tab', { name: 'List' }).click()
+  await expect(page.getByRole('link', { name: title }).getByTestId('stalled')).toContainText(/Stalled 4\dm/)
 })
