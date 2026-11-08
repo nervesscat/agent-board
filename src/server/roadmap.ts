@@ -35,7 +35,10 @@ export type RoadmapTicket = RoadmapRow & { lanes: (RoadmapRow & { depth: number 
 export function roadmap(projectId: number): RoadmapTicket[] {
   const stages = listStages(projectId)
   const all = listTickets(projectId)
-  const roots = all.filter((t) => t.parentId === null && SHOWN.has(kindOf(stages, t.status)))
+  // Last updated first: the list gives each column's placed tickets first, which the roadmap ignores.
+  const roots = all
+    .filter((t) => t.parentId === null && SHOWN.has(kindOf(stages, t.status)))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   const byId = new Map(all.map((x) => [x.id, x]))
   const lanesOf = new Map(
     roots.map((t) => {
