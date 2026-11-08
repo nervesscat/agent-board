@@ -32,13 +32,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
+import { StallNotice, stallFor } from '#/components/StallLine'
 import { StalledBadge } from '#/components/WorkStatus'
 import { threadAnchor } from '#/lib/anchors'
 import type { AreaId } from '#/lib/layout'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
-import { formatDuration } from '#/lib/workTimeline'
 
 /**
  * Where things stand, for one project (its Overview) or every project (Home, one block each): what
@@ -273,21 +273,10 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
   )
 }
 
-/** Whole minutes since `since`: the summary carries the moment, the page counts up to now. */
-const silentMinutes = (since: string) => Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60_000))
-
 /** A stalled ticket's details, from the Needs you list that names it. */
 function stalledOf(p: ProjectSummary, id: number) {
   const s = p.needsYou.stalled.find((x) => x.ticketId === id)
-  return s
-    ? {
-        since: s.lastSignalAt,
-        minutes: silentMinutes(s.lastSignalAt),
-        lastAgent: s.lastAgent,
-        lastBy: s.lastBy,
-        lastFrom: s.lastFrom,
-      }
-    : null
+  return s ? stallFor(s) : null
 }
 
 function Stale() {
@@ -516,24 +505,20 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                 <>
                   <StageBadge p={p} status={s.status} />
                   {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
-                  <Tip content={`No heartbeat or event since ${clock(s.lastSignalAt)}`}>
-                    <span className="min-w-0">
-                      silent {formatDuration(silentMinutes(s.lastSignalAt) * 60_000)}
-                      {s.lastAgent && (
-                        <>
-                          {' · last '}
-                          {s.lastFrom === 'assignee' ? (
-                            // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
-                            <span data-testid="last-assignee" className="font-medium wrap-anywhere">
-                              {s.lastAgent}
-                            </span>
-                          ) : (
-                            <ClaimedActor name={s.lastAgent} by={s.lastBy} />
-                          )}
-                        </>
-                      )}
-                    </span>
-                  </Tip>
+                  <StallNotice
+                    stalled={stallFor(s)}
+                    who={
+                      s.lastAgent &&
+                      (s.lastFrom === 'assignee' ? (
+                        // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
+                        <span data-testid="last-assignee" className="font-medium wrap-anywhere">
+                          {s.lastAgent}
+                        </span>
+                      ) : (
+                        <ClaimedActor name={s.lastAgent} by={s.lastBy} />
+                      ))
+                    }
+                  />
                 </>
               }
             />
