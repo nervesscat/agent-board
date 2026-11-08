@@ -412,6 +412,36 @@ describe('checking against a feed', () => {
     expect(updates.state()).toMatchObject({ status: 'available', newest: { version: '0.3.0-beta.1' } })
   })
 
+  it('a change of the pre-releases setting during a check checks again once that check ends', async () => {
+    // As the GitHub provider does: which release is the newest depends on allowPrerelease as the check
+    // asks. A check that is held until the test lets it answer.
+    /** @type {(() => void)[]} */
+    const answer = []
+    const asked = /** @type {boolean[]} */ ([])
+    const updater = Object.assign(new EventEmitter(), {
+      allowPrerelease: false,
+      checkForUpdates: vi.fn(async () => {
+        const pre = updater.allowPrerelease
+        asked.push(pre)
+        await new Promise((resolve) => answer.push(() => resolve(undefined)))
+        return { isUpdateAvailable: true, updateInfo: { version: pre ? '0.3.0-beta.1' : '0.2.5' } }
+      }),
+    })
+    const { updates } = setup({ updater, type: 'deb' })
+    const first = updates.check()
+    await vi.waitFor(() => expect(answer).toHaveLength(1))
+    updates.setSettings({ prereleases: true })
+    // Not two checks at once: the one under way goes on, asking with the old setting.
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+    answer[0]?.()
+    await vi.waitFor(() => expect(answer).toHaveLength(2))
+    expect(updates.state().status).toBe('checking')
+    answer[1]?.()
+    await first
+    expect(asked).toEqual([false, true])
+    expect(updates.state()).toMatchObject({ status: 'available', newest: { version: '0.3.0-beta.1' } })
+  })
+
   it('ends a check the feed cannot answer in the error state', async () => {
     const { updates } = setup({ updater: realUpdater('DebUpdater').updater, type: 'deb' })
     await updates.check()
@@ -595,7 +625,7 @@ describe('Download and install', () => {
       manual: { command: `sudo dpkg -i ${file}`, file },
     })
     expect(updates.state().error).toMatch(/polkit did not authorize the install \(pkexec exit 126\)/)
-    // electron-updater tries apt-get install -f after a failed dpkg: not after a refusal.
+    // Nothing more after a refusal (electron-updater would try apt-get install -f).
     expect(edges.spawnSync).toHaveBeenCalledTimes(1)
     expect(edges.stopServer).not.toHaveBeenCalled()
     // Pressed again, it tries again.
@@ -659,29 +689,66 @@ describe('Download and install', () => {
       status: 'manual',
       manual: { command: `sudo pacman -U ${file2}`, file: file2 },
     })
-    // pacman -Sy and a second -U come after a failed install, not after a refusal.
+    // Nothing more after a refusal (electron-updater would try pacman -Sy and a second -U).
     expect(b.edges.spawnSync).toHaveBeenCalledTimes(1)
     expect(b.edges.stopServer).not.toHaveBeenCalled()
   })
 
   it('pacman: a package manager that fails keeps the board and gives the command', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
-    const { updater } = realUpdater('PacmanUpdater')
+    const { updater, dir } = realUpdater('PacmanUpdater')
     const { updates, edges } = await offered(updater, {
       type: 'pacman',
       commands: { pkexec: '/usr/bin/pkexec', pacman: '/usr/bin/pacman' },
       pkexec: () => ({ status: 1, stderr: 'error: failed to commit transaction' }),
     })
     await updates.install()
-    expect(updates.state().status).toBe('manual')
-    expect(updates.state().error).toMatch(/The package manager failed: .*failed to commit transaction/)
-    // electron-updater's refresh after a failed pacman -U (pacman -Sy, which fails too), then the command.
-    expect(edges.spawnSync).toHaveBeenCalledTimes(2)
-    expect(edges.spawnSync.mock.calls[1]?.[1]).toEqual([
+    const file = pending(dir, 'agent-board-0.3.0.pacman')
+    expect(updates.state()).toMatchObject({
+      status: 'manual',
+      manual: { command: `sudo pacman -U ${file}`, file },
+    })
+    expect(updates.state().error).toMatch(
+      /The package manager failed: pacman -U --noconfirm .* exited with 1: error: failed to commit transaction/,
+    )
+    // One root action per press: not electron-updater's pacman -Sy (a partial sync) and second -U.
+    expect(edges.spawnSync).toHaveBeenCalledTimes(1)
+    expect(edges.spawnSync.mock.calls[0]?.[1]).toEqual([
       '--disable-internal-agent',
       '/usr/bin/pacman',
-      '-Sy',
+      '-U',
       '--noconfirm',
+      file,
+    ])
+    expect(edges.stopServer).not.toHaveBeenCalled()
+    // Pressed again, it asks once more.
+    await updates.install()
+    expect(edges.spawnSync).toHaveBeenCalledTimes(2)
+  })
+
+  it('deb: a dpkg that fails keeps the board and gives the command, without apt-get install -f', async () => {
+    release({ version: '0.3.0', files: linuxFiles('0.3.0') })
+    const { updater, dir } = realUpdater('DebUpdater')
+    const { updates, edges } = await offered(updater, {
+      type: 'deb',
+      commands: { pkexec: '/usr/bin/pkexec', dpkg: '/usr/bin/dpkg', 'apt-get': '/usr/bin/apt-get' },
+      pkexec: () => ({ status: 1, stderr: 'dpkg: dependency problems prevent configuration' }),
+    })
+    await updates.install()
+    const file = pending(dir, 'agent-board_0.3.0_amd64.deb')
+    expect(updates.state()).toMatchObject({
+      status: 'manual',
+      manual: { command: `sudo dpkg -i ${file}`, file },
+    })
+    expect(updates.state().error).toMatch(
+      /The package manager failed: dpkg -i .* exited with 1: dpkg: dependency problems/,
+    )
+    expect(edges.spawnSync).toHaveBeenCalledTimes(1)
+    expect(edges.spawnSync.mock.calls[0]?.[1]).toEqual([
+      '--disable-internal-agent',
+      '/usr/bin/dpkg',
+      '-i',
+      file,
     ])
     expect(edges.stopServer).not.toHaveBeenCalled()
   })
@@ -741,6 +808,36 @@ describe('Download and install', () => {
       expect(updates.state()).toMatchObject({ status: 'error' })
       expect(updates.state().error).toMatch(/0\.3\.0 update could not be installed/)
     })
+
+    it.runIf(process.platform === 'linux')(
+      'pressed again after a failed install, installs: electron-updater does not ignore the retry',
+      async () => {
+        // The first install fails at electron-updater's check of APPIMAGE (not an absolute path).
+        process.env.APPIMAGE = 'relative.AppImage'
+        const marker = path.join(tmp, 'appimage-retried')
+        release({
+          version: '0.3.0',
+          files: { ...linuxFiles('0.3.0'), 'agent-board-0.3.0-x86_64.AppImage': program(marker) },
+        })
+        const { updater } = realUpdater('AppImageUpdater')
+        const install = vi.spyOn(updater, 'install')
+        const { updates, order } = await offered(updater, { type: 'appimage' })
+        await updates.install()
+        expect(updates.state().status).toBe('error')
+        expect(install).toHaveLastReturnedWith(false)
+        // The cause fixed, Download and install again: the new AppImage replaces the old one and starts.
+        const apps = fs.mkdtempSync(path.join(tmp, 'apps-'))
+        const old = path.join(apps, 'agent-board-0.2.0-x86_64.AppImage')
+        fs.writeFileSync(old, 'old')
+        process.env.APPIMAGE = old
+        order.length = 0
+        await updates.install()
+        expect(install).toHaveLastReturnedWith(true)
+        expect(order).toEqual(['stopServer', 'releaseLock', 'quit'])
+        expect(fs.readdirSync(apps)).toEqual(['agent-board-0.3.0-x86_64.AppImage'])
+        await vi.waitFor(() => expect(fs.readFileSync(marker, 'utf8')).toMatch(/silent=true/))
+      },
+    )
   })
 })
 

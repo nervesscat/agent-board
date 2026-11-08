@@ -288,6 +288,8 @@ export function createUpdates({
   }
   /** @type {Promise<void> | null} */
   let checking = null
+  // The pre-releases setting changed while a check ran with the old one: check again once it ends.
+  let recheckDue = false
   /** @type {unknown} */
   let timer = null
 
@@ -348,6 +350,10 @@ export function createUpdates({
       } finally {
         checking = null
       }
+      if (recheckDue) {
+        recheckDue = false
+        await check()
+      }
     })()
     return checking
   }
@@ -401,6 +407,10 @@ export function createUpdates({
         log.error(`updates: the install failed: ${updateError(err)}`)
       }
       if (installed) return quit()
+      // electron-updater's install marks itself called before it runs and ignores every later call;
+      // only its quitAndInstall (which quits the app through Electron) clears the mark when it fails.
+      // Cleared here the same way, so pressing Download and install again really installs again.
+      Object.assign(updater, { quitAndInstallCalled: false })
       takeLock()
       await startServer()
       set({
@@ -424,9 +434,11 @@ export function createUpdates({
   }
 
   /**
-   * deb, rpm and pacman: electron-updater's own install for the package type, each command it runs
-   * through pkexec (no shell). After polkit declined once nothing more is asked for: electron-updater
-   * tries a second command when the first failed (apt-get install -f, pacman -Sy).
+   * deb, rpm and pacman: electron-updater's own install for the package type, its command run through
+   * pkexec (no shell). One root action per press of Download and install: after the first command
+   * failed, or polkit declined it, nothing more runs. electron-updater would go on with a second
+   * command (apt-get install -f after dpkg; pacman -Sy, a sync without the upgrade, and -U again), each
+   * asking polkit again; the human gets the manual command instead.
    * @param {'deb' | 'rpm' | 'pacman'} type
    * @param {string} file
    * @returns {{ ok: true } | { ok: false, error: string }}
@@ -438,11 +450,11 @@ export function createUpdates({
         ok: false,
         error: 'pkexec (polkit) is not installed, so the app cannot install the package itself.',
       }
-    /** @type {string | null} */
-    let declined = null
+    /** Why the first command failed: the commands after it are refused unrun. @type {string | null} */
+    let failed = null
     /** @param {string[]} argv */
     const run = ([cmd, ...args]) => {
-      if (declined) throw new Error(declined)
+      if (failed) throw new Error(failed)
       if (!cmd) throw new Error('no command to run')
       log.info(`updates: pkexec ${cmd} ${args.join(' ')}`)
       const res = spawnSync(pkexec, ['--disable-internal-agent', has(cmd) ?? cmd, ...args], {
@@ -450,18 +462,17 @@ export function createUpdates({
         stdio: ['ignore', 'pipe', 'pipe'],
       })
       if (res.error) {
-        declined = `pkexec could not be run: ${res.error.message}`
-        throw res.error
+        failed = `pkexec could not be run: ${res.error.message}`
+        throw new Error(failed)
       }
       if (res.status !== null && PKEXEC_REFUSED.has(res.status)) {
-        declined = `polkit did not authorize the install (pkexec exit ${res.status}).`
-        throw new Error(declined)
+        failed = `polkit did not authorize the install (pkexec exit ${res.status}).`
+        throw new Error(failed)
       }
       if (res.status !== 0) {
         const why = res.stderr.trim().split('\n').slice(-3).join(' ')
-        throw new Error(
-          `${cmd} ${args.join(' ')} exited with ${res.status ?? 'a signal'}${why ? `: ${why}` : ''}`,
-        )
+        failed = `The package manager failed: ${cmd} ${args.join(' ')} exited with ${res.status ?? 'a signal'}${why ? `: ${why}` : ''}`
+        throw new Error(failed)
       }
     }
     try {
@@ -483,15 +494,15 @@ export function createUpdates({
         )
       return { ok: true }
     } catch (err) {
-      const error = declined ?? `The package manager failed: ${updateError(err)}`
+      const error = failed ?? `The package manager failed: ${updateError(err)}`
       log.warn(`updates: ${error}`)
       return { ok: false, error }
     }
   }
 
   /**
-   * Changes the settings and saves them. A change to the pre-releases one checks again: what is offered
-   * depends on it.
+   * Changes the settings and saves them. A change to the pre-releases one checks again, what is offered
+   * depending on it: at once, or once the check under way (which asked with the old one) ends.
    * @param {Partial<UpdateSettings>} change
    */
   function setSettings(change) {
@@ -503,7 +514,9 @@ export function createUpdates({
     settings = next
     updater.allowPrerelease = settings.prereleases
     set({ settings })
-    if (recheck && type && !busy()) void check()
+    if (!recheck || !type) return
+    if (checking) recheckDue = true
+    else if (!busy()) void check()
   }
 
   return {

@@ -23,6 +23,8 @@ export const BRIDGE_TIMEOUT_MS = 10_000
 export interface DesktopChannel {
   send?: (message: unknown, callback?: (err: Error | null) => void) => boolean
   on(event: 'message', listener: (message: unknown) => void): unknown
+  /** The IPC channel's handle (process.channel), which a 'message' listener keeps ref'd. */
+  channel?: { unref(): void }
 }
 
 type Op = 'state' | 'check' | 'install' | 'settings'
@@ -56,6 +58,11 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 /**
  * Listens on `channel` for the app's hello and answers. A process with no IPC channel (no `send`) has
  * no app to hear from. Called once as the server starts (plugins/desktopBridge.ts).
+ *
+ * Listening does not keep the process alive: a 'message' listener refs the IPC channel, and the server
+ * ends on SIGTERM by closing what it holds and letting the event loop empty (Nitro's graceful
+ * shutdown), so with the channel ref'd it would stay until the app kills it. A request waiting for its
+ * answer is held by its timer.
  */
 export function listenForDesktop(channel: DesktopChannel = process as DesktopChannel) {
   if (typeof channel.send !== 'function' || kept.listening.has(channel)) return
@@ -80,6 +87,7 @@ export function listenForDesktop(channel: DesktopChannel = process as DesktopCha
         ),
       )
   })
+  channel.channel?.unref()
 }
 
 function ask(channel: DesktopChannel, op: Op, body?: unknown): Promise<UpdatesState> {

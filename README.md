@@ -328,8 +328,9 @@ a newer one over it by hand works too, the data kept:
 - **deb, rpm, pacman:** the app installs the downloaded package with the system's package manager
   (`dpkg -i` or `apt`, `dnf`, `zypper` or `rpm`, `pacman -U`) through polkit's `pkexec`, which asks for
   your authorization in its own dialog; the app never asks for or keeps a password. Once installed, it
-  stops the board and starts again as the new version. Without `pkexec` (polkit not installed), or with
-  the authorization declined, the board keeps running and the Updates section shows the exact command
+  stops the board and starts again as the new version. It asks polkit once per press of Download and
+  install. Without `pkexec` (polkit not installed), with the authorization declined, or with the package
+  manager failing, the board keeps running and the Updates section shows the error and the exact command
   to run in a terminal, with the downloaded file's path, e.g.
   `sudo pacman -U ~/.cache/agent-board-updater/pending/agent-board-0.3.0.pacman` (`sudo apt install …`,
   `sudo dnf install …` and the like by distribution); start the app again after it.
