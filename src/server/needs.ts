@@ -400,15 +400,18 @@ type Patch = Parameters<typeof features.updateTicket>[1]
  * `updateTicket` with the needs rule: `needs` replaces what the ticket needs, and a move to a done stage
  * is refused while one is not merged, unless the human sends `force` (logged). A move to a review stage
  * answers with `open` too: what its tasks still have open (openTasks). Never refused for them.
+ * `position` places it in its column (`placeTicket`) once the rest is written: with `status`, in the
+ * new stage's column. A bad one is refused before anything is written.
  */
 export async function changeTicket(
   id: number,
-  input: Patch & { needs?: number[]; force?: boolean },
+  input: Patch & { needs?: number[]; force?: boolean; position?: number },
   actor: string,
   opts: { agent: boolean },
 ) {
-  const { needs, force, ...patch } = input
+  const { needs, force, position, ...patch } = input
   const before = features.getTicket(id)
+  if (position !== undefined) features.checkPlacement(before, position)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch
@@ -421,13 +424,15 @@ export async function changeTicket(
   }
   const to = patch.status ? resolveStage(listStages(before.projectId), patch.status).key : before.status
   const unmet = await guardDone(subject, to, ids, { force, agent: opts.agent })
-  // The needs and the update land together: an update that is refused leaves the needs as they were.
+  // The needs, the update and the placement land together: an update that is refused leaves the needs
+  // as they were.
   const row = db.transaction(
     () => {
       if (needs !== undefined) setNeeds(id, ids, actor)
-      return Object.keys(patch).length
+      const changed = Object.keys(patch).length
         ? features.updateTicket(id, patch, actor, opts)
         : features.getTicket(id)
+      return position !== undefined ? features.placeTicket(id, position, actor) : changed
     },
     { behavior: 'immediate' },
   )
