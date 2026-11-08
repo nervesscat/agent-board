@@ -28,7 +28,7 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
 
   // The header: what is open now, the totals, the last heartbeat. A heartbeat just now: not stalled.
   await expect(card.getByTestId('now-line')).toContainText('Building · claude')
-  await expect(card.getByLabel('Totals')).toContainText('Waited 20 min')
+  await expect(card.getByLabel('Totals')).toContainText('Waiting 20m')
   await expect(card.getByTestId('stalled')).toHaveCount(0)
   await expect(card.getByTestId('last-heard')).toContainText('claude: running the tests')
 

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { ClaimedActor } from '#/components/Actor'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
+import { WorkTotals } from '#/components/WorkStatus'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import {
@@ -56,7 +57,7 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
             <LastHeard beat={heartbeats[0] ?? null} />
           </div>
           <WorkTimelineBar timeline={data.timeline} />
-          {hasWork(data.timeline) && <WorkSummary timeline={data.timeline} />}
+          {hasWork(data.timeline) && <WorkTotals totals={data.timeline.totals} />}
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer select-none">Key</summary>
             <div className="mt-2">
@@ -277,19 +278,6 @@ function LastHeard({ beat }: { beat: TicketEvent | null }) {
     <p data-testid="last-heard" className="text-muted-foreground">
       Last heard {clock(beat.at)} · {beat.agent}
       {beat.note ? `: ${beat.note}` : ''}
-    </p>
-  )
-}
-
-function WorkSummary({ timeline }: { timeline: WorkTimeline }) {
-  const t = timeline.totals
-  return (
-    <p aria-label="Totals" className="text-xs text-muted-foreground tabular-nums">
-      Worked <b className="font-medium text-foreground">{waitFor(t.workingMs)}</b> · Waited{' '}
-      <b className="font-medium text-foreground">{waitFor(t.waitingMs)}</b> · On you{' '}
-      <b className={`font-medium ${t.blockedOnHumanMs ? 'text-foreground' : ''}`}>
-        {waitFor(t.blockedOnHumanMs)}
-      </b>
     </p>
   )
 }
