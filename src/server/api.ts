@@ -73,6 +73,7 @@ import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
 import * as tokens from './tokens'
+import { changeUpdateSettings, checkForUpdates, installUpdate, updatesState } from './updates'
 import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
 import * as work from './workTimeline'
@@ -270,6 +271,32 @@ api.patch('/api/settings', async ({ request }) => {
     }),
   )
   return json(agents.updateSettings(body))
+})
+
+// --- the desktop app's updates (updates.ts): the human's alone, reading them included ---
+const updatesHumanOnly = (request: Request, what: string) => {
+  if (isAgent(request)) throw new HttpError(403, `only the human ${what}`)
+}
+api.get('/api/updates', async ({ request }) => {
+  updatesHumanOnly(request, "sees the app's updates")
+  return Response.json(await updatesState(), { headers: { 'cache-control': 'no-store' } })
+})
+api.post('/api/updates/check', async ({ request }) => {
+  updatesHumanOnly(request, 'checks for updates')
+  return json(await checkForUpdates())
+})
+// Download and install: the app downloads the offered release, checks its sha512 and installs it.
+api.post('/api/updates/install', async ({ request }) => {
+  updatesHumanOnly(request, 'installs updates')
+  return json(await installUpdate())
+})
+api.patch('/api/updates/settings', async ({ request }) => {
+  updatesHumanOnly(request, 'changes the update settings')
+  const body = await readJson(
+    request,
+    z.object({ autoCheck: z.boolean().optional(), prereleases: z.boolean().optional() }).strict(),
+  )
+  return json(await changeUpdateSettings(body))
 })
 
 // --- projects ---
