@@ -123,6 +123,16 @@ describe('totals', () => {
     expect(t).toEqual({ workingMs: (10 * 60 + 24) * 1000, waitingMs: 0, blockedOnHumanMs: 0 })
   })
 
+  it('counts a delegated wait with no span once, as working, never as waiting too', () => {
+    // The caller passes a delegated wait's interval among the working spans; it must not also count as waiting.
+    const t = totals(
+      [[ms('10:00'), ms('10:10')]],
+      [{ interval: [ms('10:00'), ms('10:10')], reason: 'builder' }],
+      [],
+    )
+    expect(t).toEqual({ workingMs: 10 * MIN, waitingMs: 0, blockedOnHumanMs: 0 })
+  })
+
   it('counts a wait as waiting only while no span is open', () => {
     expect(totals([], [{ interval: [ms('10:00'), ms('10:30')], reason: 'lock' }], [])).toEqual({
       workingMs: 0,
