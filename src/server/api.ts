@@ -552,7 +552,8 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 // unassigned), ?q= text found (any casing) in the ticket's #id, title, instructions or thread (its posts and the
 // replies under them): those found by name (#id, title) first, then the rest, each row with `match` (where) and
 // `snippet` (the words around a content hit). Archived tickets are left out; ?archived=include adds them,
-// ?archived=only lists just those.
+// ?archived=only lists just those. One column's rows (same stage, same parent) come in its order: placed first
+// (`rank`; null: not placed), then last updated first.
 api.get('/api/projects/:id/tickets', async ({ params, url }) => {
   const q = url.searchParams
   const parent = q.get('parent')
@@ -595,11 +596,18 @@ api.get('/api/tickets/:id', async ({ request, params, url }) =>
 )
 // An agent cannot reassign a ticket reserved for one of the project's agents; the human can. A move to a
 // done stage is a 409 (code: needs) while what it needs is not merged; force: true is the human's way past.
+// position (1-based) places it in its stage's column, the new stage's when status comes with it.
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
   json(
     await needs.changeTicket(
       id(params),
-      await readJson(request, TicketPatch.extend({ force: z.boolean().optional() })),
+      await readJson(
+        request,
+        TicketPatch.extend({
+          force: z.boolean().optional(),
+          position: z.number().int().positive().optional(),
+        }),
+      ),
       actor,
       { agent: isAgent(request) },
     ),

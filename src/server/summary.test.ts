@@ -336,6 +336,15 @@ describe('next', () => {
     expect(s.next.tickets.map((t) => t.title)).toEqual(['todo 6', 'todo 5', 'todo 4', 'todo 3', 'todo 2'])
     expect(s.next).toMatchObject({ total: 6, blocked: 1, backlog: 2 })
   })
+
+  it("follows the column's order: a ticket placed first heads it", () => {
+    const pid = project('next placed')
+    const ids = [1, 2, 3].map(
+      (i) => ticket(pid, `todo ${i}`, { status: 'todo', updatedAt: iso(at(1, 8 + i)) }).id,
+    )
+    features.placeTicket(ids[0]!, 1, HUMAN)
+    expect(take(pid).next.tickets.map((t) => t.title)).toEqual(['todo 1', 'todo 3', 'todo 2'])
+  })
 })
 
 describe('needs you', () => {
