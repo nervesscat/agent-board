@@ -385,10 +385,16 @@ describe('0029_ticket_pr_link', () => {
     expect(after.tickets.map((t) => t.id)).toEqual([feature, lane, daily])
     expect(after.tickets.map((t) => t.pr_id)).toEqual([null, null, null])
     // Every other column is what it was (toEqual leaves an undefined column out of the comparison).
-    // A later migration adds the Merged phase marker: the rest of each ticket is what it was.
-    expect(after.tickets.map((t) => ({ ...t, pr_id: undefined, merged_phase_checked: undefined }))).toEqual(
-      before.tickets,
-    )
+    // Later migrations add the Merged phase marker and the place in the column: the rest of each ticket
+    // is what it was.
+    expect(
+      after.tickets.map((t) => ({
+        ...t,
+        pr_id: undefined,
+        merged_phase_checked: undefined,
+        rank: undefined,
+      })),
+    ).toEqual(before.tickets)
     expect(after.tasks).toEqual(before.tasks)
     // Later migrations add the posts' tab, summary, archive request and repo request columns: the rest of
     // each post is what it was.
@@ -914,14 +920,16 @@ describe('0038_multi_repo_tickets_and_runs', () => {
         (table) => (sqlite.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n,
       )
     const before = counts()
-    const tickets = () => sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()
+    const tickets = () =>
+      sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[]
     const ticketsBefore = tickets()
 
     migrate(drizzle(sqlite), { migrationsFolder: folder })
 
     expect(counts()).toEqual(before)
-    // The tickets themselves are untouched, their repo, branch and PR included.
-    expect(tickets()).toEqual(ticketsBefore)
+    // The tickets themselves are untouched, their repo, branch and PR included (a later migration adds
+    // their place in the column).
+    expect(tickets().map(({ rank: _r, ...rest }) => rest)).toEqual(ticketsBefore)
     expect(
       sqlite
         .prepare(
@@ -1195,7 +1203,12 @@ describe('0042_summary_phase', () => {
     expect(after).toHaveLength(before.tasks.length + 5)
     for (const id of [hasSummary, done, shipped, cancelled, archived, prTicket, lane, plain])
       expect(after.filter((t) => t.ticket_id === id)).toEqual(before.tasks.filter((t) => t.ticket_id === id))
-    expect(sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()).toEqual(before.tickets)
+    // A later migration adds the tickets' place in the column: the rest of each is what it was.
+    expect(
+      (sqlite.prepare('SELECT * FROM tickets ORDER BY id').all() as Record<string, unknown>[]).map(
+        ({ rank: _r, ...rest }) => rest,
+      ),
+    ).toEqual(before.tickets)
 
     const list = (id: number) =>
       (
