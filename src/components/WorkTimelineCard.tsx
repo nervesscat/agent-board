@@ -66,14 +66,14 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
           </details>
           {events.length > 0 && (
             <>
-              <ol aria-label="Events" className="space-y-3 text-xs">
+              <ul aria-label="Timeline story" className="space-y-3 text-xs">
                 {groupRuns(shown).map((run) => (
                   <li key={run.rows[0]!.id}>
                     <div className="mb-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
                       {/* The name an event claims may be free text: who recorded it follows when that is someone else. */}
                       <ClaimedActor name={run.agent} by={run.by} className="min-w-0 flex-wrap break-all" />
                     </div>
-                    <ol className="space-y-1 border-l pl-3">
+                    <ul className="space-y-1 border-l pl-3">
                       {run.rows.map((r) => (
                         <li key={r.id} className="flex min-w-0 items-baseline gap-x-2">
                           <Tip content={stamp(r.at)}>
@@ -87,10 +87,10 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
                           <span className="min-w-0 break-words">{r.text}</span>
                         </li>
                       ))}
-                    </ol>
+                    </ul>
                   </li>
                 ))}
-              </ol>
+              </ul>
               {(rows.length > NEWEST_ROWS || heartbeats.length > 0) && (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   {rows.length > NEWEST_ROWS && (

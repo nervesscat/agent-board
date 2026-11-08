@@ -81,7 +81,7 @@ test("a worker's event under the name 'board' is a claim: no Board badge, and wh
   await card.getByRole('button', { name: 'Show heartbeats' }).click()
   // The story folds one actor's consecutive rows under one actor line: the claimed name and who
   // recorded it show once for the run, not on every row.
-  const list = card.getByRole('list', { name: 'Events' })
+  const list = card.getByRole('list', { name: 'Timeline story' })
   const run = list
     .locator(':scope > li')
     .filter({ hasText: /board\s*by\s*claude\s*Agent/ })

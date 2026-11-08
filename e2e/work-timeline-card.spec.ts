@@ -33,7 +33,7 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   await expect(card.getByTestId('last-heard')).toContainText('claude: running the tests')
 
   // The story: a sentence per row, the wait paired into one row with its duration.
-  const events = card.getByRole('list', { name: 'Events' })
+  const events = card.getByRole('list', { name: 'Timeline story' })
   await expect(events).toContainText('handed the work to builder-sub-1')
   await expect(events).toContainText('waited for the lock (test lock) · 20 min')
   await expect(events).toContainText('created in In progress')
@@ -75,7 +75,7 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   const empty = page.getByRole('region', { name: 'Timeline' })
   await expect(empty).toContainText('No work recorded yet.')
   // Its creation is an event: the list has that one line.
-  await expect(empty.getByRole('list', { name: 'Events' })).toContainText('created in To do')
+  await expect(empty.getByRole('list', { name: 'Timeline story' })).toContainText('created in To do')
   expect(errors).toEqual([])
 })
 
@@ -93,22 +93,22 @@ test('consecutive rows of one actor fold under one actor line; the heartbeats fo
   await record(agent, project, t.id, { kind: 'heartbeat', note: 'writing the importer' })
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
-  const events = page.getByRole('region', { name: 'Timeline' }).getByRole('list', { name: 'Events' })
+  const events = page.getByRole('region', { name: 'Timeline' }).getByRole('list', { name: 'Timeline story' })
   // Two runs: the agent's (five events, one actor line) and the board's creation.
   const runs = events.locator(':scope > li')
   await expect(runs).toHaveCount(2)
   const agentRun = runs.first()
   await expect(agentRun.locator(':scope > div')).toHaveCount(1)
   // Heartbeats stay out of the run until they are asked for; the rows keep their order.
-  await expect(agentRun.locator(':scope > ol > li')).toHaveCount(3)
-  await expect(agentRun.locator(':scope > ol > li').nth(0)).toContainText('started build')
-  await expect(agentRun.locator(':scope > ol > li').nth(1)).toContainText('ended spec: spec written')
-  await expect(agentRun.locator(':scope > ol > li').nth(2)).toContainText('started spec')
+  await expect(agentRun.locator(':scope > ul > li')).toHaveCount(3)
+  await expect(agentRun.locator(':scope > ul > li').nth(0)).toContainText('started build')
+  await expect(agentRun.locator(':scope > ul > li').nth(1)).toContainText('ended spec: spec written')
+  await expect(agentRun.locator(':scope > ul > li').nth(2)).toContainText('started spec')
   await page.getByRole('button', { name: 'Show heartbeats' }).click()
   await expect(runs).toHaveCount(2)
-  await expect(agentRun.locator(':scope > ol > li')).toHaveCount(5)
-  await expect(agentRun.locator(':scope > ol > li').nth(0)).toContainText('heartbeat: writing the importer')
-  await expect(agentRun.locator(':scope > ol > li').nth(3)).toContainText('heartbeat: drafting the spec')
+  await expect(agentRun.locator(':scope > ul > li')).toHaveCount(5)
+  await expect(agentRun.locator(':scope > ul > li').nth(0)).toContainText('heartbeat: writing the importer')
+  await expect(agentRun.locator(':scope > ul > li').nth(3)).toContainText('heartbeat: drafting the spec')
 })
 
 test('the story shows the newest 10 rows, then Show all', async ({ page, project, human, agent }) => {
@@ -117,7 +117,7 @@ test('the story shows the newest 10 rows, then Show all', async ({ page, project
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const card = page.getByRole('region', { name: 'Timeline' })
-  const rows = card.getByRole('list', { name: 'Events' }).locator(':scope > li > ol > li')
+  const rows = card.getByRole('list', { name: 'Timeline story' }).locator(':scope > li > ul > li')
   // Thirteen rows (twelve hand-offs and the creation): the newest ten, then the button for all of them.
   await expect(rows).toHaveCount(10)
   await expect(rows.first()).toContainText('handed the work to step-12')
@@ -162,7 +162,7 @@ test('a stalled build says why, and a wait pairs into one row with its duration'
   await expect(card.getByTestId('now-line')).toContainText('Nothing open')
   await expect(card.getByTestId('stalled')).toContainText(/Stalled (39|40) min/)
   await expect(card.getByTestId('stalled')).toContainText('nothing open since the build ended at')
-  const events = card.getByRole('list', { name: 'Events' })
+  const events = card.getByRole('list', { name: 'Timeline story' })
   await expect(events).toContainText('waited for spec · 1 min 25 s')
   await expect(events).not.toContainText('waiting for spec')
   await expect(events).toContainText('ended build: run returned before the builder reported')
@@ -191,14 +191,16 @@ test.describe('on a phone', () => {
       })
 
       await page.goto(`/projects/${project.id}/features/${t.id}`)
-      const events = page.getByRole('region', { name: 'Timeline' }).getByRole('list', { name: 'Events' })
+      const events = page
+        .getByRole('region', { name: 'Timeline' })
+        .getByRole('list', { name: 'Timeline story' })
       const run = events.locator(':scope > li').filter({ hasText: 'started verification' })
       await expect(run.getByTestId('event-by')).toContainText(sub)
       await expect(run.getByTestId('claimed-name')).toHaveText(`${orchName}/verifier-for-the-importer-lane`)
       expect(await scrollsSideways(page)).toBe(false)
 
       // The actor line sits above its run; the time and the sentence share one line.
-      const row = run.locator(':scope > ol > li').first()
+      const row = run.locator(':scope > ul > li').first()
       const time = row.locator('time')
       const sentence = row.getByText(/^started verification/)
       const actor = run.getByTestId('claimed-name')
