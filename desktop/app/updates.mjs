@@ -475,27 +475,39 @@ export function createUpdates({
         throw new Error(failed)
       }
     }
+    /**
+     * electron-updater's log for the install. After the first failure what it says is about the
+     * commands it goes on with, refused unrun ("attempting to update package database and retry",
+     * "Retry after pacman -Sy failed"): kept for the record, as info and marked so, not as what happened.
+     * @type {Logger}
+     */
+    const runnerLog = {
+      info: (m) => log.info(m),
+      warn: (m) => (failed ? log.info(`updates: electron-updater, after the failure: ${m}`) : log.warn(m)),
+      error: (m) => (failed ? log.info(`updates: electron-updater, after the failure: ${m}`) : log.error(m)),
+    }
     try {
       const { DebUpdater, RpmUpdater, PacmanUpdater } = electronUpdater
-      if (type === 'pacman') PacmanUpdater.installWithCommandRunner(file, run, log)
+      if (type === 'pacman') PacmanUpdater.installWithCommandRunner(file, run, runnerLog)
       else if (type === 'deb')
         DebUpdater.installWithCommandRunner(
           /** @type {'dpkg' | 'apt'} */ (packageManager(type, hasCommand)),
           file,
           run,
-          log,
+          runnerLog,
         )
       else
         RpmUpdater.installWithCommandRunner(
           /** @type {'zypper' | 'dnf' | 'yum' | 'rpm'} */ (packageManager(type, hasCommand)),
           file,
           run,
-          log,
+          runnerLog,
         )
       return { ok: true }
     } catch (err) {
       const error = failed ?? `The package manager failed: ${updateError(err)}`
-      log.warn(`updates: ${error}`)
+      // At error, the level the app keeps in its log file: the cause, for whoever reads it later.
+      log.error(`updates: the install failed: ${error}`)
       return { ok: false, error }
     }
   }

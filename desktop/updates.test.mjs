@@ -163,12 +163,26 @@ function realUpdater(kind, version = '0.2.0') {
 
 const quiet = { info: () => {}, warn: () => {}, error: () => {} }
 
+/** A log that keeps its lines by level: the app's log file keeps the error ones (main.mjs). */
+function recordingLog() {
+  const lines = /** @type {Record<'info' | 'warn' | 'error', string[]>} */ ({ info: [], warn: [], error: [] })
+  return {
+    lines,
+    log: {
+      info: (/** @type {unknown} */ m) => void lines.info.push(String(m)),
+      warn: (/** @type {unknown} */ m) => void lines.warn.push(String(m)),
+      error: (/** @type {unknown} */ m) => void lines.error.push(String(m)),
+    },
+  }
+}
+
 /**
  * The updates over `updater` with the app's edges as spies: `commands` are the ones on PATH (name to
  * path), `pkexec` answers each run of pkexec.
  * @param {{ updater: any, type: import('./app/updates.mjs').PackageType | null, installed?: string,
  *   settings?: import('./app/updates.mjs').UpdateSettings, commands?: Record<string, string>,
- *   pkexec?: (args: string[]) => { status: number | null, error?: Error, stderr?: string } }} o
+ *   pkexec?: (args: string[]) => { status: number | null, error?: Error, stderr?: string },
+ *   log?: import('./app/updates.mjs').Logger }} o
  */
 function setup({
   updater,
@@ -177,6 +191,7 @@ function setup({
   settings = DEFAULT_UPDATE_SETTINGS,
   commands = {},
   pkexec,
+  log = quiet,
 }) {
   const order = /** @type {string[]} */ ([])
   const edges = {
@@ -201,7 +216,7 @@ function setup({
     settings,
     has: (cmd) => commands[cmd] ?? null,
     timers,
-    log: quiet,
+    log,
     ...edges,
   })
   return { updates, edges, timers, order }
@@ -697,10 +712,12 @@ describe('Download and install', () => {
   it('pacman: a package manager that fails keeps the board and gives the command', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
     const { updater, dir } = realUpdater('PacmanUpdater')
+    const { lines, log } = recordingLog()
     const { updates, edges } = await offered(updater, {
       type: 'pacman',
       commands: { pkexec: '/usr/bin/pkexec', pacman: '/usr/bin/pacman' },
       pkexec: () => ({ status: 1, stderr: 'error: failed to commit transaction' }),
+      log,
     })
     await updates.install()
     const file = pending(dir, 'agent-board-0.3.0.pacman')
@@ -720,6 +737,13 @@ describe('Download and install', () => {
       '--noconfirm',
       file,
     ])
+    // The log file names the cause, not electron-updater's retry, which never ran.
+    expect(lines.error).toEqual([
+      expect.stringMatching(
+        /^updates: the install failed: The package manager failed: pacman -U --noconfirm .* exited with 1: error: failed to commit transaction$/,
+      ),
+    ])
+    expect([...lines.warn, ...lines.error].join('\n')).not.toMatch(/retry|-Sy/i)
     expect(edges.stopServer).not.toHaveBeenCalled()
     // Pressed again, it asks once more.
     await updates.install()
@@ -729,10 +753,12 @@ describe('Download and install', () => {
   it('deb: a dpkg that fails keeps the board and gives the command, without apt-get install -f', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
     const { updater, dir } = realUpdater('DebUpdater')
+    const { lines, log } = recordingLog()
     const { updates, edges } = await offered(updater, {
       type: 'deb',
       commands: { pkexec: '/usr/bin/pkexec', dpkg: '/usr/bin/dpkg', 'apt-get': '/usr/bin/apt-get' },
       pkexec: () => ({ status: 1, stderr: 'dpkg: dependency problems prevent configuration' }),
+      log,
     })
     await updates.install()
     const file = pending(dir, 'agent-board_0.3.0_amd64.deb')
@@ -750,6 +776,12 @@ describe('Download and install', () => {
       '-i',
       file,
     ])
+    expect(lines.error).toEqual([
+      expect.stringMatching(
+        /^updates: the install failed: The package manager failed: dpkg -i .* exited with 1: dpkg: dependency problems/,
+      ),
+    ])
+    expect([...lines.warn, ...lines.error].join('\n')).not.toMatch(/apt-get/)
     expect(edges.stopServer).not.toHaveBeenCalled()
   })
 
