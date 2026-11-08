@@ -9,11 +9,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   ASSETS,
   BUILD_OUTPUTS,
+  METADATA,
   REPO,
   ghCommands,
+  metadataProblems,
   parseArgs,
+  parseMetadata,
   releaseFiles,
   remoteTagProblem,
+  sha512File,
   treeChanges,
 } from './release.mjs'
 
@@ -97,6 +101,103 @@ describe('releaseFiles', () => {
       expect(workflow).toContain(a.stable)
       expect(docs).toContain(`https://github.com/${REPO}/releases/latest/download/${a.stable}`)
     }
+  })
+})
+
+// latest-linux.yml as electron-builder 26 writes it for the four Linux packages (desktop/package.mjs),
+// with made-up hashes and sizes.
+const linuxMetadata = (/** @type {Record<string, string>} */ sha, version = '0.2.0') =>
+  [
+    `version: ${version}`,
+    'files:',
+    ...[
+      `agent-board-${version}-x86_64.AppImage`,
+      `agent-board_${version}_amd64.deb`,
+      `agent-board-${version}.x86_64.rpm`,
+      `agent-board-${version}.pacman`,
+    ].flatMap((url) => [`  - url: ${url}`, `    sha512: ${sha[url] ?? 'none'}`, '    size: 123']),
+    `path: agent-board-${version}-x86_64.AppImage`,
+    `sha512: ${sha[`agent-board-${version}-x86_64.AppImage`] ?? 'none'}`,
+    "releaseDate: '2026-11-08T10:00:00.000Z'",
+    '',
+  ].join('\n')
+
+describe('the update metadata', () => {
+  const sha = (/** @type {string} */ f) => `sha-of-${f}==`
+  const good = linuxMetadata(
+    Object.fromEntries(releaseFiles('linux', '0.2.0', all).files.map((f) => [f.versioned, sha(f.versioned)])),
+  )
+
+  it('is latest.yml on Windows and latest-linux.yml on Linux', () => {
+    expect(METADATA).toEqual({ win32: 'latest.yml', linux: 'latest-linux.yml' })
+  })
+
+  it('reads the version and each file with its sha512', () => {
+    expect(parseMetadata(good)).toEqual({
+      version: '0.2.0',
+      files: [
+        { url: 'agent-board-0.2.0-x86_64.AppImage', sha512: 'sha-of-agent-board-0.2.0-x86_64.AppImage==' },
+        { url: 'agent-board_0.2.0_amd64.deb', sha512: 'sha-of-agent-board_0.2.0_amd64.deb==' },
+        { url: 'agent-board-0.2.0.x86_64.rpm', sha512: 'sha-of-agent-board-0.2.0.x86_64.rpm==' },
+        { url: 'agent-board-0.2.0.pacman', sha512: 'sha-of-agent-board-0.2.0.pacman==' },
+      ],
+    })
+    expect(
+      parseMetadata("version: '1.0.0'\r\nfiles:\r\n  - url: 'a b.exe'\r\n    sha512: \"x\"\r\n"),
+    ).toEqual({
+      version: '1.0.0',
+      files: [{ url: 'a b.exe', sha512: 'x' }],
+    })
+  })
+
+  it('accepts metadata listing every package with its own sha512, so each package type finds its file', () => {
+    expect(metadataProblems(good, { platform: 'linux', version: '0.2.0', sha512Of: sha })).toEqual([])
+    const win = 'version: 0.2.0\nfiles:\n  - url: agent-board-setup-0.2.0.exe\n    sha512: s==\n    size: 1\n'
+    expect(metadataProblems(win, { platform: 'win32', version: '0.2.0', sha512Of: () => 's==' })).toEqual([])
+  })
+
+  it('refuses a hash that is not the file’s, a package left out, another file or another version', () => {
+    expect(
+      metadataProblems(good, {
+        platform: 'linux',
+        version: '0.2.0',
+        sha512Of: (f) => (f.endsWith('.deb') ? 'rebuilt==' : sha(f)),
+      }),
+    ).toEqual(['latest-linux.yml has another sha512 for agent-board_0.2.0_amd64.deb than the file has'])
+    const noPacman = good.replace(/ {2}- url: agent-board-0\.2\.0\.pacman\n.*\n.*\n/, '')
+    expect(metadataProblems(noPacman, { platform: 'linux', version: '0.2.0', sha512Of: sha })).toEqual([
+      'latest-linux.yml does not list agent-board-0.2.0.pacman',
+    ])
+    const extra = good.replace('files:\n', 'files:\n  - url: agent-board-0.2.0.snap\n    sha512: x\n')
+    expect(metadataProblems(extra, { platform: 'linux', version: '0.2.0', sha512Of: sha })).toEqual([
+      'latest-linux.yml lists agent-board-0.2.0.snap, which is not published',
+    ])
+    expect(metadataProblems(good, { platform: 'linux', version: '0.3.0', sha512Of: sha })[0]).toBe(
+      'latest-linux.yml is for version 0.2.0, not 0.3.0',
+    )
+  })
+
+  it('hashes a file as electron-updater checks it: sha512, base64', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'release-sha-'))
+    try {
+      fs.writeFileSync(path.join(dir, 'f'), 'abc')
+      expect(sha512File(path.join(dir, 'f'))).toBe(
+        '3a81oZNherrMQXNJriBBMRLm+k6JqX6iCp7u5ktV05ohkpkqJ0/BqDa6PCOj/uu9RU1EI2Q86A4qmslPpUyknw==',
+      )
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('is uploaded by the release workflow with the packages, which it publishes on a v* tag or by hand only', () => {
+    const workflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'release.yml'), 'utf8')
+    // Each build job stages desktop/dist/release (scripts/release.mjs --stage-only) and uploads all of it.
+    for (const name of Object.values(METADATA))
+      expect(workflow).toContain(`test -f desktop/dist/release/${name}`)
+    expect(workflow).toContain('gh release create "$TAG" release/*')
+    expect(workflow).toContain('gh release upload "$TAG" release/* --clobber')
+    const on = /^on:\n((?: {2}.*\n)+)/m.exec(workflow)?.[1]
+    expect(on).toBe("  push:\n    tags: ['v*']\n  workflow_dispatch:\n")
   })
 })
 
