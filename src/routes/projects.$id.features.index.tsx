@@ -187,9 +187,8 @@ function Features() {
           <p className="text-sm text-muted-foreground">
             Tickets agents pick up. Each one carries its todo list, branch, workspaces, updates, a thread, and
             lanes for work running in parallel. On the board, drag a card to another column to change its
-            stage, or up and down its column (or Move up / Move down on the card) to set its place there: in
-            review, top merges first. The stages themselves are set in Settings. A done or cancelled column
-            can archive its tickets, which then wait under Archived.
+            stage, or up and down to reorder it (in review, top merges first). Stages are set in Settings. A
+            done or cancelled column can archive its tickets, which then wait under Archived.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
