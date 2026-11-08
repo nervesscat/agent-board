@@ -116,7 +116,7 @@ function Features() {
       qc.invalidateQueries({ queryKey: ['ticket', String(v.ticketId)] })
     },
   })
-  // A card's place in its column (drag within it, Move up / Move down): shown at once, then the list
+  // A card's place in its column (dragged within it): shown at once, then the list
   // is read again once the last placement in a row is saved; a failed one puts the order back. A
   // placement ranks every ticket above the moved one too, so their cached pages are read again then.
   const placing = ['place', id]

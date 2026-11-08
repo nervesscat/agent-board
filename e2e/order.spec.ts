@@ -28,6 +28,19 @@ async function column(api: Api, status: string, titles: string[], tags: string[]
 
 const card = (page: Page, id: number) => page.locator(`[data-card="${id}"]`)
 
+/**
+ * Drags card `id` within its column over the top (`above`) or bottom (`below`) edge of card `target`,
+ * waits for the drop line, and drops it there.
+ */
+async function drag(page: Page, id: number, side: 'above' | 'below', target: number) {
+  await card(page, id).getByRole('link').hover()
+  const to = (await card(page, target).boundingBox())!
+  await page.mouse.down()
+  await page.mouse.move(to.x + to.width / 2, side === 'above' ? to.y + 8 : to.y + to.height - 8, { steps: 8 })
+  await expect(page.locator('[data-drop-indicator]')).toBeVisible()
+  await page.mouse.up()
+}
+
 /** The href of a link to that ticket's page. */
 const pageOf = (id: number) => new RegExp(`/features/${id}$`)
 
@@ -107,40 +120,7 @@ test('a card dragged to another column changes stage and arrives there unplaced,
   await expect.poll(() => shown(page, 'in_progress')).toEqual([x, y, t])
 })
 
-test('Move up and Move down work from the keyboard, and keep the focus on the moved card', async ({
-  page,
-  api,
-  human,
-  project,
-}) => {
-  const [a, b, c] = await column(api, 'todo', ['Oldest', 'Middle', 'Newest'])
-  await page.goto(`/projects/${project.id}/features?view=board`)
-  await expect.poll(() => shown(page, 'todo')).toEqual([c, b, a])
-
-  // From the second card's link, Tab reaches its Move up.
-  await card(page, b!).getByRole('link').focus()
-  await page.keyboard.press('Tab')
-  const up = card(page, b!).getByRole('button', { name: 'Move up' })
-  await expect(up).toBeFocused()
-  await page.keyboard.press('Enter')
-  await expect.poll(() => shown(page, 'todo')).toEqual([b, c, a])
-  // At the top Move up is off; the focus stays with the card, on Move down.
-  await expect(up).toBeDisabled()
-  const down = card(page, b!).getByRole('button', { name: 'Move down' })
-  await expect(down).toBeFocused()
-  await page.keyboard.press('Space')
-  await expect.poll(() => shown(page, 'todo')).toEqual([c, b, a])
-  await page.keyboard.press('Enter')
-  await expect.poll(() => shown(page, 'todo')).toEqual([c, a, b])
-  await expect(down).toBeDisabled()
-  // Nothing opened the ticket on the way.
-  await expect(page).toHaveURL(/\/features\?view=board$/)
-  await expect.poll(() => listed(human, project.id, 'todo')).toEqual([c, a, b])
-  await page.reload()
-  await expect.poll(() => shown(page, 'todo')).toEqual([c, a, b])
-})
-
-test('on a filtered board, Move places the card next to the one shown, counted in the whole column', async ({
+test('on a filtered board, a drag places the card next to the one shown, counted in the whole column', async ({
   page,
   api,
   human,
@@ -151,7 +131,7 @@ test('on a filtered board, Move places the card next to the one shown, counted i
   await expect.poll(() => shown(page, 'todo')).toEqual([c, a])
 
   // Right below the one shown under it; the hidden card keeps its place above that one.
-  await card(page, c!).getByRole('button', { name: 'Move down' }).click()
+  await drag(page, c!, 'below', a!)
   await expect.poll(() => shown(page, 'todo')).toEqual([a, c])
   await expect.poll(() => listed(human, project.id, 'todo')).toEqual([b, a, c])
 })
@@ -171,7 +151,7 @@ test('a placement that fails to save puts the column back as it was', async ({
       ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"no luck"}' })
       : route.fallback(),
   )
-  await card(page, a!).getByRole('button', { name: 'Move up' }).click()
+  await drag(page, a!, 'above', b!)
   await expect(page.getByText('no luck')).toBeVisible()
   await expect.poll(() => shown(page, 'todo')).toEqual([b, a])
   expect(await listed(human, project.id, 'todo')).toEqual([b, a])
@@ -194,7 +174,7 @@ test('a review card placed above a ticket it needs says to merge it after that o
   await expect(card(page, base.id).getByText(/merge after/)).toHaveCount(0)
 
   // Placed below it, the hint goes; the need itself still shows.
-  await card(page, top.id).getByRole('button', { name: 'Move down' }).click()
+  await drag(page, top.id, 'below', base.id)
   await expect.poll(() => shown(page, 'review')).toEqual([base.id, top.id])
   await expect(hint).toHaveCount(0)
   await expect(card(page, top.id)).toContainText(`needs #${base.id}`)
@@ -224,7 +204,7 @@ test("a ticket's page agrees at once with a placement made on the board above it
   // To the board by the page's own link, so the ticket's page stays cached as it was read.
   await page.getByRole('link', { name: 'Ongoing features' }).first().click()
   await expect.poll(() => shown(page, 'blocked')).toEqual([a, b, c, d])
-  await card(page, d!).getByRole('button', { name: 'Move up' }).click()
+  await drag(page, d!, 'above', c!)
   await expect.poll(() => shown(page, 'blocked')).toEqual([a, b, d, c])
   await expect.poll(() => listed(human, project.id, 'blocked')).toEqual([a, b, d, c])
 
@@ -257,26 +237,31 @@ test("a ticket's page agrees at once with a placement made on the board above it
   await expect(page.getByRole('link', { name: 'Next ticket in Blocked' })).toHaveAttribute('href', pageOf(c!))
 })
 
+test('cards have no Move buttons: the agents set the order, the board only shows it', async ({
+  page,
+  api,
+  project,
+}) => {
+  const [a, b] = await column(api, 'review', ['Older', 'Newer'])
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await expect.poll(() => shown(page, 'review')).toEqual([b, a])
+  await card(page, a!).getByRole('link').hover()
+  await expect(page.locator('[data-column] [data-card]').getByRole('button', { name: /move/i })).toHaveCount(
+    0,
+  )
+  await expect(page.locator('[data-move], [data-move-buttons]')).toHaveCount(0)
+})
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  test('tapping Move up puts the card above the one before it, and it stays there', async ({
-    page,
-    api,
-    human,
-    project,
-  }) => {
+  test('cards show no Move buttons on a touch screen either', async ({ page, api, project }) => {
     const [a, b] = await column(api, 'in_progress', ['Older', 'Newer'])
     await page.goto(`/projects/${project.id}/features?view=board`)
     await expect.poll(() => shown(page, 'in_progress')).toEqual([b, a])
-    const up = card(page, a!).getByRole('button', { name: 'Move up' })
-    // Shown without a hover: a touch screen has none.
-    await expect(card(page, a!).locator('[data-move-buttons]')).toHaveCSS('opacity', '1')
-    await expect(up).toBeVisible()
-    await up.tap()
-    await expect.poll(() => shown(page, 'in_progress')).toEqual([a, b])
-    await expect.poll(() => listed(human, project.id, 'in_progress')).toEqual([a, b])
-    await page.reload()
-    await expect.poll(() => shown(page, 'in_progress')).toEqual([a, b])
+    await expect(
+      page.locator('[data-column] [data-card]').getByRole('button', { name: /move/i }),
+    ).toHaveCount(0)
+    await expect(page.locator('[data-move], [data-move-buttons]')).toHaveCount(0)
   })
 })

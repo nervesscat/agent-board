@@ -155,7 +155,7 @@ export function withPlacement<T extends Card>(items: T[], id: number, position: 
 
 /**
  * The 1-based position in `column` (one stage's column in order, `id` in it) that puts `id` right above
- * or below the ticket `anchor`, counted without `id` itself: what a drop or a Move up/down asks for when
+ * or below the ticket `anchor`, counted without `id` itself: what a drop asks for when
  * some of the column is hidden by a filter. Null when `anchor` is not in the column.
  */
 export function positionBy(column: Card[], id: number, anchor: number, side: 'above' | 'below') {

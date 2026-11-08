@@ -4,10 +4,8 @@ import {
   ArchiveRestore,
   ArrowDownUp,
   BookmarkX,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   GitBranch,
   Hand,
   Layers,
@@ -53,9 +51,9 @@ export type Placement = { anchor: number; side: 'above' | 'below' }
 
 /**
  * Tickets in the project's stage columns. Drag a card onto another column to change its stage, or up
- * and down its own column to change its place there (a line shows where it lands); Move up / Move down
- * on each card do the same without dragging (touch, keyboard). In a review column the order is the
- * merge order, and a card placed above a ticket it needs says "merge after" it. Clicking a card opens
+ * and down its own column to change its place there (a line shows where it lands). In a review column
+ * the order is the merge order, read top to bottom, and a card placed above a ticket it needs says
+ * "merge after" it. Clicking a card opens
  * the ticket. A done or cancelled column can archive all its tickets at once. `push` colours each
  * branch by whether it is on origin.
  */
@@ -98,18 +96,6 @@ export function TicketBoard({
   }
   const frame = useRef<HTMLDivElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
-  // After Move up / Move down the card's control keeps the focus, wherever the card went.
-  const refocus = useRef<{ id: number; dir: 'up' | 'down' } | null>(null)
-  useEffect(() => {
-    const want = refocus.current
-    if (!want) return
-    const card = scroller.current?.querySelector(`[data-card="${want.id}"]`)
-    const button =
-      card?.querySelector<HTMLButtonElement>(`[data-move="${want.dir}"]:not(:disabled)`) ??
-      card?.querySelector<HTMLButtonElement>('[data-move]:not(:disabled)')
-    if (button && document.activeElement !== button) button.focus()
-    refocus.current = null
-  }, [items])
   const edges = useScrollEdges(scroller)
   useFillHeight(frame)
   useRememberedScroll(`features.board.${projectId}`, scroller, stages.length > 0)
@@ -152,13 +138,6 @@ export function TicketBoard({
           // The line where a card dragged in its own column would land; none where it would not move.
           const line = own && slot !== null && slotPlacement(column, dragging, slot) ? slot : null
           const after = kind === 'review' ? mergeAfter(column) : null
-          const move = (t: TicketRow, dir: 'up' | 'down') => {
-            const i = column.indexOf(t)
-            const other = column[dir === 'up' ? i - 1 : i + 1]
-            if (!other) return
-            refocus.current = { id: t.id, dir }
-            onPlace(t.id, { anchor: other.id, side: dir === 'up' ? 'above' : 'below' })
-          }
           // Taking both dragenter and dragover is what marks the column as a place to drop.
           const dragOver = (e: DragEvent<HTMLDivElement>) => {
             if (dragging === null) return
@@ -200,7 +179,7 @@ export function TicketBoard({
               </div>
               <div data-column={status} className="min-h-12 flex-1 space-y-2 overflow-y-auto">
                 {column.map((t, i) => (
-                  <div key={t.id} data-card={t.id} className="group/card relative">
+                  <div key={t.id} data-card={t.id} className="relative">
                     {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
                     <Tip content={t.title}>
                       <Link
@@ -220,8 +199,7 @@ export function TicketBoard({
                       >
                         <div className="flex items-start gap-1.5">
                           <ComplexityChip level={t.complexity} className="mt-0.5" />
-                          {/* Room for Move up / Move down where they always show (touch). */}
-                          <div className="line-clamp-2 min-w-0 font-medium leading-snug pointer-coarse:pr-14">
+                          <div className="line-clamp-2 min-w-0 font-medium leading-snug">
                             <span className="text-muted-foreground">#{t.id}</span> {t.title}
                           </div>
                         </div>
@@ -280,15 +258,6 @@ export function TicketBoard({
                         {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
                       </Link>
                     </Tip>
-                    {column.length > 1 && (
-                      <MoveButtons
-                        id={t.id}
-                        stage={name}
-                        first={i === 0}
-                        last={i === column.length - 1}
-                        onMove={(dir) => move(t, dir)}
-                      />
-                    )}
                     {line === column.length && i === column.length - 1 && <DropLine at="bottom-0" />}
                   </div>
                 ))}
@@ -332,50 +301,6 @@ function DropLine({ at }: { at: string }) {
       aria-hidden
       className={`pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-primary ${at}`}
     />
-  )
-}
-
-/**
- * Move up / Move down, over the card's top right corner: shown while the card is hovered or one of
- * them has the keyboard's focus, always on a touch screen. Disabled at the ends of the column.
- */
-function MoveButtons({
-  id,
-  stage,
-  first,
-  last,
-  onMove,
-}: {
-  id: number
-  stage: string
-  first: boolean
-  last: boolean
-  onMove: (dir: 'up' | 'down') => void
-}) {
-  const button = (dir: 'up' | 'down', disabled: boolean) => (
-    <Tip content={`Move #${id} ${dir} in ${stage}`}>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon-xs"
-        data-move={dir}
-        disabled={disabled}
-        onClick={() => onMove(dir)}
-        aria-label={dir === 'up' ? 'Move up' : 'Move down'}
-        className="bg-card"
-      >
-        {dir === 'up' ? <ChevronUp /> : <ChevronDown />}
-      </Button>
-    </Tip>
-  )
-  return (
-    <div
-      data-move-buttons
-      className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover/card:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100"
-    >
-      {button('up', first)}
-      {button('down', last)}
-    </div>
   )
 }
 
