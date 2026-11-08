@@ -52,7 +52,7 @@ test('a delegated build: the builder on its own row, the orchestrator’s wait d
   const t = await create(human, project, { title: 'Delegated build', status: 'in_progress' })
   await record(agent, project, t.id, { kind: 'handoff', from: 'orchestrator', to: 'builder-sub-1' })
   await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'builder-sub-1' })
-  // The delegation needs the server to keep a wait's `on` (lane #768). Until it does, this test skips.
+  // The delegation needs the server to keep a wait's `on`. Until it does, this test skips.
   const waited = await agent.post(`/api/projects/${project.id}/tickets/${t.id}/events`, {
     data: { kind: 'wait_start', reason: 'builder', agent: 'orchestrator', on: 'builder-sub-1' },
   })
@@ -61,7 +61,7 @@ test('a delegated build: the builder on its own row, the orchestrator’s wait d
   }
   test.skip(
     !waited.ok() || read.timeline.waits[0]?.on !== 'builder-sub-1',
-    'needs the server to keep a wait’s `on` (#768)',
+    'needs the server to keep a wait’s `on`',
   )
   age(t.id, 30)
   await record(agent, project, t.id, { kind: 'heartbeat', agent: 'builder-sub-1' })
@@ -190,26 +190,33 @@ test.describe('on a phone', () => {
 
     await page.goto(`/projects/${project.id}/features/${t.id}`)
     const bar = page.getByRole('region', { name: 'Timeline' }).getByTestId('work-timeline')
-    const scroller = bar.getByTestId('work-timeline-scroll')
     await expect(bar.locator('[data-kind="span"]')).toBeVisible()
     expect(await scrollsSideways(page)).toBe(false)
+    // All the geometry is read in one go, so the page cannot scroll between the boxes.
+    const geometry = await bar.evaluate((root) => {
+      const box = (el: Element | null) => {
+        const r = el!.getBoundingClientRect()
+        return { x: r.x, y: r.y, width: r.width, height: r.height, right: r.right, bottom: r.bottom }
+      }
+      const scroller = root.querySelector('[data-testid="work-timeline-scroll"]')!
+      const label = [...root.querySelectorAll('span.truncate')].find(
+        (el) => el.textContent === 'builder-sub-1',
+      )
+      return {
+        scroller: { ...box(scroller), scrollable: scroller.scrollWidth > scroller.clientWidth },
+        now: box(root.querySelector('[data-kind="now"]')),
+        label: box(label ?? null),
+        span: box(root.querySelector('[data-kind="span"]')),
+      }
+    })
     // The track is wider than the phone, so it scrolls, and it opened on now at its right end.
-    expect(await scroller.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
-    const now = bar.locator('[data-kind="now"]').first()
-    const view = (await scroller.boundingBox())!
-    const nowBox = (await now.boundingBox())!
-    expect(nowBox.x).toBeGreaterThanOrEqual(view.x - 1)
-    expect(nowBox.x + nowBox.width).toBeLessThanOrEqual(view.x + view.width + 1)
-    // The segments are inside the scroller’s box, so the track has its height on a phone.
-    const spanBox = (await span.boundingBox())!
-    expect(spanBox.y).toBeGreaterThanOrEqual(view.y)
-    expect(spanBox.y + spanBox.height).toBeLessThanOrEqual(view.y + view.height + 1)
+    expect(geometry.scroller.scrollable).toBe(true)
+    expect(geometry.now.x).toBeGreaterThanOrEqual(geometry.scroller.x - 1)
+    expect(geometry.now.right).toBeLessThanOrEqual(geometry.scroller.right + 1)
+    // The row's label sits above its track, and the segment is inside the scroller, with height.
+    expect(geometry.label.bottom).toBeLessThanOrEqual(geometry.span.y + 1)
+    expect(geometry.span.y).toBeGreaterThanOrEqual(geometry.scroller.y)
+    expect(geometry.span.bottom).toBeLessThanOrEqual(geometry.scroller.bottom + 1)
     await bar.screenshot({ path: test.info().outputPath('work-timeline-390.png') })
-    // The row’s label is above its track, not beside it.
-    const label = bar.getByText('builder-sub-1', { exact: true })
-    const span = bar.locator('[data-kind="span"]')
-    expect((await label.boundingBox())!.y + (await label.boundingBox())!.height).toBeLessThanOrEqual(
-      (await span.boundingBox())!.y + 1,
-    )
   })
 })

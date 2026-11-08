@@ -154,7 +154,7 @@ function Row({
 }) {
   return (
     <div className="flex flex-col sm:flex-row">
-      <div className="shrink-0 pb-0.5 text-[11px] sm:sticky sm:left-0 sm:z-10 sm:w-28 sm:bg-card sm:pr-2 sm:pb-0">
+      <div className="sticky left-0 z-10 w-max max-w-full shrink-0 bg-card pb-0.5 pr-2 text-[11px] sm:w-28 sm:pb-0">
         {label}
       </div>
       <div className="relative min-w-0 sm:flex-1" style={{ height, minWidth }}>
