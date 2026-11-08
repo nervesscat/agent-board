@@ -2,7 +2,9 @@
 # Run by install-test.sh as its test user, under Xvfb, with the bare environment of a launch from the
 # desktop: starts the installed app with no AGENT_BOARD_HOME (PORT only, to stay off 47100) and checks
 # where it keeps its files, the PATH its server got from the login shell, the window's WM_CLASS against
-# the desktop entry, and that SIGTERM, as a logout sends, stops the app and its server.
+# the desktop entry, and that SIGTERM, as a logout sends, stops the app and its server. The app's update
+# check asks a feed served here on 127.0.0.1 (AGENT_BOARD_UPDATE_FEED, as desktop/smoke.mjs does), never
+# GitHub's releases: its only release is 0.0.0, older than any build, so it offers nothing.
 #
 #   installed-run.sh [--health-only] <launcher> <port> <node>
 set -uo pipefail
@@ -42,9 +44,39 @@ answers() {
 }
 mine() { pgrep -u "$(id -u)" "$@"; }
 
-PORT=$port "$launcher" >"$HOME/app-$port.log" 2>&1 &
+# The feed: latest.yml and latest-linux.yml (electron-updater adds ?noCache=…), each request a line in
+# $asked; it writes its port to $feed_port once it listens.
+feed_port=$HOME/feed-$port.port asked=$HOME/feed-$port.asked
+rm -f "$feed_port" "$asked"
+# shellcheck disable=SC2016 # JavaScript, not shell
+"$node" -e '
+  const fs = require("node:fs")
+  const [portFile, asked] = process.argv.slice(1)
+  const yml = "version: 0.0.0\nfiles:\n  - url: agent-board-0.0.0.none\n    sha512: none\n    size: 0\n" +
+    "path: agent-board-0.0.0.none\nsha512: none\nreleaseDate: \"2026-01-01T00:00:00.000Z\"\n"
+  const server = require("node:http").createServer((req, res) => {
+    fs.appendFileSync(asked, `${req.url}\n`)
+    if (/^\/latest(-linux)?\.yml(\?|$)/.test(req.url)) res.writeHead(200).end(yml)
+    else res.writeHead(404).end()
+  })
+  server.listen(0, "127.0.0.1", () => fs.writeFileSync(portFile, String(server.address().port)))
+' "$feed_port" "$asked" &
+feed=$!
+trap 'kill "$feed" 2>/dev/null' EXIT
+for _ in $(seq 1 50); do [ -s "$feed_port" ] && break; sleep 0.1; done
+check "the update feed listens on 127.0.0.1:$(cat "$feed_port" 2>/dev/null)" test -s "$feed_port"
+
+PORT=$port AGENT_BOARD_UPDATE_FEED=http://127.0.0.1:$(cat "$feed_port" 2>/dev/null)/ \
+  "$launcher" >"$HOME/app-$port.log" 2>&1 &
 app=$!
 check "/api/health answers on :$port" answers 90000
+# What the start-up check asked, if this copy checks at all (an unpacked one cannot update itself).
+for _ in $(seq 1 20); do [ -s "$asked" ] && break; sleep 0.5; done
+if [ -s "$asked" ]; then
+  echo "note: the update check asked the local feed for $(head -n 1 "$asked")"
+else
+  echo "note: no update check in 10 s (a copy that cannot update itself, or its check off)"
+fi
 
 if [ "$health_only" = 1 ]; then
   kill -KILL "$app" 2>/dev/null

@@ -358,7 +358,9 @@ describe('REST', () => {
       waits: [expect.objectContaining({ reason: 'lock', open: false })],
       stalled: null,
     })
-    expect(read.body.timeline.totals.waitingMs).toBeGreaterThanOrEqual(20 * MIN - 1000)
+    // The lock wait ran under the open build span: work went on, so it counts as working.
+    expect(read.body.timeline.totals.workingMs).toBeGreaterThanOrEqual(20 * MIN - 1000)
+    expect(read.body.timeline.totals.waitingMs).toBe(0)
 
     const project = await call('GET', `/api/projects/${pid}/work`)
     expect(project.body.stallMinutes).toBe(30)

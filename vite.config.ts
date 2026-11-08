@@ -106,10 +106,13 @@ export default defineConfig(({ mode }) => {
       apiIsNeverAnAsset(),
       nitro({
         plugins: [
+          // First, so that even a refusal to start (startup.ts) leaves its exit line.
+          './src/server/plugins/processLog.ts',
           './src/server/startup.ts',
           './src/server/plugins/uploadSweep.ts',
           './src/server/plugins/hostTools.ts',
           './src/server/plugins/seedRuns.ts',
+          './src/server/plugins/desktopBridge.ts',
         ],
         // Loaded from node_modules, not bundled: its certificate code (@peculiar/x509, tsyringe) needs
         // reflect-metadata to run first, an order bundling breaks.

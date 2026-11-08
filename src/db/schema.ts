@@ -58,6 +58,9 @@ export const projects = sqliteTable('projects', {
   // Which of the project's menu pages, Overview cards and ticket sections show, and where. Null is
   // the defaults; what is handed out is that merged with the elements there are now (`mergeLayout`).
   layout: text('layout', { mode: 'json' }).$type<SavedLayout>(),
+  // The key of the active stage claiming a ticket (and a status given as in_progress or active) puts it
+  // in. Null, or a stage that is gone or no longer active, is the first active stage.
+  workStage: text('work_stage'),
 })
 
 // The columns of a project's board, in order. A ticket's status is the key of one of them; the key
@@ -221,6 +224,9 @@ export const tickets = sqliteTable(
     body: text().notNull().default(''),
     // The key of one of the project's stages.
     status: text().notNull().default('todo'),
+    // Where it was placed in its stage's column (its siblings in that stage): placed tickets come first,
+    // lowest rank first, then the rest last updated first. Null until placed; any change of stage clears it.
+    rank: integer(),
     // How much review the ticket gets: low none, mid one round, high three (COMPLEXITIES).
     complexity: text().$type<Complexity>().notNull().default(DEFAULT_COMPLEXITY),
     assignee: text().notNull().default(''),

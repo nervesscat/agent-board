@@ -31,9 +31,10 @@ import { addDefaultAgents } from './defaultAgents'
 import { AGENT_ROLES, listActors } from './actors'
 import { callerInfo, isAgent } from './auth'
 import { authRoutes } from './authApi'
+import { previewBranch } from './branchPreview'
 import { cleanupReport } from './cleanup'
 import { DeleteItems, deleteLeftovers } from './cleanupActions'
-import { authMode } from './config'
+import { authMode, servedEntrance } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
 import { GalleryQuery, listGallery } from './gallery'
@@ -72,6 +73,7 @@ import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
 import * as tokens from './tokens'
+import { changeUpdateSettings, checkForUpdates, installUpdate, updatesState } from './updates'
 import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
 import * as work from './workTimeline'
@@ -210,10 +212,26 @@ api.delete('/api/agent-tokens/:id', ({ request, params }) => {
 // --- connecting agents: board settings, and the skill each CLI installs ---
 api.get('/api/agent-setup', () => json(agents.agentSetup()))
 // The board skill as a SKILL.md (no projects in it: agents call find_project); the install commands curl this.
-api.get('/api/agent-setup/skill', ({ url }) => {
+api.get('/api/agent-setup/skill', ({ request, url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
-  return new Response(agents.renderSkill(client), {
+  // transport=rest: the same skill for a session without the board's MCP tools, each tool's route in it.
+  const transport = z.enum(agents.SKILL_TRANSPORTS).catch('mcp').parse(url.searchParams.get('transport'))
+  // Fetched through the tailnet entrance: the skill names the board as that caller reaches it.
+  const entrance = servedEntrance()
+  const host = request.headers.get('host')?.toLowerCase().replace(/:\d+$/, '')
+  const boardUrl = entrance && host === entrance.host ? entrance.origin : undefined
+  return new Response(agents.renderSkill(client, transport, boardUrl), {
     headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
+// The stdio MCP bridge (scripts/board-mcp.mjs) a cloud session saves as board-mcp.mjs and runs with node.
+api.get('/api/agent-setup/board-mcp', () => {
+  return new Response(agents.boardMcpBridge(), {
+    headers: {
+      'content-type': 'text/javascript; charset=utf-8',
+      'content-disposition': 'attachment; filename="board-mcp.mjs"',
+      'cache-control': 'no-store',
+    },
   })
 })
 // feature-review, review-queue, todo-review and their agents, as a tar to extract into ~/.claude.
@@ -255,6 +273,32 @@ api.patch('/api/settings', async ({ request }) => {
   return json(agents.updateSettings(body))
 })
 
+// --- the desktop app's updates (updates.ts): the human's alone, reading them included ---
+const updatesHumanOnly = (request: Request, what: string) => {
+  if (isAgent(request)) throw new HttpError(403, `only the human ${what}`)
+}
+api.get('/api/updates', async ({ request }) => {
+  updatesHumanOnly(request, "sees the app's updates")
+  return Response.json(await updatesState(), { headers: { 'cache-control': 'no-store' } })
+})
+api.post('/api/updates/check', async ({ request }) => {
+  updatesHumanOnly(request, 'checks for updates')
+  return json(await checkForUpdates())
+})
+// Download and install: the app downloads the offered release, checks its sha512 and installs it.
+api.post('/api/updates/install', async ({ request }) => {
+  updatesHumanOnly(request, 'installs updates')
+  return json(await installUpdate())
+})
+api.patch('/api/updates/settings', async ({ request }) => {
+  updatesHumanOnly(request, 'changes the update settings')
+  const body = await readJson(
+    request,
+    z.object({ autoCheck: z.boolean().optional(), prereleases: z.boolean().optional() }).strict(),
+  )
+  return json(await changeUpdateSettings(body))
+})
+
 // --- projects ---
 api.get('/api/projects', () => json(projects.listProjects()))
 api.post('/api/projects', async ({ request, actor }) => {
@@ -294,6 +338,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       tagSuggestions: projects.TagSuggestions.optional(),
       stallMinutes: z.number().int().min(STALL_MINUTES.min).max(STALL_MINUTES.max).optional(),
       layout: projects.LayoutBody.optional(),
+      workStage: z.string().min(1).max(100).nullable().optional(),
     }),
   )
   if (body.stallMinutes !== undefined && isAgent(request))
@@ -301,6 +346,9 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
   if (body.defaultPhases !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's default phases")
+  // Where claiming puts a ticket is part of the stages, which are the human's.
+  if (body.workStage !== undefined && isAgent(request))
+    throw new HttpError(403, 'only the human sets the stage work starts in')
   // Which pages, cards and sections the human sees, and where: theirs to arrange.
   if (body.layout !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's layout")
@@ -531,7 +579,8 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 // unassigned), ?q= text found (any casing) in the ticket's #id, title, instructions or thread (its posts and the
 // replies under them): those found by name (#id, title) first, then the rest, each row with `match` (where) and
 // `snippet` (the words around a content hit). Archived tickets are left out; ?archived=include adds them,
-// ?archived=only lists just those.
+// ?archived=only lists just those. One column's rows (same stage, same parent) come in its order: placed first
+// (`rank`; null: not placed), then last updated first.
 api.get('/api/projects/:id/tickets', async ({ params, url }) => {
   const q = url.searchParams
   const parent = q.get('parent')
@@ -574,11 +623,18 @@ api.get('/api/tickets/:id', async ({ request, params, url }) =>
 )
 // An agent cannot reassign a ticket reserved for one of the project's agents; the human can. A move to a
 // done stage is a 409 (code: needs) while what it needs is not merged; force: true is the human's way past.
+// position (1-based) places it in its stage's column, the new stage's when status comes with it.
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
   json(
     await needs.changeTicket(
       id(params),
-      await readJson(request, TicketPatch.extend({ force: z.boolean().optional() })),
+      await readJson(
+        request,
+        TicketPatch.extend({
+          force: z.boolean().optional(),
+          position: z.number().int().positive().optional(),
+        }),
+      ),
       actor,
       { agent: isAgent(request) },
     ),
@@ -790,6 +846,15 @@ api.post('/api/workspaces/:id/preview/stop-link', async ({ request, params, acto
 api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
   json(await restartPreview(id(params), actor), 202),
 )
+// A branch the board has no worktree of (pushed from another machine): fetched from origin into a
+// detached worktree of the board's own beside the checkout, registered and previewed (branchPreview.ts).
+api.post('/api/tickets/:id/branch-preview', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ branch: z.string().max(255).optional(), repoId: z.number().int().optional() }),
+  )
+  return json(await previewBranch(id(params), body, actor), 202)
+})
 // ?name=build (install and build) or server.
 api.get('/api/workspaces/:id/preview/log', ({ params, url }) => {
   const name = z.enum(['build', 'server']).catch('build').parse(url.searchParams.get('name'))

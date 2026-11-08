@@ -10,6 +10,10 @@
 // AGENT_BOARD_HOME and DATA_DIR, so no pnpm, node, source or live data is involved, then checks that:
 //   - the board answers /api/health, the window opens on /setup on fresh data, setup signs it in with
 //     a passkey, and the signed-in window makes an agent token for the API calls below;
+//   - the app's updater is loaded and answers the board's update routes over the server's IPC channel:
+//     the window reads its state and Check now finds nothing newer (an unpacked copy cannot update
+//     itself; an installed one asks a feed served here on 127.0.0.1, AGENT_BOARD_UPDATE_FEED, which has
+//     the same version, never GitHub), and an agent gets 403;
 //   - a project made through the API survives a restart (migrations, the Electron-ABI driver);
 //   - a second launch exits and brings the first window back;
 //   - Quit stops the server and frees the port;
@@ -17,6 +21,9 @@
 //   - a busy port, on loopback or on every interface, is reported (in a dialog, and on stderr, where
 //     this reads it), and so are a DATA_DIR and an AGENT_BOARD_HOME that cannot be made or
 //     written; closing the dialog ends the app with exit 1;
+//   - a server killed while the app runs is started again on the same port, with no dialog, and
+//     one that then fails on every start ends, after the restarts' cap, in the stopped board's dialog
+//     with its error output;
 //   - a second launch after a failure, its window closed, raises nothing in the first copy;
 //   - on Linux: the server gets the login shell's PATH (from a .bashrc in a stand-in home), Start at
 //     login writes and removes the autostart entry, and closing the window with no tray host ends the
@@ -29,6 +36,7 @@
 // WebAuthn) in the window, which says yes at once.
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -88,6 +96,23 @@ const exe = path.join(appDir, WIN ? 'agent-board.exe' : 'agent-board')
 // Linux: the XDG config folder of every run, where Start at login writes, never the user's own.
 const xdgConfig = path.join(tmp, 'xdg-config')
 
+// The update feed every run checks (AGENT_BOARD_UPDATE_FEED): this version again, so nothing newer, and
+// no run of the smoke test asks GitHub's releases. Only an installed copy checks at all.
+const appVersion = JSON.parse(
+  fs.readFileSync(path.join(root, 'desktop', 'app', 'package.json'), 'utf8'),
+).version
+const feedYml = Buffer.from(
+  `version: ${appVersion}\nfiles:\n  - url: agent-board-${appVersion}.none\n    sha512: none\n    size: 0\n` +
+    `path: agent-board-${appVersion}.none\nsha512: none\nreleaseDate: '2026-01-01T00:00:00.000Z'\n`,
+)
+// electron-updater asks for latest*.yml?noCache=…
+const feed = http.createServer((req, res) => {
+  if (/^\/latest(-linux)?\.yml(\?|$)/.test(req.url ?? '')) res.writeHead(200).end(feedYml)
+  else res.writeHead(404).end()
+})
+await new Promise((resolve) => feed.listen(0, '127.0.0.1', () => resolve(undefined)))
+const feedUrl = `http://127.0.0.1:${/** @type {net.AddressInfo} */ (feed.address()).port}/`
+
 /** The environment of a run: everything but what the app decides itself, and `extra`. */
 /** @param {Record<string, string>} extra */
 function appEnv(extra) {
@@ -95,6 +120,7 @@ function appEnv(extra) {
   const env = {
     ...process.env,
     AGENT_BOARD_HOME: home,
+    AGENT_BOARD_UPDATE_FEED: feedUrl,
     ...(WIN ? {} : { XDG_CONFIG_HOME: xdgConfig }),
     ...extra,
   }
@@ -211,6 +237,44 @@ try {
     body: JSON.stringify({ name: projectName }),
   })
   check(created.status === 201, `a project is created through the API (${created.status})`)
+  // The updater (desktop/app/updates.mjs): loaded in the packed app, reached from the board's API over
+  // the server's IPC channel, for the human only. An unpacked copy cannot update itself, so it checks
+  // nothing (no request to GitHub from here).
+  const updates = await win.evaluate(async () => {
+    const checked = await fetch('/api/updates/check', { method: 'POST' })
+    if (!checked.ok) return { status: checked.status, body: await checked.text() }
+    for (let i = 0; i < 60; i++) {
+      const res = await fetch('/api/updates')
+      const body = res.ok ? await res.json() : null
+      if (!res.ok || body.status !== 'checking') return { status: res.status, body }
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    return { status: 0, body: 'still checking after 15 s' }
+  })
+  const runningVersion = await app.evaluate(({ app: a }) => a.getVersion())
+  const state = updates.body
+  check(
+    updates.status === 200 &&
+      state?.mode === 'desktop' &&
+      state?.installed === runningVersion &&
+      state?.newest === null &&
+      state?.status === (state?.packageType ? 'none' : 'unsupported'),
+    `the window reads the app's updates from the board's API, and Check now finds nothing newer: ${JSON.stringify(state)}`,
+  )
+  const agentUpdates = await Promise.all([
+    api(port, '/api/updates'),
+    api(port, '/api/updates/check', { method: 'POST' }),
+    api(port, '/api/updates/install', { method: 'POST' }),
+  ])
+  check(
+    agentUpdates.every((r) => r.status === 403),
+    `an agent's token gets 403 from the update routes (${agentUpdates.map((r) => r.status).join(', ')})`,
+  )
+  const updateConfig = path.join(appDir, 'resources', 'app-update.yml')
+  check(
+    fs.existsSync(updateConfig) && /provider: github/.test(fs.readFileSync(updateConfig, 'utf8')),
+    "the packed app's app-update.yml points the updater at GitHub Releases",
+  )
   if (screenshot) {
     // The window again, with the project in its picker.
     await win.reload()
@@ -364,12 +428,11 @@ try {
     app.process().stderr?.on('data', (d) => (said += d))
     check(await waitHealthy(port), '/api/health answers 200')
     await app.firstWindow()
-    const serverPid = boardServer()
-    check(serverPid > 0, `the board's server is found (${serverPid})`)
-    if (serverPid) process.kill(serverPid, 'SIGKILL')
-    for (const until = Date.now() + 20_000; Date.now() < until && !said.includes('The board stopped.'); )
-      await sleep(200)
-    check(said.includes('The board stopped.'), 'the stopped board is reported')
+    await restartsAndGivesUp(
+      app,
+      () => said,
+      (pid) => process.kill(pid, 'SIGKILL'),
+    )
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close()).catch(() => {})
     await sleep(1000)
     const again = spawn(exe, [], { env: appEnv({ PORT: String(port), DATA_DIR: dataDir }), stdio: 'ignore' })
@@ -393,12 +456,11 @@ try {
     await app.firstWindow()
     // The main process itself, which owns the windows (what Playwright started may be another).
     const pid = await app.evaluate(() => process.pid)
-    const serverPid = boardServer()
-    check(serverPid > 0, `the board's server is found (${serverPid})`)
-    if (serverPid) spawnSync('taskkill', ['/PID', String(serverPid), '/F'], { stdio: 'ignore' })
-    for (const until = Date.now() + 20_000; Date.now() < until && !said.includes('The board stopped.'); )
-      await sleep(200)
-    check(said.includes('The board stopped.'), 'the stopped board is reported')
+    await restartsAndGivesUp(
+      app,
+      () => said,
+      (serverPid) => spawnSync('taskkill', ['/PID', String(serverPid), '/F'], { stdio: 'ignore' }),
+    )
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close())
     await sleep(1000)
     const again = spawn(exe, [], { env: appEnv({ PORT: String(port), DATA_DIR: dataDir }), stdio: 'ignore' })
@@ -421,6 +483,7 @@ try {
   console.error(err)
   failed = true
 } finally {
+  feed.close()
   // The app's processes are gone; their files may take a moment to let go on Windows.
   for (let i = 0; i < 10; i++) {
     try {
@@ -434,6 +497,53 @@ try {
 
 console.log(failed ? '\nsmoke test FAILED' : '\nsmoke test passed')
 process.exit(failed ? 1 : 0)
+
+/**
+ * The server killed while the app runs: it is started again and the board answers on the same port
+ * within 15 s, with the window still there and no dialog. Then, its entry point moved away so that
+ * every start fails at once, killed again: after the restarts' cap the app reports the board stopped
+ * (in its dialog, and on stderr, where `said` reads it) with the failed start's error output. The
+ * entry point is put back; the app is left on its dialog.
+ * @param {import('@playwright/test').ElectronApplication} app
+ * @param {() => string} said The app's stderr so far.
+ * @param {(pid: number) => void} kill
+ */
+async function restartsAndGivesUp(app, said, kill) {
+  const first = boardServer()
+  check(first > 0, `the board's server is found (${first})`)
+  if (!first) return
+  kill(first)
+  const killedAt = Date.now()
+  for (const until = killedAt + 15_000; Date.now() < until && (await health(port)) !== 200; ) await sleep(200)
+  const back = (Date.now() - killedAt) / 1000
+  const again = boardServer()
+  check(
+    (await health(port)) === 200 && again > 0 && again !== first,
+    `killed, the server is started again and the board answers on :${port} (${back.toFixed(1)} s, pid ${first} -> ${again})`,
+  )
+  check(said().includes('starting it again in 1 s'), 'the restart is said on stderr')
+  check(!said().includes('The board stopped.'), 'no dialog: the board did not read as stopped')
+  const windows = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
+  check(windows === 1, `the window is still there (${windows})`)
+
+  const entry = path.join(appDir, 'resources', 'board', '.output', 'server', 'index.mjs')
+  const moved = `${entry}.moved`
+  fs.renameSync(entry, moved)
+  try {
+    kill(again)
+    // The waits of the five restarts (1 + 2 + 5 + 10 + 30 s), and each failed start.
+    for (const until = Date.now() + 120_000; Date.now() < until && !said().includes('The board stopped.'); )
+      await sleep(500)
+    check(
+      said().includes('The board stopped.'),
+      'a server that fails on every start is reported, after the cap',
+    )
+    check(said().includes('It was started again 5 times.'), 'after five restarts')
+    check(/Cannot find module/.test(said().split('The board stopped.').at(-1) ?? ''), 'with its error output')
+  } finally {
+    fs.renameSync(moved, entry)
+  }
+}
 
 /**
  * Starts the app with `extra` and expects it to report `text` (in its dialog, and on stderr, where this

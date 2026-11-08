@@ -82,8 +82,10 @@ http_headers = { Authorization = "Bearer <token>" }
    Its `stages[]` are the board's columns in order, each with a `key`, a `name` and a `kind`
    (`open`, `active`, `blocked`, `review`, `done`, `cancelled`). A ticket's `status` is a stage key;
    wherever a status is asked for you can also give a stage's name or a kind (`todo` and
-   `in_progress` mean `open` and `active`). Below, `todo`, `in_progress`, `blocked`, `review`,
-   `done` and `cancelled` mean the project's stage of that kind.
+   `in_progress` mean `open` and `active`). A kind means the project's stage of that kind: for
+   `open` the start stage (the last open stage), for `active` the stage work starts in (the
+   project's `workStage`, else the first active stage), for any other kind the first stage of that
+   kind. Below, `todo`, `in_progress`, `blocked`, `review`, `done` and `cancelled` mean exactly that.
 2. **Pick up work**: starting a session, `get_summary` with your `projectId` shows where the project
    stands in one read (waiting on the human, in progress, done today, next, carrying over). Take work
    from `list_tickets` (`status: ["todo"]` with `assignee: ""`, or assigned to
@@ -286,7 +288,12 @@ http_headers = { Authorization = "Bearer <token>" }
       ticket cannot move to `done` until that branch is merged into its base (the refusal says
       which; only the human can mark it done anyway). `get_ticket_git` → `includes` lists the open
       tickets whose unmerged work your branch already holds; `get_ticket` → `needs` says whether
-      each is `merged`.
+      each is `merged`. `needs` is the enforced rule; the review column's order is the merge order
+      the agents propose, read top to bottom (top merges first). Moving your ticket to review, place
+      it with `update_ticket` → `position` (1 is the top; with `status`, in the new stage): below
+      every open ticket it `needs`, otherwise where it should merge relative to the others. The
+      board flags a card placed above a ticket it needs ("merge after #<id>"); any move to another
+      stage clears the place.
    5. PR open, assigned to the human (`gh pr create --assignee <their login>`, or `--assignee @me`
       when you push with their account; GitHub never lets a PR's author be its requested reviewer,
       and the PR queue lists their own PRs under Waiting on others), and `update_ticket` with its

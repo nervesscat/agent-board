@@ -209,21 +209,43 @@ below (Linux). The rest of this section is the Windows app, and how both behave.
 **Installing.** Run `agent-board-setup-<version>.exe`. It installs for you alone, without admin rights,
 into `%LOCALAPPDATA%\Programs\agent-board`, adds CrossBoard to the Start menu and the desktop, and
 opens it. It is not code-signed, so Windows SmartScreen may stop it the first time (More info, Run
-anyway). It does not update itself: install a newer build over it, and the data stays.
+anyway). It updates itself from the board's Settings page (Updating, below); installing a newer build
+over it by hand works too, and the data stays.
+
+**Updating.** Settings has an Updates section: the installed version, the newest release on
+[GitHub Releases](https://github.com/nervesscat/agent-board/releases) and **Check now**. The app also
+checks as it starts and every six hours (a switch there turns that off); when a newer version is out, a
+small **Update** badge shows in the top bar, and the section shows its release notes and **Download and
+install**. Nothing is downloaded or installed until you press it. Only stable releases are offered;
+**Include pre-releases** there offers `0.3.0-beta.1` and the like too. The download is checked against
+the sha512 in the release's `latest.yml` (Linux: `latest-linux.yml`), and one that does not match is
+refused with nothing installed. Then the app stops its board server (as Quit does), runs the new
+installer for you alone, as the first one did (no admin prompt), and starts the new version. The data
+folder and `config.env` stay as they are. These settings are kept in `updates.json` beside
+`config.env`. The update state and its actions are on the board's API (`/api/updates`) for the
+signed-in human only: an agent's token gets 403, so no agent can start an install. A board run from a
+checkout has no updater: its Updates section says to `git pull` on `main` there, then `pnpm start`
+(Running the board, above). A copy run from an unpacked folder (`win-unpacked`, `linux-unpacked`) cannot
+update itself and says so.
 
 **What it runs.** The app starts the board on `127.0.0.1` in production, as `pnpm start` does (it
 always asks who is signed in), waits until it answers, and opens a window on
 `http://localhost:<PORT>/`. Its tray icon has Open, Open in browser and Quit. Closing the window
 keeps the board running for your agents (`http://localhost:<PORT>/api/mcp`, as in `AGENTS.md`);
 Quit stops it and frees the port. One copy runs at a time: starting it again brings its window back.
+If the board's server dies once it has answered, the app starts it again on the same port, waiting
+1, 2, 5, 10 and then 30 s between tries, with the window and tray kept; a notification and the tray's
+tooltip say it restarted, and `board.err.log` notes each exit. After five restarts with no five
+minutes of the board answering in between, it gives up and says the board stopped, with the end of
+its error output. A server that fails before it first answers is reported at once.
 
 **Prerequisites.** `git`, `gh` (signed in) and `claude` on `PATH`, as for a checkout: the board runs
 them just the same. Managed previews of a board worktree also need `pnpm` and `node`.
 
 **Data and settings** live in `%LOCALAPPDATA%\agent-board`:
 
-- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`), what `data/`
-  is in a checkout.
+- `data\`: the database, uploads and logs (`data\logs\board.out.log`, `board.err.log`,
+  `desktop.log`), what `data/` is in a checkout.
 - `config.env`: the settings, `KEY=value` as in `.env`, read at each start. The first start writes it
   with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
   like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and the tailnet
@@ -239,6 +261,17 @@ such as `pnpm start` from a checkout, also wants 47100) offers to open `config.e
 `PORT` there, or stop the other one; a data folder or app folder that cannot be used (a `DATA_DIR`
 or `AGENT_BOARD_HOME` on a missing drive, say) names it and what to change; a board that fails to
 start shows the end of its log and offers the logs folder.
+
+**How the board stopped** outlives that dialog. The app adds a line to `logs/desktop.log` each time
+it starts the board's server and each time the server exits, however it ends:
+`2026-11-04T20:33:47.853Z server pid 5901 exited signal=SIGKILL code=null uptime=16832s quitting=false`
+(`quitting=true`: the app was stopping it). Past 1 MB the log moves to `desktop.log.1`, the one before
+it going. The dialog names the signal that killed the server ("It was killed by SIGKILL at …"). The
+server itself, under the app and under `pnpm start` alike, writes a timestamped line to
+`board.err.log` when it is sent SIGTERM, SIGINT or SIGHUP (`… board pid 5901 received SIGTERM
+uptime=16832s maxrss=412MB`, its peak memory), when an error escapes (with its stack), and as it
+exits; which process sent a signal is not something it can tell. A server killed by SIGKILL (the
+out-of-memory killer, say) writes nothing itself, so only the app's line tells of it.
 
 **Signing in.** The window signs in with the board's own passkeys, as a browser does (First run and
 Signing in, above): on a fresh data folder it opens on `/setup`, where you give your name and create
@@ -288,8 +321,19 @@ entry in the applications menu and its icons):
   namespaces, as Ubuntu 24.04 does, and without it Electron stops at start). It adds nothing to the
   menu by itself.
 
-None is signed, and none updates itself: install a newer one over it (the AppImage: replace the
-file), and the data stays.
+None is signed. Each updates itself from Settings, Updates, as on Windows (Updating, above), and installing
+a newer one over it by hand works too, the data kept:
+
+- **AppImage:** the new AppImage, once its sha512 matched, replaces the old file where it is, and starts.
+- **deb, rpm, pacman:** the app installs the downloaded package with the system's package manager
+  (`dpkg -i` or `apt`, `dnf`, `zypper` or `rpm`, `pacman -U`) through polkit's `pkexec`, which asks for
+  your authorization in its own dialog; the app never asks for or keeps a password. Once installed, it
+  stops the board and starts again as the new version. It asks polkit once per press of Download and
+  install. Without `pkexec` (polkit not installed), with the authorization declined, or with the package
+  manager failing, the board keeps running and the Updates section shows the error and the exact command
+  to run in a terminal, with the downloaded file's path, e.g.
+  `sudo pacman -U ~/.cache/agent-board-updater/pending/agent-board-0.3.0.pacman` (`sudo apt install …`,
+  `sudo dnf install …` and the like by distribution); start the app again after it.
 
 **Data and settings** follow the XDG base directories (`XDG_CONFIG_HOME` and `XDG_DATA_HOME` when they
 are set to absolute paths):
@@ -298,7 +342,7 @@ are set to absolute paths):
   `~/.local/share/agent-board`.
 - `~/.config/agent-board/electron/`: the window's browser profile.
 - `~/.local/share/agent-board/data/`: the database, uploads and logs (`data/logs/board.out.log`,
-  `board.err.log`).
+  `board.err.log`, `desktop.log`).
 
 `AGENT_BOARD_HOME` puts all three in one folder, as on Windows.
 
@@ -436,6 +480,145 @@ Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board'
   proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`). Their `http://127.0.0.1:<port>` links
   do not open on other devices.
 - `HOST` stays `127.0.0.1`: nothing listens off this machine but Tailscale.
+
+### Cloud agents
+
+A project's agents can run in Claude Code cloud sessions (claude.ai/code) instead of on this machine.
+A cloud session runs on a machine of its own, outside your tailnet, and its MCP servers connect as the
+session starts, before anything it runs. It reaches the board the way your devices do, on the tailnet
+name, as a Tailscale node of its own that it brings up itself, with an agent token. Three things need
+it: the board's MCP tools (the `board-mcp` bridge, or the REST copy of the board skill), the skills,
+and previews of its branches (the board fetches them).
+
+**1. The board machine**: the steps above (`PUBLIC_ORIGIN`, then `tailscale serve`, tailnet only,
+never Funnel). Check it from another tailnet device: `https://<machine>.<tailnet>.ts.net/api/health`
+answers **401** (host accepted, sign-in required). A 403 means the host is not `PUBLIC_ORIGIN`.
+
+**2. In the Tailscale admin console, and on the board**
+
+- A tag for these nodes, `tag:cloud-agent`, that you own (Access controls, `tagOwners`).
+- An access rule that lets the tag reach the board's machine, on 443 only, and nothing else (no other
+  rule may name the tag or `*` as its source):
+
+  ```json
+  "hosts": { "board": "<the board machine's 100.x.y.z>" },
+  "grants": [{ "src": ["tag:cloud-agent"], "dst": ["board"], "ip": ["tcp:443"] }]
+  ```
+
+- A **Tailscale auth key** (`tskey-…`; Settings, Keys, **Generate auth key**): reusable, **ephemeral**
+  (a session's node goes when it disconnects), pre-approved when device approval is on, **tagged**
+  `tag:cloud-agent`, with an expiry you renew. An untagged key joins as you and can reach every device
+  of yours.
+- A **board agent token** (`<token>`): Connect an agent, **Generate commands**.
+
+Rotate both when the work is done. Never put a key or token in a prompt, a repo, a post or a setup
+script.
+
+**3. The cloud environment** (claude.ai/code, the environment selector, add or edit an environment):
+
+- **Repositories**: the project's repos.
+- **Network access**: Full, or Custom with `*.tailscale.com`, `*.tailscale.io` and
+  `pkgs.tailscale.com` added to the defaults.
+- **Environment variables** (`.env` format): `TS_AUTHKEY=tskey-…`, `BOARD_TOKEN=<token>` and
+  `BOARD_URL=https://<machine>.<tailnet>.ts.net`. Not **Network secrets**: the egress proxy adds those
+  to requests to a host, and the board's traffic goes inside the Tailscale tunnel, which the proxy
+  never sees.
+- **Setup script**: below. It runs once, as root, and its result is cached: files it writes persist,
+  processes do not. So each session starts Tailscale again (`tailnet-up`), and the script must never
+  fail or hang, or every session breaks (a `curl -f` right after starting Tailscale exits 7 before the
+  tunnel is up).
+
+```bash
+set +e
+# Tailscale, in userspace mode; each session runs tailnet-up again, since setup processes do not survive.
+curl -fsSL https://tailscale.com/install.sh | sh
+cat > /usr/local/bin/tailnet-up <<'EOT'
+#!/bin/sh
+# Tailscale in userspace, its HTTP proxy on localhost:1055; prints "board 401" once the board answers.
+S=/tmp/tailscaled.sock
+pgrep -x tailscaled >/dev/null || { tailscaled --tun=userspace-networking --state=mem: --socket=$S --outbound-http-proxy-listen=localhost:1055 --socks5-server=localhost:1055 >/tmp/tailscaled.log 2>&1 & }
+for i in $(seq 1 20); do
+  tailscale --socket=$S status >/dev/null 2>&1 && break
+  tailscale --socket=$S up --authkey="$TS_AUTHKEY" --hostname=cloud-agent --accept-dns=false --timeout=15s >/dev/null 2>&1 && break
+  sleep 2
+done
+c=000
+for i in $(seq 1 15); do
+  c=$(curl -s -m 5 -o /dev/null -w '%{http_code}' -x http://localhost:1055 "$BOARD_URL/api/health")
+  [ "$c" = 401 ] && break
+  sleep 2
+done
+echo "board $c"
+EOT
+cat > /usr/local/bin/board-skills <<'EOT'
+#!/bin/sh
+# From the board: the MCP bridge, the board skill (REST copy with `board-skills rest`) and the review
+# skills (todo-review, feature-review, review-queue and their agents).
+b() { curl -fs -m 60 -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" "$@"; }
+t=; [ "$1" = rest ] && t='&transport=rest'
+mkdir -p ~/.claude/skills/board /usr/local/lib
+b "$BOARD_URL/api/agent-setup/board-mcp" -o /usr/local/lib/board-mcp.mjs
+b "$BOARD_URL/api/agent-setup/skill?client=claude$t" -o ~/.claude/skills/board/SKILL.md
+b "$BOARD_URL/api/agent-setup/review-skills" | tar -x -C ~/.claude
+ls ~/.claude/skills
+EOT
+chmod +x /usr/local/bin/tailnet-up /usr/local/bin/board-skills
+timeout 90 tailnet-up && timeout 120 board-skills
+claude mcp add --scope user board -e BOARD_PROXY=http://localhost:1055 -e BOARD_UP=tailnet-up \
+  -- node /usr/local/lib/board-mcp.mjs
+exit 0
+```
+
+Sandboxes have no `/dev/net/tun`, so Tailscale runs in userspace mode and the tailnet is reached
+through its proxy: `curl -x http://localhost:1055 …`.
+
+**4. The board's MCP tools: `board-mcp`.** `scripts/board-mcp.mjs` (also served at
+`/api/agent-setup/board-mcp`) is a stdio MCP server with no dependencies but Node: each message it
+reads is posted to `$BOARD_URL/api/mcp` with `Authorization: Bearer $BOARD_TOKEN`, through
+`BOARD_PROXY` (an HTTP proxy that tunnels with CONNECT, as Tailscale's userspace proxy does), and each
+answer is written back. Before its first request it runs `BOARD_UP`, so the tailnet comes up when
+Claude starts the server, not after (about ten seconds from nothing, inside Claude Code's 30-second
+start limit; `MCP_TIMEOUT=60000` gives it more). When a request cannot connect it runs `BOARD_UP`
+again and retries once; a request the board may have read is never sent twice. `BOARD_AGENT_NAME`
+sends `X-Agent-Name`. Check it in a new session: `claude mcp list` shows `board: … Connected`, and the
+`mcp__board__*` tools are there.
+
+**5. Board access over REST**, when `board` is not listed (the environment did not keep the user
+config the setup script wrote): after `tailnet-up`, run `board-skills rest`. That is the same board
+skill, with a section that gives each tool's REST route and how to call it
+(`curl -x http://localhost:1055 -H "Authorization: Bearer $BOARD_TOKEN" $BOARD_URL/api/…`; REST API,
+below). Fetched through `PUBLIC_ORIGIN`, the skill names the board by that origin. The review skills
+say what to do in a session that has no board tools, does not offer their agent types (a
+general-purpose agent reads the agent file as its instructions), or gives a subagent no Agent tool (it
+runs the phases itself).
+
+**6. Previews.** The board runs previews from worktrees on its own machine, and a cloud session's
+worktree is not there. Push the branch, then `preview_branch` (REST `POST
+/api/tickets/:id/branch-preview`): the board fetches the branch from the repo's origin into a
+detached worktree of its own beside the main checkout (`<checkout>-preview-<branch>`), registers it on
+the ticket and runs the repo's preview there, as `start_preview` does. After the next push, call it
+again: the worktree moves to the new head and the preview builds again. The board makes no branch and
+moves no worktree but its own; Cleanup removes it once the ticket is closed.
+
+**7. Running the work**
+
+- **Launching sessions** from an orchestrator (a local Claude Code session): `RemoteTrigger` `create`
+  a one-time routine (`run_once_at`) with `job_config.ccr.environment_id`, the prompt as the first
+  user event, `session_context.sources` set to the repo, and `allowed_tools`. Follow it with
+  `list_runs` and `get_run_log`, and message a running session with `SendMessage` (one way). Nothing
+  is pasted by hand.
+- **The environment ID** (`env_…`) is not shown in the UI: create a throwaway routine in that
+  environment (Routines, New routine, pick the environment, any prompt, API trigger), and
+  `RemoteTrigger list` shows its `environment_id`.
+- **A ticket's prompt** starts with `tailnet-up` (it must print `board 401`), and `board-skills` (or
+  `board-skills rest` without the MCP tools) when the skills are missing, then the ticket's work (or
+  `/todo-review` for it), the push, `preview_branch` for a preview, the PR into the base branch, the
+  summary, and the move to review.
+
+**What holds**: the tag reaches the board's machine on 443 and nothing else on your tailnet; every
+request there needs the agent token (revoke it on Connect an agent, the key in the admin console);
+ephemeral nodes leave the tailnet with their session; a preview stays on the board's machine, as every
+board-run preview does.
 
 ## Test mode
 
@@ -724,8 +907,10 @@ a Timeline card with the same bar and the list of events.
 
 - **Totals**, per ticket and per project (its tickets and lanes, archived and PR tickets left out),
   never overlapping: _blocked on human_ is the `human` waits and the time in a blocked stage (from
-  the stage events); _waiting_ is the other waits outside that; _working_ is the spans outside every
-  wait and outside that, overlapping spans (an orchestrator's and its sub-agent's) counted once. An
+  the stage events); _working_ is the spans outside that, whoever's, overlapping spans (an
+  orchestrator's and its sub-agent's) counted once; _waiting_ is the other waits outside every span
+  and outside that, the time nothing moved on the ticket. An orchestrator's `builder` wait under its
+  builder's `build` span is working time, and the bar hatches only the human's time over the spans. An
   open span or wait runs to now while the ticket is in an active, blocked or review stage and not
   archived, and to its last event otherwise.
 - **Stalled**: a ticket (or lane) in an active stage, not archived nor a PR ticket, with no open
@@ -758,6 +943,7 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | PATCH        | `/api/agent-tokens/:id`                                                                                             | `{role}`: `orchestrator` or `worker`; the token's next request has it, and its name's `/api/actors` row at once; the human's (an agent gets 403); 404 for a revoked or unknown token                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | GET · POST   | `/api/host-tools` · `/api/host-tools/check`                                                                         | the last check of the tools the board runs (below) `{checkedAt, tools[]}`: per tool `name, found, path, version, ok, breaks, problem, fix` (gh also `signedIn`); GET waits for the startup check when it has not ended · POST checks again                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | GET          | `/api/agent-setup` · `/api/agent-setup/skill?client=claude\|codex\|opencode`                                        | the board's URL for the Connect an agent page · the board skill as a SKILL.md (agents find their project with `find_project`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| GET          | `/api/agent-setup/skill?transport=rest` · `/api/agent-setup/board-mcp`                                              | the board skill for a session without the board's MCP tools, each tool's REST route in it (fetched through `PUBLIC_ORIGIN`, it names that origin) · the stdio MCP bridge, `board-mcp.mjs` (Cloud agents, above)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | GET          | `/api/agent-setup/review-skills` · `?list`                                                                          | the feature-review, review-queue and todo-review skills with their agents, as a tar to extract into `~/.claude` · the paths it holds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | GET          | `/api/agent-setup/review-skills/status` · `?projectId=`                                                             | whether those files are installed as served: `{files, global, repos[]}`. `global` is the user-wide `~/.claude` of the machine the board runs on (`CLAUDE_HOME`): `{path, installTo, status, files[]}`, where `installTo` is the folder its install line targets when `CLAUDE_HOME` names one other than `~/.claude`, else null (the line installs into `~/.claude`). Each of `repos` is a repo's own `.claude` (every repo, or the project's) with its project, `repoPath`, `status` and `files[]`. A `status` is `none` (no copy; a repo then uses `~/.claude`), `current`, `outdated` or `unreachable`; each file is `{path, status}`                                                                                                                                                                                   |
 | GET          | `/api/agent-setup/review-skills/diff?path=&repoId=`                                                                 | one of those files as installed against as served, line endings aside, as git shows it: `{path, status, installed, unreadable, header, hunks[]}`. `path` must be one of the bundle's (else 400/404); `repoId` reads that repo's `.claude`, none `~/.claude` (409 if it can't be read). Old side: the installed copy (`/dev/null` when `missing`); new: the served one. `unreadable`: why a copy there can't be read. Read-only                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -768,6 +954,7 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | GET          | `/api/projects/:id/instructions/changes` · `/api/instructions/changes/:id`                                          | every change of the instructions, newest first: `{oldValue, newValue, changedBy, role, state, resolvedBy, resolvedAt, revertOf, revertable}`; `state` is pending for an orchestrator's change until the human reviews it, accepted, or reverted                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | POST         | `/api/instructions/changes/:id/review` · `/revert`                                                                  | mark a change reviewed (409 once reverted) · put the instructions back as they were before it, recorded as the human's own change (409 when a later change stands or the text changed since); the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 |              | `stallMinutes` on GET/PATCH `/api/projects/:id`                                                                     | how long an active ticket may go without a work-timeline event before it reads as stalled (30 until changed, 1 to 1440); the human's: an agent's PATCH is a 403                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|              | `workStage` on GET/PATCH `/api/projects/:id`                                                                        | the key of the active stage work starts in: where `claim_ticket` and a status of `in_progress` or `active` put a ticket, and where a blocked ticket goes back once its last decision is answered; `null` (the default) is the first active stage, as is a chosen stage that is gone or no longer active; anything but an active stage's key or `null` is a 400; the human's (Settings → Stages, Work starts in): an agent's PATCH is a 403                                                                                                                                                                                                                                                                                                                                                                                |
 | GET/POST     | `/api/projects/:id/agents` · PATCH/DELETE `/api/agents/:id`                                                         | the project's agents `{name, instructions, delegation, avatarId}` (writes are the human's); a ticket assigned to one is reserved                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | POST         | `/api/projects/:id/agents/defaults`                                                                                 | adds the default agents the project lacks (spec, builder, runner, env, verify, hunt, refute, merge), each with instructions and delegation notes; the human's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | GET/POST     | `/api/projects/:id/stages` · PATCH/DELETE `/api/projects/:id/stages/:stageId`                                       | board columns `{name, kind, color}`; DELETE takes `?moveTo=<key>` when it has tickets (`&force=1` into a done stage past needs not merged)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -781,6 +968,7 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 |              | `?parent=root\|<id>` on the list · `parentId` on create                                                             | lanes: a ticket's parallel sub-tickets, nested to any depth                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 |              | `?lanes=1` on GET · `?keepLanes=1` on DELETE                                                                        | lanes' updates in the feed · move lanes up a level instead of deleting them                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 |              | `needs[]` on create and PATCH · `force` on PATCH                                                                    | the tickets whose branches must be merged into its base first (same project, no cycles); GET returns `needs[]` with `merged` and `neededBy[]`, the list `needs[]`. A move to a done stage is a 409 (`code: needs`) while one is not merged; `force: true` (the human's only) marks it done anyway, logged                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+|              | `position` on PATCH · `rank` on list rows                                                                           | its place in its stage's column, 1-based (1 the top; with `status`: in the new stage; 400 when not a whole number from 1, 409 when archived); placed tickets first (`rank`; null: not placed), then by last update, and the list gives a stage's rows in that order. In review: the merge order the agents propose, read top to bottom (top merges first); an agent moving a ticket there places it below every open ticket it `needs`, otherwise where it should merge. Logged in the activity; a change of stage clears it, edits never move it                                                                                                                                                                                                                                                                         |
 |              | `resume` on GET `/api/tickets/:id` · on list rows                                                                   | the resume note with `at`, `by`, `sha`, `commitsSince`, `stale`, `noHandoff`, `day` · rows: `at`, `stale`, `noHandoff`, `day`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |              | `summary` on GET `/api/tickets/:id` · `tab` on its `updates[]`                                                      | the summary (`body`, `change`, `at`, `by`, `via`, `attachments`, `postId`, `versions`; `fallback: true` while none was written and the newest agent progress post stands in; null with neither) · each post's tab of the feed: `agents` for progress posts, posts made `as` a project agent and resume notes; `main` for the human's posts, decision cards, questions to the human and the summary                                                                                                                                                                                                                                                                                                                                                                                                                        |
 |              | `open` on PATCH to a review stage · on GET in one                                                                   | what the ticket still has open, as warnings (the move goes through): `[{taskId, ticketId, text, auto}]`, every task and subtask not done, the ticket's and its lanes' that are not cancelled, in tree order, without the Merged phase (merging is the human's); `auto: true` on a phase the board ticks (below); `[]` when nothing is left; null on GET outside a review stage and on a PR's own ticket                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -812,6 +1000,7 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | POST         | `/api/tickets/:id/runs/start` · `/stop` `{repoId?}`                                                                 | Start all (every run that does not run yet) · Stop all (every one going), of one repo with `repoId`: `{results: [{repoId, runId, name, workspaceId, ok, reason, state}]}`, one refused does not stop the rest                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | POST/GET     | `/api/workspaces/:id/runs/:runId/start` · `/stop` · `/restart` · GET `/log?name=build\|server`                      | one run from that workspace: 202 building · 409 when it does not run · stop and start again · its logs; a body is never read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | POST/GET     | `/api/workspaces/:id/preview/start` · `/stop` · `/restart` · GET `/preview/log?name=build\|server`                  | the board builds and runs the workspace's worktree as a preview (see Previews) · stop it · stop and build again · its logs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| POST         | `/api/tickets/:id/branch-preview` `{branch?, repoId?}`                                                              | a preview of a branch pushed from another machine (MCP `preview_branch`): fetched from the repo's origin into a detached worktree of the board's own beside the main checkout (`<checkout>-preview-<branch>`), registered as a workspace of the ticket, and the repo's preview run started there: 202 `{workspace, branch, sha, path, preview}`. Again after a push, that worktree moves to the new head and builds again. `branch` is the ticket's when left out; 404 when origin has no such branch, 409 when that folder is on a branch, has changes or is not a worktree of the repo                                                                                                                                                                                                                                  |
 | POST         | `/api/workspaces/:id/preview/stop-link`                                                                             | stop the server behind the link, humans only, when it runs from the workspace's worktree (see Previews): `{workspaceId, ticketId, kind: 'link', port, pids, freed}`; 400 or 409 with why otherwise                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | POST         | `/api/tickets/:id/updates` `{body, attachmentIds[], as?, progress?, tab?}`                                          | a post on the ticket's feed (`progress` default true); `as` posts under one of the project's agents (agents only); `tab` `main` or `agents` puts it in that tab, else the board picks (below)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | POST/DELETE  | `/api/tickets/:id/attachments` `{attachmentIds}` · `/api/tickets/:id/attachments/:attachmentId`                     | files that go with the ticket's instructions (uploads first); `GET /api/tickets/:id` lists them as `attachments`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -893,7 +1082,9 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   survives a restart (the window still signed in), that a second launch brings the first window back, that Quit frees the port, that
   `config.env`'s `PORT` and `DATA_DIR` are used, that a busy port (on loopback or on every interface)
   and a `DATA_DIR` or `AGENT_BOARD_HOME` that cannot be made or written are reported in a dialog
-  that ends the app, and that a second launch after a failure is harmless. On Linux (under a
+  that ends the app, that a server killed while the app runs is started again on the same port with
+  no dialog, and one that then fails on every start ends in the stopped board's dialog after the
+  restarts' cap, and that a second launch after a failure is harmless. On Linux (under a
   display: `xvfb-run -a`) it also checks that nothing of the app runs after Quit, that the server
   gets the login shell's PATH (a `.bashrc` in a stand-in home), that Start at login writes and removes
   the autostart entry, and that closing the window with no tray host ends the app and its server; its

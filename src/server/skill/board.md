@@ -6,7 +6,9 @@ description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - 
 # Working through the agent board
 
 The board is where the human and every agent coordinate. Its tools come from the `board` MCP
-server. If they are missing, or the board answers 401 (the token was revoked or is a year old), say
+server. A session that reaches the board only through a proxy or a network it brings up itself (a
+cloud session on the tailnet) starts that server with the `board-mcp` bridge, or takes the REST copy
+of this skill ({{BOARD_URL}}/api/agent-setup/skill?transport=rest). If they are missing, or the board answers 401 (the token was revoked or is a year old), say
 so and stop: the human presses Generate commands on the board's Connect an agent page
 ({{BOARD_URL}}/agents), which makes your agent token and fills it into the setup. {{MCP_HINT}} Git
 and GitHub stay read-only through the board for you, but for closed tickets' landed local branches,
@@ -62,8 +64,10 @@ Then:
    your defaults for every repo in it. Its `stages` are the board's columns, each with a `key`, a
    `name` and a `kind` (`open`, `active`, `blocked`, `review`, `done`, `cancelled`); a ticket's
    `status` is a stage key. Wherever a status is asked for you can also pass a kind, which means
-   the project's stage of that kind: below, `todo`, `in_progress`, `blocked`, `review`, `done` and
-   `cancelled` mean exactly that. Its `agents` are the project's own agents (see
+   the project's stage of that kind: for `open` (`todo`) the start stage (the last open stage), for
+   `active` (`in_progress`) the stage work starts in (the project's `workStage`, else the first
+   active stage), for any other kind the first stage of that kind. Below, `todo`, `in_progress`,
+   `blocked`, `review`, `done` and `cancelled` mean exactly that. Its `agents` are the project's own agents (see
    [The project's agents](#the-projects-agents)).
 3. `get_summary` with your `projectId`: where the project stands in one read (what waits on the
    human, in progress and since when, done today, next, and what carries over from before today).
@@ -140,7 +144,9 @@ Lanes of a ticket you are working are yours to create (next section).
   - `start_span` when a phase starts (`spec`, `build`, `review` with its `round`, `verify`, `pr`,
     `preview`, `merge`) and `end_span` when it is done.
   - `start_wait` with the reason when you cannot go on (`lock`, `builder`, `mcp`, `human`, `other`
-    with a `note`), and `end_wait` as soon as you can.
+    with a `note`), and `end_wait` as soon as you can. A wait counts as waiting only while no span
+    is open on the ticket: your wait on a sub-agent whose span runs reads as working. A `human` wait
+    counts as blocked on the human, span or not.
   - `handoff` when you brief a sub-agent and when it hands back ([Delegating](#delegating)).
     `get_ticket` → `work.open` lists your open spans and waits to close.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
@@ -346,6 +352,12 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
    Only the human can mark it done anyway.
+   `needs` is the enforced rule; the review column's order is the merge order the agents propose,
+   read top to bottom (top merges first). Moving your ticket to review, place it with
+   `update_ticket` → `position` (1 is the top of its stage's column; with `status`, in the new
+   stage): below every open ticket it `needs`, otherwise where it should merge relative to the
+   others. The board flags a card placed above a ticket it needs ("merge after #<id>"). Any move
+   to another stage clears the place, and edits never move it.
 5. PR open, assigned to the human, `prNumber` set: `gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account (GitHub never lets a PR's author be its
    requested reviewer; the PR queue lists the human's own PRs under Waiting on others). Then
