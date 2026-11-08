@@ -30,7 +30,7 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
-import { StalledBadge } from '#/components/WorkTimeline'
+import { StalledBadge } from '#/components/WorkStatus'
 import type { Push, TicketRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
