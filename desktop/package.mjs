@@ -12,7 +12,10 @@
 //      on Windows agent-board-setup-<version>.exe (NSIS, per user) and win-unpacked/agent-board.exe;
 //      on Linux agent-board-<version>-x86_64.AppImage, agent-board_<version>_amd64.deb,
 //      agent-board-<version>.x86_64.rpm, agent-board-<version>-x86_64.pacman (rpmbuild and bsdtar
-//      on PATH) and linux-unpacked/agent-board.
+//      on PATH) and linux-unpacked/agent-board; beside them the metadata electron-updater reads to update
+//      the installed app (latest.yml on Windows, latest-linux.yml on Linux: each package with its
+//      sha512), and in the packed app's resources app-update.yml, which points it at the repo's GitHub
+//      Releases. The packed app carries the main process's own dependencies (electron-updater).
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
@@ -22,7 +25,7 @@ import { fileURLToPath } from 'node:url'
 
 import { build } from 'electron-builder'
 
-import { packageArch } from './packageArgs.mjs'
+import { appDependencies, appUpdateConfigProblem, packageArch, PUBLISH } from './packageArgs.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
@@ -34,6 +37,7 @@ const electronVersion = require('electron/package.json').version
 const electronExe = /** @type {string} */ (require('electron'))
 const electronDist = path.dirname(electronExe)
 const brand = JSON.parse(fs.readFileSync(path.join(root, 'desktop', 'app', 'package.json'), 'utf8'))
+const rootPkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 
 /** @param {string} message @returns {never} */
 function fail(message) {
@@ -56,6 +60,13 @@ function run(command, args, opts = {}) {
 const WIN = process.platform === 'win32'
 if (!WIN && process.platform !== 'linux')
   fail(`the app is packaged on Windows or Linux, not ${process.platform}`)
+/** @type {string[]} */
+let appDeps = []
+try {
+  appDeps = appDependencies(brand, rootPkg)
+} catch (err) {
+  fail(err instanceof Error ? err.message : String(err))
+}
 const arch = packageArch(process.argv.slice(2))
 // The driver's probe (step 4) runs the staged binary under this machine's Electron, so the packed arch
 // is this machine's; arm64 is not built (README: "The desktop app").
@@ -109,9 +120,20 @@ run(
 
 // 5. The installer and the unpacked app. electron-builder packs the app with the dependencies its
 // package manager lists for it, and inside this repo pnpm lists the whole workspace's: the app is packed
-// from a copy outside the repo, whose package.json has none. The board's own come traced in the stage.
+// from a copy outside the repo, whose package.json lists the main process's own (appDependencies), each
+// linked from the repo's node_modules, where pnpm put the version the tests ran. electron-builder walks
+// them from there, their own dependencies with them. The board's own come traced in the stage.
 const appCopy = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-desktop-'))
 fs.cpSync(path.join(root, 'desktop', 'app'), appCopy, { recursive: true })
+for (const name of appDeps) {
+  const installed = fs.realpathSync(path.join(root, 'node_modules', name))
+  const { version } = JSON.parse(fs.readFileSync(path.join(installed, 'package.json'), 'utf8'))
+  if (version !== brand.dependencies[name])
+    fail(`node_modules has ${name} ${version}, not ${brand.dependencies[name]}: run pnpm install`)
+  const link = path.join(appCopy, 'node_modules', name)
+  fs.mkdirSync(path.dirname(link), { recursive: true })
+  fs.symlinkSync(installed, link, 'junction')
+}
 const icon = path.join(appCopy, 'icon.png')
 /** @type {import('electron-builder').Configuration} */
 const common = {
@@ -127,6 +149,9 @@ const common = {
   asar: true,
   npmRebuild: false,
   nodeGypRebuild: false,
+  // Where the installed app looks for updates (app-update.yml) and what the metadata files name. Nothing
+  // is uploaded from here (publish: 'never' below): scripts/release.mjs and the release workflow do it.
+  publish: [PUBLISH],
 }
 /** @type {Partial<import('electron-builder').CliOptions> & { config: import('electron-builder').Configuration }} */
 const windows = {
@@ -230,9 +255,32 @@ try {
   fs.rmSync(appCopy, { recursive: true, force: true })
 }
 
+// The packed app, as the updater needs it: its dependencies inside app.asar, app-update.yml beside it.
+const resources = path.join(dist, WIN ? 'win-unpacked' : 'linux-unpacked', 'resources')
+// electron-builder writes each Linux package's type into the unpacked folder's resources as it builds
+// that package, and leaves the last one's (pacman) there: the packages each have their own, and the
+// unpacked folder is none of them, so it goes, or an unpacked copy would update itself as a pacman one.
+fs.rmSync(path.join(resources, 'package-type'), { force: true })
+const asar = createRequire(
+  createRequire(fs.realpathSync(require.resolve('electron-builder/package.json'))).resolve(
+    'app-builder-lib/package.json',
+  ),
+)('@electron/asar')
+const packed = new Set(asar.listPackage(path.join(resources, 'app.asar'), { isPack: false }))
+for (const name of appDeps)
+  if (!packed.has(path.join(path.sep, 'node_modules', name, 'package.json')))
+    fail(`the packed app has no ${name} (app.asar has no node_modules/${name})`)
+const updateConfig = path.join(resources, 'app-update.yml')
+const configProblem = appUpdateConfigProblem(
+  fs.existsSync(updateConfig) ? fs.readFileSync(updateConfig, 'utf8') : null,
+)
+if (configProblem) fail(configProblem)
+
 if (WIN) {
   console.log(`\nInstaller: ${path.join(dist, `agent-board-setup-${brand.version}.exe`)}`)
   console.log(`Unpacked:  ${path.join(dist, 'win-unpacked', 'agent-board.exe')}`)
+  if (!fs.existsSync(path.join(dist, 'latest.yml'))) fail(`electron-builder made no latest.yml in ${dist}`)
+  console.log(`Metadata:  ${path.join(dist, 'latest.yml')}`)
 } else {
   const v = brand.version
   const made = [
@@ -241,6 +289,7 @@ if (WIN) {
     ['rpm:', `agent-board-${v}.x86_64.rpm`],
     ['pacman:', `agent-board-${v}.pacman`],
     ['Unpacked:', path.join('linux-unpacked', 'agent-board')],
+    ['Metadata:', 'latest-linux.yml'],
   ]
   console.log('')
   for (const [what, file] of made) {

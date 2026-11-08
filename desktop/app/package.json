@@ -8,5 +8,8 @@
   "desktopName": "agent-board.desktop",
   "private": true,
   "type": "module",
-  "main": "main.mjs"
+  "main": "main.mjs",
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  }
 }

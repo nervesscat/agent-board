@@ -32,8 +32,24 @@ interface Pending {
   timer: ReturnType<typeof setTimeout>
 }
 
-let desktop: DesktopChannel | null = null
-const pending = new Map<string, Pending>()
+/**
+ * Kept outside the module, like the host tools' check: the plugin that listens (plugins/desktopBridge.ts)
+ * and the routes are bundled apart, each with its own copy of this module, and a hot reload evaluates
+ * it again. The channel the app said hello on, the requests waiting for its answer, and the channels
+ * listened on (once each).
+ */
+interface Kept {
+  desktop: DesktopChannel | null
+  pending: Map<string, Pending>
+  listening: WeakSet<DesktopChannel>
+}
+const KEPT = Symbol.for('agent-board.desktopUpdates')
+const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= {
+  desktop: null,
+  pending: new Map(),
+  listening: new WeakSet(),
+})
+const pending = kept.pending
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
@@ -42,18 +58,20 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
  * no app to hear from. Called once as the server starts (plugins/desktopBridge.ts).
  */
 export function listenForDesktop(channel: DesktopChannel = process as DesktopChannel) {
-  if (typeof channel.send !== 'function') return
+  if (typeof channel.send !== 'function' || kept.listening.has(channel)) return
+  kept.listening.add(channel)
   channel.on('message', (message) => {
     if (!isRecord(message) || message.channel !== BRIDGE) return
     if (message.hello === true) {
-      desktop = channel
+      kept.desktop = channel
       return
     }
     const waiting = typeof message.id === 'string' ? pending.get(message.id) : undefined
     if (!waiting) return
     pending.delete(message.id as string)
     clearTimeout(waiting.timer)
-    if (message.ok === true && isRecord(message.state)) waiting.resolve(message.state as unknown as UpdatesState)
+    if (message.ok === true && isRecord(message.state))
+      waiting.resolve(message.state as unknown as UpdatesState)
     else
       waiting.reject(
         new HttpError(
@@ -92,19 +110,19 @@ function noUpdater(): never {
 }
 
 export async function updatesState(): Promise<UpdatesState> {
-  return desktop ? ask(desktop, 'state') : CHECKOUT
+  return kept.desktop ? ask(kept.desktop, 'state') : CHECKOUT
 }
 
 /** Starts a check; the state as it is then (checking). */
 export async function checkForUpdates(): Promise<UpdatesState> {
-  return desktop ? ask(desktop, 'check') : noUpdater()
+  return kept.desktop ? ask(kept.desktop, 'check') : noUpdater()
 }
 
 /** Starts the download and install of the offered update; the state as it is then (downloading). */
 export async function installUpdate(): Promise<UpdatesState> {
-  return desktop ? ask(desktop, 'install') : noUpdater()
+  return kept.desktop ? ask(kept.desktop, 'install') : noUpdater()
 }
 
 export async function changeUpdateSettings(change: Partial<UpdateSettings>): Promise<UpdatesState> {
-  return desktop ? ask(desktop, 'settings', change) : noUpdater()
+  return kept.desktop ? ask(kept.desktop, 'settings', change) : noUpdater()
 }

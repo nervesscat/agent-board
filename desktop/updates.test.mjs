@@ -2,10 +2,10 @@ import crypto from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import http from 'node:http'
-import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 
+import { configureRequestOptions, configureRequestUrl, HttpExecutor } from 'builder-util-runtime'
 import electronUpdater from 'electron-updater'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
@@ -24,6 +24,7 @@ import {
   readUpdateSettings,
   shellQuote,
   UPDATES_FILE,
+  updateError,
   writeUpdateSettings,
 } from './app/updates.mjs'
 
@@ -33,10 +34,6 @@ import {
 // (Node's http in place of Electron's net), pkexec (the spawnSync handed in), and the app's own server
 // stop/start, quit and relaunch.
 
-const { HttpExecutor, configureRequestOptions, configureRequestUrl } =
-  /** @type {typeof import('builder-util-runtime')} */ (
-    createRequire(createRequire(import.meta.url).resolve('electron-updater'))('builder-util-runtime')
-  )
 /**
  * Electron's executor (electron-updater's electronHttpExecutor.js) over Node's http: its download is
  * builder-util-runtime's doDownload, which checks the sha512 as the file comes in, as in the app.
@@ -57,7 +54,8 @@ class NodeHttp extends HttpExecutor {
             destination,
             options,
             onCancel,
-            callback: (/** @type {Error | null} */ error) => (error == null ? resolve(destination) : reject(error)),
+            callback: (/** @type {Error | null} */ error) =>
+              error == null ? resolve(destination) : reject(error),
             responseHandler: null,
           },
           0,
@@ -68,7 +66,8 @@ class NodeHttp extends HttpExecutor {
 
   /** @param {any} options @param {(res: any) => void} callback */
   createRequest(options, callback) {
-    return http.request(options, callback)
+    // A connection per request, as each download is: no shared socket to pile timeout listeners on.
+    return http.request({ ...options, agent: false }, callback)
   }
 }
 
@@ -171,7 +170,14 @@ const quiet = { info: () => {}, warn: () => {}, error: () => {} }
  *   settings?: import('./app/updates.mjs').UpdateSettings, commands?: Record<string, string>,
  *   pkexec?: (args: string[]) => { status: number | null, error?: Error, stderr?: string } }} o
  */
-function setup({ updater, type, installed = '0.2.0', settings = DEFAULT_UPDATE_SETTINGS, commands = {}, pkexec }) {
+function setup({
+  updater,
+  type,
+  installed = '0.2.0',
+  settings = DEFAULT_UPDATE_SETTINGS,
+  commands = {},
+  pkexec,
+}) {
   const order = /** @type {string[]} */ ([])
   const edges = {
     saveSettings: vi.fn(),
@@ -259,21 +265,38 @@ describe('packageType', () => {
     const installedDir = fs.mkdtempSync(path.join(tmp, 'win-'))
     fs.mkdirSync(path.join(installedDir, 'resources'))
     const win = () =>
-      packageType({ platform: 'win32', env: {}, resourcesPath: path.join(installedDir, 'resources'), isPackaged: true })
+      packageType({
+        platform: 'win32',
+        env: {},
+        resourcesPath: path.join(installedDir, 'resources'),
+        isPackaged: true,
+      })
     expect(win()).toBeNull()
     fs.writeFileSync(path.join(installedDir, 'Uninstall CrossBoard.exe'), '')
     expect(win()).toBe('nsis')
   })
 
   it('is nothing when the app is not packaged, or on another platform', () => {
-    expect(packageType({ platform: 'linux', env: { APPIMAGE: '/a' }, resourcesPath: resources, isPackaged: false })).toBeNull()
-    expect(packageType({ platform: 'darwin', env: {}, resourcesPath: resources, isPackaged: true })).toBeNull()
+    expect(
+      packageType({
+        platform: 'linux',
+        env: { APPIMAGE: '/a' },
+        resourcesPath: resources,
+        isPackaged: false,
+      }),
+    ).toBeNull()
+    expect(
+      packageType({ platform: 'darwin', env: {}, resourcesPath: resources, isPackaged: true }),
+    ).toBeNull()
   })
 })
 
 describe('the manual command', () => {
   const file = '/home/me/.cache/agent-board-updater/pending/agent-board_0.3.0_amd64.deb'
-  const only = (/** @type {string[]} */ ...cmds) => (/** @type {string} */ c) => cmds.includes(c)
+  const only =
+    (/** @type {string[]} */ ...cmds) =>
+    (/** @type {string} */ c) =>
+      cmds.includes(c)
 
   it('names the package manager this system has, with the downloaded file', () => {
     expect(manualCommand('pacman', '/c/agent-board-0.3.0.pacman', only('pacman'))).toBe(
@@ -437,7 +460,11 @@ describe('the automatic check', () => {
 
   it('with the setting off checks neither at start nor on the timer; Check now still does', async () => {
     const updater = counting()
-    const { updates, timers } = setup({ updater, type: 'deb', settings: { autoCheck: false, prereleases: false } })
+    const { updates, timers } = setup({
+      updater,
+      type: 'deb',
+      settings: { autoCheck: false, prereleases: false },
+    })
     updates.start()
     const tick = /** @type {() => void} */ (/** @type {any} */ (timers.setInterval.mock.calls[0])[0])
     tick()
@@ -453,8 +480,11 @@ describe('the automatic check', () => {
 })
 
 describe('Download and install', () => {
-  /** @param {any} updater */
-  async function offered(updater, /** @type {Parameters<typeof setup>[0]} */ over) {
+  /**
+   * @param {any} updater
+   * @param {Omit<Parameters<typeof setup>[0], 'updater'>} over
+   */
+  async function offered(updater, over) {
     const s = setup({ ...over, updater })
     await s.updates.check()
     expect(s.updates.state().status).toBe('available')
@@ -476,7 +506,9 @@ describe('Download and install', () => {
     await done
     expect(requested).toContain('agent-board_0.3.0_amd64.deb')
     expect(updates.state()).toMatchObject({ status: 'error', manual: null, progress: null })
-    expect(updates.state().error).toMatch(/sha512 checksum in the release's metadata, so nothing was installed/)
+    expect(updates.state().error).toMatch(
+      /sha512 checksum in the release's metadata, so nothing was installed/,
+    )
     expect(edges.spawnSync).not.toHaveBeenCalled()
     expect(install).not.toHaveBeenCalled()
     for (const edge of ['stopServer', 'releaseLock', 'relaunch', 'quit'])
@@ -518,14 +550,22 @@ describe('Download and install', () => {
       expect.objectContaining({ encoding: 'utf8' }),
     )
     // The package is in before the board stops: a declined polkit leaves it running.
-    expect(order).toEqual([`spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dpkg -i ${file}`, 'stopServer', 'relaunch', 'quit'])
+    expect(order).toEqual([
+      `spawn /usr/bin/pkexec --disable-internal-agent /usr/bin/dpkg -i ${file}`,
+      'stopServer',
+      'relaunch',
+      'quit',
+    ])
     expect(updates.state().status).toBe('installing')
   })
 
   it('deb: without pkexec the board keeps running and the section has the command', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
     const { updater, dir } = realUpdater('DebUpdater')
-    const { updates, edges } = await offered(updater, { type: 'deb', commands: { dpkg: '/usr/bin/dpkg', apt: '/usr/bin/apt' } })
+    const { updates, edges } = await offered(updater, {
+      type: 'deb',
+      commands: { dpkg: '/usr/bin/dpkg', apt: '/usr/bin/apt' },
+    })
     await updates.install()
     const file = pending(dir, 'agent-board_0.3.0_amd64.deb')
     expect(updates.state()).toMatchObject({
@@ -550,7 +590,10 @@ describe('Download and install', () => {
     })
     await updates.install()
     const file = pending(dir, 'agent-board_0.3.0_amd64.deb')
-    expect(updates.state()).toMatchObject({ status: 'manual', manual: { command: `sudo dpkg -i ${file}`, file } })
+    expect(updates.state()).toMatchObject({
+      status: 'manual',
+      manual: { command: `sudo dpkg -i ${file}`, file },
+    })
     expect(updates.state().error).toMatch(/polkit did not authorize the install \(pkexec exit 126\)/)
     // electron-updater tries apt-get install -f after a failed dpkg: not after a refusal.
     expect(edges.spawnSync).toHaveBeenCalledTimes(1)
@@ -577,7 +620,10 @@ describe('Download and install', () => {
     const b = await offered(no.updater, { type: 'rpm', commands, pkexec: () => ({ status: 127 }) })
     await b.updates.install()
     const file2 = pending(no.dir, 'agent-board-0.3.0.x86_64.rpm')
-    expect(b.updates.state()).toMatchObject({ status: 'manual', manual: { command: `sudo dnf install ${file2}` } })
+    expect(b.updates.state()).toMatchObject({
+      status: 'manual',
+      manual: { command: `sudo dnf install ${file2}` },
+    })
     expect(b.edges.stopServer).not.toHaveBeenCalled()
   })
 
@@ -586,7 +632,9 @@ describe('Download and install', () => {
     const { updater, dir } = realUpdater('RpmUpdater')
     const { updates } = await offered(updater, { type: 'rpm', commands: { rpm: '/usr/bin/rpm' } })
     await updates.install()
-    expect(updates.state().manual?.command).toBe(`sudo rpm -U ${pending(dir, 'agent-board-0.3.0.x86_64.rpm')}`)
+    expect(updates.state().manual?.command).toBe(
+      `sudo rpm -U ${pending(dir, 'agent-board-0.3.0.x86_64.rpm')}`,
+    )
   })
 
   it('pacman: installs the pacman package through pkexec; declined, the pacman -U command', async () => {
@@ -607,7 +655,10 @@ describe('Download and install', () => {
     const b = await offered(no.updater, { type: 'pacman', commands, pkexec: () => ({ status: 126 }) })
     await b.updates.install()
     const file2 = pending(no.dir, 'agent-board-0.3.0.pacman')
-    expect(b.updates.state()).toMatchObject({ status: 'manual', manual: { command: `sudo pacman -U ${file2}`, file: file2 } })
+    expect(b.updates.state()).toMatchObject({
+      status: 'manual',
+      manual: { command: `sudo pacman -U ${file2}`, file: file2 },
+    })
     // pacman -Sy and a second -U come after a failed install, not after a refusal.
     expect(b.edges.spawnSync).toHaveBeenCalledTimes(1)
     expect(b.edges.stopServer).not.toHaveBeenCalled()
@@ -626,7 +677,12 @@ describe('Download and install', () => {
     expect(updates.state().error).toMatch(/The package manager failed: .*failed to commit transaction/)
     // electron-updater's refresh after a failed pacman -U (pacman -Sy, which fails too), then the command.
     expect(edges.spawnSync).toHaveBeenCalledTimes(2)
-    expect(edges.spawnSync.mock.calls[1]?.[1]).toEqual(['--disable-internal-agent', '/usr/bin/pacman', '-Sy', '--noconfirm'])
+    expect(edges.spawnSync.mock.calls[1]?.[1]).toEqual([
+      '--disable-internal-agent',
+      '/usr/bin/pacman',
+      '-Sy',
+      '--noconfirm',
+    ])
     expect(edges.stopServer).not.toHaveBeenCalled()
   })
 
@@ -740,5 +796,22 @@ describe('handleBridgeMessage', () => {
     expect(handleBridgeMessage(updates, 'hello')).toBeNull()
     expect(handleBridgeMessage(updates, { channel: 'other', id: 'x', op: 'state' })).toBeNull()
     expect(handleBridgeMessage(updates, { channel: BRIDGE, op: 'state' })).toBeNull()
+  })
+})
+
+describe('updateError', () => {
+  it("keeps the first line of electron-updater's message, without its headers and stack", () => {
+    const err = new Error(
+      'Cannot find channel "latest-linux.yml" update info: HttpError: 404 Not Found\n"method: GET"\n    at x',
+    )
+    expect(updateError(err)).toBe(
+      'Cannot find channel "latest-linux.yml" update info: HttpError: 404 Not Found',
+    )
+    const mismatch = Object.assign(new Error('sha512 checksum mismatch, expected a, got b'), {
+      code: 'ERR_CHECKSUM_MISMATCH',
+    })
+    expect(updateError(mismatch)).toBe(
+      "The download did not match the sha512 checksum in the release's metadata, so nothing was installed. sha512 checksum mismatch, expected a, got b",
+    )
   })
 })

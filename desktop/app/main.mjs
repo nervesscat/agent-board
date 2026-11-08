@@ -215,7 +215,11 @@ async function start() {
  * served over http(s), to try an update before it is released (docs/releasing.md).
  */
 function startUpdates() {
-  const updater = electronUpdater.autoUpdater
+  // On Windows and Linux, the platforms the app is packaged for, one of electron-updater's BaseUpdaters.
+  const updater =
+    /** @type {import('electron-updater').AppUpdater & Pick<import('electron-updater').BaseUpdater, 'install'>} */ (
+      electronUpdater.autoUpdater
+    )
   const feed = process.env.AGENT_BOARD_UPDATE_FEED
   if (feed) updater.setFeedURL({ provider: 'generic', url: feed })
   /** @param {unknown} m */

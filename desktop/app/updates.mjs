@@ -180,6 +180,7 @@ export const isPrerelease = (v) => /^v?\d+\.\d+\.\d+-/.test(v)
  * common entities are decoded, and paragraphs, line breaks and list items become lines; the page shows
  * the text as text, never as markup.
  * @param {unknown} notes
+ * @returns {string}
  */
 export function notesText(notes) {
   if (Array.isArray(notes))
@@ -204,12 +205,13 @@ export function notesText(notes) {
 }
 
 /**
- * An error as the Updates section shows it. A download that did not match the release's sha512 says
+ * An error as the Updates section shows it, on one line. A download that did not match the release's sha512 says
  * so in words, with electron-updater's own message after.
  * @param {unknown} err
  */
 export function updateError(err) {
-  const message = err instanceof Error ? err.message : String(err)
+  // Its first line: electron-updater's messages go on with the response's headers and a stack.
+  const message = (err instanceof Error ? err.message : String(err)).split('\n')[0].trim()
   const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined
   if (code === 'ERR_CHECKSUM_MISMATCH')
     return `The download did not match the sha512 checksum in the release's metadata, so nothing was installed. ${message}`
@@ -361,7 +363,12 @@ export function createUpdates({
     const offer = state.newest
     if (!offer || !['available', 'error', 'manual'].includes(state.status))
       throw new UpdateRefused('there is no update to install: check for updates first')
-    set({ status: 'downloading', progress: { percent: 0, transferred: 0, total: 0 }, error: null, manual: null })
+    set({
+      status: 'downloading',
+      progress: { percent: 0, transferred: 0, total: 0 },
+      error: null,
+      manual: null,
+    })
     return runInstall(type, offer)
   }
 
@@ -396,12 +403,19 @@ export function createUpdates({
       if (installed) return quit()
       takeLock()
       await startServer()
-      set({ status: 'error', error: `The ${offer.version} update could not be installed; see the app's log.` })
+      set({
+        status: 'error',
+        error: `The ${offer.version} update could not be installed; see the app's log.`,
+      })
       return
     }
     const result = installPackage(type, file)
     if (!result.ok) {
-      set({ status: 'manual', error: result.error, manual: { command: manualCommand(type, file, hasCommand), file } })
+      set({
+        status: 'manual',
+        error: result.error,
+        manual: { command: manualCommand(type, file, hasCommand), file },
+      })
       return
     }
     await stopServer()
@@ -420,7 +434,10 @@ export function createUpdates({
   function installPackage(type, file) {
     const pkexec = has('pkexec')
     if (!pkexec)
-      return { ok: false, error: 'pkexec (polkit) is not installed, so the app cannot install the package itself.' }
+      return {
+        ok: false,
+        error: 'pkexec (polkit) is not installed, so the app cannot install the package itself.',
+      }
     /** @type {string | null} */
     let declined = null
     /** @param {string[]} argv */
@@ -442,7 +459,9 @@ export function createUpdates({
       }
       if (res.status !== 0) {
         const why = res.stderr.trim().split('\n').slice(-3).join(' ')
-        throw new Error(`${cmd} ${args.join(' ')} exited with ${res.status ?? 'a signal'}${why ? `: ${why}` : ''}`)
+        throw new Error(
+          `${cmd} ${args.join(' ')} exited with ${res.status ?? 'a signal'}${why ? `: ${why}` : ''}`,
+        )
       }
     }
     try {
@@ -527,10 +546,15 @@ export function handleBridgeMessage(updates, msg) {
   try {
     if (op === 'check') void updates.check()
     else if (op === 'install')
-      void updates.install().catch((err) => console.error(`agent-board desktop: updates: ${updateError(err)}`))
+      void updates
+        .install()
+        .catch((err) => console.error(`agent-board desktop: updates: ${updateError(err)}`))
     else if (op === 'settings')
-      updates.setSettings(body && typeof body === 'object' ? /** @type {Partial<UpdateSettings>} */ (body) : {})
-    else if (op !== 'state') return reply({ ok: false, status: 400, error: `unknown update request ${String(op)}` })
+      updates.setSettings(
+        body && typeof body === 'object' ? /** @type {Partial<UpdateSettings>} */ (body) : {},
+      )
+    else if (op !== 'state')
+      return reply({ ok: false, status: 400, error: `unknown update request ${String(op)}` })
     return reply({ ok: true, state: updates.state() })
   } catch (err) {
     if (err instanceof UpdateRefused) return reply({ ok: false, status: 409, error: err.message })

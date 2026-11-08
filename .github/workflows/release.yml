@@ -3,7 +3,9 @@
 # (workflow_dispatch) on a commit whose version has no release yet. Each build job runs
 # `pnpm release --stage-only` (scripts/release.mjs): pnpm desktop:package, then every file copied to
 # desktop/dist/release under its versioned name and its stable one, the one
-# https://github.com/nervesscat/agent-board/releases/latest/download/<name> always points to.
+# https://github.com/nervesscat/agent-board/releases/latest/download/<name> always points to, and
+# the update metadata the installed app's updater reads (latest.yml, latest-linux.yml: each versioned
+# file with its sha512, checked against the files as they are staged).
 # The release is published only when both builds succeed, so it never goes out with a platform missing.
 name: Release
 
@@ -42,9 +44,12 @@ jobs:
       - name: Smoke-test the unpacked app
         run: pnpm desktop:smoke --port 8240
 
-      - name: Check the stable name
+      - name: Check the stable name and the update metadata
         shell: bash
-        run: test -f desktop/dist/release/agent-board-setup-x64.exe
+        run: |
+          test -f desktop/dist/release/agent-board-setup-x64.exe
+          test -f desktop/dist/release/latest.yml
+          cat desktop/dist/release/latest.yml
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -88,12 +93,14 @@ jobs:
       - name: Smoke-test the unpacked app
         run: xvfb-run -a pnpm desktop:smoke --port 9250
 
-      - name: Check the stable names
+      - name: Check the stable names and the update metadata
         run: |
           test -f desktop/dist/release/agent-board-x86_64.AppImage
           test -f desktop/dist/release/agent-board_amd64.deb
           test -f desktop/dist/release/agent-board.x86_64.rpm
           test -f desktop/dist/release/agent-board.pacman
+          test -f desktop/dist/release/latest-linux.yml
+          cat desktop/dist/release/latest-linux.yml
           ls -l desktop/dist/release
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
