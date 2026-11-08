@@ -15,14 +15,32 @@ import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/a
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
 import { useStages } from '#/lib/project'
 import { STAGE_DOT, type StageLike, stageBadge, stageOf } from '#/lib/stages'
+import {
+  WINDOW_CHOICES,
+  WINDOW_LABELS,
+  type WindowChoice,
+  parseWindowChoice,
+  windowFor,
+} from '#/lib/roadmapWindow'
+import { useNow } from '#/lib/useNow'
 
 const FILTERS = ['all', 'blocked', 'review'] as const
 type Filter = (typeof FILTERS)[number]
 
 // ?show= is the filter picked: every ticket, those with something blocked, or those in review.
+// ?window= is the time axis every row shares: today, the last 24 h or 7 d, or fit the rows. Absent: the default.
 export const Route = createFileRoute('/projects/$id/roadmap')({
   component: Roadmap,
-  validateSearch: z.object({ show: z.enum(FILTERS).optional().catch(undefined) }),
+  validateSearch: z.object({
+    show: z.enum(FILTERS).optional().catch(undefined),
+    window: z
+      .unknown()
+      .optional()
+      .transform((raw) => {
+        const choice = parseWindowChoice(raw)
+        return choice === 'default' ? undefined : choice
+      }),
+  }),
 })
 
 type Lane = RoadmapTicket['lanes'][number]
@@ -35,9 +53,10 @@ const isBlocked = (b: RoadmapItem) => b.stage.kind === 'blocked' || hasState(b, 
 
 function Roadmap() {
   const { id } = Route.useParams()
-  const { show = 'all' } = Route.useSearch()
+  const { show = 'all', window: windowParam } = Route.useSearch()
   const navigate = Route.useNavigate()
   const stages = useStages(id)
+  const now = useNow(15_000)
   const { data, isLoading, error } = useQuery({
     queryKey: ['roadmap', id],
     queryFn: () => get<RoadmapTicket[]>(`/api/projects/${id}/roadmap`),
@@ -58,6 +77,13 @@ function Roadmap() {
   const review = tickets.filter((t) => t.stage.kind === 'review')
   const shown = show === 'blocked' ? blocked : show === 'review' ? review : tickets
   const every = tickets.flatMap((t) => [t, ...t.lanes])
+  // The one time axis for every row shown: computed here, from the shown rows' work, and ending now.
+  // Lane #18 (the chart) takes it as `window` on each row's track (see Row); nothing draws it yet.
+  const range = windowFor(
+    parseWindowChoice(windowParam),
+    shown.flatMap((t) => [t.row, ...t.lanes.map((l) => l.row)]),
+    now,
+  )
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -75,8 +101,23 @@ function Roadmap() {
             { key: 'review', label: 'Needs review', count: review.length },
           ]}
           value={show}
-          onChange={(v: Filter) => navigate({ search: { show: v === 'all' ? undefined : v }, replace: true })}
+          onChange={(v: Filter) =>
+            navigate({ search: (prev) => ({ ...prev, show: v === 'all' ? undefined : v }), replace: true })
+          }
         />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+        <span>Time axis, every row:</span>
+        <ChipTabs<WindowChoice | ''>
+          chips={WINDOW_CHOICES.map((key) => ({ key, label: WINDOW_LABELS[key] }))}
+          value={windowParam ?? ''}
+          onChange={(v) =>
+            navigate({ search: (prev) => ({ ...prev, window: v || undefined }), replace: true })
+          }
+        />
+        <span>
+          {new Date(range.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} to now
+        </span>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <div className="flex flex-wrap gap-4">
@@ -87,11 +128,15 @@ function Roadmap() {
           <Stat n={review.length} label="in review" />
           <Stat n={every.filter((b) => b.row.work.stalled).length} label="stalled" amber />
         </div>
-        <Legend />
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <Legend />
+          {/* Lane #18: <WorkTimelineKey /> (the chart's key, built from its style tables) goes beside the task Legend. */}
+        </div>
       </div>
       {work && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>Project work, every ticket and lane:</span>
+          {/* Lane #19: <WorkSummary totals={work.totals} /> replaces WorkTotals here. */}
           <WorkTotals totals={work.totals} />
         </div>
       )}
@@ -141,6 +186,7 @@ function Legend() {
   ]
   return (
     <div className="flex flex-wrap items-center gap-3.5" aria-label="Legend">
+      <span className="font-medium text-foreground">Tasks</span>
       {items.map(([state, label]) => (
         <span key={state} className="inline-flex items-center gap-1.5">
           <Dot state={state} small />
@@ -233,6 +279,7 @@ function Row({
           <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${stageBadge(stage)}`}>
             {stage.name}
           </span>
+          {/* Lane #19: <NowLine work={row.work} /> and <StallNotice compact work={row.work} /> replace this badge. */}
           <StalledBadge stalled={row.work.stalled} />
           {children}
           {total > 0 && (
@@ -255,7 +302,9 @@ function Row({
       <div className="min-w-0">
         <Track groups={groups} lane={Boolean(lane)} />
         <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
+          {/* Lane #18: WorkTimelineBar takes the shared `window` from the route (`range`) here, and draws NowLine. */}
           <WorkTimelineBar timeline={row.work} compact={Boolean(lane)} />
+          {/* Lane #19: <WorkSummary timeline={row.work} /> replaces WorkTotals here. */}
           {hasWork(row.work) && <WorkTotals totals={row.work.totals} />}
         </div>
       </div>
