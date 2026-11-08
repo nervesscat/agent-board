@@ -8,7 +8,7 @@ import { noteStageMove } from './workTimeline'
 
 export type Stage = schema.Stage
 
-/** Asked for by agents with the old fixed names; they mean the first stage of that kind. */
+/** Asked for by agents with the old fixed names; they mean open and active (`resolveStage`). */
 const KIND_ALIASES: Record<string, StageKind> = { todo: 'open', in_progress: 'active' }
 
 /** A project's stages in board order. A project that has none yet gets the defaults. */
@@ -42,6 +42,28 @@ export const kindOf = (stages: Stage[], key: string): StageKind => stageOf(stage
  */
 export const startStage = (stages: Stage[]) =>
   [...stages].reverse().find((s) => s.kind === 'open') ?? stages[0]!
+
+/**
+ * Where work starts: the active stage the project chose (`projects.workStage`), else, when it chose
+ * none or that stage is gone or no longer active, the first active stage. Claiming a ticket, a status
+ * given as `in_progress` or `active`, and the way back from blocked go there.
+ */
+export function workStage(stages: Stage[], chosen: string | null | undefined): Stage | undefined {
+  const pick = chosen ? stages.find((s) => s.key === chosen && s.kind === 'active') : undefined
+  return pick ?? firstOfKind(stages, 'active')
+}
+
+/** The project's chosen work stage key, as stored (null when it chose none). */
+export const chosenWorkStage = (projectId: number): string | null =>
+  db
+    .select({ workStage: schema.projects.workStage })
+    .from(schema.projects)
+    .where(eq(schema.projects.id, projectId))
+    .get()?.workStage ?? null
+
+/** Where the project's work starts, from its stages as read. */
+export const projectWorkStage = (projectId: number, stages: Stage[]) =>
+  workStage(stages, chosenWorkStage(projectId))
 
 /** The kinds of stage a ticket is being worked in: in these a ticket carries over from day to day. */
 export const WORKING_KINDS: readonly StageKind[] = ['active', 'blocked', 'review']
@@ -79,16 +101,23 @@ export function movePatch(
 }
 
 /**
- * The stage an agent or the UI named: its key, else its name (any casing), else the first stage of
- * that kind (`review`, `done`, … and the old `todo` / `in_progress`; for open, the start stage).
+ * The stage an agent or the UI named: its key, else its name (any casing), else a kind: `open` (and
+ * `todo`) is the start stage, `active` (and `in_progress`) the work stage (`work`, the first active
+ * stage when not given), and any other kind the first stage of that kind.
  */
-export function resolveStage(stages: Stage[], value: string): Stage {
+export function resolveStage(stages: Stage[], value: string, work?: Stage): Stage {
   const v = value.trim().toLowerCase()
   const kind = KIND_ALIASES[v] ?? (STAGE_KINDS.includes(v as StageKind) ? (v as StageKind) : null)
   const found =
     stages.find((s) => s.key === value) ??
     stages.find((s) => s.key === v || s.name.toLowerCase() === v) ??
-    (kind === 'open' ? startStage(stages) : kind ? firstOfKind(stages, kind) : undefined)
+    (kind === 'open'
+      ? startStage(stages)
+      : kind === 'active'
+        ? (work ?? firstOfKind(stages, 'active'))
+        : kind
+          ? firstOfKind(stages, kind)
+          : undefined)
   if (!found)
     throw new HttpError(
       400,

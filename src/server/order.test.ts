@@ -311,6 +311,42 @@ describe('a change of stage', () => {
     expect(features.getTicket(placed.id)).toMatchObject({ projectId: to, rank: null })
   })
 
+  it("into the project's chosen work stage, by claim or by deciding, clears its place", async () => {
+    const pid = newProject()
+    // Bug Found is the first active stage; the project starts work in In progress instead.
+    stagesMod.createStage(pid, { name: 'Bug Found', kind: 'active' }, 'enrique')
+    const ids = stagesMod.listStages(pid).map((s) => s.id)
+    const bug = ids.at(-1)!
+    const order = ids.filter((id) => id !== bug)
+    order.splice(2, 0, bug)
+    stagesMod.reorderStages(pid, order, 'enrique')
+    expect(
+      (await call('PATCH', `/api/projects/${pid}`, 'human:enrique', { workStage: 'in_progress' })).status,
+    ).toBe(200)
+    const [w] = tickets(pid, 'in_progress', ['W'])
+    features.placeTicket(w!, 1, 'enrique')
+    const [z] = tickets(pid, 'todo', ['Z'])
+    features.placeTicket(z!, 1, 'enrique')
+    features.claimTicket(z!, 'claude')
+    expect(features.getTicket(z!)).toMatchObject({ status: 'in_progress', rank: null })
+    expect(column(pid, 'in_progress')).toEqual([w, z])
+
+    const post = features.askDecision(
+      z!,
+      { body: 'Which?', options: [{ label: 'a' }, { label: 'b' }] },
+      'claude',
+    )
+    features.placeTicket(z!, 1, 'claude')
+    features.decide(post.id, 0, '', 'enrique')
+    expect(features.getTicket(z!)).toMatchObject({ status: 'in_progress', rank: null })
+    // A status named by kind lands in the work stage too, unplaced.
+    features.placeTicket(z!, 1, 'claude')
+    await needs.changeTicket(z!, { status: 'todo' }, 'claude', { agent: true })
+    await needs.changeTicket(z!, { status: 'active' }, 'claude', { agent: true })
+    expect(features.getTicket(z!)).toMatchObject({ status: 'in_progress', rank: null })
+    expect(column(pid, 'in_progress')).toEqual([w, z])
+  })
+
   it('leaves a new ticket unplaced, at the end of the merge queue', () => {
     const { pid, x, y } = setup('todo')
     const t = features.createTicket(pid, { title: 'new', status: 'review' }, 'claude')

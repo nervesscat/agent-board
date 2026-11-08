@@ -99,17 +99,65 @@ describe('totals', () => {
         [ms('10:30'), ms('11:30')],
       ],
       [
-        { interval: [ms('10:40'), ms('10:50')], reason: 'lock' },
+        { interval: [ms('09:40'), ms('10:00')], reason: 'lock' },
         { interval: [ms('11:10'), ms('11:20')], reason: 'human' },
       ],
       [],
     )
-    expect(t).toEqual({ workingMs: 70 * MIN, waitingMs: 10 * MIN, blockedOnHumanMs: 10 * MIN })
+    expect(t).toEqual({ workingMs: 80 * MIN, waitingMs: 20 * MIN, blockedOnHumanMs: 10 * MIN })
+  })
+
+  it('counts a delegated build as working: the wait on the builder runs under its span', () => {
+    // An orchestrator waits on its builder over the same stretch as the builder's build span.
+    const t = totals(
+      [[Date.parse('2026-11-04T05:58:38Z'), Date.parse('2026-11-04T06:09:02Z')]],
+      [
+        {
+          interval: [Date.parse('2026-11-04T05:58:58Z'), Date.parse('2026-11-04T06:09:02Z')],
+          reason: 'builder',
+        },
+      ],
+      [],
+    )
+    expect(t).toEqual({ workingMs: (10 * 60 + 24) * 1000, waitingMs: 0, blockedOnHumanMs: 0 })
+  })
+
+  it('counts a wait as waiting only while no span is open', () => {
+    expect(totals([], [{ interval: [ms('10:00'), ms('10:30')], reason: 'lock' }], [])).toEqual({
+      workingMs: 0,
+      waitingMs: 30 * MIN,
+      blockedOnHumanMs: 0,
+    })
+    // A span that starts during the wait takes the rest of it.
+    expect(
+      totals([[ms('10:20'), ms('10:50')]], [{ interval: [ms('10:00'), ms('10:30')], reason: 'builder' }], []),
+    ).toEqual({ workingMs: 30 * MIN, waitingMs: 20 * MIN, blockedOnHumanMs: 0 })
+  })
+
+  it('counts overlapping waits once', () => {
+    const t = totals(
+      [[ms('10:40'), ms('11:00')]],
+      [
+        { interval: [ms('10:00'), ms('10:30')], reason: 'lock' },
+        { interval: [ms('10:15'), ms('10:45')], reason: 'builder' },
+      ],
+      [],
+    )
+    expect(t).toEqual({ workingMs: 20 * MIN, waitingMs: 40 * MIN, blockedOnHumanMs: 0 })
+  })
+
+  it('counts a wait on the human as blocked on human, over a span too', () => {
+    const t = totals(
+      [[ms('10:00'), ms('11:00')]],
+      [{ interval: [ms('10:20'), ms('10:30')], reason: 'human' }],
+      [],
+    )
+    expect(t).toEqual({ workingMs: 50 * MIN, waitingMs: 0, blockedOnHumanMs: 10 * MIN })
   })
 
   it('counts a wait that overlaps human time only once, as blocked on human', () => {
     const t = totals(
-      [[ms('10:00'), ms('11:00')]],
+      [[ms('10:30'), ms('11:00')]],
       [{ interval: [ms('10:00'), ms('10:30')], reason: 'builder' }],
       [[ms('10:20'), ms('10:40')]],
     )
@@ -139,7 +187,8 @@ describe('buildTimeline', () => {
       event('span_end', '11:30', { refId: b.id, agent: 'reviewer' }),
     ]
     const t = build(events, '11:30', { status: 'done' })
-    expect(t.totals).toEqual({ workingMs: 70 * MIN, waitingMs: 10 * MIN, blockedOnHumanMs: 10 * MIN })
+    // The lock wait falls under the spans: work went on, so it is not waiting time.
+    expect(t.totals).toEqual({ workingMs: 80 * MIN, waitingMs: 0, blockedOnHumanMs: 10 * MIN })
     expect(t.spans.map((s) => [s.phase, s.round, s.agent, s.open])).toEqual([
       ['build', null, 'claude', false],
       ['review', 2, 'reviewer', false],
@@ -198,6 +247,21 @@ describe('buildTimeline', () => {
       '10:30',
     )
     expect(gone.blockedStretches).toEqual([])
+  })
+
+  it("reads a delegated build as working: the builder's span under the orchestrator's open wait", () => {
+    const wait = event('wait_start', '10:00', { reason: 'builder', agent: 'orchestrator' })
+    const span = event('span_start', '10:01', { phase: 'build', agent: 'builder' })
+    const t = build([wait, event('handoff', '10:00', { toAgent: 'builder' }), span], '10:31')
+    expect(t.totals).toEqual({ workingMs: 30 * MIN, waitingMs: MIN, blockedOnHumanMs: 0 })
+    // Once the builder hands back and nothing runs, the open wait is waiting time again.
+    const ended = build([wait, span, event('span_end', '10:31', { refId: span.id })], '10:41')
+    expect(ended.totals).toEqual({ workingMs: 30 * MIN, waitingMs: 11 * MIN, blockedOnHumanMs: 0 })
+  })
+
+  it('reads a ticket with only an open wait as waiting', () => {
+    const t = build([event('wait_start', '10:00', { reason: 'lock' })], '10:25')
+    expect(t.totals).toEqual({ workingMs: 0, waitingMs: 25 * MIN, blockedOnHumanMs: 0 })
   })
 
   it('lists hand-offs and the board marks apart from stage moves', () => {

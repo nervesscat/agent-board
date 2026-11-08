@@ -57,6 +57,7 @@ import {
   listStages,
   matchStages,
   movePatch,
+  projectWorkStage,
   resolveStage,
   startStage,
   startedPatch,
@@ -612,7 +613,11 @@ export function createTicket(
   // So is each task's tag: a bad one would otherwise leave the ticket behind without its tasks.
   if (input.tasks) newTaskTags(input.tasks)
   const stages = listStages(projectId)
-  const status = (input.status ? resolveStage(stages, input.status) : startStage(stages)).key
+  const status = (
+    input.status
+      ? resolveStage(stages, input.status, projectWorkStage(projectId, stages))
+      : startStage(stages)
+  ).key
   const row = db
     .insert(schema.tickets)
     .values({
@@ -794,7 +799,11 @@ export function updateTicket(
   if (patch.repoId) resolveRepo(before.projectId, patch.repoId)
   if (patch.tags) patch = { ...patch, tags: cleanTags(patch.tags) }
   const stages = listStages(before.projectId)
-  if (patch.status) patch = { ...patch, status: resolveStage(stages, patch.status).key }
+  if (patch.status)
+    patch = {
+      ...patch,
+      status: resolveStage(stages, patch.status, projectWorkStage(before.projectId, stages)).key,
+    }
   const row = db
     .update(schema.tickets)
     .set({
@@ -944,7 +953,7 @@ function stopIfClosed(t: schema.Ticket, stages: ReturnType<typeof listStages>, a
  * shared ticket can be taken over from whoever holds it; one reserved for a project agent only by acting
  * as that agent. Not in a done or cancelled stage, nor archived. The write only lands if nobody reassigned the ticket
  * since it was read, so two agents claiming at once cannot both win. A ticket waiting in an open or
- * blocked stage moves to the project's first active stage, if it has one.
+ * blocked stage moves to the project's work stage (`workStage`), if it has an active one.
  */
 export function claimTicket(
   id: number,
@@ -983,7 +992,7 @@ export function claimTicket(
   if (before.prId && opts.branch !== undefined && opts.branch !== before.branch)
     throw new HttpError(400, `ticket ${id} is PR #${before.prNumber}'s: it has no branch of its own`)
   const assignee = as?.name ?? actor
-  const active = firstOfKind(stages, 'active')
+  const active = projectWorkStage(before.projectId, stages)
   // A PR's own ticket keeps its stage: its PR's status is what sets it.
   const start = !before.prId && (from.kind === 'open' || from.kind === 'blocked') && active ? active : null
   const row = db
@@ -1059,7 +1068,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     (before === 'disapproved' && kind === 'cancelled') ||
     (before === 'approved' && pr && kind === 'done' && verdict === null)
   const reopenTo = opts.reopenTo
-    ? resolveStage(stages, opts.reopenTo)
+    ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages))
     : before === 'approved'
       ? (firstOfKind(stages, 'review') ?? startStage(stages))
       : startStage(stages)
@@ -1181,7 +1190,8 @@ export function archiveTicket(id: number, actor: string) {
  */
 export function archiveStage(projectId: number, status: string, actor: string) {
   getProject(projectId)
-  const stage = resolveStage(listStages(projectId), status)
+  const stages = listStages(projectId)
+  const stage = resolveStage(stages, status, projectWorkStage(projectId, stages))
   if (stage.kind !== 'done' && stage.kind !== 'cancelled')
     throw new HttpError(409, `${stage.name} is not a done or cancelled stage`)
   const ids = db
@@ -2552,7 +2562,7 @@ function postDecision(
 /**
  * The human's answer to a decision: the option picked, and an optional note. It is posted as a reply
  * under the decision too, so the agent that asked finds it in its threads. A blocked ticket goes back
- * to the project's first active stage once no decision on it is left open, except a PR's ticket, which
+ * to the project's work stage (`workStage`) once no decision on it is left open, except a PR's ticket, which
  * goes to the stage its PR's status gives. Deciding again changes the answer, and drops a relayed one:
  * the card then shows only the human's own decision.
  */
@@ -2676,11 +2686,11 @@ function settleDecision(post: { id: number; ticketId: number }, actor: string, r
     .get()
   if (!stillOpen && kindOf(stages, ticket.status) === 'blocked') {
     // A PR's ticket goes to the stage its PR's status gives. Otherwise (any other ticket, or the PR's stage or
-    // row missing), to the first active stage.
+    // row missing), to where the project's work starts (the first active stage unless it chose one).
     const pr = ticket.prId
       ? db.select().from(schema.prs).where(eq(schema.prs.id, ticket.prId)).get()
       : undefined
-    const back = (pr && prTicketStage(stages, prStatus(pr))) ?? firstOfKind(stages, 'active')
+    const back = (pr && prTicketStage(stages, prStatus(pr))) ?? projectWorkStage(ticket.projectId, stages)
     if (back && back.key !== ticket.status) {
       db.update(schema.tickets)
         .set({ status: back.key, ...movePatch(stages, ticket.status, back.key, ticket.startedAt) })

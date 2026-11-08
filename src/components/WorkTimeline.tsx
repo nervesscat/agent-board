@@ -15,7 +15,8 @@ import {
  * A ticket's work timeline (src/lib/workTimeline.ts) as one horizontal track, from its first event to
  * now (or its last event, once it is no longer worked): the agents' spans as solid segments coloured
  * by phase, packed into as many rows as overlap; the waits hatched on a row of their own, with the time
- * in a blocked stage; the hand-offs and the board's events as markers. Every segment and marker is a
+ * in a blocked stage (that and the waits on the human hatched faintly over the spans too, since they
+ * take that time off working); the hand-offs and the board's events as markers. Every segment and marker is a
  * button with its whole story as its name and its tooltip, so the track reads from the keyboard too.
  */
 
@@ -135,12 +136,19 @@ export function WorkTimelineBar({
                   </Tip>
                 )
               })}
-              {/* Where the waits fall, shown faintly over the spans too. */}
-              {timeline.waits.map((w) => (
+              {/* Where the human holds the work up, shown faintly over the spans too: that time is blocked
+                  on the human, not working. Other waits stay on their own row, since work under them counts. */}
+              {[
+                ...timeline.waits
+                  .filter((w) => w.reason === 'human')
+                  .map((w) => ({ ...w, key: `wait-${w.id}` })),
+                ...timeline.blockedStretches.map((b) => ({ ...b, key: `blocked-${b.start}` })),
+              ].map((w) => (
                 <span
-                  key={w.id}
+                  key={w.key}
                   aria-hidden
-                  className={`pointer-events-none absolute inset-y-0 ${WAIT_TONE[w.reason] ?? OTHER_WAIT}`}
+                  data-kind="human-overlay"
+                  className={`pointer-events-none absolute inset-y-0 ${WAIT_TONE.human}`}
                   style={{ left: at(w.start), width: width(w.start, w.end), ...HATCH }}
                 />
               ))}
