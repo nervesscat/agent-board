@@ -203,82 +203,82 @@ export function TicketBoard({
                   <div key={t.id} data-card={t.id} className="group/card relative">
                     {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
                     <Tip content={t.title}>
-                    <Link
-                      to="/projects/$id/features/$ticketId"
-                      params={{ id: projectId, ticketId: String(t.id) }}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = 'move'
-                        e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
-                        setDragging(t.id)
-                      }}
-                      onDragEnd={endDrag}
-                      // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
-                      className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
-                        dragging === t.id ? 'opacity-40' : ''
-                      }`}
-                    >
-                      <div className="flex items-start gap-1.5">
-                        <ComplexityChip level={t.complexity} className="mt-0.5" />
-                        {/* Room for Move up / Move down where they always show (touch). */}
-                        <div className="line-clamp-2 min-w-0 font-medium leading-snug pointer-coarse:pr-14">
-                          <span className="text-muted-foreground">#{t.id}</span> {t.title}
-                        </div>
-                      </div>
-                      {(t.decisions > 0 ||
-                        t.blockedTasks > 0 ||
-                        t.stalled ||
-                        t.needs.some((n) => !n.merged) ||
-                        after?.has(t.id) ||
-                        hasResumeBadge(t.resume)) && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                          {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
-                          {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
-                          <StalledBadge stalled={t.stalled} focusable={false} />
-                          <NeedsBadge needs={t.needs} />
-                          <ResumeBadges resume={t.resume} />
-                        </div>
-                      )}
-                      {/* The time sits at the end of the last of these rows, so it always shares a line. */}
-                      {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
-                        <div className={INFO_ROW}>
-                          {repoLabel(project, t.repoId) && (
-                            <span className="shrink-0 rounded bg-muted px-1">
-                              {repoLabel(project, t.repoId)}
-                            </span>
-                          )}
-                          {/* A long name is cut short before its badge; the branch gives way first. */}
-                          {t.assignee && <Actor name={t.assignee} truncate />}
-                          {t.branch && (
-                            <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
-                              {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
-                              <GitBranch className="size-3 shrink-0" />{' '}
-                              <span className="truncate">{t.branch}</span>
-                            </span>
-                          )}
-                          {!t.tags.length && <Updated at={t.updatedAt} />}
-                        </div>
-                      )}
-                      {t.tags.length > 0 && (
-                        <div className={INFO_ROW}>
-                          {/* Tags clip on their own, so a long list never pushes the time out of view. */}
-                          <div className="flex min-w-0 gap-1 overflow-hidden">
-                            {[...t.tags].sort(compareTags).map((tag) => (
-                              <Tag key={tag} tag={tag} className="shrink-0" />
-                            ))}
+                      <Link
+                        to="/projects/$id/features/$ticketId"
+                        params={{ id: projectId, ticketId: String(t.id) }}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = 'move'
+                          e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
+                          setDragging(t.id)
+                        }}
+                        onDragEnd={endDrag}
+                        // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
+                        className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
+                          dragging === t.id ? 'opacity-40' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-1.5">
+                          <ComplexityChip level={t.complexity} className="mt-0.5" />
+                          {/* Room for Move up / Move down where they always show (touch). */}
+                          <div className="line-clamp-2 min-w-0 font-medium leading-snug pointer-coarse:pr-14">
+                            <span className="text-muted-foreground">#{t.id}</span> {t.title}
                           </div>
-                          <Updated at={t.updatedAt} />
                         </div>
-                      )}
-                      {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
-                        <div className={INFO_ROW}>
-                          <Updated at={t.updatedAt} />
-                        </div>
-                      )}
-                      {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
-                      {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
-                    </Link>
+                        {(t.decisions > 0 ||
+                          t.blockedTasks > 0 ||
+                          t.stalled ||
+                          t.needs.some((n) => !n.merged) ||
+                          after?.has(t.id) ||
+                          hasResumeBadge(t.resume)) && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                            {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
+                            {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                            <StalledBadge stalled={t.stalled} focusable={false} />
+                            <NeedsBadge needs={t.needs} />
+                            <ResumeBadges resume={t.resume} />
+                          </div>
+                        )}
+                        {/* The time sits at the end of the last of these rows, so it always shares a line. */}
+                        {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
+                          <div className={INFO_ROW}>
+                            {repoLabel(project, t.repoId) && (
+                              <span className="shrink-0 rounded bg-muted px-1">
+                                {repoLabel(project, t.repoId)}
+                              </span>
+                            )}
+                            {/* A long name is cut short before its badge; the branch gives way first. */}
+                            {t.assignee && <Actor name={t.assignee} truncate />}
+                            {t.branch && (
+                              <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
+                                {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
+                                <GitBranch className="size-3 shrink-0" />{' '}
+                                <span className="truncate">{t.branch}</span>
+                              </span>
+                            )}
+                            {!t.tags.length && <Updated at={t.updatedAt} />}
+                          </div>
+                        )}
+                        {t.tags.length > 0 && (
+                          <div className={INFO_ROW}>
+                            {/* Tags clip on their own, so a long list never pushes the time out of view. */}
+                            <div className="flex min-w-0 gap-1 overflow-hidden">
+                              {[...t.tags].sort(compareTags).map((tag) => (
+                                <Tag key={tag} tag={tag} className="shrink-0" />
+                              ))}
+                            </div>
+                            <Updated at={t.updatedAt} />
+                          </div>
+                        )}
+                        {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
+                          <div className={INFO_ROW}>
+                            <Updated at={t.updatedAt} />
+                          </div>
+                        )}
+                        {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
+                        {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
+                      </Link>
                     </Tip>
                     {column.length > 1 && (
                       <MoveButtons
@@ -369,7 +369,10 @@ function MoveButtons({
     </Tip>
   )
   return (
-    <div className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover/card:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
+    <div
+      data-move-buttons
+      className="absolute top-1.5 right-1.5 flex gap-0.5 opacity-0 transition-opacity group-hover/card:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100"
+    >
       {button('up', first)}
       {button('down', last)}
     </div>
