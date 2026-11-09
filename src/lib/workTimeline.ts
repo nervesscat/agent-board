@@ -62,14 +62,20 @@ export type LastHeard = {
   reason: string
   note: string
 }
+/** A span that has ended: its phase, who worked it, and when it started and ended. */
+export type ClosedSpan = { phase: string; agent: string; start: string; end: string }
 /**
  * What a ticket is doing now, for a list row or the Overview: its open spans (phase, agent, since), its
- * open waits (reason, agent, `on`, since) and who was last heard from.
+ * open waits (reason, agent, `on`, since) and who was last heard from. `lastClosedSpan` is the span that
+ * ended last (null when none has), so a stall with nothing open says when the work stopped; `now` is the
+ * server's time when the read was made, which the browser's clock is corrected by.
  */
 export type Activity = {
   spans: { phase: string; agent: string; since: string }[]
   waits: { reason: string; agent: string; on: string | null; since: string }[]
   lastHeard: LastHeard | null
+  lastClosedSpan?: ClosedSpan | null
+  now?: string
 }
 /**
  * Since when an active ticket has been silent, for how many whole minutes, and who was heard from last:
@@ -87,6 +93,8 @@ export type Stalled = {
 }
 
 export type WorkTimeline = {
+  /** The server's time when the timeline was read: the browser's clock is corrected by it (see useServerOffset). */
+  now: string
   /** The first event's time; null while the ticket has none (then `end` is null too). */
   start: string | null
   /** Now while the ticket is live (worked, waiting or in review, not archived), else its last event. */
@@ -307,6 +315,7 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
       }
     : null
   return {
+    now: iso(now),
     start: startMs === null ? null : iso(startMs),
     end: endMs === null ? null : iso(endMs),
     live,
@@ -330,8 +339,11 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
   }
 }
 
-/** A timeline's activity: its open spans and waits, and who was last heard from. */
+/** A timeline's activity: its open spans and waits, who was last heard from, and the span that ended last. */
 export function activityOf(timeline: WorkTimeline): Activity {
+  const closed = timeline.spans
+    .filter((s) => !s.open)
+    .sort((a, b) => Date.parse(b.end) - Date.parse(a.end))[0]
   return {
     spans: timeline.spans
       .filter((s) => s.open)
@@ -340,6 +352,10 @@ export function activityOf(timeline: WorkTimeline): Activity {
       .filter((w) => w.open)
       .map((w) => ({ reason: w.reason, agent: w.agent, on: w.on, since: w.start })),
     lastHeard: timeline.lastHeard,
+    lastClosedSpan: closed
+      ? { phase: closed.phase, agent: closed.agent, start: closed.start, end: closed.end }
+      : null,
+    now: timeline.now,
   }
 }
 

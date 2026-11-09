@@ -10,7 +10,20 @@ import type { Stalled, TimelineSpan, TimelineWait, WorkTimeline, WorkTotals } fr
 export type WorkTimelineLike = Pick<
   WorkTimeline,
   'spans' | 'waits' | 'totals' | 'stalled' | 'live' | 'end' | 'start' | 'lastHeard'
->
+> & {
+  /** The server's time when the timeline was read (absent for one built from an activity: then no offset). */
+  now?: string
+}
+
+/**
+ * The offset of the server's clock from the browser's, measured when a time the server stamped arrived:
+ * the browser's clock runs behind or ahead of it by this much.
+ */
+export const measureOffset = (serverIso: string, browserAt: number): number =>
+  Date.parse(serverIso) - browserAt
+
+/** The browser's `now` moved onto the server's clock by the offset measured for the response. */
+export const onServerClock = (browserNow: number, offset: number): number => browserNow + offset
 
 /** The agent a wait is delegated to ('' when none). */
 const waitOn = (w: TimelineWait): string => w.on ?? ''
@@ -32,7 +45,7 @@ const latestFirst = <T extends { start: string }>(xs: T[]) =>
 export type CurrentActivity =
   | { kind: 'building'; verb: string; phase: string; agent: string; since: string; ms: number }
   | { kind: 'waiting-agent'; agent: string; reason: string; since: string; ms: number }
-  | { kind: 'waiting-human'; reason: string; since: string }
+  | { kind: 'waiting-human'; reason: string; since: string; ms: number }
   | { kind: 'nothing' }
 
 /**
@@ -50,7 +63,7 @@ export function currentActivity(t: WorkTimelineLike, now: Date | number): Curren
   const human = open.filter((w) => w.reason === 'human')
   if (human.length) {
     const first = human.reduce((a, b) => (ms(b.start) < ms(a.start) ? b : a))
-    return { kind: 'waiting-human', reason: first.reason, since: first.start }
+    return { kind: 'waiting-human', reason: first.reason, since: first.start, ms: since(first.start) }
   }
   const openSpans = t.spans.filter((s) => s.open)
   const delegated = latestFirst(open.filter((w) => waitOn(w)))

@@ -368,16 +368,28 @@ describe('delegated waits, lastHeard and activity', () => {
         reason: 'builder',
         note: '',
       },
+      lastClosedSpan: null,
+      now: expect.any(String),
     })
     expect(span.spanId).toBe(started.id)
     const overview = (await tool('get_summary', { projectId: pid })).projects[0]
-    expect(overview.inProgress.find((p: { id: number }) => p.id === t.id).activity).toEqual(row.activity)
+    // Each read is at its own time: the same activity, read at the Overview's now.
+    expect(overview.inProgress.find((p: { id: number }) => p.id === t.id).activity).toEqual({
+      ...row.activity,
+      now: expect.any(String),
+    })
 
     // Once they close, the open lists are empty; lastHeard stays at the latest event.
     await tool('end_span', { projectId: pid, ticketId: t.id, spanId: span.spanId })
     await tool('end_wait', { projectId: pid, ticketId: t.id })
     const after = (await tool('list_tickets', { projectId: pid })).find((r: { id: number }) => r.id === t.id)
     expect(after.activity).toMatchObject({ spans: [], waits: [], lastHeard: { kind: 'wait_end' } })
+    expect(after.activity.lastClosedSpan).toEqual({
+      phase: 'build',
+      agent: AGENT,
+      start: started.at,
+      end: expect.any(String),
+    })
   })
 })
 

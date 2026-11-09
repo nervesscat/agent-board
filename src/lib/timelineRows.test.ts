@@ -64,6 +64,7 @@ const handoff = (id: number, from: string, to: string, at: string): TimelineHand
 })
 
 const timeline = (more: Partial<WorkTimeline> = {}): WorkTimeline => ({
+  now: iso('11:00'),
   start: iso('10:00'),
   end: iso('11:00'),
   live: false,

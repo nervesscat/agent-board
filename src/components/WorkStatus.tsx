@@ -3,10 +3,11 @@ import { AlertTriangle, Hammer, Hourglass, UserRound } from 'lucide-react'
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
 import { clock } from '#/lib/format'
-import { useNow } from '#/lib/useNow'
+import { useNow, useServerOffset } from '#/lib/useNow'
 import {
   currentActivity,
   lastHeard,
+  onServerClock,
   stallReason,
   workShares,
   type StallReason,
@@ -28,7 +29,9 @@ export function NowLine({
   className?: string
 }) {
   const tick = useNow(60_000)
-  const a = currentActivity(timeline, now ?? tick)
+  // The browser's clock may run behind or ahead of the server's that stamped the spans: the times are read on the server's.
+  const offset = useServerOffset(timeline.now)
+  const a = currentActivity(timeline, onServerClock(+(now ?? tick), offset))
   const base = `${className} text-sm tabular-nums`
   if (a.kind === 'building')
     return (
@@ -47,7 +50,7 @@ export function NowLine({
     return (
       <p data-testid="now-line" className={`${base} font-medium text-amber-800 dark:text-amber-300`}>
         <UserRound className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />
-        Waiting on you since {clock(a.since)}
+        Waiting on you for {dur(a.ms)} since {clock(a.since)}
       </p>
     )
   return (
@@ -93,12 +96,15 @@ function stallWhy(r: StallReason): string {
 export function StallNotice({
   timeline,
   stage = null,
+  nowLine = null,
   variant = 'badge',
   focusable = true,
   className = '',
 }: {
   timeline: WorkTimelineLike
   stage?: string | null
+  /** The ticket's Now line in words, for a badge's tooltip above the why (a board card's). */
+  nowLine?: string | null
   variant?: 'badge' | 'inline'
   focusable?: boolean
   className?: string
@@ -120,7 +126,7 @@ export function StallNotice({
       </p>
     )
   return (
-    <Tip content={why}>
+    <Tip content={nowLine ? `${nowLine}\n${why}` : why}>
       <span
         tabIndex={focusable ? 0 : undefined}
         data-testid="stall-notice"

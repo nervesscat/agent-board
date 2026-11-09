@@ -373,11 +373,32 @@ describe('activityOf', () => {
         reason: '',
         note: 'waiting on the builder',
       },
+      lastClosedSpan: null,
+      now: at('10:30'),
+    })
+  })
+
+  it('names the span that ended last, and the server time of the read', () => {
+    const first = event('span_start', '10:00', { phase: 'spec' })
+    const firstEnd = event('span_end', '10:05', { refId: first.id, phase: 'spec' })
+    const second = event('span_start', '10:20', { phase: 'build' })
+    const secondEnd = event('span_end', '10:40', { refId: second.id, phase: 'build' })
+    expect(activityOf(build([first, firstEnd, second, secondEnd], '10:50')).lastClosedSpan).toEqual({
+      phase: 'build',
+      agent: 'claude',
+      start: at('10:20'),
+      end: at('10:40'),
     })
   })
 
   it('is empty for a ticket without events', () => {
-    expect(activityOf(build([], '10:00'))).toEqual({ spans: [], waits: [], lastHeard: null })
+    expect(activityOf(build([], '10:00'))).toEqual({
+      spans: [],
+      waits: [],
+      lastHeard: null,
+      lastClosedSpan: null,
+      now: at('10:00'),
+    })
   })
 })
 

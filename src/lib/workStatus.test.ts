@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import type { LastHeard, TimelineSpan, TimelineWait, WorkTotals } from '#/lib/workTimeline'
 
-import { currentActivity, lastHeard, stallReason, workShares, type WorkTimelineLike } from './workStatus'
+import {
+  currentActivity,
+  lastHeard,
+  measureOffset,
+  onServerClock,
+  stallReason,
+  workShares,
+  type WorkTimelineLike,
+} from './workStatus'
 
 const at = (hhmm: string) => `2026-10-20T${hhmm}:00.000Z`
 const NOW = Date.parse(at('12:30'))
@@ -81,7 +89,12 @@ describe('currentActivity', () => {
 
   it('names an open human wait as waiting on you, since when', () => {
     const t = timeline({ waits: [wait({ reason: 'human', start: at('12:09') })] })
-    expect(currentActivity(t, NOW)).toEqual({ kind: 'waiting-human', reason: 'human', since: at('12:09') })
+    expect(currentActivity(t, NOW)).toEqual({
+      kind: 'waiting-human',
+      reason: 'human',
+      since: at('12:09'),
+      ms: 21 * 60_000,
+    })
   })
 
   it('gives the earliest open human wait, the longest one', () => {
@@ -99,7 +112,12 @@ describe('currentActivity', () => {
       spans: [span({})],
       waits: [wait({ reason: 'human', on: 'builder', start: at('12:09') })],
     })
-    expect(currentActivity(t, NOW)).toEqual({ kind: 'waiting-human', reason: 'human', since: at('12:09') })
+    expect(currentActivity(t, NOW)).toEqual({
+      kind: 'waiting-human',
+      reason: 'human',
+      since: at('12:09'),
+      ms: 21 * 60_000,
+    })
   })
 
   it('never shows negative time when the clock is behind the span it reads', () => {
@@ -250,5 +268,37 @@ describe('workShares', () => {
 
   it('gives no shares for no time', () => {
     expect(workShares(ZERO)).toEqual({ total: 0, worked: 0, waited: 0, onYou: 0 })
+  })
+})
+
+describe('the server clock', () => {
+  it('measures how far the browser clock runs behind the server, and moves the browser time onto the server clock', () => {
+    // The server stamped 12:30 when the browser read 12:25: the browser is 5 minutes behind.
+    const offset = measureOffset(at('12:30'), Date.parse(at('12:25')))
+    expect(offset).toBe(5 * 60_000)
+    expect(onServerClock(Date.parse(at('12:35')), offset)).toBe(Date.parse(at('12:40')))
+  })
+
+  it('a browser clock ahead of the server measures negative', () => {
+    expect(measureOffset(at('12:30'), Date.parse(at('12:33')))).toBe(-3 * 60_000)
+  })
+
+  it('a span started on the server clock counts its time there, not on the browser clock behind it', () => {
+    const offset = measureOffset(at('12:30'), Date.parse(at('12:25')))
+    const t: WorkTimelineLike = {
+      spans: [span({ start: at('12:20'), open: true })],
+      waits: [],
+      totals: ZERO,
+      stalled: null,
+      live: true,
+      start: at('12:00'),
+      end: at('12:30'),
+      lastHeard: null,
+    }
+    // Browser 12:35 is server 12:40: the span, begun at 12:20, has run 20 minutes (not 15).
+    expect(currentActivity(t, onServerClock(Date.parse(at('12:35')), offset))).toMatchObject({
+      kind: 'building',
+      ms: 20 * 60_000,
+    })
   })
 })

@@ -48,8 +48,9 @@ import {
   stageColumn,
   stageOf,
 } from '#/lib/stages'
-import { useNow } from '#/lib/useNow'
 import { nameFirst } from '#/lib/tickets'
+import { useNow, useServerOffset } from '#/lib/useNow'
+import { onServerClock } from '#/lib/workStatus'
 
 /** Where a card goes in its own column: right above or below another card of it. */
 export type Placement = { anchor: number; side: 'above' | 'below' }
@@ -81,6 +82,8 @@ export function TicketBoard({
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
   const tick = useNow(60_000)
+  // The rows of one read share the server's time: the board's now is read on that clock, not the browser's.
+  const now = onServerClock(tick, useServerOffset(items[0]?.activity.now))
   const [dragging, setDragging] = useState<number | null>(null)
   const [over, setOver] = useState<string | null>(null)
   // Dragging within its own column: the gap it would land in, 0 above the first card.
@@ -195,7 +198,8 @@ export function TicketBoard({
                     t.needs.some((n) => !n.merged) ||
                     after?.has(t.id) ||
                     hasResumeBadge(t.resume)
-                  const brief = badged ? null : nowBrief(work, tick)
+                  const words = nowWords(work, now)
+                  const brief = badged ? null : nowBrief(work, now)
                   return (
                     <div key={t.id} data-card={t.id} className="relative">
                       {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
@@ -229,13 +233,14 @@ export function TicketBoard({
                             after?.has(t.id) ||
                             hasResumeBadge(t.resume)) && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                              {brief && <NowBadge brief={brief} words={nowWords(work, tick)} />}
+                              {brief && <NowBadge brief={brief} words={words} />}
                               {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                               {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
                               {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
                               <StallNotice
                                 timeline={work}
                                 stage={stallStage(stages, t.status)}
+                                nowLine={words}
                                 focusable={false}
                               />
                               <NeedsBadge needs={t.needs} />

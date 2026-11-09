@@ -90,7 +90,7 @@ describe('nowWords and nowBrief', () => {
       { ...NONE, waits: [{ reason: 'human', agent: 'claude', on: null, since: at('12:00') }] },
       null,
     )
-    expect(nowWords(t, NOW)).toMatch(/^Waiting on you since /)
+    expect(nowWords(t, NOW)).toMatch(/^Waiting on you for 30 min since /)
     expect(nowBrief(t, NOW)).toEqual({ kind: 'waiting-human', text: '30 min' })
   })
 
