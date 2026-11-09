@@ -33,6 +33,7 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { NowLine, StallNotice } from '#/components/WorkStatus'
 import type { Push, TicketRow } from '#/lib/api'
@@ -88,6 +89,13 @@ export function TicketBoard({
   const [over, setOver] = useState<string | null>(null)
   // Dragging within its own column: the gap it would land in, 0 above the first card.
   const [slot, setSlot] = useState<number | null>(null)
+  // A phone shows one stage at a time; this is the one picked (none: the first with tickets).
+  const [pickedStage, setPickedStage] = useState<string>()
+  const activeStage =
+    pickedStage ?? stages.find((s) => stageColumn(items, s.key).length > 0)?.key ?? stages[0]?.key
+  const stageItems = Object.fromEntries(
+    stages.map((s) => [s.key, `${s.name} (${stageColumn(items, s.key).length})`]),
+  )
   const draggedStatus = items.find((x) => x.id === dragging)?.status
   const endDrag = () => {
     setDragging(null)
@@ -116,12 +124,28 @@ export function TicketBoard({
     el.scrollTo({ left: (Math.round(el.scrollLeft / col) + dir) * col, behavior: 'smooth' })
   }
   return (
-    <div ref={frame} className="flex min-h-80 flex-col">
+    <div ref={frame} className="flex flex-col md:min-h-80">
+      {stages.length > 0 && activeStage && (
+        <div className="mb-2 md:hidden">
+          <Select value={activeStage} onValueChange={(v) => v && setPickedStage(v)} items={stageItems}>
+            <SelectTrigger className="w-full" aria-label="Stage">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {stages.map((s) => (
+                <SelectItem key={s.key} value={s.key}>
+                  {s.name} ({stageColumn(items, s.key).length})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {(edges.left || edges.right) && (
-        <div className="mb-2 flex justify-end gap-1">
+        <div className="mb-2 hidden justify-end gap-1 md:flex">
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon"
             disabled={!edges.left}
             onClick={() => step(-1)}
             aria-label="Previous stage"
@@ -130,7 +154,7 @@ export function TicketBoard({
           </Button>
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon"
             disabled={!edges.right}
             onClick={() => step(1)}
             aria-label="Next stage"
@@ -140,7 +164,7 @@ export function TicketBoard({
         </div>
       )}
       {/* Fixed-width columns side by side, scrolling sideways; each one as tall as the board, scrolling its own cards. */}
-      <div ref={scroller} className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
+      <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-auto pb-2 md:flex-row">
         {stages.map(({ key: status, name, kind }) => {
           const column = stageColumn(items, status)
           const own = dragging !== null && draggedStatus === status
@@ -173,9 +197,9 @@ export function TicketBoard({
                 e.preventDefault()
                 drop(status, column, slotAt(e.currentTarget, e.clientY))
               }}
-              className={`flex w-72 shrink-0 flex-col rounded-lg bg-muted/40 p-2 transition-colors ${
-                over === status && draggedStatus !== status ? 'bg-primary/10 ring-2 ring-primary/40' : ''
-              }`}
+              className={`flex w-full shrink-0 flex-col rounded-lg bg-muted/40 p-2 transition-colors md:w-72 ${
+                status !== activeStage ? 'max-md:hidden' : ''
+              } ${over === status && draggedStatus !== status ? 'bg-primary/10 ring-2 ring-primary/40' : ''}`}
             >
               <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <span className="truncate">{name}</span>
@@ -186,7 +210,7 @@ export function TicketBoard({
                   <span className="tabular-nums">{column.length}</span>
                 </span>
               </div>
-              <div data-column={status} className="min-h-12 flex-1 space-y-2 overflow-y-auto">
+              <div data-column={status} className="min-h-12 flex-1 space-y-2 md:overflow-y-auto">
                 {column.map((t, i) => {
                   // The card's work, from what its row carries: the now, and the stall (as the list and the ticket page word them).
                   const work = timelineFromActivity(t.activity, t.stalled, hasWork(kind))
@@ -215,13 +239,13 @@ export function TicketBoard({
                           }}
                           onDragEnd={endDrag}
                           // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
-                          className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
+                          className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing max-md:max-h-none ${
                             dragging === t.id ? 'opacity-40' : ''
                           }`}
                         >
                           <div className="flex items-start gap-1.5">
                             <ComplexityChip level={t.complexity} className="mt-0.5" />
-                            <div className="line-clamp-2 min-w-0 font-medium leading-snug">
+                            <div className="line-clamp-2 min-w-0 font-medium leading-snug max-md:line-clamp-none">
                               <span className="text-muted-foreground">#{t.id}</span> {t.title}
                             </div>
                           </div>
@@ -256,7 +280,7 @@ export function TicketBoard({
                                 </span>
                               )}
                               {/* A long name is cut short before its badge; the branch gives way first. */}
-                              {t.assignee && <Actor name={t.assignee} truncate />}
+                              {t.assignee && <Actor name={t.assignee} truncate short />}
                               {t.branch && (
                                 <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
                                   {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
@@ -467,7 +491,13 @@ function useFillHeight(ref: RefObject<HTMLDivElement | null>) {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    // Only the desktop board fills the window: a phone shows one stage and scrolls the page.
+    const wide = window.matchMedia('(min-width: 768px)')
     const fit = () => {
+      if (!wide.matches) {
+        el.style.height = ''
+        return
+      }
       const top = el.getBoundingClientRect().top + window.scrollY
       // 24px: the page's bottom padding (main's py-6), so the board ends where the page does.
       const height = `${Math.max(320, window.innerHeight - top - 24)}px`
@@ -477,9 +507,11 @@ function useFillHeight(ref: RefObject<HTMLDivElement | null>) {
     const around = new ResizeObserver(fit)
     if (el.parentElement) around.observe(el.parentElement)
     window.addEventListener('resize', fit)
+    wide.addEventListener('change', fit)
     return () => {
       around.disconnect()
       window.removeEventListener('resize', fit)
+      wide.removeEventListener('change', fit)
     }
   }, [ref])
 }

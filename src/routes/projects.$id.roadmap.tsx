@@ -102,10 +102,7 @@ function Roadmap() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Roadmap</h1>
-          <p className="text-sm text-muted-foreground">
-            Every ticket being worked, side by side: what is done, what is being worked now and what comes
-            next, for the ticket and each of its lanes.
-          </p>
+          <p className="text-sm text-muted-foreground">Every ticket in flight: done, now, next.</p>
         </div>
         <ChipTabs
           chips={[
@@ -277,7 +274,9 @@ function Row({
         >
           <span className="shrink-0 font-mono text-xs text-muted-foreground">#{row.id}</span>
           <Tip content={row.title}>
-            <span className={`truncate ${lane ? 'text-[13px]' : 'font-medium'}`}>{row.title}</span>
+            <span className={`line-clamp-2 min-w-0 ${lane ? 'text-[13px]' : 'font-medium'}`}>
+              {row.title}
+            </span>
           </Tip>
         </Link>
         <div
@@ -308,7 +307,12 @@ function Row({
         </div>
       </div>
       <div className="min-w-0">
-        <Track groups={groups} lane={Boolean(lane)} />
+        <div className="md:hidden">
+          <Steps groups={groups} />
+        </div>
+        <div className="hidden md:block">
+          <Track groups={groups} lane={Boolean(lane)} />
+        </div>
         <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
           {/* Keyed on the choice, not the times: a new choice re-anchors a live track at now; the ticking end does not. */}
           <WorkTimelineBar key={windowKey} timeline={row.work} compact={Boolean(lane)} window={timeWindow} />
@@ -356,6 +360,42 @@ function Track({ groups, lane }: { groups: StepGroup[]; lane: boolean }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** The same tasks as `Track`, stacked on a phone: a status dot, the step, its state and a reason. */
+function Steps({ groups }: { groups: StepGroup[] }) {
+  if (!groups.length) return <div className="px-5 py-3 text-xs text-muted-foreground">No tasks yet.</div>
+  return (
+    <div className="space-y-3 px-5 py-3" aria-label="Tasks">
+      {groups.map((g) => (
+        <div key={g.steps[0]!.id}>
+          {g.caption && (
+            <div className="mb-1 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+              {g.caption}
+            </div>
+          )}
+          <ol className="space-y-2">
+            {g.steps.map((s) => (
+              <li key={s.id} className="flex items-start gap-2.5">
+                <Dot state={s.state} small />
+                <div className="min-w-0 flex-1">
+                  <div className={`text-sm leading-snug ${LABEL[s.state]}`}>{s.text}</div>
+                  {s.state === 'blocked' && s.blockedReason && (
+                    <div className="mt-0.5 text-[11px] leading-tight text-amber-700 dark:text-amber-300">
+                      {s.blockedReason}
+                    </div>
+                  )}
+                </div>
+                <span className="shrink-0 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+                  {s.state}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
     </div>
   )
 }

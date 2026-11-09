@@ -16,7 +16,7 @@ const GROUP = 'project-files'
 
 export function FileGrid({ projectId, files }: { projectId: string; files: GalleryFile[] }) {
   return (
-    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+    <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {files.map((f) => (
         <FileTile key={f.id} projectId={projectId} file={f} />
       ))}

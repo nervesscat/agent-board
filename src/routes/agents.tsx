@@ -53,10 +53,7 @@ function ConnectAgents() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Connect an agent</h1>
         <p className="text-sm text-muted-foreground">
-          Two steps per agent CLI: connect the board&apos;s MCP server, then install the board skill. Generate
-          commands first: it makes the agent&apos;s token and puts it in every command below. The skill is one
-          file for every repo, installed once: agents ask the board for their repo&apos;s project, so a repo
-          or project added later is found without installing it again. The default CLI is set in{' '}
+          Connect a CLI, then install the skill. Generate commands first. The default CLI is set in{' '}
           <Link to="/settings" className="underline hover:text-foreground">
             Settings
           </Link>

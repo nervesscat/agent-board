@@ -91,7 +91,7 @@ export function ChipToggles<K extends string>({
               type="button"
               aria-pressed={on}
               data-active={on ? '' : undefined}
-              className={cn(tabsTriggerClass, NO_UNDERLINE)}
+              className={cn(tabsTriggerClass, NO_UNDERLINE, 'flex-none')}
               onClick={() => onToggle(c.key, !on)}
             >
               <ChipLabel label={c.label} count={c.count} />

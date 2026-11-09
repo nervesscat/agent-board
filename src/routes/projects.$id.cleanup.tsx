@@ -18,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/components/ui/card'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '#/components/ui/table'
 import { Tip } from '#/components/ui/tooltip'
@@ -176,23 +177,27 @@ function Cleanup() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Cleanup</h1>
           <p className="text-sm text-muted-foreground">
-            Done and cancelled tickets that still have worktrees, branches, registered workspaces or a running
-            preview, each branch checked against where its work should have landed: a lane's parent branch,
-            then the parent's base. Delete what landed from here, after a confirmation; the board checks each
-            item again first and never forces anything. Agents may delete local branches that landed, through
-            the same checks (<span className="font-mono">cleanup_delete</span>, or{' '}
-            <span className="font-mono">/board cleanup</span> when you ask); removing worktrees and deleting
-            branches on origin stay yours, from this page.
+            Finished work to clean up, checked against its base.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+        <Button
+          className="w-full sm:w-auto"
+          variant="outline"
+          size="sm"
+          onClick={() => refetch()}
+          disabled={isFetching}
+        >
           <RefreshCw data-icon="inline-start" className={isFetching ? 'animate-spin' : ''} /> Refresh
         </Button>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Agents may delete local branches that landed ( <span className="font-mono">cleanup_delete</span> );
+        removing worktrees and deleting branches on origin stay yours, from this page.
+      </p>
       {error && <p className="text-sm text-destructive">{errorMessage(error)}</p>}
       {actionsOff && (
         <p className="rounded-lg border bg-muted/40 p-3 text-sm">Deleting is off: {actionsOff}.</p>
@@ -238,7 +243,93 @@ function Cleanup() {
                   {g.title} <span className="text-muted-foreground">· {items.length}</span>
                 </h2>
                 <p className="text-xs text-muted-foreground">{g.hint}</p>
-                <div className="overflow-x-auto rounded-lg border">
+                <div className="space-y-2 md:hidden">
+                  {items.map(({ ticket: t, branch: b }) => (
+                    <Card key={`${t.id}:${b?.name ?? ''}`} size="sm">
+                      <CardHeader>
+                        <CardTitle className="flex items-start gap-1.5 text-sm">
+                          {t.parentId && <Layers className="mt-0.5 size-3 shrink-0 text-muted-foreground" />}
+                          <Link
+                            to="/projects/$id/features/$ticketId"
+                            params={{ id, ticketId: String(t.id) }}
+                            className="min-w-0 hover:underline"
+                          >
+                            {t.title}
+                          </Link>
+                        </CardTitle>
+                        <CardDescription>
+                          #{t.id} · {stages.length ? stageOf(stages, t.status).name : t.status}
+                          {t.workspaces.length > 0 &&
+                            ` · ${t.workspaces.length} workspace${t.workspaces.length > 1 ? 's' : ''} registered`}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-xs">
+                        {t.previews.map((p) => (
+                          <div key={p.workspaceId} className="text-amber-700 dark:text-amber-400">
+                            preview {p.status === 'running' ? `running on :${p.port}` : p.status}: stop it on
+                            the ticket
+                          </div>
+                        ))}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {b ? (
+                            <>
+                              <span className="inline-flex items-center gap-1 font-mono">
+                                <GitBranch className="size-3" /> {b.name}
+                              </span>
+                              <span className="font-mono text-muted-foreground">
+                                {b.local ? shortSha(b.local) : 'not local'}
+                              </span>
+                              {b.reach && <ReachBadge reach={b.reach} />}
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              {t.workspaces.map((w) => w.name).join(', ')}
+                            </span>
+                          )}
+                        </div>
+                        {b?.worktrees.map((w) => (
+                          <Tip
+                            key={w.path}
+                            content={w.protected ? `${w.path}: kept, ${w.protected}` : w.path}
+                          >
+                            <div className="flex items-center gap-1 truncate font-mono text-[11px]">
+                              <FolderGit2 className="size-3 shrink-0 text-muted-foreground" />
+                              <span className="truncate">{w.main ? 'main checkout' : w.path}</span>
+                            </div>
+                          </Tip>
+                        ))}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                          <span className="font-mono text-muted-foreground">
+                            {b?.remote ? `origin ${shortSha(b.remote)}` : ''}
+                          </span>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {b?.restore && (
+                              <Tip content={`Copy the restore command: ${b.restore}`}>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Copy the restore command: ${b.restore}`}
+                                  onClick={() => copy(b.restore!)}
+                                >
+                                  <Copy />
+                                </Button>
+                              </Tip>
+                            )}
+                            {b && !actionsOff && (
+                              <RowActions
+                                branch={b}
+                                busy={remove.isPending}
+                                onAsk={(kind) => ask(kind, [{ ticket: t, branch: b }])}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto rounded-lg border md:block">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -367,7 +458,62 @@ function Cleanup() {
                 its own commits against origin's copies of the bases, or by a merged PR whose head is that
                 very commit.
               </p>
-              <div className="overflow-x-auto rounded-lg border">
+              <div className="space-y-2 md:hidden">
+                {remote.map(({ ticket: t, branch: b }) => (
+                  <Card key={`${t.id}:${b.name}`} size="sm">
+                    <CardHeader>
+                      <CardTitle className="text-sm">
+                        <span className="text-muted-foreground">#{t.id}</span> {t.title}
+                      </CardTitle>
+                      <CardDescription className="font-mono">
+                        {b.name} · {shortSha(b.remote!)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-xs">
+                      <div>
+                        {b.mergedPr ? (
+                          <span>PR #{b.mergedPr.number} merged at this commit</span>
+                        ) : b.remoteReach ? (
+                          <ReachBadge reach={b.remoteReach} />
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
+                        {b.restoreRemote ? (
+                          <Tip content={`Copy the restore command: ${b.restoreRemote}`}>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Copy the restore command: ${b.restoreRemote}`}
+                              onClick={() => copy(b.restoreRemote!)}
+                            >
+                              <Copy />
+                            </Button>
+                          </Tip>
+                        ) : (
+                          <span />
+                        )}
+                        {!actionsOff &&
+                          (b.can.remote.ok ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={remove.isPending}
+                              onClick={() => ask('remote', [{ ticket: t, branch: b }])}
+                            >
+                              {ACTIONS.remote.row}
+                            </Button>
+                          ) : (
+                            <Kept reason={b.can.remote.reason} />
+                          ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              <div className="hidden overflow-x-auto rounded-lg border md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>

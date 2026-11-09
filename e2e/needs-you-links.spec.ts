@@ -1353,7 +1353,7 @@ test("Back from the project's Agents, its shell remembered, scrolled as the link
   )
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/agents\\?shell=powershell$`))
   await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible()
-  await expect(page.getByText('The roles agents work as in this project.')).toBeVisible()
+  await expect(page.getByText('The roles agents work as.')).toBeVisible()
   await expectBackAt(page, project, left)
 })
 

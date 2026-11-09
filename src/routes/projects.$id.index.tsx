@@ -10,9 +10,7 @@ function Overview() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
-        <p className="text-sm text-muted-foreground">
-          What waits on you, what is in progress, what got done today and what is next.
-        </p>
+        <p className="text-sm text-muted-foreground">What needs you, what is moving, what is next.</p>
       </div>
       <Summary projectId={Number(id)} />
     </div>

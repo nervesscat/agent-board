@@ -101,16 +101,20 @@ export function Actor({
   name,
   via,
   truncate,
+  short,
   className = '',
 }: {
   name: string
   via?: string
   /** Cut the name short on its one line before the badge after it (see `Name`). */
   truncate?: boolean
+  /** On a card, show only the leaf of a sub-identity (`ticket-794`); the tooltip keeps the whole chain. */
+  short?: boolean
   className?: string
 }) {
   const who = useWho()
   const agent = useProjectAgent(name)
+  const shown = short && name.includes('/') ? name.split('/').pop()! : name
   if (agent)
     return (
       <Tip
@@ -133,9 +137,9 @@ export function Actor({
         <Picture>
           <Icon className="size-3.5 text-muted-foreground" />
         </Picture>
-        <Name name={name} truncate={truncate} />
+        <Name name={shown} truncate={truncate} />
         <RoleBadge role={me.role} />
-        {me.role === 'worker' && me.parent && (
+        {!short && me.role === 'worker' && me.parent && (
           // Kept on one line, cut short with an ellipsis where it cannot fit (the tooltip has the chain).
           <span className="min-w-0 truncate font-normal text-muted-foreground">under {me.parent}</span>
         )}

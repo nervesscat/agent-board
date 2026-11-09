@@ -160,7 +160,7 @@ function Section({
   children: ReactNode
 }) {
   return (
-    <Card size="sm" className={cn(scroll && 'max-h-[28rem] lg:h-[28rem]', className)}>
+    <Card size="sm" className={cn(scroll && 'lg:max-h-[28rem] lg:h-[28rem]', className)}>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           <Icon className="size-4 text-muted-foreground" /> {title}

@@ -116,10 +116,7 @@ function GalleryPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Gallery</h1>
-        <p className="text-sm text-muted-foreground">
-          Every file on the project's tickets: on their posts, on the replies under them and with their
-          instructions. Click one to open it here.
-        </p>
+        <p className="text-sm text-muted-foreground">Every file on the project's tickets.</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3" role="group" aria-label="Filters">
@@ -129,7 +126,7 @@ function GalleryPage() {
           onToggle={toggleKind}
           label="File type"
           // Five chips do not fit one row on a phone: there they wrap, and the page never scrolls sideways.
-          className="flex-wrap justify-start group-data-horizontal/tabs:h-auto"
+          className="max-w-full flex-nowrap justify-start overflow-x-auto"
         />
         <div className="flex flex-wrap items-center gap-2">
           <DatePicker
@@ -187,7 +184,7 @@ function GalleryPage() {
       {error ? (
         <Empty>Could not load the files: {errorMessage(error)}</Empty>
       ) : isPending ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {Array.from({ length: 8 }, (_, i) => (
             <Skeleton key={i} className="aspect-[4/5]" />
           ))}

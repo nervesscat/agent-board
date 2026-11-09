@@ -99,9 +99,11 @@ test('posts, replies and the assignee show who is who: Human, Orchestrator, Agen
     await expect(badge(field, 'Agent')).toBeVisible()
     await page.goto(`/projects/${project.id}/features?view=board`)
     const card = page.locator('[data-column="in_progress"]').getByRole('link', { name: /Who is who/ })
-    const assignee = card.locator('span[data-role]').filter({ hasText: sub }).first()
+    const assignee = card.locator('span[data-slot="tooltip-trigger"][data-role="worker"]').first()
     await expect(badge(assignee, 'Agent')).toBeVisible()
-    await expect(assignee).toContainText(`under ${orchName}`)
+    // The card shows the leaf of the sub-identity; the whole chain is in the tooltip.
+    await expect(assignee).toContainText('worker-2')
+    await expectTooltip(assignee, /worker-2/)
   } finally {
     await Promise.all([orch.dispose(), worker.dispose(), old.dispose()])
   }
@@ -333,17 +335,14 @@ test.describe('on a phone', () => {
         .locator('[data-column="in_progress"]')
         .getByRole('link', { name: /Card with a deep assignee/ })
       await card.scrollIntoViewIfNeeded()
-      const actor = card
-        .locator('span[data-slot="tooltip-trigger"][data-role="worker"]')
-        .filter({ hasText: sub })
+      const actor = card.locator('span[data-slot="tooltip-trigger"][data-role="worker"]').first()
       const name = actor.getByTestId('actor-name')
       const role = actor.locator('[data-role="worker"]').getByText('Agent', { exact: true })
       const time = card.getByTestId('card-time')
-      await expect(name).toHaveText(sub)
+      // The card shows the leaf; its badge and time stay in view.
+      await expect(name).toHaveText('importer-lane-one')
       await expect(role).toBeVisible()
       await expect(time).toBeVisible()
-      // The name is cut short on its line, not the badge or the time after it.
-      expect(await name.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true)
       const row = time.locator('..')
       for (const inner of [role, time]) {
         await expectInside(inner, card)

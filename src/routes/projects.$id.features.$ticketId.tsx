@@ -322,18 +322,28 @@ function TicketPage() {
     'ticket.resume':
       t.archivedAt || isClosed(kind) ? null : <ResumeNote key={t.id} t={t} onChange={invalidate} />,
     'ticket.instructions': (
-      <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+      <div id="instructions" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
+        <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
+      </div>
     ),
     'ticket.tasks': <Tasks t={t} onChange={invalidate} />,
-    'ticket.timeline': <WorkTimelineCard key={t.id} t={t} />,
+    'ticket.timeline': (
+      <div id="timeline" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
+        <WorkTimelineCard key={t.id} t={t} />
+      </div>
+    ),
     'ticket.lanes': (
-      <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
+      <div id="lanes" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
+        <Lanes t={t} filter={filter} onFilter={setFilter} onVerdict={decide} judging={judge.isPending} />
+      </div>
     ),
     'ticket.activity': (
-      <ShownAnchor value={drawn ? anchor : null}>
-        {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
-        <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
-      </ShownAnchor>
+      <div id="activity" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
+        <ShownAnchor value={drawn ? anchor : null}>
+          {/* Keyed by ticket: the tab and the draft do not follow to the next one. */}
+          <Activity key={t.id} t={t} onChange={invalidate} laneFeed={laneFeed} onLaneFeed={setLaneFeed} />
+        </ShownAnchor>
+      </div>
     ),
     'ticket.runs': runs.shown ? <RunsCard t={t} git={git} onChange={invalidate} /> : null,
     'ticket.details': <Details key={t.id} t={t} includes={git?.includes} onSave={(p) => update.mutate(p)} />,
@@ -383,7 +393,7 @@ function TicketPage() {
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>
-              opened by <Actor name={t.createdBy} /> {ago(t.createdAt)}
+              opened by <Actor name={t.createdBy} truncate short /> {ago(t.createdAt)}
             </span>
             <span>updated {ago(t.updatedAt)}</span>
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
@@ -491,6 +501,14 @@ function TicketPage() {
               widen the page */}
         {main.length > 0 && (
           <div data-ticket-column="main" className="min-w-0 space-y-6">
+            <TicketSectionNav hasSummary={Boolean(t.summary)} />
+            {t.summary && (
+              <div id="summary" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
+                <ShownAnchor value={drawn ? anchor : null}>
+                  <SummaryCard t={t} />
+                </ShownAnchor>
+              </div>
+            )}
             {main.map((s) => (
               <Fragment key={s}>{sections[s]}</Fragment>
             ))}
@@ -668,6 +686,7 @@ function Instructions({
   onChange: () => void
 }) {
   const [editing, setEditing] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const [body, setBody] = useState(t.body)
   const fileInput = useRef<HTMLInputElement>(null)
   const onError = (err: unknown) => toast.error(errorMessage(err))
@@ -750,22 +769,37 @@ function Instructions({
           </div>
         </div>
       ) : t.body ? (
-        // Clicking the text edits it; a link inside still opens.
-        <Tip content="Click to edit">
-          <div
-            role="button"
-            tabIndex={0}
-            className="cursor-text rounded-md hover:bg-muted/30"
-            onClick={(e) => {
-              if (!(e.target as HTMLElement).closest('a, img')) open()
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') open()
-            }}
-          >
-            <Markdown>{t.body}</Markdown>
-          </div>
-        </Tip>
+        <>
+          {/* Clicking the text edits it; a link inside still opens. */}
+          <Tip content="Click to edit">
+            <div
+              role="button"
+              tabIndex={0}
+              className="cursor-text rounded-md hover:bg-muted/30"
+              onClick={(e) => {
+                if (!(e.target as HTMLElement).closest('a, img')) open()
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') open()
+              }}
+            >
+              <div className={cn(!expanded && 'max-md:max-h-64 max-md:overflow-hidden')}>
+                <Markdown>{t.body}</Markdown>
+              </div>
+            </div>
+          </Tip>
+          {t.body.length > 600 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2 md:hidden"
+              onClick={() => setExpanded((v) => !v)}
+            >
+              {expanded ? 'Show less' : 'Show full instructions'}
+            </Button>
+          )}
+        </>
       ) : (
         <button type="button" onClick={open} className="text-sm text-muted-foreground hover:text-foreground">
           No instructions yet. Click to write them.
@@ -1282,11 +1316,13 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
               {blockedSubtasks === 1 ? '1 subtask blocked' : `${blockedSubtasks} subtasks blocked`}
             </span>
           )}
-          <span className="ml-auto flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+          <span className="ml-auto flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100">
             {/* Tagging a done phase blocked would untick it by hand. */}
             {!(auto && task.done) && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => {
                   if (task.blocked) tag.mutate({ id: task.id, blocked: false })
                   else {
@@ -1302,12 +1338,14 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                     task.blocked ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground',
                   )}
                 />
-              </button>
+              </Button>
             )}
             {!subtask && (
               <Tip content="Add a subtask">
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => {
                     setSubtaskOf(task.id)
                     setSubtext('')
@@ -1315,7 +1353,7 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                   aria-label={`Add a subtask to ${task.text}`}
                 >
                   <ListPlus className="size-3.5 text-muted-foreground" />
-                </button>
+                </Button>
               </Tip>
             )}
             <Tip
@@ -1325,9 +1363,15 @@ function Tasks({ t, onChange }: { t: TicketFull; onChange: () => void }) {
                   : 'remove, with its subtasks'
               }
             >
-              <button type="button" onClick={() => remove.mutate(task.id)} aria-label={`Remove ${task.text}`}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => remove.mutate(task.id)}
+                aria-label={`Remove ${task.text}`}
+              >
                 <X className="size-3.5 text-muted-foreground" />
-              </button>
+              </Button>
             </Tip>
           </span>
         </div>
@@ -1814,10 +1858,13 @@ function Lanes({
               </div>
             )}
           </div>
-          <ul className="max-h-[36rem] divide-y overflow-y-auto rounded-md border">
+          <ul className="divide-y rounded-md border sm:max-h-[36rem] sm:overflow-y-auto">
             {lanes.map((l) => (
-              <li key={l.id} className="flex items-start transition-colors hover:bg-muted/50">
-                <span className="shrink-0 py-2 pr-1 pl-3">
+              <li
+                key={l.id}
+                className="flex flex-col gap-1 p-3 transition-colors hover:bg-muted/50 sm:flex-row sm:items-start sm:p-0"
+              >
+                <span className="order-3 shrink-0 pt-1 sm:order-none sm:py-2 sm:pr-1 sm:pl-3">
                   <VerdictButtons
                     t={l}
                     compact
@@ -1829,11 +1876,11 @@ function Lanes({
                   to="/projects/$id/features/$ticketId"
                   params={{ id: String(t.projectId), ticketId: String(l.id) }}
                   search={laneSearch(filter)}
-                  className="flex min-w-0 flex-1 items-start gap-3 py-2.5 pr-3 pl-2"
+                  className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-start sm:gap-3 sm:py-2.5 sm:pr-3 sm:pl-2"
                 >
                   <Tip content={stageOf(stages, l.status).name}>
                     <span
-                      className={`mt-px w-20 shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium ${stageBadge(stageOf(stages, l.status))}`}
+                      className={`mt-px w-fit shrink-0 truncate rounded px-1.5 py-0.5 text-center text-[11px] font-medium sm:w-20 ${stageBadge(stageOf(stages, l.status))}`}
                     >
                       {stageOf(stages, l.status).name}
                     </span>
@@ -1853,7 +1900,7 @@ function Lanes({
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      {l.assignee && <Actor name={l.assignee} />}
+                      {l.assignee && <Actor name={l.assignee} truncate short />}
                       {l.branch && (
                         <span className="inline-flex min-w-0 items-center gap-1 font-mono">
                           <GitBranch className="size-3 shrink-0" />{' '}
@@ -1872,7 +1919,7 @@ function Lanes({
                       )}
                     </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 text-xs tabular-nums text-muted-foreground">
+                  <div className="flex shrink-0 flex-row items-center gap-2 text-xs tabular-nums text-muted-foreground sm:flex-col sm:items-end sm:gap-1">
                     {l.rollup.total > 0 && (
                       <span>
                         {l.rollup.done}/{l.rollup.total}
@@ -2002,7 +2049,7 @@ function Activity({
         <h2 className="text-sm font-medium">Activity</h2>
         <Tabs value={tab} onValueChange={(v) => setTab(v as FeedTab)}>
           <TabsList aria-label="Feed">
-            <Tip content="For you: your posts with the replies under them, decisions, questions, the summary">
+            <Tip content="For you: your posts with the replies under them, decisions and questions">
               <TabsTrigger value="main" className="after:hidden">
                 Main
               </TabsTrigger>
@@ -2028,7 +2075,6 @@ function Activity({
           </label>
         )}
       </div>
-      {tab === 'main' && t.summary && <SummaryCard t={t} />}
       <form
         {...drop.props}
         className={cn('mb-4 space-y-2 rounded-lg border p-3', drop.className)}
@@ -2086,6 +2132,36 @@ function Activity({
         </Timeline>
       )}
     </section>
+  )
+}
+
+const SECTION_ITEMS = [
+  { key: 'summary', label: 'Summary' },
+  { key: 'tasks', label: 'Tasks' },
+  { key: 'timeline', label: 'Timeline' },
+  { key: 'activity', label: 'Activity' },
+  { key: 'lanes', label: 'Lanes' },
+] as const
+
+/** The ticket's sections, one tap away on a phone instead of a long scroll. */
+function TicketSectionNav({ hasSummary }: { hasSummary: boolean }) {
+  const [active, setActive] = useState('summary')
+  const go = (id: string) => {
+    setActive(id)
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  return (
+    <div className="-mx-1 overflow-x-auto px-1 py-2">
+      <Tabs value={active} onValueChange={(v) => go(String(v))}>
+        <TabsList aria-label="Ticket sections" className="w-max">
+          {SECTION_ITEMS.filter((s) => s.key !== 'summary' || hasSummary).map((s) => (
+            <TabsTrigger key={s.key} value={s.key} className="after:hidden">
+              {s.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+    </div>
   )
 }
 
@@ -2334,7 +2410,7 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
       {/* The post without its thread: hovering it shows its actions, hovering one of its replies does not. */}
       <div className="group/post p-3">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Actor name={u.author} via={u.via} className="text-foreground" />
+          <Actor name={u.author} via={u.via} truncate className="text-foreground" />
           {u.summary ? (
             <Tip content="The lane's summary: where its work stands, as its agents keep it">
               <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
