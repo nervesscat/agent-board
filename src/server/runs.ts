@@ -13,6 +13,7 @@ import { DEFAULT_RUN, RUN_PORTS, type RunType, runSlug } from '#/lib/runs'
 import { logActivity } from './activity'
 import { authMode, config, uploadsDir } from './config'
 import { toolProblem } from './hostTools'
+import { listeningAddresses, loopbackOf } from './listeners'
 import { HttpError, notFound } from './http'
 import { checkPreview } from './preview'
 import { deleteRunConfig, getRunConfig, listRunConfigs, type RunConfig, seedRepo } from './runConfig'
@@ -175,6 +176,8 @@ export interface PreviewRunner {
   /** The same, for the board's last moments (no await there). */
   killTreeSync(pid: number): void
   isFree(port: number): Promise<boolean>
+  /** The addresses the port listens on on this machine, loopback or not (listeners.ts). */
+  listening(port: number): Promise<string[]>
   answers(url: string): Promise<boolean>
   /** The live board's database (a backup, it is open and in WAL mode) and uploads, into `dest`. */
   copyData(dest: string): Promise<void>
@@ -242,6 +245,7 @@ const realRunner: PreviewRunner = {
       }
   },
   isFree,
+  listening: listeningAddresses,
   answers: async (url) => (await checkPreview(url, 1000)).running,
   async copyData(dest) {
     const src = path.join(config.dataDir, 'board.db')
@@ -262,6 +266,55 @@ let runner = realRunner
 /** Tests run against a fake; `null` puts the real one back. */
 export function setPreviewRunner(r: PreviewRunner | null) {
   runner = r ?? realRunner
+}
+
+/**
+ * How often a running preview's port is looked at again: a listener that appears beyond loopback is stopped
+ * within this (the proxy refuses it on each request too, previewProxy.ts).
+ */
+export const LISTEN_WATCH_MS = 2000
+
+/**
+ * Why a preview's port is not reached from its loopback only, or null when it is. Nothing listening yet is
+ * fine unless `needed` (once the server answers, it must be listening); an address that cannot be told is
+ * not loopback. The check is the enforcement of "the preview's port stays on loopback": a start command can
+ * rebind the server (`--host 0.0.0.0`), whatever the board's HOST says.
+ */
+export async function notLoopbackReason(port: number, needed: boolean): Promise<string | null> {
+  let addresses: string[]
+  try {
+    addresses = await runner.listening(port)
+  } catch {
+    return "the preview's address cannot be checked"
+  }
+  if (!addresses.length) return needed ? "the preview's address cannot be checked" : null
+  const beyond = addresses.find((a) => loopbackOf([a]) === 'beyond')
+  return beyond ? `the preview listens beyond this machine on ${beyond}` : null
+}
+
+/** Stop a run whose port is not loopback only, with the reason: it is never left running reachable. */
+async function stopNotLoopback(e: Entry, why: string) {
+  await stopRun(e.workspaceId, e.runId, why, 'the board')
+}
+
+/** While a preview runs, its port is looked at every LISTEN_WATCH_MS until the run is no longer this run. */
+function watchListeners(e: Entry, port: number) {
+  let busy = false
+  const timer = setInterval(async () => {
+    if (all().get(keyOfEntry(e)) !== e || e.status !== 'running') {
+      clearInterval(timer)
+      return
+    }
+    if (busy) return
+    busy = true
+    try {
+      const why = await notLoopbackReason(port, true)
+      if (why && e.status === 'running') await stopNotLoopback(e, why)
+    } finally {
+      busy = false
+    }
+  }, LISTEN_WATCH_MS)
+  timer.unref()
 }
 
 // --- state ---
@@ -863,12 +916,18 @@ async function go(e: Entry, run: RunConfig) {
     save()
     return
   }
+  if (port === null) return
   const base = `http://127.0.0.1:${port}`
   const health = run.healthPath && run.healthPath !== '/' ? `${base}${run.healthPath}` : base
   for (const until = Date.now() + READY_MS; Date.now() < until; ) {
     if (!current(e) || exited !== undefined) return
+    // A start command may bind beyond loopback (`--host 0.0.0.0` overrides HOST): checked from the first listen.
+    const beyond = await notLoopbackReason(port, false)
+    if (beyond) return stopNotLoopback(e, beyond)
     if (await runner.answers(health)) {
       if (!current(e)) return
+      const unknown = await notLoopbackReason(port, true)
+      if (unknown) return stopNotLoopback(e, unknown)
       e.status = 'running'
       e.step = null
       e.url = base
@@ -879,6 +938,7 @@ async function go(e: Entry, run: RunConfig) {
         .run()
       save()
       notePreview(e, `running ${base}`)
+      watchListeners(e, port)
       return
     }
     await new Promise((r) => setTimeout(r, 500))

@@ -121,3 +121,25 @@ export async function listenersOn(ports: number[]): Promise<Map<number, Listener
 export async function listeningAddresses(port: number): Promise<string[]> {
   return (await listeningSockets(true)).filter((l) => l.port === port).map((l) => l.address)
 }
+
+// --- where a port listens ---
+
+export type Loopback = 'loopback' | 'beyond' | 'unknown'
+
+/** Where a port listens, from the addresses the OS reports: loopback only, something beyond it, or unknown. */
+export function loopbackOf(addresses: string[]): Loopback {
+  if (!addresses.length) return 'unknown'
+  for (const address of addresses) {
+    const at = hostPort(address)
+    if (!at || !isLoopbackHost(at.host)) return 'beyond'
+  }
+  return 'loopback'
+}
+
+export function isLoopbackHost(host: string): boolean {
+  const h = host
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/%.*$/, '')
+  return h === '::1' || /^127\.\d+\.\d+\.\d+$/.test(h) || /^::ffff:127\.\d+\.\d+\.\d+$/.test(h)
+}

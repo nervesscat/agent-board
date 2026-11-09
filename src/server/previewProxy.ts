@@ -9,7 +9,7 @@ import { type AuthMode, authMode, config, type PublicEntrance, servedEntrance } 
 import { agentTokenOf, bearerToken, isBearer, readCookie, sessionCookieName, sessionOf } from './credentials'
 import { isForwardingHeader, type SignInSite } from './entrance'
 import { HttpError } from './http'
-import { hostPort, listeningAddresses } from './listeners'
+import { type Loopback, listeningAddresses, loopbackOf } from './listeners'
 import { previewRunOf } from './managedPreview'
 import {
   mintPreviewLink,
@@ -19,7 +19,7 @@ import {
   verifyPreviewValue,
 } from './previewLink'
 import { PREVIEW_PATH, previewCookieName, previewPathOf } from './previewPaths'
-import { type RunState, runState } from './runs'
+import { type RunState, runState, stopRun } from './runs'
 
 /**
  * The board's preview proxy: a running preview (a managed run's loopback port) at `/p/<workspaceId>/<runId>/`
@@ -194,26 +194,6 @@ function whoIs(
   const cookie = readCookie(request.headers.get('cookie'), previewCookieName(run.workspaceId, run.runId))
   const own = verifyPreviewValue(cookie, run.workspaceId, run.runId, run.runningAt, now.getTime())
   return own ? { principal: own, redeem: false } : null
-}
-
-export type Loopback = 'loopback' | 'beyond' | 'unknown'
-
-/** Where a port listens, from the addresses the OS reports: loopback only, something beyond it, or unknown. */
-export function loopbackOf(addresses: string[]): Loopback {
-  if (!addresses.length) return 'unknown'
-  for (const address of addresses) {
-    const at = hostPort(address)
-    if (!at || !isLoopbackHost(at.host)) return 'beyond'
-  }
-  return 'loopback'
-}
-
-export function isLoopbackHost(host: string): boolean {
-  const h = host
-    .toLowerCase()
-    .replace(/^\[|\]$/g, '')
-    .replace(/%.*$/, '')
-  return h === '::1' || /^127\.\d+\.\d+\.\d+$/.test(h) || /^::ffff:127\.\d+\.\d+\.\d+$/.test(h)
 }
 
 /** Headers a request carries on one connection only, never forwarded. */
@@ -462,9 +442,15 @@ export async function servePreview(
   } catch {
     loopback = 'unknown'
   }
-  if (loopback === 'beyond') return json(502, 'the preview listens beyond this machine: refused')
-  if (loopback === 'unknown')
-    return json(502, 'the preview is running but its address cannot be checked: refused')
+  if (loopback !== 'loopback') {
+    // Stopped, as the board's own watch stops it (runs.ts): a run that listens beyond the machine is not left up.
+    const why =
+      loopback === 'beyond'
+        ? 'the preview listens beyond this machine'
+        : "the preview's address cannot be checked"
+    await stopRun(workspaceId, runId, why, 'the board').catch(() => null)
+    return json(502, `${why}: stopped`)
+  }
 
   const params = new URLSearchParams(url.search)
   params.delete(LINK_PARAM)
