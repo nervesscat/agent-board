@@ -18,6 +18,7 @@ import { checkPreview } from './preview'
 import { deleteRunConfig, getRunConfig, listRunConfigs, type RunConfig, seedRepo } from './runConfig'
 import { kindOf, listStages } from './stages'
 import { noteBoardEvent } from './workTimeline'
+import { previewLinksOf, previewPathOf } from './previewLink'
 
 /**
  * Runs: long-running processes the board starts itself from a ticket's worktree, as the human
@@ -67,6 +68,12 @@ export interface RunState {
   path: string
   /** Absolute paths of its logs: install and build, then the start command's. */
   logs: { build: string; server: string }
+  /**
+   * A running preview's links (previewLink.ts): its path on this board's origin, and on the tailnet
+   * entrance when one is served. Absent for anything else, and with sign-in off.
+   */
+  proxyUrl?: string
+  remoteUrl?: string
 }
 
 const ACTIVE = new Set<RunStatus>(['building', 'starting', 'running'])
@@ -404,9 +411,10 @@ function tailOf(file: string, lines = 30): string[] {
 
 /** The state as reads hand it out; one that builds or runs carries the tail of the log it writes. */
 function view({ dataDir: _dataDir, ...e }: Entry): RunState {
-  if (!isActive(e)) return { ...e, tail: [...e.tail] }
+  const links = previewLinksOf(e)
+  if (!isActive(e)) return { ...e, tail: [...e.tail], ...links }
   const log = e.status === 'building' && e.step !== 'server' ? 'build' : 'server'
-  return { ...e, tail: tailOf(e.logs[log]), tailLog: log }
+  return { ...e, tail: tailOf(e.logs[log]), tailLog: log, ...links }
 }
 
 /** The state of one run of a workspace, or null when the board never ran it there. */
@@ -719,7 +727,7 @@ export function worktreeEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env }
   for (const key of Object.keys(env))
     if (
-      /^(NODE_ENV|PORT|HOST|NITRO_\w+|DATA_DIR|BOARD_URL|BOARD_ENV|AUTH|DEV_HUMAN|TEST_HUMAN|STORAGE|S3_\w+)$/.test(
+      /^(NODE_ENV|PORT|HOST|NITRO_\w+|DATA_DIR|BOARD_URL|BOARD_ENV|BOARD_PREVIEW_BASE|AUTH|DEV_HUMAN|TEST_HUMAN|STORAGE|S3_\w+)$/.test(
         key,
       ) ||
       ENTRANCE_KEYS.test(key)
@@ -756,11 +764,14 @@ export function runEnv(
   run: Pick<RunConfig, 'type' | 'env' | 'copyData'>,
   port: number | null,
   dataDir: string | null,
+  previewBase?: string,
 ): NodeJS.ProcessEnv {
   return {
     ...worktreeEnv(),
     ...Object.fromEntries(Object.entries(run.env).map(([k, v]) => [k, withPort(v, port)])),
     ...(run.type === 'preview' ? { HOST: '127.0.0.1', PORT: String(port) } : {}),
+    // The preview is built and started for the path the board proxies it at (previewProxy.ts).
+    ...(run.type === 'preview' && previewBase ? { BOARD_PREVIEW_BASE: previewBase } : {}),
     ...(run.copyData && dataDir ? { DATA_DIR: dataDir } : {}),
     PREVIEW_PARENT_PID: String(process.pid),
   }
@@ -786,11 +797,13 @@ function startSpawn(start: string, env: NodeJS.ProcessEnv) {
 }
 
 async function go(e: Entry, run: RunConfig) {
+  // A preview is built for the path the board proxies it at: its Vite base and router basepath read it.
+  const previewBase = run.type === 'preview' ? previewPathOf(e.workspaceId, e.runId) : undefined
   if (e.dataDir) await fs.promises.rm(e.dataDir, { recursive: true, force: true })
   else await fs.promises.rm(path.dirname(e.logs.build), { recursive: true, force: true })
   await fs.promises.mkdir(path.dirname(e.logs.build), { recursive: true })
   ownFolder(e.dataDir ?? runsDirOf(e.path))
-  const env = worktreeEnv()
+  const env = { ...worktreeEnv(), ...(previewBase ? { BOARD_PREVIEW_BASE: previewBase } : {}) }
   const step = async (name: RunStep, command: string) => {
     // Stopped while it cleared the last run's data: nothing more starts.
     if (!current(e)) return false
@@ -826,7 +839,7 @@ async function go(e: Entry, run: RunConfig) {
     if (typeof taken === 'string') return fail(e, taken, null)
     port = taken
   }
-  const start = startSpawn(withPort(run.start, port), runEnv(run, port, e.dataDir))
+  const start = startSpawn(withPort(run.start, port), runEnv(run, port, e.dataDir, previewBase))
   const proc = runner.spawn(start.command, start.args, {
     cwd: e.path,
     env: start.env,

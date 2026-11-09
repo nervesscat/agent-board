@@ -515,6 +515,27 @@ describe('the environment of a run', () => {
       vi.unstubAllEnvs()
     }
   })
+
+  it('builds and starts a preview for the path the board proxies it at, and sets its loopback port last', async () => {
+    vi.stubEnv('BOARD_PREVIEW_BASE', '/p/99/98/')
+    try {
+      useFake()
+      const repo = addRepo('preview-base')
+      const web = run(repo, { name: 'Web', build: 'make' })
+      const { ws } = ticketIn(repo)
+      const s = await running(ws.id, web.id)
+      // Every step of the preview, the build and the start command, is given the base.
+      for (const call of fake.calls)
+        expect(call.env.BOARD_PREVIEW_BASE, call.command).toBe(`/p/${ws.id}/${web.id}/`)
+      // The board's own HOST and PORT: the preview listens on loopback, at its port.
+      const start = fake.calls.at(-1)!
+      expect(start.env.HOST).toBe('127.0.0.1')
+      expect(start.env.PORT).toBe(String(s.port))
+      expect(s.proxyUrl).toBe(`http://localhost:47100/p/${ws.id}/${web.id}/`)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
 })
 
 describe('stops by itself', () => {
