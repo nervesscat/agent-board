@@ -399,8 +399,8 @@ export function WorkTimelineBar({
                     type="button"
                     aria-label={`created ${chart.created.minutes} min before work`}
                     data-kind="created"
-                    className="absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full border border-card bg-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-                    style={{ left: 0 }}
+                    className={`absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full border border-card bg-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${chart.created.left > 0 ? '-translate-x-1/2' : ''}`}
+                    style={{ left: `${chart.created.left * 100}%` }}
                   />
                 </Tip>
               )}

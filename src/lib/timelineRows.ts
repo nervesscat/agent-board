@@ -69,8 +69,11 @@ export type Chart = {
   rows: AgentRow[]
   marks: Mark[]
   bands: Band[]
-  /** The ticket was created this many whole minutes before its first agent event (the axis start). */
-  created: { minutes: number } | null
+  /**
+   * The ticket was created this many whole minutes before its first agent event. `left` is the creation's
+   * share of the axis: 0 when it is before the window (the mark then sits on the left edge).
+   */
+  created: { minutes: number; left: number } | null
   summary: string
 }
 
@@ -118,6 +121,13 @@ export function ticksFor(start: number, end: number): Tick[] {
   return ticks
 }
 
+/** When each agent event starts: a span, a wait or a hand-off (the board's own marks are not agent events). */
+const agentStarts = (t: WorkTimeline): number[] => [
+  ...t.spans.map((s) => Date.parse(s.start)),
+  ...t.waits.map((w) => Date.parse(w.start)),
+  ...t.handoffs.map((h) => Date.parse(h.at)),
+]
+
 /**
  * The axis: from the first agent event (a span, a wait or a hand-off) to the end, now while the ticket is
  * live, or the window given. Without agent events it starts at the timeline's first event.
@@ -129,11 +139,7 @@ export function axisFor(t: WorkTimeline, now: number, win?: Window): Axis {
     start = Date.parse(win.start)
     end = Date.parse(win.end)
   } else {
-    const agentAt = [
-      ...t.spans.map((s) => Date.parse(s.start)),
-      ...t.waits.map((w) => Date.parse(w.start)),
-      ...t.handoffs.map((h) => Date.parse(h.at)),
-    ]
+    const agentAt = agentStarts(t)
     start = agentAt.length ? Math.min(...agentAt) : t.start ? Date.parse(t.start) : now
     end = t.end ? Date.parse(t.end) : now
     if (t.live) end = Math.max(end, now)
@@ -334,7 +340,12 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
     const seg = place({ start: Date.parse(b.start), end: Date.parse(b.end) }, axis)
     if (seg) bands.push({ key: `blocked-${i}`, start: Date.parse(b.start), end: Date.parse(b.end), seg })
   })
-  const lead = t.start ? Math.round((axis.start - Date.parse(t.start)) / MIN) : 0
+  // The creation mark: from the ticket's first event (its creation) to its first agent event, drawn at the
+  // creation's place on the axis, and on the left edge only when the creation is before the window.
+  const agentAt = agentStarts(t)
+  const createdAt = t.start ? Date.parse(t.start) : null
+  const lead = createdAt !== null && agentAt.length ? Math.round((Math.min(...agentAt) - createdAt) / MIN) : 0
+  const createdShare = createdAt === null ? 0 : share(axis, createdAt)
   return {
     axis,
     live,
@@ -342,7 +353,10 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
     rows,
     marks,
     bands,
-    created: t.start && lead >= 1 && Date.parse(t.start) < axis.start ? { minutes: lead } : null,
+    created:
+      createdAt !== null && lead >= 1 && createdShare <= 1
+        ? { minutes: lead, left: Math.max(0, createdShare) }
+        : null,
     summary: summarize(t, rows, axis),
   }
 }
