@@ -698,6 +698,15 @@ describe('the headers on each side', () => {
     expect(proxy.rewriteRefresh('0 url=http://127.0.0.1:8/x', '/p/1/2/', 8)).toBe('0; url=/p/1/2/x')
     expect(proxy.rewriteRefresh('0', '/p/1/2/', 8)).toBe('0')
     expect(proxy.rewriteRefresh('0;', '/p/1/2/', 8)).toBe('0;')
+    // An unmatched quote does not hide the target from the Location rules.
+    expect(proxy.rewriteRefresh('0; url="https://evil.example/', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteRefresh("0; url='http://evil.example/", '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteRefresh('0; url="/x', '/p/1/2/', 8)).toBe('0; url=/p/1/2/x')
+  })
+
+  it('never doubles the prefix on a loopback Location that already carries it', () => {
+    expect(proxy.rewriteLocation('http://127.0.0.1:8/p/1/2/login', '/p/1/2/', 8)).toBe('/p/1/2/login')
+    expect(proxy.rewriteLocation('http://127.0.0.1:8/login', '/p/1/2/', 8)).toBe('/p/1/2/login')
   })
 
   it('passes a Location already under the prefix through, with or without its slash, and never doubles the prefix', async () => {

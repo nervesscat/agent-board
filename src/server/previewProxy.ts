@@ -354,7 +354,9 @@ export function rewriteLocation(
     const local = ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)
     const at = Number(target.port || (target.protocol === 'https:' ? 443 : 80))
     if (!/^https?:$/.test(target.protocol) || !local || at !== port) return null
-    return prefix + target.pathname.slice(1) + target.search + target.hash
+    // A path already under the prefix (an app built with its base) is not prefixed twice.
+    const path = underPrefix(target.pathname, prefix) ? target.pathname : prefix + target.pathname.slice(1)
+    return path + target.search + target.hash
   }
   if (url.startsWith('/')) return inPrefix(url, prefix) ? location : prefix + url.slice(1)
   return location
@@ -377,10 +379,12 @@ export function rewriteRefresh(
   const rest = m[2]!.replace(/^[\s;,]+/, '')
   if (rest === '') return value
   if (delay === '') return null
+  // A quote is taken off each end on its own, matched or not: an unmatched one must not hide the target.
   const target = rest
     .replace(/^url\s*=\s*/i, '')
     .trim()
-    .replace(/^(['"])(.*)\1$/s, '$2')
+    .replace(/^['"]/, '')
+    .replace(/['"]$/, '')
   if (target === '') return value
   const rewritten = rewriteLocation(target, prefix, port, own)
   return rewritten === null ? null : `${delay}; url=${rewritten}`
@@ -402,7 +406,15 @@ export function runtimeScript(prefix: string): string {
   if (f) window.fetch = function (input, init) {
     if (typeof input === 'string') input = at(input);
     else if (input instanceof URL) { var a = abs(input.href); if (a !== null && a !== input.pathname + input.search + input.hash) input = new URL(a, location.origin); }
-    else if (typeof Request !== 'undefined' && input instanceof Request) { var b = abs(input.url); if (b !== null) input = new Request(location.origin + b, input); }
+    else if (typeof Request !== 'undefined' && input instanceof Request) {
+      var b = abs(input.url);
+      if (b !== null) {
+        var o = { method: input.method, headers: input.headers, signal: input.signal, credentials: input.credentials, cache: input.cache, redirect: input.redirect, integrity: input.integrity, keepalive: input.keepalive, duplex: 'half' };
+        if (input.mode !== 'navigate') o.mode = input.mode;
+        if (input.method !== 'GET' && input.method !== 'HEAD') o.body = input.body;
+        input = new Request(location.origin + b, o);
+      }
+    }
     return f.call(this, input, init);
   };
   var open = XMLHttpRequest.prototype.open;
