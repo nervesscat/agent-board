@@ -9,6 +9,8 @@ export function getRouter() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 5_000, retry: 1 } } })
   const router = createRouter({
     routeTree,
+    // The Vite base: '/' here, or a preview's path on the board's origin (vite.config.ts, previewProxy.ts).
+    basepath: import.meta.env.BASE_URL,
     context: { queryClient },
     scrollRestoration: true,
     // A page brings its own #anchor into view once its data has drawn it (src/lib/reveal.ts). The

@@ -99,6 +99,9 @@ export default defineConfig(({ mode }) => {
   adoptCheckedEnv(mode, process.cwd())
   return {
     resolve: { tsconfigPaths: true },
+    // A preview run is built for the path the board proxies it at (runs.ts sets BOARD_PREVIEW_BASE); the board
+    // itself, run from this checkout, keeps '/'.
+    base: process.env.BOARD_PREVIEW_BASE || '/',
     plugins: [
       refuseUnsafeAuth(),
       // Ahead of Nitro's and Vite's own middlewares: Vite's files and its WebSocket are behind it too.
