@@ -278,6 +278,49 @@ describe('the Funnel and sign-in off refusals', () => {
     writeState(tailnet())
   })
 
+  it('refuses to save when the Tailscale CLI is missing, and writes nothing', async () => {
+    const before = process.env.TAILSCALE_BIN
+    process.env.TAILSCALE_BIN = path.join(tmp, 'no-such-tailscale')
+    try {
+      const err = await B.entrance.setEntrance(ORIGIN, 'Enrique').then(
+        () => null,
+        (e) => e,
+      )
+      expect(err).toMatchObject({ status: 409, code: 'tailscale-missing' })
+      expect(savedRow()).toBeNull()
+    } finally {
+      process.env.TAILSCALE_BIN = before
+    }
+  })
+
+  it('turns the entrance off while Funnel is on: a clear narrows what is served, so it is not refused', async () => {
+    writeState(tailnet())
+    await B.entrance.setEntrance(ORIGIN, 'Enrique')
+    writeState(
+      tailnet({
+        'serve status --json': {
+          Web: { [`${NAME}:443`]: { Handlers: { '/': { Proxy: 'http://127.0.0.1:47100' } } } },
+          AllowFunnel: { [`${NAME}:443`]: true },
+        },
+        'funnel status --json': { AllowFunnel: { [`${NAME}:443`]: true } },
+      }),
+    )
+    const state = await B.entrance.setEntrance(null, 'Enrique')
+    expect(state.saved).toBeNull()
+    expect(savedRow()).toBeNull()
+    writeState(tailnet())
+  })
+
+  it('turns the entrance off while Funnel cannot be read', async () => {
+    writeState(tailnet())
+    await B.entrance.setEntrance(ORIGIN, 'Enrique')
+    const { 'funnel status --json': _funnel, ...rest } = tailnet()
+    writeState(rest)
+    await B.entrance.setEntrance(null, 'Enrique')
+    expect(savedRow()).toBeNull()
+    writeState(tailnet())
+  })
+
   it('refuses to save with sign-in off, and the entrance is never served there', async () => {
     const test = await load({ BOARD_ENV: 'test' })
     const err = await test.entrance.setEntrance(ORIGIN, 'Enrique').then(

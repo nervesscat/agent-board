@@ -210,21 +210,30 @@ export async function setEntrance(origin: string | null, actor: string): Promise
         'remove it there to set the entrance here',
       'env-set',
     )
-  const tailnet = await readTailnet(config.port)
-  if (!tailnet.funnelKnown)
-    throw new HttpError(
-      409,
-      'could not read Funnel: Tailscale did not say whether Funnel is on, so the save is refused. ' +
-        'Check that `tailscale funnel status --json` answers, then save again',
-      'funnel-unknown',
-    )
-  if (tailnet.funnel)
-    throw new HttpError(
-      409,
-      'Tailscale Funnel is on: it puts the board on the internet, and the board answers on your tailnet only. ' +
-        'Turn it off first (tailscale funnel off, or tailscale serve reset), then save',
-      'funnel',
-    )
+  // Turning the entrance off only narrows what is served, so it is never refused for Funnel.
+  if (next !== null) {
+    const tailnet = await readTailnet(config.port)
+    if (!tailnet.installed)
+      throw new HttpError(
+        409,
+        'Tailscale is not installed here (no `tailscale` command): install it and sign in, then save',
+        'tailscale-missing',
+      )
+    if (!tailnet.funnelKnown)
+      throw new HttpError(
+        409,
+        'could not read Funnel: Tailscale did not say whether Funnel is on, so the save is refused. ' +
+          'Check that `tailscale funnel status --json` answers, then save again',
+        'funnel-unknown',
+      )
+    if (tailnet.funnel)
+      throw new HttpError(
+        409,
+        'Tailscale Funnel is on: it puts the board on the internet, and the board answers on your tailnet only. ' +
+          'Turn it off first (tailscale funnel off, or tailscale serve reset), then save',
+        'funnel',
+      )
+  }
 
   const before = savedEntrance(db.$client)
   const after = next === null ? null : entranceOf(next)
