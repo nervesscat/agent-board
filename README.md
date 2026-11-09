@@ -475,10 +475,12 @@ Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board'
   port) or the `PUBLIC_ORIGIN` host gets a 403, whatever its path (one starting with `//` included),
   and a write carrying the session cookie must come from `http://localhost:<PORT>`,
   `http://127.0.0.1:<PORT>`, `http://[::1]:<PORT>` or `PUBLIC_ORIGIN`.
-- Previews stay on this machine: board-run previews never get `PUBLIC_ORIGIN`, `pnpm dev` copies get it
-  empty, and a board with sign-in off (test mode, `AUTH=off`) ignores it and refuses every request a
-  proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`). Their `http://127.0.0.1:<port>` links
-  do not open on other devices.
+- Previews reach other devices through the board: a running preview is proxied at
+  `https://<machine>.<tailnet>.ts.net/p/<workspaceId>/<runId>/`, signed in only (Runs, "Previews on the
+  board's origin"). Its own port stays on this machine: its `http://127.0.0.1:<port>` link still does not
+  open on another device. `pnpm dev` copies get `PUBLIC_ORIGIN` empty, and a board with sign-in off (test
+  mode, `AUTH=off`) ignores it, refuses every request a proxy forwarded (`X-Forwarded-*`, `Forwarded`,
+  `Tailscale-*`) and answers 404 on every `/p/` path.
 - `HOST` stays `127.0.0.1`: nothing listens off this machine but Tailscale.
 
 ### Cloud agents
@@ -600,6 +602,14 @@ the ticket and runs the repo's preview there, as `start_preview` does. After the
 again: the worktree moves to the new head and the preview builds again. The board makes no branch and
 moves no worktree but its own; Cleanup removes it once the ticket is closed.
 
+A running preview is then at its proxied link (`proxyUrl` in `list_runs`, `start_run` and `get_ticket`:
+`/p/<workspaceId>/<runId>/` on the board's origin; `remoteUrl`, the same path on `PUBLIC_ORIGIN`, when
+that is set). To look at it, a headless browser sends `Authorization: Bearer <BOARD_TOKEN>` with every
+request (Playwright's `extraHTTPHeaders`): the token stays out of the URL, and the page, its assets,
+API calls and event stream all load. A browser that cannot send headers takes a link from `preview_link`
+(REST `POST /api/workspaces/:id/preview/link`), opened within five minutes. A ticket's Preview task is
+not blocked because the agent runs in the cloud: a running preview ticks it from any agent.
+
 **7. Running the work**
 
 - **Launching sessions** from an orchestrator (a local Claude Code session): `RemoteTrigger` `create`
@@ -617,8 +627,9 @@ moves no worktree but its own; Cleanup removes it once the ticket is closed.
 
 **What holds**: the tag reaches the board's machine on 443 and nothing else on your tailnet; every
 request there needs the agent token (revoke it on Connect an agent, the key in the admin console);
-ephemeral nodes leave the tailnet with their session; a preview stays on the board's machine, as every
-board-run preview does.
+ephemeral nodes leave the tailnet with their session; a preview is reached only through the board's
+sign-in (no credential, a 401; another project's agent, a 403), and its own port stays on the board's
+machine.
 
 ## Test mode
 
@@ -704,6 +715,30 @@ BOARD_URL=http://127.0.0.1:{port}`: the build of the branch on its own data, sig
 (that server's own startup guards then apply, README "Test mode"). A run the human deletes is not given
 back. `start_preview`, `stop_preview` and `/api/workspaces/:id/preview/*` act on the first preview run of
 the workspace's repo; a repo without one says so.
+
+#### Previews on the board's origin
+
+A running preview is also proxied at `/p/<workspaceId>/<runId>/` on the board's own origin, with
+`proxyUrl` in its state (and `remoteUrl` with `PUBLIC_ORIGIN`). The board builds and starts it with
+`BOARD_PREVIEW_BASE` set to that path, so a build that honours it (the board's own Preview does: Vite's
+base and the router's basepath) loads its assets and API calls through the proxy. Other previews keep
+working through the link when their pages use relative URLs, and the proxy adds a small script to an HTML
+page that makes root-absolute `fetch`, `XMLHttpRequest` and `EventSource` URLs go through the prefix.
+
+The proxy answers only a signed-in caller: a passkey session of the origin the request came through, an
+agent token whose name is a persona of the preview's project only (another project's, several projects'
+or none gets 403), or a link the board minted for that run and that caller. No credential gets 401 JSON,
+never the login page. The preview's port stays on loopback: a port that listens beyond this machine, or
+that the board cannot tell, is refused with 502, and so is a preview that does not answer in 10 seconds.
+A stopped or never-started run gets 404 with the start hint. Event streams pass through as they are sent;
+WebSocket upgrades are not proxied. Cookies and `Authorization` from the board never reach the preview,
+and its own cookies are kept on the run's path. With sign-in off every `/p/` path answers 404.
+
+A browser that cannot send the `Authorization` header gets a link: `POST /api/workspaces/:id/preview/link`
+(MCP `preview_link`) returns `url`, `/p/<w>/<r>/?pl=…`, which opens within five minutes. Opening it sets
+a cookie for that run's path, `HttpOnly`, `SameSite=Lax`, valid for 15 minutes, and redirects to the path
+without the link. The link carries no token, and it is worthless once the run is restarted, the caller's
+session ends or its token is revoked.
 
 Logs: `<worktree>/data/preview/logs/` for a run that copies the live data, else
 `<worktree>/data/runs/<name>/logs/` (kept out of git), `build.log` (install, build) and `server.log`
@@ -1000,6 +1035,8 @@ one (`\t`, `\n`, `\r`, `\b`, `\f`) the string silently changes. `\u005c` survive
 | POST         | `/api/tickets/:id/runs/start` · `/stop` `{repoId?}`                                                                 | Start all (every run that does not run yet) · Stop all (every one going), of one repo with `repoId`: `{results: [{repoId, runId, name, workspaceId, ok, reason, state}]}`, one refused does not stop the rest                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | POST/GET     | `/api/workspaces/:id/runs/:runId/start` · `/stop` · `/restart` · GET `/log?name=build\|server`                      | one run from that workspace: 202 building · 409 when it does not run · stop and start again · its logs; a body is never read                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | POST/GET     | `/api/workspaces/:id/preview/start` · `/stop` · `/restart` · GET `/preview/log?name=build\|server`                  | the board builds and runs the workspace's worktree as a preview (see Previews) · stop it · stop and build again · its logs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| POST         | `/api/workspaces/:id/preview/link`                                                                                  | a link to the running preview through the board's origin (MCP `preview_link`): `{url, runId, expiresAt}`, `url` = `/p/<w>/<r>/?pl=…`, opened within five minutes (see Previews on the board's origin); for the human's session or an agent token of the preview's project                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| GET/POST/…   | `/p/<workspaceId>/<runId>/…`                                                                                        | a running preview, proxied on the board's origin: signed in (a session of the origin, an agent token of its project, or a redeemed link), then the preview's own answer; 401 without a credential, 403 for another project's agent, 404 when stopped, 502 when it does not answer                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | POST         | `/api/tickets/:id/branch-preview` `{branch?, repoId?}`                                                              | a preview of a branch pushed from another machine (MCP `preview_branch`): fetched from the repo's origin into a detached worktree of the board's own beside the main checkout (`<checkout>-preview-<branch>`), registered as a workspace of the ticket, and the repo's preview run started there: 202 `{workspace, branch, sha, path, preview}`. Again after a push, that worktree moves to the new head and builds again. `branch` is the ticket's when left out; 404 when origin has no such branch, 409 when that folder is on a branch, has changes or is not a worktree of the repo                                                                                                                                                                                                                                  |
 | POST         | `/api/workspaces/:id/preview/stop-link`                                                                             | stop the server behind the link, humans only, when it runs from the workspace's worktree (see Previews): `{workspaceId, ticketId, kind: 'link', port, pids, freed}`; 400 or 409 with why otherwise                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | POST         | `/api/tickets/:id/updates` `{body, attachmentIds[], as?, progress?, tab?}`                                          | a post on the ticket's feed (`progress` default true); `as` posts under one of the project's agents (agents only); `tab` `main` or `agents` puts it in that tab, else the board picks (below)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

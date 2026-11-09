@@ -209,6 +209,13 @@ http_headers = { Authorization = "Bearer <token>" }
      or the workspace is removed, and when the board itself stops (it does not start them again). Do
      not run `pnpm dev` in your session for the human: it dies with your session and the dev server
      behaves differently from the build.
+     A running preview also has a `proxyUrl`: `/p/<workspaceId>/<runId>/` on the board's own origin,
+     which answers only to a signed-in caller. Open it with your agent token in an `Authorization`
+     header, never in the URL: a headless browser takes it as the context's extra HTTP headers, and
+     then the page, its assets, its API calls and its event stream all load through the board. A
+     browser that cannot send headers takes a link from `preview_link` (`url`, valid for five minutes
+     to open; it sets a cookie for that run's path). A token of another project gets 403 there. Being
+     in the cloud does not block the Preview task: a running preview ticks it, from any agent.
    - **A repo with no runs, when you do not add one:** start your branch from your worktree on a
      free port, with a copy of the data rather than the real one (the project's instructions say
      how), and register its link on the workspace (`set_preview`, or `previewUrl` on
