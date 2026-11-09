@@ -2,10 +2,10 @@ import { expect, test } from './fixtures'
 import { age, create, errorsOn, record, scrollsSideways } from './workTimeline'
 
 /**
- * The chart's insides: a row per agent, the key, the details popover, the live now line, and the phone layout.
+ * The chart's insides: a row per agent, the details popover, the live now line, and the phone layout.
  */
 
-test('the chart has a row per agent, its work and waits on its own row, and the key under it', async ({
+test('the chart has a row per agent, its work and waits on its own row', async ({
   page,
   project,
   human,
