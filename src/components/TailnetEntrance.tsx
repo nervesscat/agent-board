@@ -116,7 +116,7 @@ export function TailnetEntrance() {
               : 'nothing'}
         </dd>
         <dt className="text-muted-foreground">Funnel</dt>
-        <dd>{t.funnel ? 'on (refused)' : 'off'}</dd>
+        <dd>{!t.funnelKnown ? 'could not read Funnel' : t.funnel ? 'on (refused)' : 'off'}</dd>
       </dl>
       {t.error && <p className="text-xs text-muted-foreground break-all">Tailscale said: {t.error}</p>}
 

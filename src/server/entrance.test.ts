@@ -369,6 +369,31 @@ describe('the guard on a request to the board itself', () => {
     if (verdict.allow) return
     const res = refusalResponse(verdict)
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'the board does not answer for the host "evil.example"' })
+    expect(await res.json()).toEqual({
+      error:
+        'no tailnet entrance is configured (PUBLIC_ORIGIN): the board answers on this machine only, not the host "evil.example"',
+    })
+  })
+
+  it('names the missing entrance for a host the board would take as its tailnet name, once it is cleared', () => {
+    // Cleared (or never set): the name the entrance had is refused as "no tailnet entrance is configured".
+    const cleared = guardBoardRequest(
+      web('http://devbox.example-tailnet.ts.net/', { host: PUBLIC }),
+      production,
+      null,
+    )
+    expect(cleared).toMatchObject({ allow: false, status: 403 })
+    if (!cleared.allow) expect(cleared.error).toMatch(/^no tailnet entrance is configured/)
+    // While an entrance is set, a host that is not it still gets the host refusal.
+    const other = guardBoardRequest(
+      web('http://evil.example/', { host: 'evil.example' }),
+      production,
+      entrance,
+    )
+    expect(other).toMatchObject({
+      allow: false,
+      status: 403,
+      error: 'the board does not answer for the host "evil.example"',
+    })
   })
 })

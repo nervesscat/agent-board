@@ -43,6 +43,8 @@ export interface TailnetStatus {
   serve: { state: 'board' | 'other' | 'none'; target: string | null }
   /** Tailscale Funnel is on for something this machine serves: the internet, which the board refuses. */
   funnel: boolean
+  /** Whether Funnel's state could be read at all. When not, it is unknown and a save is refused. */
+  funnelKnown: boolean
   /** What the CLI said when a read failed (the status is then partial). */
   error: string | null
 }
@@ -72,12 +74,15 @@ export async function readTailnet(port: number): Promise<TailnetStatus> {
     https: false,
     serve: { state: 'none', target: null },
     funnel: false,
+    // Known off where there is no Tailscale to be on; otherwise known only once the funnel read answers.
+    funnelKnown: false,
     error: null,
   }
   try {
     base.version = (await tailscaleAsync('version')).split(/\r?\n/)[0]!.trim()
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ...base, installed: false }
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT')
+      return { ...base, installed: false, funnelKnown: true }
     return { ...base, error: reasonOf(err) }
   }
   // A status that will not read leaves the rest unknown, but the serve and Funnel reads still run: Funnel
@@ -108,12 +113,15 @@ export async function readTailnet(port: number): Promise<TailnetStatus> {
     out.error = out.error ?? reasonOf(err)
   }
   // The funnel status is read too, though the serve config holds AllowFunnel as well: an older CLI has none.
+  // Funnel's state is unknown when its own read fails: the save is then refused, not let through.
   let funnelConfig: Json = {}
+  let funnelKnown = true
   try {
     funnelConfig = await readJson('funnel', 'status', '--json')
   } catch {
-    // Nothing to add.
+    funnelKnown = false
   }
+  out.funnelKnown = funnelKnown
   if (name !== null) {
     const target = servedAt(serveConfig, name, 443)
     out.serve =
@@ -203,6 +211,13 @@ export async function setEntrance(origin: string | null, actor: string): Promise
       'env-set',
     )
   const tailnet = await readTailnet(config.port)
+  if (!tailnet.funnelKnown)
+    throw new HttpError(
+      409,
+      'could not read Funnel: Tailscale did not say whether Funnel is on, so the save is refused. ' +
+        'Check that `tailscale funnel status --json` answers, then save again',
+      'funnel-unknown',
+    )
   if (tailnet.funnel)
     throw new HttpError(
       409,
@@ -279,6 +294,8 @@ export async function checkEntrance(port: number = config.port): Promise<Entranc
     )
   const s = await readTailnet(port)
   if (!s.installed) return failed('Tailscale is not installed on this machine')
+  if (!s.funnelKnown)
+    return failed('could not read Funnel: check that tailscale funnel status --json answers')
   if (s.funnel)
     return failed('Tailscale Funnel is on: turn it off first; the board answers on the tailnet only')
   if (!s.signedIn) return failed(`Tailscale is ${s.backend ?? 'not running'} on this machine: sign in first`)

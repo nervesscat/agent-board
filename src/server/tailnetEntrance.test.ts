@@ -249,6 +249,35 @@ describe('the Funnel and sign-in off refusals', () => {
     writeState(tailnet())
   })
 
+  it('refuses the save when only the Funnel read fails, and says Funnel could not be read', async () => {
+    const { 'funnel status --json': _funnel, ...rest } = tailnet()
+    writeState(rest)
+    const view = await B.entrance.readTailnet(47100)
+    expect(view).toMatchObject({ funnelKnown: false, serve: { state: 'board' } })
+    const err = await B.entrance.setEntrance(ORIGIN, 'Enrique').then(
+      () => null,
+      (e) => e,
+    )
+    expect(err).toMatchObject({ status: 409, code: 'funnel-unknown' })
+    expect(err.message).toMatch(/could not read Funnel/)
+    expect(savedRow()).toBeNull()
+    writeState(tailnet())
+  })
+
+  it('refuses the save when the serve and Funnel reads both fail', async () => {
+    const { 'funnel status --json': _funnel, 'serve status --json': _serve, ...rest } = tailnet()
+    writeState(rest)
+    const view = await B.entrance.readTailnet(47100)
+    expect(view).toMatchObject({ funnelKnown: false, serve: { state: 'none' } })
+    const err = await B.entrance.setEntrance(ORIGIN, 'Enrique').then(
+      () => null,
+      (e) => e,
+    )
+    expect(err).toMatchObject({ status: 409, code: 'funnel-unknown' })
+    expect(savedRow()).toBeNull()
+    writeState(tailnet())
+  })
+
   it('refuses to save with sign-in off, and the entrance is never served there', async () => {
     const test = await load({ BOARD_ENV: 'test' })
     const err = await test.entrance.setEntrance(ORIGIN, 'Enrique').then(
