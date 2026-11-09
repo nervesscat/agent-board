@@ -201,7 +201,7 @@ describe('in progress and carrying over', () => {
     })
     log(pid, fresh.id, `claimed ticket #${fresh.id} Fresh note (status To do → In progress)`, at(7, 9))
     log(pid, fresh.id, 'set a task done', at(6, 17))
-    // Started three days ago, worked yesterday, nobody wrote a note: no handoff.
+    // Started three days ago, worked yesterday, nobody wrote a note: no resume note.
     const bare = ticket(pid, 'No note', { status: 'in_progress', startedAt: iso(at(4, 10)) })
     log(pid, bare.id, 'set a task done', at(6, 15))
     post(bare.id, 'tests pass', at(6, 15))

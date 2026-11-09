@@ -897,7 +897,7 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
         {r.noHandoff && r.note && (
           <Tip content="It was worked on a later day than this note was written">
             <span className={warn}>
-              <TriangleAlert className="size-3.5" /> no handoff since the last session
+              <TriangleAlert className="size-3.5" /> no resume note since the last session
             </span>
           </Tip>
         )}
@@ -955,7 +955,7 @@ function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
         <Markdown>{r.note}</Markdown>
       ) : (
         <div className="text-sm">
-          <p className="font-medium">No handoff yet</p>
+          <p className="font-medium">No resume note yet</p>
           <p className="text-muted-foreground">
             This ticket was already being worked on an earlier day, and nobody wrote down where it was left.{' '}
             <button

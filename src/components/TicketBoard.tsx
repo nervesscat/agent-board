@@ -408,7 +408,7 @@ const multiDay = (resume: TicketRow['resume']) => resume.day !== null && resume.
 const hasResumeBadge = (resume: TicketRow['resume']) => resume.noHandoff || multiDay(resume)
 
 /**
- * A ticket that carried over to another day: which day of work this is, and "no handoff" when nobody
+ * A ticket that carried over to another day: which day of work this is, and "no resume note" when nobody
  * left a resume note for it since the last day it was worked.
  */
 function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
@@ -417,7 +417,7 @@ function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
       {resume.noHandoff && (
         <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
           <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-            <BookmarkX className="size-3" /> no handoff
+            <BookmarkX className="size-3" /> no resume note
           </span>
         </Tip>
       )}

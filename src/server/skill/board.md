@@ -424,10 +424,10 @@ After that:
    **How to resume:** branch, worktree, commands, preview, gotchas
    ```
 
-   It replaces the ticket's previous note and is posted to its feed (the Agents tab) as a handoff,
+   It replaces the ticket's previous note and is posted to its feed (the Agents tab) as a resume note,
    so the older ones stay readable. It is for whoever works the ticket next; the human's hand-off
    is the summary. The ticket page shows it at the top as "Resume here"; a ticket that carries over
-   to the next day without one shows "no handoff".
+   to the next day without one shows "no resume note".
 
 2. `daily_report` with your `projectId` shows what else happened in the project today.
 
