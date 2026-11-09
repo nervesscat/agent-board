@@ -80,11 +80,14 @@ export async function readTailnet(port: number): Promise<TailnetStatus> {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { ...base, installed: false }
     return { ...base, error: reasonOf(err) }
   }
-  let status: Json
+  // A status that will not read leaves the rest unknown, but the serve and Funnel reads still run: Funnel
+  // on must show, and refuse a save, whatever the status said.
+  let status: Json = {}
+  let statusError: string | null = null
   try {
     status = await readJson('status', '--json')
   } catch (err) {
-    return { ...base, error: reasonOf(err) }
+    statusError = reasonOf(err)
   }
   const backend = typeof status.BackendState === 'string' ? status.BackendState : null
   const dns = asObject(status.Self).DNSName
@@ -96,12 +99,13 @@ export async function readTailnet(port: number): Promise<TailnetStatus> {
     signedIn: backend === 'Running',
     name,
     https: name !== null && certs.includes(name),
+    error: statusError,
   }
   let serveConfig: Json = {}
   try {
     serveConfig = await readJson('serve', 'status', '--json')
   } catch (err) {
-    out.error = reasonOf(err)
+    out.error = out.error ?? reasonOf(err)
   }
   // The funnel status is read too, though the serve config holds AllowFunnel as well: an older CLI has none.
   let funnelConfig: Json = {}

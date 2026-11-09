@@ -224,6 +224,24 @@ describe('the Funnel and sign-in off refusals', () => {
     expect(savedRow()).toBeNull()
   })
 
+  it('refuses the save and reports Funnel on, even when the status read itself fails', async () => {
+    // No answer for `status --json`: the status read fails, and the Funnel config still says it is on.
+    const { 'status --json': _status, ...rest } = tailnet({
+      'funnel status --json': { AllowFunnel: { [`${NAME}:443`]: true } },
+    })
+    writeState(rest)
+    const view = await B.entrance.readTailnet(47100)
+    expect(view).toMatchObject({ funnel: true, error: expect.any(String) })
+    const err = await B.entrance.setEntrance(ORIGIN, 'Enrique').then(
+      () => null,
+      (e) => e,
+    )
+    expect(err).toMatchObject({ status: 409, code: 'funnel' })
+    expect(err.message).toMatch(/Funnel is on/)
+    expect(savedRow()).toBeNull()
+    writeState(tailnet())
+  })
+
   it('refuses to save with sign-in off, and the entrance is never served there', async () => {
     const test = await load({ BOARD_ENV: 'test' })
     const err = await test.entrance.setEntrance(ORIGIN, 'Enrique').then(

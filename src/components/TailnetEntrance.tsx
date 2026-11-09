@@ -81,7 +81,7 @@ export function TailnetEntrance() {
       )}
       {s.fromEnv && (
         <p role="status" className="rounded-md border p-3 text-sm">
-          Set in config.env (or .env): <code className="break-all">PUBLIC_ORIGIN={s.fromEnv}</code>. It wins
+          Set in config.env (or .env): <code className="break-words">PUBLIC_ORIGIN={s.fromEnv}</code>. It wins
           over this setting, so the entrance is read-only here. Remove that line there to set it in Settings.
         </p>
       )}
