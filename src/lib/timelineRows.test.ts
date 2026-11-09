@@ -47,6 +47,7 @@ const wait = (
   id,
   reason: 'lock',
   agent,
+  on: null,
   note: '',
   start: iso(start),
   end: iso(end),
@@ -73,6 +74,7 @@ const timeline = (more: Partial<WorkTimeline> = {}): WorkTimeline => ({
   blockedStretches: [],
   totals: { workingMs: 0, waitingMs: 0, blockedOnHumanMs: 0 },
   lastSignalAt: iso('10:00'),
+  lastHeard: null,
   stalled: null,
   ...more,
 })

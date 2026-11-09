@@ -17,8 +17,8 @@ import {
 const MIN = 60_000
 const DAY = 24 * 60 * MIN
 
-/** A wait as the chart reads it: `on` names the agent it was delegated to ('' or absent for a plain wait). */
-export type ChartWait = TimelineWait & { on?: string | null }
+/** A wait as the chart reads it: `on` names the agent it was delegated to (null for a plain wait). */
+export type ChartWait = TimelineWait
 
 export type Window = { start: string; end: string }
 export type Tick = { at: number; label: string }
