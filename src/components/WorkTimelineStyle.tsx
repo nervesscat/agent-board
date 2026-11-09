@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { CSSProperties } from 'react'
 import {
   ArrowRight,
   CircleDot,
@@ -67,102 +67,6 @@ export const OTHER_MARK = { name: 'board event', icon: CircleDot }
 
 /** The icon of a wait's reason; the human's and any other reason's are the same as the rest. */
 export const waitIcon = (reason: string): LucideIcon => WAIT_ICON[reason] ?? NEUTRAL_WAIT_ICON
-
-const SAMPLE = 'inline-flex h-4 items-center gap-1 rounded-sm px-1 text-[10px] leading-none whitespace-nowrap'
-
-function Item({ sample, children }: { sample: ReactNode; children?: ReactNode }) {
-  return (
-    <li className="inline-flex items-center gap-1.5">
-      {sample}
-      {children && <span>{children}</span>}
-    </li>
-  )
-}
-
-/** The chart's key: each mark and its meaning, drawn from the same classes as the chart. */
-export function WorkTimelineKey() {
-  const phases = Object.keys(PHASE)
-  const plain: { reason: string; text: string }[] = [
-    { reason: 'lock', text: 'waiting: lock' },
-    { reason: 'mcp', text: 'waiting: mcp' },
-    { reason: 'other', text: 'waiting: other' },
-    { reason: '', text: 'waiting, any other reason' },
-  ]
-  return (
-    <ul
-      aria-label="Timeline key"
-      data-testid="work-timeline-key"
-      className="flex flex-wrap gap-x-3 gap-y-1.5 text-[11px] text-muted-foreground"
-    >
-      {phases.map((p) => (
-        <Item key={p} sample={<span className={`${SAMPLE} ${PHASE[p]}`}>{p}</span>} />
-      ))}
-      {plain.map(({ reason, text }) => {
-        const Icon = waitIcon(reason)
-        return (
-          <Item
-            key={reason || 'other-reason'}
-            sample={
-              <span className={`${SAMPLE} ${PLAIN_WAIT}`} style={HATCH}>
-                <Icon className="size-3" aria-hidden />
-                <span className="rounded-sm bg-card px-0.5">{reason || 'reason'}</span>
-              </span>
-            }
-          >
-            {text}
-          </Item>
-        )
-      })}
-      <Item
-        sample={
-          <span className={`${SAMPLE} ${HUMAN_WAIT}`}>
-            <HUMAN_ICON className="size-3" aria-hidden />
-            human
-          </span>
-        }
-      >
-        waiting on the human
-      </Item>
-      <Item sample={<span aria-hidden className={`h-px w-6 bg-current ${DELEGATION}`} />}>
-        delegated to another agent
-      </Item>
-      <Item
-        sample={
-          <span className={`grid size-4 place-items-center rounded-full ${ARROW}`}>
-            <ARROW_ICON className="size-2.5" aria-hidden />
-          </span>
-        }
-      >
-        hand-off, on the row it lands on
-      </Item>
-      <Item sample={<span aria-hidden className={`h-4 w-0 border-l border-dashed ${HANDOFF_LINE}`} />}>
-        hand-off, from the row it leaves
-      </Item>
-      {Object.entries(MARK).map(([kind, { name, icon: Icon }]) => (
-        <Item key={kind} sample={<Icon className="size-3.5" aria-hidden />}>
-          {name}
-        </Item>
-      ))}
-      <Item sample={<span className={`${SAMPLE} rounded-none ${BLOCKED_CHIP}`}>blocked</span>}>
-        blocked stage
-      </Item>
-      <Item
-        sample={
-          <span
-            aria-hidden
-            className={`${SAMPLE} ${PHASE.build} rounded-r-none`}
-            style={{ maskImage: 'linear-gradient(to right, #000 60%, transparent)' }}
-          >
-            open
-          </span>
-        }
-      >
-        still open, growing
-      </Item>
-      <Item sample={<span aria-hidden className={`h-4 w-0.5 ${NOW_LINE}`} />}>now</Item>
-    </ul>
-  )
-}
 
 /** A style for a segment's box, with its share of the axis. */
 export const boxStyle = (left: number, width: number, top: number, height: number): CSSProperties => ({

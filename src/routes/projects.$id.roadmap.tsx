@@ -9,9 +9,8 @@ import { ChipTabs } from '#/components/Chips'
 import { Empty } from '#/components/Empty'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { StalledBadge, WorkTotals } from '#/components/WorkStatus'
+import { NowLine, StallNotice, WorkSummary } from '#/components/WorkStatus'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
-import { WorkTimelineKey } from '#/components/WorkTimelineKey'
 import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
 import { useStages } from '#/lib/project'
@@ -134,16 +133,11 @@ function Roadmap() {
           <Stat n={review.length} label="in review" />
           <Stat n={every.filter((b) => b.row.work.stalled).length} label="stalled" amber />
         </div>
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-          <Legend />
-          <WorkTimelineKey />
-        </div>
       </div>
       {work && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>Project work, every ticket and lane:</span>
-          {/* Lane #19: <WorkSummary totals={work.totals} /> replaces WorkTotals here. */}
-          <WorkTotals totals={work.totals} />
+          <WorkSummary totals={work.totals} />
         </div>
       )}
       {error ? (
@@ -179,27 +173,6 @@ function Stat({ n, label, amber = false }: { n: number; label: string; amber?: b
       </b>{' '}
       {label}
     </span>
-  )
-}
-
-function Legend() {
-  const items: [StepState, string][] = [
-    ['done', 'Done'],
-    ['now', 'Now'],
-    ['next', 'Next'],
-    ['later', 'Later'],
-    ['blocked', 'Blocked'],
-  ]
-  return (
-    <div className="flex flex-wrap items-center gap-3.5" aria-label="Legend">
-      <span className="font-medium text-foreground">Tasks</span>
-      {items.map(([state, label]) => (
-        <span key={state} className="inline-flex items-center gap-1.5">
-          <Dot state={state} small />
-          {label}
-        </span>
-      ))}
-    </div>
   )
 }
 
@@ -291,8 +264,8 @@ function Row({
           <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${stageBadge(stage)}`}>
             {stage.name}
           </span>
-          {/* Lane #19: <NowLine work={row.work} /> and <StallNotice compact work={row.work} /> replace this badge. */}
-          <StalledBadge stalled={row.work.stalled} />
+          <NowLine timeline={row.work} />
+          <StallNotice timeline={row.work} />
           {children}
           {total > 0 && (
             <Tip content={`${done} of ${total} done`}>
@@ -315,8 +288,7 @@ function Row({
         <Track groups={groups} lane={Boolean(lane)} />
         <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
           <WorkTimelineBar timeline={row.work} compact={Boolean(lane)} window={timeWindow} />
-          {/* Lane #19: <WorkSummary timeline={row.work} /> replaces WorkTotals here. */}
-          {hasWork(row.work) && <WorkTotals totals={row.work.totals} />}
+          {hasWork(row.work) && <WorkSummary totals={row.work.totals} />}
         </div>
       </div>
     </div>
