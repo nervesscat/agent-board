@@ -393,7 +393,7 @@ function TicketPage() {
           <InlineTitle key={t.id} t={t} onSave={(title) => update.mutate({ title })} />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span>
-              opened by <Actor name={t.createdBy} truncate short /> {ago(t.createdAt)}
+              opened by <Actor name={t.createdBy} short /> {ago(t.createdAt)}
             </span>
             <span>updated {ago(t.updatedAt)}</span>
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
@@ -2410,7 +2410,7 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
       {/* The post without its thread: hovering it shows its actions, hovering one of its replies does not. */}
       <div className="group/post p-3">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <Actor name={u.author} via={u.via} truncate className="text-foreground" />
+          <Actor name={u.author} via={u.via} className="text-foreground" />
           {u.summary ? (
             <Tip content="The lane's summary: where its work stands, as its agents keep it">
               <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
