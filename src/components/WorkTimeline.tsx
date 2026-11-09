@@ -36,9 +36,8 @@ import {
   PHASE,
   PLAIN_WAIT,
   waitIcon,
-  WorkTimelineKey,
   boxStyle,
-} from './WorkTimelineKey'
+} from './WorkTimelineStyle'
 
 export { spokenDuration }
 
@@ -47,7 +46,7 @@ export { spokenDuration }
  * agent that recorded it), its work as solid segments by phase, its waits hatched on its own row (amber
  * and filled on the human, a thin connector where it delegated), the hand-offs between rows, the board's
  * events on a rail on top, the blocked stages as bands behind the rows. Layout is in src/lib/timelineRows.ts,
- * the key in WorkTimelineKey.tsx. Every segment and marker is a button, with its story as its name and
+ * the shared classes in WorkTimelineStyle.tsx. Every segment and marker is a button, with its story as its name and
  * tooltip, and its details in a popover on click, tap or Enter.
  */
 
@@ -311,14 +310,11 @@ export function WorkTimelineBar({
   timeline,
   compact = false,
   window: win,
-  showKey,
 }: {
   timeline: WorkTimeline
   compact?: boolean
   /** Fixes the axis to this window (the Roadmap's), instead of the ticket's own first event to its end. */
   window?: Window
-  /** Whether the key is shown under the chart; by default it is, unless the chart is compact. */
-  showKey?: boolean
 }) {
   const now = useNow(30_000)
   const summaryId = useId()
@@ -519,7 +515,6 @@ export function WorkTimelineBar({
       {chart.created && (
         <p className="text-[10.5px] text-muted-foreground">created {chart.created.minutes} min before work</p>
       )}
-      {(showKey ?? !compact) && <WorkTimelineKey />}
     </div>
   )
 }
