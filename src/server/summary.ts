@@ -256,6 +256,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
               lastAgent: s.lastAgent,
               lastBy: s.lastBy,
               lastFrom: s.lastFrom,
+              // The open spans and waits and the last heard, so the stall says why (the same read as `stalled`).
+              activity: activityOf(timelines.get(t.id)!.timeline),
             },
           ]
         : []

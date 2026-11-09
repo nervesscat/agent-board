@@ -7,9 +7,12 @@ import {
   ChevronLeft,
   ChevronRight,
   GitBranch,
+  Hammer,
   Hand,
+  Hourglass,
   Layers,
   Scale,
+  UserRound,
 } from 'lucide-react'
 import { type DragEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
@@ -31,8 +34,9 @@ import {
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
-import { StalledBadge } from '#/components/WorkStatus'
+import { NowLine, StallNotice } from '#/components/WorkStatus'
 import type { Push, TicketRow } from '#/lib/api'
+import { hasWork, nowBrief, nowWords, stallStage, timelineFromActivity } from '#/lib/activityTimeline'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 import {
@@ -44,6 +48,7 @@ import {
   stageColumn,
   stageOf,
 } from '#/lib/stages'
+import { useNow } from '#/lib/useNow'
 import { nameFirst } from '#/lib/tickets'
 
 /** Where a card goes in its own column: right above or below another card of it. */
@@ -75,6 +80,7 @@ export function TicketBoard({
 }) {
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
+  const tick = useNow(60_000)
   const [dragging, setDragging] = useState<number | null>(null)
   const [over, setOver] = useState<string | null>(null)
   // Dragging within its own column: the gap it would land in, 0 above the first card.
@@ -178,89 +184,108 @@ export function TicketBoard({
                 </span>
               </div>
               <div data-column={status} className="min-h-12 flex-1 space-y-2 overflow-y-auto">
-                {column.map((t, i) => (
-                  <div key={t.id} data-card={t.id} className="relative">
-                    {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
-                    <Tip content={t.title}>
-                      <Link
-                        to="/projects/$id/features/$ticketId"
-                        params={{ id: projectId, ticketId: String(t.id) }}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.effectAllowed = 'move'
-                          e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
-                          setDragging(t.id)
-                        }}
-                        onDragEnd={endDrag}
-                        // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
-                        className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
-                          dragging === t.id ? 'opacity-40' : ''
-                        }`}
-                      >
-                        <div className="flex items-start gap-1.5">
-                          <ComplexityChip level={t.complexity} className="mt-0.5" />
-                          <div className="line-clamp-2 min-w-0 font-medium leading-snug">
-                            <span className="text-muted-foreground">#{t.id}</span> {t.title}
-                          </div>
-                        </div>
-                        {(t.decisions > 0 ||
-                          t.blockedTasks > 0 ||
-                          t.stalled ||
-                          t.needs.some((n) => !n.merged) ||
-                          after?.has(t.id) ||
-                          hasResumeBadge(t.resume)) && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                            {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
-                            {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
-                            <StalledBadge stalled={t.stalled} focusable={false} />
-                            <NeedsBadge needs={t.needs} />
-                            <ResumeBadges resume={t.resume} />
-                          </div>
-                        )}
-                        {/* The time sits at the end of the last of these rows, so it always shares a line. */}
-                        {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
-                          <div className={INFO_ROW}>
-                            {repoLabel(project, t.repoId) && (
-                              <span className="shrink-0 rounded bg-muted px-1">
-                                {repoLabel(project, t.repoId)}
-                              </span>
-                            )}
-                            {/* A long name is cut short before its badge; the branch gives way first. */}
-                            {t.assignee && <Actor name={t.assignee} truncate />}
-                            {t.branch && (
-                              <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
-                                {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
-                                <GitBranch className="size-3 shrink-0" />{' '}
-                                <span className="truncate">{t.branch}</span>
-                              </span>
-                            )}
-                            {!t.tags.length && <Updated at={t.updatedAt} />}
-                          </div>
-                        )}
-                        {t.tags.length > 0 && (
-                          <div className={INFO_ROW}>
-                            {/* Tags clip on their own, so a long list never pushes the time out of view. */}
-                            <div className="flex min-w-0 gap-1 overflow-hidden">
-                              {[...t.tags].sort(compareTags).map((tag) => (
-                                <Tag key={tag} tag={tag} className="shrink-0" />
-                              ))}
+                {column.map((t, i) => {
+                  // The card's work, from what its row carries: the now, and the stall (as the list and the ticket page word them).
+                  const work = timelineFromActivity(t.activity, t.stalled, hasWork(kind))
+                  // The now shows on a card with no other badge: a busy card is capped in height, and its time must not clip.
+                  const badged =
+                    t.decisions > 0 ||
+                    t.blockedTasks > 0 ||
+                    !!t.stalled ||
+                    t.needs.some((n) => !n.merged) ||
+                    after?.has(t.id) ||
+                    hasResumeBadge(t.resume)
+                  const brief = badged ? null : nowBrief(work, tick)
+                  return (
+                    <div key={t.id} data-card={t.id} className="relative">
+                      {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
+                      <Tip content={t.title}>
+                        <Link
+                          to="/projects/$id/features/$ticketId"
+                          params={{ id: projectId, ticketId: String(t.id) }}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move'
+                            e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
+                            setDragging(t.id)
+                          }}
+                          onDragEnd={endDrag}
+                          // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
+                          className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
+                            dragging === t.id ? 'opacity-40' : ''
+                          }`}
+                        >
+                          <div className="flex items-start gap-1.5">
+                            <ComplexityChip level={t.complexity} className="mt-0.5" />
+                            <div className="line-clamp-2 min-w-0 font-medium leading-snug">
+                              <span className="text-muted-foreground">#{t.id}</span> {t.title}
                             </div>
-                            <Updated at={t.updatedAt} />
                           </div>
-                        )}
-                        {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
-                          <div className={INFO_ROW}>
-                            <Updated at={t.updatedAt} />
-                          </div>
-                        )}
-                        {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
-                        {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
-                      </Link>
-                    </Tip>
-                    {line === column.length && i === column.length - 1 && <DropLine at="bottom-0" />}
-                  </div>
-                ))}
+                          {(t.decisions > 0 ||
+                            t.blockedTasks > 0 ||
+                            t.stalled ||
+                            brief ||
+                            t.needs.some((n) => !n.merged) ||
+                            after?.has(t.id) ||
+                            hasResumeBadge(t.resume)) && (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              {brief && <NowBadge brief={brief} words={nowWords(work, tick)} />}
+                              {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                              {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
+                              {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                              <StallNotice
+                                timeline={work}
+                                stage={stallStage(stages, t.status)}
+                                focusable={false}
+                              />
+                              <NeedsBadge needs={t.needs} />
+                              <ResumeBadges resume={t.resume} />
+                            </div>
+                          )}
+                          {/* The time sits at the end of the last of these rows, so it always shares a line. */}
+                          {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
+                            <div className={INFO_ROW}>
+                              {repoLabel(project, t.repoId) && (
+                                <span className="shrink-0 rounded bg-muted px-1">
+                                  {repoLabel(project, t.repoId)}
+                                </span>
+                              )}
+                              {/* A long name is cut short before its badge; the branch gives way first. */}
+                              {t.assignee && <Actor name={t.assignee} truncate />}
+                              {t.branch && (
+                                <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
+                                  {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
+                                  <GitBranch className="size-3 shrink-0" />{' '}
+                                  <span className="truncate">{t.branch}</span>
+                                </span>
+                              )}
+                              {!t.tags.length && <Updated at={t.updatedAt} />}
+                            </div>
+                          )}
+                          {t.tags.length > 0 && (
+                            <div className={INFO_ROW}>
+                              {/* Tags clip on their own, so a long list never pushes the time out of view. */}
+                              <div className="flex min-w-0 gap-1 overflow-hidden">
+                                {[...t.tags].sort(compareTags).map((tag) => (
+                                  <Tag key={tag} tag={tag} className="shrink-0" />
+                                ))}
+                              </div>
+                              <Updated at={t.updatedAt} />
+                            </div>
+                          )}
+                          {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
+                            <div className={INFO_ROW}>
+                              <Updated at={t.updatedAt} />
+                            </div>
+                          )}
+                          {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
+                          {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
+                        </Link>
+                      </Tip>
+                      {line === column.length && i === column.length - 1 && <DropLine at="bottom-0" />}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )
@@ -399,6 +424,23 @@ function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
         </Tip>
       )}
     </>
+  )
+}
+
+/** The card's now in little: an icon and how long, with the whole line (what, who, since when) in its tooltip. */
+function NowBadge({ brief, words }: { brief: { kind: string; text: string }; words: string }) {
+  const Icon =
+    brief.kind === 'waiting-human' ? UserRound : brief.kind === 'waiting-agent' ? Hourglass : Hammer
+  return (
+    <Tip content={words}>
+      <span
+        data-testid="card-now"
+        className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground/80 tabular-nums"
+      >
+        <Icon className="size-3" aria-hidden />
+        {brief.text}
+      </span>
+    </Tip>
   )
 }
 
@@ -591,6 +633,7 @@ export function TicketList({
   useRememberedPageScroll(`features.list.${projectId}`)
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
+  const tick = useNow(60_000)
   const stageIndex = (key: string) => {
     const i = stages.findIndex((s) => s.key === key)
     return i < 0 ? stages.length : i
@@ -603,6 +646,7 @@ export function TicketList({
     <ul className="divide-y rounded-md border">
       {rows.map((t) => {
         const stage = stageOf(stages, t.status)
+        const work = timelineFromActivity(t.activity, t.stalled, hasWork(stage.kind))
         return (
           <li key={t.id} className="transition-colors hover:bg-muted/50">
             <Link
@@ -627,7 +671,12 @@ export function TicketList({
                   {t.blockedTasks > 0 && (
                     <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />
                   )}
-                  <StalledBadge stalled={t.stalled} focusable={false} className="ml-2 align-[1px]" />
+                  <StallNotice
+                    timeline={work}
+                    stage={stallStage(stages, t.status)}
+                    focusable={false}
+                    className="ml-2 align-[1px]"
+                  />
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
                   {hasResumeBadge(t.resume) && (
                     <span className="ml-2 inline-flex gap-1 align-[1px]">
@@ -642,6 +691,7 @@ export function TicketList({
                     </span>
                   )}
                 </div>
+                {hasWork(stage.kind) && <NowLine timeline={work} now={tick} className="mt-0.5" />}
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   {repoLabel(project, t.repoId) && (
                     <span className="rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>

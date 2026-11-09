@@ -2,10 +2,10 @@ import { expect, test } from './fixtures'
 import { age, create, errorsOn, record, scrollsSideways } from './workTimeline'
 
 /**
- * The chart's insides: a row per agent, the key, the details popover, the live now line, and the phone layout.
+ * The chart's insides: a row per agent, the details popover, the live now line, and the phone layout.
  */
 
-test('the chart has a row per agent, its work and waits on its own row, and the key under it', async ({
+test('the chart has a row per agent, its work and waits on its own row', async ({
   page,
   project,
   human,
@@ -63,7 +63,9 @@ test('a delegated build: the builder on its own row, the orchestrator’s wait d
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const card = page.getByRole('region', { name: 'Timeline' })
   const bar = card.getByTestId('work-timeline')
-  await expect(card.getByLabel('Totals')).toContainText('Working 30m · Waiting 0m · Blocked on human 0m')
+  await expect(card.getByTestId('work-summary')).toContainText('Worked 30 min')
+  await expect(card.getByTestId('work-summary')).toContainText('Waited 0')
+  await expect(card.getByTestId('work-summary')).toContainText('On you 0')
   const span = bar.locator('[data-kind="span"][data-phase="build"]')
   await expect(span).toHaveText('build')
   // The delegation is a connector on the orchestrator’s row, not a second bar over the builder’s.
@@ -101,7 +103,7 @@ test('a human wait is amber and filled on the waiting agent’s row, not hatched
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const card = page.getByRole('region', { name: 'Timeline' })
   const bar = card.getByTestId('work-timeline')
-  await expect(card.getByLabel('Totals')).toContainText('Blocked on human 10m')
+  await expect(card.getByTestId('work-summary')).toContainText('On you 10 min')
   const humanWait = bar.locator('[data-kind="wait"][data-reason="human"]')
   await expect(humanWait).toHaveText('human')
   await expect(humanWait).toHaveClass(/bg-amber-500/)

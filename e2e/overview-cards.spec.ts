@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
 import { expect, section, test } from './fixtures'
+import { create, record, workedTicket } from './workTimeline'
 
 /**
  * Needs you and In progress, side by side on the Overview, are as tall as each other whatever they
@@ -81,4 +82,75 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await content(needsYou).evaluate((el) => el.scrollTo(0, 200))
   await needsYou.scrollIntoViewIfNeeded()
   await shot(page, 'phone')
+})
+
+test('a stalled ticket says why and since when, in the same words on Needs you, In progress, the board and the list', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const { t } = await workedTicket(human, agent, project)
+  const title = new RegExp(`#${t.id} Ship the importer`)
+  // The ticket's open build and the agent that has it, as the why names them everywhere.
+  const why = /Stalled \d+ min: claude has a build open, nobody heard from since \d{1,2}:\d{2}\s*[AP]M/
+
+  await page.goto(`/projects/${project.id}`)
+  const row = section(page, 'Needs you')
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` }) })
+  await expect(row).toContainText(why)
+  await expect(row).toContainText(/last\s*claude/)
+  await expect(row).not.toContainText('silent')
+  // In progress: what the ticket is doing now, a line on when an agent was last heard, and the same stall.
+  const progress = section(page, 'In progress')
+    .getByRole('listitem')
+    .filter({ hasText: `#${t.id} Ship the importer` })
+  await expect(progress.getByTestId('now-line')).toContainText(/Building · claude · \d+ min/)
+  await expect(progress.getByTestId('last-heard')).toContainText(/Last heard \d+ min ago/)
+  await expect(progress.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
+
+  // The board card and the list row: the stall's badge, and on the list the now line too.
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  const card = page.getByRole('link', { name: title })
+  await expect(card.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
+  // A stalled card's badge is its why: the card's now is left off where another badge is shown.
+  await expect(card.getByTestId('card-now')).toHaveCount(0)
+  await page.getByRole('tab', { name: 'List' }).click()
+  const listRow = page.getByRole('link', { name: title })
+  await expect(listRow.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
+  await expect(listRow.getByTestId('now-line')).toContainText(/Building · claude · \d+ min/)
+})
+
+test('In progress says what a ticket waits on and since when, when a person has to act', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Approve the copy', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'spec' })
+  await record(agent, project, t.id, { kind: 'wait_start', reason: 'human', note: 'needs the copy approved' })
+
+  await page.goto(`/projects/${project.id}`)
+  const row = section(page, 'In progress')
+    .getByRole('listitem')
+    .filter({ hasText: `#${t.id} Approve the copy` })
+  await expect(row.getByTestId('now-line')).toContainText(/Waiting on you since \d{1,2}:\d{2}\s*[AP]M/)
+  await expect(row.getByTestId('stall-notice')).toHaveCount(0)
+})
+
+test('a busy card with no other badge shows what it is doing now, as icon and time', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Building right now', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
+
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  const card = page.getByRole('link', { name: new RegExp(`#${t.id} Building right now`) })
+  await expect(card.getByTestId('card-now')).toContainText(/^\s*\d+ min|under a minute\s*$/)
+  await expect(card.getByTestId('stall-notice')).toHaveCount(0)
 })
