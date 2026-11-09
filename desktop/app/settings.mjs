@@ -106,7 +106,8 @@ export const CONFIG_TEMPLATE = `# The board's settings, read each time the app s
 # The Claude Code CLI that writes generated reports (default: claude on PATH).
 # CLAUDE_BIN=
 
-# The tailnet entrance for your other devices (README: "Using it from other devices").
+# The tailnet entrance for your other devices: turn it on in Settings, Other devices (tailnet), which needs
+# no edit here. A PUBLIC_ORIGIN set below wins over Settings (README: "Using it from other devices").
 # PUBLIC_ORIGIN=
 `
 
