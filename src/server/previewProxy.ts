@@ -240,12 +240,15 @@ const HOP_BY_HOP = new Set([
 /** The board's own request headers, which the preview never sees. */
 const BOARD_HEADERS = new Set(['host', 'authorization', 'accept-encoding', 'x-test-actor', 'x-agent-name'])
 
+/** The board's own cookies: its session's (`board_session_<port>`) and the previews' links' (`board_preview_…`). */
+const BOARD_COOKIE = /^board_(session|preview)_/i
+
 /** The Cookie header without the board's own cookies: its session's and the previews' links'. */
 export function withoutBoardCookies(cookie: string): string {
   return cookie
     .split(';')
     .map((part) => part.trim())
-    .filter((part) => part && !/^board_(session|preview)_/.test(part))
+    .filter((part) => part && !BOARD_COOKIE.test(part))
     .join('; ')
 }
 
@@ -449,7 +452,11 @@ async function answerOf(
   for (const [name, value] of Object.entries(res.headers)) {
     if (value === undefined || HOP_BY_HOP.has(name)) continue
     if (name === 'set-cookie') {
-      for (const cookie of [value].flat()) headers.append('set-cookie', rewriteSetCookie(cookie, opts.prefix))
+      // A cookie named as the board's own is dropped: a preview must not shadow the human's session cookie.
+      for (const cookie of [value].flat()) {
+        if (BOARD_COOKIE.test(cookie.trim())) continue
+        headers.append('set-cookie', rewriteSetCookie(cookie, opts.prefix))
+      }
     } else if (name === 'location') {
       const location = rewriteLocation(String(value), opts.prefix, opts.port)
       if (location === null) {

@@ -71,6 +71,17 @@ function route(req: IncomingMessage, res: ServerResponse, body: Buffer) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
     return res.end(Buffer.alloc(proxy.HTML_CAP_BYTES + 1, 'a'))
   }
+  if (p === '/cookies') {
+    res.writeHead(200, {
+      'content-type': 'text/plain',
+      'set-cookie': [
+        `board_session_${config.port}=stolen; Path=/`,
+        'board_preview_1_2=stolen; Path=/',
+        'lang=fr; Path=/; Domain=example.com',
+      ],
+    })
+    return res.end('ok')
+  }
   if (p === '/bin') {
     res.writeHead(200, { 'content-type': 'application/octet-stream' })
     return res.end(Buffer.from([0, 1, 2, 255, 254, 13, 10]))
@@ -564,6 +575,11 @@ describe('the headers on each side', () => {
     expect(sent.headers.authorization).toBeUndefined()
     expect(sent.headers.cookie).toBe('theme=dark')
     expect(sent.headers['x-test-actor']).toBeUndefined()
+  })
+
+  it("drops a Set-Cookie named as the board's own, and keeps the preview's others on its path", async () => {
+    const res = await serve(request(previewPath(wsA, RUN, 'cookies'), { headers: bearer(TOKEN.builder) }))
+    expect(res.headers.getSetCookie()).toEqual([`lang=fr; Path=/p/${wsA}/${RUN}/`])
   })
 
   it("rewrites the preview's Set-Cookie to the run's path with no Domain, and its Location to the prefix", async () => {
