@@ -11,6 +11,9 @@ import { hashSecret } from './credentials'
 // environment, the sign-in off refusals, the sessions and passkeys of an origin that changes, the routes an
 // agent is refused on, and the Tailscale states the Settings section shows.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-tailnet-entrance-'))
+// Every variable this file sets is put back as it was when the file ends: the worker runs other files after it.
+const ENV_KEYS = ['DATA_DIR', 'PUBLIC_ORIGIN', 'AUTH', 'BOARD_ENV', 'TAILSCALE_BIN', 'FAKE_TAILSCALE_STATE']
+const envBefore = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
 process.env.DATA_DIR = tmp
 delete process.env.PUBLIC_ORIGIN
 delete process.env.AUTH
@@ -91,6 +94,10 @@ beforeAll(async () => {
 })
 afterAll(() => {
   vi.unstubAllEnvs()
+  for (const key of ENV_KEYS) {
+    if (envBefore[key] === undefined) delete process.env[key]
+    else process.env[key] = envBefore[key]
+  }
   fs.rmSync(tmp, { recursive: true, force: true })
 })
 
