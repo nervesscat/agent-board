@@ -61,12 +61,18 @@ export type Verdict =
   | { allow: true; entrance: PublicEntrance | null }
   | { allow: false; status: number; error: string }
 
-/** The guard's settings from the board's environment, as config.ts reads them. Throws StartupError. */
-export function guardConfig(e: Record<string, string | undefined>): GuardConfig {
+/**
+ * The guard's settings from the board's environment, as config.ts reads them, and the entrance the board's
+ * database saved (`stored`, null when none). Throws StartupError.
+ */
+export function guardConfig(
+  e: Record<string, string | undefined>,
+  stored: PublicEntrance | null = null,
+): GuardConfig {
   return {
     authOff: readAuthMode(e).off,
     port: readPort(e),
-    entrance: readServedEntrance(e),
+    entrance: readServedEntrance(e, stored),
     dataDir: expandPath(e.DATA_DIR || './data'),
   }
 }

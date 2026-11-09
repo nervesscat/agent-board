@@ -407,6 +407,19 @@ export function revokePasskey(id: number) {
   })
 }
 
+/**
+ * Ends every session made with a passkey of `rpId`: the sessions of an origin the board no longer serves
+ * (the tailnet name it was changed from). Its passkeys stay listed; they just sign in nowhere now.
+ */
+export function signOutOfOrigin(rpId: string): number {
+  return db
+    .delete(schema.sessions)
+    .where(
+      sql`${schema.sessions.passkeyId} in (select ${schema.passkeys.id} from ${schema.passkeys} where ${schema.passkeys.rpId} = ${rpId})`,
+    )
+    .run().changes
+}
+
 /** The live sessions, with the passkey each signed in with; `current` is the caller's own. */
 export function listSessions(currentToken: string | null) {
   const current = currentToken ? hashSecret(currentToken) : null

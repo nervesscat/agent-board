@@ -308,6 +308,20 @@ describe('guardConfig', () => {
     })
     expect(() => guardConfig({ PUBLIC_ORIGIN: 'http://devbox' })).toThrow(/PUBLIC_ORIGIN must be/)
   })
+
+  it('takes the entrance Settings saved when PUBLIC_ORIGIN is not set, and only on the production board', () => {
+    const saved = { origin: `https://${PUBLIC}`, host: PUBLIC }
+    expect(guardConfig({ DATA_DIR: dataDir }, saved).entrance).toEqual(saved)
+    expect(guardConfig({ DATA_DIR: dataDir, BOARD_ENV: 'development' }, saved).entrance).toBeNull()
+    expect(guardConfig({ DATA_DIR: dataDir, BOARD_ENV: 'test' }, saved).entrance).toBeNull()
+    // The environment still wins over it.
+    expect(
+      guardConfig(
+        { ...keys, PORT: '47100' },
+        { origin: 'https://other.example.ts.net', host: 'other.example.ts.net' },
+      ).entrance,
+    ).toEqual(entrance)
+  })
 })
 
 describe('the guard on a request to the board itself', () => {
