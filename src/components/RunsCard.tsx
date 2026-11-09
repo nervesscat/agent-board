@@ -315,7 +315,6 @@ function RunRow({ run, onChange }: { run: TicketRun; onChange: () => void }) {
                 rel="noreferrer"
                 className="text-xs text-muted-foreground underline-offset-2 hover:underline"
                 data-testid="run-through-board"
-                title="The preview through the board's own origin: signed in, for other devices and cloud agents"
               >
                 Through the board
               </a>
