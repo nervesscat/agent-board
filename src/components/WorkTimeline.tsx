@@ -323,11 +323,13 @@ export function WorkTimelineBar({
   const now = useNow(30_000)
   const summaryId = useId()
   const scroller = useRef<HTMLDivElement>(null)
+  // Whether the reader is at the track's right end (where now is); only then does a live track follow the time.
+  const atNow = useRef(true)
   const live = timeline.live
-  // A live ticket opens at its right end, where now is, and stays there as the track grows with time.
+  // A live ticket opens at its right end, and stays there as the track grows, unless the reader has scrolled back.
   useEffect(() => {
     const el = scroller.current
-    if (el && live) el.scrollLeft = el.scrollWidth
+    if (el && live && atNow.current) el.scrollLeft = el.scrollWidth
   }, [live, now, timeline.end])
   if (!timeline.start || !timeline.end || !hasWork(timeline))
     return (
@@ -379,7 +381,15 @@ export function WorkTimelineBar({
       <p id={summaryId} className="sr-only">
         {chart.summary}
       </p>
-      <div ref={scroller} data-testid="work-timeline-scroll" className="overflow-x-auto pb-1">
+      <div
+        ref={scroller}
+        data-testid="work-timeline-scroll"
+        className="overflow-x-auto pb-1"
+        onScroll={(e) => {
+          const el = e.currentTarget
+          atNow.current = el.scrollWidth - el.clientWidth - el.scrollLeft < 8
+        }}
+      >
         <div className="w-max min-w-full">
           {marks.length > 0 || bands.length > 0 || chart.created ? (
             <Row
