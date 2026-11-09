@@ -57,8 +57,8 @@ export interface ProxyDeps {
   auth: () => AuthMode
   entrance: () => PublicEntrance | null
   runOf: (workspaceId: number, runId: number) => RunState | null
-  /** The addresses the port listens on, loopback or not. */
-  listening: (port: number) => Promise<string[]>
+  /** The addresses the port listens on, loopback or not, for the run that holds the port. */
+  listening: (port: number, run: RunRef) => Promise<string[]>
   projectOf: (workspaceId: number) => number | null
   /** The run a workspace's link is for: its repo's preview run. */
   previewRunId: (workspaceId: number) => number | null
@@ -66,13 +66,26 @@ export interface ProxyDeps {
   upstreamMs: number
 }
 
-const listenCache = new Map<number, { at: number; addresses: string[] }>()
+/** The run a link or a request is for, and the start it is of: a restart is a new start (a new runningAt). */
+interface RunRef {
+  workspaceId: number
+  runId: number
+  runningAt: string | null
+}
 
-async function listeningNow(port: number): Promise<string[]> {
-  const hit = listenCache.get(port)
-  if (hit && Date.now() - hit.at < LISTEN_TTL_MS) return hit.addresses
+/** The last answer per run, for the port and the start it was given for: never another run's, nor a restart's. */
+const listenCache = new Map<
+  string,
+  { port: number; runningAt: string | null; at: number; addresses: string[] }
+>()
+
+export async function listeningNow(port: number, run: RunRef): Promise<string[]> {
+  const key = `${run.workspaceId}:${run.runId}`
+  const hit = listenCache.get(key)
+  if (hit && hit.port === port && hit.runningAt === run.runningAt && Date.now() - hit.at < LISTEN_TTL_MS)
+    return hit.addresses
   const addresses = await listeningAddresses(port)
-  listenCache.set(port, { at: Date.now(), addresses })
+  listenCache.set(key, { port, runningAt: run.runningAt, at: Date.now(), addresses })
   return addresses
 }
 
@@ -566,11 +579,14 @@ export async function servePreview(
 
   let loopback: Loopback
   try {
-    loopback = loopbackOf(await deps.listening(state.port))
+    loopback = loopbackOf(
+      await deps.listening(state.port, { workspaceId, runId, runningAt: state.runningAt }),
+    )
   } catch {
     loopback = 'unknown'
   }
   if (loopback !== 'loopback') {
+    listenCache.delete(`${workspaceId}:${runId}`)
     // Stopped, as the board's own watch stops it (runs.ts): a run that listens beyond the machine is not left up.
     const why =
       loopback === 'beyond'

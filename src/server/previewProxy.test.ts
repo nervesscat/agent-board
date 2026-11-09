@@ -512,6 +512,21 @@ describe('the run behind the path', () => {
   })
 })
 
+describe("the listeners a run's answer comes from", () => {
+  it('answers from its own last look for its port and start, and looks again for another run or a restart', async () => {
+    const server = net.createServer()
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const port = (server.address() as net.AddressInfo).port
+    const run = { workspaceId: wsA, runId: RUN, runningAt: RUNNING_AT }
+    const first = await proxy.listeningNow(port, run)
+    expect(first.length).toBeGreaterThan(0)
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    expect(await proxy.listeningNow(port, run)).toEqual(first)
+    expect(await proxy.listeningNow(port, { ...run, runId: RUN + 1 })).toEqual([])
+    expect(await proxy.listeningNow(port, { ...run, runningAt: '2026-11-09T10:30:00.000Z' })).toEqual([])
+  })
+})
+
 describe('the target, whatever the request says', () => {
   it('sends the request to 127.0.0.1 on the run port, whatever Host, forwarded headers and paths it has', async () => {
     const res = await serve(
