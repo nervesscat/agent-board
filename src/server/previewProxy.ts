@@ -284,18 +284,50 @@ export function rewriteSetCookie(value: string, prefix: string): string {
 }
 
 /**
- * A Location of the preview: its loopback address (on the port it is) or a root path, into the prefix. Any
- * other target (a relative one, another host) stays as it is.
+ * A URL as a browser reads it: the leading and trailing characters of 0x20 and below (spaces, control
+ * characters) dropped, and the tabs and line breaks inside it.
  */
-export function rewriteLocation(location: string, prefix: string, port: number): string {
-  const absolute = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]):(\d+)(\/.*)?$/i.exec(location)
-  if (absolute) {
-    if (Number(absolute[2]) !== port) return location
-    return prefix + (absolute[3] ?? '/').slice(1)
+function browserURL(location: string): string {
+  let from = 0
+  let to = location.length
+  while (from < to && location.charCodeAt(from) <= 0x20) from++
+  while (to > from && location.charCodeAt(to - 1) <= 0x20) to--
+  return location.slice(from, to).replace(/[\t\r\n]/g, '')
+}
+
+/**
+ * A Location of the preview, for the path it is served at. Its loopback address on the run's port, or a
+ * root path, goes into the prefix. Any other absolute or protocol-relative target (another host, another
+ * scheme, `//host`, `/\\host`, which browsers read as `//host`) is refused: null, and the answer is 502, so
+ * the preview cannot send a visitor elsewhere through the board. A relative one stays as it is.
+ */
+export function rewriteLocation(location: string, prefix: string, port: number): string | null {
+  const url = browserURL(location)
+  // Browsers read a backslash as a slash, so `/\\host` is protocol-relative too.
+  if (/^[/\\]{2}/.test(url)) return null
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+    let target: URL
+    try {
+      target = new URL(url)
+    } catch {
+      return null
+    }
+    const local = ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)
+    const at = Number(target.port || (target.protocol === 'https:' ? 443 : 80))
+    if (!/^https?:$/.test(target.protocol) || !local || at !== port) return null
+    return prefix + target.pathname.slice(1) + target.search + target.hash
   }
-  if (location.startsWith('/') && !location.startsWith('//') && !location.startsWith(prefix))
-    return prefix + location.slice(1)
+  if (url.startsWith('/') && !url.startsWith(prefix)) return prefix + url.slice(1)
   return location
+}
+
+/** A Refresh header of the preview (`5; url=…`) with its target rewritten the same way; null when refused. */
+export function rewriteRefresh(value: string, prefix: string, port: number): string | null {
+  const m = /^(\s*\d+(?:\.\d+)?\s*)([;,]\s*(?:url\s*=\s*)?)?(.*)$/is.exec(value)
+  if (!m || !m[2]) return value
+  const target = m[3]!.trim().replace(/^(['"])(.*)\1$/s, '$2')
+  const rewritten = rewriteLocation(target, prefix, port)
+  return rewritten === null ? null : `${m[1]}${m[2]}${rewritten}`
 }
 
 /**
@@ -419,7 +451,15 @@ async function answerOf(
     if (name === 'set-cookie') {
       for (const cookie of [value].flat()) headers.append('set-cookie', rewriteSetCookie(cookie, opts.prefix))
     } else if (name === 'location') {
-      headers.set(name, rewriteLocation(String(value), opts.prefix, opts.port))
+      const location = rewriteLocation(String(value), opts.prefix, opts.port)
+      if (location === null) {
+        res.resume()
+        return json(502, 'the preview redirects beyond itself: refused')
+      }
+      headers.set(name, location)
+    } else if (name === 'refresh') {
+      const refresh = rewriteRefresh(String(value), opts.prefix, opts.port)
+      if (refresh !== null) headers.set(name, refresh)
     } else {
       headers.set(name, [value].flat().join(', '))
     }

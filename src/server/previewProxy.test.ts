@@ -99,6 +99,29 @@ function route(req: IncomingMessage, res: ServerResponse, body: Buffer) {
     res.writeHead(302, { location: 'https://example.com/a' })
     return res.end()
   }
+  if (p === '/bare') {
+    res.writeHead(302, { location: `http://127.0.0.1:${previewPort}?x=1` })
+    return res.end()
+  }
+  if (p === '/proto') {
+    res.writeHead(302, { location: '//evil.example/x' })
+    return res.end()
+  }
+  if (p === '/backslash') {
+    res.writeHead(302, { location: '/\\\\evil.example/x' })
+    return res.end()
+  }
+  if (p === '/refresh') {
+    res.writeHead(200, {
+      'content-type': 'text/plain',
+      refresh: `0; url=http://127.0.0.1:${previewPort}/next`,
+    })
+    return res.end('ok')
+  }
+  if (p === '/refresh-ext') {
+    res.writeHead(200, { 'content-type': 'text/plain', refresh: '5; url=https://example.com/' })
+    return res.end('ok')
+  }
   if (p === '/sse') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
     res.write('event: one\ndata: 1\n\n')
@@ -552,25 +575,58 @@ describe('the headers on each side', () => {
     expect(res.headers.get('referrer-policy')).toBe('same-origin')
   })
 
-  it('rewrites Location of the loopback address or a root path to the prefix, and leaves others', async () => {
+  it('rewrites a Location of the loopback address on the run port or a root path to the prefix, and leaves a relative one', async () => {
     const prefix = `/p/${wsA}/${RUN}/`
     const go = await serve(request(previewPath(wsA, RUN, 'go'), { headers: bearer(TOKEN.builder) }))
     expect(go.headers.get('location')).toBe(`${prefix}next?x=1`)
     const local = await serve(request(previewPath(wsA, RUN, 'go-local'), { headers: bearer(TOKEN.builder) }))
     expect(local.headers.get('location')).toBe(`${prefix}a`)
+    const bare = await serve(request(previewPath(wsA, RUN, 'bare'), { headers: bearer(TOKEN.builder) }))
+    expect(bare.headers.get('location')).toBe(`${prefix}?x=1`)
     const root = await serve(request(previewPath(wsA, RUN, 'root'), { headers: bearer(TOKEN.builder) }))
     expect(root.headers.get('location')).toBe(`${prefix}login`)
     const rel = await serve(request(previewPath(wsA, RUN, 'rel'), { headers: bearer(TOKEN.builder) }))
     expect(rel.headers.get('location')).toBe('next')
-    const ext = await serve(request(previewPath(wsA, RUN, 'ext'), { headers: bearer(TOKEN.builder) }))
-    expect(ext.headers.get('location')).toBe('https://example.com/a')
   })
 
-  it("rewrites a Location to a loopback port that is not the run's not at all", () => {
-    expect(proxy.rewriteLocation('http://127.0.0.1:9/x', '/p/1/2/', 8)).toBe('http://127.0.0.1:9/x')
+  it('refuses (502) a Location that leads off the preview: another host, another scheme, protocol-relative', async () => {
+    for (const rest of ['ext', 'proto', 'backslash']) {
+      const res = await serve(request(previewPath(wsA, RUN, rest), { headers: bearer(TOKEN.builder) }))
+      expect(res.status, rest).toBe(502)
+      expect(await errorOf(res)).toBe('the preview redirects beyond itself: refused')
+      expect(res.headers.get('location')).toBeNull()
+    }
+  })
+
+  it('rewrites a Refresh header the same way, and drops one that leads off the preview', async () => {
+    const prefix = `/p/${wsA}/${RUN}/`
+    const ok = await serve(request(previewPath(wsA, RUN, 'refresh'), { headers: bearer(TOKEN.builder) }))
+    expect(ok.headers.get('refresh')).toBe(`0; url=${prefix}next`)
+    const ext = await serve(request(previewPath(wsA, RUN, 'refresh-ext'), { headers: bearer(TOKEN.builder) }))
+    expect(ext.status).toBe(200)
+    expect(ext.headers.get('refresh')).toBeNull()
+  })
+
+  it('refuses the Location targets browsers would follow off the preview, and rewrites the loopback ones', () => {
+    expect(proxy.rewriteLocation('http://127.0.0.1:8/x', '/p/1/2/', 8)).toBe('/p/1/2/x')
+    expect(proxy.rewriteLocation('http://127.0.0.1:9/x', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteLocation('http://localhost:8', '/p/1/2/', 8)).toBe('/p/1/2/')
+    expect(proxy.rewriteLocation('http://[::1]:8/a?b=1#c', '/p/1/2/', 8)).toBe('/p/1/2/a?b=1#c')
+    expect(proxy.rewriteLocation('http://example.com:8/x', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteLocation('javascript:alert(1)', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteLocation('//evil.example/x', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteLocation('/\\evil.example/x', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteLocation(' \t//evil.example/x', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteLocation('\u0000//evil.example/x', '/p/1/2/', 8)).toBeNull()
     expect(proxy.rewriteLocation('/x', '/p/1/2/', 8)).toBe('/p/1/2/x')
     expect(proxy.rewriteLocation('/p/1/2/x', '/p/1/2/', 8)).toBe('/p/1/2/x')
-    expect(proxy.rewriteLocation('//evil.example/x', '/p/1/2/', 8)).toBe('//evil.example/x')
+    expect(proxy.rewriteLocation('next?x=1', '/p/1/2/', 8)).toBe('next?x=1')
+  })
+
+  it('rewrites a Refresh target the same way, and drops a refused one', () => {
+    expect(proxy.rewriteRefresh('0; url=http://127.0.0.1:8/a', '/p/1/2/', 8)).toBe('0; url=/p/1/2/a')
+    expect(proxy.rewriteRefresh('3', '/p/1/2/', 8)).toBe('3')
+    expect(proxy.rewriteRefresh('0; url=https://example.com', '/p/1/2/', 8)).toBeNull()
   })
 
   it('rewrites a Set-Cookie: no Domain, Path set, the rest kept', () => {
