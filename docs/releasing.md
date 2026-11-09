@@ -28,6 +28,34 @@ pre-release by both the workflow and `pnpm release`, so `latest` stays on the ne
 `pnpm desktop:package` builds the Windows installer on Windows and the four Linux packages on Linux
 (README: "The desktop app"), and a release needs all five.
 
+## Update metadata
+
+Each release also carries the files the installed app's updater (electron-updater) reads:
+`latest.yml` for Windows and `latest-linux.yml` for Linux. electron-builder writes them beside the
+packages in `desktop/dist`; each names the version and the versioned files, every one with its sha512
+(base64) and size. `latest-linux.yml` lists all four Linux packages, so each kind of install finds its
+own by its extension (the AppImage, the `.deb`, the `.rpm`, the `.pacman`). The packed app has
+`resources/app-update.yml`, which points it at this repo's GitHub Releases
+(`provider: github`, `owner: nervesscat`, `repo: agent-board`); `pnpm desktop:package` fails without it,
+or when the app's `electron-updater` is not inside `app.asar`.
+
+`pnpm release` (and `--stage-only`, the workflow's step) checks the metadata before it stages anything:
+for the version being released, listing each of the platform's versioned files and nothing else, with
+the sha512 that file has. It then copies it to `desktop/dist/release` under its own name, and it is
+uploaded with the packages to the same release. The app downloads an update only when the human presses
+Download and install in Settings, Updates; the download is checked against the sha512 in the metadata,
+and one that does not match is refused and nothing is installed (README: "Updating").
+
+The updater follows `releases/latest` and so offers only stable releases; a pre-release (a version
+with a suffix) is offered only to an app whose Updates section has **Include pre-releases** on.
+
+**Trying an update before it is released.** Never publish a release to test one. Serve a folder with a
+`latest-linux.yml` (or `latest.yml`) and the packages it names over HTTP, e.g. the `desktop/dist` of a
+build with a higher version (`python3 -m http.server 8120 --bind 127.0.0.1 --directory desktop/dist`),
+and start an installed app with `AGENT_BOARD_UPDATE_FEED=http://127.0.0.1:8120/` in its environment:
+it then checks that folder instead of GitHub. `desktop/updates.test.mjs` does the same against a feed it
+serves itself on `127.0.0.1`, for each kind of install, the refusal of a wrong sha512 among them.
+
 ## 1. Prepare
 
 1. Set the new version in `desktop/app/package.json` (`0.2.0`, say) and merge it like any other change.
@@ -44,9 +72,9 @@ git push origin v0.2.0
 releases `v<version>` at the commit it runs on):
 
 - **Windows installer** (`windows-latest`): `pnpm install --frozen-lockfile`, `pnpm release --stage-only`
-  (that is `pnpm desktop:package`, then the copies under both names in `desktop/dist/release`), a smoke
-  test of the unpacked app.
-- **Linux packages** (`ubuntu-24.04`): the same on Linux, with the packaging tools CI's `desktop-linux`
+  (that is `pnpm desktop:package`, then the copies under both names in `desktop/dist/release`, with
+  `latest.yml`), a smoke test of the unpacked app.
+- **Linux packages** (`ubuntu-24.04`): the same on Linux (with `latest-linux.yml`), with the packaging tools CI's `desktop-linux`
   job installs (`rpm`, `libarchive-tools`, Xvfb and Electron's libraries), and the smoke test under
   `xvfb-run`.
 - **Publish the GitHub Release**: only when both builds succeeded, so a release never goes out with a
@@ -73,6 +101,8 @@ pnpm release             # pnpm desktop:package, copies to desktop/dist/release,
    `pnpm release`: builds the Linux packages and adds them to the same release
    (`gh release upload v<version> … --clobber`).
 
+Each run uploads its platform's update metadata too (`latest.yml`, `latest-linux.yml`).
+
 Either platform can go first: the first run creates the release, the next adds to it, and a run again
 replaces its own files (`--clobber`). Until the second platform's run, the release has only the first
 platform's files, and its stable links for the other platform answer 404.
@@ -88,4 +118,7 @@ in `desktop/dist`; `--stage-only` builds and copies and publishes nothing (the w
 ## After a release
 
 - Check the release page and each link in the table above.
-- The installers are not code-signed: Windows SmartScreen asks once (More info, Run anyway).
+- An installed app of the previous version offers the new one in Settings, Updates, after Check now.
+- The installers are not code-signed: Windows SmartScreen asks once (More info, Run anyway). With a
+  signed installer, electron-updater would also check that an update is signed by the same publisher
+  (`publisherName`), on top of the sha512.

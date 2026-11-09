@@ -11,7 +11,15 @@ import { HttpError } from './http'
 import { getProject } from './projects'
 import { listRepos } from './repos'
 import { withResume, withResumeBriefs } from './resume'
-import { deleteStage, firstOfKind, kindOf, listStages, resolveStage, stageOf } from './stages'
+import {
+  deleteStage,
+  firstOfKind,
+  kindOf,
+  listStages,
+  projectWorkStage,
+  resolveStage,
+  stageOf,
+} from './stages'
 import { stalledFor, timelinesFor, workOf } from './workTimeline'
 
 /**
@@ -400,15 +408,18 @@ type Patch = Parameters<typeof features.updateTicket>[1]
  * `updateTicket` with the needs rule: `needs` replaces what the ticket needs, and a move to a done stage
  * is refused while one is not merged, unless the human sends `force` (logged). A move to a review stage
  * answers with `open` too: what its tasks still have open (openTasks). Never refused for them.
+ * `position` places it in its column (`placeTicket`) once the rest is written: with `status`, in the
+ * new stage's column. A bad one is refused before anything is written.
  */
 export async function changeTicket(
   id: number,
-  input: Patch & { needs?: number[]; force?: boolean },
+  input: Patch & { needs?: number[]; force?: boolean; position?: number },
   actor: string,
   opts: { agent: boolean },
 ) {
-  const { needs, force, ...patch } = input
+  const { needs, force, position, ...patch } = input
   const before = features.getTicket(id)
+  if (position !== undefined) features.checkPlacement(before, position)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch
@@ -419,15 +430,20 @@ export async function changeTicket(
     baseBranch: primary.baseBranch || before.baseBranch,
     from: before.status,
   }
-  const to = patch.status ? resolveStage(listStages(before.projectId), patch.status).key : before.status
+  const stages = listStages(before.projectId)
+  const to = patch.status
+    ? resolveStage(stages, patch.status, projectWorkStage(before.projectId, stages)).key
+    : before.status
   const unmet = await guardDone(subject, to, ids, { force, agent: opts.agent })
-  // The needs and the update land together: an update that is refused leaves the needs as they were.
+  // The needs, the update and the placement land together: an update that is refused leaves the needs
+  // as they were.
   const row = db.transaction(
     () => {
       if (needs !== undefined) setNeeds(id, ids, actor)
-      return Object.keys(patch).length
+      const changed = Object.keys(patch).length
         ? features.updateTicket(id, patch, actor, opts)
         : features.getTicket(id)
+      return position !== undefined ? features.placeTicket(id, position, actor) : changed
     },
     { behavior: 'immediate' },
   )
@@ -469,7 +485,8 @@ export async function newTicket(
   if (ids.length && rest.status) {
     // Judged against the repo and base the ticket is created with.
     const { repo, baseBranch } = features.placement(projectId, features.newTicketPrimary(rest))
-    const to = resolveStage(listStages(projectId), rest.status).key
+    const stages = listStages(projectId)
+    const to = resolveStage(stages, rest.status, projectWorkStage(projectId, stages)).key
     await guardDone({ id: null, projectId, repoId: repo.id, baseBranch }, to, ids, opts)
   }
   const seeded = defaultPhases ?? !rest.parentId
@@ -496,7 +513,7 @@ export async function judgeTicket(
     verdict === 'approved' && pr
       ? firstOfKind(stages, 'done')?.key
       : verdict === null && opts.reopenTo
-        ? resolveStage(stages, opts.reopenTo).key
+        ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages)).key
         : undefined
   const unmet =
     to && features.verdictOf(t) !== verdict

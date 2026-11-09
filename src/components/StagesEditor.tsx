@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, get, patch, post, put } from '#/lib/api'
 import { STAGE_COLORS, STAGE_KINDS, type StageColor, type StageKind } from '#/lib/constants'
+import { useProject } from '#/lib/project'
 import { STAGE_DOT, STAGE_KIND_LABEL } from '#/lib/stages'
 import { ticketsKey } from '#/lib/tickets'
 import type { Stage } from '#/db/schema'
@@ -28,7 +29,7 @@ import type { Stage } from '#/db/schema'
 type StageRow = Stage & { tickets: number }
 
 const KIND_HINT: Record<StageKind, string> = {
-  open: 'waiting to be picked up; claiming moves it to the first active stage',
+  open: 'waiting to be picked up; claiming moves it to the stage work starts in',
   active: 'being worked on',
   blocked: 'waiting on you',
   review: 'handed off for review',
@@ -93,7 +94,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
     reorder.mutate(ids)
   }
   return (
-    <section className="max-w-3xl space-y-3">
+    <section aria-label="Stages" className="max-w-3xl space-y-3">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Stages</h2>
         <p className="text-sm text-muted-foreground">
@@ -159,6 +160,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
           </li>
         ))}
       </ul>
+      <WorkStage projectId={projectId} stages={stages} />
       <form
         className="flex flex-wrap items-center gap-2"
         onSubmit={(e) => {
@@ -194,6 +196,63 @@ export function StagesEditor({ projectId }: { projectId: string }) {
         <span className="text-xs text-muted-foreground">{KIND_HINT[kind]}</span>
       </form>
     </section>
+  )
+}
+
+/** What the select shows for the project's default: the first active stage, whichever it is now. */
+const FIRST_ACTIVE = '__first_active__'
+
+/**
+ * Where work starts: the active stage claiming a ticket (and a status given as in_progress or active)
+ * puts it in. The first active stage until the human picks one; a pick whose stage is gone or no longer
+ * active reads as the default again, as the server takes it.
+ */
+function WorkStage({ projectId, stages }: { projectId: string; stages: StageRow[] }) {
+  const qc = useQueryClient()
+  const { data: project } = useProject(projectId)
+  const save = useMutation({
+    mutationFn: (workStage: string | null) =>
+      patch<{ workStage: string | null }>(`/api/projects/${projectId}`, { workStage }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['project', projectId] })
+      toast.success('Saved')
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  const active = stages.filter((s) => s.kind === 'active')
+  if (!project) return null
+  const first = active[0]
+  const chosen = active.find((s) => s.key === project.workStage)
+  const items = {
+    [FIRST_ACTIVE]: first ? `First active stage (${first.name})` : 'First active stage (none)',
+    ...Object.fromEntries(active.map((s) => [s.key, s.name])),
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span id="work-stage-label" className="text-sm font-medium">
+        Work starts in
+      </span>
+      <Select
+        value={chosen?.key ?? FIRST_ACTIVE}
+        onValueChange={(v) => v && save.mutate(v === FIRST_ACTIVE ? null : v)}
+        items={items}
+        disabled={save.isPending}
+      >
+        <SelectTrigger size="sm" className="w-64" aria-labelledby="work-stage-label">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(items).map(([key, label]) => (
+            <SelectItem key={key} value={key}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <span className="text-xs text-muted-foreground">
+        Where claiming a ticket puts it; a status of in progress or active means this stage too.
+      </span>
+    </div>
   )
 }
 

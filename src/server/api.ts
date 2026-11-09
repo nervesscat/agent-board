@@ -73,6 +73,7 @@ import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
 import * as tokens from './tokens'
+import { changeUpdateSettings, checkForUpdates, installUpdate, updatesState } from './updates'
 import { getSummary } from './summary'
 import { deleteUnattachedUploads } from './unattached'
 import * as work from './workTimeline'
@@ -272,6 +273,32 @@ api.patch('/api/settings', async ({ request }) => {
   return json(agents.updateSettings(body))
 })
 
+// --- the desktop app's updates (updates.ts): the human's alone, reading them included ---
+const updatesHumanOnly = (request: Request, what: string) => {
+  if (isAgent(request)) throw new HttpError(403, `only the human ${what}`)
+}
+api.get('/api/updates', async ({ request }) => {
+  updatesHumanOnly(request, "sees the app's updates")
+  return Response.json(await updatesState(), { headers: { 'cache-control': 'no-store' } })
+})
+api.post('/api/updates/check', async ({ request }) => {
+  updatesHumanOnly(request, 'checks for updates')
+  return json(await checkForUpdates())
+})
+// Download and install: the app downloads the offered release, checks its sha512 and installs it.
+api.post('/api/updates/install', async ({ request }) => {
+  updatesHumanOnly(request, 'installs updates')
+  return json(await installUpdate())
+})
+api.patch('/api/updates/settings', async ({ request }) => {
+  updatesHumanOnly(request, 'changes the update settings')
+  const body = await readJson(
+    request,
+    z.object({ autoCheck: z.boolean().optional(), prereleases: z.boolean().optional() }).strict(),
+  )
+  return json(await changeUpdateSettings(body))
+})
+
 // --- projects ---
 api.get('/api/projects', () => json(projects.listProjects()))
 api.post('/api/projects', async ({ request, actor }) => {
@@ -311,6 +338,7 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
       tagSuggestions: projects.TagSuggestions.optional(),
       stallMinutes: z.number().int().min(STALL_MINUTES.min).max(STALL_MINUTES.max).optional(),
       layout: projects.LayoutBody.optional(),
+      workStage: z.string().min(1).max(100).nullable().optional(),
     }),
   )
   if (body.stallMinutes !== undefined && isAgent(request))
@@ -318,6 +346,9 @@ api.patch('/api/projects/:id', async ({ request, params, actor }) => {
   // They shape every new ticket of the project: agents change the phases of a ticket instead.
   if (body.defaultPhases !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's default phases")
+  // Where claiming puts a ticket is part of the stages, which are the human's.
+  if (body.workStage !== undefined && isAgent(request))
+    throw new HttpError(403, 'only the human sets the stage work starts in')
   // Which pages, cards and sections the human sees, and where: theirs to arrange.
   if (body.layout !== undefined && isAgent(request))
     throw new HttpError(403, "only the human sets the project's layout")
@@ -548,7 +579,8 @@ api.patch('/api/prs/:id', async ({ request, params, actor }) => {
 // unassigned), ?q= text found (any casing) in the ticket's #id, title, instructions or thread (its posts and the
 // replies under them): those found by name (#id, title) first, then the rest, each row with `match` (where) and
 // `snippet` (the words around a content hit). Archived tickets are left out; ?archived=include adds them,
-// ?archived=only lists just those.
+// ?archived=only lists just those. One column's rows (same stage, same parent) come in its order: placed first
+// (`rank`; null: not placed), then last updated first.
 api.get('/api/projects/:id/tickets', async ({ params, url }) => {
   const q = url.searchParams
   const parent = q.get('parent')
@@ -591,11 +623,18 @@ api.get('/api/tickets/:id', async ({ request, params, url }) =>
 )
 // An agent cannot reassign a ticket reserved for one of the project's agents; the human can. A move to a
 // done stage is a 409 (code: needs) while what it needs is not merged; force: true is the human's way past.
+// position (1-based) places it in its stage's column, the new stage's when status comes with it.
 api.patch('/api/tickets/:id', async ({ request, params, actor }) =>
   json(
     await needs.changeTicket(
       id(params),
-      await readJson(request, TicketPatch.extend({ force: z.boolean().optional() })),
+      await readJson(
+        request,
+        TicketPatch.extend({
+          force: z.boolean().optional(),
+          position: z.number().int().positive().optional(),
+        }),
+      ),
       actor,
       { agent: isAgent(request) },
     ),

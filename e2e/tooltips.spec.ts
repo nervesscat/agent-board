@@ -370,7 +370,7 @@ test('a trigger that also opens a dialog, a select or a tab shows its tooltip an
   // A stage's kind, in the stages editor.
   await page.goto(`/projects/${project.id}/settings`)
   const kind = page.getByRole('combobox').filter({ hasText: 'Open' }).first()
-  await expectTooltip(kind, 'waiting to be picked up; claiming moves it to the first active stage')
+  await expectTooltip(kind, 'waiting to be picked up; claiming moves it to the stage work starts in')
   await kind.click()
   await expect(page.getByRole('option', { name: 'Active' })).toBeVisible()
   await page.keyboard.press('Escape')
