@@ -10,6 +10,10 @@
 // AGENT_BOARD_HOME and DATA_DIR, so no pnpm, node, source or live data is involved, then checks that:
 //   - the board answers /api/health, the window opens on /setup on fresh data, setup signs it in with
 //     a passkey, and the signed-in window makes an agent token for the API calls below;
+//   - the app's updater is loaded and answers the board's update routes over the server's IPC channel:
+//     the window reads its state and Check now finds nothing newer (an unpacked copy cannot update
+//     itself; an installed one asks a feed served here on 127.0.0.1, AGENT_BOARD_UPDATE_FEED, which has
+//     the same version, never GitHub), and an agent gets 403;
 //   - a project made through the API survives a restart (migrations, the Electron-ABI driver);
 //   - a second launch exits and brings the first window back;
 //   - Quit stops the server and frees the port;
@@ -32,6 +36,7 @@
 // WebAuthn) in the window, which says yes at once.
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -91,6 +96,23 @@ const exe = path.join(appDir, WIN ? 'agent-board.exe' : 'agent-board')
 // Linux: the XDG config folder of every run, where Start at login writes, never the user's own.
 const xdgConfig = path.join(tmp, 'xdg-config')
 
+// The update feed every run checks (AGENT_BOARD_UPDATE_FEED): this version again, so nothing newer, and
+// no run of the smoke test asks GitHub's releases. Only an installed copy checks at all.
+const appVersion = JSON.parse(
+  fs.readFileSync(path.join(root, 'desktop', 'app', 'package.json'), 'utf8'),
+).version
+const feedYml = Buffer.from(
+  `version: ${appVersion}\nfiles:\n  - url: agent-board-${appVersion}.none\n    sha512: none\n    size: 0\n` +
+    `path: agent-board-${appVersion}.none\nsha512: none\nreleaseDate: '2026-01-01T00:00:00.000Z'\n`,
+)
+// electron-updater asks for latest*.yml?noCache=…
+const feed = http.createServer((req, res) => {
+  if (/^\/latest(-linux)?\.yml(\?|$)/.test(req.url ?? '')) res.writeHead(200).end(feedYml)
+  else res.writeHead(404).end()
+})
+await new Promise((resolve) => feed.listen(0, '127.0.0.1', () => resolve(undefined)))
+const feedUrl = `http://127.0.0.1:${/** @type {net.AddressInfo} */ (feed.address()).port}/`
+
 /** The environment of a run: everything but what the app decides itself, and `extra`. */
 /** @param {Record<string, string>} extra */
 function appEnv(extra) {
@@ -98,6 +120,7 @@ function appEnv(extra) {
   const env = {
     ...process.env,
     AGENT_BOARD_HOME: home,
+    AGENT_BOARD_UPDATE_FEED: feedUrl,
     ...(WIN ? {} : { XDG_CONFIG_HOME: xdgConfig }),
     ...extra,
   }
@@ -214,6 +237,44 @@ try {
     body: JSON.stringify({ name: projectName }),
   })
   check(created.status === 201, `a project is created through the API (${created.status})`)
+  // The updater (desktop/app/updates.mjs): loaded in the packed app, reached from the board's API over
+  // the server's IPC channel, for the human only. An unpacked copy cannot update itself, so it checks
+  // nothing (no request to GitHub from here).
+  const updates = await win.evaluate(async () => {
+    const checked = await fetch('/api/updates/check', { method: 'POST' })
+    if (!checked.ok) return { status: checked.status, body: await checked.text() }
+    for (let i = 0; i < 60; i++) {
+      const res = await fetch('/api/updates')
+      const body = res.ok ? await res.json() : null
+      if (!res.ok || body.status !== 'checking') return { status: res.status, body }
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    return { status: 0, body: 'still checking after 15 s' }
+  })
+  const runningVersion = await app.evaluate(({ app: a }) => a.getVersion())
+  const state = updates.body
+  check(
+    updates.status === 200 &&
+      state?.mode === 'desktop' &&
+      state?.installed === runningVersion &&
+      state?.newest === null &&
+      state?.status === (state?.packageType ? 'none' : 'unsupported'),
+    `the window reads the app's updates from the board's API, and Check now finds nothing newer: ${JSON.stringify(state)}`,
+  )
+  const agentUpdates = await Promise.all([
+    api(port, '/api/updates'),
+    api(port, '/api/updates/check', { method: 'POST' }),
+    api(port, '/api/updates/install', { method: 'POST' }),
+  ])
+  check(
+    agentUpdates.every((r) => r.status === 403),
+    `an agent's token gets 403 from the update routes (${agentUpdates.map((r) => r.status).join(', ')})`,
+  )
+  const updateConfig = path.join(appDir, 'resources', 'app-update.yml')
+  check(
+    fs.existsSync(updateConfig) && /provider: github/.test(fs.readFileSync(updateConfig, 'utf8')),
+    "the packed app's app-update.yml points the updater at GitHub Releases",
+  )
   if (screenshot) {
     // The window again, with the project in its picker.
     await win.reload()
@@ -422,6 +483,7 @@ try {
   console.error(err)
   failed = true
 } finally {
+  feed.close()
   // The app's processes are gone; their files may take a moment to let go on Windows.
   for (let i = 0; i < 10; i++) {
     try {

@@ -112,6 +112,7 @@ export default defineConfig(({ mode }) => {
           './src/server/plugins/uploadSweep.ts',
           './src/server/plugins/hostTools.ts',
           './src/server/plugins/seedRuns.ts',
+          './src/server/plugins/desktopBridge.ts',
         ],
         // Loaded from node_modules, not bundled: its certificate code (@peculiar/x509, tsyringe) needs
         // reflect-metadata to run first, an order bundling breaks.

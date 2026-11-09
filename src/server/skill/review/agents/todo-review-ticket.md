@@ -129,8 +129,9 @@ works when, who waits on what, and what stalled. Keep it, with `projectId: PROJE
   `projectId` and `ticketId`, a `heartbeat` every few minutes, its spans and waits) so its own
   time shows too; an agent that cannot reach the board leaves that to you.
 - `start_wait` with the reason and `end_wait` when it is over: `lock` while you wait for `LOCK` or
-  a git lock, `builder` while you wait on the builder or another agent's result, `mcp` while the
-  board does not answer (record it once it does), `human` once you block on a decision.
+  a git lock, `builder` while you wait on the builder or another agent's result (pass `on: builder`
+  for the builder, so the wait counts as working time: the builder's span is `agent: builder`), `mcp`
+  while the board does not answer (record it once it does), `human` once you block on a decision.
 - `get_ticket` → `work.open` lists the spans and waits still open: close yours before you return
   any `STATUS`.
 
