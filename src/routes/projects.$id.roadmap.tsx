@@ -87,7 +87,6 @@ function Roadmap() {
           <Stat n={review.length} label="in review" />
           <Stat n={every.filter((b) => b.row.work.stalled).length} label="stalled" amber />
         </div>
-        <Legend />
       </div>
       {work && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -128,26 +127,6 @@ function Stat({ n, label, amber = false }: { n: number; label: string; amber?: b
       </b>{' '}
       {label}
     </span>
-  )
-}
-
-function Legend() {
-  const items: [StepState, string][] = [
-    ['done', 'Done'],
-    ['now', 'Now'],
-    ['next', 'Next'],
-    ['later', 'Later'],
-    ['blocked', 'Blocked'],
-  ]
-  return (
-    <div className="flex flex-wrap items-center gap-3.5" aria-label="Legend">
-      {items.map(([state, label]) => (
-        <span key={state} className="inline-flex items-center gap-1.5">
-          <Dot state={state} small />
-          {label}
-        </span>
-      ))}
-    </div>
   )
 }
 
