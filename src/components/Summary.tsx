@@ -32,13 +32,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { StallNotice, stallFor } from '#/components/StallLine'
-import { StalledBadge } from '#/components/WorkStatus'
+import { stallFor } from '#/components/StallLine'
+import { NowLine, StallNotice } from '#/components/WorkStatus'
+import { timelineFromActivity, stallStage } from '#/lib/activityTimeline'
 import { threadAnchor } from '#/lib/anchors'
 import type { AreaId } from '#/lib/layout'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
+import { lastHeard, type WorkTimelineLike } from '#/lib/workStatus'
+import type { Stalled } from '#/lib/workTimeline'
 
 /**
  * Where things stand, for one project (its Overview) or every project (Home, one block each): what
@@ -274,9 +277,28 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
 }
 
 /** A stalled ticket's details, from the Needs you list that names it. */
-function stalledOf(p: ProjectSummary, id: number) {
+function stalledOf(p: ProjectSummary, id: number): Stalled | null {
   const s = p.needsYou.stalled.find((x) => x.ticketId === id)
   return s ? stallFor(s) : null
+}
+
+/** When an agent was last heard from, relative, and what it said: one line under the now line. */
+function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
+  const h = lastHeard(timeline)
+  if (!h)
+    return (
+      <p data-testid="last-heard" className="text-xs text-muted-foreground">
+        Nobody heard from yet
+      </p>
+    )
+  return (
+    <p data-testid="last-heard" className="flex min-w-0 text-xs text-muted-foreground tabular-nums">
+      <span className="shrink-0">Last heard {ago(h.at)}</span>
+      {h.agent && (
+        <span className="min-w-0 truncate">{` · ${h.agent}${h.summary ? `: ${h.summary}` : ''}`}</span>
+      )}
+    </p>
+  )
 }
 
 function Stale() {
@@ -488,41 +510,52 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               }
             />
           ))}
-          {stalled.map((s) => (
-            <Row
-              key={`s${s.ticketId}`}
-              icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" />}
-              title={
-                <Link
-                  to="/projects/$id/features/$ticketId"
-                  params={{ id: pid, ticketId: String(s.ticketId) }}
-                  className="hover:underline"
-                >
-                  Stalled: #{s.ticketId} {s.title}
-                </Link>
-              }
-              meta={
-                <>
-                  <StageBadge p={p} status={s.status} />
-                  {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
-                  <StallNotice
-                    stalled={stallFor(s)}
-                    who={
-                      s.lastAgent &&
-                      (s.lastFrom === 'assignee' ? (
-                        // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
-                        <span data-testid="last-assignee" className="font-medium wrap-anywhere">
-                          {s.lastAgent}
-                        </span>
-                      ) : (
-                        <ClaimedActor name={s.lastAgent} by={s.lastBy} />
-                      ))
-                    }
-                  />
-                </>
-              }
-            />
-          ))}
+          {stalled.map((s) => {
+            const timeline = timelineFromActivity(
+              p.inProgress.find((t) => t.id === s.ticketId)?.activity,
+              stallFor(s),
+            )
+            return (
+              <Row
+                key={`s${s.ticketId}`}
+                icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" />}
+                title={
+                  <Link
+                    to="/projects/$id/features/$ticketId"
+                    params={{ id: pid, ticketId: String(s.ticketId) }}
+                    className="hover:underline"
+                  >
+                    Stalled: #{s.ticketId} {s.title}
+                  </Link>
+                }
+                meta={
+                  <>
+                    <StageBadge p={p} status={s.status} />
+                    {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
+                    <StallNotice
+                      timeline={timeline}
+                      stage={stallStage(p.stages, s.status)}
+                      variant="inline"
+                      className="w-full"
+                    />
+                    {s.lastAgent && (
+                      <span className="min-w-0 wrap-anywhere">
+                        last{' '}
+                        {s.lastFrom === 'assignee' ? (
+                          // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
+                          <span data-testid="last-assignee" className="font-medium">
+                            {s.lastAgent}
+                          </span>
+                        ) : (
+                          <ClaimedActor name={s.lastAgent} by={s.lastBy} />
+                        )}
+                      </span>
+                    )}
+                  </>
+                }
+              />
+            )
+          })}
           {reviews.map((t) => (
             <Row
               key={`r${t.id}`}
@@ -553,50 +586,57 @@ function InProgress({ p }: { p: ProjectSummary }) {
         <Quiet>Nothing in progress.</Quiet>
       ) : (
         <Rows>
-          {items.map((t) => (
-            <Row
-              key={t.id}
-              title={<TicketLink p={p} id={t.id} title={t.title} />}
-              side={
-                <>
-                  {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
-                  {t.stalled && <StalledBadge stalled={stalledOf(p, t.id)} />}
-                  {t.stale && <Stale />}
-                </>
-              }
-              meta={
-                <div className="w-full min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <Who p={p} name={t.assignee} />
-                    <Tip content={new Date(t.since).toLocaleString()}>
-                      <span>{since(t.since)}</span>
-                    </Tip>
-                    {t.lanes > 0 && (
-                      <span className="inline-flex items-center gap-1">
-                        <Layers className="size-3" /> {plural(t.lanes, 'lane')}
-                      </span>
+          {items.map((t) => {
+            const timeline = timelineFromActivity(t.activity, t.stalled ? stalledOf(p, t.id) : null)
+            return (
+              <Row
+                key={t.id}
+                title={<TicketLink p={p} id={t.id} title={t.title} />}
+                side={
+                  <>
+                    {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
+                    {timeline.stalled && (
+                      <StallNotice timeline={timeline} stage={stallStage(p.stages, t.status)} />
                     )}
-                    {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                    {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
-                    {t.preview && (
-                      <Tip content={`Preview of ${t.preview.workspace}`}>
-                        <a
-                          href={t.preview.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-foreground hover:underline"
-                        >
-                          <ExternalLink className="size-3" /> Preview
-                        </a>
+                    {t.stale && <Stale />}
+                  </>
+                }
+                meta={
+                  <div className="w-full min-w-0">
+                    <NowLine timeline={timeline} />
+                    <HeardLine timeline={timeline} />
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <Who p={p} name={t.assignee} />
+                      <Tip content={new Date(t.since).toLocaleString()}>
+                        <span>{since(t.since)}</span>
                       </Tip>
-                    )}
+                      {t.lanes > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Layers className="size-3" /> {plural(t.lanes, 'lane')}
+                        </span>
+                      )}
+                      {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                      {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                      {t.preview && (
+                        <Tip content={`Preview of ${t.preview.workspace}`}>
+                          <a
+                            href={t.preview.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-foreground hover:underline"
+                          >
+                            <ExternalLink className="size-3" /> Preview
+                          </a>
+                        </Tip>
+                      )}
+                    </div>
+                    {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-1.5" />}
+                    <LastPost post={t.lastPost} />
                   </div>
-                  {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-1.5" />}
-                  <LastPost post={t.lastPost} />
-                </div>
-              }
-            />
-          ))}
+                }
+              />
+            )
+          })}
         </Rows>
       )}
     </Section>
