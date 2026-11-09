@@ -11,6 +11,7 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { StalledBadge, WorkTotals } from '#/components/WorkStatus'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
+import { WorkTimelineKey } from '#/components/WorkTimelineKey'
 import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
 import { useStages } from '#/lib/project'
@@ -23,6 +24,7 @@ import {
   windowFor,
 } from '#/lib/roadmapWindow'
 import { useNow } from '#/lib/useNow'
+import type { Window } from '#/lib/timelineRows'
 
 const FILTERS = ['all', 'blocked', 'review'] as const
 type Filter = (typeof FILTERS)[number]
@@ -78,12 +80,16 @@ function Roadmap() {
   const shown = show === 'blocked' ? blocked : show === 'review' ? review : tickets
   const every = tickets.flatMap((t) => [t, ...t.lanes])
   // The one time axis for every row shown: computed here, from the shown rows' work, and ending now.
-  // Lane #18 (the chart) takes it as `window` on each row's track (see Row); nothing draws it yet.
   const range = windowFor(
     parseWindowChoice(windowParam),
     shown.flatMap((t) => [t.row, ...t.lanes.map((l) => l.row)]),
     now,
   )
+  // The chart takes the window as ISO times; every row's track uses this same one.
+  const timeWindow: Window = {
+    start: new Date(range.start).toISOString(),
+    end: new Date(range.end).toISOString(),
+  }
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -130,7 +136,7 @@ function Roadmap() {
         </div>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
           <Legend />
-          {/* Lane #18: <WorkTimelineKey /> (the chart's key, built from its style tables) goes beside the task Legend. */}
+          <WorkTimelineKey />
         </div>
       </div>
       {work && (
@@ -155,7 +161,7 @@ function Roadmap() {
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card" data-testid="roadmap">
           {shown.map((t) => (
-            <TicketRows key={t.row.id} projectId={id} ticket={t} lanes={t.lanes} />
+            <TicketRows key={t.row.id} projectId={id} ticket={t} lanes={t.lanes} timeWindow={timeWindow} />
           ))}
         </div>
       )}
@@ -202,15 +208,17 @@ function TicketRows({
   projectId,
   ticket,
   lanes,
+  timeWindow,
 }: {
   projectId: string
   ticket: RoadmapItem
   lanes: RoadmapItem[]
+  timeWindow: Window
 }) {
   const [open, setOpen] = useState(true)
   return (
     <section className="border-b last:border-b-0" aria-label={`#${ticket.row.id} ${ticket.row.title}`}>
-      <Row projectId={projectId} item={ticket}>
+      <Row projectId={projectId} item={ticket} timeWindow={timeWindow}>
         {lanes.length > 0 && (
           <button
             type="button"
@@ -229,6 +237,7 @@ function TicketRows({
             key={lane.row.id}
             projectId={projectId}
             item={lane}
+            timeWindow={timeWindow}
             lane={{ depth: 'depth' in lane.row ? lane.row.depth : 0, last: i === lanes.length - 1 }}
           />
         ))}
@@ -240,12 +249,15 @@ function Row({
   projectId,
   item,
   lane,
+  timeWindow,
   children,
 }: {
   projectId: string
   item: RoadmapItem
   /** Set on a lane's row: how deep it sits under the ticket, and whether it is the last one. */
   lane?: { depth: number; last: boolean }
+  /** The one axis every row shares. */
+  timeWindow: Window
   children?: React.ReactNode
 }) {
   const { row, stage, groups } = item
@@ -302,8 +314,7 @@ function Row({
       <div className="min-w-0">
         <Track groups={groups} lane={Boolean(lane)} />
         <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
-          {/* Lane #18: WorkTimelineBar takes the shared `window` from the route (`range`) here, and draws NowLine. */}
-          <WorkTimelineBar timeline={row.work} compact={Boolean(lane)} />
+          <WorkTimelineBar timeline={row.work} compact={Boolean(lane)} window={timeWindow} />
           {/* Lane #19: <WorkSummary timeline={row.work} /> replaces WorkTotals here. */}
           {hasWork(row.work) && <WorkTotals totals={row.work.totals} />}
         </div>
