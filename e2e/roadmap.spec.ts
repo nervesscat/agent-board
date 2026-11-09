@@ -52,3 +52,22 @@ test('the Roadmap shows tickets being worked with their lanes as timelines, and 
   await page.getByRole('tab', { name: /Needs review/ }).click()
   await expect(page.getByText('No ticket is waiting for review.')).toBeVisible()
 })
+
+test('the Roadmap picks its time axis in the URL, which survives a reload', async ({ page, project }) => {
+  await page.goto(`/projects/${project.id}/roadmap`)
+  await expect(page.getByRole('heading', { name: 'Roadmap' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: '7 d' })).not.toHaveAttribute('aria-selected', 'true')
+
+  await page.getByRole('tab', { name: '7 d' }).click()
+  await expect(page).toHaveURL(/[?&]window=7d(&|$)/)
+  await page.reload()
+  await expect(page).toHaveURL(/[?&]window=7d(&|$)/)
+  await expect(page.getByRole('tab', { name: '7 d' })).toHaveAttribute('aria-selected', 'true')
+
+  // An unknown value is the default: the page still loads, with no time axis picked.
+  await page.goto(`/projects/${project.id}/roadmap?window=30d`)
+  await expect(page.getByRole('heading', { name: 'Roadmap' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /^(Today|24 h|7 d|Fit all rows)$/ }).first()).toBeVisible()
+  for (const name of ['Today', '24 h', '7 d', 'Fit all rows'])
+    await expect(page.getByRole('tab', { name })).not.toHaveAttribute('aria-selected', 'true')
+})
