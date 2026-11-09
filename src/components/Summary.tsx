@@ -292,10 +292,10 @@ function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
       </p>
     )
   return (
-    <p data-testid="last-heard" className="flex min-w-0 text-xs text-muted-foreground tabular-nums">
+    <p data-testid="last-heard" className="flex min-w-0 gap-x-1 text-xs text-muted-foreground tabular-nums">
       <span className="shrink-0">Last heard {ago(h.at)}</span>
       {h.agent && (
-        <span className="min-w-0 truncate">{` · ${h.agent}${h.summary ? `: ${h.summary}` : ''}`}</span>
+        <span className="min-w-0 truncate">{`· ${h.agent}${h.summary ? `: ${h.summary}` : ''}`}</span>
       )}
     </p>
   )
@@ -511,10 +511,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
             />
           ))}
           {stalled.map((s) => {
-            const timeline = timelineFromActivity(
-              p.inProgress.find((t) => t.id === s.ticketId)?.activity,
-              stallFor(s),
-            )
+            const timeline = timelineFromActivity(s.activity, stallFor(s))
             return (
               <Row
                 key={`s${s.ticketId}`}

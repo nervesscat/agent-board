@@ -114,7 +114,8 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.getByRole('link', { name: title })
   await expect(card.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
-  await expect(card.getByTestId('card-now')).toContainText(/\d+ min/)
+  // A stalled card's badge is its why: the card's now is left off where another badge is shown.
+  await expect(card.getByTestId('card-now')).toHaveCount(0)
   await page.getByRole('tab', { name: 'List' }).click()
   const listRow = page.getByRole('link', { name: title })
   await expect(listRow.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
@@ -137,4 +138,19 @@ test('In progress says what a ticket waits on and since when, when a person has 
     .filter({ hasText: `#${t.id} Approve the copy` })
   await expect(row.getByTestId('now-line')).toContainText(/Waiting on you since \d{1,2}:\d{2}\s*[AP]M/)
   await expect(row.getByTestId('stall-notice')).toHaveCount(0)
+})
+
+test('a busy card with no other badge shows what it is doing now, as icon and time', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Building right now', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
+
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  const card = page.getByRole('link', { name: new RegExp(`#${t.id} Building right now`) })
+  await expect(card.getByTestId('card-now')).toContainText(/^\s*\d+ min|under a minute\s*$/)
+  await expect(card.getByTestId('stall-notice')).toHaveCount(0)
 })

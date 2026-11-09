@@ -187,7 +187,15 @@ export function TicketBoard({
                 {column.map((t, i) => {
                   // The card's work, from what its row carries: the now, and the stall (as the list and the ticket page word them).
                   const work = timelineFromActivity(t.activity, t.stalled, hasWork(kind))
-                  const brief = nowBrief(work, tick)
+                  // The now shows on a card with no other badge: a busy card is capped in height, and its time must not clip.
+                  const badged =
+                    t.decisions > 0 ||
+                    t.blockedTasks > 0 ||
+                    !!t.stalled ||
+                    t.needs.some((n) => !n.merged) ||
+                    after?.has(t.id) ||
+                    hasResumeBadge(t.resume)
+                  const brief = badged ? null : nowBrief(work, tick)
                   return (
                     <div key={t.id} data-card={t.id} className="relative">
                       {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}

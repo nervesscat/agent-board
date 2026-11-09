@@ -413,6 +413,10 @@ describe('needs you', () => {
       [asked.id, reported.id, answered.id].sort(),
     )
     expect(s.needsYou.total).toBe(4 + 3)
+    // Each stalled row carries its ticket's activity: the open spans and waits, and the last heard.
+    for (const x of s.needsYou.stalled) {
+      expect(x.activity).toEqual({ spans: [], waits: [], lastHeard: null })
+    }
     // Nobody signed in as the human yet: no threads, the rest stays.
     expect(take(pid, { humans: [] }).needsYou.threads).toEqual([])
   })
