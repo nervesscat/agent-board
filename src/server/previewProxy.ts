@@ -266,12 +266,7 @@ export function withoutBoardCookies(cookie: string): string {
 }
 
 /** The headers the preview gets: the caller's, minus the board's and forwarding, with its own host. */
-export function upstreamHeaders(
-  from: Headers,
-  port: number,
-  host: string | null,
-  secure: boolean,
-): Record<string, string> {
+export function upstreamHeaders(from: Headers, port: number): Record<string, string> {
   const out: Record<string, string> = {}
   from.forEach((value, name) => {
     if (HOP_BY_HOP.has(name) || BOARD_HEADERS.has(name) || isForwardingHeader(name)) return
@@ -284,8 +279,8 @@ export function upstreamHeaders(
   })
   // Identity encoding, so an HTML page can be read and given its script.
   out.host = `127.0.0.1:${port}`
-  if (host) out['x-forwarded-host'] = host
-  out['x-forwarded-proto'] = secure ? 'https' : 'http'
+  // No X-Forwarded-* to the preview: its own guard (sign-in off) refuses any request that carries them from
+  // loopback as one that came through a proxy, so every proxied request would be refused there.
   return out
 }
 
@@ -667,7 +662,7 @@ export async function servePreview(
 
   // The query goes on as it came: a `pl` here is the preview's own (a link is redeemed on the root path only).
   const path = `${rest}${url.search}`
-  const headers = upstreamHeaders(request.headers, state.port, request.headers.get('host'), secure)
+  const headers = upstreamHeaders(request.headers, state.port)
   let res: IncomingMessage
   try {
     res = await upstream(

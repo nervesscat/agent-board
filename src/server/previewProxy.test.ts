@@ -590,7 +590,9 @@ describe('the target, whatever the request says', () => {
     expect(res.status).toBe(200)
     const sent = seen.at(-1)!
     expect(sent.headers.host).toBe(`127.0.0.1:${previewPort}`)
-    expect(sent.headers['x-forwarded-host']).toBe('evil.example:9999')
+    // No forwarding header reaches the preview: its guard would take one as a request through a proxy.
+    expect(sent.headers['x-forwarded-host']).toBeUndefined()
+    expect(sent.headers['x-forwarded-proto']).toBeUndefined()
     // The header is an ordinary one to the proxy: forwarded, and it names no target.
     expect(sent.headers['x-board-target']).toBe(`127.0.0.1:${deadPort}`)
     expect(seen.length).toBe(1)
