@@ -353,9 +353,13 @@ function upstream(
 ): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, method, path, headers })
-    const timer = setTimeout(() => req.destroy(new Error('no answer')), timeoutMs)
+    // The no-answer clock starts once the request is sent whole: a slow upload is not a silent preview.
+    let timer: NodeJS.Timeout | undefined
     const abort = () => req.destroy()
     signal.addEventListener('abort', abort, { once: true })
+    req.once('finish', () => {
+      timer = setTimeout(() => req.destroy(new Error('no answer')), timeoutMs)
+    })
     req.on('response', (res) => {
       clearTimeout(timer)
       resolve(res)

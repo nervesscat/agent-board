@@ -619,6 +619,28 @@ describe('the body', () => {
     expect(proxy.withCharset('text/html', 'utf-8')).toBe('text/html; charset=utf-8')
   })
 
+  it('does not count the time a slow upload takes against the preview: its clock starts once the request is sent', async () => {
+    const chunks = ['a', 'b', 'c']
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const next = chunks.shift()
+        if (next === undefined) return controller.close()
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        controller.enqueue(new TextEncoder().encode(next))
+      },
+    })
+    const upload = new Request(`http://${LOCAL}${previewPath(wsA, RUN, 'echo')}`, {
+      method: 'POST',
+      headers: { host: LOCAL, ...bearer(TOKEN.builder) },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+    // The upload takes about 450 ms, the test's answer timer is 300 ms: it still reaches the preview.
+    const res = await serve(upload)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('abc')
+  })
+
   it('passes an event stream as it is sent: event one arrives before the preview sends event two', async () => {
     const res = await serve(request(previewPath(wsA, RUN, 'sse'), { headers: bearer(TOKEN.builder) }))
     expect(res.headers.get('content-type')).toBe('text/event-stream')
