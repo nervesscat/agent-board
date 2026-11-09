@@ -70,8 +70,14 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await shot(page, 'desktop')
 
   await page.setViewportSize({ width: 390, height: 844 })
-  // On a phone the card grows with its content: no nested scroll, the page itself scrolls it.
-  await expect.poll(() => height(needsYou)).toBeGreaterThan(desktop + 1)
+  // On a phone the card shows its first three entries and a way to see the rest; no nested scroll.
+  const rows = content(needsYou).locator('li')
+  await expect(rows.nth(3)).toBeHidden()
+  const more = needsYou.getByRole('button', { name: /View all/ })
+  await expect(more).toBeVisible()
+  await more.click()
+  await expect(rows.nth(3)).toBeVisible()
+  await expect(needsYou.getByRole('button', { name: 'Show fewer' })).toBeVisible()
   // Both cards and their scrolling areas stay within the phone's width.
   for (const card of [needsYou, inProgress]) {
     const b = (await card.boundingBox())!
