@@ -9,7 +9,7 @@ import { type AuthMode, authMode, config, type PublicEntrance, servedEntrance } 
 import { agentTokenOf, bearerToken, isBearer, readCookie, sessionCookieName, sessionOf } from './credentials'
 import { isForwardingHeader, type SignInSite } from './entrance'
 import { HttpError } from './http'
-import { hostPort, listeningAddresses } from './linkPreview'
+import { hostPort, listeningAddresses } from './listeners'
 import { previewRunOf } from './managedPreview'
 import {
   mintPreviewLink,
