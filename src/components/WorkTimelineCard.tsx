@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { ChevronDown } from 'lucide-react'
 
 import { ClaimedActor } from '#/components/Actor'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
-import { WorkTimelineKey } from '#/components/WorkTimelineKey'
-import { WorkTotals } from '#/components/WorkStatus'
+import { LastHeard, NowLine, StallNotice, WorkSummary } from '#/components/WorkStatus'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import {
@@ -19,19 +19,17 @@ import { clock, stamp } from '#/lib/format'
 import { useStages } from '#/lib/project'
 import { useNow } from '#/lib/useNow'
 
-/** The story shows its newest rows, then "Show all". */
-const NEWEST_ROWS = 10
-
 /**
  * The ticket's Timeline card. At the top: what is open now, whether the ticket is stalled and why, and
- * the last heartbeat. Then the chart, the totals and the key. Then the events as a story: one sentence
- * per row, the consecutive rows of one actor under one actor line, a wait's start and end as one row
- * with its duration, and the heartbeats folded away until they are asked for.
+ * the last heard. Then the chart and the worked, waited and on-you summary. Then the story, folded
+ * under "Show more": one sentence per event, oldest first, the consecutive rows of one actor under one
+ * actor line, a wait's start and end as one row with its duration, and the heartbeats folded away until
+ * they are asked for.
  */
 export function WorkTimelineCard({ t }: { t: TicketFull }) {
   const stages = useStages(t.projectId)
   const [beats, setBeats] = useState(false)
-  const [all, setAll] = useState(false)
+  const [more, setMore] = useState(false)
   const { data, error } = useQuery({
     queryKey: ['ticket-events', t.id],
     queryFn: () => get<TicketEvents>(`/api/tickets/${t.id}/events`),
@@ -39,10 +37,9 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
   })
   const now = useNow(1000)
   const stageName = (key: string) => stages.find((s) => s.key === key)?.name ?? key
-  const events = data ? newestFirst(data.events) : []
+  const events = data ? oldestFirst(data.events) : []
   const heartbeats = events.filter((e) => e.kind === 'heartbeat')
   const rows = data ? storyRows(events, data.timeline, now, stageName, beats) : []
-  const shown = all ? rows : rows.slice(0, NEWEST_ROWS)
   return (
     <section className="rounded-lg border p-4" aria-label="Timeline">
       <h2 className="mb-3 text-sm font-medium">Timeline</h2>
@@ -54,70 +51,67 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
         <div className="space-y-3">
           <div className="space-y-1 text-sm">
             <NowLine timeline={data.timeline} />
-            <StallNotice timeline={data.timeline} />
-            <LastHeard beat={heartbeats[0] ?? null} />
+            <StallNotice timeline={data.timeline} variant="inline" />
+            <LastHeard timeline={data.timeline} />
           </div>
-          <WorkTimelineBar timeline={data.timeline} showKey={false} />
-          {hasWork(data.timeline) && <WorkTotals totals={data.timeline.totals} />}
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer select-none">Key</summary>
-            <div className="mt-2">
-              <WorkTimelineKey />
-            </div>
-          </details>
+          <WorkTimelineBar timeline={data.timeline} />
+          {hasWork(data.timeline) && <WorkSummary totals={data.timeline.totals} />}
           {events.length > 0 && (
-            <>
-              <ul aria-label="Timeline story" className="space-y-3 text-xs">
-                {groupRuns(shown).map((run) => (
-                  <li key={run.rows[0]!.id}>
-                    <div className="mb-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                      {/* The name an event claims may be free text: who recorded it follows when that is someone else. */}
-                      <ClaimedActor name={run.agent} by={run.by} className="min-w-0 flex-wrap break-all" />
-                    </div>
-                    <ul className="space-y-1 border-l pl-3">
-                      {run.rows.map((r) => (
-                        <li key={r.id} className="flex min-w-0 items-baseline gap-x-2">
-                          <Tip content={stamp(r.at)}>
-                            <time
-                              dateTime={r.at}
-                              className="shrink-0 font-mono text-muted-foreground tabular-nums"
-                            >
-                              {clock(r.at)}
-                            </time>
-                          </Tip>
-                          <span className="min-w-0 break-words">{r.text}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-              {(rows.length > NEWEST_ROWS || heartbeats.length > 0) && (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {rows.length > NEWEST_ROWS && (
-                    <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll((v) => !v)}>
-                      {all ? 'Show fewer' : `Show all ${rows.length}`}
-                    </Button>
-                  )}
-                  {heartbeats.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-expanded={beats}
-                      onClick={() => setBeats((v) => !v)}
-                    >
-                      {beats ? 'Hide heartbeats' : 'Show heartbeats'}
-                    </Button>
-                  )}
-                  {heartbeats.length > 0 && !beats && (
-                    <span className="text-muted-foreground">
-                      {heartbeats.length} heartbeat{heartbeats.length === 1 ? '' : 's'}, last{' '}
-                      {clock(heartbeats[0]!.at)}
-                    </span>
-                  )}
-                </div>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-expanded={more}
+                  aria-controls="timeline-story"
+                  onClick={() => setMore((v) => !v)}
+                >
+                  {more ? 'Show less' : 'Show more'}
+                  <ChevronDown
+                    className={`size-3.5 transition-transform ${more ? 'rotate-180' : ''}`}
+                    aria-hidden
+                  />
+                </Button>
+                {heartbeats.length > 0 && (
+                  <Button variant="ghost" size="sm" aria-expanded={beats} onClick={() => setBeats((v) => !v)}>
+                    {beats ? 'Hide heartbeats' : 'Show heartbeats'}
+                  </Button>
+                )}
+                {heartbeats.length > 0 && !beats && (
+                  <span className="text-xs text-muted-foreground">
+                    {heartbeats.length} heartbeat{heartbeats.length === 1 ? '' : 's'}, last{' '}
+                    {clock(heartbeats.at(-1)!.at)}
+                  </span>
+                )}
+              </div>
+              {more && (
+                <ul id="timeline-story" aria-label="Timeline story" className="space-y-3 text-xs">
+                  {groupRuns(rows).map((run) => (
+                    <li key={run.rows[0]!.id}>
+                      <div className="mb-1 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        {/* The name an event claims may be free text: who recorded it follows when that is someone else. */}
+                        <ClaimedActor name={run.agent} by={run.by} className="min-w-0 flex-wrap break-all" />
+                      </div>
+                      <ul className="space-y-1 border-l pl-3">
+                        {run.rows.map((r) => (
+                          <li key={r.id} className="flex min-w-0 items-baseline gap-x-2">
+                            <Tip content={stamp(r.at)}>
+                              <time
+                                dateTime={r.at}
+                                className="shrink-0 font-mono text-muted-foreground tabular-nums"
+                              >
+                                {clock(r.at)}
+                              </time>
+                            </Tip>
+                            <span className="min-w-0 break-words">{r.text}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </>
+            </div>
           )}
         </div>
       )}
@@ -132,11 +126,12 @@ type Row = { id: number; at: string; agent: string; by: string; text: string }
 /** The consecutive rows of one actor, under one actor line. */
 type Run = { agent: string; by: string; rows: Row[] }
 
-const newestFirst = (events: TicketEvent[]) =>
-  [...events].sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id - a.id)
+/** The events from the start of the ticket to its end. */
+const oldestFirst = (events: TicketEvent[]) =>
+  [...events].sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id - b.id)
 
 /**
- * The rows the story shows, newest first. A wait's end is not a row of its own: its start carries both
+ * The rows the story shows, oldest first. A wait's end is not a row of its own: its start carries both
  * ends and the duration (a wait still open runs to now on a live ticket). Heartbeats are rows only when
  * they are asked for.
  */
@@ -150,7 +145,7 @@ function storyRows(
   const startIds = new Set(events.filter((e) => e.kind === 'wait_start').map((e) => e.id))
   const endOf = new Map<number, TicketEvent>()
   for (const e of events) if (e.kind === 'wait_end' && e.refId !== null) endOf.set(e.refId, e)
-  const lastAt = events[0]?.at
+  const lastAt = events.at(-1)?.at
   const ticketEnd = timeline.live ? now : Date.parse(timeline.end ?? lastAt ?? new Date(now).toISOString())
   const rows: Row[] = []
   for (const e of events) {
@@ -237,48 +232,4 @@ function waitFor(ms: number): string {
   const h = Math.floor(m / 60)
   const rest = m % 60
   return rest ? `${h} h ${rest} min` : `${h} h`
-}
-
-// --- STAND-INS (NowLine, StallNotice, LastHeard: remove when #19 merges) ---
-// The header and the key are not on this branch yet: NowLine, StallNotice, LastHeard and WorkSummary come
-// from WorkStatus.tsx, WorkTimelineKey from WorkTimelineKey.tsx (both still in progress). These stand-ins take the same
-// props they are expected to take (`timeline`, and `beat` for LastHeard). When those merge, delete this
-// block and import the real ones.
-
-function NowLine({ timeline }: { timeline: WorkTimeline }) {
-  const now = useNow(1000)
-  const span = timeline.spans.find((s) => s.open)
-  const wait = timeline.waits.find((w) => w.open)
-  const text = span
-    ? `Building · ${span.agent} · ${waitFor(now - Date.parse(span.start))}`
-    : wait
-      ? `Waiting on ${waitTarget(wait.reason, wait.note)} · ${waitFor(now - Date.parse(wait.start))}`
-      : 'Nothing open'
-  return <p data-testid="now-line">{text}</p>
-}
-
-function StallNotice({ timeline }: { timeline: WorkTimeline }) {
-  const s = timeline.stalled
-  if (!s) return null
-  const closed = timeline.spans
-    .filter((x) => !x.open)
-    .sort((a, b) => Date.parse(b.end) - Date.parse(a.end))[0]
-  const why = closed
-    ? `nothing open since the ${closed.phase} ended at ${clock(closed.end)}`
-    : `nobody heard from since ${clock(s.since)}`
-  return (
-    <p data-testid="stalled" className="text-amber-800 dark:text-amber-300">
-      Stalled {waitFor(s.minutes * 60_000)} · {why}
-    </p>
-  )
-}
-
-function LastHeard({ beat }: { beat: TicketEvent | null }) {
-  if (!beat) return null
-  return (
-    <p data-testid="last-heard" className="text-muted-foreground">
-      Last heard {clock(beat.at)} · {beat.agent}
-      {beat.note ? `: ${beat.note}` : ''}
-    </p>
-  )
 }
