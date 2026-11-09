@@ -13,6 +13,16 @@ export function useNow(ms: number) {
 }
 
 /**
+ * False in the server render and the first client render, true after mount. A value read from the clock
+ * that is drawn before mount would differ between the two, so it waits for this.
+ */
+export function useMounted(): boolean {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
+  return mounted
+}
+
+/**
  * The offset of the server's clock from the browser's, for a server time the response carried (`now` of a
  * timeline, or of an activity): measured when that time arrived, so the browser's clock is corrected by it.
  * 0 when there is none.

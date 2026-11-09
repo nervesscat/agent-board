@@ -23,7 +23,7 @@ import {
   parseWindowChoice,
   windowFor,
 } from '#/lib/roadmapWindow'
-import { useNow, useServerOffset } from '#/lib/useNow'
+import { useMounted, useNow, useServerOffset } from '#/lib/useNow'
 import { onServerClock } from '#/lib/workStatus'
 import type { Window } from '#/lib/timelineRows'
 
@@ -61,6 +61,8 @@ function Roadmap() {
   const navigate = Route.useNavigate()
   const stages = useStages(id)
   const browserNow = useNow(15_000)
+  // The axis's end is the clock: drawn only after mount, so the server render and the first client render agree.
+  const mounted = useMounted()
   const { data, isLoading, error } = useQuery({
     queryKey: ['roadmap', id],
     queryFn: () => get<RoadmapTicket[]>(`/api/projects/${id}/roadmap`),
@@ -126,9 +128,11 @@ function Roadmap() {
             navigate({ search: (prev) => ({ ...prev, window: v || undefined }), replace: true })
           }
         />
-        <span>
-          {new Date(range.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} to now
-        </span>
+        {mounted && (
+          <span>
+            {new Date(range.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} to now
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <div className="flex flex-wrap gap-4">
