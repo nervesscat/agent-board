@@ -534,7 +534,7 @@ It replaces the previous note; each new version is also posted to the ticket's f
   )
   tool(
     'preview_link',
-    "A link to the workspace's running preview through the board's own origin (its proxyUrl, from list_runs, start_run or get_ticket), for a browser that cannot send an Authorization header: the board returns url (/p/<workspaceId>/<runId>/?pl=..., open it once within five minutes: the board sets a cookie for the preview's path, valid for 15 minutes, and redirects to the path without the link) and expiresAt. A link is for that one run and this caller only; the caller's own token is never in it. With a Bearer header (what an agent's HTTP client and headless browser send), no link is needed: send the header with each request. The workspace's preview run must be running: start_run first.",
+    "A link to the workspace's running preview through the board's own origin (its proxyUrl, from list_runs, start_run or get_ticket), for a browser that cannot send an Authorization header: the board returns url (/p/<workspaceId>/<runId>/?pl=...: it works for anyone who holds it until expiresAt, five minutes after it is returned, so send it only to the person meant to open it; not single-use. Opening it sets a cookie for the preview's path, valid for 15 minutes, and redirects to the path without the link) and expiresAt. A link is for that one run and this caller only; the caller's own token is never in it. With a Bearer header (what an agent's HTTP client and headless browser send), no link is needed: send the header with each request. The workspace's preview run must be running: start_run first.",
     { workspaceId: z.number().int() },
     ({ workspaceId }) => linkFor(request, workspaceId),
   )

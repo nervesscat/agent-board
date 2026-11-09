@@ -255,8 +255,9 @@ Lanes of a ticket you are working are yours to create (next section).
     `Authorization: Bearer <token>` as its context's extra HTTP headers, from your environment; then
     `goto` the board's origin plus that path, and the page, its assets, API calls and event stream load
     through the board. Attach the screenshot to your summary. A browser that cannot send headers takes
-    a link from `preview_link` (REST `POST /api/workspaces/:id/preview/link`): its `url` opens once
-    within five minutes and sets a cookie for the preview's path. Another project's token gets 403
+    a link from `preview_link` (REST `POST /api/workspaces/:id/preview/link`): its `url` works for anyone
+    who holds it for five minutes (send it only to the person meant to open it) and sets a cookie for the
+    preview's path, good for 15 minutes. Another project's token gets 403
     there. Being in the cloud does not block the Preview task: a running preview ticks it.
   - A repo with no runs: start your branch from your worktree on a free port, with a copy of the data
     rather than the real one (the project's `instructions` say how), then `set_preview` with the

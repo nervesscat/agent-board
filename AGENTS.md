@@ -213,8 +213,9 @@ http_headers = { Authorization = "Bearer <token>" }
      which answers only to a signed-in caller. Open it with your agent token in an `Authorization`
      header, never in the URL: a headless browser takes it as the context's extra HTTP headers, and
      then the page, its assets, its API calls and its event stream all load through the board. A
-     browser that cannot send headers takes a link from `preview_link` (`url`, valid for five minutes
-     to open; it sets a cookie for that run's path). A token of another project gets 403 there. Being
+     browser that cannot send headers takes a link from `preview_link` (`url`: good for five minutes for
+     anyone who holds it, so send it only to the person meant to open it; it sets a cookie for that run's
+     path, good for 15 minutes). A token of another project gets 403 there. Being
      in the cloud does not block the Preview task: a running preview ticks it, from any agent.
    - **A repo with no runs, when you do not add one:** start your branch from your worktree on a
      free port, with a copy of the data rather than the real one (the project's instructions say
