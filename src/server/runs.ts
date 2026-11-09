@@ -292,9 +292,12 @@ export async function notLoopbackReason(port: number, needed: boolean): Promise<
   return beyond ? `the preview listens beyond this machine on ${beyond}` : null
 }
 
-/** Stop a run whose port is not loopback only, with the reason: it is never left running reachable. */
-async function stopNotLoopback(e: Entry, why: string) {
-  await stopRun(e.workspaceId, e.runId, why, 'the board')
+/**
+ * Stop a run whose port is not loopback only, and mark it failed with the reason: it is never left running
+ * reachable, and the failure says why (the preview's log is kept as its tail).
+ */
+function stopNotLoopback(e: Entry, why: string) {
+  fail(e, why, 'server')
 }
 
 /** While a preview runs, its port is looked at every LISTEN_WATCH_MS until the run is no longer this run. */

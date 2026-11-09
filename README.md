@@ -729,8 +729,16 @@ page that makes root-absolute `fetch`, `XMLHttpRequest` and `EventSource` URLs g
 The proxy answers only a signed-in caller: a passkey session of the origin the request came through, an
 agent token whose name is a persona of the preview's project only (another project's, several projects'
 or none gets 403), or a link the board minted for that run and that caller. No credential gets 401 JSON,
-never the login page. The preview's port stays on loopback: a port that listens beyond this machine, or
-that the board cannot tell, is refused with 502, and so is a preview that does not answer in 10 seconds.
+never the login page. The preview's port stays on loopback: the board checks it when the run starts and
+while it runs, and a port that listens beyond this machine, or that the board cannot tell, makes the run
+fail with that reason (the board stops it), and the proxy refuses it with 502 meanwhile. The proxy only
+ever connects to `127.0.0.1` on the run's own port, never to a host the run reports. A preview that does
+not answer in 10 seconds gets 502 too.
+
+Only the run's own port is checked. A run's commands are trusted config, set only by the human or the
+project's agents, and they run with the board's rights: a command that opens another port (on any
+interface) is not stopped or blocked by the board. Keep a preview's servers on loopback. Sandboxing
+previews is a follow-up, not part of the proxy.
 A stopped or never-started run gets 404 with the start hint. Event streams pass through as they are sent;
 WebSocket upgrades are not proxied. Cookies and `Authorization` from the board never reach the preview,
 and its own cookies are kept on the run's path. With sign-in off every `/p/` path answers 404.

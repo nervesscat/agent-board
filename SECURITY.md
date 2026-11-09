@@ -32,6 +32,10 @@ branch get security fixes. Upgrade to the latest release before reporting where 
 In scope: the board's server and pages, its sign-in (passkeys, sessions, agent tokens), its REST API and
 MCP server, the desktop app and its installers, and the scripts in this repository.
 
+Previews: a run's commands run with your rights, and a command may open other ports (on any interface). The
+board checks and stops only a run's own port when it listens beyond loopback; keep previews' servers on
+loopback. Sandboxing previews is not in place yet.
+
 Out of scope: a board deliberately run with its sign-in off (`AUTH=off`, `BOARD_ENV=test`, which only run
 on loopback outside production), what a signed-in human or an agent with a valid token is allowed to do
 by design, and flaws in `git`, `gh`, `claude` or other tools the board starts (report those to their
