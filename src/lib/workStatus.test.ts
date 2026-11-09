@@ -1,16 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import type { TimelineSpan, WorkTotals } from '#/lib/workTimeline'
+import type { LastHeard, TimelineSpan, TimelineWait, WorkTotals } from '#/lib/workTimeline'
 
-import {
-  currentActivity,
-  lastHeard,
-  stallReason,
-  workShares,
-  type LastHeard,
-  type WaitLike,
-  type WorkTimelineLike,
-} from './workStatus'
+import { currentActivity, lastHeard, stallReason, workShares, type WorkTimelineLike } from './workStatus'
 
 const at = (hhmm: string) => `2026-10-20T${hhmm}:00.000Z`
 const NOW = Date.parse(at('12:30'))
@@ -28,10 +20,11 @@ const span = (more: Partial<TimelineSpan>): TimelineSpan => ({
   ...more,
 })
 
-const wait = (more: Partial<WaitLike>): WaitLike => ({
+const wait = (more: Partial<TimelineWait>): TimelineWait => ({
   id: 2,
   reason: 'lock',
   agent: '',
+  on: null,
   note: '',
   start: at('12:10'),
   end: at('12:30'),
@@ -156,7 +149,7 @@ describe('lastHeard', () => {
     expect(lastHeard(timeline({ lastHeard: heard({ agent: '' }) }))?.agent).toBe('')
   })
 
-  it('is null when no agent event exists, and for a delegated build with no lastHeard field', () => {
+  it('is null when no agent event exists, even while a delegated build is open', () => {
     expect(lastHeard(timeline({ lastHeard: null }))).toBeNull()
     expect(lastHeard(timeline({ spans: [span({})], waits: [wait({ on: 'builder' })] }))).toBeNull()
   })

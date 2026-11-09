@@ -68,6 +68,7 @@ describe('NowLine', () => {
           id: 2,
           reason: 'human',
           agent: 'builder',
+          on: null,
           note: '',
           start: at('12:09'),
           end: at('12:30'),

@@ -1,4 +1,3 @@
-import type { EventKind } from './constants'
 import type { Stalled, TimelineSpan, TimelineWait, WorkTimeline, WorkTotals } from './workTimeline'
 
 /**
@@ -7,35 +6,14 @@ import type { Stalled, TimelineSpan, TimelineWait, WorkTimeline, WorkTotals } fr
  * their tests read the same answers from the same timeline.
  */
 
-/** The latest agent event on a ticket, heartbeats included (the timeline's `lastHeard`). */
-export type LastHeard = {
-  at: string
-  agent: string
-  by: string
-  kind: EventKind
-  phase: string
-  reason: string
-  note: string
-}
-
-/**
- * The timeline fields this module reads that the timeline does not carry yet: `on` (a wait's delegate,
- * '' when none) and `lastHeard`. They are optional here and read only through `waitOn` and
- * `lastHeardOf` below, so they can be made required once the timeline carries them.
- */
-export type WaitLike = TimelineWait & { on?: string }
+/** What the answers read of a work timeline: its spans, waits, totals, stall and last agent event. */
 export type WorkTimelineLike = Pick<
   WorkTimeline,
-  'spans' | 'totals' | 'stalled' | 'live' | 'end' | 'start'
-> & {
-  waits: WaitLike[]
-  lastHeard?: LastHeard | null
-}
+  'spans' | 'waits' | 'totals' | 'stalled' | 'live' | 'end' | 'start' | 'lastHeard'
+>
 
 /** The agent a wait is delegated to ('' when none). */
-const waitOn = (w: WaitLike): string => w.on ?? ''
-/** The latest agent event, or null when none. */
-const lastHeardOf = (t: WorkTimelineLike): LastHeard | null => t.lastHeard ?? null
+const waitOn = (w: TimelineWait): string => w.on ?? ''
 
 const GERUND: Record<string, string> = {
   spec: 'Specifying',
@@ -109,7 +87,7 @@ export function currentActivity(t: WorkTimelineLike, now: Date | number): Curren
 }
 
 /** Who a wait is on: its delegate when it has one, else the agent it names. */
-const waitTarget = (w: WaitLike) => waitOn(w) || w.agent
+const waitTarget = (w: TimelineWait) => waitOn(w) || w.agent
 
 export type LastHeardLine = {
   at: string
@@ -122,7 +100,7 @@ export type LastHeardLine = {
 
 /** The last agent event as a line, or null when no agent has been heard from on the ticket. */
 export function lastHeard(t: WorkTimelineLike): LastHeardLine | null {
-  const h = lastHeardOf(t)
+  const h = t.lastHeard
   if (!h) return null
   return { at: h.at, agent: h.agent, by: h.by, summary: h.note || h.reason || h.phase }
 }
@@ -156,7 +134,7 @@ export function stallReason(t: WorkTimelineLike, stage: string | null = null): S
   const span = latestFirst(t.spans.filter((x) => x.open))[0]
   if (span) return { kind: 'working', agent: span.agent, phase: span.phase, since, stage }
   const closed = t.spans.filter((x: TimelineSpan) => !x.open).sort((a, b) => ms(b.end) - ms(a.end))[0]
-  const h = lastHeardOf(t)
+  const h = t.lastHeard
   const quote = closed && h && h.at === closed.end ? h.reason : ''
   return {
     kind: 'nothing-open',
