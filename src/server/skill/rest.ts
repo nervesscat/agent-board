@@ -43,7 +43,7 @@ export const TOOL_ROUTES: Record<string, string> = {
   start_span: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "span_start", phase, round?}`',
   end_span: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "span_end", spanId?, phase?}`',
   handoff: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "handoff", from?, to?}`',
-  start_wait: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "wait_start", reason}`',
+  start_wait: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "wait_start", reason, on?}`',
   end_wait: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "wait_end", waitId?, reason?}`',
   heartbeat: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "heartbeat"}`',
   post_update: 'POST /api/tickets/:id/updates `{body, attachmentIds[], as?, progress?, tab?}`',
