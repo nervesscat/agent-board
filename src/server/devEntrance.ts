@@ -46,8 +46,11 @@ import { savedEntrance } from './tailnetStore.ts'
  * Node's headers as the board's middleware sees them (srvx): Node keeps the first of two Host headers,
  * srvx joins them, and so does this, so two never pass for one good one.
  */
-/** The request's path, without its query. */
-const pathOf = (req: IncomingMessage) => (req.url ?? '/').split('?')[0]!
+/**
+ * The request's path, without its query, normalised as the built server reads it (`new URL(…).pathname`):
+ * a raw `/x/../p/…` is the preview path it resolves to, so the guard's rules for `/p/` apply to it too.
+ */
+const pathOf = (req: IncomingMessage) => new URL(req.url ?? '/', 'http://localhost').pathname
 
 export function nodeHeaders(req: IncomingMessage): HeaderLookup {
   return {

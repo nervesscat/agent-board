@@ -92,9 +92,9 @@ const freePort = () =>
     })
   })
 
-function send(port: number, target: string, headers: Record<string, string>) {
+function send(port: number, target: string, headers: Record<string, string>, method = 'GET') {
   return new Promise<{ status: number; location?: string; body: string }>((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path: target, headers }, (res) => {
+    const req = http.request({ host: '127.0.0.1', port, path: target, headers, method }, (res) => {
       let body = ''
       res.setEncoding('utf8')
       res.on('data', (chunk) => (body += chunk))
@@ -197,6 +197,16 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
     const res = await send(on, '/p/1/2/api/x', { host: PUBLIC, ...SERVE, accept: 'text/html' })
     expect(res.status).toBe(404)
     expect(res.location).toBeUndefined()
+  })
+
+  it("refuses a foreign page's write under a preview's path however the path is spelled, as the built server does", async () => {
+    // Only a preview's link cookie, from another site: the cross-site rule for /p/ applies. A raw `..` in the
+    // path resolves to the same preview path, so it is refused the same way, never passed on.
+    const headers = { host: PUBLIC, origin: 'https://evil.example', cookie: 'board_preview_1_2=link' }
+    for (const target of ['/p/1/2/api/save', '/x/../p/1/2/api/save', '/p/1/9/../2/api/save']) {
+      const res = await send(on, target, headers, 'POST')
+      expect(res.status, target).toBe(403)
+    }
   })
 
   it('lets the sign-in pages and their endpoints through to the board, and nothing else', async () => {
