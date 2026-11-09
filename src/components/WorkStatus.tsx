@@ -151,10 +151,10 @@ export function StallNotice({
     return (
       <p
         data-testid="stall-notice"
-        className={`${className} inline-flex flex-wrap items-center gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300`}
+        className={`${className} flex items-start gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300`}
       >
-        <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
-        <span>
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0">
           {head}: {why}
         </span>
       </p>

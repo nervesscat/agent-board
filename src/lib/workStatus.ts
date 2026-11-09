@@ -43,8 +43,11 @@ export type CurrentActivity =
 export function currentActivity(t: WorkTimelineLike, now: Date | number): CurrentActivity {
   if (!t.live) return { kind: 'nothing' }
   const n = +now
+  // The clock here can run behind the server that stamped the spans: never show negative time.
+  const since = (iso: string) => Math.max(0, n - ms(iso))
   const open = t.waits.filter((w) => w.open)
-  const human = open.filter((w) => w.reason === 'human' && !waitOn(w))
+  // A human wait counts as waiting on you even when it names an agent: the totals count it so too.
+  const human = open.filter((w) => w.reason === 'human')
   if (human.length) {
     const first = human.reduce((a, b) => (ms(b.start) < ms(a.start) ? b : a))
     return { kind: 'waiting-human', reason: first.reason, since: first.start }
@@ -61,7 +64,7 @@ export function currentActivity(t: WorkTimelineLike, now: Date | number): Curren
       phase,
       agent: waitOn(w),
       since: w.start,
-      ms: n - ms(w.start),
+      ms: since(w.start),
     }
   }
   const span = latestFirst(openSpans)[0]
@@ -72,7 +75,7 @@ export function currentActivity(t: WorkTimelineLike, now: Date | number): Curren
       phase: span.phase,
       agent: span.agent,
       since: span.start,
-      ms: n - ms(span.start),
+      ms: since(span.start),
     }
   const other = latestFirst(open)[0]
   if (other)
@@ -81,7 +84,7 @@ export function currentActivity(t: WorkTimelineLike, now: Date | number): Curren
       agent: waitTarget(other),
       reason: other.reason,
       since: other.start,
-      ms: n - ms(other.start),
+      ms: since(other.start),
     }
   return { kind: 'nothing' }
 }

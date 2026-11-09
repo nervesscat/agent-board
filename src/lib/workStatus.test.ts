@@ -94,6 +94,20 @@ describe('currentActivity', () => {
     expect(currentActivity(t, NOW)).toMatchObject({ kind: 'waiting-human', since: at('12:09') })
   })
 
+  it('reads a human wait that names an agent as waiting on you, not as the agent building', () => {
+    const t = timeline({
+      spans: [span({})],
+      waits: [wait({ reason: 'human', on: 'builder', start: at('12:09') })],
+    })
+    expect(currentActivity(t, NOW)).toEqual({ kind: 'waiting-human', reason: 'human', since: at('12:09') })
+  })
+
+  it('never shows negative time when the clock is behind the span it reads', () => {
+    const t = timeline({ spans: [span({ start: at('12:40') })] })
+    const a = currentActivity(t, NOW)
+    expect(a).toMatchObject({ kind: 'building', ms: 0 })
+  })
+
   it('says nothing is open when no span or wait is', () => {
     expect(currentActivity(timeline(), NOW)).toEqual({ kind: 'nothing' })
   })
