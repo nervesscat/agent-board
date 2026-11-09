@@ -133,10 +133,7 @@ function Previews() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Previews</h1>
-          <p className="text-sm text-muted-foreground">
-            Every preview of the project's tickets, running or not: links the agents registered, and the
-            previews the board builds and runs from their worktrees. Archived tickets are left out.
-          </p>
+          <p className="text-sm text-muted-foreground">Every preview, running or not.</p>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0">
           {known ? (

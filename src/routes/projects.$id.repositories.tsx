@@ -39,15 +39,12 @@ function Repositories() {
   const repos = project?.repos ?? []
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Repositories</h1>
-          <p className="text-sm text-muted-foreground">
-            The checkouts of this project the board reads. Its PR queue, features, reviews and daily log span
-            all of them. Edit one to move it to another project.
-          </p>
+          <p className="text-sm text-muted-foreground">Checkouts this project reads.</p>
         </div>
-        <Button onClick={() => setAdding(true)}>
+        <Button className="w-full sm:w-auto" onClick={() => setAdding(true)}>
           <Plus data-icon="inline-start" /> New repository
         </Button>
       </div>

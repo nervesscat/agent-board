@@ -39,8 +39,8 @@ test('every hour starts closed under the day’s counts; each opens on its own, 
   // The counts stay on top: how many, of each kind, by whom.
   await expect(activity).toContainText('3 actions')
   await expect(activity.getByText('2 tickets', { exact: true })).toBeVisible()
-  await expect(activity.getByText('1 comments', { exact: true })).toBeVisible()
-  await expect(activity.getByText(/^by (enrique, claude|claude, enrique)$/)).toBeVisible()
+  await expect(activity.getByText('1 comment', { exact: true })).toBeVisible()
+  await expect(activity.getByText('by 2 contributors', { exact: true })).toBeVisible()
 
   // Closed on the first visit: the hours show, their lines do not.
   await expect(hour(page, '10:00')).toHaveAttribute('aria-expanded', 'false')

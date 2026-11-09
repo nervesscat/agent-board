@@ -20,7 +20,7 @@ import {
   Play,
   Scale,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { Actor, ClaimedActor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
@@ -159,8 +159,11 @@ function Section({
   scroll?: boolean
   children: ReactNode
 }) {
+  // On a phone the scroll cards show their first three entries and a way to see the rest.
+  const [expanded, setExpanded] = useState(false)
+  const more = scroll && (count ?? 0) > 3
   return (
-    <Card size="sm" className={cn(scroll && 'max-h-[28rem] lg:h-[28rem]', className)}>
+    <Card size="sm" className={cn(scroll && 'lg:max-h-[28rem] lg:h-[28rem]', className)}>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           <Icon className="size-4 text-muted-foreground" /> {title}
@@ -174,10 +177,28 @@ function Section({
       </CardHeader>
       <CardContent
         data-scroll={scroll ? '' : undefined}
-        className={cn('space-y-3', scroll && 'min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2')}
+        className={cn(
+          'space-y-3',
+          scroll && 'min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2',
+          more && !expanded && 'max-md:[&>ul>*:nth-child(n+4)]:hidden',
+        )}
       >
         {children}
       </CardContent>
+      {more && (
+        <div className="px-(--card-spacing) md:hidden">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? 'Show fewer' : `View all ${count}`}
+          </Button>
+        </div>
+      )}
     </Card>
   )
 }

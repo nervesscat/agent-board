@@ -547,7 +547,7 @@ test.describe('on a phone', () => {
       `?type=other,docs&archived=include&from=${today}&to=${today}&sort=name-desc`,
     )
     await expect(tiles(page)).toHaveCount(60)
-    // The chips, both date pickers with a day and the sort control fit the screen, wrapping as they need.
+    // The chips scroll inside their own row instead of wrapping; each is reachable and inside the screen.
     await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
     for (const control of [
       ...(await typeChips(page).getByRole('button').all()),
@@ -556,15 +556,16 @@ test.describe('on a phone', () => {
       page.getByRole('combobox', { name: 'Sort' }),
     ]) {
       await expect(control).toBeVisible()
+      await control.scrollIntoViewIfNeeded()
       const b = await box(control)
       expect(b.x).toBeGreaterThanOrEqual(0)
       expect(b.x + b.width).toBeLessThanOrEqual(390)
     }
     expect(await scrollsSideways(page)).toBe(false)
-    // Fewer columns than on a desktop: two tiles side by side.
+    // One tile per row on a phone: the gallery's cards get the whole width.
     const [a, b, c] = await Promise.all([0, 1, 2].map((i) => box(tiles(page).nth(i))))
-    expect(a!.y).toBe(b!.y)
-    expect(c!.y).toBeGreaterThan(a!.y)
+    expect(a!.y).toBeLessThan(b!.y)
+    expect(b!.y).toBeLessThan(c!.y)
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
     await expect(tiles(page)).toHaveCount(61)
     await expect(more(page)).toHaveCount(0)

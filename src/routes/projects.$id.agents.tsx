@@ -50,19 +50,15 @@ function Agents() {
     tickets.filter((t) => t.assignee.toLowerCase() === a.name.toLowerCase())
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-start gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Team</h1>
-          <p className="text-sm text-muted-foreground">The roles agents work as in this project.</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            The specialists this project's work can go to. Assign a ticket to one and it is reserved for it: a
-            connected agent (claude, codex…) works it as that agent, briefed with its instructions, and posts
-            under its name. Mention <code className="rounded bg-muted px-1">@name</code> in a thread to ask
-            one. Tickets left to a connected agent or to nobody are shared by all of them.
+          <p className="text-sm text-muted-foreground">
+            The roles agents work as. Assign a ticket to reserve it for one.
           </p>
         </div>
         {!adding && (
-          <Button className="shrink-0" onClick={() => setAdding(true)}>
+          <Button className="w-full shrink-0 sm:w-auto" onClick={() => setAdding(true)}>
             <Plus data-icon="inline-start" /> New agent
           </Button>
         )}

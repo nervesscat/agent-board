@@ -719,11 +719,19 @@ test('a PR to review lands on its card, whatever filter this browser remembers',
  * Overview's link to the PR: the list is drawn at once, then filtered as remembered, then switched to
  * the filter that shows the PR.
  */
+async function expandNeedsYouOnPhone(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) > 640) return
+  const more = needsYou(page).getByRole('button', { name: /^View all/ })
+  await expect(more).toBeVisible()
+  await more.click()
+}
+
 async function reviewFromCachedQueue(page: Page, project: Project) {
   const target = seedPr(project, { title: 'Review me again', updatedAt: '2026-01-01T00:00:00.000Z' })
   for (let i = 0; i < 12; i++) seedPr(project, { title: `Queued PR ${i}` })
   await overview(page, project)
   const link = needsYou(page).getByRole('link', { name: `Review PR #${target.number} Review me again` })
+  await expandNeedsYouOnPhone(page)
   await link.click()
   await expect(page.locator(`#pr-${target.id}`)).toHaveAttribute('data-revealed', '')
   await page.getByRole('tab', { name: /^Waiting on others/ }).click()
@@ -732,6 +740,7 @@ async function reviewFromCachedQueue(page: Page, project: Project) {
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
   await recordMarks(page)
+  await expandNeedsYouOnPhone(page)
   await link.click()
   await expect(page).toHaveURL(new RegExp(`filter=me#pr-${target.id}$`))
   await expect(page.getByRole('tab', { name: /^To review/ })).toHaveAttribute('aria-selected', 'true')
@@ -1353,7 +1362,7 @@ test("Back from the project's Agents, its shell remembered, scrolled as the link
   )
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/agents\\?shell=powershell$`))
   await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible()
-  await expect(page.getByText('The roles agents work as in this project.')).toBeVisible()
+  await expect(page.getByText('The roles agents work as.')).toBeVisible()
   await expectBackAt(page, project, left)
 })
 

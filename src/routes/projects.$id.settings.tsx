@@ -46,9 +46,7 @@ function Settings() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Instructions</h1>
           <p className="text-sm text-muted-foreground">
-            What every agent reads (via <code className="rounded bg-muted px-1">get_project</code>) before
-            working here: conventions, how to run things, what never to do. They apply to all its repos. You
-            and an orchestrator agent change them; every change is kept below.
+            What every agent reads before working here. Every change is kept below.
           </p>
         </div>
         {/* A new editor per project: an edit never follows the page to another one. */}

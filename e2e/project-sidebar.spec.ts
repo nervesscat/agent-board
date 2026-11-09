@@ -51,12 +51,19 @@ test('at a narrow width the sidebar sits above the content and nothing scrolls s
   const t = await api.ticket({ title: 'Long ticket', body: longText })
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   await expect(page.getByText('Line 120 of a long description.')).toBeAttached()
-  const nav = sidebar(page).getByRole('navigation')
-  await expect(nav).toBeVisible()
+  // On a phone the project's pages are a picker instead of the desktop sidebar nav.
+  const picker = page.getByRole('combobox', { name: 'Project page' })
+  await expect(picker).toBeVisible()
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
   ).toBe(true)
-  expect(await sidebar(page).evaluate((el) => getComputedStyle(el).position)).toBe('static')
-  await nav.getByRole('link').last().click()
+  expect(
+    await page
+      .locator('aside')
+      .first()
+      .evaluate((el) => getComputedStyle(el).position),
+  ).toBe('static')
+  await picker.click()
+  await page.getByRole('option', { name: 'Roadmap' }).click()
   await expect(page).not.toHaveURL(new RegExp(`/features/${t.id}$`))
 })

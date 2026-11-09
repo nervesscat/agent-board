@@ -184,12 +184,7 @@ function Features() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Ongoing features</h1>
-          <p className="text-sm text-muted-foreground">
-            Tickets agents pick up. Each one carries its todo list, branch, workspaces, updates, a thread, and
-            lanes for work running in parallel. On the board, drag a card to another column to change its
-            stage, or up and down to reorder it (in review, top merges first). Stages are set in Settings. A
-            done or cancelled column can archive its tickets, which then wait under Archived.
-          </p>
+          <p className="text-sm text-muted-foreground">Tickets in flight, by stage.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Tabs value={view} onValueChange={(v) => pickView(v as View)}>

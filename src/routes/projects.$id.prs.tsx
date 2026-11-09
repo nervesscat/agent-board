@@ -172,11 +172,7 @@ function PrQueue() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">PR queue</h1>
-          <p className="text-sm text-muted-foreground">
-            Pull requests by others that you review, and your own, across every repo of the project, by where
-            their reviews stand; merged ones stay under Done for two weeks. Read-only against GitHub; holds
-            live here, and each PR's ticket opens from its card.
-          </p>
+          <p className="text-sm text-muted-foreground">PRs to review and your own, by review state.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           <Tabs value={filter} onValueChange={(v) => pickFilter(v as Filter)}>

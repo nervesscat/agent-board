@@ -274,7 +274,9 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   await expect(
     page.locator('[data-ticket-column="side"]').getByRole('region', { name: 'Details' }),
   ).toHaveCount(0)
-  const first = await mainColumn.evaluate((el) => el.firstElementChild?.getAttribute('aria-label'))
+  const first = await mainColumn.evaluate((el) =>
+    el.querySelector(':scope > [aria-label]')?.getAttribute('aria-label'),
+  )
   expect(first).toBe('Details')
   await expect(page.getByRole('heading', { level: 2, name: 'Tasks' })).toBeVisible()
   await expect(page.getByRole('heading', { level: 2, name: 'Workspaces' })).toHaveCount(0)

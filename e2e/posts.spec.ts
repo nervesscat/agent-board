@@ -53,7 +53,7 @@ test('posts on a ticket, replies, edits and deletes', async ({ page, api, human 
   await page.getByRole('textbox', { name: 'New post' }).fill('Should this ship behind a flag?')
   await page.getByRole('button', { name: 'Post', exact: true }).click()
   // The ticket's only post.
-  const post = page.getByRole('article')
+  const post = page.locator('article:not([aria-label="Summary"])')
   await expect(post).toContainText('Should this ship behind a flag?')
   await expect(page.getByRole('textbox', { name: 'New post' })).toHaveText('')
 
@@ -174,7 +174,7 @@ test("a post's actions are icons in a row under its text and files, shown on hov
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   await page.mouse.move(0, 0)
 
-  const post = page.getByRole('article')
+  const post = page.locator('article:not([aria-label="Summary"])')
   const header = authorRow(post)
   const actions = post.getByRole('group', { name: 'Post actions' })
   // The header keeps who posted it, and no buttons.
@@ -269,7 +269,7 @@ test('the progress toggle flips a post both ways, with its own icon for each', a
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   // A progress post: in the agents' tab.
   await openFeedTab(page, 'Agents')
-  const post = page.getByRole('article')
+  const post = page.locator('article:not([aria-label="Summary"])')
   const chip = authorRow(post).getByText('progress', { exact: true })
   await expect(chip).toBeVisible()
   await expect(post).not.toHaveClass(/bg-muted\/30/)
@@ -317,7 +317,7 @@ test('the New post box has no progress switch, and what it posts is not progress
   )
   await form.getByRole('button', { name: 'Post', exact: true }).click()
   expect((await sent).postDataJSON()).toMatchObject({ progress: false })
-  const post = page.getByRole('article')
+  const post = page.locator('article:not([aria-label="Summary"])')
   await expect(post).toContainText('Is the old export still used?')
   await expect(authorRow(post).getByText('progress', { exact: true })).toHaveCount(0)
   await expect(post).toHaveClass(/bg-muted\/30/)
@@ -340,7 +340,7 @@ test('a lane post on its parent keeps only the reply toggle, in the row under it
   await page.getByText('include lane posts').click()
   await openFeedTab(page, 'Agents')
 
-  const post = page.getByRole('article').filter({ hasText: 'Done in the lane.' })
+  const post = page.locator('article:not([aria-label="Summary"])').filter({ hasText: 'Done in the lane.' })
   await expect(authorRow(post).getByRole('link', { name: 'One part' })).toBeVisible()
   await expect(authorRow(post).getByRole('button')).toHaveCount(0)
   await post.hover()
@@ -363,7 +363,7 @@ test('the reply toggle shows the count, opens the thread right under its row and
   await ok(agent.post('/api/comments', { data: { parentType: 'update', parentId: id, body: 'The reply.' } }))
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   await openFeedTab(page, 'Agents')
-  const post = page.getByRole('article')
+  const post = page.locator('article:not([aria-label="Summary"])')
   const actions = post.getByRole('group', { name: 'Post actions' })
 
   const toggle = actions.getByRole('button', { name: '1 reply', exact: true })
@@ -412,7 +412,7 @@ test('a reply in a thread has its actions as icons under its own text, before it
   )
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   await page.mouse.move(0, 0)
-  const post = page.getByRole('article')
+  const post = page.locator('article:not([aria-label="Summary"])')
   await post.getByRole('button', { name: '2 replies', exact: true }).click()
 
   // Each reply: its header, its text, then its own row of actions; the nested reply after that row.
@@ -507,7 +507,7 @@ test("hovering a reply or the thread's Reply box shows the reply's actions, not 
     await ok(agent.post('/api/comments', { data: { parentType: 'update', parentId: id, body } }))
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
   await openFeedTab(page, 'Agents')
-  const post = page.getByRole('article')
+  const post = page.locator('article:not([aria-label="Summary"])')
   const actions = post.getByRole('group', { name: 'Post actions' })
   await actions.getByRole('button', { name: '3 replies', exact: true }).click()
   await page.mouse.move(0, 0)

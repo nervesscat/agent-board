@@ -1,8 +1,9 @@
-import { Link, Outlet, createFileRoute } from '@tanstack/react-router'
+import { Link, Outlet, createFileRoute, useRouterState } from '@tanstack/react-router'
 import { FolderGit2 } from 'lucide-react'
 
 import { PushedTodayBadge } from '#/components/daily/PushedToday'
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { useProject } from '#/lib/project'
@@ -29,9 +30,18 @@ const MODULES = {
 
 function ProjectLayout() {
   const { id } = Route.useParams()
+  const navigate = Route.useNavigate()
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { data: project } = useProject(id)
   // The defaults until the project has loaded.
   const pages = shownIn(project?.layout ?? defaultLayout(), 'nav')
+  // The page the URL is on, for the phone-sized picker. The Overview's URL starts every other page's.
+  const current =
+    pages.find((page) => {
+      const to = MODULES[page].replace('$id', id)
+      return page === 'nav.overview' ? pathname === to : pathname.startsWith(to)
+    }) ?? pages[0]
+  const pageItems = Object.fromEntries(pages.map((page) => [page, layoutElement(page).label]))
   return (
     <div className="flex flex-col gap-6 md:flex-row">
       {/* From md up the sidebar sticks below the sticky header (3rem + its 1px border) and main's
@@ -60,7 +70,27 @@ function ProjectLayout() {
             )}
           </ul>
         </div>
-        <nav className="flex gap-1 overflow-x-auto md:flex-col">
+        {pages.length > 0 && current && (
+          <div className="mb-2 px-2 md:hidden">
+            <Select
+              value={current}
+              onValueChange={(v) => v && navigate({ to: MODULES[v as AreaId<'nav'>], params: { id } })}
+              items={pageItems}
+            >
+              <SelectTrigger className="w-full" aria-label="Project page">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pages.map((page) => (
+                  <SelectItem key={page} value={page}>
+                    {layoutElement(page).label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <nav className="hidden gap-1 md:flex md:flex-col">
           {pages.map((page) => {
             const Icon = LAYOUT_ICONS[page]
             return (

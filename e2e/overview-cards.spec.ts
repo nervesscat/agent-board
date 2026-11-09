@@ -5,7 +5,8 @@ import { create, record, workedTicket } from './workTimeline'
 
 /**
  * Needs you and In progress, side by side on the Overview, are as tall as each other whatever they
- * hold; what does not fit scrolls under the card's header. On a phone each is capped at that height.
+ * hold; what does not fit scrolls under the card's header. On a phone the cards grow with their
+ * content instead: the page scrolls, not the card.
  */
 
 const content = (card: Locator) => card.locator('[data-slot="card-content"]')
@@ -69,17 +70,21 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await shot(page, 'desktop')
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await expect.poll(() => height(needsYou)).toBeLessThanOrEqual(desktop + 0.5)
-  expect(await height(needsYou)).toBeGreaterThanOrEqual(desktop - 0.5)
-  expect(await height(inProgress)).toBeLessThan(desktop)
+  // On a phone the card shows its first three entries and a way to see the rest; no nested scroll.
+  const rows = content(needsYou).locator('li')
+  await expect(rows.nth(3)).toBeHidden()
+  const more = needsYou.getByRole('button', { name: /View all/ })
+  await expect(more).toBeVisible()
+  await more.click()
+  await expect(rows.nth(3)).toBeVisible()
+  await expect(needsYou.getByRole('button', { name: 'Show fewer' })).toBeVisible()
   // Both cards and their scrolling areas stay within the phone's width.
   for (const card of [needsYou, inProgress]) {
     const b = (await card.boundingBox())!
     expect(b.x + b.width).toBeLessThanOrEqual(390)
     expect(await content(card).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   }
-  await overflows(needsYou)
-  await content(needsYou).evaluate((el) => el.scrollTo(0, 200))
+  expect(await content(needsYou).evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
   await needsYou.scrollIntoViewIfNeeded()
   await shot(page, 'phone')
 })
