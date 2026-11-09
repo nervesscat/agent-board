@@ -56,7 +56,10 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   await expect(tooltip(page)).toHaveText(/^build by claude, /)
   // The wait and the hand-off name themselves too, with a tooltip on hover.
   await expectTooltip(wait, /^wait: lock \(claude\), .*, 20 min: test lock$/)
-  await expectTooltip(bar.locator('[data-kind="handoff"]'), /^handoff orchestrator → builder-sub-1, /)
+  await expectTooltip(
+    bar.locator('[data-kind="handoff"]'),
+    /^orchestrator passed the work to builder-sub-1, /,
+  )
   await expectTooltip(
     ticket.getByTestId('stall-notice'),
     /^claude has a build open, nobody heard from since /,

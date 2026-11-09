@@ -75,7 +75,7 @@ export const delegationLabel = (w: ChartWait, live: boolean) =>
   `delegated to ${w.on} by ${w.agent}, ${clock(w.start)} to ${until(w, live)}, ${spokenDuration(Date.parse(w.end) - Date.parse(w.start))}${w.open ? ', open' : ''}${w.note ? `: ${w.note}` : ''}`
 
 const handoffLabel = (h: { from: string; to: string; at: string; note: string }) =>
-  `handoff ${h.from} → ${h.to}, ${clock(h.at)}${h.note ? `: ${h.note}` : ''}`
+  `${h.from} passed the work to ${h.to}, ${clock(h.at)}${h.note ? `: ${h.note}` : ''}`
 
 const markLabel = (m: TimelineMark) =>
   `${(MARK[m.kind] ?? OTHER_MARK).name}${m.note ? `: ${m.note}` : ''}, ${clock(m.at)}`

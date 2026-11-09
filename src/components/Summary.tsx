@@ -757,7 +757,7 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
         missing > 0 && (
           <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
             <span className="inline-flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400">
-              <BookmarkX className="size-3" /> {missing} without a handoff
+              <BookmarkX className="size-3" /> {missing} without a resume note
             </span>
           </Tip>
         )
@@ -835,7 +835,7 @@ function NoHandoff({ p, id }: { p: ProjectSummary; id: number }) {
       className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 hover:underline dark:text-amber-400"
       tip="Worked on an earlier day, and nobody left a resume note on where it was left: open it to write one"
     >
-      <BookmarkX className="size-3" /> no handoff
+      <BookmarkX className="size-3" /> no resume note
     </ResumeLink>
   )
 }

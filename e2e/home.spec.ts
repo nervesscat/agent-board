@@ -78,8 +78,8 @@ test('Home and Overview sum up the work: what needs you, in progress, done today
   await expect(link(carrying, today)).toHaveCount(0)
   const carried = carrying.getByRole('listitem').filter({ hasText: 'Started yesterday' })
   await expect(carried).toContainText('1 day in progress')
-  await expect(carried.getByRole('link', { name: 'no handoff' })).toBeVisible()
-  await expect(carrying.locator('[data-slot="card-title"]')).toContainText('1 without a handoff')
+  await expect(carried.getByRole('link', { name: 'no resume note' })).toBeVisible()
+  await expect(carrying.locator('[data-slot="card-title"]')).toContainText('1 without a resume note')
 
   // Once the human answers, it no longer waits on them.
   await ok(human.post('/api/comments', { data: { parentType: 'ticket', parentId: next.id, body: 'Yes.' } }))

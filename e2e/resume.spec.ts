@@ -5,7 +5,7 @@ import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { startedAt, yesterdayNoon } from './db'
 import { expect, ok, openFeedTab, section, test } from './fixtures'
 
-test('writes a resume note from the template; it shows with who and when, and posts a handoff', async ({
+test('writes a resume note from the template; it shows with who and when, and posts it to the feed', async ({
   page,
   api,
 }) => {
@@ -71,7 +71,7 @@ test('an agent writes the resume note as one of the project agents; the human ca
   await expect(card.getByText(/^by /)).toContainText(as)
 })
 
-test('a ticket carried over from yesterday without a note shows no handoff until one is written', async ({
+test('a ticket carried over from yesterday without a note shows no resume note until one is written', async ({
   page,
   api,
   agent,
@@ -83,27 +83,27 @@ test('a ticket carried over from yesterday without a note shows no handoff until
 
   await page.goto(`/projects/${project.id}/features?view=board`)
   const boardCard = page.locator('[data-column="in_progress"]').getByRole('link', { name: /Carried over/ })
-  await expect(boardCard).toContainText('no handoff')
+  await expect(boardCard).toContainText('no resume note')
   await expect(boardCard).toContainText('day 2')
 
   await boardCard.click()
   const card = page.getByRole('region', { name: 'Resume here' })
-  await expect(card).toContainText('No handoff yet')
+  await expect(card).toContainText('No resume note yet')
   await expect(card).toContainText('day 2 in progress')
 
   await ok(agent.put(`/api/tickets/${t.id}/resume`, { data: { note: 'Halfway through the parser' } }))
   await page.reload()
   await expect(card).toContainText('Halfway through the parser')
-  await expect(card).not.toContainText('No handoff yet')
+  await expect(card).not.toContainText('No resume note yet')
 
   await page.goto(`/projects/${project.id}/features?view=board`)
-  await expect(boardCard).not.toContainText('no handoff')
+  await expect(boardCard).not.toContainText('no resume note')
   await expect(boardCard).toContainText('day 2')
   // The Overview's Carrying over shows the note where the last session left off.
   await page.goto(`/projects/${project.id}`)
   const carried = section(page, 'Carrying over').getByRole('listitem').filter({ hasText: 'Carried over' })
   await expect(carried).toContainText('Halfway through the parser — claude')
-  await expect(carried.getByText('no handoff')).toHaveCount(0)
+  await expect(carried.getByText('no resume note')).toHaveCount(0)
 })
 
 interface Noted {
