@@ -21,6 +21,8 @@ import {
 } from './entrance'
 import { HttpError } from './http'
 import { getAccount, hasAccount, liveSession } from './passkeys'
+// Registers the entrance Settings saved as the one config.ts serves, before any request is admitted.
+import './tailnetEntrance'
 
 /**
  * Who a request is. The board signs people in itself (passkeys.ts, README: "Signing in"): the browser's

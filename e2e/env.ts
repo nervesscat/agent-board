@@ -10,6 +10,11 @@ import path from 'node:path'
  */
 export function e2eEnv() {
   process.env.E2E_PORT ||= freePort()
+  if (!process.env.E2E_ENV_PORT) {
+    let other = freePort()
+    while (other === process.env.E2E_PORT) other = freePort()
+    process.env.E2E_ENV_PORT = other
+  }
   process.env.E2E_ROOT ||= fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-e2e-'))
   const root = process.env.E2E_ROOT
   return {
@@ -23,6 +28,14 @@ export function e2eEnv() {
     seedFile: path.join(root, 'seed.json'),
     /** The board's user-wide .claude folder (CLAUDE_HOME): never the real ~/.claude. Not there at first. */
     claudeHome: path.join(root, 'home', '.claude'),
+    /** A second board, its PUBLIC_ORIGIN set in the environment (the Settings state "set by env"). */
+    envPort: Number(process.env.E2E_ENV_PORT),
+    envBaseURL: `http://127.0.0.1:${process.env.E2E_ENV_PORT}`,
+    envDataDir: path.join(root, 'env-data'),
+    /** The Tailscale CLI the boards read: a link named tailscale.mjs to e2e/fake-tailscale.mjs (absent: not installed). */
+    tailscaleBin: path.join(root, 'tailscale', 'tailscale.mjs'),
+    /** The fake's answers, written by the tests (tailnet-entrance.spec.ts). */
+    tailscaleState: path.join(root, 'tailscale', 'state.json'),
   }
 }
 
