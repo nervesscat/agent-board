@@ -16,8 +16,10 @@ import {
   type WorkTimeline,
 } from '#/lib/api'
 import { clock, stamp } from '#/lib/format'
+import { stallStage } from '#/lib/activityTimeline'
 import { useStages } from '#/lib/project'
-import { useNow } from '#/lib/useNow'
+import { useNow, useServerOffset } from '#/lib/useNow'
+import { onServerClock } from '#/lib/workStatus'
 
 /**
  * The ticket's Timeline card. At the top: what is open now, whether the ticket is stalled and why, and
@@ -35,7 +37,7 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
     queryFn: () => get<TicketEvents>(`/api/tickets/${t.id}/events`),
     refetchInterval: 10_000,
   })
-  const now = useNow(1000)
+  const now = onServerClock(useNow(1000), useServerOffset(data?.timeline.now))
   const stageName = (key: string) => stages.find((s) => s.key === key)?.name ?? key
   const events = data ? oldestFirst(data.events) : []
   const heartbeats = events.filter((e) => e.kind === 'heartbeat')
@@ -51,7 +53,7 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
         <div className="space-y-3">
           <div className="space-y-1 text-sm">
             <NowLine timeline={data.timeline} />
-            <StallNotice timeline={data.timeline} variant="inline" />
+            <StallNotice timeline={data.timeline} stage={stallStage(stages, t.status)} variant="inline" />
             <LastHeard timeline={data.timeline} />
           </div>
           <WorkTimelineBar timeline={data.timeline} />
@@ -151,16 +153,25 @@ function storyRows(
   for (const e of events) {
     if (e.kind === 'heartbeat' && !beats) continue
     if (e.kind === 'wait_end' && e.refId !== null && startIds.has(e.refId)) continue
-    const end = endOf.get(e.id)
-    const text =
-      e.kind === 'wait_start'
-        ? end
-          ? `waited for ${waitTarget(e.reason, e.note)} · ${waitFor(Date.parse(end.at) - Date.parse(e.at))}`
-          : `waiting for ${waitTarget(e.reason, e.note)} · ${waitFor(ticketEnd - Date.parse(e.at))}`
-        : sentence(e, stageName)
+    const text = e.kind === 'wait_start' ? waitRowText(e, endOf.get(e.id), ticketEnd) : sentence(e, stageName)
     rows.push({ id: e.id, at: e.at, agent: e.agent, by: e.by, text })
   }
   return rows
+}
+
+/**
+ * A wait's row: whom it waited for and how long, then the note its end gave when there is one. A wait not
+ * yet ended runs to `ticketEnd`.
+ */
+export function waitRowText(
+  start: Pick<TicketEvent, 'at' | 'reason' | 'note'>,
+  end: Pick<TicketEvent, 'at' | 'note'> | undefined,
+  ticketEnd: number,
+): string {
+  const who = waitTarget(start.reason, start.note)
+  if (!end) return `waiting for ${who} · ${waitFor(ticketEnd - Date.parse(start.at))}`
+  const note = end.note ? `: ${end.note}` : ''
+  return `waited for ${who} · ${waitFor(Date.parse(end.at) - Date.parse(start.at))}${note}`
 }
 
 /** The consecutive rows of one actor (name and recorder) as one run. */
