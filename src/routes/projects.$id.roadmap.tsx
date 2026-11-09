@@ -23,7 +23,8 @@ import {
   parseWindowChoice,
   windowFor,
 } from '#/lib/roadmapWindow'
-import { useNow } from '#/lib/useNow'
+import { useNow, useServerOffset } from '#/lib/useNow'
+import { onServerClock } from '#/lib/workStatus'
 import type { Window } from '#/lib/timelineRows'
 
 const FILTERS = ['all', 'blocked', 'review'] as const
@@ -59,7 +60,7 @@ function Roadmap() {
   const { show = 'all', window: windowParam } = Route.useSearch()
   const navigate = Route.useNavigate()
   const stages = useStages(id)
-  const now = useNow(15_000)
+  const browserNow = useNow(15_000)
   const { data, isLoading, error } = useQuery({
     queryKey: ['roadmap', id],
     queryFn: () => get<RoadmapTicket[]>(`/api/projects/${id}/roadmap`),
@@ -70,6 +71,8 @@ function Roadmap() {
     queryFn: () => get<ProjectWork>(`/api/projects/${id}/work`),
     refetchInterval: 10_000,
   })
+  // The axis ends at the server's now, so a span the server stamped is drawn to its real end.
+  const now = onServerClock(browserNow, useServerOffset(work?.now))
   const item = (row: RoadmapTicket | Lane): RoadmapItem => ({
     row,
     stage: stageOf(stages, row.status),

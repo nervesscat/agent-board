@@ -344,7 +344,7 @@ export function buildChart(t: WorkTimeline, now: number, win?: Window): Chart {
   // creation's place on the axis, and on the left edge only when the creation is before the window.
   const agentAt = agentStarts(t)
   const createdAt = t.start ? Date.parse(t.start) : null
-  const lead = createdAt !== null && agentAt.length ? Math.round((Math.min(...agentAt) - createdAt) / MIN) : 0
+  const lead = createdAt !== null && agentAt.length ? Math.floor((Math.min(...agentAt) - createdAt) / MIN) : 0
   const createdShare = createdAt === null ? 0 : share(axis, createdAt)
   return {
     axis,

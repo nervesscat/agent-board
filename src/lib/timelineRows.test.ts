@@ -219,6 +219,16 @@ describe('the axis and ticks', () => {
     expect(chart.created).toEqual({ minutes: 12, left: 0 })
   })
 
+  it('has no creation mark for a lead under a minute, even one of 59 seconds', () => {
+    const created = Date.parse(iso('09:00'))
+    const t = timeline({
+      start: new Date(created).toISOString(),
+      spans: [span(1, 'builder', 'builder', new Date(created + 59_000).toISOString(), '09:30')],
+      end: iso('09:30'),
+    })
+    expect(buildChart(t, ms('09:30')).created).toBeNull()
+  })
+
   it('has no creation mark when the first event is the first work', () => {
     const t = timeline({ spans: [span(1, 'builder', 'builder', '10:00', '10:30')], end: iso('10:30') })
     expect(buildChart(t, ms('10:30')).created).toBeNull()
