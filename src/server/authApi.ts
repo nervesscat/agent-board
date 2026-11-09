@@ -8,6 +8,7 @@ import { localSite, type SignInSite } from './entrance'
 import { HttpError, intParam, readJson } from './http'
 import * as passkeys from './passkeys'
 import type { ApiRouter } from './router'
+import * as tailnet from './tailnetEntrance'
 
 /**
  * /api/auth/*: the passkey ceremonies of the sign-in pages (authPages.ts), signing out, and the devices
@@ -15,6 +16,9 @@ import type { ApiRouter } from './router'
  *
  * The ceremonies (setup, login, enrol) and logout are answered without a session (entrance.ts
  * SIGN_IN_API); setup only straight from this machine. The rest is the signed-in human's alone.
+ *
+ * /api/tailnet: the tailnet entrance Settings shows and saves (tailnetEntrance.ts). The human's alone too,
+ * agent tokens and test-mode agents refused; read with sign-in off, where saving is refused.
  */
 
 // A WebAuthn response as the browser's credential serialises it; @simplewebauthn checks the rest.
@@ -141,5 +145,23 @@ export function authRoutes(api: ApiRouter) {
     humanOnly(request, 'ends sessions')
     passkeys.revokeSession(intParam(params.id!))
     return new Response(null, { status: 204 })
+  })
+
+  // --- the tailnet entrance: what Settings shows, saves (null turns it off) and tests ---
+  const tailnetHumanOnly = (request: Request, what: string) => {
+    if (isAgent(request)) throw new HttpError(403, `only the human ${what}`)
+  }
+  api.get('/api/tailnet', async ({ request }) => {
+    tailnetHumanOnly(request, 'sees the tailnet entrance')
+    return Response.json(await tailnet.entranceState(), { headers: { 'cache-control': 'no-store' } })
+  })
+  api.patch('/api/tailnet', async ({ request, actor }) => {
+    tailnetHumanOnly(request, 'changes the tailnet entrance')
+    const body = await readJson(request, z.object({ origin: z.string().max(300).nullable() }).strict())
+    return Response.json(await tailnet.setEntrance(body.origin, actor))
+  })
+  api.post('/api/tailnet/test', async ({ request }) => {
+    tailnetHumanOnly(request, 'tests the tailnet entrance')
+    return Response.json(await tailnet.checkEntrance())
   })
 }

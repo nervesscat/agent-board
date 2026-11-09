@@ -146,17 +146,21 @@ export const authOffBanner = (auth: AuthMode, name: string) =>
     : '')
 
 // --- the tailnet entrance: the board on this machine's tailnet name, through `tailscale serve`. ---
-// README: "Using it from other devices". Off unless PUBLIC_ORIGIN is set, and never with sign-in off.
+// README: "Using it from other devices". Set by PUBLIC_ORIGIN (the environment, .env or config.env, which
+// wins) or in Settings (saved in the database under TAILNET_SETTING), and never served with sign-in off.
 // Under `vite dev` PUBLIC_ORIGIN, BOARD_ENV and AUTH reach process.env as Vite's loadEnv reads .env, not
 // as Nitro's loader does (devEnv.ts); every other key here is Nitro's. The built server reads no .env.
 
 export interface PublicEntrance {
-  /** PUBLIC_ORIGIN: the board as other devices open it, `https://<machine>.<tailnet>.ts.net`. */
+  /** The board as other devices open it, `https://<machine>.<tailnet>.ts.net`. */
   origin: string
   /** Its host name, lower case: the one Host besides loopback the board answers for, and the RP ID of
    *  the passkeys made through it. */
   host: string
 }
+
+/** The settings key the Settings page saves the entrance under, as `{ "origin": ... }`; absent when none. */
+export const TAILNET_SETTING = 'tailnetEntrance'
 
 // A host name of two labels or more, the last one starting with a letter: no wildcard, no IP literal.
 const HOST_NAME =
@@ -173,6 +177,26 @@ const parseUrl = (raw: string) => {
 const isOrigin = (raw: string, url: URL) => raw.replace(/\/$/, '').toLowerCase() === url.origin
 
 /**
+ * Why `raw` is not an origin the board takes as its tailnet entrance (the rule the environment and the
+ * Settings page both meet), or null when it is one. The message starts with PUBLIC_ORIGIN either way.
+ */
+export function publicOriginProblem(raw: string): string | null {
+  const board = parseUrl(raw)
+  if (board?.protocol === 'https:' && !board.port && isOrigin(raw, board) && HOST_NAME.test(board.hostname))
+    return null
+  return (
+    'PUBLIC_ORIGIN must be https://<machine>.<tailnet>.ts.net: https, a host name (no IP, no wildcard), ' +
+    `no port and no path; got "${raw}"`
+  )
+}
+
+/** The entrance a valid origin names (publicOriginProblem said so already). */
+export function entranceOf(origin: string): PublicEntrance {
+  const board = new URL(origin)
+  return { origin: board.origin, host: board.hostname }
+}
+
+/**
  * PUBLIC_ORIGIN: the board on this machine's tailnet name, where other devices sign in with passkeys of
  * their own. Null when it is not set: the board then answers on loopback only. Throws on anything it
  * cannot trust: http, a wildcard, an IP, a port or a path.
@@ -180,30 +204,57 @@ const isOrigin = (raw: string, url: URL) => raw.replace(/\/$/, '').toLowerCase()
 export function readPublicEntrance(e: Env): PublicEntrance | null {
   const origin = e.PUBLIC_ORIGIN?.trim() ?? ''
   if (!origin) return null
-  const board = parseUrl(origin)
-  if (
-    board?.protocol !== 'https:' ||
-    board.port ||
-    !isOrigin(origin, board) ||
-    !HOST_NAME.test(board.hostname)
-  )
-    throw new StartupError(
-      'PUBLIC_ORIGIN must be https://<machine>.<tailnet>.ts.net: https, a host name (no IP, no wildcard), ' +
-        `no port and no path; got "${origin}"`,
-    )
-  return { origin: board.origin, host: board.hostname }
+  const problem = publicOriginProblem(origin)
+  if (problem) throw new StartupError(problem)
+  return entranceOf(origin)
 }
 
-/** The entrance a board with these settings serves: none while sign-in is off, whatever the key says. */
-export function readServedEntrance(e: Env): PublicEntrance | null {
-  const entrance = readPublicEntrance(e)
-  return entrance && !readAuthMode(e).off ? entrance : null
+let warnedRow: string | undefined
+/**
+ * The entrance a settings row holds: null when there is none, or when it is not one the board takes (logged
+ * once per value, never a crash: the board then answers on loopback only).
+ */
+export function entranceOfRow(value: unknown): PublicEntrance | null {
+  if (value === undefined || value === null) return null
+  const origin =
+    typeof value === 'object' && 'origin' in value && typeof value.origin === 'string' ? value.origin : null
+  const problem = origin === null ? 'the value is not { "origin": ... }' : publicOriginProblem(origin)
+  if (origin !== null && problem === null) return entranceOf(origin)
+  const shown = JSON.stringify(value)
+  if (shown !== warnedRow) {
+    warnedRow = shown
+    console.error(`agent-board: the tailnet entrance saved in the database is ignored: ${problem} (${shown})`)
+  }
+  return null
+}
+
+/**
+ * The entrance a board with these settings serves. PUBLIC_ORIGIN in the environment wins; else the one
+ * saved in Settings (`stored`), which only the production board serves: a development copy or a preview
+ * never answers through it. Nothing is served while sign-in is off, whatever is set.
+ */
+export function readServedEntrance(e: Env, stored: PublicEntrance | null = null): PublicEntrance | null {
+  const fromEnv = readPublicEntrance(e)
+  const mode = readAuthMode(e)
+  if (mode.off) return null
+  if (fromEnv) return fromEnv
+  return mode.boardEnv === 'production' ? stored : null
 }
 
 let served: PublicEntrance | null | undefined
-/** The entrance this process serves, read once; the startup check has already refused a bad one. */
-export const servedEntrance = () =>
-  served === undefined ? (served = readServedEntrance(process.env)) : served
+let saved: () => PublicEntrance | null = () => null
+/** Where the board reads the entrance saved in Settings from (tailnetEntrance.ts, the database). */
+export function setStoredEntrance(read: () => PublicEntrance | null) {
+  saved = read
+  served = undefined
+}
+/** The entrance this process serves: read once, and again after a change (resetServedEntrance). */
+export const servedEntrance = (): PublicEntrance | null =>
+  served === undefined ? (served = readServedEntrance(process.env, saved())) : served
+/** Forgets the entrance read: the next request reads it again, so a save or a clear applies without a restart. */
+export const resetServedEntrance = () => {
+  served = undefined
+}
 
 /** Said as a board without sign-in starts with PUBLIC_ORIGIN set: it never answers through it. */
 export const entranceIgnored = (auth: AuthMode) =>

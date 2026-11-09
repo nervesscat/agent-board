@@ -106,6 +106,22 @@ Open `http://localhost:47100/` on this machine: with no account yet the board se
 Give your name (filled in with the name the board knew you by, if any) and create a passkey; you are
 signed in. Setup works once, and only on this machine.
 
+Home then shows **Getting started**, four steps, each with the button or link that does it and
+ticked by itself once the board sees it done:
+
+1. **Tools on this machine**: `git`, `gh` (signed in) and `claude` on the board's PATH (`node` and
+   `pnpm` only for previews), each missing one with its fix and **Check again**.
+2. **Create a project and add its first repository**: **New project**, then **New repository** on
+   its Repositories page (the checkout's folder, its GitHub repo, its base branch).
+3. **Connect an agent**: **Generate commands** on Connect an agent, run in your terminal.
+4. **Write a first ticket and hand it to the agent**: a ticket on the project's Features page, then
+   in your repo run `claude` and say `/board pick up the next ticket`.
+
+Until every step has been done once or you dismiss it, the top bar keeps a **Getting started · 2/4**
+button that opens the list (on a phone, an item of the Pages menu that leads to the list on Home). This browser remembers the dismissal or the completion, per user (in its
+storage: another browser shows the button again until it too sees 4 of 4 or a dismissal); the same
+holds in the desktop app.
+
 Create a project from the project menu in the top bar and add a repository (path of a local
 checkout) on its **Repositories** page, and you are on. A project can hold several repos; its
 modules show them all together. `/repositories`, the board-wide page it replaces, leads home.
@@ -248,10 +264,11 @@ them just the same. Managed previews of a board worktree also need `pnpm` and `n
   `desktop.log`), what `data/` is in a checkout.
 - `config.env`: the settings, `KEY=value` as in `.env`, read at each start. The first start writes it
   with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
-  like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and the tailnet
-  entrance's `PUBLIC_ORIGIN` (Using it from other devices, below); any other key of `.env` works too.
-  A variable set in the environment wins over the file. `BOARD_ENV` and `HOST` are not settings: the
-  app always runs production on `127.0.0.1`.
+  like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and `PUBLIC_ORIGIN`, the
+  tailnet entrance (Using it from other devices, below). Set the entrance in Settings, Other devices
+  (tailnet), which needs no file: keep `PUBLIC_ORIGIN` here only to override Settings. Any other key of
+  `.env` works too. A variable set in the environment wins over the file. `BOARD_ENV` and `HOST` are not
+  settings: the app always runs production on `127.0.0.1`.
 - `electron\`: the window's browser profile (its sign-in, its cache).
 
 `AGENT_BOARD_HOME` in the environment moves all three elsewhere (the smoke test runs its copy that way).
@@ -420,28 +437,35 @@ done.
   and tailnet names then appear in a public certificate log.
 - Tailnet access rules (ACLs or grants) that let only your own devices reach this machine on 443.
 
-**1. `.env`**:
+**1. The entrance, in Settings**: on this machine, Settings, **Other devices (tailnet)** shows whether
+Tailscale is installed and signed in here, this machine's name, whether its HTTPS certificates are on, and
+what `tailscale serve` sends port 443 to. **Use https://&lt;machine&gt;.&lt;tailnet&gt;.ts.net**, or type it,
+then **Save**. The board keeps it in its database and serves it at once: no file to edit, and no restart.
+It takes the same origin as `PUBLIC_ORIGIN`: https, a host name, no port and no path. The board's passkeys
+are for that host name, the name your devices sign in on.
 
-```
-PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net
-```
+A `PUBLIC_ORIGIN` set in the environment wins over Settings: `.env` in a checkout, `config.env` in the
+desktop app, or the shell. The section then shows it read-only (set in config.env), and saving is refused
+until that line is removed. Use it to keep the setting in a file. The board refuses to start with a value it
+cannot trust (http, a port, a path, a wildcard or an IP), and `pnpm tailnet` refuses it too. A reference in
+it (`${NAME}`, `${NAME:-default}`) is expanded as Vite reads `.env`: a name defined nowhere is empty. Then
+`pnpm start`. An earlier setup's `GATE_URL`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` lines are no longer
+read: delete them.
 
-`PUBLIC_ORIGIN` is the board as your devices open it, and its host the name their passkeys are for.
-The board refuses to start with a value it cannot trust (http, a port, a path, a wildcard or an IP),
-and `pnpm tailnet` refuses it too. A reference in it (`${NAME}`, `${NAME:-default}`) is expanded as
-Vite reads `.env`: a name defined nowhere is empty. Then `pnpm start`. `pnpm tailnet` prints the value
-for this machine.
-An earlier setup's `GATE_URL`, `PUBLIC_GATE_URL` and `PUBLIC_GATE_AUTH_URL` lines are no longer read:
-delete them.
-
-**2. `tailscale serve`**: `pnpm tailnet` prints the command for this machine, its URL and how to stop.
-It only reads (`tailscale status`, `serve status`, `funnel status`, `version`) and never runs `serve`
-itself; it refuses while Funnel is on, for any port but the board's (`PORT`), and for a board that
-answers without signing in. It also names anything else this machine serves on its tailnet name.
+**2. `tailscale serve`**: Settings shows the command for this machine, with a copy button, and checks
+again after you run it. `pnpm tailnet` prints the same command in a checkout, with its URL and how to stop.
+The board never runs `serve` itself. The reads it makes (`tailscale status`, `serve status`, `funnel status`,
+`version`) are the only calls it makes to Tailscale, and the save refuses while Funnel is on. `pnpm tailnet`
+also refuses for any port but the board's (`PORT`), and for a board that answers without signing in. Both
+name anything else this machine serves on its tailnet name.
 
 ```
 tailscale serve --bg --https=443 http://127.0.0.1:47100
 ```
+
+**Test the entrance** (Settings) asks the board itself, over its tailnet name: a `/api/health` that answers
+**401** (the name reaches the board, and it asks for sign-in) is ok. A 403 means the name does not reach the
+board (the entrance and `tailscale serve` disagree), and a missing certificate or serve is named.
 
 **3. A passkey for each device**: on this machine, Settings, Devices, **Add a device**, and open the
 tailnet link (`https://<machine>.<tailnet>.ts.net/enroll?code=…`, valid 15 minutes, used once) on the
@@ -459,7 +483,9 @@ the same origin) with their agent token: a token works on both addresses.
 tailscale serve --https=443 off        # or tailscale serve reset, which clears every handler
 ```
 
-Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board's side too.
+Turn the entrance off in Settings, or remove `PUBLIC_ORIGIN` from the environment file and restart the
+board, to close it on the board's side too. Turning it off, or changing it to another name, signs out the
+browsers signed in through the old name; their passkeys stay listed under Devices, and sign in nowhere else.
 
 **What holds**
 
@@ -475,10 +501,13 @@ Remove `PUBLIC_ORIGIN` from `.env` (then `pnpm start`) to close it on the board'
   port) or the `PUBLIC_ORIGIN` host gets a 403, whatever its path (one starting with `//` included),
   and a write carrying the session cookie must come from `http://localhost:<PORT>`,
   `http://127.0.0.1:<PORT>`, `http://[::1]:<PORT>` or `PUBLIC_ORIGIN`.
-- Previews stay on this machine: board-run previews never get `PUBLIC_ORIGIN`, `pnpm dev` copies get it
-  empty, and a board with sign-in off (test mode, `AUTH=off`) ignores it and refuses every request a
-  proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`). Their `http://127.0.0.1:<port>` links
-  do not open on other devices.
+- The entrance is the human's: Settings reads and saves it, and an agent token (worker or orchestrator),
+  or an `agent:` or `orchestrator:` test actor, gets a 403 on those routes. The board never runs Funnel
+  or `tailscale serve`, and refuses to save while Funnel is on or sign-in is off.
+- Previews stay on this machine: board-run previews never get the entrance, `pnpm dev` copies get it
+  empty, and only the production board serves an entrance saved in Settings. A board with sign-in off (test
+  mode, `AUTH=off`) ignores it and refuses every request a proxy forwarded (`X-Forwarded-*`, `Forwarded`,
+  `Tailscale-*`). Their `http://127.0.0.1:<port>` links do not open on other devices.
 - `HOST` stays `127.0.0.1`: nothing listens off this machine but Tailscale.
 
 ### Cloud agents
@@ -490,9 +519,10 @@ name, as a Tailscale node of its own that it brings up itself, with an agent tok
 it: the board's MCP tools (the `board-mcp` bridge, or the REST copy of the board skill), the skills,
 and previews of its branches (the board fetches them).
 
-**1. The board machine**: the steps above (`PUBLIC_ORIGIN`, then `tailscale serve`, tailnet only,
-never Funnel). Check it from another tailnet device: `https://<machine>.<tailnet>.ts.net/api/health`
-answers **401** (host accepted, sign-in required). A 403 means the host is not `PUBLIC_ORIGIN`.
+**1. The board machine**: the steps above (the entrance in Settings, or `PUBLIC_ORIGIN`, then the
+`tailscale serve` command it shows, tailnet only, never Funnel). Check it from another tailnet device:
+`https://<machine>.<tailnet>.ts.net/api/health` answers **401** (host accepted, sign-in required). A 403
+means the host is not the entrance.
 
 **2. In the Tailscale admin console, and on the board**
 
@@ -652,10 +682,10 @@ them stops it with a clear error and a non-zero exit:
   `BOARD_ENV=production` (or unset) is refused;
 - with sign-in off, the board only listens on loopback (`HOST` 127.0.0.1, ::1 or localhost; the built
   server's default, every interface, is refused) and never on 47100, the live board's port;
-- with sign-in off, the board ignores `PUBLIC_ORIGIN` (it says so as it starts) and answers a 403 to
-  any request a proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`), Vite's own files
-  included; in every mode, a `PUBLIC_ORIGIN` it cannot trust (Using it from other devices, above)
-  stops the start;
+- with sign-in off, the board ignores `PUBLIC_ORIGIN` (it says so as it starts), and an entrance saved in
+  Settings, which Settings refuses to save; it answers a 403 to any request a proxy forwarded
+  (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`), Vite's own files included; in every mode, a
+  `PUBLIC_ORIGIN` it cannot trust (Using it from other devices, above) stops the start;
 - `X-Test-Actor` is only read in test (`orchestrator:` included); in production and development it
   changes nothing, and a role comes only from an agent token;
 - `pnpm start` runs the board as production even from a shell with another `BOARD_ENV`;

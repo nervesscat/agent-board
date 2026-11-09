@@ -129,7 +129,7 @@ export function ProjectSwitcher() {
   )
 }
 
-function NewProject({
+export function NewProject({
   open,
   onOpenChange,
   onCreated,

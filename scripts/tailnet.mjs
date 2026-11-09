@@ -12,16 +12,19 @@
 // PUBLIC_ORIGIN in .env the board refuses to start with, and a board that answers /api/me without
 // signing in (its sign-in is off). TAILSCALE_BIN names the CLI to ask (default `tailscale`; a .mjs or
 // .js file runs with node).
-import { execFileSync } from 'node:child_process'
 import http from 'node:http'
 
+import {
+  funnelled,
+  parseTailscaleJson,
+  servedAt,
+  tailscaleBin,
+  tailscaleSync,
+} from '../src/server/tailscale.mjs'
 import { boardAddress, readDotenv } from './dotenv.mjs'
 
 const USAGE = 'usage: pnpm tailnet [--port <the board port>] [--target http://127.0.0.1:<the board port>]'
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]'])
-/** Everything this asks Tailscale, and nothing else: no `serve` or `funnel` with a target, ever. */
-const READS = new Set(['version', 'status --json', 'serve status --json', 'funnel status --json'])
-
 function fail(message) {
   console.error(message)
   process.exit(1)
@@ -77,13 +80,11 @@ const parseUrl = (raw) => {
 }
 const portOf = (url) => Number(url.port || (url.protocol === 'https:' ? 443 : 80))
 
-/** What `tailscale <args>` prints; throws when it fails. Only the reads above ever run. */
+/** What `tailscale <args>` prints; throws when it fails. Only the reads of tailscale.mjs ever run. */
 function tailscale(...args) {
-  if (!READS.has(args.join(' '))) throw new Error(`tailscale ${args.join(' ')} is not a read: refused`)
-  const bin = process.env.TAILSCALE_BIN || 'tailscale'
-  const [file, argv] = /\.[cm]?js$/i.test(bin) ? [process.execPath, [bin, ...args]] : [bin, args]
+  const bin = tailscaleBin()
   try {
-    return execFileSync(file, argv, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 20_000 })
+    return tailscaleSync(...args)
   } catch (err) {
     if (err.code === 'ENOENT')
       fail(
@@ -98,13 +99,7 @@ function tailscale(...args) {
 
 /** A JSON answer (an empty one is an empty serve config); throws when there is none. */
 function tailscaleJson(...args) {
-  const out = tailscale(...args).trim()
-  if (!out) return {}
-  try {
-    return JSON.parse(out)
-  } catch {
-    throw new Error(`tailscale ${args.join(' ')} did not print JSON:\n${out.slice(0, 400)}`)
-  }
+  return parseTailscaleJson(tailscale(...args), args)
 }
 
 /** The same, stopping here when it fails. */
@@ -114,24 +109,6 @@ function mustRead(read) {
   } catch (err) {
     fail(err.message)
   }
-}
-
-/** Every host:port a serve config lets Funnel put on the internet, its foreground sessions included. */
-function funnelled(config) {
-  const on = []
-  const scan = (part, where) => {
-    for (const [hostPort, allowed] of Object.entries(part?.AllowFunnel ?? {}))
-      if (allowed === true) on.push({ hostPort, where })
-  }
-  scan(config, null)
-  for (const [session, part] of Object.entries(config?.Foreground ?? {})) scan(part, session)
-  return on
-}
-
-/** What a serve config already sends https://<name>:<port>/ to, if anything. */
-function servedAt(config, name, port) {
-  const handler = config?.Web?.[`${name}:${port}`]?.Handlers?.['/']
-  return handler?.Proxy ?? handler?.Path ?? handler?.Text ?? null
 }
 
 /** Whether the board answers /api/me without credentials: 200 (sign-in off), another status, or null. */
