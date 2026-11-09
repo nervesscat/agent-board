@@ -65,3 +65,15 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   await ticket.screenshot({ path: test.info().outputPath('roadmap-work-timeline.png') })
   expect(errors).toEqual([])
 })
+
+test('changing the Roadmap time axis keeps a live track at now', async ({ page, project, human, agent }) => {
+  await workedTicket(human, agent, project)
+  await page.goto(`/projects/${project.id}/roadmap`)
+  const scroller = page.getByTestId('work-timeline-scroll').first()
+  await expect(scroller).toBeVisible()
+  await page.getByRole('tab', { name: '7 d' }).click()
+  // Now stays in view on the new axis: the track sits at its right end, where now is.
+  await expect
+    .poll(() => scroller.evaluate((el) => el.scrollWidth - el.clientWidth - el.scrollLeft))
+    .toBeLessThan(8)
+})

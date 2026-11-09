@@ -155,7 +155,14 @@ function Roadmap() {
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card" data-testid="roadmap">
           {shown.map((t) => (
-            <TicketRows key={t.row.id} projectId={id} ticket={t} lanes={t.lanes} timeWindow={timeWindow} />
+            <TicketRows
+              key={t.row.id}
+              projectId={id}
+              ticket={t}
+              lanes={t.lanes}
+              timeWindow={timeWindow}
+              windowKey={windowParam ?? 'default'}
+            />
           ))}
         </div>
       )}
@@ -182,16 +189,18 @@ function TicketRows({
   ticket,
   lanes,
   timeWindow,
+  windowKey,
 }: {
   projectId: string
   ticket: RoadmapItem
   lanes: RoadmapItem[]
   timeWindow: Window
+  windowKey: string
 }) {
   const [open, setOpen] = useState(true)
   return (
     <section className="border-b last:border-b-0" aria-label={`#${ticket.row.id} ${ticket.row.title}`}>
-      <Row projectId={projectId} item={ticket} timeWindow={timeWindow}>
+      <Row projectId={projectId} item={ticket} timeWindow={timeWindow} windowKey={windowKey}>
         {lanes.length > 0 && (
           <button
             type="button"
@@ -211,6 +220,7 @@ function TicketRows({
             projectId={projectId}
             item={lane}
             timeWindow={timeWindow}
+            windowKey={windowKey}
             lane={{ depth: 'depth' in lane.row ? lane.row.depth : 0, last: i === lanes.length - 1 }}
           />
         ))}
@@ -223,6 +233,7 @@ function Row({
   item,
   lane,
   timeWindow,
+  windowKey,
   children,
 }: {
   projectId: string
@@ -231,6 +242,8 @@ function Row({
   lane?: { depth: number; last: boolean }
   /** The one axis every row shares. */
   timeWindow: Window
+  /** The window choice from the URL ('default' when absent): changing it re-anchors the bar. */
+  windowKey: string
   children?: React.ReactNode
 }) {
   const { row, stage, groups } = item
@@ -287,7 +300,8 @@ function Row({
       <div className="min-w-0">
         <Track groups={groups} lane={Boolean(lane)} />
         <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
-          <WorkTimelineBar timeline={row.work} compact={Boolean(lane)} window={timeWindow} />
+          {/* Keyed on the choice, not the times: a new choice re-anchors a live track at now; the ticking end does not. */}
+          <WorkTimelineBar key={windowKey} timeline={row.work} compact={Boolean(lane)} window={timeWindow} />
           {hasWork(row.work) && <WorkSummary totals={row.work.totals} />}
         </div>
       </div>
