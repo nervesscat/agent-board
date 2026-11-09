@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { eq } from 'drizzle-orm'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // The board's modules open the database at import: point DATA_DIR at a throwaway directory first.
 const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-')))
@@ -18,7 +18,13 @@ const { hashSecret, sessionCookieName } = await import('./credentials')
 const { mintPreviewLink, signPreviewValue, previewCookieName, PREVIEW_LINK_TTL_MS } = await import(
   './previewLink'
 )
+// stopRun is spied on, not replaced: a test can see whether the proxy ever asks for a stop.
+vi.mock('./runs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./runs')>()
+  return { ...actual, stopRun: vi.fn(actual.stopRun) }
+})
 const proxy = await import('./previewProxy')
+const runs = await import('./runs')
 type ProxyDeps = import('./previewProxy').ProxyDeps
 const { db, schema } = await import('#/db')
 import type { RunState } from './runs'
@@ -145,6 +151,36 @@ function route(req: IncomingMessage, res: ServerResponse, body: Buffer) {
   if (p === '/echo') {
     res.writeHead(200, { 'content-type': 'text/plain' })
     return res.end(body)
+  }
+  if (p === '/refresh-url') {
+    res.writeHead(200, { 'content-type': 'text/plain', refresh: '0 http://evil.example/' })
+    return res.end('ok')
+  }
+  if (p === '/refresh-url-local') {
+    res.writeHead(200, { 'content-type': 'text/plain', refresh: `0 url=http://127.0.0.1:${previewPort}/x` })
+    return res.end('ok')
+  }
+  if (p === '/loc-prefix') {
+    res.writeHead(302, { location: `/p/${wsA}/${RUN}` })
+    return res.end()
+  }
+  if (p === '/own') {
+    res.writeHead(302, { location: `http://localhost:${config.port}${previewPath(wsA, RUN, 'x')}` })
+    return res.end()
+  }
+  if (p === '/own-out') {
+    res.writeHead(302, { location: `http://localhost:${config.port}/login` })
+    return res.end()
+  }
+  if (p === '/cut-html' || p === '/cut-text') {
+    // Headers and a little body, then the connection is reset before the rest comes.
+    res.writeHead(200, {
+      'content-type': p === '/cut-html' ? 'text/html; charset=utf-8' : 'text/plain',
+      'content-length': '1000',
+    })
+    res.write('partial')
+    setTimeout(() => res.destroy(), 20)
+    return
   }
   if (p === '/silent') return // never answers
   res.writeHead(200, { 'content-type': 'application/json' })
@@ -495,6 +531,17 @@ describe('the run behind the path', () => {
     expect(upstreamCount()).toBe(0)
   })
 
+  it('refuses (502) a preview beyond loopback without stopping it: the proxy stops nothing, the run watch does', async () => {
+    vi.mocked(runs.stopRun).mockClear()
+    listening = async (port) => [`0.0.0.0:${port}`]
+    const res = await serve(request(previewPath(), { headers: bearer(TOKEN.builder) }))
+    expect(res.status).toBe(502)
+    expect(await errorOf(res)).toContain('listens beyond this machine')
+    expect(vi.mocked(runs.stopRun)).not.toHaveBeenCalled()
+    expect(states.get(key(wsA, RUN))?.status).toBe('running')
+    expect(upstreamCount()).toBe(0)
+  })
+
   it('answers 502 when the addresses of the port cannot be told (fails closed)', async () => {
     listening = async () => []
     const res = await serve(request(previewPath(), { headers: bearer(TOKEN.builder) }))
@@ -638,6 +685,54 @@ describe('the headers on each side', () => {
     expect(ext.headers.get('refresh')).toBeNull()
   })
 
+  it('rewrites a Refresh that names its URL with no separator or with url=, drops one to another host, keeps a delay alone', async () => {
+    const off = await serve(request(previewPath(wsA, RUN, 'refresh-url'), { headers: bearer(TOKEN.builder) }))
+    expect(off.status).toBe(200)
+    expect(off.headers.get('refresh')).toBeNull()
+    const local = await serve(
+      request(previewPath(wsA, RUN, 'refresh-url-local'), { headers: bearer(TOKEN.builder) }),
+    )
+    expect(local.headers.get('refresh')).toBe(`0; url=/p/${wsA}/${RUN}/x`)
+    expect(proxy.rewriteRefresh('0 http://evil.example/', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteRefresh('0 url=http://127.0.0.1:9/x', '/p/1/2/', 8)).toBeNull()
+    expect(proxy.rewriteRefresh('0 url=http://127.0.0.1:8/x', '/p/1/2/', 8)).toBe('0; url=/p/1/2/x')
+    expect(proxy.rewriteRefresh('0', '/p/1/2/', 8)).toBe('0')
+    expect(proxy.rewriteRefresh('0;', '/p/1/2/', 8)).toBe('0;')
+  })
+
+  it('passes a Location already under the prefix through, with or without its slash, and never doubles the prefix', async () => {
+    const noSlash = await serve(
+      request(previewPath(wsA, RUN, 'loc-prefix'), { headers: bearer(TOKEN.builder) }),
+    )
+    expect(noSlash.headers.get('location')).toBe(`/p/${wsA}/${RUN}`)
+    expect(proxy.rewriteLocation('/p/1/2/x', '/p/1/2/', 8)).toBe('/p/1/2/x')
+    expect(proxy.rewriteLocation('/p/1/2', '/p/1/2/', 8)).toBe('/p/1/2')
+    expect(proxy.rewriteLocation('/p/1/2?x=1', '/p/1/2/', 8)).toBe('/p/1/2?x=1')
+    expect(proxy.rewriteLocation('/p/1/23/x', '/p/1/2/', 8)).toBe('/p/1/2/p/1/23/x')
+    expect(proxy.rewriteLocation('/p/1/2/../../x', '/p/1/2/', 8)).toBe('/p/1/2/p/1/2/../../x')
+  })
+
+  it("rewrites a same-origin absolute Location under the run's prefix, and refuses one outside it", async () => {
+    const inside = await serve(request(previewPath(wsA, RUN, 'own'), { headers: bearer(TOKEN.builder) }))
+    expect(inside.status).toBe(302)
+    expect(inside.headers.get('location')).toBe(`/p/${wsA}/${RUN}/x`)
+    const outside = await serve(request(previewPath(wsA, RUN, 'own-out'), { headers: bearer(TOKEN.builder) }))
+    expect(outside.status).toBe(502)
+    expect(await errorOf(outside)).toBe('the preview redirects beyond itself: refused')
+    expect(
+      proxy.rewriteLocation('https://devbox.example/p/1/2/x', '/p/1/2/', 8, 'https://devbox.example'),
+    ).toBe('/p/1/2/x')
+    expect(
+      proxy.rewriteLocation('https://devbox.example/login', '/p/1/2/', 8, 'https://devbox.example'),
+    ).toBeNull()
+    expect(
+      proxy.rewriteLocation('https://other.example/p/1/2/x', '/p/1/2/', 8, 'https://devbox.example'),
+    ).toBeNull()
+    expect(
+      proxy.rewriteLocation('http://devbox.example/p/1/2/x', '/p/1/2/', 8, 'https://devbox.example'),
+    ).toBeNull()
+  })
+
   it('refuses the Location targets browsers would follow off the preview, and rewrites the loopback ones', () => {
     expect(proxy.rewriteLocation('http://127.0.0.1:8/x', '/p/1/2/', 8)).toBe('/p/1/2/x')
     expect(proxy.rewriteLocation('http://127.0.0.1:9/x', '/p/1/2/', 8)).toBeNull()
@@ -748,6 +843,33 @@ describe('the body', () => {
       got += decoder.decode(value)
     }
     expect(got).toContain('event: two')
+  })
+})
+
+describe('a reset connection and a foreign write', () => {
+  it('answers 502 when the preview resets its connection mid-body, and the request does not fail', async () => {
+    const html = await serve(request(previewPath(wsA, RUN, 'cut-html'), { headers: bearer(TOKEN.builder) }))
+    expect(html.status).toBe(502)
+    expect(await errorOf(html)).toBe('the preview ended its answer early: refused')
+    const text = await serve(request(previewPath(wsA, RUN, 'cut-text'), { headers: bearer(TOKEN.builder) }))
+    expect(text.status).toBe(200)
+    await text.arrayBuffer().catch(() => null)
+  })
+
+  it('answers 401, not 403, to a foreign-origin write under a preview with no credential at all', async () => {
+    const req = new Request(`http://${LOCAL}${previewPath(wsA, RUN, 'api/save')}`, {
+      method: 'POST',
+      headers: { host: LOCAL, origin: 'https://evil.example' },
+      body: 'x',
+    })
+    const guard = guardRequest(
+      { method: 'POST', headers: req.headers, peer: '127.0.0.1', path: previewPath(wsA, RUN, 'api/save') },
+      { authOff: false, port: config.port, entrance: null, dataDir: tmp },
+    )
+    expect(guard.allow).toBe(true)
+    const res = await serve(req)
+    expect(res.status).toBe(401)
+    expect(upstreamCount()).toBe(0)
   })
 })
 

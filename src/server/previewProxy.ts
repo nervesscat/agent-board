@@ -19,7 +19,7 @@ import {
   verifyPreviewValue,
 } from './previewLink'
 import { PREVIEW_PATH, previewCookieName, previewPathOf } from './previewPaths'
-import { type RunState, runState, stopRun } from './runs'
+import { type RunState, runState } from './runs'
 
 /**
  * The board's preview proxy: a running preview (a managed run's loopback port) at `/p/<workspaceId>/<runId>/`
@@ -311,13 +311,34 @@ function browserURL(location: string): string {
   return location.slice(from, to).replace(/[\t\r\n]/g, '')
 }
 
+/** Whether a path (normalized as a browser reads it) is the run's prefix, with or without its trailing slash, or under it. */
+function underPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix.slice(0, -1) || pathname.startsWith(prefix)
+}
+
+/** Whether a root-relative reference resolves to a path under the prefix (`/p/1/2/../../x` does not). */
+function inPrefix(path: string, prefix: string): boolean {
+  try {
+    return underPrefix(new URL(path, `http://board.invalid${prefix}`).pathname, prefix)
+  } catch {
+    return false
+  }
+}
+
 /**
  * A Location of the preview, for the path it is served at. Its loopback address on the run's port, or a
- * root path, goes into the prefix. Any other absolute or protocol-relative target (another host, another
- * scheme, `//host`, `/\\host`, which browsers read as `//host`) is refused: null, and the answer is 502, so
- * the preview cannot send a visitor elsewhere through the board. A relative one stays as it is.
+ * root path, goes into the prefix; a path already under the prefix stays as it is. An absolute target whose
+ * origin is the request's own (`own`, from its Host and scheme) and whose path is under the prefix becomes
+ * that path. Any other absolute or protocol-relative target (another host, another scheme, `//host`,
+ * `/\\host`, which browsers read as `//host`) is refused: null, and the answer is 502, so the preview cannot
+ * send a visitor elsewhere through the board. A relative one stays as it is.
  */
-export function rewriteLocation(location: string, prefix: string, port: number): string | null {
+export function rewriteLocation(
+  location: string,
+  prefix: string,
+  port: number,
+  own: string | null = null,
+): string | null {
   const url = browserURL(location)
   // Browsers read a backslash as a slash, so `/\\host` is protocol-relative too.
   if (/^[/\\]{2}/.test(url)) return null
@@ -328,22 +349,41 @@ export function rewriteLocation(location: string, prefix: string, port: number):
     } catch {
       return null
     }
+    if (own !== null && target.origin === own && underPrefix(target.pathname, prefix))
+      return target.pathname + target.search + target.hash
     const local = ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname)
     const at = Number(target.port || (target.protocol === 'https:' ? 443 : 80))
     if (!/^https?:$/.test(target.protocol) || !local || at !== port) return null
     return prefix + target.pathname.slice(1) + target.search + target.hash
   }
-  if (url.startsWith('/') && !url.startsWith(prefix)) return prefix + url.slice(1)
+  if (url.startsWith('/')) return inPrefix(url, prefix) ? location : prefix + url.slice(1)
   return location
 }
 
-/** A Refresh header of the preview (`5; url=…`) with its target rewritten the same way; null when refused. */
-export function rewriteRefresh(value: string, prefix: string, port: number): string | null {
-  const m = /^(\s*\d+(?:\.\d+)?\s*)([;,]\s*(?:url\s*=\s*)?)?(.*)$/is.exec(value)
-  if (!m || !m[2]) return value
-  const target = m[3]!.trim().replace(/^(['"])(.*)\1$/s, '$2')
-  const rewritten = rewriteLocation(target, prefix, port)
-  return rewritten === null ? null : `${m[1]}${m[2]}${rewritten}`
+/**
+ * A Refresh header of the preview (`5; url=…`) with its target rewritten the same way; null when refused. A
+ * header with a delay and no URL part is kept; any URL part, with or without `;`, `,` or `url=`, goes through
+ * the Location rules, and a header with no delay is dropped.
+ */
+export function rewriteRefresh(
+  value: string,
+  prefix: string,
+  port: number,
+  own: string | null = null,
+): string | null {
+  const m = /^\s*(\d+(?:\.\d+)?)?([\s\S]*)$/.exec(value)
+  if (!m) return null
+  const delay = m[1] ?? ''
+  const rest = m[2]!.replace(/^[\s;,]+/, '')
+  if (rest === '') return value
+  if (delay === '') return null
+  const target = rest
+    .replace(/^url\s*=\s*/i, '')
+    .trim()
+    .replace(/^(['"])(.*)\1$/s, '$2')
+  if (target === '') return value
+  const rewritten = rewriteLocation(target, prefix, port, own)
+  return rewritten === null ? null : `${delay}; url=${rewritten}`
 }
 
 /**
@@ -458,7 +498,7 @@ async function readCapped(res: IncomingMessage, cap: number): Promise<Buffer | n
 /** The preview's answer as the board sends it: headers rewritten, the body as it is (HTML gets its script). */
 async function answerOf(
   res: IncomingMessage,
-  opts: { prefix: string; port: number; method: string },
+  opts: { prefix: string; port: number; method: string; own: string | null },
 ): Promise<Response> {
   const status = res.statusCode ?? 502
   const headers = new Headers()
@@ -471,14 +511,14 @@ async function answerOf(
         headers.append('set-cookie', rewriteSetCookie(cookie, opts.prefix))
       }
     } else if (name === 'location') {
-      const location = rewriteLocation(String(value), opts.prefix, opts.port)
+      const location = rewriteLocation(String(value), opts.prefix, opts.port, opts.own)
       if (location === null) {
         res.resume()
         return json(502, 'the preview redirects beyond itself: refused')
       }
       headers.set(name, location)
     } else if (name === 'refresh') {
-      const refresh = rewriteRefresh(String(value), opts.prefix, opts.port)
+      const refresh = rewriteRefresh(String(value), opts.prefix, opts.port, opts.own)
       if (refresh !== null) headers.set(name, refresh)
     } else {
       headers.set(name, [value].flat().join(', '))
@@ -493,7 +533,14 @@ async function answerOf(
   // Only an HTML page is read whole, so it can be given its script, and it is capped. Any other body streams
   // as the preview sends it, with no cap: an event stream stays open for as long as the preview keeps it.
   if (/^text\/html\b/i.test(type) && !headers.get('content-encoding')) {
-    const bytes = await readCapped(res, HTML_CAP_BYTES)
+    let bytes: Buffer | null
+    try {
+      bytes = await readCapped(res, HTML_CAP_BYTES)
+    } catch {
+      // The preview reset its connection mid-body, before any header went out: a clean 502.
+      res.destroy()
+      return json(502, 'the preview ended its answer early: refused')
+    }
     if (!bytes) return json(502, 'the preview response is too large: refused')
     headers.delete('content-length')
     const charset = charsetOf(type, bytes.subarray(0, 1024).toString('latin1'))
@@ -509,6 +556,16 @@ async function answerOf(
     return new Response(injectRuntime(decoder.decode(bytes), opts.prefix), { status, headers })
   }
   return new Response(Readable.toWeb(res) as unknown as ReadableStream, { status, headers })
+}
+
+/** The origin the browser sees the board at: the request's Host, with the scheme the browser used (`secure`). */
+export function ownOriginOf(request: Request, url: URL, secure: boolean): string | null {
+  const host = request.headers.get('host') ?? url.host
+  try {
+    return new URL(`${secure ? 'https' : 'http'}://${host}`).origin
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -587,13 +644,13 @@ export async function servePreview(
   }
   if (loopback !== 'loopback') {
     listenCache.delete(`${workspaceId}:${runId}`)
-    // Stopped, as the board's own watch stops it (runs.ts): a run that listens beyond the machine is not left up.
+    // Refused only: a request never stops a run (stop rights are the stop endpoint's). The run's own watch
+    // (runs.ts) stops a port that listens beyond loopback.
     const why =
       loopback === 'beyond'
         ? 'the preview listens beyond this machine'
         : "the preview's address cannot be checked"
-    await stopRun(workspaceId, runId, why, 'the board').catch(() => null)
-    return json(502, `${why}: stopped`)
+    return json(502, `${why}: refused`)
   }
 
   // The query goes on as it came: a `pl` here is the preview's own (a link is redeemed on the root path only).
@@ -613,7 +670,12 @@ export async function servePreview(
   } catch {
     return json(502, 'the preview is running but does not answer')
   }
-  return answerOf(res, { prefix, port: state.port, method: request.method })
+  return answerOf(res, {
+    prefix,
+    port: state.port,
+    method: request.method,
+    own: ownOriginOf(request, url, secure),
+  })
 }
 
 /**
