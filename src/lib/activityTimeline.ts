@@ -9,7 +9,7 @@ import type { Activity, Stalled } from './workTimeline'
  * The Overview's and the board's view of a ticket's work. Their rows carry the ticket's `activity` (its open
  * spans and waits, and who was last heard from) and its `stalled`, not a full timeline; these build the
  * timeline the shared answers (`currentActivity`, `stallReason`, the components) read, from those alone.
- * Closed spans are not in an activity, so a stall with nothing open is dated by its last signal.
+ * An activity carries only the span that ended last: a stall with nothing open is dated by its ended work.
  */
 
 /** A timeline as far as an activity says: its open spans and waits, the last heard, and the stall. */
@@ -19,16 +19,33 @@ export function timelineFromActivity(
   live = true,
 ): WorkTimelineLike {
   return {
-    spans: (activity?.spans ?? []).map((s, i) => ({
-      id: i,
-      phase: s.phase,
-      round: null,
-      agent: s.agent,
-      by: '',
-      start: s.since,
-      end: s.since,
-      open: true,
-    })),
+    spans: [
+      ...(activity?.spans ?? []).map((s, i) => ({
+        id: i,
+        phase: s.phase,
+        round: null,
+        agent: s.agent,
+        by: '',
+        start: s.since,
+        end: s.since,
+        open: true,
+      })),
+      // The span that ended last, so a stall with nothing open is dated by when its work ended.
+      ...(activity?.lastClosedSpan
+        ? [
+            {
+              id: -1,
+              phase: activity.lastClosedSpan.phase,
+              round: null,
+              agent: activity.lastClosedSpan.agent,
+              by: '',
+              start: activity.lastClosedSpan.start,
+              end: activity.lastClosedSpan.end,
+              open: false,
+            },
+          ]
+        : []),
+    ],
     waits: (activity?.waits ?? []).map((w, i) => ({
       id: i,
       reason: w.reason,
@@ -45,6 +62,7 @@ export function timelineFromActivity(
     start: null,
     end: null,
     lastHeard: activity?.lastHeard ?? null,
+    now: activity?.now,
   }
 }
 
@@ -69,7 +87,7 @@ export function nowWords(t: WorkTimelineLike, now: Date | number): string {
   const a = currentActivity(t, now)
   if (a.kind === 'building') return `${a.verb} · ${a.agent} · ${dur(a.ms)}`
   if (a.kind === 'waiting-agent') return `Waiting on ${a.agent} · ${dur(a.ms)}`
-  if (a.kind === 'waiting-human') return `Waiting on you since ${clock(a.since)}`
+  if (a.kind === 'waiting-human') return `Waiting on you for ${dur(a.ms)} since ${clock(a.since)}`
   return 'Nothing open'
 }
 

@@ -1,5 +1,5 @@
-import { expect, expectTooltip, test, tooltip } from './fixtures'
-import { errorsOn, workedTicket } from './workTimeline'
+import { expect, expectTooltip, ok, test, tooltip } from './fixtures'
+import { age, create, errorsOn, record, workedTicket } from './workTimeline'
 
 /**
  * The work timeline on the Roadmap: each ticket's bar, its totals and the stalled count.
@@ -76,4 +76,26 @@ test('changing the Roadmap time axis keeps a live track at now', async ({ page, 
   await expect
     .poll(() => scroller.evaluate((el) => el.scrollWidth - el.clientWidth - el.scrollLeft))
     .toBeLessThan(8)
+})
+
+test('a stalled ticket in another active stage names that stage in its why on the Roadmap', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  await ok(human.post(`/api/projects/${project.id}/stages`, { data: { name: 'Bug Found', kind: 'active' } }))
+  const stages = await ok<{ key: string; name: string }[]>(human.get(`/api/projects/${project.id}/stages`))
+  const t = await create(human, project, {
+    title: 'Crash on import',
+    status: stages.find((s) => s.name === 'Bug Found')!.key,
+  })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
+  await record(agent, project, t.id, { kind: 'span_end', phase: 'build' })
+  age(t.id, 40)
+
+  await page.goto(`/projects/${project.id}/roadmap`)
+  const ticket = page.getByTestId('roadmap').getByRole('region', { name: `#${t.id} Crash on import` })
+  // A badge: its why is in the tooltip.
+  await expectTooltip(ticket.getByTestId('stall-notice').first(), /^in Bug Found, no agent heard from since /)
 })

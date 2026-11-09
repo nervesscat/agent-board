@@ -8,7 +8,9 @@ import {
   builtServerBind,
   checkBind,
   entranceIgnored,
+  entranceOfRow,
   LIVE_PORT,
+  publicOriginProblem,
   readAuthMode,
   readClaudeArgs,
   readClaudeTimeout,
@@ -212,6 +214,70 @@ describe('the tailnet entrance', () => {
   })
 })
 
+describe('the entrance Settings saves', () => {
+  const saved = { origin: 'https://devbox.example-tailnet.ts.net', host: 'devbox.example-tailnet.ts.net' }
+
+  it('is served by the production board when PUBLIC_ORIGIN is not set', () => {
+    expect(readServedEntrance({}, saved)).toEqual(saved)
+    expect(readServedEntrance({ BOARD_ENV: 'production', AUTH: 'on' }, saved)).toEqual(saved)
+  })
+
+  it('never wins over PUBLIC_ORIGIN in the environment, which is served instead', () => {
+    const env = { PUBLIC_ORIGIN: 'https://other-box.example-tailnet.ts.net' }
+    expect(readServedEntrance(env, saved)).toEqual({
+      origin: 'https://other-box.example-tailnet.ts.net',
+      host: 'other-box.example-tailnet.ts.net',
+    })
+  })
+
+  it('is not served by a development copy or a preview (AUTH=on or off), nor with sign-in off', () => {
+    for (const env of [
+      { BOARD_ENV: 'development' },
+      { BOARD_ENV: 'development', AUTH: 'off' },
+      { BOARD_ENV: 'test' },
+    ])
+      expect(readServedEntrance(env, saved), JSON.stringify(env)).toBeNull()
+  })
+
+  it('is checked the way PUBLIC_ORIGIN is: the same answer for each bad value', () => {
+    for (const origin of ['http://devbox.example-tailnet.ts.net', 'https://*.ts.net', 'https://ts.net.'])
+      expect(() => publicOriginProblem(origin), origin).not.toBeNull()
+    for (const origin of [
+      'https://devbox.example-tailnet.ts.net',
+      'https://DevBox.example-tailnet.ts.net/',
+    ]) {
+      expect(publicOriginProblem(origin), origin).toBeNull()
+      expect(readPublicEntrance({ PUBLIC_ORIGIN: origin })).toMatchObject({
+        host: 'devbox.example-tailnet.ts.net',
+      })
+    }
+    const problem = publicOriginProblem('https://devbox.example-tailnet.ts.net:8080')
+    expect(() => readPublicEntrance({ PUBLIC_ORIGIN: 'https://devbox.example-tailnet.ts.net:8080' })).toThrow(
+      problem!,
+    )
+  })
+
+  it('reads a settings row as an entrance only when it is one the board takes, and logs the rest', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(entranceOfRow(undefined)).toBeNull()
+      expect(entranceOfRow(null)).toBeNull()
+      expect(entranceOfRow({ origin: 'https://DevBox.example-tailnet.ts.net/' })).toEqual(saved)
+      for (const value of [
+        'https://devbox.example-tailnet.ts.net',
+        { origin: 'http://devbox.example-tailnet.ts.net' },
+        { origin: 'https://*.ts.net' },
+        { origin: 42 },
+        { host: 'devbox.example-tailnet.ts.net' },
+      ])
+        expect(entranceOfRow(value), JSON.stringify(value)).toBeNull()
+      expect(log).toHaveBeenCalledWith(expect.stringMatching(/saved in the database is ignored/))
+    } finally {
+      log.mockRestore()
+    }
+  })
+})
+
 describe('servedEntrance', () => {
   // Read once, as the module loads its environment: each case loads a fresh copy.
   const load = async (env: Record<string, string>) => {
@@ -228,6 +294,22 @@ describe('servedEntrance', () => {
     })
     expect(await load({ ...keys, BOARD_ENV: 'test' })).toBeNull()
     expect(await load({ PUBLIC_ORIGIN: '', BOARD_ENV: 'production' })).toBeNull()
+  })
+
+  it('is the entrance Settings saved when the environment has none, and follows a reset at once', async () => {
+    vi.stubEnv('BOARD_ENV', 'production')
+    vi.stubEnv('PUBLIC_ORIGIN', '')
+    vi.resetModules()
+    const config = await import('./config')
+    let row: { origin: string } | null = { origin: 'https://devbox.example-tailnet.ts.net' }
+    config.setStoredEntrance(() =>
+      row ? { origin: row.origin, host: 'devbox.example-tailnet.ts.net' } : null,
+    )
+    expect(config.servedEntrance()).toMatchObject({ host: 'devbox.example-tailnet.ts.net' })
+    row = null
+    expect(config.servedEntrance()).toMatchObject({ host: 'devbox.example-tailnet.ts.net' })
+    config.resetServedEntrance()
+    expect(config.servedEntrance()).toBeNull()
   })
 })
 

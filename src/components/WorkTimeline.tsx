@@ -15,8 +15,9 @@ import {
   type RowItem,
   type Window,
 } from '#/lib/timelineRows'
-import { useNow } from '#/lib/useNow'
+import { useNow, useServerOffset } from '#/lib/useNow'
 import type { TimelineMark, TimelineSpan, WorkTimeline } from '#/lib/workTimeline'
+import { onServerClock } from '#/lib/workStatus'
 
 import {
   ARROW,
@@ -316,7 +317,8 @@ export function WorkTimelineBar({
   /** Fixes the axis to this window (the Roadmap's), instead of the ticket's own first event to its end. */
   window?: Window
 }) {
-  const now = useNow(30_000)
+  // The axis's now is the server's, so a browser clock behind it does not cut the live segments short.
+  const now = onServerClock(useNow(30_000), useServerOffset(timeline.now))
   const summaryId = useId()
   const scroller = useRef<HTMLDivElement>(null)
   // Whether the reader is at the track's right end (where now is); only then does a live track follow the time.
@@ -399,8 +401,8 @@ export function WorkTimelineBar({
                     type="button"
                     aria-label={`created ${chart.created.minutes} min before work`}
                     data-kind="created"
-                    className="absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full border border-card bg-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
-                    style={{ left: 0 }}
+                    className={`absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full border border-card bg-foreground outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${chart.created.left > 0 ? '-translate-x-1/2' : ''}`}
+                    style={{ left: `${chart.created.left * 100}%` }}
                   />
                 </Tip>
               )}

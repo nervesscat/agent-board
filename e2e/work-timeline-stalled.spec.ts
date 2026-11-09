@@ -1,6 +1,6 @@
 import type { Project } from '#/lib/api'
 import { HUMAN } from './env'
-import { expect, ok, section, test } from './fixtures'
+import { expect, expectTooltip, ok, section, test } from './fixtures'
 import { as, age, create, record, workedTicket } from './workTimeline'
 
 /**
@@ -21,6 +21,11 @@ test('a stalled ticket shows on its card, in the list and in Needs you, linking 
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) })
   await expect(card).toContainText('Stalled')
+  // The badge's tooltip: the Now line, then the why.
+  await expectTooltip(
+    card.getByTestId('stall-notice'),
+    /Building · claude · \d+ min\nclaude has a build open/,
+  )
   await expect(page.getByRole('link', { name: /All quiet/ })).not.toContainText('Stalled')
   await page.getByRole('tab', { name: 'List' }).click()
   await expect(page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) })).toContainText(

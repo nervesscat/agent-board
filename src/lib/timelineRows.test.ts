@@ -64,6 +64,7 @@ const handoff = (id: number, from: string, to: string, at: string): TimelineHand
 })
 
 const timeline = (more: Partial<WorkTimeline> = {}): WorkTimeline => ({
+  now: iso('11:00'),
   start: iso('10:00'),
   end: iso('11:00'),
   live: false,
@@ -215,7 +216,17 @@ describe('the axis and ticks', () => {
     const axis = axisFor(t, ms('09:40'))
     expect(axis.start).toBe(ms('09:12'))
     const chart = buildChart(t, ms('09:40'))
-    expect(chart.created).toEqual({ minutes: 12 })
+    expect(chart.created).toEqual({ minutes: 12, left: 0 })
+  })
+
+  it('has no creation mark for a lead under a minute, even one of 59 seconds', () => {
+    const created = Date.parse(iso('09:00'))
+    const t = timeline({
+      start: new Date(created).toISOString(),
+      spans: [span(1, 'builder', 'builder', new Date(created + 59_000).toISOString(), '09:30')],
+      end: iso('09:30'),
+    })
+    expect(buildChart(t, ms('09:30')).created).toBeNull()
   })
 
   it('has no creation mark when the first event is the first work', () => {
@@ -346,5 +357,47 @@ describe('durations', () => {
     expect(spokenDuration(38 * MIN)).toBe('38 min')
     expect(spokenDuration(125 * MIN)).toBe('2 h 5 min')
     expect(spokenDuration(120 * MIN)).toBe('2 h')
+  })
+})
+
+describe('the creation mark', () => {
+  it('measures from the creation to the first agent event, on a window that starts after the creation', () => {
+    // Created three days before the window's end; the first agent event 71 hours after the creation.
+    const created = Date.parse('2026-10-17T10:00:00.000Z')
+    const firstWork = created + 71 * 60 * MIN
+    const t = timeline({
+      start: new Date(created).toISOString(),
+      spans: [span(1, 'builder', 'builder', new Date(firstWork).toISOString().slice(11, 16), '23:00')],
+      end: iso('23:00'),
+    })
+    // The window opens two days before the creation's first event: the creation is inside it.
+    const win = { start: new Date(created - 2 * 24 * 60 * MIN).toISOString(), end: iso('23:00') }
+    const chart = buildChart(t, ms('23:00'), win)
+    expect(chart.created?.minutes).toBe(71 * 60)
+    expect(chart.created?.left).toBeCloseTo(
+      (created - Date.parse(win.start)) / (Date.parse(win.end) - Date.parse(win.start)),
+      6,
+    )
+  })
+
+  it('is pinned to the left edge when the creation is before the window', () => {
+    const t = timeline({
+      start: iso('08:00'),
+      spans: [span(1, 'builder', 'builder', '10:00', '10:30')],
+      end: iso('10:30'),
+    })
+    const chart = buildChart(t, ms('10:30'), { start: iso('09:30'), end: iso('10:30') })
+    expect(chart.created).toEqual({ minutes: 120, left: 0 })
+  })
+
+  it('is at the creation on a window that starts before it', () => {
+    const t = timeline({
+      start: iso('09:50'),
+      spans: [span(1, 'builder', 'builder', '10:00', '10:30')],
+      end: iso('10:30'),
+    })
+    const chart = buildChart(t, ms('10:30'), { start: iso('09:00'), end: iso('10:30') })
+    expect(chart.created?.minutes).toBe(10)
+    expect(chart.created?.left).toBeCloseTo(50 / 90, 6)
   })
 })

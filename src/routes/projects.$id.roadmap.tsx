@@ -13,6 +13,7 @@ import { NowLine, StallNotice, WorkSummary } from '#/components/WorkStatus'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
 import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
+import { stallStage } from '#/lib/activityTimeline'
 import { useStages } from '#/lib/project'
 import { STAGE_DOT, type StageLike, stageBadge, stageOf } from '#/lib/stages'
 import {
@@ -22,7 +23,8 @@ import {
   parseWindowChoice,
   windowFor,
 } from '#/lib/roadmapWindow'
-import { useNow } from '#/lib/useNow'
+import { useMounted, useNow, useServerOffset } from '#/lib/useNow'
+import { onServerClock } from '#/lib/workStatus'
 import type { Window } from '#/lib/timelineRows'
 
 const FILTERS = ['all', 'blocked', 'review'] as const
@@ -46,7 +48,8 @@ export const Route = createFileRoute('/projects/$id/roadmap')({
 
 type Lane = RoadmapTicket['lanes'][number]
 /** A ticket or a lane as the view draws it: its stage and its timeline worked out. */
-type RoadmapItem = { row: RoadmapTicket | Lane; stage: StageLike; groups: StepGroup[] }
+/** `stall` is the stage a stall names when it is not the project's first active one (see stallStage). */
+type RoadmapItem = { row: RoadmapTicket | Lane; stage: StageLike; stall: string | null; groups: StepGroup[] }
 
 const hasState = (b: RoadmapItem, state: StepState) =>
   b.groups.some((g) => g.steps.some((s) => s.state === state))
@@ -57,7 +60,9 @@ function Roadmap() {
   const { show = 'all', window: windowParam } = Route.useSearch()
   const navigate = Route.useNavigate()
   const stages = useStages(id)
-  const now = useNow(15_000)
+  const browserNow = useNow(15_000)
+  // The axis's end is the clock: drawn only after mount, so the server render and the first client render agree.
+  const mounted = useMounted()
   const { data, isLoading, error } = useQuery({
     queryKey: ['roadmap', id],
     queryFn: () => get<RoadmapTicket[]>(`/api/projects/${id}/roadmap`),
@@ -68,9 +73,12 @@ function Roadmap() {
     queryFn: () => get<ProjectWork>(`/api/projects/${id}/work`),
     refetchInterval: 10_000,
   })
+  // The axis ends at the server's now, so a span the server stamped is drawn to its real end.
+  const now = onServerClock(browserNow, useServerOffset(work?.now))
   const item = (row: RoadmapTicket | Lane): RoadmapItem => ({
     row,
     stage: stageOf(stages, row.status),
+    stall: stallStage(stages, row.status),
     groups: timeline(row.tasks),
   })
   const tickets = (data ?? []).map((t) => ({ ...item(t), lanes: t.lanes.map(item) }))
@@ -120,9 +128,11 @@ function Roadmap() {
             navigate({ search: (prev) => ({ ...prev, window: v || undefined }), replace: true })
           }
         />
-        <span>
-          {new Date(range.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} to now
-        </span>
+        {mounted && (
+          <span>
+            {new Date(range.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} to now
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <div className="flex flex-wrap gap-4">
@@ -278,7 +288,7 @@ function Row({
             {stage.name}
           </span>
           <NowLine timeline={row.work} />
-          <StallNotice timeline={row.work} />
+          <StallNotice timeline={row.work} stage={item.stall} />
           {children}
           {total > 0 && (
             <Tip content={`${done} of ${total} done`}>

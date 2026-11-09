@@ -353,6 +353,8 @@ export function workOf(timeline: WorkTimeline) {
 }
 
 export type ProjectWork = {
+  /** The server's time when it was read: the browser's clock is corrected by it (see useServerOffset). */
+  now: string
   stallMinutes: number
   totals: WorkTotals
   tickets: { id: number; totals: WorkTotals; stalled: WorkTimeline['stalled'] }[]
@@ -381,7 +383,12 @@ export function projectWork(projectId: number, now: Date = new Date()): ProjectW
     const { timeline } = all.get(t.id)!
     return { id: t.id, totals: timeline.totals, stalled: timeline.stalled }
   })
-  return { stallMinutes: project.stallMinutes, totals: sumTotals(rows.map((r) => r.totals)), tickets: rows }
+  return {
+    now: now.toISOString(),
+    stallMinutes: project.stallMinutes,
+    totals: sumTotals(rows.map((r) => r.totals)),
+    tickets: rows,
+  }
 }
 
 // --- what the MCP tools and REST take ---

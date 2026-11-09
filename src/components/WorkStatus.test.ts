@@ -1,7 +1,8 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { timelineFromActivity } from '#/lib/activityTimeline'
 import { clock } from '#/lib/format'
 import type { WorkTimelineLike } from '#/lib/workStatus'
 import type { WorkTotals } from '#/lib/workTimeline'
@@ -77,7 +78,7 @@ describe('NowLine', () => {
       ],
     })
     const out = html(createElement(NowLine, { timeline: t, now: NOW }))
-    expect(text(out)).toBe(`Waiting on you since ${clock(at('12:09'))}`)
+    expect(text(out)).toBe(`Waiting on you for 21 min since ${clock(at('12:09'))}`)
     expect(out).toContain('text-amber-800')
     expect(out).toContain('dark:text-amber-300')
     expect(out).toContain('<svg')
@@ -87,6 +88,25 @@ describe('NowLine', () => {
     const out = html(createElement(NowLine, { timeline: timeline(), now: NOW }))
     expect(text(out)).toBe('Nothing open')
     expect(out).toContain('text-muted-foreground')
+  })
+
+  describe('on the server clock', () => {
+    afterEach(() => vi.useRealTimers())
+
+    it('counts the elapsed time on the server clock when the browser clock runs behind it', () => {
+      // The browser reads 12:25 while the server stamped 12:30 (its span began at 12:20): 10 minutes, not 5.
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(Date.parse(at('12:25')))
+      const t = timeline({ now: at('12:30'), spans: [span({ start: at('12:20') })] })
+      expect(text(html(createElement(NowLine, { timeline: t })))).toBe('Building · builder · 10 min')
+    })
+
+    it('counts the same time when the browser clock runs ahead of the server', () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(Date.parse(at('12:35')))
+      const t = timeline({ now: at('12:30'), spans: [span({ start: at('12:20') })] })
+      expect(text(html(createElement(NowLine, { timeline: t })))).toBe('Building · builder · 10 min')
+    })
   })
 })
 
@@ -151,6 +171,21 @@ describe('StallNotice', () => {
       createElement(StallNotice, { timeline: closed, variant: 'inline', stage: 'Bug Found' }),
     )
     expect(text(inline)).toBe(`Stalled 33 min: in Bug Found, no agent heard from since ${clock(at('12:08'))}`)
+  })
+
+  it('dates a stall with nothing open by the span that ended last, when the activity names it', () => {
+    const t = timelineFromActivity(
+      {
+        spans: [],
+        waits: [],
+        lastHeard: null,
+        lastClosedSpan: { phase: 'build', agent: 'builder', start: at('11:50'), end: at('12:08') },
+      },
+      { since: at('12:08'), minutes: 22, lastAgent: 'builder', lastBy: '', lastFrom: 'event' },
+    )
+    expect(text(html(createElement(StallNotice, { timeline: t, variant: 'inline' })))).toBe(
+      `Stalled 22 min: nothing open since the build ended at ${clock(at('12:08'))}`,
+    )
   })
 
   it('renders nothing when the ticket is not stalled', () => {

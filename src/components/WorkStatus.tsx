@@ -3,56 +3,17 @@ import { AlertTriangle, Hammer, Hourglass, UserRound } from 'lucide-react'
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
 import { clock } from '#/lib/format'
-import { useNow } from '#/lib/useNow'
+import { useNow, useServerOffset } from '#/lib/useNow'
 import {
   currentActivity,
   lastHeard,
+  onServerClock,
   stallReason,
   workShares,
   type StallReason,
   type WorkTimelineLike,
 } from '#/lib/workStatus'
-import { formatDuration, type Stalled, type WorkTotals as Totals } from '#/lib/workTimeline'
-
-/** Working, waiting and blocked-on-human time, as one line. */
-export function WorkTotals({ totals, className = '' }: { totals: Totals; className?: string }) {
-  return (
-    <p aria-label="Totals" className={`text-xs text-muted-foreground tabular-nums ${className}`}>
-      Working <b className="font-medium text-foreground">{formatDuration(totals.workingMs)}</b> · Waiting{' '}
-      <b className="font-medium text-foreground">{formatDuration(totals.waitingMs)}</b> · Blocked on human{' '}
-      <b className="font-medium text-foreground">{formatDuration(totals.blockedOnHumanMs)}</b>
-    </p>
-  )
-}
-
-/**
- * The amber warning on a ticket nobody was heard from on for longer than its project allows. It takes
- * the keyboard for its tooltip, unless it sits inside a link or a button (`focusable` false).
- */
-export function StalledBadge({
-  stalled,
-  focusable = true,
-  className = '',
-}: {
-  stalled: Stalled | null | undefined
-  focusable?: boolean
-  className?: string
-}) {
-  if (!stalled) return null
-  const tip = `No heartbeat or event since ${clock(stalled.since)}${stalled.lastAgent ? ` (${stalled.lastAgent})` : ''}`
-  return (
-    <Tip content={tip}>
-      <span
-        tabIndex={focusable ? 0 : undefined}
-        data-testid="stalled"
-        className={`${className} inline-flex shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring dark:bg-amber-400/15 dark:text-amber-300`}
-      >
-        <AlertTriangle className="size-3" aria-hidden />
-        Stalled {formatDuration(stalled.minutes * 60_000)}
-      </span>
-    </Tip>
-  )
-}
+import type { WorkTotals as Totals } from '#/lib/workTimeline'
 
 /** A duration in words for the status lines: `43 min`, `1 h 5 min`; `0` for none. */
 const dur = (ms: number) => (ms > 0 ? spokenDuration(ms) : '0')
@@ -68,7 +29,9 @@ export function NowLine({
   className?: string
 }) {
   const tick = useNow(60_000)
-  const a = currentActivity(timeline, now ?? tick)
+  // The browser's clock may run behind or ahead of the server's that stamped the spans: the times are read on the server's.
+  const offset = useServerOffset(timeline.now)
+  const a = currentActivity(timeline, onServerClock(+(now ?? tick), offset))
   const base = `${className} text-sm tabular-nums`
   if (a.kind === 'building')
     return (
@@ -87,7 +50,7 @@ export function NowLine({
     return (
       <p data-testid="now-line" className={`${base} font-medium text-amber-800 dark:text-amber-300`}>
         <UserRound className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />
-        Waiting on you since {clock(a.since)}
+        Waiting on you for {dur(a.ms)} since {clock(a.since)}
       </p>
     )
   return (
@@ -133,12 +96,15 @@ function stallWhy(r: StallReason): string {
 export function StallNotice({
   timeline,
   stage = null,
+  nowLine = null,
   variant = 'badge',
   focusable = true,
   className = '',
 }: {
   timeline: WorkTimelineLike
   stage?: string | null
+  /** The ticket's Now line in words, for a badge's tooltip above the why (a board card's). */
+  nowLine?: string | null
   variant?: 'badge' | 'inline'
   focusable?: boolean
   className?: string
@@ -160,7 +126,7 @@ export function StallNotice({
       </p>
     )
   return (
-    <Tip content={why}>
+    <Tip content={nowLine ? `${nowLine}\n${why}` : why}>
       <span
         tabIndex={focusable ? 0 : undefined}
         data-testid="stall-notice"
