@@ -242,7 +242,8 @@ describe('a write with the session cookie', () => {
       allow: false,
       status: 403,
     })
-    expect(guardRequest(preview({}), on)).toMatchObject({ allow: false, status: 403 })
+    // No credential at all: the guard lets it on, and the proxy answers 401 (previewProxy.test.ts).
+    expect(guardRequest(preview({}), on)).toEqual({ allow: true, entrance: null })
     expect(guardRequest(preview({ cookie: 'board_preview_1_2=abc' }, 'GET'), on)).toEqual({
       allow: true,
       entrance: null,
