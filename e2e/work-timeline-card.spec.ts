@@ -31,6 +31,8 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   // not stalled, and the story is folded away until it is asked for.
   await expect(card.getByTestId('now-line')).toContainText('Building · claude')
   await expect(card.getByTestId('work-summary')).toContainText('Waited 20 min')
+  // The legend is gone: no key in the card, and no toggle for one.
+  await expect(card.getByText('Key', { exact: true })).toHaveCount(0)
   await expect(card.getByTestId('stall-notice')).toHaveCount(0)
   await expect(card.getByTestId('last-heard')).toContainText('claude: running the tests')
   await expect(card.getByRole('list', { name: 'Timeline story' })).toHaveCount(0)
