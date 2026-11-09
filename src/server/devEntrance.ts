@@ -7,6 +7,7 @@ import type { Plugin } from 'vite'
 
 import { StartupError } from './config.ts'
 import { signedIn } from './credentials.ts'
+import { isPreviewPath } from './previewPaths.ts'
 import {
   type GuardConfig,
   guardConfig,
@@ -126,8 +127,12 @@ export function entranceMiddleware(cfg: GuardConfig, check: SignInCheck) {
       if (!verdict.allow) return answer(res, verdict.status, { error: verdict.error })
       if (!isLoopbackPeer(peer)) dropForwarding(req)
       if (!verdict.entrance) return next()
+      const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
       // The board's own sign-in pages and endpoints: it answers them, and they hold none of Vite's files.
-      if (isSignInPath(new URL(req.url ?? '/', 'http://localhost').pathname)) return next()
+      if (isSignInPath(pathname)) return next()
+      // A running preview's path is the board's to answer (previewProxy.ts): it signs the caller in itself
+      // and answers 401 JSON, never this login redirect, so the request goes on to the board.
+      if (isPreviewPath(pathname)) return next()
       if (check.signedIn(headers, verdict.entrance.host)) return next()
       if (wantsHtml(req.method, headers.get('accept'))) {
         res.writeHead(302, { location: loginLocation(pathAndSearch(req.url)) })

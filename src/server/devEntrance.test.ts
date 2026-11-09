@@ -192,6 +192,13 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
     expect(res.body).not.toContain('MARK-SOURCE')
   })
 
+  it("passes a preview's path on to the board, which answers it itself: the guard sends no login redirect", async () => {
+    // The board answers /p/ paths (previewProxy.ts): with no board behind this Vite, it is passed on to a 404.
+    const res = await send(on, '/p/1/2/api/x', { host: PUBLIC, ...SERVE, accept: 'text/html' })
+    expect(res.status).toBe(404)
+    expect(res.location).toBeUndefined()
+  })
+
   it('lets the sign-in pages and their endpoints through to the board, and nothing else', async () => {
     // No board behind this Vite: what the guard passes on, Vite answers with a 404 itself.
     for (const target of ['/login?next=%2F', '/setup', '/enroll?code=x', '/api/auth/login/options'])

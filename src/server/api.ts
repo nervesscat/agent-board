@@ -53,6 +53,7 @@ import {
   stopProjectPreviews,
 } from './managedPreview'
 import { handleMcp } from './mcp'
+import { linkFor } from './previewProxy'
 import * as needs from './needs'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
@@ -846,6 +847,10 @@ api.post('/api/workspaces/:id/preview/stop-link', async ({ request, params, acto
 api.post('/api/workspaces/:id/preview/restart', async ({ params, actor }) =>
   json(await restartPreview(id(params), actor), 202),
 )
+// A link to the workspace's running preview through the board's origin (previewProxy.ts): `{url, runId,
+// expiresAt}`, valid for five minutes, for a browser that cannot send the agent token's header. The human's
+// session, or an agent token of the preview's project.
+api.post('/api/workspaces/:id/preview/link', ({ request, params }) => json(linkFor(request, id(params))))
 // A branch the board has no worktree of (pushed from another machine): fetched from origin into a
 // detached worktree of the board's own beside the checkout, registered and previewed (branchPreview.ts).
 api.post('/api/tickets/:id/branch-preview', async ({ request, params, actor }) => {
