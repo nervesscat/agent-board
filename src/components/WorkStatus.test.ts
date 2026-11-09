@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { timelineFromActivity } from '#/lib/activityTimeline'
 import { clock } from '#/lib/format'
 import type { WorkTimelineLike } from '#/lib/workStatus'
 import type { WorkTotals } from '#/lib/workTimeline'
@@ -170,6 +171,21 @@ describe('StallNotice', () => {
       createElement(StallNotice, { timeline: closed, variant: 'inline', stage: 'Bug Found' }),
     )
     expect(text(inline)).toBe(`Stalled 33 min: in Bug Found, no agent heard from since ${clock(at('12:08'))}`)
+  })
+
+  it('dates a stall with nothing open by the span that ended last, when the activity names it', () => {
+    const t = timelineFromActivity(
+      {
+        spans: [],
+        waits: [],
+        lastHeard: null,
+        lastClosedSpan: { phase: 'build', agent: 'builder', start: at('11:50'), end: at('12:08') },
+      },
+      { since: at('12:08'), minutes: 22, lastAgent: 'builder', lastBy: '', lastFrom: 'event' },
+    )
+    expect(text(html(createElement(StallNotice, { timeline: t, variant: 'inline' })))).toBe(
+      `Stalled 22 min: nothing open since the build ended at ${clock(at('12:08'))}`,
+    )
   })
 
   it('renders nothing when the ticket is not stalled', () => {

@@ -70,6 +70,15 @@ describe('the why of a stall comes from the activity', () => {
     expect(stallReason(t)).toMatchObject({ kind: 'nothing-open', since: at('11:20'), endedAt: null })
   })
 
+  it('with nothing open, the why dates the span that ended last, when the activity names one', () => {
+    const activity: Activity = {
+      ...NONE,
+      lastClosedSpan: { phase: 'build', agent: 'claude', start: at('11:50'), end: at('12:08') },
+    }
+    const t = timelineFromActivity(activity, stalled(at('12:08')))
+    expect(stallReason(t)).toMatchObject({ kind: 'nothing-open', endedAt: at('12:08'), phase: 'build' })
+  })
+
   it('a ticket that is not stalled has no why', () => {
     expect(stallReason(timelineFromActivity(NONE, null))).toBeNull()
   })
