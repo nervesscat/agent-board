@@ -8,6 +8,7 @@ import type { Connect, Plugin, ViteDevServer } from 'vite'
 
 import { type PublicEntrance, StartupError } from './config.ts'
 import { signedIn } from './credentials.ts'
+import { isPreviewPath } from './previewPaths.ts'
 import {
   type GuardConfig,
   guardConfig,
@@ -45,6 +46,12 @@ import { savedEntrance } from './tailnetStore.ts'
  * Node's headers as the board's middleware sees them (srvx): Node keeps the first of two Host headers,
  * srvx joins them, and so does this, so two never pass for one good one.
  */
+/**
+ * The request's path, without its query, normalised as the built server reads it (`new URL(…).pathname`):
+ * a raw `/x/../p/…` is the preview path it resolves to, so the guard's rules for `/p/` apply to it too.
+ */
+const pathOf = (req: IncomingMessage) => new URL(req.url ?? '/', 'http://localhost').pathname
+
 export function nodeHeaders(req: IncomingMessage): HeaderLookup {
   return {
     get(name) {
@@ -146,12 +153,16 @@ export function entranceMiddleware(live: () => GuardConfig, check: SignInCheck) 
       const peer = req.socket.remoteAddress
       const headers = nodeHeaders(req)
       const cfg = live()
-      const verdict = guardRequest({ method: req.method ?? 'GET', headers, peer }, cfg)
+      const verdict = guardRequest({ method: req.method ?? 'GET', headers, peer, path: pathOf(req) }, cfg)
       if (!verdict.allow) return answer(res, verdict.status, { error: verdict.error })
       if (!isLoopbackPeer(peer)) dropForwarding(req)
       if (!verdict.entrance) return next()
+      const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
       // The board's own sign-in pages and endpoints: it answers them, and they hold none of Vite's files.
-      if (isSignInPath(new URL(req.url ?? '/', 'http://localhost').pathname)) return next()
+      if (isSignInPath(pathname)) return next()
+      // A running preview's path is the board's to answer (previewProxy.ts): it signs the caller in itself
+      // and answers 401 JSON, never this login redirect, so the request goes on to the board.
+      if (isPreviewPath(pathname)) return next()
       if (check.signedIn(headers, verdict.entrance.host)) return next()
       if (wantsHtml(req.method, headers.get('accept'))) {
         res.writeHead(302, { location: loginLocation(pathAndSearch(req.url)) })
@@ -168,7 +179,10 @@ export function entranceMiddleware(live: () => GuardConfig, check: SignInCheck) 
 export function entranceUpgradeGuard(live: () => GuardConfig) {
   return function refuseEntranceUpgrade(req: IncomingMessage, socket: Duplex) {
     const peer = req.socket.remoteAddress
-    const verdict = guardRequest({ method: req.method ?? 'GET', headers: nodeHeaders(req), peer }, live())
+    const verdict = guardRequest(
+      { method: req.method ?? 'GET', headers: nodeHeaders(req), peer, path: pathOf(req) },
+      live(),
+    )
     const refusal = !verdict.allow
       ? verdict
       : verdict.entrance

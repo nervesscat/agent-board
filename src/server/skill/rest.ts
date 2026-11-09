@@ -31,6 +31,8 @@ export const TOOL_ROUTES: Record<string, string> = {
   set_preview: 'PATCH /api/workspaces/:id `{previewUrl}`',
   start_preview: 'POST /api/workspaces/:id/preview/start (`/preview/restart` for restart: true)',
   preview_branch: 'POST /api/tickets/:id/branch-preview `{branch?, repoId?}`',
+  preview_link:
+    'POST /api/workspaces/:id/preview/link (the link `url` of a running preview: good for five minutes for anyone who holds it)',
   stop_preview: 'POST /api/workspaces/:id/preview/stop',
   list_runs: 'GET /api/tickets/:id/runs',
   start_run:

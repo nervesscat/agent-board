@@ -13,11 +13,13 @@ import { DEFAULT_RUN, RUN_PORTS, type RunType, runSlug } from '#/lib/runs'
 import { logActivity } from './activity'
 import { authMode, config, uploadsDir } from './config'
 import { toolProblem } from './hostTools'
+import { listeningAddresses, loopbackOf } from './listeners'
 import { HttpError, notFound } from './http'
 import { checkPreview } from './preview'
 import { deleteRunConfig, getRunConfig, listRunConfigs, type RunConfig, seedRepo } from './runConfig'
 import { kindOf, listStages } from './stages'
 import { noteBoardEvent } from './workTimeline'
+import { previewLinksOf, previewPathOf } from './previewLink'
 
 /**
  * Runs: long-running processes the board starts itself from a ticket's worktree, as the human
@@ -67,6 +69,12 @@ export interface RunState {
   path: string
   /** Absolute paths of its logs: install and build, then the start command's. */
   logs: { build: string; server: string }
+  /**
+   * A running preview's links (previewLink.ts): its path on this board's origin, and on the tailnet
+   * entrance when one is served. Absent for anything else, and with sign-in off.
+   */
+  proxyUrl?: string
+  remoteUrl?: string
 }
 
 const ACTIVE = new Set<RunStatus>(['building', 'starting', 'running'])
@@ -168,6 +176,8 @@ export interface PreviewRunner {
   /** The same, for the board's last moments (no await there). */
   killTreeSync(pid: number): void
   isFree(port: number): Promise<boolean>
+  /** The addresses the port listens on on this machine, loopback or not (listeners.ts). */
+  listening(port: number): Promise<string[]>
   answers(url: string): Promise<boolean>
   /** The live board's database (a backup, it is open and in WAL mode) and uploads, into `dest`. */
   copyData(dest: string): Promise<void>
@@ -235,6 +245,7 @@ const realRunner: PreviewRunner = {
       }
   },
   isFree,
+  listening: listeningAddresses,
   answers: async (url) => (await checkPreview(url, 1000)).running,
   async copyData(dest) {
     const src = path.join(config.dataDir, 'board.db')
@@ -255,6 +266,58 @@ let runner = realRunner
 /** Tests run against a fake; `null` puts the real one back. */
 export function setPreviewRunner(r: PreviewRunner | null) {
   runner = r ?? realRunner
+}
+
+/**
+ * How often a running preview's port is looked at again: a listener that appears beyond loopback is stopped
+ * within this (the proxy refuses it on each request too, previewProxy.ts).
+ */
+export const LISTEN_WATCH_MS = 2000
+
+/**
+ * Why a preview's port is not reached from its loopback only, or null when it is. Nothing listening yet is
+ * fine unless `needed` (once the server answers, it must be listening); an address that cannot be told is
+ * not loopback. The check is the enforcement of "the preview's port stays on loopback": a start command can
+ * rebind the server (`--host 0.0.0.0`), whatever the board's HOST says.
+ */
+export async function notLoopbackReason(port: number, needed: boolean): Promise<string | null> {
+  let addresses: string[]
+  try {
+    addresses = await runner.listening(port)
+  } catch {
+    return "the preview's address cannot be checked"
+  }
+  if (!addresses.length) return needed ? "the preview's address cannot be checked" : null
+  const beyond = addresses.find((a) => loopbackOf([a]) === 'beyond')
+  return beyond ? `the preview listens beyond this machine on ${beyond}` : null
+}
+
+/**
+ * Stop a run whose port is not loopback only, and mark it failed with the reason: it is never left running
+ * reachable, and the failure says why (the preview's log is kept as its tail).
+ */
+function stopNotLoopback(e: Entry, why: string) {
+  fail(e, why, 'server')
+}
+
+/** While a preview runs, its port is looked at every LISTEN_WATCH_MS until the run is no longer this run. */
+function watchListeners(e: Entry, port: number) {
+  let busy = false
+  const timer = setInterval(async () => {
+    if (all().get(keyOfEntry(e)) !== e || e.status !== 'running') {
+      clearInterval(timer)
+      return
+    }
+    if (busy) return
+    busy = true
+    try {
+      const why = await notLoopbackReason(port, true)
+      if (why && e.status === 'running') await stopNotLoopback(e, why)
+    } finally {
+      busy = false
+    }
+  }, LISTEN_WATCH_MS)
+  timer.unref()
 }
 
 // --- state ---
@@ -404,9 +467,10 @@ function tailOf(file: string, lines = 30): string[] {
 
 /** The state as reads hand it out; one that builds or runs carries the tail of the log it writes. */
 function view({ dataDir: _dataDir, ...e }: Entry): RunState {
-  if (!isActive(e)) return { ...e, tail: [...e.tail] }
+  const links = previewLinksOf(e)
+  if (!isActive(e)) return { ...e, tail: [...e.tail], ...links }
   const log = e.status === 'building' && e.step !== 'server' ? 'build' : 'server'
-  return { ...e, tail: tailOf(e.logs[log]), tailLog: log }
+  return { ...e, tail: tailOf(e.logs[log]), tailLog: log, ...links }
 }
 
 /** The state of one run of a workspace, or null when the board never ran it there. */
@@ -719,7 +783,7 @@ export function worktreeEnv(): NodeJS.ProcessEnv {
   const env = { ...process.env }
   for (const key of Object.keys(env))
     if (
-      /^(NODE_ENV|PORT|HOST|NITRO_\w+|DATA_DIR|BOARD_URL|BOARD_ENV|AUTH|DEV_HUMAN|TEST_HUMAN|STORAGE|S3_\w+)$/.test(
+      /^(NODE_ENV|PORT|HOST|NITRO_\w+|DATA_DIR|BOARD_URL|BOARD_ENV|BOARD_PREVIEW_BASE|AUTH|DEV_HUMAN|TEST_HUMAN|STORAGE|S3_\w+)$/.test(
         key,
       ) ||
       ENTRANCE_KEYS.test(key)
@@ -756,11 +820,14 @@ export function runEnv(
   run: Pick<RunConfig, 'type' | 'env' | 'copyData'>,
   port: number | null,
   dataDir: string | null,
+  previewBase?: string,
 ): NodeJS.ProcessEnv {
   return {
     ...worktreeEnv(),
     ...Object.fromEntries(Object.entries(run.env).map(([k, v]) => [k, withPort(v, port)])),
     ...(run.type === 'preview' ? { HOST: '127.0.0.1', PORT: String(port) } : {}),
+    // The preview is built and started for the path the board proxies it at (previewProxy.ts).
+    ...(run.type === 'preview' && previewBase ? { BOARD_PREVIEW_BASE: previewBase } : {}),
     ...(run.copyData && dataDir ? { DATA_DIR: dataDir } : {}),
     PREVIEW_PARENT_PID: String(process.pid),
   }
@@ -786,11 +853,13 @@ function startSpawn(start: string, env: NodeJS.ProcessEnv) {
 }
 
 async function go(e: Entry, run: RunConfig) {
+  // A preview is built for the path the board proxies it at: its Vite base and router basepath read it.
+  const previewBase = run.type === 'preview' ? previewPathOf(e.workspaceId, e.runId) : undefined
   if (e.dataDir) await fs.promises.rm(e.dataDir, { recursive: true, force: true })
   else await fs.promises.rm(path.dirname(e.logs.build), { recursive: true, force: true })
   await fs.promises.mkdir(path.dirname(e.logs.build), { recursive: true })
   ownFolder(e.dataDir ?? runsDirOf(e.path))
-  const env = worktreeEnv()
+  const env = { ...worktreeEnv(), ...(previewBase ? { BOARD_PREVIEW_BASE: previewBase } : {}) }
   const step = async (name: RunStep, command: string) => {
     // Stopped while it cleared the last run's data: nothing more starts.
     if (!current(e)) return false
@@ -826,7 +895,7 @@ async function go(e: Entry, run: RunConfig) {
     if (typeof taken === 'string') return fail(e, taken, null)
     port = taken
   }
-  const start = startSpawn(withPort(run.start, port), runEnv(run, port, e.dataDir))
+  const start = startSpawn(withPort(run.start, port), runEnv(run, port, e.dataDir, previewBase))
   const proc = runner.spawn(start.command, start.args, {
     cwd: e.path,
     env: start.env,
@@ -850,12 +919,18 @@ async function go(e: Entry, run: RunConfig) {
     save()
     return
   }
+  if (port === null) return
   const base = `http://127.0.0.1:${port}`
   const health = run.healthPath && run.healthPath !== '/' ? `${base}${run.healthPath}` : base
   for (const until = Date.now() + READY_MS; Date.now() < until; ) {
     if (!current(e) || exited !== undefined) return
+    // A start command may bind beyond loopback (`--host 0.0.0.0` overrides HOST): checked from the first listen.
+    const beyond = await notLoopbackReason(port, false)
+    if (beyond) return stopNotLoopback(e, beyond)
     if (await runner.answers(health)) {
       if (!current(e)) return
+      const unknown = await notLoopbackReason(port, true)
+      if (unknown) return stopNotLoopback(e, unknown)
       e.status = 'running'
       e.step = null
       e.url = base
@@ -866,6 +941,7 @@ async function go(e: Entry, run: RunConfig) {
         .run()
       save()
       notePreview(e, `running ${base}`)
+      watchListeners(e, port)
       return
     }
     await new Promise((r) => setTimeout(r, 500))

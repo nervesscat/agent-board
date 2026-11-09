@@ -125,6 +125,9 @@ class FakeRunner implements PreviewRunner {
   async isFree(port: number) {
     return !this.busy.has(port)
   }
+  async listening(port: number) {
+    return [`127.0.0.1:${port}`]
+  }
   async answers(url: string) {
     this.asked.push(url)
     const base = /^http:\/\/127\.0\.0\.1:\d+/.exec(url)![0]
@@ -514,6 +517,67 @@ describe('the environment of a run', () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+
+  it('builds and starts a preview for the path the board proxies it at, and sets its loopback port last', async () => {
+    vi.stubEnv('BOARD_PREVIEW_BASE', '/p/99/98/')
+    try {
+      useFake()
+      const repo = addRepo('preview-base')
+      const web = run(repo, { name: 'Web', build: 'make' })
+      const { ws } = ticketIn(repo)
+      const s = await running(ws.id, web.id)
+      // Every step of the preview, the build and the start command, is given the base.
+      for (const call of fake.calls)
+        expect(call.env.BOARD_PREVIEW_BASE, call.command).toBe(`/p/${ws.id}/${web.id}/`)
+      // The board's own HOST and PORT: the preview listens on loopback, at its port.
+      const start = fake.calls.at(-1)!
+      expect(start.env.HOST).toBe('127.0.0.1')
+      expect(start.env.PORT).toBe(String(s.port))
+      expect(s.proxyUrl).toBe(`http://localhost:47100/p/${ws.id}/${web.id}/`)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+})
+
+describe("a preview's port stays on loopback", () => {
+  it('fails and stops a preview whose start binds beyond loopback, before it answers', async () => {
+    const f = useFake()
+    const repo = addRepo('bound-wide')
+    const web = run(repo, { name: 'Web' })
+    const { ws } = ticketIn(repo)
+    f.listening = async (port) => [`0.0.0.0:${port}`]
+    runs.startRun(ws.id, web.id, 'claude')
+    await vi.waitFor(() => expect(status(ws.id, web.id)).toBe('failed'))
+    expect(state(ws.id, web.id)!.reason).toMatch(
+      /^the preview listens beyond this machine on 0\.0\.0\.0:\d+$/,
+    )
+    expect(fake.killed.length).toBeGreaterThan(0)
+  })
+
+  it('fails and stops a running preview that starts listening beyond loopback, within the watch interval', async () => {
+    const f = useFake()
+    const repo = addRepo('rebound')
+    const web = run(repo, { name: 'Web' })
+    const { ws } = ticketIn(repo)
+    await running(ws.id, web.id)
+    f.listening = async (port) => [`127.0.0.1:${port}`, `*:${port}`]
+    await vi.waitFor(() => expect(status(ws.id, web.id)).toBe('failed'), {
+      timeout: runs.LISTEN_WATCH_MS + 3000,
+    })
+    expect(state(ws.id, web.id)!.reason).toContain('listens beyond this machine')
+  })
+
+  it('fails a preview whose addresses cannot be told once it answers', async () => {
+    const f = useFake()
+    const repo = addRepo('unknown-port')
+    const web = run(repo, { name: 'Web' })
+    const { ws } = ticketIn(repo)
+    f.listening = async () => []
+    runs.startRun(ws.id, web.id, 'claude')
+    await vi.waitFor(() => expect(status(ws.id, web.id)).toBe('failed'))
+    expect(state(ws.id, web.id)!.reason).toBe("the preview's address cannot be checked")
   })
 })
 
