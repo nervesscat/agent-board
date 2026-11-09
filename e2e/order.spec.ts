@@ -36,7 +36,14 @@ async function drag(page: Page, id: number, side: 'above' | 'below', target: num
   await card(page, id).getByRole('link').hover()
   const to = (await card(page, target).boundingBox())!
   await page.mouse.down()
-  await page.mouse.move(to.x + to.width / 2, side === 'above' ? to.y + 8 : to.y + to.height - 8, { steps: 8 })
+  const x = to.x + to.width / 2
+  const y = side === 'above' ? to.y + 8 : to.y + to.height - 8
+  await page.mouse.move(x, y, { steps: 8 })
+  // The board takes a drag over only once it has drawn the drag it began (its dragover reads that state), and
+  // the moves above can end before it has: so wait for the card to show as dragged, then move over the place
+  // once more, where the board's next dragover sees it.
+  await expect(card(page, id).getByRole('link')).toHaveClass(/opacity-40/)
+  await page.mouse.move(x, y, { steps: 2 })
   await expect(page.locator('[data-drop-indicator]')).toBeVisible()
   await page.mouse.up()
 }
