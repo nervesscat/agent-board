@@ -57,6 +57,20 @@ function route(req: IncomingMessage, res: ServerResponse, body: Buffer) {
     })
     return res.end('<!doctype html><html><head><title>t</title></head><body><p>Hello</p></body></html>')
   }
+  if (p === '/latin') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=iso-8859-1' })
+    return res.end(Buffer.from('<!doctype html><html><head></head><body>caf\xe9</body></html>', 'latin1'))
+  }
+  if (p === '/latin-meta') {
+    res.writeHead(200, { 'content-type': 'text/html' })
+    return res.end(
+      Buffer.from('<html><head><meta charset="windows-1252"></head><body>caf\xe9</body></html>', 'latin1'),
+    )
+  }
+  if (p === '/big') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    return res.end(Buffer.alloc(proxy.HTML_CAP_BYTES + 1, 'a'))
+  }
   if (p === '/bin') {
     res.writeHead(200, { 'content-type': 'application/octet-stream' })
     return res.end(Buffer.from([0, 1, 2, 255, 254, 13, 10]))
@@ -579,6 +593,30 @@ describe('the body', () => {
     expect(Buffer.from(await bin.arrayBuffer())).toEqual(Buffer.from([0, 1, 2, 255, 254, 13, 10]))
     const js = await serve(request(previewPath(wsA, RUN, 'app.js'), { headers: bearer(TOKEN.builder) }))
     expect(await js.text()).toBe('const x = "/api/y";\r\n')
+  })
+
+  it('decodes an HTML page by its charset, sends it as UTF-8, and refuses one bigger than the cap', async () => {
+    for (const rest of ['latin', 'latin-meta']) {
+      const res = await serve(request(previewPath(wsA, RUN, rest), { headers: bearer(TOKEN.builder) }))
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+      const text = await res.text()
+      expect(text).toContain('<body>café</body>')
+      expect(text).toContain('<script>')
+    }
+    const big = await serve(request(previewPath(wsA, RUN, 'big'), { headers: bearer(TOKEN.builder) }))
+    expect(big.status).toBe(502)
+    expect(await errorOf(big)).toBe('the preview response is too large: refused')
+  })
+
+  it('reads the charset of a page from its header or its meta, and only for the first kilobyte of the head', () => {
+    expect(proxy.charsetOf('text/html; charset="ISO-8859-1"', '')).toBe('iso-8859-1')
+    expect(proxy.charsetOf('text/html', '<meta http-equiv="x" content="y"><meta charset=utf-8>')).toBe(
+      'utf-8',
+    )
+    expect(proxy.charsetOf('text/html', '<p>nothing</p>')).toBeNull()
+    expect(proxy.withCharset('text/html; charset=iso-8859-1', 'utf-8')).toBe('text/html; charset=utf-8')
+    expect(proxy.withCharset('text/html', 'utf-8')).toBe('text/html; charset=utf-8')
   })
 
   it('passes an event stream as it is sent: event one arrives before the preview sends event two', async () => {

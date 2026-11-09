@@ -370,6 +370,39 @@ function upstream(
   })
 }
 
+/** The most of an HTML page the board reads to give it its script; more is refused with 502. */
+export const HTML_CAP_BYTES = 5 * 1024 * 1024
+
+/** The charset an HTML page declares: its Content-Type's, else a `<meta charset>` in its head; null when none. */
+export function charsetOf(contentType: string, head: string): string | null {
+  const fromHeader = /charset\s*=\s*["']?([^"';\s]+)/i.exec(contentType)?.[1]
+  if (fromHeader) return fromHeader.toLowerCase()
+  const meta = /<meta[^>]+charset\s*=\s*["']?\s*([^"'\s;>/]+)/i.exec(head)?.[1]
+  return meta ? meta.toLowerCase() : null
+}
+
+/** A Content-Type with its charset set to `charset` (added when it names none). */
+export function withCharset(contentType: string, charset: string): string {
+  if (/charset\s*=/i.test(contentType))
+    return contentType.replace(/charset\s*=\s*[^;]*/i, `charset=${charset}`)
+  return `${contentType.replace(/;\s*$/, '')}; charset=${charset}`
+}
+
+/** The whole body, or null once it is more than `cap` bytes (the preview's answer is then dropped). */
+async function readCapped(res: IncomingMessage, cap: number): Promise<Buffer | null> {
+  const chunks: Buffer[] = []
+  let total = 0
+  for await (const chunk of res as AsyncIterable<Buffer>) {
+    total += chunk.length
+    if (total > cap) {
+      res.destroy()
+      return null
+    }
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
+}
+
 /** The preview's answer as the board sends it: headers rewritten, the body as it is (HTML gets its script). */
 async function answerOf(
   res: IncomingMessage,
@@ -393,10 +426,23 @@ async function answerOf(
     return new Response(null, { status, headers })
   }
   const type = headers.get('content-type') ?? ''
+  // Only an HTML page is read whole, so it can be given its script, and it is capped. Any other body streams
+  // as the preview sends it, with no cap: an event stream stays open for as long as the preview keeps it.
   if (/^text\/html\b/i.test(type) && !headers.get('content-encoding')) {
-    const html = await new Response(Readable.toWeb(res) as unknown as ReadableStream).text()
+    const bytes = await readCapped(res, HTML_CAP_BYTES)
+    if (!bytes) return json(502, 'the preview response is too large: refused')
     headers.delete('content-length')
-    return new Response(injectRuntime(html, opts.prefix), { status, headers })
+    const charset = charsetOf(type, bytes.subarray(0, 1024).toString('latin1'))
+    let decoder: TextDecoder
+    try {
+      decoder = new TextDecoder(charset ?? 'utf-8')
+    } catch {
+      // A charset the board cannot decode: the page goes through untouched, with no script.
+      return new Response(new Uint8Array(bytes), { status, headers })
+    }
+    // The page is sent as UTF-8, and its header says so.
+    headers.set('content-type', withCharset(type, 'utf-8'))
+    return new Response(injectRuntime(decoder.decode(bytes), opts.prefix), { status, headers })
   }
   return new Response(Readable.toWeb(res) as unknown as ReadableStream, { status, headers })
 }
