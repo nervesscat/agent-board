@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { ClaimedActor } from '#/components/Actor'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
+import { WorkTimelineKey } from '#/components/WorkTimelineKey'
 import { WorkTotals } from '#/components/WorkStatus'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
@@ -56,7 +57,7 @@ export function WorkTimelineCard({ t }: { t: TicketFull }) {
             <StallNotice timeline={data.timeline} />
             <LastHeard beat={heartbeats[0] ?? null} />
           </div>
-          <WorkTimelineBar timeline={data.timeline} />
+          <WorkTimelineBar timeline={data.timeline} showKey={false} />
           {hasWork(data.timeline) && <WorkTotals totals={data.timeline.totals} />}
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer select-none">Key</summary>
@@ -238,7 +239,7 @@ function waitFor(ms: number): string {
   return rest ? `${h} h ${rest} min` : `${h} h`
 }
 
-// --- STAND-INS (remove at rebase) ---
+// --- STAND-INS (NowLine, StallNotice, LastHeard: remove when #19 merges) ---
 // The header and the key are not on this branch yet: NowLine, StallNotice, LastHeard and WorkSummary come
 // from WorkStatus.tsx, WorkTimelineKey from WorkTimelineKey.tsx (both still in progress). These stand-ins take the same
 // props they are expected to take (`timeline`, and `beat` for LastHeard). When those merge, delete this
@@ -279,16 +280,5 @@ function LastHeard({ beat }: { beat: TicketEvent | null }) {
       Last heard {clock(beat.at)} · {beat.agent}
       {beat.note ? `: ${beat.note}` : ''}
     </p>
-  )
-}
-
-function WorkTimelineKey() {
-  return (
-    <ul className="space-y-0.5">
-      <li>Solid: work, by phase</li>
-      <li>Hatched: waiting</li>
-      <li>Amber: waiting on you or blocked</li>
-      <li>Arrow: hand-off</li>
-    </ul>
   )
 }
