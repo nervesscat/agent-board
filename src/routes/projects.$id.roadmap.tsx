@@ -13,6 +13,7 @@ import { NowLine, StallNotice, WorkSummary } from '#/components/WorkStatus'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
 import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
+import { stallStage } from '#/lib/activityTimeline'
 import { useStages } from '#/lib/project'
 import { STAGE_DOT, type StageLike, stageBadge, stageOf } from '#/lib/stages'
 import {
@@ -46,7 +47,8 @@ export const Route = createFileRoute('/projects/$id/roadmap')({
 
 type Lane = RoadmapTicket['lanes'][number]
 /** A ticket or a lane as the view draws it: its stage and its timeline worked out. */
-type RoadmapItem = { row: RoadmapTicket | Lane; stage: StageLike; groups: StepGroup[] }
+/** `stall` is the stage a stall names when it is not the project's first active one (see stallStage). */
+type RoadmapItem = { row: RoadmapTicket | Lane; stage: StageLike; stall: string | null; groups: StepGroup[] }
 
 const hasState = (b: RoadmapItem, state: StepState) =>
   b.groups.some((g) => g.steps.some((s) => s.state === state))
@@ -71,6 +73,7 @@ function Roadmap() {
   const item = (row: RoadmapTicket | Lane): RoadmapItem => ({
     row,
     stage: stageOf(stages, row.status),
+    stall: stallStage(stages, row.status),
     groups: timeline(row.tasks),
   })
   const tickets = (data ?? []).map((t) => ({ ...item(t), lanes: t.lanes.map(item) }))
@@ -278,7 +281,7 @@ function Row({
             {stage.name}
           </span>
           <NowLine timeline={row.work} />
-          <StallNotice timeline={row.work} />
+          <StallNotice timeline={row.work} stage={item.stall} />
           {children}
           {total > 0 && (
             <Tip content={`${done} of ${total} done`}>
