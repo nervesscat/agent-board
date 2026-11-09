@@ -100,6 +100,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
       // Its tags are the project's used ones now, offered under the next ticket's field.
       qc.invalidateQueries({ queryKey: ['project', projectId] })
+      // The projects' ticket counts: Getting started's last step ticks on the first one.
+      qc.invalidateQueries({ queryKey: ['projects'] })
       if (parent) qc.invalidateQueries({ queryKey: ['ticket', String(parent.id)] })
       setOpen(false)
       setTitle('')

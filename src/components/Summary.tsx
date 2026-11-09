@@ -25,6 +25,7 @@ import type { ReactNode } from 'react'
 import { Actor, ClaimedActor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
+import { GettingStarted } from '#/components/GettingStarted'
 import { useSettleInstructions } from '#/components/InstructionsHistory'
 import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
@@ -60,16 +61,14 @@ export function Summary({ projectId }: { projectId?: number }) {
       </div>
     )
   if (error || !data) return <Empty>Could not load the summary: {errorMessage(error)}</Empty>
-  if (!data.projects.length)
-    return (
-      <Empty>
-        No projects yet. Create one from the project menu in the top bar, then add its checkouts on the
-        project's Repositories page.
-      </Empty>
-    )
+  if (!data.projects.length) return <GettingStarted />
   if (projectId) return <ProjectBlock p={data.projects[0]!} />
   return (
     <div className="space-y-10">
+      {/* The top bar's Getting started entry folds into the Pages menu on a phone, which leads here. */}
+      <div className="empty:hidden md:hidden">
+        <GettingStarted dismissable />
+      </div>
       {data.projects.map((p) => (
         <section key={p.project.id} className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
