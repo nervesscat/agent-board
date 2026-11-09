@@ -48,6 +48,23 @@ describe('roadmap', () => {
     ])
   })
 
+  it('lists the tickets last updated first, wherever they are placed in their column', async () => {
+    const { db, schema } = await import('#/db')
+    const { eq } = await import('drizzle-orm')
+    const older = ticket('older', 'review')
+    const newer = ticket('newer', 'review')
+    const at = (id: number, updatedAt: string, rank: number | null) =>
+      db.update(schema.tickets).set({ updatedAt, rank }).where(eq(schema.tickets.id, id)).run()
+    // The older one is placed at the top of the review column: the board shows it first, the roadmap not.
+    at(older.id, '2026-01-01T00:00:00.000Z', 1)
+    at(newer.id, '2026-01-02T00:00:00.000Z', null)
+
+    const ids = roadmapModule.roadmap(projectId).map((t) => t.id)
+    expect(ids.indexOf(newer.id)).toBeLessThan(ids.indexOf(older.id))
+    const updated = roadmapModule.roadmap(projectId).map((t) => t.updatedAt)
+    expect(updated).toEqual([...updated].sort().reverse())
+  })
+
   it('answers on the API', async () => {
     const { api } = await import('./api')
     const res = await api.handle(new Request(`http://localhost/api/projects/${projectId}/roadmap`), 'enrique')

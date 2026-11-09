@@ -354,6 +354,12 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
    Only the human can mark it done anyway.
+   `needs` is the enforced rule; the review column's order is the merge order the agents propose,
+   read top to bottom (top merges first). Moving your ticket to review, place it with
+   `update_ticket` → `position` (1 is the top of its stage's column; with `status`, in the new
+   stage): below every open ticket it `needs`, otherwise where it should merge relative to the
+   others. The board flags a card placed above a ticket it needs ("merge after #<id>"). Any move
+   to another stage clears the place, and edits never move it.
 5. PR open, assigned to the human, `prNumber` set: `gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account (GitHub never lets a PR's author be its
    requested reviewer; the PR queue lists the human's own PRs under Waiting on others). Then

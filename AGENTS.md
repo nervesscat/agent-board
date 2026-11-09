@@ -289,7 +289,12 @@ http_headers = { Authorization = "Bearer <token>" }
       ticket cannot move to `done` until that branch is merged into its base (the refusal says
       which; only the human can mark it done anyway). `get_ticket_git` → `includes` lists the open
       tickets whose unmerged work your branch already holds; `get_ticket` → `needs` says whether
-      each is `merged`.
+      each is `merged`. `needs` is the enforced rule; the review column's order is the merge order
+      the agents propose, read top to bottom (top merges first). Moving your ticket to review, place
+      it with `update_ticket` → `position` (1 is the top; with `status`, in the new stage): below
+      every open ticket it `needs`, otherwise where it should merge relative to the others. The
+      board flags a card placed above a ticket it needs ("merge after #<id>"); any move to another
+      stage clears the place.
    5. PR open, assigned to the human (`gh pr create --assignee <their login>`, or `--assignee @me`
       when you push with their account; GitHub never lets a PR's author be its requested reviewer,
       and the PR queue lists their own PRs under Waiting on others), and `update_ticket` with its

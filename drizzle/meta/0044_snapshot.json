@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "88d9402b-07de-4ab4-b114-1e58c9d75ab3",
+  "id": "0d1a79a6-435f-4c42-9b6e-fa1cec493860",
   "prevId": "a3339b29-ddc8-4053-be31-4d5e4329d262",
   "tables": {
     "account": {
@@ -2295,13 +2295,6 @@
           "autoincrement": false,
           "default": "''"
         },
-        "on": {
-          "name": "on",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "note": {
           "name": "note",
           "type": "text",
@@ -2572,6 +2565,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'todo'"
+        },
+        "rank": {
+          "name": "rank",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "complexity": {
           "name": "complexity",

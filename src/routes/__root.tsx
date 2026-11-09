@@ -15,6 +15,7 @@ import { Gallery } from '#/components/Gallery'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
+import { UpdateBadge } from '#/components/Updates'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
@@ -101,6 +102,7 @@ function App() {
             </Link>
           </Tip>
           <AuthOffBadge />
+          <UpdateBadge />
           <ProjectSwitcher />
           <div className="ml-auto hidden items-center gap-5 md:flex">
             {PAGES.map((p) => (
