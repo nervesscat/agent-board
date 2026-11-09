@@ -10,6 +10,7 @@ import {
   servedEntrance,
 } from './config.ts'
 import { isBearer, sessionCookieName } from './credentials.ts'
+import { isPreviewPath } from './previewPaths.ts'
 
 /**
  * The guard in front of every request, before anyone's sign-in is checked: pages, /api/* and /api/mcp
@@ -43,6 +44,8 @@ export interface GuardRequest {
   headers: HeaderLookup
   /** The address the connection came from; undefined when the server cannot tell (counted as loopback). */
   peer: string | null | undefined
+  /** The request's path, without its query, where the caller knows it (a preview's writes are checked for it). */
+  path?: string
 }
 
 export interface GuardConfig {
@@ -117,13 +120,16 @@ const READS = new Set(['GET', 'HEAD', 'OPTIONS'])
 /**
  * A write a page of another origin may have sent with the human's session: it carries the board's
  * session cookie and an Origin that is not one of the board's. No Origin (agents, curl) or a token is
- * not one.
+ * not one. Under a preview's path (`/p/…`) the check applies whatever cookie comes with the write: the
+ * preview's own cookie is no reason to let a foreign page write there.
  */
 function crossSiteWrite(req: GuardRequest, cfg: GuardConfig): string | null {
   if (READS.has(req.method.toUpperCase())) return null
   const origin = req.headers.get('origin')
   if (origin === null || isBearer(req.headers.get('authorization'))) return null
-  if (!(req.headers.get('cookie') ?? '').includes(`${sessionCookieName(cfg.port)}=`)) return null
+  const underPreview = isPreviewPath(req.path ?? '')
+  if (!underPreview && !(req.headers.get('cookie') ?? '').includes(`${sessionCookieName(cfg.port)}=`))
+    return null
   return boardOrigins(cfg).includes(origin) ? null : origin
 }
 
@@ -142,7 +148,12 @@ export function guardBoardRequest(
   entrance: PublicEntrance | null = servedEntrance(),
 ): Verdict {
   return guardRequest(
-    { method: request.method, headers: request.headers, peer: peerOf(request) },
+    {
+      method: request.method,
+      headers: request.headers,
+      peer: peerOf(request),
+      path: new URL(request.url).pathname,
+    },
     { authOff: auth.off, port: config.port, entrance, dataDir: config.dataDir },
   )
 }

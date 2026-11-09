@@ -38,6 +38,9 @@ import {
  * Node's headers as the board's middleware sees them (srvx): Node keeps the first of two Host headers,
  * srvx joins them, and so does this, so two never pass for one good one.
  */
+/** The request's path, without its query. */
+const pathOf = (req: IncomingMessage) => (req.url ?? '/').split('?')[0]!
+
 export function nodeHeaders(req: IncomingMessage): HeaderLookup {
   return {
     get(name) {
@@ -123,7 +126,7 @@ export function entranceMiddleware(cfg: GuardConfig, check: SignInCheck) {
     try {
       const peer = req.socket.remoteAddress
       const headers = nodeHeaders(req)
-      const verdict = guardRequest({ method: req.method ?? 'GET', headers, peer }, cfg)
+      const verdict = guardRequest({ method: req.method ?? 'GET', headers, peer, path: pathOf(req) }, cfg)
       if (!verdict.allow) return answer(res, verdict.status, { error: verdict.error })
       if (!isLoopbackPeer(peer)) dropForwarding(req)
       if (!verdict.entrance) return next()
@@ -149,7 +152,10 @@ export function entranceMiddleware(cfg: GuardConfig, check: SignInCheck) {
 export function entranceUpgradeGuard(cfg: GuardConfig) {
   return function refuseEntranceUpgrade(req: IncomingMessage, socket: Duplex) {
     const peer = req.socket.remoteAddress
-    const verdict = guardRequest({ method: req.method ?? 'GET', headers: nodeHeaders(req), peer }, cfg)
+    const verdict = guardRequest(
+      { method: req.method ?? 'GET', headers: nodeHeaders(req), peer, path: pathOf(req) },
+      cfg,
+    )
     const refusal = !verdict.allow
       ? verdict
       : verdict.entrance
