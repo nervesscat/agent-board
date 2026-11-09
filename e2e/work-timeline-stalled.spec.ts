@@ -78,20 +78,23 @@ test("a worker's event under the name 'board' is a claim: no Board badge, and wh
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const card = page.getByRole('region', { name: 'Timeline' })
+  await card.getByRole('button', { name: 'Show more' }).click()
   await card.getByRole('button', { name: 'Show heartbeats' }).click()
-  const items = card.getByRole('list', { name: 'Events' }).getByRole('listitem')
-  for (const text of ['heartbeat', 'started build']) {
-    const row = items.filter({
-      hasText: new RegExp(`\\d(\\s*[AP]M)?\\s*board\\s*by\\s*claude\\s*Agent\\s*${text}$`),
-    })
-    await expect(row).toHaveCount(1)
-    await expect(row.getByTestId('claimed-name')).toHaveText('board')
-    await expect(row.getByTestId('event-by')).toContainText(/^by\s*claude\s*Agent$/)
-    await expect(row.locator('[data-role="board"]')).toHaveCount(0)
-    await expect(row.locator('[data-role]:not([data-testid="event-by"] *)')).toHaveCount(0)
-  }
+  // The story folds one actor's consecutive rows under one actor line: the claimed name and who
+  // recorded it show once for the run, not on every row.
+  const list = card.getByRole('list', { name: 'Timeline story' })
+  const run = list
+    .locator(':scope > li')
+    .filter({ hasText: /board\s*by\s*claude\s*Agent/ })
+    .filter({ hasText: 'heartbeat' })
+  await expect(run).toHaveCount(1)
+  await expect(run.getByTestId('claimed-name')).toHaveText('board')
+  await expect(run.getByTestId('event-by')).toContainText(/^by\s*claude\s*Agent$/)
+  await expect(run.locator('[data-role="board"]')).toHaveCount(0)
+  await expect(run.getByRole('listitem').filter({ hasText: 'started build' })).toHaveCount(1)
+  await expect(run.locator('[data-role]:not([data-testid="event-by"] *)')).toHaveCount(0)
   // The board's own event keeps its badge.
-  const created = items.filter({ hasText: 'created in In progress' })
+  const created = list.getByRole('listitem').filter({ hasText: 'created in In progress' })
   await expect(created.locator('[data-role="board"]').first()).toContainText(/^board\s*Board$/)
   await expect(created.getByTestId('event-by')).toHaveCount(0)
 })
