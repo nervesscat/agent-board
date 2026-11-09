@@ -183,8 +183,11 @@ function sentence(e: TicketEvent, stageName: (key: string) => string): string {
       return `started ${phase}${note}`
     case 'span_end':
       return `ended ${phase}${note}`
-    case 'handoff':
-      return `handed the work to ${e.toAgent || 'someone'}${note}`
+    case 'handoff': {
+      // The giver is named when it is not the recorder (the actor line names the recorder).
+      const from = e.fromAgent && e.fromAgent !== e.agent ? ` from ${e.fromAgent}` : ''
+      return `handed the work${from} to ${e.toAgent || 'someone'}${note}`
+    }
     case 'wait_start':
       return `waiting for ${waitTarget(e.reason, e.note)}`
     case 'wait_end':
@@ -194,11 +197,12 @@ function sentence(e: TicketEvent, stageName: (key: string) => string): string {
     case 'stage':
       return e.fromStage ? `moved to ${stageName(e.toStage)}` : `created in ${stageName(e.toStage)}`
     case 'push':
-      return `pushed${note}`
+      // The event's note already says what was pushed; the verb is only the fallback.
+      return e.note || 'pushed'
     case 'pr':
       return `opened the PR${note}`
     case 'merge':
-      return `merged${note}`
+      return e.note || 'merged'
     case 'preview':
       return `preview ${e.note}`
     default:
