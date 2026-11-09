@@ -301,6 +301,8 @@ export const ticketEvents = sqliteTable(
     fromAgent: text('from_agent').notNull().default(''),
     toAgent: text('to_agent').notNull().default(''),
     reason: text().notNull().default(''),
+    // On wait_start: the agent the work was handed to (a delegated wait counts as working); null otherwise.
+    on: text(),
     note: text().notNull().default(''),
     // On stage events: the stage keys it moved from ('' when the ticket was created) and to.
     fromStage: text('from_stage').notNull().default(''),
