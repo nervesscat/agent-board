@@ -10,12 +10,15 @@
 // It packages for the platform it runs on (the Windows installer on Windows, the Linux packages on
 // Linux), copies each file to desktop/dist/release under its versioned name and under a stable,
 // versionless one, so https://github.com/nervesscat/agent-board/releases/latest/download/<stable name>
-// always reaches the newest, and uploads both. The tag is v<version> of desktop/app/package.json, at
+// always reaches the newest, and uploads both, with the metadata electron-updater reads to update an
+// installed app (METADATA: latest.yml on Windows, latest-linux.yml on Linux), which names the versioned
+// files with their sha512, checked here against the files before anything is staged. The tag is v<version> of desktop/app/package.json, at
 // the commit checked out here, which must be clean and on origin. The release is created by the first
 // run (whichever platform), and the next run on the other platform uploads to the same release
 // (`gh release upload --clobber`). A tag already on origin at another commit is refused unless
 // --force. `gh` must be signed in with write access to the repo.
 import { spawnSync } from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -63,6 +66,71 @@ export const ASSETS = {
       required: true,
     },
   ],
+}
+
+/**
+ * The update metadata electron-builder writes beside a platform's packages (desktop/package.mjs) and
+ * electron-updater reads from the release: each versioned file with its sha512, which every download
+ * is checked against before it installs. Published under this name only.
+ */
+export const METADATA = { win32: 'latest.yml', linux: 'latest-linux.yml' }
+
+/**
+ * The version and the files of an update metadata file, as electron-builder writes it: `version:` and
+ * a `files:` list of `- url:` entries with their `sha512:` (and `size:`).
+ * @param {string} text
+ */
+export function parseMetadata(text) {
+  /** @type {{ url: string, sha512: string }[]} */
+  const files = []
+  let version = ''
+  let inFiles = false
+  const value = (/** @type {string} */ v) => v.trim().replace(/^(['"])(.*)\1$/, '$2')
+  for (const line of text.split(/\r?\n/)) {
+    if (/^\S/.test(line)) {
+      inFiles = /^files:\s*$/.test(line)
+      const v = /^version:(.*)$/.exec(line)
+      if (v) version = value(v[1])
+      continue
+    }
+    if (!inFiles) continue
+    const url = /^\s*-\s+url:(.*)$/.exec(line)
+    if (url) files.push({ url: value(url[1]), sha512: '' })
+    const sha = /^\s+sha512:(.*)$/.exec(line)
+    const last = files[files.length - 1]
+    if (sha && last) last.sha512 = value(sha[1])
+  }
+  return { version, files }
+}
+
+/** A file's sha512 as the metadata gives it (base64). @param {string} file */
+export const sha512File = (file) => crypto.createHash('sha512').update(fs.readFileSync(file)).digest('base64')
+
+/**
+ * What is wrong with a platform's update metadata, none when nothing is: it must be for `version`, and
+ * list each of the platform's versioned files (so every package type finds its own, the Linux updaters
+ * by extension) and no other, each with the sha512 the file has (`sha512Of`, by file name).
+ * @param {string} text
+ * @param {{ platform: string, version: string, sha512Of: (file: string) => string }} o
+ * @returns {string[]}
+ */
+export function metadataProblems(text, { platform, version, sha512Of }) {
+  const name = METADATA[/** @type {keyof typeof METADATA} */ (platform)]
+  const assets = ASSETS[/** @type {keyof typeof ASSETS} */ (platform)]
+  if (!name || !assets) throw new Error(`the app is packaged on Windows or Linux, not ${platform}`)
+  const meta = parseMetadata(text)
+  const problems = []
+  if (meta.version !== version)
+    problems.push(`${name} is for version ${meta.version || 'none'}, not ${version}`)
+  const expected = assets.map((a) => a.versioned(version))
+  for (const file of expected)
+    if (!meta.files.some((f) => f.url === file)) problems.push(`${name} does not list ${file}`)
+  for (const f of meta.files) {
+    if (!expected.includes(f.url)) problems.push(`${name} lists ${f.url}, which is not published`)
+    else if (f.sha512 !== sha512Of(f.url))
+      problems.push(`${name} has another sha512 for ${f.url} than the file has`)
+  }
+  return problems
 }
 
 /**
@@ -309,6 +377,29 @@ function main() {
       path.join('desktop', 'dist', 'release', f.versioned),
       path.join('desktop', 'dist', 'release', f.stable),
     )
+  }
+  // The update metadata, as electron-builder wrote it beside the packages: checked against them first.
+  const metadata = METADATA[/** @type {keyof typeof METADATA} */ (process.platform)]
+  const metadataPath = path.join(dist, metadata)
+  if (exists(metadata)) {
+    const problems = fs.existsSync(metadataPath)
+      ? metadataProblems(fs.readFileSync(metadataPath, 'utf8'), {
+          platform: process.platform,
+          version,
+          sha512Of: (f) => sha512File(path.join(dist, f)),
+        })
+      : []
+    if (problems.length) {
+      if (!opts.dryRun) fail(problems.join('; '))
+      for (const p of problems) say(`would refuse: ${p}`)
+    }
+    say(`update metadata: ${metadata} -> desktop/dist/release/${metadata}`)
+    if (!opts.dryRun) fs.copyFileSync(metadataPath, path.join(out, metadata))
+    uploads.push(path.join('desktop', 'dist', 'release', metadata))
+  } else {
+    const message = `desktop/dist has no ${metadata}`
+    if (!opts.dryRun) fail(message)
+    say(`would refuse: ${message}`)
   }
   if (opts.stageOnly) {
     say(`staged in ${out}; nothing published (--stage-only)`)

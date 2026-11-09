@@ -4,7 +4,7 @@ import { db, schema } from '#/db'
 import type { StageKind } from '#/lib/constants'
 import { logActivity } from './activity'
 import { listRepos } from './repos'
-import { firstOfKind, kindOf, listStages, startedPatch, startStage, type Stage } from './stages'
+import { firstOfKind, kindOf, listStages, movePatch, startedPatch, startStage, type Stage } from './stages'
 import { noteStageMove } from './workTimeline'
 
 /**
@@ -140,7 +140,7 @@ export function movePrTicket(pr: Pr, status: PrTicketStatus, actor = 'board') {
   db.update(schema.tickets)
     .set({
       status: stage.key,
-      ...startedPatch(stages, own.status, stage.key, own.startedAt),
+      ...movePatch(stages, own.status, stage.key, own.startedAt),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(schema.tickets.id, own.id))
@@ -175,7 +175,7 @@ export function cancelSupersededPrTickets(t: schema.Ticket, actor: string) {
     const kind = own ? kindOf(stages, own.status) : undefined
     if (!own || kind === 'done' || kind === 'cancelled') continue
     db.update(schema.tickets)
-      .set({ status: cancel.key, updatedAt: new Date().toISOString() })
+      .set({ status: cancel.key, rank: null, updatedAt: new Date().toISOString() })
       .where(eq(schema.tickets.id, own.id))
       .run()
     noteStageMove(own.id, own.status, cancel.key)

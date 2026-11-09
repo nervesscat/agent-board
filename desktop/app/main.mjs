@@ -4,6 +4,10 @@
 // frees its port. A server that dies on its own once the board has answered is started again, with
 // waits between tries and a cap (onServerExit). README: "The desktop app".
 //
+// The app updates itself from the repo's GitHub Releases when the human asks, from the board's Settings
+// page (updates.mjs): the server's update routes reach this process over the server child's IPC
+// channel, which nothing else has.
+//
 // On Linux it runs natively on Wayland in a Wayland session and on X11 otherwise: Electron's default
 // since 38 (--ozone-platform=auto), so no switch is set here. Its Wayland app_id and X11 WM_CLASS come
 // from desktopName in package.json, which the packages' desktop entry names too (desktop/package.mjs).
@@ -14,6 +18,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, shell, Tray } from 'electron'
+import electronUpdater from 'electron-updater'
 
 import {
   appFolders,
@@ -38,6 +43,14 @@ import {
   withLoginPath,
 } from './settings.mjs'
 import { exitLine, exitSentence, logServer, spawnFailedLine, startLine } from './serverLog.mjs'
+import {
+  BRIDGE,
+  createUpdates,
+  handleBridgeMessage,
+  packageType,
+  readUpdateSettings,
+  writeUpdateSettings,
+} from './updates.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const LINUX = process.platform === 'linux'
@@ -96,6 +109,8 @@ let restarts = { exits: 0, healthySince: /** @type {number | null} */ (null) }
 let restartTimer = null
 // The window's page failed to load while the board was down: it is loaded again once it answers.
 let pageFailed = false
+/** @type {import('./updates.mjs').Updates | null} */
+let updates = null
 
 if (homeError) {
   void app
@@ -118,6 +133,7 @@ if (homeError) {
   app.on('window-all-closed', () => {})
   app.on('before-quit', (event) => {
     quitting = true
+    updates?.stop()
     if (restartTimer) clearTimeout(restartTimer)
     restartTimer = null
     if (!server) return
@@ -177,15 +193,96 @@ async function start() {
       OPEN_SETTINGS,
     )
   }
+  updates = startUpdates()
   startServer()
   if (!(await waitUntilUp(server))) return
   ready = true
   restarts.healthySince = Date.now()
   console.log(`agent-board desktop: the board answers on ${settings.url}`)
+  greetServer()
   if (LINUX) trayShown = await trayHostPresent()
   createTray()
   if (LINUX) Menu.setApplicationMenu(linuxMenu())
   createWindow()
+  // The check at start, once the board is up, then every few hours (updates.mjs).
+  updates.start()
+}
+
+/**
+ * The updater (updates.mjs) over electron-updater's, for the package this copy came in. Its settings
+ * are in updates.json beside config.env. AGENT_BOARD_UPDATE_FEED points it at another feed than the
+ * repo's GitHub Releases: a folder with latest.yml / latest-linux.yml and the packages they name,
+ * served over http(s), to try an update before it is released (docs/releasing.md).
+ */
+function startUpdates() {
+  // On Windows and Linux, the platforms the app is packaged for, one of electron-updater's BaseUpdaters.
+  const updater =
+    /** @type {import('electron-updater').AppUpdater & Pick<import('electron-updater').BaseUpdater, 'install'>} */ (
+      electronUpdater.autoUpdater
+    )
+  const feed = process.env.AGENT_BOARD_UPDATE_FEED
+  if (feed) updater.setFeedURL({ provider: 'generic', url: feed })
+  /** @param {unknown} m */
+  const line = (m) => `agent-board desktop: ${m instanceof Error ? m.message : String(m)}`
+  return createUpdates({
+    updater,
+    installed: app.getVersion(),
+    type: packageType({
+      platform: process.platform,
+      env: process.env,
+      resourcesPath: process.resourcesPath,
+      isPackaged: app.isPackaged,
+    }),
+    settings: readUpdateSettings(home),
+    saveSettings: (s) => writeUpdateSettings(home, s),
+    spawnSync,
+    // As Quit does: an exit asked for, so it is not restarted (onServerExit) and its line says so.
+    stopServer: async () => {
+      quitting = true
+      if (restartTimer) clearTimeout(restartTimer)
+      restartTimer = null
+      await stopServer()
+    },
+    // An install that did not go through: the board again, as it was.
+    startServer: async () => {
+      quitting = false
+      startServer()
+      if (await waitUntilUp(server)) greetServer()
+    },
+    releaseLock: () => app.releaseSingleInstanceLock(),
+    takeLock: () => void app.requestSingleInstanceLock(),
+    relaunch: () => app.relaunch(),
+    quit: () => app.quit(),
+    log: {
+      info: (m) => console.log(line(m)),
+      warn: (m) => console.warn(line(m)),
+      error: (m) => {
+        console.error(line(m))
+        appendLog(path.join(settings.dataDir, 'logs'), line(m))
+      },
+    },
+  })
+}
+
+/**
+ * Tells the server it runs under the app, so its update routes ask here (src/server/updates.ts): once
+ * it answers, after each start.
+ */
+function greetServer() {
+  sendServer(server, { channel: BRIDGE, hello: true })
+}
+
+/**
+ * A message to the server over its IPC channel. One it cannot take (gone, its channel closed) is
+ * dropped: with a callback, a failed send is no 'error' on the child, which would end the app.
+ * @param {import('node:child_process').ChildProcess | null} proc
+ * @param {unknown} msg
+ */
+function sendServer(proc, msg) {
+  if (!proc?.connected) return
+  proc.send(/** @type {import('node:child_process').Serializable} */ (msg), (err) => {
+    if (err) console.error(`agent-board desktop: the board's server did not take a message: ${err.message}`)
+  })
 }
 
 function startServer() {
@@ -208,7 +305,9 @@ function startServer() {
     // The migrations are read from ./drizzle (src/db/index.ts).
     cwd: boardDir,
     env: { ...settings.serverEnv, ELECTRON_RUN_AS_NODE: '1' },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    // The fourth: the IPC channel the update routes ask over (greetServer). Node takes its variable
+    // out of the server's environment, so what the server starts does not inherit it.
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
     windowsHide: true,
     // Elsewhere than Windows, a process group of its own: stopServer ends it with what it started.
     detached: process.platform !== 'win32',
@@ -225,6 +324,11 @@ function startServer() {
     serverErr = tail(serverErr + String(chunk), 4000)
   })
   const proc = server
+  // The update routes' requests (src/server/updates.ts), answered from updates.mjs.
+  proc.on('message', (msg) => {
+    const reply = updates && handleBridgeMessage(updates, msg)
+    if (reply) sendServer(proc, reply)
+  })
   // It could not be started at all (its folder gone, say): no 'exit' follows.
   proc.on('error', (e) => {
     if (server === proc) server = null
@@ -288,6 +392,7 @@ async function restartServer(reason) {
   startServer()
   if (!(await waitUntilUp(server))) return
   restarts.healthySince = Date.now()
+  greetServer()
   const at = new Date().toLocaleTimeString()
   console.log(`agent-board desktop: the board answers again on ${settings.url} (it had exited: ${reason})`)
   appendLog(path.join(settings.dataDir, 'logs'), `the board answers again on ${settings.url}`)

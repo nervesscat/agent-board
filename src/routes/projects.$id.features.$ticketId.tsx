@@ -163,7 +163,11 @@ function TicketPage() {
   const key = ['ticket', ticketId]
   // Fold the lanes' updates into this ticket's feed.
   const [laneFeed, setLaneFeed] = useState(false)
-  const { data: t, error } = useQuery({
+  const {
+    data: t,
+    error,
+    dataUpdatedAt: readAt,
+  } = useQuery({
     queryKey: [...key, laneFeed],
     queryFn: () => get<TicketFull>(`/api/tickets/${ticketId}${laneFeed ? '?lanes=1' : ''}`),
     placeholderData: keepPreviousData,
@@ -236,7 +240,7 @@ function TicketPage() {
   })
   // On a top-level ticket: the board's tickets, for previous / next in the same column. Same query
   // as the board, so it is usually cached already.
-  const { data: board } = useQuery({
+  const { data: board, dataUpdatedAt: boardReadAt } = useQuery({
     ...ticketsQuery(id, 'root'),
     enabled: Boolean(t) && !t?.parentId,
     refetchInterval: 10_000,
@@ -362,7 +366,9 @@ function TicketPage() {
         <ChevronRight className="size-3.5" />
         <span className="text-foreground">#{t.id}</span>
         {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
-        {!t.parentId && !t.prId && board && <StageNav key={t.id} projectId={id} tickets={board} t={t} />}
+        {!t.parentId && !t.prId && board && (
+          <StageNav key={t.id} projectId={id} tickets={board} t={t} pageIsNewer={readAt >= boardReadAt} />
+        )}
       </nav>
 
       {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
@@ -1555,15 +1561,29 @@ declare module '@tanstack/react-router' {
  * "‹ 3 of 7 in In progress ›" among the top-level tickets in a board column, in its order: the list the
  * reader stepped here through, else this ticket's column. The list holds on through stage changes, like
  * the lanes do: a ticket moved out of its stage, this one too, keeps its place in it until the reader
- * leaves the steps.
+ * leaves the steps. This ticket's own stage and place come from whichever was read last, its page or
+ * the board's list: the page has a stage change made here before the list catches up, and the list has
+ * a placement made on the board, which ranks the tickets above the moved one too, before their pages
+ * are read again.
  */
-function StageNav({ projectId, tickets, t }: { projectId: string; tickets: TicketRow[]; t: TicketFull }) {
+function StageNav({
+  projectId,
+  tickets,
+  t,
+  pageIsNewer,
+}: {
+  projectId: string
+  tickets: TicketRow[]
+  t: TicketFull
+  pageIsNewer: boolean
+}) {
   const stages = useStages(projectId)
   const stepped = useLocation({ select: (l) => l.state.stepList })
   // The list as this page last had it (the page is keyed by ticket), so moving this ticket keeps it.
   const [kept, setKept] = useState<StepList>()
-  // This ticket as its own page has it, so a stage change shows here before the board's list catches up.
-  const rows = [...tickets.filter((x) => x.id !== t.id && x.parentId === null), t]
+  const listed = tickets.find((x) => x.id === t.id)
+  const self = pageIsNewer || !listed ? t : listed
+  const rows = [...tickets.filter((x) => x.id !== t.id && x.parentId === null), self]
   const around = columnNeighbours(rows, t.id, kept ?? stepped)
   const list = around?.list
   const same = list && kept && list.stage === kept.stage && list.ids.join() === kept.ids.join()

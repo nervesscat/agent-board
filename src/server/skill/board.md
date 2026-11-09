@@ -146,7 +146,9 @@ Lanes of a ticket you are working are yours to create (next section).
   - `start_wait` with the reason when you cannot go on (`lock`, `builder`, `mcp`, `human`, `other`
     with a `note`), and `end_wait` as soon as you can. A wait counts as waiting only while no span
     is open on the ticket: your wait on a sub-agent whose span runs reads as working. A `human` wait
-    counts as blocked on the human, span or not.
+    counts as blocked on the human, span or not. When you wait on an agent you briefed, pass `on`:
+    the agent the work was handed to (its full name, such as `orch/builder-1`). A wait with `on` is
+    delegated work and counts as working, not waiting; `on` is 1 to 60 characters.
   - `handoff` when you brief a sub-agent and when it hands back ([Delegating](#delegating)).
     `get_ticket` → `work.open` lists your open spans and waits to close.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
@@ -352,6 +354,12 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
    Only the human can mark it done anyway.
+   `needs` is the enforced rule; the review column's order is the merge order the agents propose,
+   read top to bottom (top merges first). Moving your ticket to review, place it with
+   `update_ticket` → `position` (1 is the top of its stage's column; with `status`, in the new
+   stage): below every open ticket it `needs`, otherwise where it should merge relative to the
+   others. The board flags a card placed above a ticket it needs ("merge after #<id>"). Any move
+   to another stage clears the place, and edits never move it.
 5. PR open, assigned to the human, `prNumber` set: `gh pr create --assignee <their login>`, or
    `--assignee @me` when you push with their account (GitHub never lets a PR's author be its
    requested reviewer; the PR queue lists the human's own PRs under Waiting on others). Then
