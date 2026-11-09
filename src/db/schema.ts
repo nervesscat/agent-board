@@ -224,6 +224,9 @@ export const tickets = sqliteTable(
     body: text().notNull().default(''),
     // The key of one of the project's stages.
     status: text().notNull().default('todo'),
+    // Where it was placed in its stage's column (its siblings in that stage): placed tickets come first,
+    // lowest rank first, then the rest last updated first. Null until placed; any change of stage clears it.
+    rank: integer(),
     // How much review the ticket gets: low none, mid one round, high three (COMPLEXITIES).
     complexity: text().$type<Complexity>().notNull().default(DEFAULT_COMPLEXITY),
     assignee: text().notNull().default(''),
@@ -298,6 +301,8 @@ export const ticketEvents = sqliteTable(
     fromAgent: text('from_agent').notNull().default(''),
     toAgent: text('to_agent').notNull().default(''),
     reason: text().notNull().default(''),
+    // On wait_start: the agent the work was handed to (a delegated wait counts as working); null otherwise.
+    on: text(),
     note: text().notNull().default(''),
     // On stage events: the stage keys it moved from ('' when the ticket was created) and to.
     fromStage: text('from_stage').notNull().default(''),

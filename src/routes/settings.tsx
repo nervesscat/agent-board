@@ -6,6 +6,7 @@ import { AgentIdentities } from '#/components/AgentIdentities'
 import { AgentPicker } from '#/components/AgentPicker'
 import { Devices } from '#/components/Devices'
 import { PreviewLimitEditor } from '#/components/Preview'
+import { Updates } from '#/components/Updates'
 import { errorMessage, get, type Me, patch } from '#/lib/api'
 import type { Settings } from '#/server/agents'
 
@@ -49,6 +50,8 @@ function BoardSettings() {
         </p>
         <PreviewLimitEditor key={data.previewLimit} id="settings-preview-limit" limit={data.previewLimit} />
       </section>
+      {/* The app's updates are the human's: an agent never sees them here, and their routes refuse one. */}
+      {me && !me.agent && <Updates />}
       {/* The agents' roles are the human's call: an agent never sees them here. */}
       {me && !me.agent && <AgentIdentities />}
       {/* With sign-in off (test mode, AUTH=off) there are no passkeys to show. */}

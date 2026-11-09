@@ -87,6 +87,20 @@ export function startedPatch(
 }
 
 /**
+ * What to write when a ticket moves from `from` to `to`, besides the status: `startedPatch`, and when
+ * the stage changes, the end of its place in the column it leaves: it arrives in the new one unplaced,
+ * below the tickets placed there. Every write of a ticket's status goes through this.
+ */
+export function movePatch(
+  stages: Stage[],
+  from: string,
+  to: string,
+  startedAt: string | null,
+): { startedAt?: string; rank?: null } {
+  return { ...startedPatch(stages, from, to, startedAt), ...(from !== to ? { rank: null } : {}) }
+}
+
+/**
  * The stage an agent or the UI named: its key, else its name (any casing), else a kind: `open` (and
  * `todo`) is the start stage, `active` (and `in_progress`) the work stage (`work`, the first active
  * stage when not given), and any other kind the first stage of that kind.
@@ -260,6 +274,8 @@ export function deleteStage(projectId: number, id: number, opts: { moveTo?: stri
       tx.update(schema.tickets)
         .set({
           status: target.key,
+          // They arrive unplaced, below the tickets placed in the target's column.
+          rank: null,
           updatedAt: new Date().toISOString(),
           // Work starts for them when they go from a stage that is not one of work into one that is.
           ...(isWorking(stages, stage.key) ? {} : startedPatch(stages, stage.key, target.key)),
