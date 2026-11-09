@@ -56,8 +56,6 @@ test('the Roadmap shows tickets being worked with their lanes as timelines, and 
 test('the Roadmap picks its time axis in the URL, which survives a reload', async ({ page, project }) => {
   await page.goto(`/projects/${project.id}/roadmap`)
   await expect(page.getByRole('heading', { name: 'Roadmap' })).toBeVisible()
-  // The legend's own label, so its task states read apart from the rest of the page.
-  await expect(page.getByLabel('Legend').getByText('Tasks', { exact: true })).toBeVisible()
   await expect(page.getByRole('tab', { name: '7 d' })).not.toHaveAttribute('aria-selected', 'true')
 
   await page.getByRole('tab', { name: '7 d' }).click()

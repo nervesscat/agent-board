@@ -32,16 +32,16 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   await expect(bar.locator('[data-kind="handoff"]')).toHaveCount(1)
 
   // Silent for 40 minutes in progress: stalled. Its totals and the project's show as text.
-  await expect(ticket.getByTestId('stalled').first()).toContainText('Stalled')
-  await expect(ticket.getByLabel('Totals').first()).toContainText(
-    /Working \d+m · Waiting 20m · Blocked on human 0m/,
+  await expect(ticket.getByTestId('stall-notice').first()).toContainText('Stalled')
+  await expect(ticket.getByTestId('work-summary').first()).toContainText(
+    /Worked 40 min\s*·\s*Waited 20 min\s*·\s*On you 0/,
   )
   await expect(page.getByText('Project work, every ticket and lane:')).toBeVisible()
   await expect(page.getByText(/^1 stalled$/)).toBeVisible()
   // The lane has no events: it says so, and is not stalled.
   const laneRow = ticket.getByRole('group', { name: 'Work timeline' }).nth(1)
   await expect(laneRow).toContainText('No work recorded yet.')
-  await expect(ticket.getByTestId('stalled')).toHaveCount(1)
+  await expect(ticket.getByTestId('stall-notice')).toHaveCount(1)
   void lane
 
   // From the keyboard: Tab reaches the span, which has its story as its name and shows its tooltip.
@@ -57,7 +57,10 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   // The wait and the hand-off name themselves too, with a tooltip on hover.
   await expectTooltip(wait, /^wait: lock \(claude\), .*, 20 min: test lock$/)
   await expectTooltip(bar.locator('[data-kind="handoff"]'), /^handoff orchestrator → builder-sub-1, /)
-  await expectTooltip(ticket.getByTestId('stalled'), /^No heartbeat or event since .* \(claude\)$/)
+  await expectTooltip(
+    ticket.getByTestId('stall-notice'),
+    /^claude has a build open, nobody heard from since /,
+  )
 
   await ticket.screenshot({ path: test.info().outputPath('roadmap-work-timeline.png') })
   expect(errors).toEqual([])
