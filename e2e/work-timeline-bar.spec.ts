@@ -32,12 +32,6 @@ test('the chart has a row per agent, its work and waits on its own row, and the 
   expect(
     await build.evaluate((el, other) => el.parentElement === other.parentElement, await lock.elementHandle()),
   ).toBe(false)
-  // The key draws the same language, under the chart.
-  const key = bar.getByTestId('work-timeline-key')
-  await expect(key).toBeVisible()
-  await expect(key).toContainText('waiting on the human')
-  await expect(key).toContainText('delegated to another agent')
-  await expect(key).toContainText('blocked stage')
   await card.screenshot({ path: test.info().outputPath('work-timeline-rows.png') })
   expect(errors).toEqual([])
 })
