@@ -31,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type ProjectPreview, type ProjectPreviews, type StopAll } from '#/lib/api'
+import { previewOpenLinks } from '#/lib/previewLinks'
 import { useProject } from '#/lib/project'
 import { recall, remember, whenArrived } from '#/lib/remembered'
 import {
@@ -360,6 +361,8 @@ function PreviewItem({
   const { workspace: w, ticket: t } = p
   // A link that answers, not a preview the board runs: whether the board may stop the server behind it.
   const link = !previewActive(p.managed) && !!p.check?.running
+  // The board's own preview of the workspace: its link on this machine, or the proxied path on the tailnet.
+  const links = p.managed?.proxyUrl ? previewOpenLinks(p.managed) : null
   return (
     <li className="min-w-0 space-y-1.5 rounded-lg border p-3 text-sm">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -390,6 +393,33 @@ function PreviewItem({
         </Tip>
       )}
       {p.managed && <ManagedLine m={p.managed} workspaceId={w.id} />}
+      {links?.through && (
+        <p className="text-xs">
+          Through the board:{' '}
+          <a
+            href={links.through}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono break-all hover:underline"
+            data-testid="preview-through-board"
+          >
+            {links.through}
+          </a>
+        </p>
+      )}
+      {links && !links.through && links.open && (
+        <p className="text-xs">
+          <a
+            href={links.open}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono break-all hover:underline"
+            data-testid="preview-through-board"
+          >
+            Open through the board
+          </a>
+        </p>
+      )}
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
           <span className="inline-flex min-w-0 items-center gap-1 font-mono">

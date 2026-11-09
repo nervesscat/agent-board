@@ -23,6 +23,7 @@ import {
   type WorkspacePreview,
 } from '#/lib/api'
 import { clock } from '#/lib/format'
+import { previewOpenLinks } from '#/lib/previewLinks'
 import { cn } from '#/lib/utils'
 
 /**
@@ -294,10 +295,32 @@ function RunRow({ run, onChange }: { run: TicketRun; onChange: () => void }) {
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {s?.status === 'running' && s.url && (
-          <a href={s.url} target="_blank" rel="noreferrer" className={buttonVariants({ size: 'sm' })}>
-            Open <ExternalLink />
-          </a>
+        {s?.status === 'running' && (s.url || s.proxyUrl) && (
+          <>
+            {previewOpenLinks(s).open && (
+              <a
+                href={previewOpenLinks(s).open!}
+                target="_blank"
+                rel="noreferrer"
+                className={buttonVariants({ size: 'sm' })}
+                data-testid="run-open"
+              >
+                Open <ExternalLink />
+              </a>
+            )}
+            {previewOpenLinks(s).through && (
+              <a
+                href={previewOpenLinks(s).through!}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                data-testid="run-through-board"
+                title="The preview through the board's own origin: signed in, for other devices and cloud agents"
+              >
+                Through the board
+              </a>
+            )}
+          </>
         )}
         {!active && (
           <Tip
