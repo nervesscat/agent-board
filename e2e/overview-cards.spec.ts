@@ -136,7 +136,9 @@ test('In progress says what a ticket waits on and since when, when a person has 
   const row = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${t.id} Approve the copy` })
-  await expect(row.getByTestId('now-line')).toContainText(/Waiting on you since \d{1,2}:\d{2}\s*[AP]M/)
+  await expect(row.getByTestId('now-line')).toContainText(
+    /Waiting on you for [^·]+ since \d{1,2}:\d{2}\s*[AP]M/,
+  )
   await expect(row.getByTestId('stall-notice')).toHaveCount(0)
 })
 

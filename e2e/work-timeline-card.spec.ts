@@ -1,4 +1,4 @@
-import { expect, expectTooltip, test } from './fixtures'
+import { expect, expectTooltip, ok, test } from './fixtures'
 import { inDatabase } from './db'
 import { age, as, create, errorsOn, record, scrollsSideways, workedTicket } from './workTimeline'
 
@@ -171,7 +171,7 @@ test('a stalled build says why, and a wait pairs into one row with its duration'
       .prepare('update ticket_events set at = ? where id = ?')
       .run(new Date(Date.now() - 85_000).toISOString(), wait.waitId),
   )
-  await record(agent, project, t.id, { kind: 'wait_end', agent: 'orchestrator' })
+  await record(agent, project, t.id, { kind: 'wait_end', agent: 'orchestrator', note: 'spec approved' })
   await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
   await record(agent, project, t.id, {
     kind: 'span_end',
@@ -188,7 +188,7 @@ test('a stalled build says why, and a wait pairs into one row with its duration'
   await expect(card.getByTestId('stall-notice')).toContainText('nothing open since the build ended at')
   await card.getByRole('button', { name: 'Show more' }).click()
   const events = card.getByRole('list', { name: 'Timeline story' })
-  await expect(events).toContainText('waited for spec · 1 min 25 s')
+  await expect(events).toContainText('waited for spec · 1 min 25 s: spec approved')
   await expect(events).not.toContainText('waiting for spec')
   await expect(events).toContainText('ended build: run returned before the builder reported')
 })
@@ -252,4 +252,28 @@ test.describe('on a phone', () => {
       await worker.dispose()
     }
   })
+})
+
+test('a stall in another active stage names that stage in its why, on the ticket page', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // An active stage after the first one (In progress), so the stall names it.
+  await ok(human.post(`/api/projects/${project.id}/stages`, { data: { name: 'Bug Found', kind: 'active' } }))
+  const stages = await ok<{ key: string; name: string }[]>(human.get(`/api/projects/${project.id}/stages`))
+  const t = await create(human, project, {
+    title: 'Crash on import',
+    status: stages.find((s) => s.name === 'Bug Found')!.key,
+  })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
+  await record(agent, project, t.id, { kind: 'span_end', phase: 'build' })
+  age(t.id, 40)
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const card = page.getByRole('region', { name: 'Timeline' })
+  await expect(card.getByTestId('stall-notice')).toContainText(
+    /Stalled \d+ min: in Bug Found, no agent heard from since/,
+  )
 })
