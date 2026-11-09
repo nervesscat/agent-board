@@ -146,7 +146,9 @@ Lanes of a ticket you are working are yours to create (next section).
   - `start_wait` with the reason when you cannot go on (`lock`, `builder`, `mcp`, `human`, `other`
     with a `note`), and `end_wait` as soon as you can. A wait counts as waiting only while no span
     is open on the ticket: your wait on a sub-agent whose span runs reads as working. A `human` wait
-    counts as blocked on the human, span or not.
+    counts as blocked on the human, span or not. When you wait on an agent you briefed, pass `on`:
+    the agent the work was handed to (its full name, such as `orch/builder-1`). A wait with `on` is
+    delegated work and counts as working, not waiting; `on` is 1 to 60 characters.
   - `handoff` when you brief a sub-agent and when it hands back ([Delegating](#delegating)).
     `get_ticket` → `work.open` lists your open spans and waits to close.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag

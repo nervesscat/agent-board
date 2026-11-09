@@ -201,10 +201,14 @@ export function handoff(
   return { event }
 }
 
+/**
+ * A wait on the ticket. `on` names the agent the work was handed to (a delegated wait: the time counts as
+ * working); left out, the wait reads as it always did.
+ */
 export function startWait(
   projectId: number,
   ticketId: number,
-  input: EventBase & { reason: WaitReason },
+  input: EventBase & { reason: WaitReason; on?: string },
   actor: string,
 ) {
   const t = scopedTicket(projectId, ticketId)
@@ -212,6 +216,7 @@ export function startWait(
     kind: 'wait_start',
     agent: input.agent,
     reason: input.reason,
+    on: clean(input.on) || null,
     note: clean(input.note),
   })
   return { waitId: event.id, event }
@@ -333,23 +338,13 @@ export function ticketTimeline(ticketId: number, now: Date = new Date()) {
   return { events: newest, timeline }
 }
 
-/** What list rows carry: the stalled flag and when the ticket was last heard from. */
-export function stalledFor(tickets: TimelineTicket[], now: Date = new Date()) {
-  const all = timelinesFor(tickets, now)
-  return new Map(
-    [...all].map(([id, { timeline }]) => [
-      id,
-      { stalled: timeline.stalled, lastSignalAt: timeline.lastSignalAt },
-    ]),
-  )
-}
-
-/** What `get_ticket` carries: the totals, the stalled flag, and the spans and waits still open to close. */
+/** What `get_ticket` carries: the totals, the stalled flag, who was last heard from, and the open spans and waits. */
 export function workOf(timeline: WorkTimeline) {
   return {
     totals: timeline.totals,
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
+    lastHeard: timeline.lastHeard,
     open: {
       spans: timeline.spans.filter((s) => s.open),
       waits: timeline.waits.filter((w) => w.open),
@@ -358,6 +353,8 @@ export function workOf(timeline: WorkTimeline) {
 }
 
 export type ProjectWork = {
+  /** The server's time when it was read: the browser's clock is corrected by it (see useServerOffset). */
+  now: string
   stallMinutes: number
   totals: WorkTotals
   tickets: { id: number; totals: WorkTotals; stalled: WorkTimeline['stalled'] }[]
@@ -386,13 +383,20 @@ export function projectWork(projectId: number, now: Date = new Date()): ProjectW
     const { timeline } = all.get(t.id)!
     return { id: t.id, totals: timeline.totals, stalled: timeline.stalled }
   })
-  return { stallMinutes: project.stallMinutes, totals: sumTotals(rows.map((r) => r.totals)), tickets: rows }
+  return {
+    now: now.toISOString(),
+    stallMinutes: project.stallMinutes,
+    totals: sumTotals(rows.map((r) => r.totals)),
+    tickets: rows,
+  }
 }
 
 // --- what the MCP tools and REST take ---
 
 const Name = z.string().trim().min(1).max(60)
 const Phase = z.string().trim().min(1).max(60)
+/** The agent a wait hands the work to: a name, like `agent`. */
+const On = Name
 /** Every event's own fields: who did the work (a sub-agent's name too; the caller when left out) and a note. */
 export const eventBase = {
   agent: Name.optional(),
@@ -403,7 +407,7 @@ export const eventFields = {
   span_start: { phase: Phase, round: z.number().int().min(1).max(20).optional() },
   span_end: { spanId: z.number().int().optional(), phase: Phase.optional() },
   handoff: { from: Name.optional(), to: Name },
-  wait_start: { reason: z.enum(WAIT_REASONS) },
+  wait_start: { reason: z.enum(WAIT_REASONS), on: On.optional() },
   wait_end: { waitId: z.number().int().optional() },
   heartbeat: {},
 } as const satisfies Record<AgentEventKind, z.ZodRawShape>

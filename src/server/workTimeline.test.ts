@@ -259,6 +259,39 @@ describe('the agent tools', () => {
     })
   })
 
+  it('start_wait stores on, through MCP and REST, and refuses a bad one', async () => {
+    const pid = newProject()
+    const t = activeTicket(pid)
+    const w = await tool('start_wait', { projectId: pid, ticketId: t.id, reason: 'builder', on: 'builder' })
+    expect(agentEvents(t.id)[0]).toMatchObject({ id: w.waitId, reason: 'builder', on: 'builder' })
+    expect(w.event).toMatchObject({ on: 'builder' })
+
+    const rest = await call('POST', `/api/projects/${pid}/tickets/${t.id}/events`, {
+      kind: 'wait_start',
+      reason: 'builder',
+      on: 'orch/builder-1',
+    })
+    expect(rest.status).toBe(201)
+    expect(rest.body.event).toMatchObject({ on: 'orch/builder-1' })
+
+    // Left out, the wait reads as it always did: on is null.
+    const plain = await tool('start_wait', { projectId: pid, ticketId: t.id, reason: 'lock' })
+    expect(agentEvents(t.id).find((e) => e.id === plain.waitId)!.on).toBeNull()
+
+    for (const on of ['', '   ', 'x'.repeat(61)]) {
+      expect(
+        await tool('start_wait', { projectId: pid, ticketId: t.id, reason: 'builder', on }),
+      ).toHaveProperty('error')
+      const bad = await call('POST', `/api/projects/${pid}/tickets/${t.id}/events`, {
+        kind: 'wait_start',
+        reason: 'builder',
+        on,
+      })
+      expect(bad.status).toBe(400)
+    }
+    expect(agentEvents(t.id)).toHaveLength(3)
+  })
+
   it('heartbeat stores a row and answers lastSignalAt as its time', async () => {
     const pid = newProject()
     const t = activeTicket(pid)
@@ -266,6 +299,97 @@ describe('the agent tools', () => {
     const row = agentEvents(t.id)[0]!
     expect(row.kind).toBe('heartbeat')
     expect(beat).toEqual({ at: row.at, lastSignalAt: row.at })
+  })
+})
+
+describe('delegated waits, lastHeard and activity', () => {
+  it('counts a wait with on as working and a plain one as waiting, on the ticket and on the REST read', async () => {
+    const pid = newProject()
+    const delegated = activeTicket(pid, 'delegated')
+    const plain = activeTicket(pid, 'plain')
+    await tool('start_wait', { projectId: pid, ticketId: delegated.id, reason: 'builder', on: 'builder' })
+    await tool('start_wait', { projectId: pid, ticketId: plain.id, reason: 'builder' })
+    age(delegated.id, 30)
+    age(plain.id, 30)
+    const d = work.ticketTimeline(delegated.id).timeline.totals
+    const p = work.ticketTimeline(plain.id).timeline.totals
+    expect(d.workingMs).toBeGreaterThanOrEqual(30 * MIN - 1000)
+    expect(d.waitingMs).toBe(0)
+    expect(p.waitingMs).toBeGreaterThanOrEqual(30 * MIN - 1000)
+    expect(p.workingMs).toBe(0)
+    const rest = await call('GET', `/api/tickets/${delegated.id}/events`)
+    expect(rest.body.timeline.waits[0]).toMatchObject({ reason: 'builder', on: 'builder' })
+  })
+
+  it('answers lastHeard as the latest agent event with its note, on the events, the timeline and get_ticket', async () => {
+    const pid = newProject()
+    const t = activeTicket(pid)
+    await tool('start_span', { projectId: pid, ticketId: t.id, phase: 'build', agent: 'builder' })
+    await tool('heartbeat', { projectId: pid, ticketId: t.id, agent: 'builder', note: 'checks running' })
+    const rest = await call('GET', `/api/tickets/${t.id}/events`)
+    const expected = {
+      kind: 'heartbeat',
+      agent: 'builder',
+      by: AGENT,
+      phase: '',
+      reason: '',
+      note: 'checks running',
+    }
+    expect(rest.body.timeline.lastHeard).toMatchObject(expected)
+    expect((await tool('get_ticket', { ticketId: t.id })).work.lastHeard).toMatchObject(expected)
+  })
+
+  it('is none for a ticket that only the board has recorded events on', async () => {
+    const pid = newProject()
+    const t = features.createTicket(pid, { title: 'quiet', status: 'todo' }, HUMAN)
+    const rest = await call('GET', `/api/tickets/${t.id}/events`)
+    expect(rest.body.events.every((e: { agent: string }) => e.agent === 'board')).toBe(true)
+    expect(rest.body.timeline.lastHeard).toBeNull()
+  })
+
+  it('gives list rows and the Overview the same activity: open spans, open waits and lastHeard', async () => {
+    const pid = newProject()
+    const t = activeTicket(pid, 'busy')
+    const span = await tool('start_span', { projectId: pid, ticketId: t.id, phase: 'build' })
+    await tool('start_wait', { projectId: pid, ticketId: t.id, reason: 'builder', on: 'builder' })
+    const [row] = (await tool('list_tickets', { projectId: pid })).filter(
+      (r: { id: number }) => r.id === t.id,
+    )
+    const started = agentEvents(t.id).find((e) => e.kind === 'span_start')!
+    expect(row.activity).toEqual({
+      spans: [{ phase: 'build', agent: AGENT, since: started.at }],
+      waits: [{ reason: 'builder', agent: AGENT, on: 'builder', since: expect.any(String) }],
+      lastHeard: {
+        at: expect.any(String),
+        agent: AGENT,
+        by: AGENT,
+        kind: 'wait_start',
+        phase: '',
+        reason: 'builder',
+        note: '',
+      },
+      lastClosedSpan: null,
+      now: expect.any(String),
+    })
+    expect(span.spanId).toBe(started.id)
+    const overview = (await tool('get_summary', { projectId: pid })).projects[0]
+    // Each read is at its own time: the same activity, read at the Overview's now.
+    expect(overview.inProgress.find((p: { id: number }) => p.id === t.id).activity).toEqual({
+      ...row.activity,
+      now: expect.any(String),
+    })
+
+    // Once they close, the open lists are empty; lastHeard stays at the latest event.
+    await tool('end_span', { projectId: pid, ticketId: t.id, spanId: span.spanId })
+    await tool('end_wait', { projectId: pid, ticketId: t.id })
+    const after = (await tool('list_tickets', { projectId: pid })).find((r: { id: number }) => r.id === t.id)
+    expect(after.activity).toMatchObject({ spans: [], waits: [], lastHeard: { kind: 'wait_end' } })
+    expect(after.activity.lastClosedSpan).toEqual({
+      phase: 'build',
+      agent: AGENT,
+      start: started.at,
+      end: expect.any(String),
+    })
   })
 })
 

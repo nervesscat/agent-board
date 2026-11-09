@@ -21,6 +21,10 @@ const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bench-data-test-'))
 const migrationsFolder = path.resolve('drizzle')
 afterAll(() => fs.rmSync(root, { recursive: true, force: true, maxRetries: 3 }))
 
+/** The times each read stamps at its own hour (the summary's generatedAt, and each activity's now), which the reads leave out. */
+const withoutReadTimes = (value) =>
+  JSON.parse(JSON.stringify(value, (k, v) => (k === 'now' && typeof v === 'string' ? undefined : v)))
+
 describe('assertBenchDataDir', () => {
   const live = path.join(root, 'checkout', 'data')
   it('refuses the live data folder, a folder in it, and a folder that holds it', () => {
@@ -188,7 +192,8 @@ describe('the generated dataset, whatever the hour', () => {
       const anchor = startOfLocalDay(run.generated)
       for (const at of run.reads) {
         const now = new Date(at)
-        const { generatedAt: _at, ...summary } = getSummary(undefined, { now })
+        const { generatedAt: _at, ...read } = getSummary(undefined, { now })
+        const summary = withoutReadTimes(read)
         const daily = dailyReport(today(now))
         // A period's label names its date ("Fri, Oct 9"), which no layout of the data can keep.
         const reports = listReports(1, {}, now).periods.map(({ label: _label, ...p }) => p)
@@ -271,7 +276,8 @@ describe('the generated dataset, whatever the hour on a daylight saving change',
     const { getSummary } = await import('#/server/summary')
     const { dailyReport, today } = await import('#/server/daily')
     const now = new Date(at)
-    const { generatedAt: _at, ...summary } = getSummary(undefined, { now })
+    const { generatedAt: _at, ...read } = getSummary(undefined, { now })
+    const summary = withoutReadTimes(read)
     const daily = dailyReport(today(now))
     ;(await import('#/db')).db.$client.close()
     const blank = (value) =>
