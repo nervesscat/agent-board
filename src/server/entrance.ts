@@ -64,12 +64,18 @@ export type Verdict =
   | { allow: true; entrance: PublicEntrance | null }
   | { allow: false; status: number; error: string }
 
-/** The guard's settings from the board's environment, as config.ts reads them. Throws StartupError. */
-export function guardConfig(e: Record<string, string | undefined>): GuardConfig {
+/**
+ * The guard's settings from the board's environment, as config.ts reads them, and the entrance the board's
+ * database saved (`stored`, null when none). Throws StartupError.
+ */
+export function guardConfig(
+  e: Record<string, string | undefined>,
+  stored: PublicEntrance | null = null,
+): GuardConfig {
   return {
     authOff: readAuthMode(e).off,
     port: readPort(e),
-    entrance: readServedEntrance(e),
+    entrance: readServedEntrance(e, stored),
     dataDir: expandPath(e.DATA_DIR || './data'),
   }
 }
@@ -175,8 +181,16 @@ export function guardRequest(req: GuardRequest, cfg: GuardConfig): Verdict {
       'Tailscale Funnel is refused: the board answers on its tailnet only, never the internet',
     )
   const host = req.headers.get('host')
-  if (!hostOf(host, cfg.entrance))
-    return refuse(403, `the board does not answer for the host ${JSON.stringify(host ?? '')}`)
+  if (!hostOf(host, cfg.entrance)) {
+    // With no entrance set (none saved, cleared, or sign-in off), a foreign host is the case the message names.
+    const named = JSON.stringify(host ?? '')
+    return refuse(
+      403,
+      cfg.entrance
+        ? `the board does not answer for the host ${named}`
+        : `no tailnet entrance is configured (PUBLIC_ORIGIN): the board answers on this machine only, not the host ${named}`,
+    )
+  }
   const through = cameThroughEntrance(req, cfg.entrance)
   if (through && cfg.authOff)
     return refuse(403, 'sign-in is off: this board answers on this machine only, never through a proxy')

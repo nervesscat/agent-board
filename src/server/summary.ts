@@ -4,6 +4,7 @@ import { db, schema } from '#/db'
 import type { StageKind } from '#/lib/constants'
 import { mergeLayout, shownIn } from '#/lib/layout'
 import { stageColumn } from '#/lib/stages'
+import { activityOf } from '#/lib/workTimeline'
 import { dayBounds } from './activity'
 import { listActors } from './actors'
 import { today } from './daily'
@@ -16,7 +17,7 @@ import { listRepos } from './repos'
 import { reportDueFor } from './reportDue'
 import { handoffStates } from './resume'
 import { listStages, type Stage } from './stages'
-import { stalledFor } from './workTimeline'
+import { timelinesFor } from './workTimeline'
 
 /**
  * The one-glance picture of a project (or of every project): what waits on the human, what is in
@@ -239,10 +240,10 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       }
     })
   // Active tickets and lanes nobody was heard from on for longer than the project allows (the work timeline).
-  const signals = stalledFor(tickets, now)
+  const timelines = timelinesFor(tickets, now)
   const stalled = tickets
     .flatMap((t) => {
-      const s = signals.get(t.id)?.stalled
+      const s = timelines.get(t.id)!.timeline.stalled
       return s
         ? [
             {
@@ -255,6 +256,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
               lastAgent: s.lastAgent,
               lastBy: s.lastBy,
               lastFrom: s.lastFrom,
+              // The open spans and waits and the last heard, so the stall says why (the same read as `stalled`).
+              activity: activityOf(timelines.get(t.id)!.timeline),
             },
           ]
         : []
@@ -333,7 +336,9 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         days: Math.round((startOfToday - new Date(`${today(new Date(since))}T00:00:00`).getTime()) / DAY_MS),
         // Handed off for review, it waits on the human rather than on its own posts.
         // Active and silent past the project's threshold (the work timeline's rule).
-        stalled: !!signals.get(t.id)?.stalled,
+        stalled: !!timelines.get(t.id)!.timeline.stalled,
+        // The open spans and waits, and who was last heard from (the same read as `stalled`).
+        activity: activityOf(timelines.get(t.id)!.timeline),
         stale:
           kind(t.status) !== 'review' &&
           now.getTime() - new Date(post?.createdAt ?? since).getTime() > STALE_MS,

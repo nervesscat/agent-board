@@ -25,6 +25,7 @@ import type { ReactNode } from 'react'
 import { Actor, ClaimedActor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
+import { GettingStarted } from '#/components/GettingStarted'
 import { useSettleInstructions } from '#/components/InstructionsHistory'
 import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
@@ -32,13 +33,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { StalledBadge } from '#/components/WorkTimeline'
+import { stallFor } from '#/components/StallLine'
+import { NowLine, StallNotice } from '#/components/WorkStatus'
+import { timelineFromActivity, stallStage } from '#/lib/activityTimeline'
 import { threadAnchor } from '#/lib/anchors'
 import type { AreaId } from '#/lib/layout'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
-import { formatDuration } from '#/lib/workTimeline'
+import { lastHeard, type WorkTimelineLike } from '#/lib/workStatus'
+import type { Stalled } from '#/lib/workTimeline'
 
 /**
  * Where things stand, for one project (its Overview) or every project (Home, one block each): what
@@ -60,16 +64,14 @@ export function Summary({ projectId }: { projectId?: number }) {
       </div>
     )
   if (error || !data) return <Empty>Could not load the summary: {errorMessage(error)}</Empty>
-  if (!data.projects.length)
-    return (
-      <Empty>
-        No projects yet. Create one from the project menu in the top bar, then add its checkouts on the
-        project's Repositories page.
-      </Empty>
-    )
+  if (!data.projects.length) return <GettingStarted />
   if (projectId) return <ProjectBlock p={data.projects[0]!} />
   return (
     <div className="space-y-10">
+      {/* The top bar's Getting started entry folds into the Pages menu on a phone, which leads here. */}
+      <div className="empty:hidden md:hidden">
+        <GettingStarted dismissable />
+      </div>
       {data.projects.map((p) => (
         <section key={p.project.id} className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -273,21 +275,29 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
   )
 }
 
-/** Whole minutes since `since`: the summary carries the moment, the page counts up to now. */
-const silentMinutes = (since: string) => Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60_000))
-
 /** A stalled ticket's details, from the Needs you list that names it. */
-function stalledOf(p: ProjectSummary, id: number) {
+function stalledOf(p: ProjectSummary, id: number): Stalled | null {
   const s = p.needsYou.stalled.find((x) => x.ticketId === id)
-  return s
-    ? {
-        since: s.lastSignalAt,
-        minutes: silentMinutes(s.lastSignalAt),
-        lastAgent: s.lastAgent,
-        lastBy: s.lastBy,
-        lastFrom: s.lastFrom,
-      }
-    : null
+  return s ? stallFor(s) : null
+}
+
+/** When an agent was last heard from, relative, and what it said: one line under the now line. */
+function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
+  const h = lastHeard(timeline)
+  if (!h)
+    return (
+      <p data-testid="last-heard" className="text-xs text-muted-foreground">
+        Nobody heard from yet
+      </p>
+    )
+  return (
+    <p data-testid="last-heard" className="flex min-w-0 gap-x-1 text-xs text-muted-foreground tabular-nums">
+      <span className="shrink-0">Last heard {ago(h.at)}</span>
+      {h.agent && (
+        <span className="min-w-0 truncate">{`· ${h.agent}${h.summary ? `: ${h.summary}` : ''}`}</span>
+      )}
+    </p>
+  )
 }
 
 function Stale() {
@@ -499,45 +509,49 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               }
             />
           ))}
-          {stalled.map((s) => (
-            <Row
-              key={`s${s.ticketId}`}
-              icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" />}
-              title={
-                <Link
-                  to="/projects/$id/features/$ticketId"
-                  params={{ id: pid, ticketId: String(s.ticketId) }}
-                  className="hover:underline"
-                >
-                  Stalled: #{s.ticketId} {s.title}
-                </Link>
-              }
-              meta={
-                <>
-                  <StageBadge p={p} status={s.status} />
-                  {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
-                  <Tip content={`No heartbeat or event since ${clock(s.lastSignalAt)}`}>
-                    <span className="min-w-0">
-                      silent {formatDuration(silentMinutes(s.lastSignalAt) * 60_000)}
-                      {s.lastAgent && (
-                        <>
-                          {' · last '}
-                          {s.lastFrom === 'assignee' ? (
-                            // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
-                            <span data-testid="last-assignee" className="font-medium wrap-anywhere">
-                              {s.lastAgent}
-                            </span>
-                          ) : (
-                            <ClaimedActor name={s.lastAgent} by={s.lastBy} />
-                          )}
-                        </>
-                      )}
-                    </span>
-                  </Tip>
-                </>
-              }
-            />
-          ))}
+          {stalled.map((s) => {
+            const timeline = timelineFromActivity(s.activity, stallFor(s))
+            return (
+              <Row
+                key={`s${s.ticketId}`}
+                icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" />}
+                title={
+                  <Link
+                    to="/projects/$id/features/$ticketId"
+                    params={{ id: pid, ticketId: String(s.ticketId) }}
+                    className="hover:underline"
+                  >
+                    Stalled: #{s.ticketId} {s.title}
+                  </Link>
+                }
+                meta={
+                  <>
+                    <StageBadge p={p} status={s.status} />
+                    {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
+                    <StallNotice
+                      timeline={timeline}
+                      stage={stallStage(p.stages, s.status)}
+                      variant="inline"
+                      className="w-full"
+                    />
+                    {s.lastAgent && (
+                      <span className="min-w-0 wrap-anywhere">
+                        last{' '}
+                        {s.lastFrom === 'assignee' ? (
+                          // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
+                          <span data-testid="last-assignee" className="font-medium">
+                            {s.lastAgent}
+                          </span>
+                        ) : (
+                          <ClaimedActor name={s.lastAgent} by={s.lastBy} />
+                        )}
+                      </span>
+                    )}
+                  </>
+                }
+              />
+            )
+          })}
           {reviews.map((t) => (
             <Row
               key={`r${t.id}`}
@@ -568,50 +582,57 @@ function InProgress({ p }: { p: ProjectSummary }) {
         <Quiet>Nothing in progress.</Quiet>
       ) : (
         <Rows>
-          {items.map((t) => (
-            <Row
-              key={t.id}
-              title={<TicketLink p={p} id={t.id} title={t.title} />}
-              side={
-                <>
-                  {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
-                  {t.stalled && <StalledBadge stalled={stalledOf(p, t.id)} />}
-                  {t.stale && <Stale />}
-                </>
-              }
-              meta={
-                <div className="w-full min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <Who p={p} name={t.assignee} />
-                    <Tip content={new Date(t.since).toLocaleString()}>
-                      <span>{since(t.since)}</span>
-                    </Tip>
-                    {t.lanes > 0 && (
-                      <span className="inline-flex items-center gap-1">
-                        <Layers className="size-3" /> {plural(t.lanes, 'lane')}
-                      </span>
+          {items.map((t) => {
+            const timeline = timelineFromActivity(t.activity, t.stalled ? stalledOf(p, t.id) : null)
+            return (
+              <Row
+                key={t.id}
+                title={<TicketLink p={p} id={t.id} title={t.title} />}
+                side={
+                  <>
+                    {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
+                    {timeline.stalled && (
+                      <StallNotice timeline={timeline} stage={stallStage(p.stages, t.status)} />
                     )}
-                    {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                    {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
-                    {t.preview && (
-                      <Tip content={`Preview of ${t.preview.workspace}`}>
-                        <a
-                          href={t.preview.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-foreground hover:underline"
-                        >
-                          <ExternalLink className="size-3" /> Preview
-                        </a>
+                    {t.stale && <Stale />}
+                  </>
+                }
+                meta={
+                  <div className="w-full min-w-0">
+                    <NowLine timeline={timeline} />
+                    <HeardLine timeline={timeline} />
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <Who p={p} name={t.assignee} />
+                      <Tip content={new Date(t.since).toLocaleString()}>
+                        <span>{since(t.since)}</span>
                       </Tip>
-                    )}
+                      {t.lanes > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Layers className="size-3" /> {plural(t.lanes, 'lane')}
+                        </span>
+                      )}
+                      {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                      {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                      {t.preview && (
+                        <Tip content={`Preview of ${t.preview.workspace}`}>
+                          <a
+                            href={t.preview.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-foreground hover:underline"
+                          >
+                            <ExternalLink className="size-3" /> Preview
+                          </a>
+                        </Tip>
+                      )}
+                    </div>
+                    {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-1.5" />}
+                    <LastPost post={t.lastPost} />
                   </div>
-                  {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-1.5" />}
-                  <LastPost post={t.lastPost} />
-                </div>
-              }
-            />
-          ))}
+                }
+              />
+            )
+          })}
         </Rows>
       )}
     </Section>
@@ -736,7 +757,7 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
         missing > 0 && (
           <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
             <span className="inline-flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400">
-              <BookmarkX className="size-3" /> {missing} without a handoff
+              <BookmarkX className="size-3" /> {missing} without a resume note
             </span>
           </Tip>
         )
@@ -814,7 +835,7 @@ function NoHandoff({ p, id }: { p: ProjectSummary; id: number }) {
       className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 hover:underline dark:text-amber-400"
       tip="Worked on an earlier day, and nobody left a resume note on where it was left: open it to write one"
     >
-      <BookmarkX className="size-3" /> no handoff
+      <BookmarkX className="size-3" /> no resume note
     </ResumeLink>
   )
 }

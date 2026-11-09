@@ -171,7 +171,7 @@ describe('the resume note', () => {
     expect((await read(t.id)).stale).toBe(true)
   })
 
-  it('flags a ticket that carried over to another day without a handoff, and counts its days', async () => {
+  it('flags a ticket that carried over to another day without a resume note, and counts its days', async () => {
     const t = features.createTicket(pid, { title: 'carry over' }, 'enrique')
     // Not being worked: nothing to hand off.
     expect(await read(t.id, day(1))).toMatchObject({ noHandoff: false, day: null })

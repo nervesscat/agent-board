@@ -1,11 +1,12 @@
+import fs from 'node:fs'
 import { type IncomingMessage, type ServerResponse, STATUS_CODES } from 'node:http'
 import path from 'node:path'
 import type { Duplex } from 'node:stream'
 
 import Database from 'better-sqlite3'
-import type { Plugin } from 'vite'
+import type { Connect, Plugin, ViteDevServer } from 'vite'
 
-import { StartupError } from './config.ts'
+import { type PublicEntrance, StartupError } from './config.ts'
 import { signedIn } from './credentials.ts'
 import { isPreviewPath } from './previewPaths.ts'
 import {
@@ -13,12 +14,14 @@ import {
   guardConfig,
   guardRequest,
   type HeaderLookup,
+  hostOf,
   isForwardingHeader,
   isLoopbackPeer,
   isSignInPath,
   loginLocation,
   wantsHtml,
 } from './entrance.ts'
+import { savedEntrance } from './tailnetStore.ts'
 
 /**
  * `vite dev`, which runs the board, answers some requests itself before Nitro hands one to the board's
@@ -30,8 +33,13 @@ import {
  * WebSocket opens (the board has none; hot reload is for this machine's browsers). A request straight to
  * the board on this machine is served as before, once its Host (and a cookie write's Origin) passes.
  *
- * Who is signed in is read from the board's database (credentials.ts), opened here in Vite's process,
- * never written: the board itself runs in Nitro's.
+ * The entrance is read for each request, from the environment and from the board's database: an entrance
+ * saved in Settings applies at once, here as in the board's own process (which resets its memo on a save).
+ * Vite's own Host check is built once from allowedHosts, so it lets through the saved host by the same
+ * reading (admitSavedHost).
+ *
+ * Who is signed in, and the saved entrance, are read from the board's database (credentials.ts,
+ * tailnetStore.ts), opened here in Vite's process, never written: the board itself runs in Nitro's.
  */
 
 /**
@@ -84,40 +92,55 @@ const pathAndSearch = (url: string | undefined) => {
 export interface SignInCheck {
   /** Whether these headers sign someone in on the public origin `rpId`. */
   signedIn(headers: HeaderLookup, rpId: string): boolean
+  /** The entrance Settings saved, as the database holds it now (null: none, or not one the board takes). */
+  saved(): PublicEntrance | null
   close(): void
 }
 
 /**
- * Sign-ins read from the database in `dataDir` of the board on `port` (its session cookie's name): opened
- * on the first question, and again after a failure (before the board's first start there is no database
- * yet, and then nobody is signed in).
+ * Sign-ins and the saved entrance read from the database in `dataDir` of the board on `port` (its session
+ * cookie's name): opened on the first question, and again after a failure. Before the board's first start
+ * there is no database yet: then nobody is signed in and nothing is saved.
  */
 export function databaseSignIn(dataDir: string, port: number): SignInCheck {
+  const file = path.join(dataDir, 'board.db')
   let sqlite: Database.Database | null = null
   const close = () => {
     sqlite?.close()
     sqlite = null
   }
+  const open = () => (sqlite ??= new Database(file, { fileMustExist: true }))
+  const failed = (err: unknown) => {
+    console.error('agent-board: cannot read the database:', err instanceof Error ? err.message : err)
+    close()
+  }
   return {
     signedIn(headers, rpId) {
       try {
-        sqlite ??= new Database(path.join(dataDir, 'board.db'), { fileMustExist: true })
-        return signedIn(sqlite, headers, rpId, port)
+        return signedIn(open(), headers, rpId, port)
       } catch (err) {
-        console.error(
-          'agent-board: cannot read sign-ins from the database:',
-          err instanceof Error ? err.message : err,
-        )
-        close()
+        failed(err)
         return false
+      }
+    },
+    saved() {
+      if (!sqlite && !fs.existsSync(file)) return null
+      try {
+        return savedEntrance(open())
+      } catch (err) {
+        failed(err)
+        return null
       }
     },
     close,
   }
 }
 
-/** The connect middleware: the guard, then for the tailnet entrance a session of the public origin. */
-export function entranceMiddleware(cfg: GuardConfig, check: SignInCheck) {
+/**
+ * The connect middleware: the guard, then for the tailnet entrance a session of the public origin. `live`
+ * reads the guard's settings as they are now, once for each request.
+ */
+export function entranceMiddleware(live: () => GuardConfig, check: SignInCheck) {
   return function entranceGuardMiddleware(
     req: IncomingMessage,
     res: ServerResponse,
@@ -126,6 +149,7 @@ export function entranceMiddleware(cfg: GuardConfig, check: SignInCheck) {
     try {
       const peer = req.socket.remoteAddress
       const headers = nodeHeaders(req)
+      const cfg = live()
       const verdict = guardRequest({ method: req.method ?? 'GET', headers, peer, path: pathOf(req) }, cfg)
       if (!verdict.allow) return answer(res, verdict.status, { error: verdict.error })
       if (!isLoopbackPeer(peer)) dropForwarding(req)
@@ -149,12 +173,12 @@ export function entranceMiddleware(cfg: GuardConfig, check: SignInCheck) {
 }
 
 /** For the server's `upgrade` event, ahead of Vite's own listener: a refused upgrade never gets a 101. */
-export function entranceUpgradeGuard(cfg: GuardConfig) {
+export function entranceUpgradeGuard(live: () => GuardConfig) {
   return function refuseEntranceUpgrade(req: IncomingMessage, socket: Duplex) {
     const peer = req.socket.remoteAddress
     const verdict = guardRequest(
       { method: req.method ?? 'GET', headers: nodeHeaders(req), peer, path: pathOf(req) },
-      cfg,
+      live(),
     )
     const refusal = !verdict.allow
       ? verdict
@@ -178,9 +202,33 @@ export function entranceUpgradeGuard(cfg: GuardConfig) {
 }
 
 /**
+ * Vite's Host check (hostValidationMiddleware, built once from allowedHosts, ahead of this plugin) lets
+ * through the entrance's host the environment names only. This lets through the host Settings saved as
+ * well, as it is now: the guard then decides the rest, as it does for every request. Any other Host goes to
+ * Vite's own check as before.
+ */
+function admitSavedHost(server: ViteDevServer, live: () => GuardConfig) {
+  const layer = server.middlewares.stack.find(
+    (item) => (item.handle as { name?: string }).name === 'hostValidationMiddleware',
+  )
+  if (!layer) {
+    server.config.logger.warn(
+      'agent-board: vite dev has no host check to extend: a tailnet entrance saved in Settings is refused until it restarts',
+    )
+    return
+  }
+  const viteCheck = layer.handle as Connect.NextHandleFunction
+  layer.handle = (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => {
+    if (hostOf(req.headers.host ?? null, live().entrance) === 'public') return next()
+    return viteCheck(req, res, next)
+  }
+}
+
+/**
  * The plugin vite.config.ts puts first. Its settings are read from process.env as the server is
  * configured, once .env is loaded: BOARD_ENV, AUTH and PUBLIC_ORIGIN as Vite's loadEnv reads them
- * (devEnv.ts), the rest by Nitro (`env` stands in for that in tests).
+ * (devEnv.ts), the rest by Nitro (`env` stands in for that in tests). The entrance Settings saved is read
+ * on each request.
  */
 export function entranceGuard(options: { env?: () => Record<string, string | undefined> } = {}): Plugin {
   return {
@@ -191,16 +239,19 @@ export function entranceGuard(options: { env?: () => Record<string, string | und
       // /__open-in-editor, which Vite adds after these hooks; only its own Host check runs earlier.
       order: 'pre',
       handler(server) {
-        let cfg: GuardConfig
+        const env = () => options.env?.() ?? process.env
+        let startup: GuardConfig
         try {
-          cfg = guardConfig(options.env?.() ?? process.env)
+          startup = guardConfig(env())
         } catch (err) {
           if (err instanceof StartupError) throw new Error(`agent-board refuses to start: ${err.message}`)
           throw err
         }
-        const check = databaseSignIn(cfg.dataDir, cfg.port)
-        server.middlewares.use(entranceMiddleware(cfg, check))
-        server.httpServer?.prependListener('upgrade', entranceUpgradeGuard(cfg))
+        const check = databaseSignIn(startup.dataDir, startup.port)
+        const live = () => guardConfig(env(), check.saved())
+        admitSavedHost(server, live)
+        server.middlewares.use(entranceMiddleware(live, check))
+        server.httpServer?.prependListener('upgrade', entranceUpgradeGuard(live))
         server.httpServer?.once('close', check.close)
       },
     },

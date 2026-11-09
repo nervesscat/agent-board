@@ -337,6 +337,20 @@ describe('guardConfig', () => {
     })
     expect(() => guardConfig({ PUBLIC_ORIGIN: 'http://devbox' })).toThrow(/PUBLIC_ORIGIN must be/)
   })
+
+  it('takes the entrance Settings saved when PUBLIC_ORIGIN is not set, and only on the production board', () => {
+    const saved = { origin: `https://${PUBLIC}`, host: PUBLIC }
+    expect(guardConfig({ DATA_DIR: dataDir }, saved).entrance).toEqual(saved)
+    expect(guardConfig({ DATA_DIR: dataDir, BOARD_ENV: 'development' }, saved).entrance).toBeNull()
+    expect(guardConfig({ DATA_DIR: dataDir, BOARD_ENV: 'test' }, saved).entrance).toBeNull()
+    // The environment still wins over it.
+    expect(
+      guardConfig(
+        { ...keys, PORT: '47100' },
+        { origin: 'https://other.example.ts.net', host: 'other.example.ts.net' },
+      ).entrance,
+    ).toEqual(entrance)
+  })
 })
 
 describe('the guard on a request to the board itself', () => {
@@ -384,6 +398,31 @@ describe('the guard on a request to the board itself', () => {
     if (verdict.allow) return
     const res = refusalResponse(verdict)
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'the board does not answer for the host "evil.example"' })
+    expect(await res.json()).toEqual({
+      error:
+        'no tailnet entrance is configured (PUBLIC_ORIGIN): the board answers on this machine only, not the host "evil.example"',
+    })
+  })
+
+  it('names the missing entrance for a host the board would take as its tailnet name, once it is cleared', () => {
+    // Cleared (or never set): the name the entrance had is refused as "no tailnet entrance is configured".
+    const cleared = guardBoardRequest(
+      web('http://devbox.example-tailnet.ts.net/', { host: PUBLIC }),
+      production,
+      null,
+    )
+    expect(cleared).toMatchObject({ allow: false, status: 403 })
+    if (!cleared.allow) expect(cleared.error).toMatch(/^no tailnet entrance is configured/)
+    // While an entrance is set, a host that is not it still gets the host refusal.
+    const other = guardBoardRequest(
+      web('http://evil.example/', { host: 'evil.example' }),
+      production,
+      entrance,
+    )
+    expect(other).toMatchObject({
+      allow: false,
+      status: 403,
+      error: 'the board does not answer for the host "evil.example"',
+    })
   })
 })

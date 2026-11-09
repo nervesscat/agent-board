@@ -268,7 +268,8 @@ http_headers = { Authorization = "Bearer <token>" }
    - `start_wait` with the reason when you cannot go on (`lock`: a shared lock such as the test
      lock; `builder`: another agent's result; `mcp`: the board or another MCP server is down;
      `human`: the human's answer or action; `other`, with a `note`), and `end_wait` as soon as you
-     can. An open `human` wait keeps the ticket from reading as stalled.
+     can. An open `human` wait keeps the ticket from reading as stalled. When you wait on an agent
+     you briefed, pass `on` with its name: a wait with `on` is delegated work and counts as working.
      `get_ticket` → `work.open` lists your open spans and waits to close. The board adds its own
      events (pushes, the PR, the preview, the merge, stage moves); nothing of this goes to the feed
      or the Daily view.

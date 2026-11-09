@@ -314,6 +314,88 @@ describe('vite dev with sign-in off', () => {
   })
 })
 
+// --- an entrance saved in Settings, in the database: `vite dev` reads it on each request ---
+const savedDir = path.join(root, 'saved')
+fs.mkdirSync(savedDir)
+{
+  const sqlite = new Database(path.join(savedDir, 'board.db'))
+  migrate(drizzle(sqlite), { migrationsFolder: path.resolve('drizzle') })
+  const future = '2099-01-01T00:00:00.000Z'
+  sqlite.prepare(`insert into account (id, name, user_handle) values (1, 'Enrique', 'AAAA')`).run()
+  const phone = Number(
+    sqlite
+      .prepare(
+        `insert into passkeys (credential_id, public_key, rp_id, name) values ('phone', 'AAAA', ?, 'Phone')`,
+      )
+      .run(PUBLIC).lastInsertRowid,
+  )
+  sqlite
+    .prepare('insert into sessions (token_hash, passkey_id, expires_at, last_seen_at) values (?, ?, ?, ?)')
+    .run(hashSecret('public-ok'), phone, future, future)
+  sqlite.close()
+}
+/** Sets the saved entrance row as Settings writes it (JSON), or removes it: the server reads it on each request. */
+function setSaved(value: string | null) {
+  const sqlite = new Database(path.join(savedDir, 'board.db'))
+  try {
+    if (value === null) sqlite.prepare("delete from settings where key = 'tailnetEntrance'").run()
+    else
+      sqlite.prepare("insert or replace into settings (key, value) values ('tailnetEntrance', ?)").run(value)
+  } finally {
+    sqlite.close()
+  }
+}
+const SAVED = JSON.stringify({ origin: `https://${PUBLIC}` })
+
+describe('vite dev with an entrance saved in Settings', () => {
+  let saved: number
+  let developmentCopy: number
+  beforeAll(async () => {
+    // Production, the entrance from the database only (no PUBLIC_ORIGIN in the environment).
+    saved = await vite({ BOARD_ENV: 'production', DATA_DIR: savedDir }, [])
+    // A development copy of the same database: its saved entrance is not served.
+    developmentCopy = await vite({ BOARD_ENV: 'development', DATA_DIR: savedDir }, [])
+  }, 60_000)
+
+  const signedIn = (port: number) => ({ host: PUBLIC, ...SERVE, cookie: `board_session_${port}=public-ok` })
+
+  it('admits the saved host at once, without a restart, and clearing it refuses it at once', async () => {
+    setSaved(SAVED)
+    expect((await send(saved, '/@vite/client', signedIn(saved))).status).toBe(200)
+    setSaved(null)
+    // Vite's own check refuses the name once it is not saved any more.
+    const gone = await send(saved, '/@vite/client', signedIn(saved))
+    expect(gone.status).toBe(403)
+    expect(gone.body).not.toContain('createHotContext')
+    // A proxy's request on this machine gets the guard's own answer: no entrance is configured.
+    const forwarded = await send(saved, '/@vite/client', { host: `localhost:${saved}`, ...SERVE })
+    expect(forwarded.status).toBe(403)
+    expect(forwarded.body).toMatch(/no tailnet entrance is configured/)
+    // Saved again: admitted again, and the session of the origin signs in as before.
+    setSaved(SAVED)
+    expect((await send(saved, '/@vite/client', signedIn(saved))).status).toBe(200)
+    expect((await send(saved, '/@vite/client', { host: PUBLIC, ...SERVE })).status).toBe(401)
+  })
+
+  it('still asks for a session through the saved entrance, and refuses a bad saved value without a crash', async () => {
+    setSaved(SAVED)
+    expect((await send(saved, '/src/secret.ts', { host: PUBLIC, ...SERVE })).status).toBe(401)
+    setSaved('{"origin":"http://devbox.example-tailnet.ts.net"}')
+    const refused = await send(saved, '/@vite/client', signedIn(saved))
+    expect(refused.status).toBe(403)
+    // The board itself still answers on this machine.
+    expect((await send(saved, '/@vite/client', { host: `localhost:${saved}` })).status).toBe(200)
+    setSaved(null)
+  })
+
+  it('serves no saved entrance from a development copy, whatever its database says', async () => {
+    setSaved(SAVED)
+    expect((await send(developmentCopy, '/@vite/client', signedIn(developmentCopy))).status).toBe(403)
+    expect(await upgrade(developmentCopy, { host: PUBLIC, ...SERVE })).toBe('HTTP/1.1 403 Forbidden')
+    setSaved(null)
+  })
+})
+
 describe('the plugin', () => {
   it('stops vite dev on a PUBLIC_ORIGIN it cannot trust', async () => {
     await expect(

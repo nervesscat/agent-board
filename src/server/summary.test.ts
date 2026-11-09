@@ -201,7 +201,7 @@ describe('in progress and carrying over', () => {
     })
     log(pid, fresh.id, `claimed ticket #${fresh.id} Fresh note (status To do → In progress)`, at(7, 9))
     log(pid, fresh.id, 'set a task done', at(6, 17))
-    // Started three days ago, worked yesterday, nobody wrote a note: no handoff.
+    // Started three days ago, worked yesterday, nobody wrote a note: no resume note.
     const bare = ticket(pid, 'No note', { status: 'in_progress', startedAt: iso(at(4, 10)) })
     log(pid, bare.id, 'set a task done', at(6, 15))
     post(bare.id, 'tests pass', at(6, 15))
@@ -413,6 +413,16 @@ describe('needs you', () => {
       [asked.id, reported.id, answered.id].sort(),
     )
     expect(s.needsYou.total).toBe(4 + 3)
+    // Each stalled row carries its ticket's activity: the open spans and waits, and the last heard.
+    for (const x of s.needsYou.stalled) {
+      expect(x.activity).toEqual({
+        spans: [],
+        waits: [],
+        lastHeard: null,
+        lastClosedSpan: null,
+        now: expect.any(String),
+      })
+    }
     // Nobody signed in as the human yet: no threads, the rest stays.
     expect(take(pid, { humans: [] }).needsYou.threads).toEqual([])
   })
@@ -706,5 +716,46 @@ describe('instruction changes in needs you', () => {
     history.revertInstructionChange(two.id, 'enrique')
     expect(take().instructionChanges).toEqual([])
     expect(take().total).toBe(before)
+  })
+})
+
+describe('the stalled rows of the Overview: the span that ended last', () => {
+  it('names the last closed span, so a stall with nothing open is dated by when its work ended', () => {
+    const pid = project('closed span')
+    const { db, schema } = dbm
+    const t = ticket(pid, 'Built, then silent', {
+      status: 'in_progress',
+      startedAt: iso(at(7, 9)),
+      createdAt: iso(at(7, 8)),
+    })
+    const event = (kind: 'span_start' | 'span_end', when: Date, refId: number | null = null) =>
+      db
+        .insert(schema.ticketEvents)
+        .values({
+          ticketId: t.id,
+          projectId: pid,
+          kind,
+          agent: 'builder',
+          by: 'builder',
+          phase: 'build',
+          refId,
+          at: iso(when),
+        })
+        .returning()
+        .get()
+    const start = event('span_start', at(7, 9))
+    event('span_end', at(7, 9, 30), start.id)
+    const row = take(pid).needsYou.stalled.find((x) => x.ticketId === t.id)!
+    expect(row.activity.spans).toEqual([])
+    expect(row.activity.lastClosedSpan).toEqual({
+      phase: 'build',
+      agent: 'builder',
+      start: iso(at(7, 9)),
+      end: iso(at(7, 9, 30)),
+    })
+    // The why reads from it: the build ended, nothing open since.
+    expect(
+      summary.getSummary(pid, { now: NOW, humans: [HUMAN] }).projects[0]!.needsYou.stalled,
+    ).toContainEqual(expect.objectContaining({ ticketId: t.id, lastSignalAt: iso(at(7, 9, 30)) }))
   })
 })

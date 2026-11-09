@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { AgentIdentities } from '#/components/AgentIdentities'
 import { AgentPicker } from '#/components/AgentPicker'
 import { Devices } from '#/components/Devices'
+import { TailnetEntrance } from '#/components/TailnetEntrance'
 import { PreviewLimitEditor } from '#/components/Preview'
 import { Updates } from '#/components/Updates'
 import { errorMessage, get, type Me, patch } from '#/lib/api'
@@ -54,6 +55,8 @@ function BoardSettings() {
       {me && !me.agent && <Updates />}
       {/* The agents' roles are the human's call: an agent never sees them here. */}
       {me && !me.agent && <AgentIdentities />}
+      {/* The tailnet entrance is the human's; with sign-in off it shows why it cannot be saved there. */}
+      {me && !me.agent && <TailnetEntrance />}
       {/* With sign-in off (test mode, AUTH=off) there are no passkeys to show. */}
       {me && !me.authOff && !me.agent && <Devices />}
     </div>

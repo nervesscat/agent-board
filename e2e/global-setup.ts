@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import path from 'node:path'
 
 import { request } from '@playwright/test'
 
@@ -14,6 +15,11 @@ import { seedProject } from './fixtures'
  */
 export default async function globalSetup() {
   const env = e2eEnv()
+  // The Tailscale CLI the boards read: linked in, so a test can take it away (not installed), and its answers
+  // start as a board on a running tailnet (tailnet-entrance.spec.ts sets them).
+  fs.mkdirSync(path.dirname(env.tailscaleBin), { recursive: true })
+  fs.symlinkSync(path.resolve('e2e/fake-tailscale.mjs'), env.tailscaleBin)
+  fs.writeFileSync(env.tailscaleState, JSON.stringify({ version: '1.80.2\n' }))
   fs.mkdirSync(env.repoPath, { recursive: true })
   execFileSync('git', ['init', '-q', '--bare', '-b', 'main', env.originPath], { stdio: 'ignore' })
   git('init', '-q', '-b', 'main')

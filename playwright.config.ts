@@ -12,6 +12,26 @@ import { HUMAN, e2eEnv } from './e2e/env'
  */
 const env = e2eEnv()
 const build = process.env.E2E_SKIP_BUILD ? '' : 'pnpm build --logLevel error && '
+const tailscaleEnv = { TAILSCALE_BIN: env.tailscaleBin, FAKE_TAILSCALE_STATE: env.tailscaleState }
+
+/** What a test-mode board runs with: its port, its data, the fake claude; never the shell's own settings. */
+const boardEnv = (port: number, baseURL: string, dataDir: string) => ({
+  BOARD_BUILD_DIR: '.output-e2e',
+  BOARD_ENV: 'test',
+  TEST_HUMAN: HUMAN,
+  HOST: '127.0.0.1',
+  PORT: String(port),
+  // Nitro reads these before HOST and PORT: never inherit them from the shell.
+  NITRO_HOST: '127.0.0.1',
+  NITRO_PORT: String(port),
+  BOARD_URL: baseURL,
+  DATA_DIR: dataDir,
+  CLAUDE_HOME: env.claudeHome,
+  STORAGE: 'local',
+  // claude is a stand-in that reads the prompt from stdin and answers with a report.
+  CLAUDE_BIN: process.execPath,
+  CLAUDE_ARGS: JSON.stringify([path.resolve('e2e/fake-claude.mjs')]),
+})
 
 export default defineConfig({
   testDir: 'e2e',
@@ -36,29 +56,33 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
-  webServer: {
-    command: `${build}node .output-e2e/server/index.mjs`,
-    url: `${env.baseURL}/api/me`,
-    reuseExistingServer: false,
-    timeout: 180_000,
-    stdout: 'ignore',
-    stderr: 'pipe',
-    env: {
-      BOARD_BUILD_DIR: '.output-e2e',
-      BOARD_ENV: 'test',
-      TEST_HUMAN: HUMAN,
-      HOST: '127.0.0.1',
-      PORT: String(env.port),
-      // Nitro reads these before HOST and PORT: never inherit them from the shell.
-      NITRO_HOST: '127.0.0.1',
-      NITRO_PORT: String(env.port),
-      BOARD_URL: env.baseURL,
-      DATA_DIR: env.dataDir,
-      CLAUDE_HOME: env.claudeHome,
-      STORAGE: 'local',
-      // claude is a stand-in that reads the prompt from stdin and answers with a report.
-      CLAUDE_BIN: process.execPath,
-      CLAUDE_ARGS: JSON.stringify([path.resolve('e2e/fake-claude.mjs')]),
+  // Two test-mode boards: the second one has PUBLIC_ORIGIN in its environment (Settings shows it set by env).
+  // Both read the fake Tailscale CLI (e2e/fake-tailscale.mjs), never the real one.
+  webServer: [
+    {
+      command: `${build}node .output-e2e/server/index.mjs`,
+      url: `${env.baseURL}/api/me`,
+      reuseExistingServer: false,
+      timeout: 180_000,
+      stdout: 'ignore',
+      stderr: 'pipe',
+      env: {
+        ...boardEnv(env.port, env.baseURL, env.dataDir),
+        ...tailscaleEnv,
+      },
     },
-  },
+    {
+      command: 'node .output-e2e/server/index.mjs',
+      url: `${env.envBaseURL}/api/me`,
+      reuseExistingServer: false,
+      timeout: 180_000,
+      stdout: 'ignore',
+      stderr: 'pipe',
+      env: {
+        ...boardEnv(env.envPort, env.envBaseURL, env.envDataDir),
+        PUBLIC_ORIGIN: 'https://envbox.example-tailnet.ts.net',
+        ...tailscaleEnv,
+      },
+    },
+  ],
 })
