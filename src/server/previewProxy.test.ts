@@ -633,6 +633,21 @@ describe('links to a preview', () => {
     expect(cookieOnly.status).toBe(200)
   })
 
+  it('redirects with the rest of the query as it came, only the link taken off', () => {
+    expect(proxy.withoutLink('?pl=abc&q=%20a%7Eb+c&r=%2B', 'abc')).toBe('q=%20a%7Eb+c&r=%2B')
+    expect(proxy.withoutLink('?q=1&pl=abc', 'abc')).toBe('q=1')
+    expect(proxy.withoutLink('?p%6c=abc&x=1', 'abc')).toBe('x=1')
+    expect(proxy.withoutLink('?pl=other&pl=abc', 'abc')).toBe('pl=other')
+    expect(proxy.withoutLink('?pl=abc', 'abc')).toBe('')
+  })
+
+  it('keeps the query of a redeemed link as it came in the redirect', async () => {
+    const link = mint(`t${tokenId(TOKEN.builder)}`)
+    const res = await serve(request(`${link.url}&q=%20a%7Eb`))
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe(`${previewPath()}?q=%20a%7Eb`)
+  })
+
   it('sets the cookie with HttpOnly, SameSite=Lax, the run path and Max-Age 900, Secure only over https', async () => {
     const link = mint(`t${tokenId(TOKEN.builder)}`)
     const res = await serve(request(link.url))

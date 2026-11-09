@@ -200,6 +200,29 @@ function whoIs(
   return own ? { principal: own, redeem: false } : null
 }
 
+/** A query component decoded as a URL decodes it (`+` is a space); what cannot be decoded stays as it is. */
+function decoded(part: string): string {
+  try {
+    return decodeURIComponent(part.replace(/\+/g, ' '))
+  } catch {
+    return part
+  }
+}
+
+/**
+ * The raw query (with or without its `?`) minus the first `pl` pair whose value is the link, every other byte
+ * as it came: a re-serialized query would turn `%20` into `+` and `%7E` into `~`.
+ */
+export function withoutLink(search: string, link: string): string {
+  const parts = search.replace(/^\?/, '').split('&')
+  const at = parts.findIndex((part) => {
+    const eq = part.indexOf('=')
+    return eq >= 0 && decoded(part.slice(0, eq)) === LINK_PARAM && decoded(part.slice(eq + 1)) === link
+  })
+  if (at >= 0) parts.splice(at, 1)
+  return parts.join('&')
+}
+
 /** Headers a request carries on one connection only, never forwarded. */
 const HOP_BY_HOP = new Set([
   'connection',
@@ -426,11 +449,9 @@ export async function servePreview(
       who.principal,
       now.getTime() + PREVIEW_COOKIE_MAX_AGE_S * 1000,
     )
-    const params = new URLSearchParams(url.search)
-    params.delete(LINK_PARAM)
-    const query = params.toString()
+    const query = withoutLink(url.search, url.searchParams.get(LINK_PARAM) ?? '')
     const headers = new Headers({
-      location: `${prefix}${rest.slice(1)}${query ? `?${query}` : ''}`,
+      location: `${prefix}${query ? `?${query}` : ''}`,
     })
     headers.append(
       'set-cookie',
