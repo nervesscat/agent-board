@@ -2,6 +2,7 @@ import { asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
+import { activityOf } from '#/lib/workTimeline'
 import { logActivity } from './activity'
 import { baseChain, baseRefs, branchRef, gitCache, type GitCache, memo, reachOf, refSha } from './cleanup'
 import * as features from './features'
@@ -20,7 +21,7 @@ import {
   resolveStage,
   stageOf,
 } from './stages'
-import { stalledFor, timelinesFor, workOf } from './workTimeline'
+import { timelinesFor, workOf } from './workTimeline'
 
 /**
  * What a ticket needs merged before it can be done: other tickets of the project whose branches have
@@ -252,20 +253,25 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
 }
 
 /**
- * `listTickets` with each ticket's needs, met or not, whether its resume note holds (`resume`), and
- * whether it reads as stalled with when it was last heard from (the work timeline).
+ * `listTickets` with each ticket's needs, met or not, whether its resume note holds (`resume`), whether it
+ * reads as stalled with when it was last heard from (the work timeline), and its activity: the spans and
+ * waits still open and who was last heard from.
  */
 export async function ticketRows(projectId: number, filter: features.TicketFilter = {}) {
   const rows = features.listTickets(projectId, filter)
   const needs = await needsFor(rows, context(projectId))
-  const signals = stalledFor(rows)
+  const timelines = timelinesFor(rows)
   return withResumeBriefs(
-    rows.map((t) => ({
-      ...t,
-      needs: needs.get(t.id) ?? [],
-      stalled: signals.get(t.id)!.stalled,
-      lastSignalAt: signals.get(t.id)!.lastSignalAt,
-    })),
+    rows.map((t) => {
+      const { timeline } = timelines.get(t.id)!
+      return {
+        ...t,
+        needs: needs.get(t.id) ?? [],
+        stalled: timeline.stalled,
+        lastSignalAt: timeline.lastSignalAt,
+        activity: activityOf(timeline),
+      }
+    }),
   )
 }
 
@@ -408,15 +414,18 @@ type Patch = Parameters<typeof features.updateTicket>[1]
  * `updateTicket` with the needs rule: `needs` replaces what the ticket needs, and a move to a done stage
  * is refused while one is not merged, unless the human sends `force` (logged). A move to a review stage
  * answers with `open` too: what its tasks still have open (openTasks). Never refused for them.
+ * `position` places it in its column (`placeTicket`) once the rest is written: with `status`, in the
+ * new stage's column. A bad one is refused before anything is written.
  */
 export async function changeTicket(
   id: number,
-  input: Patch & { needs?: number[]; force?: boolean },
+  input: Patch & { needs?: number[]; force?: boolean; position?: number },
   actor: string,
   opts: { agent: boolean },
 ) {
-  const { needs, force, ...patch } = input
+  const { needs, force, position, ...patch } = input
   const before = features.getTicket(id)
+  if (position !== undefined) features.checkPlacement(before, position)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch
@@ -432,13 +441,15 @@ export async function changeTicket(
     ? resolveStage(stages, patch.status, projectWorkStage(before.projectId, stages)).key
     : before.status
   const unmet = await guardDone(subject, to, ids, { force, agent: opts.agent })
-  // The needs and the update land together: an update that is refused leaves the needs as they were.
+  // The needs, the update and the placement land together: an update that is refused leaves the needs
+  // as they were.
   const row = db.transaction(
     () => {
       if (needs !== undefined) setNeeds(id, ids, actor)
-      return Object.keys(patch).length
+      const changed = Object.keys(patch).length
         ? features.updateTicket(id, patch, actor, opts)
         : features.getTicket(id)
+      return position !== undefined ? features.placeTicket(id, position, actor) : changed
     },
     { behavior: 'immediate' },
   )

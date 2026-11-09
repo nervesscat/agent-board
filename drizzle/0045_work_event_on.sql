@@ -1,0 +1,1 @@
+ALTER TABLE `ticket_events` ADD `on` text;

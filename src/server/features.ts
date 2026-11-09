@@ -9,6 +9,7 @@ import {
   RESUME_TEMPLATE,
 } from '#/lib/constants'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
+import { columnOrder, placeInColumn, stageColumn } from '#/lib/stages'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
 import { reconcileTicket } from './autoPhases'
@@ -55,6 +56,7 @@ import {
   kindOf,
   listStages,
   matchStages,
+  movePatch,
   projectWorkStage,
   resolveStage,
   startStage,
@@ -202,14 +204,16 @@ type ListedTicket = ReturnType<typeof projectTickets>[number] & Partial<TicketHi
  * A project's tickets; `parentId` narrows to the lanes of one ticket (`null` to the top level), `tag`
  * to those carrying it (any casing), `status` to those stages, `assignee` to one name (`''` for
  * unassigned). Archived tickets only with `archived`. `q` keeps the tickets it is found in, those found
- * by name first, each row saying where (`searchTickets`).
+ * by name first, each row saying where (`searchTickets`). Last updated first, except that the tickets
+ * of one column (same stage, same parent) come in the column's order among themselves: the ones placed
+ * there first.
  */
 export function listTickets(projectId: number, filter: TicketFilter = {}): ListedTicket[] {
   getProject(projectId)
   const tag = filter.tag?.trim().toLowerCase()
   const q = filter.q?.trim()
   const stages = filter.status?.length ? matchStages(listStages(projectId), filter.status) : null
-  const rows = projectTickets(projectId).filter(
+  const rows = inColumnOrder(projectTickets(projectId)).filter(
     (t) =>
       (filter.parentId === undefined || t.parentId === filter.parentId) &&
       (!tag || t.tags.some((x) => x.toLowerCase() === tag)) &&
@@ -218,6 +222,18 @@ export function listTickets(projectId: number, filter: TicketFilter = {}): Liste
       (filter.archived === 'include' || (filter.archived === 'only') === Boolean(t.archivedAt)),
   )
   return q ? searchTickets(rows, q) : rows
+}
+
+/**
+ * `rows` with each column's tickets (same parent, same stage) put in the column's order, in the places
+ * that column's tickets held: a list where nothing was placed comes back as it was.
+ */
+function inColumnOrder<T extends schema.Ticket>(rows: T[]): T[] {
+  const column = (t: T) => `${t.parentId ?? ''}:${t.status}`
+  const columns = new Map<string, T[]>()
+  for (const t of rows) columns.set(column(t), [...(columns.get(column(t)) ?? []), t])
+  for (const list of columns.values()) list.sort(columnOrder)
+  return rows.map((t) => columns.get(column(t))!.shift()!)
 }
 
 /**
@@ -792,7 +808,7 @@ export function updateTicket(
     .update(schema.tickets)
     .set({
       ...patch,
-      ...(patch.status ? startedPatch(stages, before.status, patch.status, before.startedAt) : {}),
+      ...(patch.status ? movePatch(stages, before.status, patch.status, before.startedAt) : {}),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(schema.tickets.id, id))
@@ -852,6 +868,53 @@ export function updateTicket(
   if (!row.prId && (patch.prNumber !== undefined || patch.branch !== undefined || patch.repoId !== undefined))
     takeOverPrTickets(row, actor)
   return row
+}
+
+/**
+ * Put a ticket at `position` (1-based; past the end is last) in its stage's column: the tickets on the
+ * board in its stage with the same parent (top-level tickets are the board's columns). The tickets
+ * above it are placed with it, so the column reads back with it there and every other ticket in the
+ * order it had (`placeInColumn`). In a review stage this is the merge order, top first; nothing
+ * enforces it. A change of stage clears it. Any caller may place any ticket of the project; logged.
+ * Only the ranks are written: a placement is not an edit of the ticket.
+ */
+export function placeTicket(id: number, position: number, actor: string) {
+  const t = getTicket(id)
+  checkPlacement(t, position)
+  const placed = db.transaction(() => {
+    const siblings = listTickets(t.projectId, { parentId: t.parentId })
+    const column = stageColumn(siblings, t.status)
+    const ranks = placeInColumn(column, id, position)
+    const at = ranks.findIndex((r) => r.id === id)
+    // Already placed right there: nothing changes.
+    if (column[at]?.id === id && column[at].rank !== null) return null
+    for (const r of ranks)
+      db.update(schema.tickets).set({ rank: r.rank }).where(eq(schema.tickets.id, r.id)).run()
+    return { at: at + 1, of: column.length }
+  })
+  if (placed) {
+    const stage = stageOf(listStages(t.projectId), t.status)
+    logActivity({
+      projectId: t.projectId,
+      actor,
+      kind: 'ticket',
+      text: `moved ${t.parentId ? 'lane' : 'ticket'} #${id} ${t.title} to ${placed.at} of ${placed.of} in ${stage.name}`,
+      refType: 'ticket',
+      refId: id,
+    })
+  }
+  return getTicket(id)
+}
+
+/**
+ * Refuse a position that is not a whole number from 1, or a ticket with no column on the board: one
+ * archived, or a PR's own ticket (it lives in the PR queue).
+ */
+export function checkPlacement(t: Pick<schema.Ticket, 'id' | 'archivedAt' | 'prId'>, position: number) {
+  if (!Number.isInteger(position) || position < 1)
+    throw new HttpError(400, 'position is a whole number from 1 (the top of the column)')
+  if (t.archivedAt) throw new HttpError(409, `ticket ${t.id} is archived: it has no place on the board`)
+  if (t.prId) throw new HttpError(409, `ticket ${t.id} is a PR's: it has no place on the board`)
 }
 
 /**
@@ -937,7 +1000,7 @@ export function claimTicket(
     .set({
       assignee,
       ...(start ? { status: start.key } : {}),
-      ...startedPatch(stages, before.status, start?.key ?? before.status, before.startedAt),
+      ...movePatch(stages, before.status, start?.key ?? before.status, before.startedAt),
       ...(opts.branch !== undefined ? { branch: opts.branch } : {}),
       updatedAt: new Date().toISOString(),
     })
@@ -1019,7 +1082,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
       disapprovedAt: verdict === 'disapproved' ? now : null,
       disapprovedBy: verdict === 'disapproved' ? actor : '',
       status,
-      ...startedPatch(stages, t.status, status, t.startedAt),
+      ...movePatch(stages, t.status, status, t.startedAt),
       updatedAt: now,
     })
     .where(eq(schema.tickets.id, id))
@@ -1057,7 +1120,11 @@ export function deleteTicket(id: number, actor: string, opts: { keepLanes?: bool
   for (const w of db.select().from(schema.workspaces).where(inArray(schema.workspaces.ticketId, gone)).all())
     forgetPreview(w.id, actor)
   if (opts.keepLanes)
-    db.update(schema.tickets).set({ parentId: t.parentId }).where(eq(schema.tickets.parentId, id)).run()
+    // In their new column (the ticket's siblings) they arrive unplaced.
+    db.update(schema.tickets)
+      .set({ parentId: t.parentId, rank: null })
+      .where(eq(schema.tickets.parentId, id))
+      .run()
   db.delete(schema.tickets).where(eq(schema.tickets.id, id)).run()
   logActivity({ projectId: t.projectId, actor, kind: 'ticket', text: `deleted ticket #${id} ${t.title}` })
 }
@@ -1066,7 +1133,10 @@ export function deleteTicket(id: number, actor: string, opts: { keepLanes?: bool
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-/** Set or clear the archive mark on these tickets and every lane under them, in one write. */
+/**
+ * Set or clear the archive mark on these tickets and every lane under them, in one write. Off the board
+ * they keep no place in their column: one restored comes back unplaced.
+ */
 function markArchived(projectId: number, roots: number[], archivedAt: string | null, actor: string) {
   const all = db
     .select({ id: schema.tickets.id, parentId: schema.tickets.parentId })
@@ -1077,7 +1147,7 @@ function markArchived(projectId: number, roots: number[], archivedAt: string | n
   const ids = [...roots, ...lanes]
   if (ids.length)
     db.update(schema.tickets)
-      .set({ archivedAt, archivedBy: archivedAt ? actor : '' })
+      .set({ archivedAt, archivedBy: archivedAt ? actor : '', ...(archivedAt ? { rank: null } : {}) })
       .where(inArray(schema.tickets.id, ids))
       .run()
   return lanes.length
@@ -2473,7 +2543,7 @@ function postDecision(
   const blocked = firstOfKind(stages, 'blocked')
   if ((input.block ?? true) && blocked && ticket.status !== blocked.key) {
     db.update(schema.tickets)
-      .set({ status: blocked.key, ...startedPatch(stages, ticket.status, blocked.key, ticket.startedAt) })
+      .set({ status: blocked.key, ...movePatch(stages, ticket.status, blocked.key, ticket.startedAt) })
       .where(eq(schema.tickets.id, ticketId))
       .run()
     noteStageMove(ticketId, ticket.status, blocked.key)
@@ -2623,7 +2693,7 @@ function settleDecision(post: { id: number; ticketId: number }, actor: string, r
     const back = (pr && prTicketStage(stages, prStatus(pr))) ?? projectWorkStage(ticket.projectId, stages)
     if (back && back.key !== ticket.status) {
       db.update(schema.tickets)
-        .set({ status: back.key, ...startedPatch(stages, ticket.status, back.key, ticket.startedAt) })
+        .set({ status: back.key, ...movePatch(stages, ticket.status, back.key, ticket.startedAt) })
         .where(eq(schema.tickets.id, ticket.id))
         .run()
       noteStageMove(ticket.id, ticket.status, back.key)
