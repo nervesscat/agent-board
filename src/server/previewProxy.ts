@@ -171,12 +171,16 @@ interface Who {
  * Who the request is for this run: a Bearer token (a bare or unknown one is refused whatever cookie comes
  * with it), else a link being redeemed, else the session of the origin, else the preview cookie a redeemed
  * link set. Null when none of them is good.
+ *
+ * A link is redeemed only on the run's own path (`rest` is '/', the path a link names) and only when it is
+ * good. Any other `pl` is the preview's own query parameter: the request goes on to the usual checks and
+ * the preview gets its query as it came.
  */
 function whoIs(
   request: Request,
   url: URL,
   site: SignInSite | null,
-  run: { workspaceId: number; runId: number; runningAt: string | null },
+  run: { workspaceId: number; runId: number; runningAt: string | null; rest: string },
   now: Date,
 ): Who | null {
   if (isBearer(request.headers.get('authorization'))) {
@@ -185,9 +189,9 @@ function whoIs(
   }
   const readsOnly = request.method === 'GET' || request.method === 'HEAD'
   const link = url.searchParams.get(LINK_PARAM)
-  if (link !== null && readsOnly) {
+  if (link !== null && readsOnly && run.rest === '/') {
     const principal = verifyPreviewValue(link, run.workspaceId, run.runId, run.runningAt, now.getTime())
-    return principal ? { principal, redeem: true } : null
+    if (principal) return { principal, redeem: true }
   }
   const principal = credentialOf(request, site, now)
   if (principal) return { principal, redeem: false }
@@ -396,7 +400,13 @@ export async function servePreview(
   const state = deps.runOf(workspaceId, runId)
   const site = siteOf(request, deps.entrance(), opts.peer)
 
-  const who = whoIs(request, url, site, { workspaceId, runId, runningAt: state?.runningAt ?? null }, now)
+  const who = whoIs(
+    request,
+    url,
+    site,
+    { workspaceId, runId, runningAt: state?.runningAt ?? null, rest },
+    now,
+  )
   if (!who) return json(401, SIGN_IN_NEEDED)
   const standing = standingOf(who.principal, workspaceId, now, deps)
   if (standing === 'signed-out') return json(401, SIGN_IN_NEEDED)
@@ -452,10 +462,8 @@ export async function servePreview(
     return json(502, `${why}: stopped`)
   }
 
-  const params = new URLSearchParams(url.search)
-  params.delete(LINK_PARAM)
-  const query = params.toString()
-  const path = `${rest}${query ? `?${query}` : ''}`
+  // The query goes on as it came: a `pl` here is the preview's own (a link is redeemed on the root path only).
+  const path = `${rest}${url.search}`
   const headers = upstreamHeaders(request.headers, state.port, request.headers.get('host'), secure)
   let res: IncomingMessage
   try {

@@ -499,7 +499,7 @@ describe('the target, whatever the request says', () => {
     expect(seen.at(-1)!.url).toBe('//evil.example/y')
   })
 
-  it('forwards the path under the prefix, the query without the link, and the method and body', async () => {
+  it('forwards the path under the prefix, the query as it came, and the method and body', async () => {
     const res = await serve(
       request(previewPath(wsA, RUN, 'echo?a=1'), {
         method: 'POST',
@@ -681,6 +681,26 @@ describe('links to a preview', () => {
       request(previewPath(), { headers: cookies(`${previewCookieName(wsA, RUN)}=${value}`) }),
     )
     expect(cookie.status).toBe(401)
+  })
+
+  it("a pl that is not a good link is the preview's own query: the usual checks go on, the preview gets it", async () => {
+    const res = await serve(
+      request(previewPath(wsA, RUN, 'echo?pl=nope&a=%20b~'), { headers: sessionHeader(SESSION.local) }),
+    )
+    expect(res.status).toBe(200)
+    expect(seen.at(-1)!.url).toBe('/echo?pl=nope&a=%20b~')
+    expect((await serve(request(previewPath(wsA, RUN, 'echo?pl=nope')))).status).toBe(401)
+  })
+
+  it("a good link on a path other than the run's root is not redeemed: it is the preview's query", async () => {
+    const link = mint(`t${tokenId(TOKEN.builder)}`)
+    const pl = new URL(link.url, 'http://board.test').searchParams.get('pl')!
+    expect((await serve(request(previewPath(wsA, RUN, `echo?pl=${pl}`)))).status).toBe(401)
+    const res = await serve(
+      request(previewPath(wsA, RUN, `echo?pl=${pl}`), { headers: bearer(TOKEN.builder) }),
+    )
+    expect(res.status).toBe(200)
+    expect(seen.at(-1)!.url).toBe(`/echo?pl=${pl}`)
   })
 
   it('answers 401 for a cookie past its fifteen minutes', async () => {
