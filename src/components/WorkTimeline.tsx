@@ -132,7 +132,7 @@ function Segment({
 }
 
 const SEG_BASE =
-  'absolute flex items-center gap-1 overflow-hidden rounded-sm px-1 text-left leading-none whitespace-nowrap outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring'
+  'absolute flex min-w-0 items-center gap-1 overflow-hidden rounded-sm px-1 text-left leading-none whitespace-nowrap outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring'
 
 /** Lane height in pixels: the compact chart (a lane of a Roadmap ticket) is shorter. */
 const lanePx = (compact: boolean) => (compact ? 16 : 20)
@@ -199,7 +199,7 @@ function WaitSegment({
         attrs={{ 'data-kind': 'delegation', 'data-on': on, 'data-narrow': seg.narrow ? 'true' : undefined }}
       >
         <span aria-hidden className="h-px min-w-2 flex-1 bg-current" />
-        {!seg.narrow && <span className="shrink-0 rounded-sm bg-card px-1">delegated to {on}</span>}
+        {!seg.narrow && <span className="min-w-0 truncate rounded-sm bg-card px-1">delegated to {on}</span>}
       </Segment>
     )
   }
@@ -277,7 +277,7 @@ function SpanSegment({
         'data-narrow': seg.narrow ? 'true' : undefined,
       }}
     >
-      {!seg.narrow && phaseShort(s)}
+      {!seg.narrow && <span className="min-w-0 truncate">{phaseShort(s)}</span>}
     </Segment>
   )
 }
@@ -324,11 +324,11 @@ export function WorkTimelineBar({
   const summaryId = useId()
   const scroller = useRef<HTMLDivElement>(null)
   const live = timeline.live
-  // A live ticket opens at its right end, where now is.
+  // A live ticket opens at its right end, where now is, and stays there as the track grows with time.
   useEffect(() => {
     const el = scroller.current
     if (el && live) el.scrollLeft = el.scrollWidth
-  }, [live])
+  }, [live, now, timeline.end])
   if (!timeline.start || !timeline.end || !hasWork(timeline))
     return (
       <p data-testid="work-timeline" className="text-xs text-muted-foreground">

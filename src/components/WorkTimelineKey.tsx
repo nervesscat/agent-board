@@ -21,11 +21,11 @@ import {
 
 /** Work, by phase: solid, with its name as the label. */
 export const PHASE: Record<string, string> = {
-  spec: 'bg-sky-600 text-white dark:bg-sky-500 dark:text-sky-950',
+  spec: 'bg-sky-700 text-white dark:bg-sky-500 dark:text-sky-950',
   build: 'bg-blue-600 text-white dark:bg-blue-400 dark:text-blue-950',
   review: 'bg-violet-600 text-white dark:bg-violet-400 dark:text-violet-950',
-  verify: 'bg-teal-600 text-white dark:bg-teal-400 dark:text-teal-950',
-  pr: 'bg-emerald-600 text-white dark:bg-emerald-400 dark:text-emerald-950',
+  verify: 'bg-teal-700 text-white dark:bg-teal-400 dark:text-teal-950',
+  pr: 'bg-emerald-700 text-white dark:bg-emerald-400 dark:text-emerald-950',
   preview: 'bg-pink-600 text-white dark:bg-pink-400 dark:text-pink-950',
   merge: 'bg-lime-700 text-white dark:bg-lime-400 dark:text-lime-950',
 }
