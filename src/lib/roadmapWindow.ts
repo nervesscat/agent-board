@@ -64,5 +64,5 @@ export const WINDOW_LABELS: Record<WindowChoice, string> = {
   today: 'Today',
   '24h': '24 h',
   '7d': '7 d',
-  fit: 'Fit each row',
+  fit: 'Fit all rows',
 }

@@ -69,7 +69,7 @@ test('the Roadmap picks its time axis in the URL, which survives a reload', asyn
   // An unknown value is the default: the page still loads, with no time axis picked.
   await page.goto(`/projects/${project.id}/roadmap?window=30d`)
   await expect(page.getByRole('heading', { name: 'Roadmap' })).toBeVisible()
-  await expect(page.getByRole('tab', { name: /^(Today|24 h|7 d|Fit each row)$/ }).first()).toBeVisible()
-  for (const name of ['Today', '24 h', '7 d', 'Fit each row'])
+  await expect(page.getByRole('tab', { name: /^(Today|24 h|7 d|Fit all rows)$/ }).first()).toBeVisible()
+  for (const name of ['Today', '24 h', '7 d', 'Fit all rows'])
     await expect(page.getByRole('tab', { name })).not.toHaveAttribute('aria-selected', 'true')
 })
