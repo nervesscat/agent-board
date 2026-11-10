@@ -1303,7 +1303,6 @@ since included, so a branch deleted and pushed again as it was brings nothing. T
 under the first branch that brought them, whenever they were written. Merge commits do not count.
 Lines added and removed are their `git diff --shortstat`. The answer is
 `{date, commits, added, removed, checkedAt, repos}`, each repo with its `branches` (and a branch's
-`ticket` when it is one's); the Daily page shows it green,
-or grey when nothing was pushed, and the project's sidebar on a day something was. What the
-commits are is kept by their shas, so reading it again asks git nothing new; pushes made while the
-board was not reading the repo count on the day it next does.
+`ticket` when it is one's); the Daily page shows it green, or grey when nothing was pushed. What
+the commits are is kept by their shas, so reading it again asks git nothing new; pushes made while
+the board was not reading the repo count on the day it next does.

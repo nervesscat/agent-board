@@ -1,7 +1,6 @@
 import { Link, Outlet, createFileRoute, useRouterState } from '@tanstack/react-router'
 import { FolderGit2 } from 'lucide-react'
 
-import { PushedTodayBadge } from '#/components/daily/PushedToday'
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
@@ -51,7 +50,6 @@ function ProjectLayout() {
       <aside className="md:sticky md:top-[calc(4.5rem+1px+env(safe-area-inset-top))] md:max-h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:w-52 md:shrink-0 md:self-start md:overflow-y-auto">
         <div className="mb-3 px-2">
           <div className="truncate font-semibold">{project?.name ?? '…'}</div>
-          <PushedTodayBadge projectId={Number(id)} compact />
           <ul className="mt-1 space-y-0.5">
             {project?.repos.map((r) => (
               <Tip key={r.id} content={r.repoPath}>

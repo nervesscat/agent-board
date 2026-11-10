@@ -9,9 +9,8 @@ const ticket = (human: APIRequestContext, project: Project, title: string, branc
     human.post(`/api/projects/${project.id}/tickets`, { data: { title, status: 'in_progress', branch } }),
   )
 
-/** The indicator in the Daily page's header, and the compact one under the project's name. */
+/** The indicator in the Daily page's header. */
 const header = (page: Page) => page.locator('aside + section').getByRole('button', { name: /^Pushed today/ })
-const sidebar = (page: Page) => page.locator('aside').getByRole('button', { name: /^Pushed today/ })
 
 const scrollsSideways = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
@@ -38,8 +37,6 @@ test('grey until a commit reaches origin, then green with the commits and lines,
   await page.goto(`/projects/${project.id}/daily`)
   await expect(header(page)).toHaveAttribute('data-pushed', 'no')
   await expect(header(page)).toHaveText('Nothing pushed today')
-  // The sidebar shows it only on a day something was pushed.
-  await expect(sidebar(page)).toHaveCount(0)
   await header(page).click()
   await expect(page.getByText("Nothing reached origin today on this project's repos.")).toBeVisible()
   await page.keyboard.press('Escape')
@@ -76,7 +73,6 @@ test('grey until a commit reaches origin, then green with the commits and lines,
   await expect(header(page)).toContainText('1 commit')
   await expect(header(page)).toContainText('+1 −0')
   await expect(header(page).locator('[data-part="dot"]')).toHaveClass(/bg-emerald-500/)
-  await expect(sidebar(page)).toContainText('1 commit')
 
   await header(page).click()
   const byRepo = page.getByRole('list', { name: 'Pushed today by repo' })
@@ -86,17 +82,14 @@ test('grey until a commit reaches origin, then green with the commits and lines,
   await expect(byRepo).toContainText('1 commit +1 −0')
   await byRepo.getByRole('link', { name: 'Checkout totals' }).click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${work.id}$`))
-  // Every page of the project has it under the project's name.
-  await expect(sidebar(page)).toContainText('+1 −0')
+  // Only the Daily page has it: the project's sidebar does not.
+  await expect(page.locator('aside').getByRole('button', { name: /^Pushed today/ })).toHaveCount(0)
 })
 
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
-  test('fits the Daily page and the Overview, answers a tap, and reads in light and dark', async ({
-    page,
-    human,
-  }, info) => {
+  test('fits the Daily page, answers a tap, and reads in light and dark', async ({ page, human }, info) => {
     const quiet = await ownRepo(human, `Nothing pushed ${info.workerIndex}.${info.repeatEachIndex}`)
     const busy = await ownRepo(
       human,
@@ -120,18 +113,6 @@ test.describe('on a phone', () => {
     await expect(byRepo).toContainText('A ticket whose title is long enough')
     expect(await scrollsSideways(page)).toBe(false)
     await page.screenshot({ path: info.outputPath('pushed-today-phone-daily.png'), animations: 'disabled' })
-    await page.keyboard.press('Escape')
-
-    await page.goto(`/projects/${busy.project.id}`)
-    await expect(sidebar(page)).toBeVisible()
-    expect(await scrollsSideways(page)).toBe(false)
-    await sidebar(page).tap()
-    await expect(byRepo).toBeVisible()
-    expect(await scrollsSideways(page)).toBe(false)
-    await page.screenshot({
-      path: info.outputPath('pushed-today-phone-overview.png'),
-      animations: 'disabled',
-    })
     await page.keyboard.press('Escape')
 
     // Green and grey, each told apart from the page, in both themes.
