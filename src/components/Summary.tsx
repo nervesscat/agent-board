@@ -41,7 +41,8 @@ import type { AreaId } from '#/lib/layout'
 import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
 import { ago, clock } from '#/lib/format'
 import { stageBadge, stageOf } from '#/lib/stages'
-import { lastHeard, type WorkTimelineLike } from '#/lib/workStatus'
+import { useServerOffset } from '#/lib/useNow'
+import { lastHeard, onServerClock, type WorkTimelineLike } from '#/lib/workStatus'
 import type { Stalled } from '#/lib/workTimeline'
 
 /**
@@ -55,6 +56,9 @@ export function Summary({ projectId }: { projectId?: number }) {
     queryFn: () => get<Payload>(`/api/summary${projectId ? `?projectId=${projectId}` : ''}`),
     refetchInterval: 30_000,
   })
+  // The stall minutes are counted on the server's clock, from the moment this summary was taken, so a
+  // browser whose clock is off shows the same minutes as the ticket page. 0 before the summary arrives.
+  const now = onServerClock(Date.now(), useServerOffset(data?.generatedAt))
   if (isLoading)
     return (
       <div className="grid gap-4 lg:grid-cols-2">
@@ -65,7 +69,7 @@ export function Summary({ projectId }: { projectId?: number }) {
     )
   if (error || !data) return <Empty>Could not load the summary: {errorMessage(error)}</Empty>
   if (!data.projects.length) return <GettingStarted />
-  if (projectId) return <ProjectBlock p={data.projects[0]!} />
+  if (projectId) return <ProjectBlock p={data.projects[0]!} now={now} />
   return (
     <div className="space-y-10">
       {/* The top bar's Getting started entry folds into the Pages menu on a phone, which leads here. */}
@@ -84,7 +88,7 @@ export function Summary({ projectId }: { projectId?: number }) {
             </h2>
             <span className="text-xs text-muted-foreground">{headline(p)}</span>
           </div>
-          <ProjectBlock p={p} />
+          <ProjectBlock p={p} now={now} />
         </section>
       ))}
     </div>
@@ -104,7 +108,7 @@ const headline = (p: ProjectSummary) =>
     .join(' · ')
 
 /** Each card of the block; which show and in what order is the project's layout. */
-const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary }) => ReactNode> = {
+const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary; now: number }) => ReactNode> = {
   'overview.needsYou': NeedsYou,
   'overview.inProgress': InProgress,
   'overview.doneToday': DoneToday,
@@ -112,7 +116,7 @@ const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary }) => ReactN
   'overview.carryingOver': CarryingOver,
 }
 
-function ProjectBlock({ p }: { p: ProjectSummary }) {
+function ProjectBlock({ p, now }: { p: ProjectSummary; now: number }) {
   if (!p.project.overview.length)
     return (
       <Empty>
@@ -132,7 +136,7 @@ function ProjectBlock({ p }: { p: ProjectSummary }) {
     <div className="grid gap-4 lg:grid-cols-2">
       {p.project.overview.map((card) => {
         const Shown = CARDS[card]
-        return <Shown key={card} p={p} />
+        return <Shown key={card} p={p} now={now} />
       })}
     </div>
   )
@@ -296,10 +300,10 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
   )
 }
 
-/** A stalled ticket's details, from the Needs you list that names it. */
-function stalledOf(p: ProjectSummary, id: number): Stalled | null {
+/** A stalled ticket's details, from the Needs you list that names it: its minutes counted on `now`. */
+function stalledOf(p: ProjectSummary, id: number, now: number): Stalled | null {
   const s = p.needsYou.stalled.find((x) => x.ticketId === id)
-  return s ? stallFor(s) : null
+  return s ? stallFor(s, now) : null
 }
 
 /** When an agent was last heard from, relative, and what it said: one line under the now line. */
@@ -333,7 +337,7 @@ function Stale() {
 
 // --- the sections ---
 
-function NeedsYou({ p }: { p: ProjectSummary }) {
+function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
   const { decisions, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } = p.needsYou
   const pid = String(p.project.id)
   const settle = useSettleInstructions(pid)
@@ -531,7 +535,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
             />
           ))}
           {stalled.map((s) => {
-            const timeline = timelineFromActivity(s.activity, stallFor(s))
+            const timeline = timelineFromActivity(s.activity, stallFor(s, now))
             return (
               <Row
                 key={`s${s.ticketId}`}
@@ -595,7 +599,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
   )
 }
 
-function InProgress({ p }: { p: ProjectSummary }) {
+function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
   const items = p.inProgress
   return (
     <Section icon={Play} title="In progress" count={items.length} scroll>
@@ -604,7 +608,7 @@ function InProgress({ p }: { p: ProjectSummary }) {
       ) : (
         <Rows>
           {items.map((t) => {
-            const timeline = timelineFromActivity(t.activity, t.stalled ? stalledOf(p, t.id) : null)
+            const timeline = timelineFromActivity(t.activity, t.stalled ? stalledOf(p, t.id, now) : null)
             return (
               <Row
                 key={t.id}
