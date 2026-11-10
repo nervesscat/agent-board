@@ -1,12 +1,15 @@
 import { createHash } from 'node:crypto'
+import { once } from 'node:events'
 import fs from 'node:fs'
 import http, { type IncomingMessage, type ServerResponse } from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import type { Duplex } from 'node:stream'
 
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { WebSocket, WebSocketServer } from 'ws'
 
 // The board's modules open the database at import: point DATA_DIR at a throwaway directory first.
 const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-test-')))
@@ -52,6 +55,9 @@ let gate = new Promise<void>((resolve) => (release = resolve))
 let previewPort = 0
 let deadPort = 0
 let previewServer: http.Server
+let echo: WebSocketServer
+/** The upgrades the preview's WebSocket server saw, as it got them. */
+const upgrades: { url: string; headers: http.IncomingHttpHeaders }[] = []
 
 function route(req: IncomingMessage, res: ServerResponse, body: Buffer) {
   const url = req.url ?? '/'
@@ -201,11 +207,30 @@ beforeAll(async () => {
   })
   await new Promise<void>((resolve) => previewServer.listen(0, '127.0.0.1', resolve))
   previewPort = (previewServer.address() as net.AddressInfo).port
+  // A real WebSocket echo server on the preview's port: the proxy's handshake reaches the same app.
+  echo = new WebSocketServer({ noServer: true })
+  previewServer.on('upgrade', (req, socket, head) => {
+    echo.handleUpgrade(req, socket, head, (ws) => {
+      upgrades.push({ url: req.url ?? '', headers: req.headers })
+      ws.on('message', (data, isBinary) => ws.send(data, { binary: isBinary }))
+    })
+  })
   // A port nothing listens on: taken, then freed.
   const dead = net.createServer()
   await new Promise<void>((resolve) => dead.listen(0, '127.0.0.1', resolve))
   deadPort = (dead.address() as net.AddressInfo).port
   await new Promise<void>((resolve) => dead.close(() => resolve()))
+
+  // The board's own server as server.ts/Nitro wire it: every upgrade is the preview proxy's.
+  boardServer = http.createServer((_req, res) => {
+    res.writeHead(426, { 'content-type': 'text/plain' })
+    res.end('upgrade required')
+  })
+  boardServer.on('upgrade', (req, socket, head) => {
+    void proxy.handlePreviewUpgrade(req, socket, head, { ...deps(), ...boardOver })
+  })
+  await new Promise<void>((resolve) => boardServer.listen(0, '127.0.0.1', resolve))
+  boardPort = (boardServer.address() as net.AddressInfo).port
 
   // Projects A and B, a ticket and a workspace in each, and the agents' personas.
   const projectA = db.insert(schema.projects).values({ name: 'Project A' }).returning().get().id
@@ -267,6 +292,9 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
+  for (const client of echo.clients) client.terminate()
+  echo.close()
+  await new Promise<void>((resolve) => boardServer.close(() => resolve()))
   await new Promise<void>((resolve) => previewServer.close(() => resolve()))
 })
 
@@ -291,6 +319,11 @@ let clock = START
 let states = new Map<string, RunState>()
 let listening: (port: number) => Promise<string[]>
 let previewRuns = new Map<number, number | null>()
+
+/** The board's upgrade listener, as the server wires it (beforeAll), and this test's overrides. */
+let boardServer: http.Server
+let boardPort = 0
+let boardOver: Partial<ProxyDeps> = {}
 
 const key = (w: number, r: number) => `${w}:${r}`
 
@@ -325,6 +358,7 @@ function deps(over: Partial<ProxyDeps> = {}): Partial<ProxyDeps> {
     auth: () => production,
     entrance: () => null,
     runOf: (w, r) => states.get(key(w, r)) ?? null,
+    statusOf: (w, r) => states.get(key(w, r)) ?? null,
     listening: (port) => listening(port),
     projectOf: (w) => projectOfWs.get(w) ?? null,
     previewRunId: (w) => previewRuns.get(w) ?? null,
@@ -360,6 +394,8 @@ function previewPath(w = wsA, r = RUN, rest = '') {
 beforeEach(() => {
   clock = START
   seen.length = 0
+  upgrades.length = 0
+  boardOver = {}
   gate = new Promise<void>((resolve) => (release = resolve))
   states = new Map([[key(wsA, RUN), runningState()]])
   previewRuns = new Map([[wsA, RUN]])
@@ -881,6 +917,167 @@ describe('a reset connection and a foreign write', () => {
     const res = await serve(req)
     expect(res.status).toBe(401)
     expect(upstreamCount()).toBe(0)
+  })
+})
+
+describe('a WebSocket upgrade to a preview', () => {
+  interface Answer {
+    status: number
+    headers: http.IncomingHttpHeaders
+    body: string
+    socket?: Duplex
+  }
+
+  /** A WebSocket handshake to the board, answered with its 101 or its refusal. */
+  function upgrade(path: string, headers: Record<string, string> = {}, host = LOCAL): Promise<Answer> {
+    return new Promise((resolve, reject) => {
+      const req = http.request({
+        host: '127.0.0.1',
+        port: boardPort,
+        path,
+        method: 'GET',
+        headers: {
+          host,
+          connection: 'Upgrade',
+          upgrade: 'websocket',
+          'sec-websocket-version': '13',
+          'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+          origin: `http://${host}`,
+          ...headers,
+        },
+      })
+      req.once('upgrade', (res, socket) =>
+        resolve({ status: res.statusCode ?? 0, headers: res.headers, body: '', socket }),
+      )
+      req.once('response', (res) => {
+        let body = ''
+        res.on('data', (chunk: Buffer) => (body += chunk.toString()))
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }))
+      })
+      req.once('error', reject)
+      req.end()
+    })
+  }
+
+  const closeOf = (socket: Duplex, ms = 3000) =>
+    new Promise<void>((resolve, reject) => {
+      if (socket.destroyed) return resolve()
+      const timer = setTimeout(() => reject(new Error('the proxied socket stayed open')), ms)
+      socket.once('close', () => {
+        clearTimeout(timer)
+        resolve()
+      })
+    })
+
+  it('answers 401 JSON with no credential, before the handshake, and reaches no preview', async () => {
+    const res = await upgrade(previewPath(wsA, RUN, 'live'))
+    expect(res.status).toBe(401)
+    expect(JSON.parse(res.body).error).toContain('sign in')
+    expect(res.socket).toBeUndefined()
+    expect(upgrades.length).toBe(0)
+  })
+
+  it("answers 403 to another project's agent token", async () => {
+    const res = await upgrade(previewPath(wsA, RUN, 'live'), bearer(TOKEN.reviewer))
+    expect(res.status).toBe(403)
+    expect(JSON.parse(res.body).error).toContain('not one of its agents')
+    expect(res.socket).toBeUndefined()
+    expect(upgrades.length).toBe(0)
+  })
+
+  it("refuses an Origin that is not the board's own, with a valid credential", async () => {
+    const res = await upgrade(previewPath(wsA, RUN, 'live'), {
+      ...bearer(TOKEN.builder),
+      origin: 'https://evil.example',
+    })
+    expect(res.status).toBe(403)
+    expect(JSON.parse(res.body).error).toContain('Origin')
+    expect(upgrades.length).toBe(0)
+  })
+
+  it('refuses an upgrade that carries no Origin at all (a non-browser client)', async () => {
+    const req = http.request({
+      host: '127.0.0.1',
+      port: boardPort,
+      path: previewPath(wsA, RUN, 'live'),
+      headers: {
+        host: LOCAL,
+        connection: 'Upgrade',
+        upgrade: 'websocket',
+        'sec-websocket-version': '13',
+        'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==',
+        ...bearer(TOKEN.builder),
+      },
+    })
+    const status = await new Promise<number>((resolve, reject) => {
+      req.once('response', (res) => {
+        res.resume()
+        resolve(res.statusCode ?? 0)
+      })
+      req.once('upgrade', () => reject(new Error('it opened')))
+      req.once('error', reject)
+      req.end()
+    })
+    expect(status).toBe(403)
+    expect(upgrades.length).toBe(0)
+  })
+
+  it("lets the preview link's cookie in, as it does for HTTP", async () => {
+    const id = db
+      .select()
+      .from(schema.agentTokens)
+      .where(eq(schema.agentTokens.tokenHash, hashSecret(TOKEN.builder)))
+      .get()!.id
+    const value = signPreviewValue(wsA, RUN, RUNNING_AT, `t${id}`, clock + 60_000)
+    const res = await upgrade(previewPath(wsA, RUN, 'live'), {
+      cookie: `${previewCookieName(wsA, RUN)}=${value}`,
+    })
+    expect(res.status).toBe(101)
+    res.socket!.destroy()
+  })
+
+  it('always dials 127.0.0.1 on the run port, and shows the preview its own origin', async () => {
+    const host = `127.0.0.1:${config.port}`
+    const res = await upgrade(
+      previewPath(wsA, RUN, 'echo?x=1'),
+      {
+        ...bearer(TOKEN.builder),
+        'x-board-target': `127.0.0.1:${deadPort}`,
+        'x-test-actor': 'human:someone',
+      },
+      host,
+    )
+    expect(res.status).toBe(101)
+    const got = upgrades.at(-1)!
+    expect(got.url).toBe('/echo?x=1')
+    expect(got.headers.host).toBe(`127.0.0.1:${previewPort}`)
+    // The preview sees itself at its own origin, never the board's entrance.
+    expect(got.headers.origin).toBe(`http://127.0.0.1:${previewPort}`)
+    // No board credential or acting header reaches it either.
+    expect(got.headers.authorization).toBeUndefined()
+    expect(got.headers['x-test-actor']).toBeUndefined()
+    res.socket!.destroy()
+  })
+
+  it('closes the proxied socket when the run stops', async () => {
+    const res = await upgrade(previewPath(wsA, RUN, 'live'), bearer(TOKEN.builder))
+    expect(res.status).toBe(101)
+    const socket = res.socket!
+    states.set(key(wsA, RUN), runningState({ status: 'stopped', port: null, runningAt: null }))
+    await closeOf(socket)
+  })
+
+  it('carries a preview WebSocket end to end: a message echoes back through the board', async () => {
+    const client = new WebSocket(`ws://127.0.0.1:${boardPort}${previewPath(wsA, RUN, 'live')}`, {
+      origin: `http://${LOCAL}`,
+      headers: { host: LOCAL, ...bearer(TOKEN.builder) },
+    })
+    await once(client, 'open')
+    client.send('hello through the board')
+    const [data] = (await once(client, 'message')) as [Buffer, boolean]
+    expect(data.toString()).toBe('hello through the board')
+    client.close()
+    await once(client, 'close')
   })
 })
 

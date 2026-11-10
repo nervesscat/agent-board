@@ -1,5 +1,5 @@
-import http, { type IncomingMessage } from 'node:http'
-import { Readable } from 'node:stream'
+import http, { type IncomingMessage, STATUS_CODES } from 'node:http'
+import { type Duplex, Readable } from 'node:stream'
 
 import { eq } from 'drizzle-orm'
 
@@ -7,7 +7,7 @@ import { db, schema } from '#/db'
 import { siteOf } from './auth'
 import { type AuthMode, authMode, config, type PublicEntrance, servedEntrance } from './config'
 import { agentTokenOf, bearerToken, isBearer, readCookie, sessionCookieName, sessionOf } from './credentials'
-import { isForwardingHeader, type SignInSite } from './entrance'
+import { guardRequest, type HeaderLookup, isForwardingHeader, type SignInSite } from './entrance'
 import { HttpError } from './http'
 import { type Loopback, listeningAddresses, loopbackOf } from './listeners'
 import { previewRunOf } from './managedPreview'
@@ -19,7 +19,7 @@ import {
   verifyPreviewValue,
 } from './previewLink'
 import { PREVIEW_PATH, previewCookieName, previewPathOf } from './previewPaths'
-import { type RunState, runState } from './runs'
+import { type RunState, runState, runStatus } from './runs'
 
 /**
  * The board's preview proxy: a running preview (a managed run's loopback port) at `/p/<workspaceId>/<runId>/`
@@ -37,10 +37,14 @@ import { type RunState, runState } from './runs'
  * - Board credentials never reach the preview: no Authorization, no board session or preview cookie. Its own
  *   cookies are rewritten to the run's path; its Location headers that name the loopback address or a root
  *   path are rewritten to the prefix. Every other body streams byte for byte, except an HTML page, which gets
- *   one small script (`runtimeScript`) that prefixes root-absolute fetch, XMLHttpRequest and EventSource URLs.
+ *   one small script (`runtimeScript`) that prefixes root-absolute fetch, XMLHttpRequest, EventSource and
+ *   WebSocket URLs.
  * - Sign-in off (outside production, see config.ts): every `/p/` path answers 404, and nothing is proxied.
  *
- * WebSocket upgrades are not proxied (see the PR description): a preview's live updates use event streams.
+ * A WebSocket upgrade under the same prefix is proxied too (`handlePreviewUpgrade`), through the same
+ * sign-in gate and the same loopback check, before the handshake passes: its `Origin` must name the board's
+ * own entrance (a browser on another site can never open one against a preview), and the preview sees its
+ * own origin instead. A socket is closed when its run stops.
  */
 
 export { isPreviewPath, PREVIEW_PATH } from './previewPaths'
@@ -57,6 +61,8 @@ export interface ProxyDeps {
   auth: () => AuthMode
   entrance: () => PublicEntrance | null
   runOf: (workspaceId: number, runId: number) => RunState | null
+  /** The run's state as a proxied socket needs it, without the log tail `runOf` reads for every request. */
+  statusOf: (workspaceId: number, runId: number) => Pick<RunState, 'status' | 'port' | 'runningAt'> | null
   /** The addresses the port listens on, loopback or not, for the run that holds the port. */
   listening: (port: number, run: RunRef) => Promise<string[]>
   projectOf: (workspaceId: number) => number | null
@@ -105,6 +111,7 @@ const DEFAULTS: ProxyDeps = {
   auth: () => authMode(),
   entrance: () => servedEntrance(),
   runOf: (workspaceId, runId) => runState(workspaceId, runId),
+  statusOf: (workspaceId, runId) => runStatus(workspaceId, runId),
   listening: listeningNow,
   projectOf: projectOfWorkspace,
   previewRunId: (workspaceId) => previewRunOf(workspaceId)?.id ?? null,
@@ -211,6 +218,76 @@ function whoIs(
   const cookie = readCookie(request.headers.get('cookie'), previewCookieName(run.workspaceId, run.runId))
   const own = verifyPreviewValue(cookie, run.workspaceId, run.runId, run.runningAt, now.getTime())
   return own ? { principal: own, redeem: false } : null
+}
+
+/**
+ * What the sign-in gate let through for a preview path: the run the path names, the origin it came through,
+ * and who the request is. The HTTP proxy and the WebSocket upgrade both start from it, so both ask the same
+ * questions in the same order.
+ */
+interface PreviewGate {
+  workspaceId: number
+  runId: number
+  /** The path under the run's prefix, with its leading slash ('' for the prefix itself). */
+  rest: string
+  prefix: string
+  state: RunState | null
+  secure: boolean
+  who: Who
+}
+
+type GateVerdict = { refusal: { status: number; error: string } } | { gate: PreviewGate }
+
+/**
+ * The gate every proxied request passes before the board reaches a preview: sign-in on (404 when off), a
+ * credential of this run's principal (401 otherwise), and that principal still standing for the preview's
+ * project (403 for another project's agent). It reads the run state but does not decide that the run is
+ * running, so a link is still redeemed for a run that is gone (the request then gets the run's own 404).
+ */
+function gateOf(
+  request: Request,
+  url: URL,
+  m: RegExpExecArray,
+  deps: ProxyDeps,
+  peer: string | undefined,
+  now: Date,
+): GateVerdict {
+  if (deps.auth().off)
+    return { refusal: { status: 404, error: 'the preview proxy is off: sign-in is off on this board' } }
+  const workspaceId = Number(m[1])
+  const runId = Number(m[2])
+  const rest = m[3] ?? ''
+  const prefix = previewPathOf(workspaceId, runId)
+  const state = deps.runOf(workspaceId, runId)
+  const site = siteOf(request, deps.entrance(), peer)
+  const who = whoIs(
+    request,
+    url,
+    site,
+    { workspaceId, runId, runningAt: state?.runningAt ?? null, rest },
+    now,
+  )
+  if (!who) return { refusal: { status: 401, error: SIGN_IN_NEEDED } }
+  const standing = standingOf(who.principal, workspaceId, now, deps)
+  if (standing === 'signed-out') return { refusal: { status: 401, error: SIGN_IN_NEEDED } }
+  if (standing === 'other-project')
+    return {
+      refusal: {
+        status: 403,
+        error: "this preview is for the agents of its project: the token's name is not one of its agents",
+      },
+    }
+  return {
+    gate: {
+      workspaceId,
+      runId,
+      rest,
+      prefix,
+      state,
+      secure: site?.origin.startsWith('https:') ?? false,
+      who,
+    },
+  }
 }
 
 /** A query component decoded as a URL decodes it (`+` is a space); what cannot be decoded stays as it is. */
@@ -386,8 +463,8 @@ export function rewriteRefresh(
 }
 
 /**
- * The script an HTML page of the preview gets: root-absolute URLs its scripts open with fetch, XMLHttpRequest
- * and EventSource gain the prefix, so `/api/x` reaches `/p/<w>/<r>/api/x`. Changes nothing else.
+ * The script an HTML page of the preview gets: root-absolute URLs its scripts open with fetch, XMLHttpRequest,
+ * EventSource and WebSocket gain the prefix, so `/api/x` reaches `/p/<w>/<r>/api/x`. Changes nothing else.
  */
 export function runtimeScript(prefix: string): string {
   return `(function (p) {
@@ -424,6 +501,24 @@ export function runtimeScript(prefix: string): string {
     Wrapped.prototype = ES.prototype;
     Wrapped.CONNECTING = ES.CONNECTING; Wrapped.OPEN = ES.OPEN; Wrapped.CLOSED = ES.CLOSED;
     window.EventSource = Wrapped;
+  }
+  function wsu(u) {
+    if (typeof u !== 'string') return u;
+    if (u.charAt(0) === '/' && u.charAt(1) !== '/') return at(u);
+    try {
+      var x = new URL(u, location.href);
+      if ((x.protocol === 'ws:' || x.protocol === 'wss:') && x.host === location.host) return at(x.pathname + x.search + x.hash);
+    } catch (e) {}
+    return u;
+  }
+  if (window.WebSocket) {
+    var WS = window.WebSocket;
+    var WrappedWS = function (url, protocols) {
+      return protocols === undefined ? new WS(wsu(url)) : new WS(wsu(url), protocols);
+    };
+    WrappedWS.prototype = WS.prototype;
+    WrappedWS.CONNECTING = WS.CONNECTING; WrappedWS.OPEN = WS.OPEN; WrappedWS.CLOSING = WS.CLOSING; WrappedWS.CLOSED = WS.CLOSED;
+    window.WebSocket = WrappedWS;
   }
 })(${JSON.stringify(prefix)});`
 }
@@ -588,32 +683,11 @@ export async function servePreview(
   const url = new URL(request.url)
   const m = PREVIEW_PATH.exec(url.pathname)
   if (!m) return null
-  if (deps.auth().off) return json(404, 'the preview proxy is off: sign-in is off on this board')
-  const workspaceId = Number(m[1])
-  const runId = Number(m[2])
-  const rest = m[3] ?? ''
-  const prefix = previewPathOf(workspaceId, runId)
   const now = new Date(deps.now())
-  const state = deps.runOf(workspaceId, runId)
-  const site = siteOf(request, deps.entrance(), opts.peer)
+  const verdict = gateOf(request, url, m, deps, opts.peer, now)
+  if ('refusal' in verdict) return json(verdict.refusal.status, verdict.refusal.error)
+  const { workspaceId, runId, rest, prefix, state, secure, who } = verdict.gate
 
-  const who = whoIs(
-    request,
-    url,
-    site,
-    { workspaceId, runId, runningAt: state?.runningAt ?? null, rest },
-    now,
-  )
-  if (!who) return json(401, SIGN_IN_NEEDED)
-  const standing = standingOf(who.principal, workspaceId, now, deps)
-  if (standing === 'signed-out') return json(401, SIGN_IN_NEEDED)
-  if (standing === 'other-project')
-    return json(
-      403,
-      "this preview is for the agents of its project: the token's name is not one of its agents",
-    )
-
-  const secure = site?.origin.startsWith('https:') ?? false
   if (who.redeem && state) {
     // The link's own value, re-signed for the cookie's lifetime, sets the cookie; the path goes on without it.
     const value = signPreviewValue(
@@ -683,6 +757,302 @@ export async function servePreview(
     method: request.method,
     own: ownOriginOf(request, url, secure),
   })
+}
+
+// --- WebSocket upgrades -------------------------------------------------------------------------
+
+/** How often a proxied WebSocket is checked against its run: one whose run stopped is closed. */
+export const SOCKET_SWEEP_MS = 500
+
+interface ProxiedSocket {
+  workspaceId: number
+  runId: number
+  port: number
+  runningAt: string | null
+  client: Duplex
+  upstream: Duplex
+  statusOf: ProxyDeps['statusOf']
+}
+
+const proxied = new Set<ProxiedSocket>()
+let sweepTimer: NodeJS.Timeout | null = null
+
+function dropProxied(s: ProxiedSocket) {
+  proxied.delete(s)
+  s.client.destroy()
+  s.upstream.destroy()
+}
+
+/**
+ * Closes the proxied WebSockets whose run is no longer the one they were opened for: stopped, failed,
+ * restarted (a new start has a new `runningAt`) or replaced by another run on another port. Every stop path
+ * (stop, restart, a failed run, a forgotten workspace) settles on the run state, so one look is enough.
+ */
+export function sweepPreviewSockets() {
+  for (const s of proxied) {
+    const run = s.statusOf(s.workspaceId, s.runId)
+    if (run && run.status === 'running' && run.port === s.port && run.runningAt === s.runningAt) continue
+    dropProxied(s)
+  }
+  if (proxied.size === 0 && sweepTimer) {
+    clearInterval(sweepTimer)
+    sweepTimer = null
+  }
+}
+
+function trackProxied(s: ProxiedSocket) {
+  proxied.add(s)
+  if (!sweepTimer) {
+    sweepTimer = setInterval(sweepPreviewSockets, SOCKET_SWEEP_MS)
+    sweepTimer.unref()
+  }
+}
+
+/** The answer to an upgrade the board refuses: the same JSON body an HTTP refusal carries, then the socket closes. */
+function refuseUpgrade(socket: Duplex, status: number, error: string) {
+  if (socket.destroyed) return
+  const body = JSON.stringify({ error })
+  socket.on('error', () => {})
+  socket.end(
+    `HTTP/1.1 ${status} ${STATUS_CODES[status] ?? 'Error'}\r\n` +
+      'Content-Type: application/json; charset=utf-8\r\n' +
+      `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+      'Connection: close\r\n\r\n' +
+      body,
+    () => socket.destroy(),
+  )
+}
+
+/** A request's headers as the guard reads them, duplicates joined (two Hosts never pass for one good one). */
+function headerLookupOf(req: IncomingMessage): HeaderLookup {
+  return {
+    get(name) {
+      const lower = name.toLowerCase()
+      if (lower === 'host') {
+        const hosts: string[] = []
+        for (let i = 0; i < req.rawHeaders.length; i += 2)
+          if (req.rawHeaders[i]!.toLowerCase() === 'host') hosts.push(req.rawHeaders[i + 1]!)
+        return hosts.length ? hosts.join(', ') : null
+      }
+      const value = req.headers[lower]
+      return value === undefined ? null : Array.isArray(value) ? value.join(', ') : value
+    },
+    keys: () => Object.keys(req.headers),
+  }
+}
+
+/**
+ * The upgrade as a web Request, on the board's origin as the caller sent it, and its URL. A target that
+ * starts with `//` stays a path on that origin, as it does for the HTTP proxy.
+ */
+function requestOfUpgrade(req: IncomingMessage): { request: Request; url: URL } | null {
+  const host = req.headers.host ?? `localhost:${config.port}`
+  let base: URL
+  try {
+    base = new URL(`http://${host}`)
+  } catch {
+    return null
+  }
+  const raw = req.url ?? '/'
+  const target = raw.startsWith('/') ? raw : `/${raw}`
+  let parsed: URL
+  try {
+    parsed = new URL(`http://board.invalid${target}`)
+  } catch {
+    return null
+  }
+  try {
+    const url = new URL(`${base.origin}${parsed.pathname}${parsed.search}`)
+    const headers = new Headers()
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (value === undefined) continue
+      if (Array.isArray(value)) for (const v of value) headers.append(name, v)
+      else headers.set(name, value)
+    }
+    return { request: new Request(url, { method: req.method ?? 'GET', headers }), url }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Whether the upgrade's Origin names the board's own entrance: the origin the caller reached the board at
+ * (`ownOriginOf`, from its Host and the scheme it came through). A browser sends Origin on every WebSocket
+ * handshake, so a missing one (a script that is not a browser) is refused too: a page on another site can
+ * never open a socket against a preview with the visitor's session.
+ */
+export function originAllowed(request: Request, url: URL, secure: boolean): boolean {
+  const origin = request.headers.get('origin')
+  const own = ownOriginOf(request, url, secure)
+  if (!origin || own === null) return false
+  try {
+    return new URL(origin).origin === own
+  } catch {
+    return false
+  }
+}
+
+/** The preview's 101, as the browser gets it: its headers, its board cookies dropped and its own kept on the run's path. */
+function upgradeAnswer(res: IncomingMessage, prefix: string): string {
+  const lines = ['HTTP/1.1 101 Switching Protocols']
+  for (let i = 0; i < res.rawHeaders.length; i += 2) {
+    const name = res.rawHeaders[i]!
+    const value = res.rawHeaders[i + 1]!
+    const lower = name.toLowerCase()
+    if (lower === 'content-length' || lower === 'transfer-encoding') continue
+    if (lower === 'set-cookie') {
+      if (BOARD_COOKIE.test(value.trim())) continue
+      lines.push(`${name}: ${rewriteSetCookie(value, prefix)}`)
+      continue
+    }
+    lines.push(`${name}: ${value}`)
+  }
+  return `${lines.join('\r\n')}\r\n\r\n`
+}
+
+/** The preview's side of the handshake: its 101, or a rejection once the preview answered something else. */
+function connectUpgrade(
+  port: number,
+  path: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<{ res: IncomingMessage; socket: Duplex; head: Buffer }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port, method: 'GET', path, headers })
+    const timer = setTimeout(() => req.destroy(new Error('no answer')), timeoutMs)
+    req.once('upgrade', (res, socket, head) => {
+      clearTimeout(timer)
+      resolve({ res, socket: socket as Duplex, head })
+    })
+    req.once('response', (res) => {
+      clearTimeout(timer)
+      res.resume()
+      reject(new Error('the preview did not upgrade'))
+    })
+    req.once('error', (err) => {
+      clearTimeout(timer)
+      reject(err)
+    })
+    req.end()
+  })
+}
+
+/**
+ * The WebSocket upgrade of a preview at `/p/<w>/<r>/...`, or false when the path is not the proxy's. It
+ * asks the same questions as the HTTP proxy first (the entrance guard, the sign-in gate, the run's state,
+ * the loopback check), then the upgrade's own (its Origin is the board's, it is a WebSocket). Only then does
+ * it connect to `127.0.0.1:<the run's port>`, rewriting Origin to the preview's own, and pipes the frames
+ * both ways until the client or the run goes. `over` is for tests, as on servePreview.
+ */
+export async function handlePreviewUpgrade(
+  req: IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+  over: Partial<ProxyDeps> = {},
+): Promise<boolean> {
+  const deps = { ...DEFAULTS, ...over }
+  const built = requestOfUpgrade(req)
+  if (!built) {
+    refuseUpgrade(socket, 400, 'the request is malformed: refused')
+    return true
+  }
+  const { request, url } = built
+  const m = PREVIEW_PATH.exec(url.pathname)
+  if (!m) return false
+  const peer = req.socket.remoteAddress
+  const guard = guardRequest(
+    { method: request.method, headers: headerLookupOf(req), peer, path: url.pathname },
+    { authOff: deps.auth().off, port: config.port, entrance: deps.entrance(), dataDir: config.dataDir },
+  )
+  if (!guard.allow) {
+    refuseUpgrade(socket, guard.status, guard.error)
+    return true
+  }
+  if ((req.headers.upgrade ?? '').toLowerCase() !== 'websocket') {
+    refuseUpgrade(socket, 400, 'only WebSocket upgrades are proxied: refused')
+    return true
+  }
+  const now = new Date(deps.now())
+  const verdict = gateOf(request, url, m, deps, peer, now)
+  if ('refusal' in verdict) {
+    refuseUpgrade(socket, verdict.refusal.status, verdict.refusal.error)
+    return true
+  }
+  const { workspaceId, runId, rest, prefix, state, secure, who } = verdict.gate
+  if (!originAllowed(request, url, secure)) {
+    refuseUpgrade(socket, 403, "the WebSocket's Origin is not this board: refused")
+    return true
+  }
+  if (!state || state.runType !== 'preview') {
+    refuseUpgrade(socket, 404, `the board runs no preview ${runId} of workspace ${workspaceId}`)
+    return true
+  }
+  if (state.status !== 'running' || state.port === null) {
+    refuseUpgrade(
+      socket,
+      404,
+      "the preview is not running: start it on the ticket's Preview card or with start_run",
+    )
+    return true
+  }
+  let loopback: Loopback
+  try {
+    loopback = loopbackOf(
+      await deps.listening(state.port, { workspaceId, runId, runningAt: state.runningAt }),
+    )
+  } catch {
+    loopback = 'unknown'
+  }
+  if (loopback !== 'loopback') {
+    listenCache.delete(`${workspaceId}:${runId}`)
+    const why =
+      loopback === 'beyond'
+        ? 'the preview listens beyond this machine'
+        : "the preview's address cannot be checked"
+    refuseUpgrade(socket, 502, `${why}: refused`)
+    return true
+  }
+
+  const query = who.redeem
+    ? withoutLink(url.search, url.searchParams.get(LINK_PARAM) ?? '')
+    : url.search.replace(/^\?/, '')
+  const path = `${rest}${query ? `?${query}` : ''}`
+  const headers = upstreamHeaders(request.headers, state.port)
+  headers.connection = 'Upgrade'
+  headers.upgrade = 'websocket'
+  // The preview sees itself at its own origin, never the board's entrance.
+  headers.origin = `http://127.0.0.1:${state.port}`
+  let handshake: { res: IncomingMessage; socket: Duplex; head: Buffer }
+  try {
+    handshake = await connectUpgrade(state.port, path, headers, deps.upstreamMs)
+  } catch {
+    refuseUpgrade(socket, 502, 'the preview is running but does not answer')
+    return true
+  }
+  if (socket.destroyed) {
+    handshake.socket.destroy()
+    return true
+  }
+  socket.write(upgradeAnswer(handshake.res, prefix))
+  if (handshake.head.length) socket.write(handshake.head)
+  if (head.length) handshake.socket.write(head)
+  const upstreamSocket = handshake.socket
+  socket.on('error', () => upstreamSocket.destroy())
+  upstreamSocket.on('error', () => socket.destroy())
+  socket.on('close', () => upstreamSocket.destroy())
+  upstreamSocket.on('close', () => socket.destroy())
+  socket.pipe(upstreamSocket)
+  upstreamSocket.pipe(socket)
+  trackProxied({
+    workspaceId,
+    runId,
+    port: state.port,
+    runningAt: state.runningAt,
+    client: socket,
+    upstream: upstreamSocket,
+    statusOf: deps.statusOf,
+  })
+  return true
 }
 
 /**
