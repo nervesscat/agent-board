@@ -2,7 +2,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { Gallery } from '#/lib/api'
 import { fileSize, localDate, shiftDate } from '#/lib/format'
-import { AGENT } from './env'
+import { AGENT, e2eEnv } from './env'
 import { uploadedAt } from './db'
 import { type Api, expect, expectTooltip, ok, test } from './fixtures'
 import { png, pdf } from './files'
@@ -16,6 +16,8 @@ import { box, coveredAt, feedDrawn, longTicket, ticketHeader } from './scrolling
 
 type Row = { id: number }
 type Upload = { id: number; url: string; size: number }
+
+const env = e2eEnv()
 
 // Not a playable video: enough for the tile to be a <video>, which only reads its metadata.
 const WEBM = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01])
@@ -140,6 +142,48 @@ test('the Gallery module lists the files with their size, uploader, time and tic
   await expect(dialog.getByText('Download', { exact: true })).toHaveAttribute('href', blob.url)
   await page.keyboard.press('Escape')
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/gallery$`))
+})
+
+test('an image tile copies the image to the clipboard from its own button, and no other file has one', async ({
+  page,
+  context,
+  project,
+  api,
+  agent,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: env.baseURL })
+  const t = await api.ticket({ title: 'Copied screens', status: 'in_progress' })
+  const image = await upload(agent, 'shot.png', png(64))
+  const doc = await upload(agent, 'spec.pdf', pdf('Spec'))
+  await postWith(agent, t.id, [image.id, doc.id])
+
+  await gallery(page, project.id)
+  const shot = tile(page, 'shot.png')
+  const copy = shot.getByRole('button', { name: 'Copy image' })
+  await expect(copy).toHaveCount(1)
+  // Only images: a PDF tile has no button at all.
+  await expect(tile(page, 'spec.pdf').getByRole('button', { name: 'Copy image' })).toHaveCount(0)
+
+  // Out of the way until the tile is hovered.
+  await expect(copy).toHaveCSS('opacity', '0')
+  await shot.hover()
+  await expect(copy).toHaveCSS('opacity', '1')
+  await page.screenshot({ path: testInfo.outputPath('gallery-copy-image.png') })
+
+  await copy.click()
+  // Says it copied, then goes back on its own.
+  await expect(copy).toHaveAttribute('data-state', 'copied')
+  await expect(copy).toHaveAttribute('data-state', 'idle', { timeout: 5000 })
+  // The image itself is on the clipboard, not a link or its name.
+  const types = await page.evaluate(async () =>
+    (await navigator.clipboard.read()).flatMap((item) => item.types),
+  )
+  expect(types).toContain('image/png')
+
+  // Copying never opened the lightbox; a click on the tile still does.
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await thumb(shot).click()
+  await expect(page.getByRole('dialog').locator(`img[src="${image.url}"]`)).toBeVisible()
 })
 
 test('the type, day and archived filters live in the URL, survive a reload, and show an empty state', async ({
@@ -570,6 +614,26 @@ test.describe('on a phone', () => {
     await expect(tiles(page)).toHaveCount(61)
     await expect(more(page)).toHaveCount(0)
     expect(new Set(await tileNames(page)).size).toBe(61)
+    expect(await scrollsSideways(page)).toBe(false)
+  })
+
+  test('the copy button on an image tile is shown without a hover, and is big enough to tap', async ({
+    page,
+    project,
+    api,
+    agent,
+  }) => {
+    const t = await api.ticket({ title: 'Phone copy', status: 'in_progress' })
+    await postWith(agent, t.id, [(await upload(agent, 'phone.png', png())).id])
+    await gallery(page, project.id)
+    const copy = tile(page, 'phone.png').getByRole('button', { name: 'Copy image' })
+    await expect(copy).toHaveCSS('opacity', '1')
+    const b = await box(copy)
+    expect(b.width).toBeGreaterThanOrEqual(44)
+    expect(b.height).toBeGreaterThanOrEqual(44)
+    // Over the tile, not spilling out of it.
+    const tileBox = await box(tile(page, 'phone.png'))
+    expect(b.x + b.width).toBeLessThanOrEqual(tileBox.x + tileBox.width)
     expect(await scrollsSideways(page)).toBe(false)
   })
 })
