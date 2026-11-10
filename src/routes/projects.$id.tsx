@@ -1,12 +1,13 @@
 import { Link, Outlet, createFileRoute, useRouterState } from '@tanstack/react-router'
 import { FolderGit2 } from 'lucide-react'
+import { useEffect } from 'react'
 
 import { PushedTodayBadge } from '#/components/daily/PushedToday'
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
-import { useProject } from '#/lib/project'
+import { rememberCurrentProject, useProject } from '#/lib/project'
 
 export const Route = createFileRoute('/projects/$id')({ component: ProjectLayout })
 
@@ -34,6 +35,8 @@ function ProjectLayout() {
   const navigate = Route.useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { data: project } = useProject(id)
+  // A link that names no project (the old `/daily`) opens this one.
+  useEffect(() => rememberCurrentProject(id), [id])
   // The defaults until the project has loaded.
   const pages = shownIn(project?.layout ?? defaultLayout(), 'nav')
   // The page the URL is on, for the phone-sized picker. The Overview's URL starts every other page's.

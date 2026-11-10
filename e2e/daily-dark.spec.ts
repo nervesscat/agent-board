@@ -13,7 +13,7 @@ import {
 import { expect, test } from './fixtures'
 
 /*
- * The Daily pages in the dark theme, every part of them at once: each is screenshotted into the
+ * The Daily page in the dark theme, every part of it at once: it is screenshotted into the
  * test's output, and its text and status marks are checked against what they sit on, by contrast
  * (WCAG: 4.5 for text, 3 for a mark that says something; the marks of upcoming and off days are
  * meant to be quiet, and only have to show).
@@ -173,44 +173,6 @@ test("a project's Daily page in the dark: banner, header, notice, report, calend
     expect(await scrollsSideways(page)).toBe(false)
     await shot(page, 'daily-project-dark')
     await shot(page, 'daily-project-dark-full', true)
-  } finally {
-    await quiet()
-  }
-})
-
-test("every project's Daily page in the dark: the reports and the activity", async ({
-  page,
-  human,
-  agent,
-}, info) => {
-  const { project, due, quiet } = await seedDailyPage(
-    human,
-    agent,
-    `Dark all daily ${info.workerIndex}.${info.repeatEachIndex}`,
-  )
-  try {
-    await page.goto('/daily')
-    await dark(page)
-    await expect(reminder(page, due)).toBeVisible()
-    const reports = page.getByRole('region', { name: 'Reports', exact: true })
-    const card = reports.getByRole('article', { name: project.name, exact: true })
-    await expect(card).toContainText('Ship it')
-    await standsOut(card.getByRole('link', { name: project.name }), TEXT)
-    await standsOut(card.getByText('done', { exact: true }), TEXT)
-    await standsOut(card.getByRole('heading', { name: 'Done' }), TEXT)
-    await shot(card, 'all-projects-report-dark')
-    // A project still without its report says so, in its status' colour.
-    const other = reports.getByRole('article', { name: due.name, exact: true })
-    await expect(other).toContainText(`No report for`)
-    await standsOut(other.getByText(/^(upcoming|missing)$/), TEXT)
-
-    const activity = page.getByRole('region', { name: 'Activity' })
-    await activity.getByRole('button', { name: 'Open all' }).click()
-    const tag = activity.getByText(`[${project.name}]`).first()
-    await expect(tag).toBeVisible()
-    await standsOut(tag, TEXT)
-    expect(await scrollsSideways(page)).toBe(false)
-    await shot(page, 'daily-all-dark-full', true)
   } finally {
     await quiet()
   }

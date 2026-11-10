@@ -136,13 +136,10 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Previe
   await expect(page.getByRole('link', { name: /^Decide: Which one\?/ })).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
 
-  for (const daily of [`/projects/${project.id}/daily`, '/daily']) {
-    await page.goto(daily)
-    await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).tap()
-    await expect(page.getByText(/asked for a decision on/).first()).toBeVisible()
-    expect(await scrollsSideways(page), daily).toBe(false)
-  }
   await page.goto(`/projects/${project.id}/daily`)
+  await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).tap()
+  await expect(page.getByText(/asked for a decision on/).first()).toBeVisible()
+  expect(await scrollsSideways(page)).toBe(false)
   await expect(page.getByRole('region', { name: 'Report', exact: true })).toContainText(
     'daily by 17:00, text',
   )
@@ -215,7 +212,7 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Previe
   }
 })
 
-test("a project's whole Daily page, every project's, and the reports-due banner fit 390px and answer taps", async ({
+test("a project's whole Daily page and the reports-due banner fit 390px and answer taps", async ({
   page,
   human,
   agent,
@@ -268,18 +265,6 @@ test("a project's whole Daily page, every project's, and the reports-due banner 
     await expect(card).toContainText('The parser')
     expect(await scrollsSideways(page)).toBe(false)
 
-    await page.goto('/daily')
-    const reports = page.getByRole('region', { name: 'Reports', exact: true })
-    await expect(reports.getByRole('article', { name: project.name, exact: true })).toContainText('Ship it')
-    await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).tap()
-    await expect(page.getByText(`[${project.name}]`).first()).toBeVisible()
-    expect(await scrollsSideways(page)).toBe(false)
-    await page.screenshot({
-      path: info.outputPath('daily-all-phone.png'),
-      fullPage: true,
-      style: 'body header { position: static !important }',
-    })
-
     // The banner, on a ticket page.
     await page.goto(`/projects/${project.id}/features/${ticket.id}`)
     await expect(reminder(page, due)).toBeVisible()
@@ -330,15 +315,15 @@ test('the top bar and the page paint the theme background, so the phone status b
   }
 })
 
-test('the top bar folds its pages into a menu that opens', async ({ page }) => {
+test('the top bar folds its pages into a menu that opens, and Daily is not one of them', async ({ page }) => {
   await page.goto(`/projects/${seededProject().id}/prs`)
   await expect(page.getByRole('heading', { name: 'PR queue' })).toBeVisible()
-  // The inline links are hidden at this width; the menu holds them.
-  await expect(page.getByRole('banner').getByRole('link', { name: 'Daily' })).toBeHidden()
+  // Daily is a project's page now: it is in the project's menu, never in the top bar.
+  await expect(page.getByRole('banner').getByRole('link', { name: 'Daily' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Pages' }).click()
   const menu = page.getByRole('dialog')
-  for (const name of ['Daily', 'Connect', 'Settings'])
-    await expect(menu.getByRole('link', { name })).toBeVisible()
+  await expect(menu.getByRole('link', { name: 'Daily' })).toHaveCount(0)
+  for (const name of ['Connect', 'Settings']) await expect(menu.getByRole('link', { name })).toBeVisible()
   await menu.getByRole('link', { name: 'Connect' }).click()
   await expect(page).toHaveURL(/\/agents$/)
   await expect(menu).toBeHidden()
