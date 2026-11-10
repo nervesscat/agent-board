@@ -18,6 +18,7 @@ type Decision = NeedsYou['decisions'][number]
 type PrToReview = NeedsYou['prs'][number]
 type Thread = NeedsYou['threads'][number]
 type Review = NeedsYou['reviews'][number]
+type HumanWait = NeedsYou['humanWaits'][number]
 type BlockedTask = NeedsYou['blockedTasks'][number]
 type InstructionChange = NeedsYou['instructionChanges'][number]
 type Stalled = NeedsYou['stalled'][number]
@@ -29,6 +30,7 @@ type Stalled = NeedsYou['stalled'][number]
  */
 export const needKeys = {
   decision: (d: Decision) => `decision:${d.postId}`,
+  humanWait: (w: HumanWait) => `humanwait:${w.waitId}:${w.since}`,
   pr: (pr: PrToReview) => `pr:${pr.id}:${pr.updatedAt}`,
   thread: (th: Thread) => `thread:${th.parentType}:${th.parentId}:${th.last.id}`,
   review: (t: Review) => `review:${t.id}:${t.updatedAt}`,
@@ -46,6 +48,7 @@ export function undismissed(p: ProjectSummary, dismissed: ReadonlySet<string>): 
   if (!dismissed.size) return p
   const n = p.needsYou
   const decisions = n.decisions.filter((d) => !dismissed.has(needKeys.decision(d)))
+  const humanWaits = n.humanWaits.filter((w) => !dismissed.has(needKeys.humanWait(w)))
   const prs = n.prs.filter((pr) => !dismissed.has(needKeys.pr(pr)))
   const threads = n.threads.filter((th) => !dismissed.has(needKeys.thread(th)))
   const reviews = n.reviews.filter((t) => !dismissed.has(needKeys.review(t)))
@@ -54,6 +57,7 @@ export function undismissed(p: ProjectSummary, dismissed: ReadonlySet<string>): 
   const stalled = n.stalled.filter((s) => !dismissed.has(needKeys.stalled(s)))
   const total =
     decisions.length +
+    humanWaits.length +
     prs.length +
     threads.length +
     reviews.length +
@@ -63,7 +67,17 @@ export function undismissed(p: ProjectSummary, dismissed: ReadonlySet<string>): 
   if (total === n.total) return p
   return {
     ...p,
-    needsYou: { decisions, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total },
+    needsYou: {
+      decisions,
+      humanWaits,
+      prs,
+      threads,
+      reviews,
+      blockedTasks,
+      instructionChanges,
+      stalled,
+      total,
+    },
   }
 }
 

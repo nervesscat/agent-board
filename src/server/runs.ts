@@ -16,7 +16,14 @@ import { toolProblem } from './hostTools'
 import { listeningAddresses, loopbackOf } from './listeners'
 import { HttpError, notFound } from './http'
 import { checkPreview } from './preview'
-import { deleteRunConfig, getRunConfig, listRunConfigs, type RunConfig, seedRepo } from './runConfig'
+import {
+  deleteRunConfig,
+  getRunConfig,
+  isBoardCheckout,
+  listRunConfigs,
+  type RunConfig,
+  seedRepo,
+} from './runConfig'
 import { kindOf, listStages } from './stages'
 import { noteBoardEvent } from './workTimeline'
 import { previewLinksOf, previewPathOf } from './previewLink'
@@ -46,6 +53,12 @@ export interface RunState {
   runName: string
   runType: RunType
   repoId: number
+  /**
+   * The base the board built this preview for (`/p/<workspaceId>/<runId>/`), for a checkout of the board
+   * whose app serves it (Vite's base and Nitro's baseURL). Null for a plain preview: it is served at `/`,
+   * and the proxy strips the prefix before forwarding.
+   */
+  previewBase: string | null
   status: RunStatus
   step: RunStep | null
   /** The port it holds while starting or running (a preview's). */
@@ -438,6 +451,8 @@ function all(): Map<string, Entry> {
       changed = true
       continue
     }
+    // A run remembered from before this field: it is a plain preview until it is started again.
+    e.previewBase ??= null
     if (isActive(e)) {
       changed = true
       if (e.url && ws.previewUrl === e.url) clearUrl(e.workspaceId, e.url)
@@ -655,6 +670,11 @@ export function startRun(
   const logs = dataDir
     ? path.join(dataDir, 'logs')
     : path.join(runsDirOf(target.path), runSlug(run.name), 'logs')
+  // Only a checkout of the board serves the preview's path on the board's origin: its base is built in
+  // (vite.config.ts) and the proxy forwards the whole path. A plain preview keeps `/`, and the proxy
+  // strips the prefix.
+  const previewBase =
+    run.type === 'preview' && isBoardCheckout(target.path) === true ? previewPathOf(workspaceId, runId) : null
   const e: Entry = {
     workspaceId,
     ticketId: ws.ticketId,
@@ -662,6 +682,7 @@ export function startRun(
     runName: run.name,
     runType: run.type,
     repoId: run.repoId,
+    previewBase,
     status: 'building',
     step: null,
     port: null,
@@ -838,8 +859,11 @@ export function runEnv(
     ...worktreeEnv(),
     ...Object.fromEntries(Object.entries(run.env).map(([k, v]) => [k, withPort(v, port)])),
     ...(run.type === 'preview' ? { HOST: '127.0.0.1', PORT: String(port) } : {}),
-    // The preview is built and started for the path the board proxies it at (previewProxy.ts).
-    ...(run.type === 'preview' && previewBase ? { BOARD_PREVIEW_BASE: previewBase } : {}),
+    // The preview is built and started for the path the board proxies it at (previewProxy.ts): Vite's base,
+    // the router's basepath and Nitro's own routes and assets (NITRO_APP_BASE_URL).
+    ...(run.type === 'preview' && previewBase
+      ? { BOARD_PREVIEW_BASE: previewBase, NITRO_APP_BASE_URL: previewBase }
+      : {}),
     ...(run.copyData && dataDir ? { DATA_DIR: dataDir } : {}),
     PREVIEW_PARENT_PID: String(process.pid),
   }
@@ -865,13 +889,17 @@ function startSpawn(start: string, env: NodeJS.ProcessEnv) {
 }
 
 async function go(e: Entry, run: RunConfig) {
-  // A preview is built for the path the board proxies it at: its Vite base and router basepath read it.
-  const previewBase = run.type === 'preview' ? previewPathOf(e.workspaceId, e.runId) : undefined
+  // A checkout of the board is built and started for the path the board proxies it at: its Vite base, its
+  // router's basepath and Nitro's baseURL read it. A plain preview keeps '/'.
+  const previewBase = e.previewBase ?? undefined
   if (e.dataDir) await fs.promises.rm(e.dataDir, { recursive: true, force: true })
   else await fs.promises.rm(path.dirname(e.logs.build), { recursive: true, force: true })
   await fs.promises.mkdir(path.dirname(e.logs.build), { recursive: true })
   ownFolder(e.dataDir ?? runsDirOf(e.path))
-  const env = { ...worktreeEnv(), ...(previewBase ? { BOARD_PREVIEW_BASE: previewBase } : {}) }
+  const env = {
+    ...worktreeEnv(),
+    ...(previewBase ? { BOARD_PREVIEW_BASE: previewBase, NITRO_APP_BASE_URL: previewBase } : {}),
+  }
   const step = async (name: RunStep, command: string) => {
     // Stopped while it cleared the last run's data: nothing more starts.
     if (!current(e)) return false

@@ -24,6 +24,7 @@ const stalled = (ticketId: number, lastSignalAt: string) => ({ ticketId, lastSig
 function project(needs: Partial<Omit<NeedsYou, 'total'>>): ProjectSummary {
   const lists = {
     decisions: [],
+    humanWaits: [],
     prs: [],
     threads: [],
     reviews: [],
@@ -104,6 +105,7 @@ describe('what is hidden', () => {
     const shown = undismissed(p, all).needsYou
     expect(shown).toEqual({
       decisions: [],
+      humanWaits: [],
       prs: [],
       threads: [],
       reviews: [],
@@ -112,6 +114,19 @@ describe('what is hidden', () => {
       stalled: [],
       total: 0,
     })
+  })
+
+  it('hides a human wait once it is opened, and shows it again when a newer one starts', () => {
+    const p = project({
+      humanWaits: [{ waitId: 8, since: '2026-01-02T03:04:05.000Z' } as NeedsYou['humanWaits'][number]],
+    })
+    const opened = new Set([needKeys.humanWait(p.needsYou.humanWaits[0]!)])
+    expect(undismissed(p, opened).needsYou.humanWaits).toEqual([])
+    expect(undismissed(p, opened).needsYou.total).toBe(0)
+    const later = project({
+      humanWaits: [{ waitId: 8, since: '2026-01-02T04:00:00.000Z' } as NeedsYou['humanWaits'][number]],
+    })
+    expect(undismissed(later, opened).needsYou.humanWaits).toHaveLength(1)
   })
 })
 

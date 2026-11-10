@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { type PointerEvent, type RefObject, useEffect, useRef, useState } from 'react'
 
+import { CopyImageButton } from '#/components/CopyImage'
 import { Tip } from '#/components/ui/tooltip'
 import { viewKind } from '#/lib/fileKinds'
 
@@ -117,6 +118,14 @@ export function Gallery() {
                   </span>
                 )}
                 <div className="ml-auto flex shrink-0 items-center gap-1">
+                  {viewKind(item) === 'image' && (
+                    <CopyImageButton
+                      src={item.src}
+                      mime={item.mime}
+                      name={item.name}
+                      className="sm:size-8 bg-transparent text-white/80 shadow-none hover:bg-white/10 hover:text-white"
+                    />
+                  )}
                   <Tip content="Open in new tab">
                     <a
                       href={item.src}

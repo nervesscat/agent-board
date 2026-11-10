@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { hashSecret } from './credentials'
 import { dropForwarding, entranceGuard, nodeHeaders } from './devEntrance'
+import { useAppBase } from './previewPaths'
 
 /**
  * The guard in front of `vite dev`'s own surface, on a real Vite dev server with the plugin vite.config.ts
@@ -197,6 +198,19 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
     const res = await send(on, '/p/1/2/api/x', { host: PUBLIC, ...SERVE, accept: 'text/html' })
     expect(res.status).toBe(404)
     expect(res.location).toBeUndefined()
+  })
+
+  it("takes the dev server's own preview base for the app's path, not for a preview to pass through", async () => {
+    // A preview of the board runs `pnpm dev` with its base (`vite.config.ts`): under that base it is the
+    // app, and the entrance guard must ask for a session as it does for every other page.
+    useAppBase('/p/1/2/')
+    try {
+      const res = await send(on, '/p/1/2/api/x', { host: PUBLIC, ...SERVE, accept: 'text/html' })
+      expect(res.status).toBe(302)
+      expect(res.location).toBe('/login?next=%2Fp%2F1%2F2%2Fapi%2Fx')
+    } finally {
+      useAppBase('/')
+    }
   })
 
   it("refuses a foreign page's write under a preview's path however the path is spelled, as the built server does", async () => {

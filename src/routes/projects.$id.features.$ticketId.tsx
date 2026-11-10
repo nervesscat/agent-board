@@ -375,10 +375,6 @@ function TicketPage() {
         ))}
         <ChevronRight className="size-3.5" />
         <span className="text-foreground">#{t.id}</span>
-        {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
-        {!t.parentId && !t.prId && board && (
-          <StageNav key={t.id} projectId={id} tickets={board} t={t} pageIsNewer={readAt >= boardReadAt} />
-        )}
       </nav>
 
       {/* The header stays in view once scrolled up to the top bar (h-12 and its border), with the
@@ -488,6 +484,18 @@ function TicketPage() {
             </AlertDialog>
           )}
         </div>
+        {/* The step controls ride in the sticky header, in their own row: the page can scroll past
+              the breadcrumb, but going to the previous or next ticket stays one click away. The row
+              keeps its height while the board or the parent ticket loads, so the header does not grow
+              under a heading the page has already scrolled to. */}
+        {!t.prId && (
+          <div className="-mt-1 flex min-h-7 w-full items-center gap-2 text-xs">
+            {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
+            {!t.parentId && board && (
+              <StageNav key={t.id} projectId={id} tickets={board} t={t} pageIsNewer={readAt >= boardReadAt} />
+            )}
+          </div>
+        )}
       </header>
 
       {/* One column when the layout leaves the other empty. */}
@@ -537,11 +545,12 @@ const ShownAnchor = createContext<Anchor | null>(null)
 function measureHeader(header: HTMLElement | null) {
   const page = header?.parentElement
   if (!header || !page) return
-  const measure = () =>
-    page.style.setProperty(
-      '--ticket-header',
-      `${parseFloat(getComputedStyle(header).top) + header.offsetHeight}px`,
-    )
+  const measure = () => {
+    const top = parseFloat(getComputedStyle(header).top)
+    // The rectangle's height, not offsetHeight: a row with a fractional height must count in full, or
+    // a heading scrolled to just below the header peeks under its last pixel.
+    page.style.setProperty('--ticket-header', `${top + header.getBoundingClientRect().height}px`)
+  }
   measure()
   const resized = new ResizeObserver(measure)
   resized.observe(header)
