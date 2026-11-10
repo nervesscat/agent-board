@@ -204,7 +204,8 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
             <span>Multilevel delegation on (depth {config.depth})</span>
           </p>
           <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-            Read from <code className="rounded bg-muted px-1">{config.source}</code>.
+            Read from <code className="rounded bg-muted px-1">{config.source}</code>. The system-wide config
+            outranks global and project files.
           </p>
           {config.error && (
             <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{config.error}</p>
@@ -232,8 +233,9 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
             Add this to <code className="rounded bg-black/10 px-1 dark:bg-white/10">{config.source}</code>{' '}
             (inside its <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block
             if it has one), then restart OpenCode. The last config file that defines an{' '}
-            <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block decides, so
-            a later one can override an earlier depth. The board only reads the file.
+            <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block decides; the
+            system-wide config outranks global and project files, so a later one can override an earlier
+            depth. The board only reads files.
           </p>
           {config.ignoredDeprecated && <IgnoredDeprecated source={config.ignoredDeprecated} />}
           <CopyBlock text={'"experimental": { "subagent_depth": 2 }'} label="Copy snippet" />

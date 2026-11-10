@@ -27,8 +27,9 @@ const boardEnv = (port: number, baseURL: string, dataDir: string) => ({
   BOARD_URL: baseURL,
   DATA_DIR: dataDir,
   CLAUDE_HOME: env.claudeHome,
-  // OpenCode's global config folder: this run's own, never the machine's real one (opencode-depth.spec.ts).
+  // OpenCode's config sources this run controls: its global folder, and no $OPENCODE_CONFIG of the shell.
   XDG_CONFIG_HOME: env.opencodeConfigHome,
+  OPENCODE_CONFIG: '',
   STORAGE: 'local',
   // claude is a stand-in that reads the prompt from stdin and answers with a report.
   CLAUDE_BIN: process.execPath,

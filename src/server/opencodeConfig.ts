@@ -7,15 +7,17 @@ import path from 'node:path'
  * its config sets `experimental.subagent_depth` above 1; without it every agent the board starts is a
  * dead end, and the Connect an agent page should say so.
  *
- * Read only: the global config (`~/.config/opencode/opencode.json` and `.jsonc`, under `XDG_CONFIG_HOME`
- * when set) and, when it is there, the project's own (`opencode.json(c)` and `.opencode/opencode.json(c)`
- * at the root of a repo). OpenCode merges those documents in that order and the *last* one that defines
- * an `experimental` block decides the depth (`findLast(...)?.info.experimental?.subagent_depth ?? 1`), so
- * a later project block without the key turns delegation off, and a later lower depth overrides an
- * earlier higher one. The deprecated top-level `subagent_depth` is no longer read by OpenCode (v2.2.5
- * drops it as an unsupported legacy setting), so it never turns delegation on; the check reports the
- * document that still sets it, so the human can move it where OpenCode reads it. A file that cannot be
- * read or parsed is reported, never a crash, and the user's config is never written.
+ * Read only, in OpenCode v2.2.5's order: the global config (`~/.config/opencode/opencode.json(c)`, under
+ * `XDG_CONFIG_HOME` when set), then `$OPENCODE_CONFIG` when set, then every project directory from the
+ * filesystem root down to each repo (`opencode.json(c)`, then `.opencode/opencode.json(c)`), then the
+ * system-wide config (`/etc/opencode`, `%ProgramData%\opencode` on Windows, `/Library/Application
+ * Support/opencode` on macOS). The *last* document that defines an `experimental` block decides the
+ * depth (`findLast(...)?.info.experimental?.subagent_depth ?? 1`), so a later block without the key
+ * turns delegation off, and a later lower depth overrides an earlier higher one; the system-wide config
+ * therefore outranks global and project files. The deprecated top-level `subagent_depth` is no longer
+ * read by OpenCode (v2.2.5 drops it as an unsupported legacy setting), so it never turns delegation on;
+ * the check reports the document that still sets it, so the human can move it where OpenCode reads it. A
+ * file that cannot be read or parsed is reported, never a crash, and the user's config is never written.
  */
 
 /** The depth OpenCode uses when its config names none. */
@@ -131,7 +133,7 @@ export function parseJsonc(text: string): unknown {
   return JSON.parse(out)
 }
 
-/** The global OpenCode config files, in the order they are read. */
+/** The global OpenCode config files, in the order they are read (lowest precedence). */
 export function globalConfigFiles(env: NodeJS.ProcessEnv = process.env): string[] {
   const configHome = env.XDG_CONFIG_HOME?.trim()
     ? path.resolve(env.XDG_CONFIG_HOME)
@@ -140,29 +142,92 @@ export function globalConfigFiles(env: NodeJS.ProcessEnv = process.env): string[
   return [path.join(dir, 'opencode.json'), path.join(dir, 'opencode.jsonc')]
 }
 
-/** The project config files of a checkout: OpenCode reads both the root and `.opencode`. */
+/**
+ * OpenCode's system-wide config directory, which outranks global and project config. Windows reads it
+ * from `%ProgramData%\opencode` (`C:\ProgramData` when that variable is not set); macOS from
+ * `/Library/Application Support/opencode`; everything else from `/etc/opencode`.
+ */
+export function systemConfigDir(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (platform === 'win32')
+    return path.win32.join(env.ProgramData || env.PROGRAMDATA || 'C:\\ProgramData', 'opencode')
+  if (platform === 'darwin') return '/Library/Application Support/opencode'
+  return '/etc/opencode'
+}
+
+/** The files a config directory holds, in OpenCode's order: `.json` then `.jsonc`. */
+const configDirFiles = (dir: string): string[] => [
+  path.join(dir, 'opencode.json'),
+  path.join(dir, 'opencode.jsonc'),
+]
+
+export const systemConfigFiles = (systemDir: string): string[] => configDirFiles(systemDir)
+
+/**
+ * A checkout and every directory above it, from the filesystem root down to the checkout. OpenCode
+ * walks up from the directory it runs in, so a config farther up is read first and a closer one wins.
+ */
+export function ancestorDirs(start: string): string[] {
+  const dirs: string[] = []
+  let dir = path.resolve(start)
+  for (;;) {
+    dirs.push(dir)
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return dirs.reverse()
+}
+
+/**
+ * The config files OpenCode reads for a checkout, in its order: every ancestor's `opencode.json` then
+ * `.jsonc` (farthest to closest first), then every ancestor's `.opencode/opencode.json` then `.jsonc`.
+ * A file config of any ancestor comes before the `.opencode` directory configs.
+ */
 export function projectConfigFiles(repoDir: string): string[] {
+  const dirs = ancestorDirs(repoDir)
   return [
-    path.join(repoDir, 'opencode.json'),
-    path.join(repoDir, 'opencode.jsonc'),
-    path.join(repoDir, '.opencode', 'opencode.json'),
-    path.join(repoDir, '.opencode', 'opencode.jsonc'),
+    ...dirs.flatMap((dir) => configDirFiles(dir)),
+    ...dirs.flatMap((dir) => configDirFiles(path.join(dir, '.opencode'))),
   ]
 }
 
 export interface ReadOptions {
   env?: NodeJS.ProcessEnv
-  /** The checkouts to read a project config from (the board's repos). */
+  /** The checkouts to read project configs for (the board's repos). */
   projectDirs?: string[]
+  /** The platform the system config path is built for (tests stub it); the running one by default. */
+  platform?: NodeJS.Platform
+  /**
+   * The system-wide config directory; the platform's by default. Tests pass a folder of their own (or
+   * null to skip it) so they never read the machine's `/etc/opencode`.
+   */
+  systemDir?: string | null
 }
 
 /** Reads the config files and answers the effective depth. Never throws on a file. */
 export function readOpencodeConfig({
   env = process.env,
   projectDirs = [],
+  platform = process.platform,
+  systemDir,
 }: ReadOptions = {}): OpencodeConfig {
   const global = globalConfigFiles(env)
-  const files = [...global, ...projectDirs.flatMap(projectConfigFiles)]
+  // OpenCode loads $OPENCODE_CONFIG (a file) right after the global user config and before any project
+  // config (Config.load: global, explicit, project direct files, project .opencode dirs, then system).
+  const explicit = env.OPENCODE_CONFIG?.trim() ? path.resolve(env.OPENCODE_CONFIG.trim()) : null
+  const system = systemDir === undefined ? systemConfigDir(platform, env) : systemDir
+  // System-wide config is read last: it outranks global and project config.
+  const files = [
+    ...new Set([
+      ...global,
+      ...(explicit ? [explicit] : []),
+      ...projectDirs.flatMap(projectConfigFiles),
+      ...(system ? systemConfigFiles(system) : []),
+    ]),
+  ]
   /** The first file that was there and read, even when it set no depth: the one to add the key to. */
   let read: string | null = null
   let error: string | null = null
@@ -178,8 +243,10 @@ export function readOpencodeConfig({
     try {
       text = fs.readFileSync(file, 'utf8')
     } catch (err) {
-      // Missing is the normal state of a config nobody wrote; anything else is worth saying.
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT' && error === null)
+      // Missing is the normal state of a config nobody wrote; so is a config folder that is not there,
+      // or a file where a folder should be (OpenCode skips both). Anything else is worth saying.
+      const code = (err as NodeJS.ErrnoException).code
+      if (code !== 'ENOENT' && code !== 'ENOTDIR' && error === null)
         error = `Could not read ${file}: ${(err as Error).message}`
       continue
     }
@@ -229,16 +296,21 @@ const kept = ((globalThis as { [KEPT]?: Kept })[KEPT] ??= { last: null, projectD
 export const opencodeConfig = (): OpencodeConfig | null => kept.last
 
 /** Reads the config again and keeps the result. */
-export function checkOpencodeConfig(projectDirs: string[] = kept.projectDirs): OpencodeConfig {
-  const next = readOpencodeConfig({ projectDirs })
+export function checkOpencodeConfig(
+  projectDirs: string[] = kept.projectDirs,
+  options: Omit<ReadOptions, 'projectDirs'> = {},
+): OpencodeConfig {
+  const next = readOpencodeConfig({ projectDirs, ...options })
   kept.last = next
   kept.projectDirs = projectDirs
   return next
 }
 
 /** The last check, or a new one when none ran yet. */
-export const readyOpencodeConfig = (projectDirs: string[] = kept.projectDirs): OpencodeConfig =>
-  kept.last ?? checkOpencodeConfig(projectDirs)
+export const readyOpencodeConfig = (
+  projectDirs: string[] = kept.projectDirs,
+  options: Omit<ReadOptions, 'projectDirs'> = {},
+): OpencodeConfig => kept.last ?? checkOpencodeConfig(projectDirs, options)
 
 /** Tests: set the kept result (null forgets it). */
 export function setOpencodeConfig(config: OpencodeConfig | null) {

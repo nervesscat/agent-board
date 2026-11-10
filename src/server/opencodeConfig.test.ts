@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   DEFAULT_SUBAGENT_DEPTH,
+  ancestorDirs,
   checkOpencodeConfig,
   experimentalDepth,
   globalConfigFiles,
@@ -13,9 +14,12 @@ import {
   hasExperimentalBlock,
   opencodeConfig,
   parseJsonc,
+  projectConfigFiles,
   readOpencodeConfig,
+  type ReadOptions,
   readyOpencodeConfig,
   setOpencodeConfig,
+  systemConfigDir,
   validDepth,
 } from './opencodeConfig'
 
@@ -38,9 +42,17 @@ function globalConfig(body: string, jsonc = false) {
   fs.mkdirSync(dir, { recursive: true })
   const file = path.join(dir, jsonc ? 'opencode.jsonc' : 'opencode.json')
   fs.writeFileSync(file, body)
-  const env = { ...process.env, XDG_CONFIG_HOME: configHome }
+  const env: NodeJS.ProcessEnv = { ...process.env, XDG_CONFIG_HOME: configHome }
+  // The machine's own $OPENCODE_CONFIG would otherwise join every test's documents.
+  delete env.OPENCODE_CONFIG
   return { configHome, env, file }
 }
+
+/** A config directory that is not there: the system-wide one, unless a test makes its own. */
+const missingSystem = () => path.join(tmp(), 'system')
+
+/** Reads a config with the machine's own system dir out of the way. */
+const read = (opts: ReadOptions = {}) => readOpencodeConfig({ systemDir: missingSystem(), ...opts })
 
 /** A project checkout with one of OpenCode's config files. */
 function projectConfig(body: string, at = 'opencode.json') {
@@ -115,7 +127,7 @@ describe('reading the effective depth', () => {
   it('is 1 when no config exists, and names the global file to add it to', () => {
     const { env, file } = globalConfig('{}')
     fs.rmSync(file)
-    const r = readOpencodeConfig({ env, projectDirs: [tmp()] })
+    const r = read({ env, projectDirs: [tmp()] })
     expect(r).toMatchObject({ depth: DEFAULT_SUBAGENT_DEPTH, set: false, source: file, error: null })
     expect(Date.parse(r.checkedAt)).not.toBeNaN()
   })
@@ -128,13 +140,13 @@ describe('reading the effective depth', () => {
       }`,
       true,
     )
-    const r = readOpencodeConfig({ env, projectDirs: [] })
+    const r = read({ env, projectDirs: [] })
     expect(r).toMatchObject({ depth: 2, set: true, source: file, error: null })
   })
 
   it('ignores the deprecated top-level key, and names the document that still sets it', () => {
     const { env, file } = globalConfig('{ "subagent_depth": 3 }')
-    expect(readOpencodeConfig({ env, projectDirs: [] })).toMatchObject({
+    expect(read({ env, projectDirs: [] })).toMatchObject({
       depth: 1,
       set: false,
       source: file,
@@ -146,7 +158,7 @@ describe('reading the effective depth', () => {
     const { env } = globalConfig(depthConfig(2))
     // A later project document with a lower depth overrides the global one.
     const lower = projectConfig(depthConfig(1))
-    expect(readOpencodeConfig({ env, projectDirs: [lower.dir] })).toMatchObject({
+    expect(read({ env, projectDirs: [lower.dir] })).toMatchObject({
       depth: 1,
       set: false,
       source: lower.file,
@@ -154,7 +166,7 @@ describe('reading the effective depth', () => {
 
     // A later document with an experimental block but no depth turns delegation off.
     const noDepth = projectConfig(JSON.stringify({ experimental: { todo: true } }))
-    expect(readOpencodeConfig({ env, projectDirs: [noDepth.dir] })).toMatchObject({
+    expect(read({ env, projectDirs: [noDepth.dir] })).toMatchObject({
       depth: DEFAULT_SUBAGENT_DEPTH,
       set: false,
       source: noDepth.file,
@@ -162,7 +174,7 @@ describe('reading the effective depth', () => {
 
     // And a higher later one still wins: the last block, not the highest.
     const higher = projectConfig(depthConfig(3), '.opencode/opencode.jsonc')
-    expect(readOpencodeConfig({ env, projectDirs: [higher.dir] })).toMatchObject({
+    expect(read({ env, projectDirs: [higher.dir] })).toMatchObject({
       depth: 3,
       set: true,
       source: higher.file,
@@ -174,7 +186,7 @@ describe('reading the effective depth', () => {
     const dir = tmp()
     fs.writeFileSync(path.join(dir, 'opencode.json'), depthConfig(2))
     fs.writeFileSync(path.join(dir, 'opencode.jsonc'), depthConfig(3))
-    expect(readOpencodeConfig({ env, projectDirs: [dir] })).toMatchObject({
+    expect(read({ env, projectDirs: [dir] })).toMatchObject({
       depth: 3,
       source: path.join(dir, 'opencode.jsonc'),
     })
@@ -182,7 +194,7 @@ describe('reading the effective depth', () => {
     // The .opencode document comes after the root ones whatever their names.
     fs.mkdirSync(path.join(dir, '.opencode'))
     fs.writeFileSync(path.join(dir, '.opencode', 'opencode.json'), depthConfig(1))
-    expect(readOpencodeConfig({ env, projectDirs: [dir] })).toMatchObject({
+    expect(read({ env, projectDirs: [dir] })).toMatchObject({
       depth: 1,
       source: path.join(dir, '.opencode', 'opencode.json'),
     })
@@ -192,7 +204,7 @@ describe('reading the effective depth', () => {
     // The block in the global document decides; a later project's deprecated key has no effect.
     const global = globalConfig(depthConfig(2))
     const project = projectConfig('{ "subagent_depth": 1 }')
-    expect(readOpencodeConfig({ env: global.env, projectDirs: [project.dir] })).toMatchObject({
+    expect(read({ env: global.env, projectDirs: [project.dir] })).toMatchObject({
       depth: 2,
       set: true,
       source: global.file,
@@ -202,7 +214,7 @@ describe('reading the effective depth', () => {
     // A block with no depth turns it off; the deprecated key in the same document changes nothing.
     const noDepth = globalConfig(JSON.stringify({ experimental: { todo: true } }))
     const both = projectConfig(JSON.stringify({ experimental: { todo: true }, subagent_depth: 3 }))
-    expect(readOpencodeConfig({ env: noDepth.env, projectDirs: [both.dir] })).toMatchObject({
+    expect(read({ env: noDepth.env, projectDirs: [both.dir] })).toMatchObject({
       depth: 1,
       set: false,
       source: both.file,
@@ -212,7 +224,7 @@ describe('reading the effective depth', () => {
 
   it('names the config file it read even when it sets no depth', () => {
     const { env, file } = globalConfig('{ "theme": "system" }', true)
-    expect(readOpencodeConfig({ env, projectDirs: [] })).toMatchObject({
+    expect(read({ env, projectDirs: [] })).toMatchObject({
       depth: 1,
       set: false,
       source: file,
@@ -222,14 +234,14 @@ describe('reading the effective depth', () => {
   it('reports a malformed file instead of crashing, and keeps the other files', () => {
     const { env, file } = globalConfig('{ "experimental": ')
     const project = projectConfig(depthConfig(2))
-    const r = readOpencodeConfig({ env, projectDirs: [project.dir] })
+    const r = read({ env, projectDirs: [project.dir] })
     expect(r.depth).toBe(2)
     expect(r.set).toBe(true)
     expect(r.source).toBe(project.file)
     expect(r.error).toContain(`Could not parse ${file}`)
 
     // Nothing readable at all: depth 1, the global file named, and the error still said.
-    const broken = readOpencodeConfig({ env, projectDirs: [] })
+    const broken = read({ env, projectDirs: [] })
     expect(broken).toMatchObject({ depth: 1, set: false, source: file })
     expect(broken.error).toContain(`Could not parse ${file}`)
   })
@@ -238,28 +250,151 @@ describe('reading the effective depth', () => {
     const { env } = globalConfig('{}')
     const dir = path.join(env.XDG_CONFIG_HOME!, 'opencode', 'opencode.jsonc')
     fs.mkdirSync(dir, { recursive: true })
-    const r = readOpencodeConfig({ env, projectDirs: [] })
+    const r = read({ env, projectDirs: [] })
     expect(r.error).toContain(`Could not read ${dir}`)
+  })
+})
+
+describe('the system-wide config', () => {
+  it('builds its path per platform, with the ProgramData fallback', () => {
+    expect(systemConfigDir('win32', { ProgramData: 'D:\\Corp' })).toBe('D:\\Corp\\opencode')
+    expect(systemConfigDir('win32', {})).toBe('C:\\ProgramData\\opencode')
+    expect(systemConfigDir('win32', { PROGRAMDATA: 'E:\\Data' })).toBe('E:\\Data\\opencode')
+    expect(systemConfigDir('darwin', {})).toBe('/Library/Application Support/opencode')
+    expect(systemConfigDir('linux', {})).toBe('/etc/opencode')
+    expect(systemConfigDir('freebsd', {})).toBe('/etc/opencode')
+  })
+
+  it('outranks project config, down and up', () => {
+    const system = tmp()
+    const systemJson = path.join(system, 'opencode.json')
+    const systemJsonc = path.join(system, 'opencode.jsonc')
+    const global = globalConfig(depthConfig(2))
+    const project = projectConfig(depthConfig(3))
+    const opts = { env: global.env, projectDirs: [project.dir], systemDir: system }
+
+    fs.writeFileSync(systemJson, depthConfig(1))
+    expect(readOpencodeConfig(opts)).toMatchObject({ depth: 1, set: false, source: systemJson })
+
+    fs.writeFileSync(systemJsonc, depthConfig(4))
+    expect(readOpencodeConfig(opts)).toMatchObject({ depth: 4, set: true, source: systemJsonc })
+
+    // Even a system block without a depth wins: it is the last block OpenCode reads.
+    fs.rmSync(systemJsonc)
+    fs.writeFileSync(systemJson, JSON.stringify({ experimental: { todo: true } }))
+    expect(readOpencodeConfig(opts)).toMatchObject({ depth: 1, set: false, source: systemJson })
+  })
+
+  it('is not an error when its folder is missing, or is a file', () => {
+    const global = globalConfig(depthConfig(2))
+    const missing = path.join(tmp(), 'missing')
+    expect(readOpencodeConfig({ env: global.env, projectDirs: [], systemDir: missing })).toMatchObject({
+      depth: 2,
+      error: null,
+    })
+
+    const asFile = path.join(tmp(), 'system')
+    fs.writeFileSync(asFile, 'not a folder')
+    expect(readOpencodeConfig({ env: global.env, projectDirs: [], systemDir: asFile })).toMatchObject({
+      depth: 2,
+      error: null,
+    })
+  })
+})
+
+describe('$OPENCODE_CONFIG', () => {
+  it('loads after the global config and before project configs', () => {
+    const global = globalConfig(depthConfig(2))
+    const explicit = path.join(tmp(), 'explicit.json')
+    fs.writeFileSync(explicit, depthConfig(3))
+    const project = projectConfig(depthConfig(1))
+    const opts = { env: { ...global.env, OPENCODE_CONFIG: explicit }, projectDirs: [project.dir] }
+
+    // The project document comes after the explicit file, so it wins.
+    expect(read(opts)).toMatchObject({ depth: 1, source: project.file })
+    fs.rmSync(project.file)
+    // With no project change, the explicit file beats the global one.
+    expect(read(opts)).toMatchObject({ depth: 3, source: explicit })
+  })
+
+  it('skips a file that is not there, without an error', () => {
+    const global = globalConfig(depthConfig(2))
+    expect(
+      read({
+        env: { ...global.env, OPENCODE_CONFIG: path.join(tmp(), 'nope.json') },
+        projectDirs: [],
+      }),
+    ).toMatchObject({ depth: 2, source: global.file, error: null })
+  })
+})
+
+describe('project configs up the tree', () => {
+  it('reads farthest to closest, direct files then .opencode folders', () => {
+    const root = tmp()
+    const repo = path.join(root, 'a', 'b')
+    fs.mkdirSync(repo, { recursive: true })
+    const rootJson = path.join(root, 'opencode.json')
+    const aJson = path.join(root, 'a', 'opencode.json')
+    const repoJson = path.join(repo, 'opencode.json')
+    const rootDot = path.join(root, '.opencode', 'opencode.json')
+    const repoDot = path.join(repo, '.opencode', 'opencode.json')
+    fs.writeFileSync(rootJson, depthConfig(5))
+    fs.writeFileSync(aJson, depthConfig(6))
+    fs.writeFileSync(repoJson, depthConfig(7))
+    const env = globalConfig(depthConfig(2)).env
+    expect(read({ env, projectDirs: [repo] })).toMatchObject({ depth: 7, source: repoJson })
+
+    // Every .opencode folder is read after every direct file: a farther one wins over a closer direct file.
+    fs.mkdirSync(path.dirname(rootDot), { recursive: true })
+    fs.writeFileSync(rootDot, depthConfig(3))
+    expect(read({ env, projectDirs: [repo] })).toMatchObject({ depth: 3, source: rootDot })
+
+    // A closer .opencode folder wins over a farther one.
+    fs.mkdirSync(path.dirname(repoDot), { recursive: true })
+    fs.writeFileSync(repoDot, depthConfig(4))
+    expect(read({ env, projectDirs: [repo] })).toMatchObject({ depth: 4, source: repoDot })
+
+    // Direct files in one folder are read .json then .jsonc.
+    const other = tmp()
+    fs.writeFileSync(path.join(other, 'opencode.json'), depthConfig(1))
+    fs.writeFileSync(path.join(other, 'opencode.jsonc'), depthConfig(9))
+    expect(read({ env, projectDirs: [other] })).toMatchObject({
+      depth: 9,
+      source: path.join(other, 'opencode.jsonc'),
+    })
+  })
+
+  it('orders the files the way OpenCode does', () => {
+    const root = tmp()
+    const repo = path.join(root, 'a', 'b')
+    const files = projectConfigFiles(repo)
+    const index = (file: string) => files.indexOf(file)
+    const rootJson = index(path.join(root, 'opencode.json'))
+    const aJson = index(path.join(root, 'a', 'opencode.json'))
+    const repoJson = index(path.join(repo, 'opencode.json'))
+    const rootDot = index(path.join(root, '.opencode', 'opencode.json'))
+    const repoDot = index(path.join(repo, '.opencode', 'opencode.json'))
+    for (const i of [rootJson, aJson, repoJson, rootDot, repoDot]) expect(i).toBeGreaterThanOrEqual(0)
+    expect(rootJson).toBeLessThan(aJson)
+    expect(aJson).toBeLessThan(repoJson)
+    expect(repoJson).toBeLessThan(rootDot)
+    expect(rootDot).toBeLessThan(repoDot)
+    expect(ancestorDirs(repo).at(-1)).toBe(repo)
+    expect(ancestorDirs(repo)[0]).toBe(path.parse(repo).root)
   })
 })
 
 describe('the last check', () => {
   it('keeps what it read until checked again', () => {
-    const { configHome, file } = globalConfig(depthConfig(2))
-    const previous = process.env.XDG_CONFIG_HOME
-    process.env.XDG_CONFIG_HOME = configHome
-    try {
-      const first = checkOpencodeConfig([])
-      expect(first).toMatchObject({ depth: 2, set: true, source: file })
-      expect(opencodeConfig()).toEqual(first)
-      // Ready reuses the kept result rather than reading again.
-      expect(readyOpencodeConfig([])).toEqual(first)
-      setOpencodeConfig(null)
-      expect(opencodeConfig()).toBeNull()
-      expect(readyOpencodeConfig([]).checkedAt >= first.checkedAt).toBe(true)
-    } finally {
-      if (previous === undefined) delete process.env.XDG_CONFIG_HOME
-      else process.env.XDG_CONFIG_HOME = previous
-    }
+    const { env, file } = globalConfig(depthConfig(2))
+    const options = { env, systemDir: missingSystem() }
+    const first = checkOpencodeConfig([], options)
+    expect(first).toMatchObject({ depth: 2, set: true, source: file })
+    expect(opencodeConfig()).toEqual(first)
+    // Ready reuses the kept result rather than reading again.
+    expect(readyOpencodeConfig([], options)).toEqual(first)
+    setOpencodeConfig(null)
+    expect(opencodeConfig()).toBeNull()
+    expect(readyOpencodeConfig([], options).checkedAt >= first.checkedAt).toBe(true)
   })
 })

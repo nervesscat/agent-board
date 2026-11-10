@@ -56,7 +56,7 @@ test.describe('the OpenCode card', () => {
     await expect(
       card(page).getByText('"experimental": { "subagent_depth": 2 }', { exact: true }),
     ).toBeVisible()
-    await expect(card(page)).toContainText('The board only reads the file.')
+    await expect(card(page)).toContainText('The board only reads files.')
 
     // The other clients' cards are as they were: no delegation note.
     await page.getByRole('tab', { name: AGENTS.claude.label }).click()
