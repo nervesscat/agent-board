@@ -360,7 +360,8 @@ test('a trigger that also opens a dialog, a select or a tab shows its tooltip an
   await page.getByRole('alertdialog').getByRole('button', { name: 'Keep' }).click()
 
   // The gallery's close.
-  await page.getByRole('img', { name: 'shot.png' }).click()
+  // Clear of the copy button hovering in the thumbnail's top-right corner.
+  await page.getByRole('img', { name: 'shot.png' }).click({ position: { x: 2, y: 2 } })
   const gallery = page.getByRole('dialog')
   const close = gallery.getByRole('button', { name: 'Close (Esc)' })
   await expectTooltip(close, 'Close (Esc)')
@@ -454,7 +455,8 @@ test('a button disabled for a reason says why on hover, and stays disabled', asy
   )
   await postWithPicture(human, t.id, 'Zoom it.')
   await page.goto(`/projects/${project.id}/features/${t.id}`)
-  await page.getByRole('img', { name: 'shot.png' }).click()
+  // Clear of the copy button hovering in the thumbnail's top-right corner.
+  await page.getByRole('img', { name: 'shot.png' }).click({ position: { x: 2, y: 2 } })
   const gallery = page.getByRole('dialog')
   const zoomOut = gallery.getByRole('button', { name: 'Zoom out (-)' })
   await expect(zoomOut).toBeDisabled()
