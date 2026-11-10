@@ -382,7 +382,7 @@ function TicketPage() {
             Its padding keeps the title off the top bar's edge; the margins take it back at rest. */}
       <header
         ref={measureHeader}
-        className="sticky top-[calc(3rem+1px)] z-10 -my-2 flex flex-wrap items-start gap-3 bg-background py-2"
+        className="sticky top-[calc(3rem+1px+env(safe-area-inset-top))] z-10 -my-2 flex flex-wrap items-start gap-3 bg-background py-2"
       >
         {/* At least 12rem wide: a toolbar too wide to sit beside it wraps under it, not squeezes the title. */}
         <div className="min-w-48 flex-1">

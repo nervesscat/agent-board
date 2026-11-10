@@ -112,6 +112,7 @@ export default defineConfig(({ mode }) => {
           // First, so that even a refusal to start (startup.ts) leaves its exit line.
           './src/server/plugins/processLog.ts',
           './src/server/startup.ts',
+          './src/server/plugins/previewUpgrade.ts',
           './src/server/plugins/uploadSweep.ts',
           './src/server/plugins/hostTools.ts',
           './src/server/plugins/seedRuns.ts',

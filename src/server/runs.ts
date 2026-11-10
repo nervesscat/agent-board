@@ -479,6 +479,18 @@ export function runState(workspaceId: number, runId: number): RunState | null {
   return e ? view(e) : null
 }
 
+/**
+ * Just what a socket opened against the run needs to know it is still the same run (the preview proxy's
+ * sweep): no log tail, no links, nothing read from disk.
+ */
+export function runStatus(
+  workspaceId: number,
+  runId: number,
+): Pick<RunState, 'status' | 'port' | 'runningAt'> | null {
+  const e = all().get(keyOf(workspaceId, runId))
+  return e ? { status: e.status, port: e.port, runningAt: e.runningAt } : null
+}
+
 /** Every run the board started from the workspace, as it last was. */
 export function workspaceRuns(workspaceId: number): RunState[] {
   return [...all().values()].filter((e) => e.workspaceId === workspaceId).map(view)

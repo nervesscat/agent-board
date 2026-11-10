@@ -142,6 +142,9 @@
   html {
     @apply font-sans;
     color-scheme: light;
+    /* The root canvas, not just the body: the phone's status-bar and overscroll areas take their colour
+       from here when the page paints them (viewport-fit=cover). Transparent fell back to white. */
+    background-color: var(--background);
   }
   html.dark {
     color-scheme: dark;
