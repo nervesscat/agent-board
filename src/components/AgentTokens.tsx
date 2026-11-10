@@ -106,7 +106,7 @@ export function AgentTokenList() {
   })
   const now = Date.now()
   return (
-    <section className="space-y-2" aria-labelledby="agent-tokens-title">
+    <section id="agent-tokens" className="scroll-mt-16 space-y-2" aria-labelledby="agent-tokens-title">
       <h2 id="agent-tokens-title" className="text-sm font-medium">
         Agent tokens
       </h2>

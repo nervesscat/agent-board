@@ -12,6 +12,7 @@ import { ReviewSkills, useShell } from '#/components/ReviewSkills'
 import { AGENTS, SHELLS, type Shell, mcpSetup, skillInstall } from '#/lib/agents'
 import { errorMessage, get } from '#/lib/api'
 import type { AgentClient } from '#/lib/constants'
+import { useAnchor, useReveal } from '#/lib/reveal'
 import type { Settings } from '#/server/agents'
 import type { NewAgentToken } from '#/server/tokens'
 
@@ -45,6 +46,8 @@ function ConnectAgents() {
     },
     enabled: Boolean(client),
   })
+  // A link into a section (#agent-tokens, #review-skills) lands on it on an in-app navigation too.
+  useReveal(useAnchor(), { ready: setup !== undefined && client !== null })
   if (!setup || !client) return null
   const agent = AGENTS[client]
   const mcp = mcpSetup(client, setup.boardUrl, token)
@@ -132,7 +135,7 @@ function ConnectAgents() {
         )}
       </section>
 
-      <section className="space-y-2">
+      <section id="review-skills" className="scroll-mt-16 space-y-2">
         <h2 className="text-sm font-medium">3. Install the review skills (Claude Code)</h2>
         <ReviewSkills boardUrl={setup.boardUrl} token={token} shell={shell} onShellChange={pickShell} />
       </section>
