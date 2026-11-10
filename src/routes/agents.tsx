@@ -1,7 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Copy } from 'lucide-react'
+import { CheckCircle2, Copy, RefreshCw, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { AgentPicker, CopyBlock, copyText } from '#/components/AgentPicker'
@@ -10,9 +11,11 @@ import { Button } from '#/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { ReviewSkills, useShell } from '#/components/ReviewSkills'
 import { AGENTS, SHELLS, type Shell, mcpSetup, skillInstall } from '#/lib/agents'
-import { errorMessage, get } from '#/lib/api'
+import { errorMessage, get, post } from '#/lib/api'
 import type { AgentClient } from '#/lib/constants'
+import { useAnchor, useReveal } from '#/lib/reveal'
 import type { Settings } from '#/server/agents'
+import type { OpencodeConfig } from '#/server/opencodeConfig'
 import type { NewAgentToken } from '#/server/tokens'
 
 // ?shell= is the shell the install lines are for (none: the one this browser remembers, else bash).
@@ -21,7 +24,7 @@ export const Route = createFileRoute('/agents')({
   validateSearch: z.object({ shell: z.enum(SHELLS).optional().catch(undefined) }),
 })
 
-type Setup = { boardUrl: string; settings: Settings }
+type Setup = { boardUrl: string; settings: Settings; opencode: OpencodeConfig }
 
 function ConnectAgents() {
   const { data: setup } = useQuery({
@@ -45,6 +48,8 @@ function ConnectAgents() {
     },
     enabled: Boolean(client),
   })
+  // A link into a section (#agent-tokens, #review-skills) lands on it on an in-app navigation too.
+  useReveal(useAnchor(), { ready: setup !== undefined && client !== null })
   if (!setup || !client) return null
   const agent = AGENTS[client]
   const mcp = mcpSetup(client, setup.boardUrl, token)
@@ -69,6 +74,8 @@ function ConnectAgents() {
           setMade(null)
         }}
       />
+
+      {client === 'opencode' && <OpencodeDelegation config={setup.opencode} />}
 
       {/* Keyed by the CLI: another CLI's field is a new one, and a press of the old one hands over nothing. */}
       <GenerateCommands key={client} defaultName={client} token={made} onToken={setMade} />
@@ -132,12 +139,130 @@ function ConnectAgents() {
         )}
       </section>
 
-      <section className="space-y-2">
+      <section id="review-skills" className="scroll-mt-16 space-y-2">
         <h2 className="text-sm font-medium">3. Install the review skills (Claude Code)</h2>
         <ReviewSkills boardUrl={setup.boardUrl} token={token} shell={shell} onShellChange={pickShell} />
       </section>
 
       <AgentTokenList />
     </div>
+  )
+}
+
+/**
+ * Whether OpenCode can run a subagent from inside a subagent, read from its config on the board's machine:
+ * off (the default) with the snippet that turns it on and the file it read, on with the depth and where it
+ * came from, or a file that could not be read. "Check again" re-reads it after the human edits the file;
+ * the board never writes it.
+ */
+function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
+  const queryClient = useQueryClient()
+  const check = useMutation({
+    mutationFn: () => post<OpencodeConfig>('/api/agent-setup/opencode-check'),
+    onSuccess: (opencode) =>
+      queryClient.setQueryData<Setup>(['agent-setup'], (old) => (old ? { ...old, opencode } : old)),
+    onError: (err) => toast.error(errorMessage(err)),
+  })
+  const again = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      aria-label="Check the OpenCode config again"
+      disabled={check.isPending}
+      onClick={() => check.mutate()}
+    >
+      <RefreshCw data-icon="inline-start" className={check.isPending ? 'animate-spin' : ''} /> Check again
+    </Button>
+  )
+
+  if (config.error && !config.set)
+    return (
+      <section
+        aria-label="OpenCode multilevel delegation"
+        className="flex items-start gap-2 rounded-md border border-rose-300/60 bg-rose-50 p-3 text-rose-950 dark:border-rose-400/20 dark:bg-rose-950/40 dark:text-rose-100"
+      >
+        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="text-sm font-medium">Could not read the OpenCode config</p>
+          <p className="text-xs [overflow-wrap:anywhere]">{config.error}</p>
+          <p className="text-xs">
+            Fix that file, then check again. Multilevel delegation stays off until the config can be read.
+          </p>
+          {config.ignoredDeprecated && <IgnoredDeprecated source={config.ignoredDeprecated} />}
+          {again}
+        </div>
+      </section>
+    )
+
+  if (config.set)
+    return (
+      <section
+        aria-label="OpenCode multilevel delegation"
+        className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
+      >
+        <div className="min-w-0 space-y-1">
+          <p className="flex items-center gap-1.5 text-sm">
+            <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+            <span>Multilevel delegation on (depth {config.depth})</span>
+          </p>
+          <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+            Read from <code className="rounded bg-muted px-1">{config.source}</code>. The system-wide config
+            outranks global and project files.
+          </p>
+          {config.error && (
+            <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{config.error}</p>
+          )}
+          {config.ignoredDeprecated && (
+            <IgnoredDeprecated source={config.ignoredDeprecated} className="text-muted-foreground" />
+          )}
+        </div>
+        {again}
+      </section>
+    )
+
+  return (
+    <section
+      aria-label="OpenCode multilevel delegation"
+      className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-amber-950 dark:border-amber-400/20 dark:bg-amber-950/40 dark:text-amber-100"
+    >
+      <div className="flex items-start gap-2">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+        <div className="min-w-0 flex-1 space-y-2">
+          <p className="text-sm font-medium">
+            Multilevel delegation is off: subagents cannot launch subagents
+          </p>
+          <p className="text-xs [overflow-wrap:anywhere]">
+            Add this to <code className="rounded bg-black/10 px-1 dark:bg-white/10">{config.source}</code>{' '}
+            (inside its <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block
+            if it has one), then restart OpenCode. The last config file that defines an{' '}
+            <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block decides; the
+            system-wide config outranks global and project files, so a later one can override an earlier
+            depth. The board only reads files.
+          </p>
+          {config.ignoredDeprecated && <IgnoredDeprecated source={config.ignoredDeprecated} />}
+          <CopyBlock text={'"experimental": { "subagent_depth": 2 }'} label="Copy snippet" />
+          {again}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/**
+ * OpenCode v2.2.5 drops the top-level `subagent_depth` as an unsupported legacy setting: a document that
+ * still has it looks configured but does nothing. Say where it is, so the human moves it into the
+ * `experimental` block the card reads.
+ */
+function IgnoredDeprecated({ source, className = '' }: { source: string; className?: string }) {
+  return (
+    <p className={`text-xs [overflow-wrap:anywhere] ${className}`}>
+      The top-level{' '}
+      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">subagent_depth</code> in{' '}
+      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">{source}</code> is no longer read
+      by OpenCode; only{' '}
+      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">experimental.subagent_depth</code>{' '}
+      counts.
+    </p>
   )
 }

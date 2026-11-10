@@ -67,7 +67,7 @@ board only.
 
 Other tickets of the same repo may run at the same time as yours, each in its own worktree on its
 own branch. Two things are still shared, and each has a rule. Before any `STATUS: error` below,
-`set_resume_note` with where you stopped, so the next run starts from there.
+update the ticket's summary with where you stopped, so the next run starts from there.
 
 **The main checkout's git.** Every git command that writes to `REPO`'s `.git` (`fetch`,
 `worktree add`, `worktree remove`, and `push` from your worktree, which updates `REPO`'s refs) can
@@ -146,10 +146,10 @@ works when, who waits on what, and what stalled. Keep it, with `projectId: PROJE
    step had no agent.
 2. `get_ticket`: the instructions, the attachments (read each image and file at its local `path`:
    a ticket with an empty body and a screenshot is a bug report), the posts, the answered
-   decisions, and the **resume note first** when there is one. Its `complexity` is this run's level: the
+   decisions, and the **summary first** when there is one. Its `complexity` is this run's level: the
    board's value wins when it differs from `COMPLEXITY`, and `NOTES` says so. You never change a
-   ticket's complexity. On `RETRY`, start from the resume
-   note and fix what `RETRY` names before anything else.
+   ticket's complexity. On `RETRY`, start from the summary
+   and posts and fix what `RETRY` names before anything else.
 3. Branch. The ticket's **own** branch is the `branch` that `get_ticket` showed in step 2, before
    this run claimed anything (a `RETRY` or re-queued run finds the one its first run claimed).
    Without one, choose a **new** name: three or four words saying what the change does,
@@ -323,8 +323,8 @@ Agent tool's `effort` on every subagent you start (the spec agent, the builder),
 The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need one
 of the finished thing in the preview (step 7) at the state the ticket is about. A low ticket has no
 review folder, so its screenshots come from the preview. With
-`BROWSER=no` and a UI change, do everything else, leave the ticket in progress with a resume note,
-and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
+`BROWSER=no` and a UI change, do everything else, leave the ticket in progress with its summary saying
+where you stopped, and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
 
 ### 7. Hand off
 
@@ -440,8 +440,8 @@ the ticket only when nothing else can go on.
 When you do block: move the ticket to `blocked` (an `ask_decision` card does it for you), and post
 the ask: what is needed, why, what you tried (at least two things), and what you will do once it is
 given. A decision card stays open for the human: this agent never answers a decision, and the
-BLOCKER line of your result names the question. Then `set_resume_note` with the state, the next steps and how to resume (branch, worktree,
-commands). A blocker the orchestrator finds weak comes back to you as `RETRY`.
+BLOCKER line of your result names the question. Then update the ticket's summary (`set_ticket_summary`) with the state, the next steps and how to
+resume (branch, worktree, commands). A blocker the orchestrator finds weak comes back to you as `RETRY`.
 
 ## Output
 

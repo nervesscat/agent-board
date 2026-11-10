@@ -120,15 +120,6 @@ describe('the tab of the feed a post goes to', () => {
     expect((await call('POST', at, AGENT, { body: 'a question', progress: false })).body.tab).toBe('main')
   })
 
-  it("puts the resume note's versions in agents, the human's too", async () => {
-    const t = newTicket()
-    const saved = await call('PUT', `/api/tickets/${t.id}/resume`, HUMAN, { note: 'left off here' })
-    expect(saved.status).toBe(200)
-    expect(tabOfPost(saved.body.postId)).toBe('agents')
-    const mine = await tool('set_resume_note', { ticketId: t.id, note: 'and now here' })
-    expect(tabOfPost(mine.postId)).toBe('agents')
-  })
-
   it('takes the tab the writer names, moves a post only on purpose, and refuses any other value', async () => {
     const t = newTicket()
     const p = await tool('post_update', { ticketId: t.id, body: 'for the human', tab: 'main' })
@@ -352,10 +343,9 @@ describe('the summary', () => {
     const t = newTicket('older')
     features.postUpdate(t.id, 'first step', [], 'claude')
     const latest = features.postUpdate(t.id, 'Hand-off: PR, preview, how it was tested', [], 'claude')
-    // Neither the human's, a discussion post nor a resume note stands in.
+    // Neither the human's nor a discussion post stands in.
     features.postUpdate(t.id, 'my progress', [], 'enrique')
     features.postUpdate(t.id, 'a question', [], 'claude', { progress: false })
-    await features.setResumeNote(t.id, 'where it stands', 'claude')
     const count = () => dbm.db.select().from(dbm.schema.updates).all().length
     const rows = count()
     const view = await tool('get_ticket', { ticketId: t.id })

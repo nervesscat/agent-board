@@ -82,6 +82,7 @@ test('Generate commands makes a token per agent, fills it into every command, li
   await expect(page.getByLabel('Agent token', { exact: true })).toHaveCount(0)
   await expect(page.getByText('Makes a token for this agent')).toContainText('1 year')
   await expect(page.getByText('Makes a token for this agent')).toContainText('shown only once')
+  await expect(page.getByText('Makes a token for this agent')).toContainText('orchestrator')
   await expect(page.locator('main')).not.toContainText(/gate_|gate token|passkey gate/i)
 
   for (const client of AGENT_CLIENTS) {
@@ -91,7 +92,12 @@ test('Generate commands makes a token per agent, fills it into every command, li
     await expect(page.getByLabel('Agent name')).toHaveValue(client)
     const made = await generateCommands(page)
     expect(made.name).toBe(client)
+    // The token those commands carry runs and delegates: Connect makes it an orchestrator.
+    expect(made.role).toBe('orchestrator')
     await expect(page.getByRole('status').filter({ hasText: 'shown this once' })).toContainText(client)
+    await expect(page.getByRole('status').filter({ hasText: 'shown this once' })).toContainText(
+      'orchestrator',
+    )
     await expect(shown(mcpSetup(client, boardUrl, made.token).text)).toBeVisible()
     await expect(shown(skillInstall(client, 'bash', boardUrl, made.token))).toBeVisible()
     await expect(shown(reviewSkillsInstall('bash', boardUrl, made.token))).toBeVisible()
@@ -99,7 +105,9 @@ test('Generate commands makes a token per agent, fills it into every command, li
     await expect(shown(skillInstall(client, 'powershell', boardUrl, made.token))).toBeVisible()
     await expect(shown(reviewSkillsInstall('powershell', boardUrl, made.token))).toBeVisible()
     await page.getByRole('tab', { name: 'bash / zsh' }).first().click()
-    await expect(tokens.getByRole('listitem').filter({ hasText: client }).first()).toContainText('never used')
+    const listed = tokens.getByRole('listitem').filter({ hasText: client }).first()
+    await expect(listed).toContainText('never used')
+    await expect(listed.getByText('Orchestrator', { exact: true })).toBeVisible()
   }
   expect(mints).toHaveLength(AGENT_CLIENTS.length)
 
@@ -234,7 +242,10 @@ function emptyHome() {
  * Presses Generate commands (after naming the agent `name`, when given) and returns the token the board
  * made: the commands on the page carry it from then on.
  */
-async function generateCommands(page: Page, name?: string): Promise<{ name: string; token: string }> {
+async function generateCommands(
+  page: Page,
+  name?: string,
+): Promise<{ name: string; token: string; role: string }> {
   if (name !== undefined) await page.getByLabel('Agent name').fill(name)
   const minted = page.waitForResponse(
     (r) => new URL(r.url()).pathname === '/api/agent-tokens' && r.request().method() === 'POST',
@@ -242,7 +253,7 @@ async function generateCommands(page: Page, name?: string): Promise<{ name: stri
   await page.getByRole('button', { name: 'Generate commands' }).click()
   const res = await minted
   expect(res.status()).toBe(201)
-  return (await res.json()) as { name: string; token: string }
+  return (await res.json()) as { name: string; token: string; role: string }
 }
 
 /**

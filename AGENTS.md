@@ -20,8 +20,9 @@ and the human generates new commands.
 REST `GET /api/me` answers `{actor, agent, role, parent, boardEnv, authOff}`: `actor` is your name
 (your token's name, or `<token>/<name>` once you send `X-Agent-Name`), and it has no `token` field.
 
-- The human is `human`. An agent token is a `worker` unless the human made it an `orchestrator`
-  (Settings, Agent tokens). The role comes with the token: nothing an agent sends raises it.
+- The human is `human`. An agent token made by Connect an agent is an `orchestrator`; the human can
+  make it a `worker` (Settings, Agent tokens). The role comes with the token: nothing an agent sends
+  raises it.
 - Only the human and an orchestrator change a project's instructions (`set_project_instructions`,
   REST `PUT /api/projects/:id/instructions`), create a project with instructions (`POST /api/projects`)
   or move a repo to another project (`PATCH /api/repos/:id` `{projectId}`). A worker is refused with
@@ -95,10 +96,9 @@ http_headers = { Authorization = "Bearer <token>" }
    logs it), so prefer unassigned ones. A ticket with `reserved: true` belongs to one of the
    project's agents (below): claim it only with `as`.
    **Start of a session:** before anything else on a ticket you pick up or come back to, read its
-   resume note (`resume` on `get_ticket`, also returned by `claim_ticket`): where the last session
-   left off, the next steps and how to resume. `resume.commitsSince` and `resume.stale` say whether
-   the work moved on since it was written; `resume.noHandoff` means it carried over from an earlier
-   day without one.
+   `summary` (`summary` on `get_ticket`, the one state post at the top of Main): where the last
+   session left off, what is done, the next steps, the PR and the preview. Read the latest posts and
+   the branch too when the summary is behind them.
 3. **Break it down**: a new ticket starts with its project's default phases as its top-level
    tasks (`get_project` → `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR,
    CI, Preview, Summary, Merged). Tasks go two levels and no more: the concrete steps of the
@@ -166,7 +166,7 @@ http_headers = { Authorization = "Bearer <token>" }
    **posts** has two tabs, and the board puts each post in one (its `tab`, `main` or `agents`):
    - **Agents** is your working record: progress posts (`post_update` marks one as progress; lane
      summaries and the Daily view pick those out), anything posted `as` one of the project's
-     agents (the spec, the builder, the runner, the review phases), the resume note's versions.
+     agents (the spec, the builder, the runner, the review phases).
    - **Main** is the human's, and stays short and to the point: their posts with your replies
      under them, decision cards, your questions to them (`comment` on the ticket, not progress),
      and the ticket's **summary** on top.
@@ -331,7 +331,8 @@ http_headers = { Authorization = "Bearer <token>" }
       they still show the current state, never dropping the proofs for a section that still stands.
       Add what changed this time (`change`, one line); do not delete the rest. If a fact no longer
       holds, say what replaced it rather than silently removing the line.
-   8. Resume note if the ticket stays open past the session (step 9).
+      The summary is the ticket's one state card: the end of a session updates it rather than leaving
+      a separate note.
 
    `update_ticket` to `review` answers with `open`: every task and subtask still open, the
    ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text,
@@ -396,12 +397,10 @@ githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo 
    each again as for the human and answering the command that restores it, never a worktree nor a
    branch on origin: `post_update` its deleted `branch @ sha` lines on the ticket. The board skill's
    `/board cleanup` walks it with the human.
-9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`,
-   `set_resume_note` with its template filled in (state, done so far, next steps, open questions or
-   blockers, how to resume: branch, worktree, commands, preview, gotchas), concretely enough that
-   another agent can continue without asking. It is the ticket's one current "Where we left off"
-   note, shown at the top of its page; each version is also posted to its feed (the Agents tab) as
-   a handoff. Then
+9. **End of a session**: for every ticket you leave in `in_progress`, `blocked` or `review`, its
+   `set_ticket_summary` up to date: where it stands, what is next and how to resume (branch,
+   worktree, commands, preview, gotchas), concretely enough that another agent can continue without
+   asking. It is the ticket's one current state card, rewritten to the current state. Then
    the project's report, if it keeps one (step 10); `daily_report` shows what everyone else did that
    day.
 10. **Reports**: a project can ask for one report per period, every workday or once a week
