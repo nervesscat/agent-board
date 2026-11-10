@@ -48,7 +48,7 @@ function ProjectLayout() {
           1.5rem top padding, and scrolls on its own when taller than the window. The page itself
           keeps scrolling (not the content pane), so the header, other sticky bars and the
           browser's scroll restoration keep working as on every other page. */}
-      <aside className="md:sticky md:top-[calc(4.5rem+1px)] md:max-h-[calc(100vh-6rem-1px)] md:w-52 md:shrink-0 md:self-start md:overflow-y-auto">
+      <aside className="md:sticky md:top-[calc(4.5rem+1px+env(safe-area-inset-top))] md:max-h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:w-52 md:shrink-0 md:self-start md:overflow-y-auto">
         <div className="mb-3 px-2">
           <div className="truncate font-semibold">{project?.name ?? '…'}</div>
           <PushedTodayBadge projectId={Number(id)} compact />

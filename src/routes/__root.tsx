@@ -35,7 +35,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+      // viewport-fit=cover lets the page paint the phone's safe areas (the status bar behind the notch)
+      // itself, instead of leaving Safari to fill them with its own colour; the top bar pads its content
+      // by env(safe-area-inset-top) below. The theme-colour tags live in RootDocument: HeadContent keeps
+      // one meta per name, and two are needed, one per scheme.
+      { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { title: 'CrossBoard' },
     ],
     // The stylesheet is not here but in RootDocument, after KEY_ENTRIES. The SVG favicon switches its own
@@ -61,6 +65,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             the head. Without one, the link stays where it is written. TanStack Start's own dev stylesheet
             would come first too: vite.config.ts turns it off. */}
         <ScriptOnce>{KEY_ENTRIES}</ScriptOnce>
+        {/* Both schemes, in RootDocument rather than head(): HeadContent keeps one meta per name. These
+            tint the phone's status bar and overscroll area; each matches --background. */}
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
         <link rel="stylesheet" href={appCss} />
         <HeadContent />
       </head>
@@ -92,7 +100,9 @@ function App() {
   useEffect(followSystemTheme, [])
   return (
     <TooltipProvider delay={TOOLTIP_DELAY}>
-      <header className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur">
+      {/* Opaque and padded for the phone's safe area: this bar is what paints the strip behind the status
+          bar (viewport-fit=cover above), so a translucent bar would let the page's canvas show through. */}
+      <header className="sticky top-0 z-20 border-b bg-background pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
         <nav className="mx-auto flex h-12 max-w-7xl items-center gap-3 px-4 text-sm sm:gap-5">
           <Tip content="Home">
             <Link to="/" className="flex shrink-0 items-center gap-2">
@@ -124,7 +134,7 @@ function App() {
       </header>
       <HostToolsBanner />
       <ReportDueBanner />
-      <main className="mx-auto w-full max-w-7xl px-4 py-6">
+      <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         <Outlet />
       </main>
       <Gallery />
