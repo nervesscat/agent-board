@@ -100,7 +100,9 @@ function ProjectLayout() {
                 params={{ id }}
                 // The Overview's URL starts every other page's.
                 activeOptions={{ exact: page === 'nav.overview' }}
-                className="flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground [&.active]:bg-muted [&.active]:text-foreground"
+                // The ring is inset: the aside is the scroll container (its overflow-x becomes auto with
+                // overflow-y), so an outline drawn outside the link would be cut at its edge.
+                className="flex shrink-0 items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset [&.active]:bg-muted [&.active]:text-foreground"
               >
                 <Icon className="size-4" /> {layoutElement(page).label}
               </Link>
