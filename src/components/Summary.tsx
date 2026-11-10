@@ -822,7 +822,8 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
           </Tip>
         )
       }
-      className="lg:col-span-2"
+      className="lg:col-span-full"
+      scroll
     >
       {!items.length ? (
         <Quiet>Nothing carried over from before today.</Quiet>
