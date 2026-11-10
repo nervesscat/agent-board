@@ -731,6 +731,8 @@ api.put('/api/tickets/:id/repo', async ({ request, params, actor }) => {
   )
   return json(features.setTicketRepo(id(params), body, actor, { agent: isAgent(request) }))
 })
+// Assigns the ticket to the caller (or, with `as`, to the project agent the caller works it as) and
+// starts it. Answers with the ticket row; the summary is a read of its own (GET /api/tickets/:id).
 api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   const body = await readJson(
     request,

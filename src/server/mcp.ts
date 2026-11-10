@@ -409,7 +409,7 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
   )
   tool(
     'claim_ticket',
-    "Pick a ticket up: assigns it to you (or, with as, to the project agent you work it as) and moves it from an open or blocked stage to the stage work starts in (get_project's workStage, else the first active stage), optionally setting the branch (the primary repo's) and, with repos, each repo's branch. Returns the ticket, with its summary (as in get_ticket): read it before anything else. A shared ticket someone else holds is taken over from them. Fails when the ticket is reserved for one of the project's agents and as is not that agent, or when it is in a done or cancelled stage.",
+    "Pick a ticket up: assigns it to you (or, with as, to the project agent you work it as) and moves it from an open or blocked stage to the stage work starts in (get_project's workStage, else the first active stage), optionally setting the branch (the primary repo's) and, with repos, each repo's branch. Returns the ticket row; read its summary with get_ticket before anything else. A shared ticket someone else holds is taken over from them. Fails when the ticket is reserved for one of the project's agents and as is not that agent, or when it is in a done or cancelled stage.",
     {
       ticketId: z.number().int(),
       branch: z.string().optional().describe("the branch in the ticket's primary repo"),
