@@ -54,7 +54,7 @@ const PROJECT_PATHS = {
   daily: '/projects/$id/daily',
   cleanup: '/projects/$id/cleanup',
   repositories: '/projects/$id/repositories',
-  instructions: '/projects/$id/settings',
+  instructions: '/projects/$id/instructions',
 } as const
 
 type ProjectPath = (typeof PROJECT_PATHS)[keyof typeof PROJECT_PATHS]
@@ -195,6 +195,8 @@ type Section = {
   subtitle?: string
   keywords?: string[]
   hash: string
+  /** The page the section lives on; the settings page unless the section moved elsewhere. */
+  path?: ProjectPath
   /** Only the human sees it: an agent's pages leave it out too. */
   humanOnly?: boolean
   /** The page draws it only while sign-in is on (a board with sign-in off has no passkeys). */
@@ -265,6 +267,7 @@ const PROJECT_SETTINGS: Section[] = [
     subtitle: 'What every agent reads',
     keywords: ['rules', 'agents', 'prompt'],
     hash: 'instructions',
+    path: PROJECT_PATHS.instructions,
   },
   {
     key: 'instructions-history',
@@ -272,6 +275,7 @@ const PROJECT_SETTINGS: Section[] = [
     subtitle: 'Every change to the instructions',
     keywords: ['versions', 'history', 'changes'],
     hash: 'instructions-history',
+    path: PROJECT_PATHS.instructions,
   },
   {
     key: 'default-phases',
@@ -526,7 +530,7 @@ export function CommandPalette() {
         keywords: section.keywords,
         run: () =>
           navigate({
-            to: '/projects/$id/settings',
+            to: section.path ?? '/projects/$id/settings',
             params: { id: String(projectId) },
             hash: section.hash,
           }),

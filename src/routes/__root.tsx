@@ -15,6 +15,7 @@ import { CommandPalette } from '#/components/CommandPalette'
 import { Gallery } from '#/components/Gallery'
 import { GettingStartedEntry, GettingStartedMenuItem } from '#/components/GettingStarted'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
+import { PreviewWindows } from '#/components/PreviewWindow'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
 import { UpdateBadge } from '#/components/Updates'
@@ -83,10 +84,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 /**
  * The board-wide pages, on the right of the top bar. Under `md` they fold into a menu: between `sm` and
- * `md` the lockup, the auth-off badge, the project switcher and the three links do not fit on one row.
+ * `md` the lockup, the auth-off badge, the project switcher and the links do not fit on one row.
+ * A project's pages, Daily among them, are in its own menu beside the page.
  */
 const PAGES = [
-  { to: '/daily', label: 'Daily' },
   { to: '/agents', label: 'Connect' },
   { to: '/settings', label: 'Settings' },
 ] as const
@@ -140,6 +141,7 @@ function App() {
         <Outlet />
       </main>
       <Gallery />
+      <PreviewWindows />
       <Toaster />
     </TooltipProvider>
   )

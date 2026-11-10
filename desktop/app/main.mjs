@@ -533,6 +533,20 @@ function ownOrigin(/** @type {string} */ url) {
   }
 }
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
+
+/** Whether a URL is a server on this machine, which the embedded preview may frame beside the board. */
+function loopbackOrigin(/** @type {string} */ url) {
+  try {
+    const parsed = new URL(url)
+    return (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') && LOOPBACK_HOSTS.has(parsed.hostname)
+    )
+  } catch {
+    return false
+  }
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1440,
@@ -541,7 +555,17 @@ function createWindow() {
     title: app.getName(),
     icon: icon(),
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, sandbox: true },
+    // webviewTag: the board's embedded preview window (PreviewWindow.tsx) shows a running preview in a
+    // real browser view of that tag in the desktop app, where the web build frames it instead.
+    webPreferences: { contextIsolation: true, sandbox: true, webviewTag: true },
+  })
+  // A preview is embedded only from the board's own origin (its proxy path) or from a loopback server
+  // on this machine: a page anywhere else opens in the browser. The guest gets no preload and no Node.
+  win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    delete webPreferences.preload
+    webPreferences.nodeIntegration = false
+    webPreferences.contextIsolation = true
+    if (!ownOrigin(params.src) && !loopbackOrigin(params.src)) event.preventDefault()
   })
   win.once('ready-to-show', () => win?.show())
   // Closed for good (once the app is failing or quitting): nothing may show it again.

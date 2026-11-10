@@ -15,6 +15,7 @@ const MENU = [
   'Cleanup',
   'Repositories',
   'Instructions',
+  'Settings',
 ]
 const CARDS = ['Needs you', 'In progress', 'Done today', 'Next', 'Carrying over']
 
@@ -55,7 +56,7 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await expect(status).toHaveText('No changes.')
   await expect(save).toBeDisabled()
   // The landing page, the board and this page can move but never hide.
-  for (const name of ['Overview', 'Ongoing features', 'Instructions'])
+  for (const name of ['Overview', 'Ongoing features', 'Settings'])
     await expect(layout.getByRole('switch', { name: `Show ${name} in the menu` })).toBeDisabled()
   await expect(layout.getByRole('switch', { name: 'Show Tasks on the ticket page' })).toBeDisabled()
 
@@ -77,15 +78,24 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await expect(up).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(up).toBeFocused()
-  const order = [...MENU.slice(0, 5), 'Daily', 'Gallery', 'Team', 'Cleanup', 'Repositories', 'Instructions']
+  const order = [
+    ...MENU.slice(0, 5),
+    'Daily',
+    'Gallery',
+    'Team',
+    'Cleanup',
+    'Repositories',
+    'Instructions',
+    'Settings',
+  ]
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   // At the top, the focus moves to its other arrow.
-  const settingsUp = layout.getByRole('button', { name: 'Move Instructions up in the menu' })
+  const settingsUp = layout.getByRole('button', { name: 'Move Settings up in the menu' })
   await settingsUp.focus()
   for (let i = 0; i < MENU.length - 1; i++) await page.keyboard.press('Enter')
-  await expect(layout.getByRole('button', { name: 'Move Instructions down in the menu' })).toBeFocused()
+  await expect(layout.getByRole('button', { name: 'Move Settings down in the menu' })).toBeFocused()
   await page.keyboard.press('Enter')
-  const reordered = ['Overview', 'Instructions', ...order.slice(1, -1)]
+  const reordered = ['Overview', 'Settings', ...order.slice(1, -1)]
   await expect(tiles(layout, 'Project menu')).toHaveText(reordered)
 
   // Saved from the keyboard too; the menu follows at once.
@@ -155,7 +165,7 @@ test('an edit made while a Save or a Reset is on its way stays, unsaved, and a s
   await expect(saving).toBeDisabled()
   await roadmap.click()
   await layout.getByRole('button', { name: 'Move Daily up in the menu' }).click()
-  const order = [...MENU.slice(0, 6), 'Daily', 'Team', 'Cleanup', 'Repositories', 'Instructions']
+  const order = [...MENU.slice(0, 6), 'Daily', 'Team', 'Cleanup', 'Repositories', 'Instructions', 'Settings']
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   await expect(status).toHaveText('Unsaved changes. 2 hidden.')
   release()
@@ -507,4 +517,53 @@ test('a layout saved with the Hand-off card still loads, without it', async ({ p
     'Branch',
     'Workspaces',
   ])
+})
+
+test('Daily is in the project menu, never the top bar, and the old /daily opens the last project', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/daily`)
+  await expect(page.getByRole('heading', { level: 1, name: 'Daily' })).toBeVisible()
+  await expect(page.getByRole('banner').getByRole('link', { name: 'Daily' })).toHaveCount(0)
+  // In the project's menu, highlighted while its page shows. The router marks the current link
+  // `aria-current="page"`, not only with a class.
+  const daily = page.locator('aside nav').getByRole('link', { name: 'Daily' })
+  await expect(daily).toHaveAttribute('aria-current', 'page')
+  // The old board-wide address opens this browser's current project.
+  await page.goto('/daily')
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/daily$`))
+  await expect(page.locator('aside nav').getByRole('link', { name: 'Daily' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+
+  // At 390 the project's pages are a picker, Daily among them, and the top bar still has none.
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('banner').getByRole('link', { name: 'Daily' })).toHaveCount(0)
+  const picker = page.getByRole('combobox', { name: 'Project page' })
+  await expect(picker).toContainText('Daily')
+  await picker.click()
+  await page.getByRole('option', { name: 'Daily' }).click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/daily$`))
+  await expect(picker).toContainText('Daily')
+
+  // With no project known, it lands on Home, where a project is picked.
+  await page.evaluate(() => localStorage.clear())
+  await page.goto('/daily')
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible()
+
+  // The project list failing is the same dead end as an empty one: Home, never stuck on "Opening
+  // Daily…". (The review found /daily depended on this call only since Daily became project-only.)
+  await page.route(
+    (url) => url.pathname === '/api/projects',
+    (route) =>
+      route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"restarting"}' }),
+  )
+  await page.goto('/daily')
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible()
+  await expect(page.getByText('Opening Daily…')).toHaveCount(0)
 })

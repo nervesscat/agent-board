@@ -90,9 +90,11 @@ export function TicketBoard({
   // Dragging within its own column: the gap it would land in, 0 above the first card.
   const [slot, setSlot] = useState<number | null>(null)
   // A phone shows one stage at a time; this is the one picked (none: the first with tickets).
-  const [pickedStage, setPickedStage] = useState<string>()
+  const [pickedStage, pickStage] = useRememberedStage(`features.board.stage.${projectId}`, stages)
   const activeStage =
-    pickedStage ?? stages.find((s) => stageColumn(items, s.key).length > 0)?.key ?? stages[0]?.key
+    stages.find((s) => s.key === pickedStage)?.key ??
+    stages.find((s) => stageColumn(items, s.key).length > 0)?.key ??
+    stages[0]?.key
   const stageItems = Object.fromEntries(
     stages.map((s) => [s.key, `${s.name} (${stageColumn(items, s.key).length})`]),
   )
@@ -127,7 +129,7 @@ export function TicketBoard({
     <div ref={frame} className="flex flex-col md:min-h-80">
       {stages.length > 0 && activeStage && (
         <div className="mb-2 md:hidden">
-          <Select value={activeStage} onValueChange={(v) => v && setPickedStage(v)} items={stageItems}>
+          <Select value={activeStage} onValueChange={(v) => v && pickStage(v)} items={stageItems}>
             <SelectTrigger className="w-full" aria-label="Stage">
               <SelectValue />
             </SelectTrigger>
@@ -534,6 +536,45 @@ function writeScroll(key: string, value: SavedScroll) {
   }
 }
 
+function readStage(key: string) {
+  try {
+    return sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeStage(key: string, stage: string) {
+  try {
+    sessionStorage.setItem(key, stage)
+  } catch {
+    // storage unavailable (private mode, blocked): the board just starts at the first stage
+  }
+}
+
+/**
+ * The stage a phone was showing, for this tab: restored when the board comes back, however it is
+ * reached (a ticket's Back, the menu, a link), and across a reload. `stages` once the project's
+ * columns are known, since a stage that no longer exists must not hide every column.
+ */
+function useRememberedStage(key: string, stages: StageLike[]): [string | undefined, (stage: string) => void] {
+  const [stage, setStage] = useState<string>()
+  const restoredFor = useRef<string | undefined>(undefined)
+  useLayoutEffect(() => {
+    // Once per board: the saved stage of this project, or none (the first with tickets) when it has
+    // no say, is gone, or another project's board took this one's place.
+    if (!stages.length || restoredFor.current === key) return
+    restoredFor.current = key
+    const saved = readStage(key)
+    setStage(saved && stages.some((s) => s.key === saved) ? saved : undefined)
+  }, [key, stages])
+  const pick = (next: string) => {
+    setStage(next)
+    writeStage(key, next)
+  }
+  return [stage, pick]
+}
+
 /**
  * Where the board was scrolled, sideways and in each column, for this tab: restored when the page
  * comes back, however it is reached (a link, the menu, Back). `ready` once the columns are drawn.
@@ -555,12 +596,23 @@ function useRememberedScroll(key: string, scroller: RefObject<HTMLDivElement | n
     let pending = 0
     const save = () => {
       cancelAnimationFrame(pending)
-      pending = requestAnimationFrame(() =>
+      pending = requestAnimationFrame(() => {
+        const before = readScroll(key)
+        // A value the element coerces to 0 because it cannot scroll there is not where the reader
+        // was (a phone shows one column, with nothing sideways and nothing scrolling in it): keep
+        // what was saved, so a visit at phone width does not lose the desktop's position.
+        const sideways = el.scrollWidth > el.clientWidth
         writeScroll(key, {
-          left: el.scrollLeft,
-          columns: Object.fromEntries(columns().map((c) => [c.dataset.column!, c.scrollTop])),
-        }),
-      )
+          left: sideways ? el.scrollLeft : (before?.left ?? 0),
+          columns: Object.fromEntries(
+            columns().map((c) => {
+              const name = c.dataset.column!
+              const down = c.scrollHeight > c.clientHeight
+              return [name, down ? c.scrollTop : (before?.columns?.[name] ?? 0)]
+            }),
+          ),
+        })
+      })
     }
     // Scroll events do not bubble; listening while they travel down catches the columns' too.
     el.addEventListener('scroll', save, { capture: true, passive: true })

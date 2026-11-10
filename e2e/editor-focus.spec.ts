@@ -509,7 +509,7 @@ test('editors without an attach of their own have none in the toolbar; posts and
   }
 
   // The project instructions.
-  await page.goto(`/projects/${t.projectId}/settings`)
+  await page.goto(`/projects/${t.projectId}/instructions`)
   const settings = page.getByRole('region', { name: 'Project instructions' })
   await settings.getByRole('button', { name: 'No instructions yet. Click to write them.' }).click()
   const instructions = settings.getByRole('textbox', { name: 'Project instructions' })

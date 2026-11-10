@@ -1,30 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute, useBlocker } from '@tanstack/react-router'
-import { FolderGit2, Pencil } from 'lucide-react'
-import { useState } from 'react'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
-import { InstructionsHistory, instructionChangesKey } from '#/components/InstructionsHistory'
 import { LayoutEditor } from '#/components/LayoutEditor'
 import { ListInput } from '#/components/ListInput'
-import { Markdown } from '#/components/Markdown'
-import { RichEditor } from '#/components/RichEditor'
 import { RunsSettings } from '#/components/RunsSettings'
 import { StagesEditor } from '#/components/StagesEditor'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
-import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, patch } from '#/lib/api'
 import { STALL_MINUTES } from '#/lib/constants'
 import { useProject } from '#/lib/project'
@@ -32,45 +17,49 @@ import { useAnchor, useReveal } from '#/lib/reveal'
 import { DEFAULT_TAG_SUGGESTIONS, cleanSuggestions } from '#/lib/tags'
 import { addTasks } from '#/lib/tasks'
 
-export const Route = createFileRoute('/projects/$id/settings')({ component: Settings })
+export const Route = createFileRoute('/projects/$id/settings')({
+  // Old links into the instructions history (a bookmark, another page's link) follow the page there.
+  beforeLoad: ({ location, params }) => {
+    if (location.hash === 'instructions-history')
+      throw redirect({
+        to: '/projects/$id/instructions',
+        params,
+        hash: 'instructions-history',
+        replace: true,
+      })
+  },
+  component: Settings,
+})
 
 function Settings() {
   const { id } = Route.useParams()
+  const navigate = Route.useNavigate()
   const { data: p } = useProject(id)
-  // A link into a section (#layout, #instructions-history) lands on it on an in-app navigation too.
-  useReveal(useAnchor(), { page: id, ready: p !== undefined })
-  if (!p) return null
+  const anchor = useAnchor()
+  // A link into a section (#layout) lands on it on an in-app navigation too.
+  useReveal(anchor, { page: id, ready: p !== undefined })
+  // A page loaded afresh sends no fragment to the server, so `beforeLoad` cannot see this one: follow
+  // an old #instructions-history link once the page runs.
+  const oldHistory = anchor?.target === 'instructions-history'
+  useEffect(() => {
+    if (oldHistory)
+      void navigate({
+        to: '/projects/$id/instructions',
+        params: { id },
+        hash: 'instructions-history',
+        replace: true,
+      })
+  }, [oldHistory, navigate, id])
+  if (!p || oldHistory) return null
   return (
     <div className="space-y-10">
-      <div className="max-w-3xl space-y-5">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Instructions</h1>
-          <p className="text-sm text-muted-foreground">
-            What every agent reads before working here. Every change is kept below.
-          </p>
-        </div>
-        {/* A new editor per project: an edit never follows the page to another one. */}
-        <Instructions key={id} projectId={id} saved={p.instructions} />
-        <div className="space-y-1 text-right text-sm">
-          <ul className="space-y-0.5">
-            {p.repos.map((r) => (
-              <Tip key={r.id} content={r.repoPath}>
-                <li className="flex items-center justify-end gap-1.5 text-muted-foreground">
-                  <FolderGit2 className="size-3.5 shrink-0" />
-                  <span className="font-mono text-xs">{r.githubRepo ?? r.repoPath}</span>
-                </li>
-              </Tip>
-            ))}
-          </ul>
-          <p className="text-xs text-muted-foreground">
-            Repos:{' '}
-            <Link to="/projects/$id/repositories" params={{ id }} className="underline hover:text-foreground">
-              Repositories page
-            </Link>
-            . Rename or delete the project: project menu → Manage projects.
-          </p>
-        </div>
-        <InstructionsHistory key={`history-${id}`} projectId={id} />
+      <div className="max-w-3xl space-y-2">
+        <h1 className="text-xl font-semibold tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground">
+          How this project works: what new tickets start with, the tags it offers, when a ticket counts as
+          stalled, its stages, its runs and what its pages show. Its agents&apos; instructions are on their
+          own page.
+        </p>
       </div>
       <DefaultPhases key={id} projectId={id} saved={p.defaultPhases} />
       <TagSuggestions key={`tags-${id}`} projectId={id} saved={p.tagSuggestions} />
@@ -81,8 +70,6 @@ function Settings() {
     </div>
   )
 }
-
-const always = () => true
 
 /**
  * The top-level phases every new ticket of the project starts with, in order: the list in effect
@@ -303,142 +290,6 @@ function StallMinutes({ projectId, saved }: { projectId: string; saved: number }
             : `A whole number from ${STALL_MINUTES.min} to ${STALL_MINUTES.max}.`}
         </span>
       </form>
-    </section>
-  )
-}
-
-/**
- * The project's instructions, edited in place like a ticket's: they read as rendered markdown, and
- * the editor stores markdown, which is what agents get. Unsaved changes are not lost by accident:
- * Cancel, Esc, leaving the page or closing the tab ask first.
- */
-function Instructions({ projectId, saved }: { projectId: string; saved: string }) {
-  const qc = useQueryClient()
-  const [editing, setEditing] = useState(false)
-  const [body, setBody] = useState(saved)
-  const [asking, setAsking] = useState(false)
-  const dirty = editing && body !== saved
-  const blocker = useBlocker({
-    shouldBlockFn: always,
-    disabled: !dirty,
-    enableBeforeUnload: true,
-    withResolver: true,
-  })
-  const save = useMutation({
-    mutationFn: (instructions: string) => patch(`/api/projects/${projectId}`, { instructions }),
-    onSuccess: async () => {
-      qc.invalidateQueries({ queryKey: ['projects'] })
-      qc.invalidateQueries({ queryKey: instructionChangesKey(projectId) })
-      // Back to reading once the saved text is the one shown.
-      await qc.invalidateQueries({ queryKey: ['project', projectId] })
-      setEditing(false)
-      toast.success('Saved')
-    },
-    onError: (err) => toast.error(errorMessage(err)),
-  })
-  const open = () => {
-    setBody(saved)
-    setEditing(true)
-  }
-  const submit = () => {
-    if (save.isPending) return
-    if (body === saved) setEditing(false)
-    else save.mutate(body)
-  }
-  const cancel = () => {
-    if (dirty) setAsking(true)
-    else setEditing(false)
-  }
-  const stay = () => {
-    setAsking(false)
-    blocker.reset?.()
-  }
-  const discard = () => {
-    setAsking(false)
-    setEditing(false)
-    blocker.proceed?.()
-  }
-  return (
-    <section id="instructions" aria-label="Project instructions" className="scroll-mt-16 space-y-2">
-      <div className="flex items-center gap-3">
-        <Label>Project instructions</Label>
-        {!editing && (
-          <Button type="button" variant="ghost" size="xs" className="ml-auto" onClick={open}>
-            <Pencil data-icon="inline-start" /> edit
-          </Button>
-        )}
-      </div>
-      {editing ? (
-        <div className="space-y-2">
-          <RichEditor
-            value={body}
-            onChange={setBody}
-            onSubmit={submit}
-            onCancel={cancel}
-            autoFocus
-            minHeight="min-h-64"
-            label="Project instructions"
-            placeholder="How to run the repos, the conventions to follow, what never to do."
-          />
-          <div className="flex items-center justify-end gap-2">
-            <span className="mr-auto text-xs text-muted-foreground" aria-live="polite">
-              {dirty ? 'Unsaved changes. Ctrl/⌘+Enter saves.' : 'No changes.'}
-            </span>
-            <Button type="button" variant="ghost" size="sm" onClick={cancel}>
-              Cancel
-            </Button>
-            <Button type="button" size="sm" onClick={submit} disabled={!dirty || save.isPending}>
-              {save.isPending ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-        </div>
-      ) : saved ? (
-        // Clicking the text edits it; a link inside still opens.
-        <Tip content="Click to edit">
-          <div
-            role="button"
-            tabIndex={0}
-            className="cursor-text rounded-md border p-4 hover:bg-muted/30"
-            onClick={(e) => {
-              if (!(e.target as HTMLElement).closest('a, img')) open()
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') open()
-            }}
-          >
-            <Markdown>{saved}</Markdown>
-          </div>
-        </Tip>
-      ) : (
-        <button
-          type="button"
-          onClick={open}
-          className="w-full rounded-md border border-dashed p-4 text-left text-sm text-muted-foreground hover:text-foreground"
-        >
-          No instructions yet. Click to write them.
-        </button>
-      )}
-      <AlertDialog
-        open={asking || blocker.status === 'blocked'}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) stay()
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Discard your changes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The project instructions have unsaved changes. Agents keep reading the saved ones.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={discard}>
-              Discard
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </section>
   )
 }

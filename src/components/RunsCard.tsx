@@ -1,8 +1,9 @@
 import { Link } from '@tanstack/react-router'
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query'
-import { ExternalLink, GitBranch, Layers, Loader2, Play, RotateCw, Square } from 'lucide-react'
+import { AppWindow, ExternalLink, GitBranch, Layers, Loader2, Play, RotateCw, Square } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { openPreview } from '#/components/PreviewWindow'
 import { PreviewActions, PreviewBadge } from '#/components/Preview'
 import { Badge } from '#/components/ui/badge'
 import { Button, buttonVariants } from '#/components/ui/button'
@@ -24,6 +25,7 @@ import {
 } from '#/lib/api'
 import { clock } from '#/lib/format'
 import { previewOpenLinks } from '#/lib/previewLinks'
+import { previewBrowserUrl, previewTab } from '#/lib/previewWindow'
 import { cn } from '#/lib/utils'
 
 /**
@@ -193,7 +195,7 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
               {repo.runs.length ? (
                 <ul className="space-y-3">
                   {repo.runs.map((r) => (
-                    <RunRow key={r.id} run={r} onChange={changed} />
+                    <RunRow key={r.id} run={r} ticketId={t.id} ticketTitle={t.title} onChange={changed} />
                   ))}
                 </ul>
               ) : (
@@ -243,6 +245,8 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
                   w={w}
                   check={checks[i]?.data}
                   projectId={t.projectId}
+                  ticketId={t.id}
+                  ticketTitle={t.title}
                   onChange={changed}
                 />
               ))}
@@ -254,7 +258,17 @@ export function RunsCard({ t, git, onChange }: { t: TicketFull; git?: TicketGit;
   )
 }
 
-function RunRow({ run, onChange }: { run: TicketRun; onChange: () => void }) {
+function RunRow({
+  run,
+  ticketId,
+  ticketTitle,
+  onChange,
+}: {
+  run: TicketRun
+  ticketId: number
+  ticketTitle: string
+  onChange: () => void
+}) {
   const s = run.state
   const active = runActive(s)
   const action = useMutation({
@@ -297,15 +311,32 @@ function RunRow({ run, onChange }: { run: TicketRun; onChange: () => void }) {
       <div className="flex flex-wrap items-center gap-2">
         {s?.status === 'running' && (s.url || s.proxyUrl) && (
           <>
-            {previewOpenLinks(s).open && (
+            {(() => {
+              const tab = previewTab({
+                ticketId,
+                title: ticketTitle,
+                workspaceId: s.workspaceId,
+                runId: run.id,
+                label: run.name,
+                run: s,
+              })
+              return tab ? (
+                <Tip content="Show the preview inside CrossBoard, over the page: the board stays as it was">
+                  <Button size="sm" data-testid="run-open" onClick={() => openPreview(tab)}>
+                    <AppWindow /> Open
+                  </Button>
+                </Tip>
+              ) : null
+            })()}
+            {previewBrowserUrl(s) && (
               <a
-                href={previewOpenLinks(s).open!}
+                href={previewBrowserUrl(s)!}
                 target="_blank"
                 rel="noreferrer"
-                className={buttonVariants({ size: 'sm' })}
-                data-testid="run-open"
+                className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                data-testid="run-open-browser"
               >
-                Open <ExternalLink />
+                Open in browser <ExternalLink />
               </a>
             )}
             {previewOpenLinks(s).through && (
@@ -448,11 +479,15 @@ function LinkRow({
   w,
   check,
   projectId,
+  ticketId,
+  ticketTitle,
   onChange,
 }: {
   w: Workspace & { lane: { id: number; title: string } | null }
   check: WorkspacePreview | undefined
   projectId: number
+  ticketId: number
+  ticketTitle: string
   onChange: () => void
 }) {
   return (
@@ -464,6 +499,9 @@ function LinkRow({
           managed={null}
           cannotStart={undefined}
           onChange={onChange}
+          ticketId={ticketId}
+          ticketTitle={ticketTitle}
+          label={w.name}
         />
         <PreviewBadge url={w.previewUrl} check={check} className="ml-auto" />
       </div>
