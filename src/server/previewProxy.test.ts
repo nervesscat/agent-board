@@ -8,7 +8,7 @@ import path from 'node:path'
 import type { Duplex } from 'node:stream'
 
 import { eq } from 'drizzle-orm'
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebSocket, WebSocketServer } from 'ws'
 
 // The board's modules open the database at import: point DATA_DIR at a throwaway directory first.
@@ -27,6 +27,7 @@ vi.mock('./runs', async (importOriginal) => {
   return { ...actual, stopRun: vi.fn(actual.stopRun) }
 })
 const proxy = await import('./previewProxy')
+const { useAppBase } = await import('./previewPaths')
 const runs = await import('./runs')
 type ProxyDeps = import('./previewProxy').ProxyDeps
 const { db, schema } = await import('#/db')
@@ -61,7 +62,31 @@ const upgrades: { url: string; headers: http.IncomingHttpHeaders }[] = []
 
 function route(req: IncomingMessage, res: ServerResponse, body: Buffer) {
   const url = req.url ?? '/'
-  const p = url.split('?')[0]
+  const base = `/p/${wsA}/${RUN}/`
+  let p = url.split('?')[0]
+  // A preview built for the path the board proxies it at (the board's own Preview: vite.config.ts base):
+  // it serves everything under that base, and sends a root path there.
+  if (p === base.slice(0, -1) || p === base) {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    return res.end('<!doctype html><html><head></head><body>preview home</body></html>')
+  }
+  if (p === `${base}projects` || p === `${base}projects/1`) {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+    return res.end(
+      `<!doctype html><html><head><script type="module" src="${base}assets/app.js"></script></head><body>projects</body></html>`,
+    )
+  }
+  if (p === `${base}assets/app.js`) {
+    res.writeHead(200, { 'content-type': 'text/javascript' })
+    return res.end('const preview = 1\n')
+  }
+  if (p === '/projects' || p === '/projects/1') {
+    // What a base-built app does with a path outside its base.
+    res.writeHead(307, { location: `${base}projects/1` })
+    return res.end()
+  }
+  // Every other route of this fake answers at the root, reached under the prefix the proxy now forwards.
+  if (p.startsWith(base)) p = `/${p.slice(base.length)}`
   if (p === '/html') {
     res.writeHead(200, {
       'content-type': 'text/html; charset=utf-8',
@@ -644,7 +669,7 @@ describe('the target, whatever the request says', () => {
     const dbl = await serve(request(`/p/${wsA}/${RUN}//evil.example/y`, { headers: bearer(TOKEN.builder) }))
     expect(dbl.status).toBe(200)
     expect(seen.at(-1)!.headers.host).toBe(`127.0.0.1:${previewPort}`)
-    expect(seen.at(-1)!.url).toBe('//evil.example/y')
+    expect(seen.at(-1)!.url).toBe(`/p/${wsA}/${RUN}//evil.example/y`)
   })
 
   it('forwards the path under the prefix, the query as it came, and the method and body', async () => {
@@ -656,7 +681,53 @@ describe('the target, whatever the request says', () => {
       }),
     )
     expect(await res.text()).toBe('hello')
-    expect(seen.at(-1)).toMatchObject({ method: 'POST', url: '/echo?a=1', body: 'hello' })
+    expect(seen.at(-1)).toMatchObject({
+      method: 'POST',
+      url: `/p/${wsA}/${RUN}/echo?a=1`,
+      body: 'hello',
+    })
+  })
+})
+
+describe('a preview built for its own base on the board origin', () => {
+  const prefix = () => previewPath(wsA, RUN)
+  afterEach(() => useAppBase('/'))
+
+  it('forwards the prefixed path the app serves, so its page answers through the proxy (no 307 loop)', async () => {
+    const res = await serve(request(previewPath(wsA, RUN, 'projects/1'), { headers: bearer(TOKEN.builder) }))
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('projects')
+    // Never the stripped path: a base-built app answers that with a 307 back to its base.
+    expect(seen.at(-1)!.url).toBe(`${prefix()}projects/1`)
+  })
+
+  it('answers the base root itself, and an asset under it', async () => {
+    const root = await serve(request(previewPath(), { headers: bearer(TOKEN.builder) }))
+    expect(root.status).toBe(200)
+    expect(await root.text()).toContain('preview home')
+    expect(seen.at(-1)!.url).toBe(prefix())
+
+    const asset = await serve(
+      request(previewPath(wsA, RUN, 'assets/app.js'), { headers: bearer(TOKEN.builder) }),
+    )
+    expect(asset.status).toBe(200)
+    expect(await asset.text()).toContain('const preview')
+    expect(seen.at(-1)!.url).toBe(`${prefix()}assets/app.js`)
+  })
+
+  it('still answers at its own loopback URL without the proxy', async () => {
+    const direct = await fetch(`http://127.0.0.1:${previewPort}${prefix()}projects/1`)
+    expect(direct.status).toBe(200)
+    expect(await direct.text()).toContain('projects')
+  })
+
+  it('does not take its own base for a preview path, so it never proxies itself', async () => {
+    useAppBase(prefix())
+    expect(proxy.isPreviewPath(`${prefix()}projects/1`)).toBe(false)
+    expect(proxy.isPreviewPath(prefix().slice(0, -1))).toBe(false)
+    // Another run's path is still a preview to proxy.
+    expect(proxy.isPreviewPath(previewPath(wsA, RUN + 1, 'projects/1'))).toBe(true)
+    expect(await proxy.servePreview(request(previewPath(wsA, RUN, 'projects/1')), {}, deps())).toBeNull()
   })
 })
 
@@ -1057,7 +1128,7 @@ describe('a WebSocket upgrade to a preview', () => {
     )
     expect(res.status).toBe(101)
     const got = upgrades.at(-1)!
-    expect(got.url).toBe('/echo?x=1')
+    expect(got.url).toBe(`${previewPath(wsA, RUN)}echo?x=1`)
     expect(got.headers.host).toBe(`127.0.0.1:${previewPort}`)
     // The preview sees itself at its own origin, never the board's entrance.
     expect(got.headers.origin).toBe(`http://127.0.0.1:${previewPort}`)
@@ -1079,7 +1150,7 @@ describe('a WebSocket upgrade to a preview', () => {
     const target = `http://${LOCAL}${previewPath(wsA, RUN, 'echo?x=1')}`
     const res = await upgrade(target, bearer(TOKEN.builder))
     expect(res.status).toBe(101)
-    expect(upgrades.at(-1)!.url).toBe('/echo?x=1')
+    expect(upgrades.at(-1)!.url).toBe(`${previewPath(wsA, RUN)}echo?x=1`)
     res.socket!.destroy()
     // Without a credential the same form is refused with its own 401, not left hanging.
     const anon = await upgrade(`http://${LOCAL}${previewPath(wsA, RUN, 'live')}`)
@@ -1210,7 +1281,7 @@ describe('links to a preview', () => {
       request(previewPath(wsA, RUN, 'echo?pl=nope&a=%20b~'), { headers: sessionHeader(SESSION.local) }),
     )
     expect(res.status).toBe(200)
-    expect(seen.at(-1)!.url).toBe('/echo?pl=nope&a=%20b~')
+    expect(seen.at(-1)!.url).toBe(`${previewPath(wsA, RUN)}echo?pl=nope&a=%20b~`)
     expect((await serve(request(previewPath(wsA, RUN, 'echo?pl=nope')))).status).toBe(401)
   })
 
@@ -1222,7 +1293,7 @@ describe('links to a preview', () => {
       request(previewPath(wsA, RUN, `echo?pl=${pl}`), { headers: bearer(TOKEN.builder) }),
     )
     expect(res.status).toBe(200)
-    expect(seen.at(-1)!.url).toBe(`/echo?pl=${pl}`)
+    expect(seen.at(-1)!.url).toBe(`${previewPath(wsA, RUN)}echo?pl=${pl}`)
   })
 
   it('answers 401 for a cookie past its fifteen minutes', async () => {

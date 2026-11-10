@@ -14,6 +14,7 @@ import {
 import { endConnectionGone } from './src/server/connectionGone.ts'
 import { adoptCheckedEnv } from './src/server/devEnv.ts'
 import { entranceGuard } from './src/server/devEntrance.ts'
+import { useAppBase } from './src/server/previewPaths.ts'
 
 /**
  * In dev, Nitro hands a request the browser marks as an image, video or embed (`Sec-Fetch-Dest`) to
@@ -97,6 +98,9 @@ export default defineConfig(({ mode }) => {
   // guard and the board's runtime read BOARD_ENV, AUTH and PUBLIC_ORIGIN as loadEnv gives them
   // (src/server/devEnv.ts says why, and what still comes from Nitro's loader).
   adoptCheckedEnv(mode, process.cwd())
+  // The dev server's own guard reads the same base Vite serves and proxies under: its own base paths are
+  // the app's, not a preview's (previewPaths.ts).
+  useAppBase(process.env.BOARD_PREVIEW_BASE)
   return {
     resolve: { tsconfigPaths: true },
     // A preview run is built for the path the board proxies it at (runs.ts sets BOARD_PREVIEW_BASE); the board

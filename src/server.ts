@@ -3,6 +3,11 @@ import { createServerEntry } from '@tanstack/react-start/server-entry'
 
 import { guardBoardRequest, refusalResponse } from '#/server/entrance'
 import { servePreview } from '#/server/previewProxy'
+import { useAppBase } from '#/server/previewPaths'
+
+// A preview of the board is built and served at its path on the board's origin (vite.config.ts). Under it
+// every path is the app's own, `/p/<w>/<r>/…` included: it must not be taken for a preview to proxy again.
+useAppBase(import.meta.env.BASE_URL)
 
 const startHandler = createStartHandler(defaultStreamHandler)
 
