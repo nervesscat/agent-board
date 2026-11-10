@@ -369,7 +369,9 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    unmerged work your branch holds: each one belongs in `needs`. The PR queue then marks your PR
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
-   Only the human can mark it done anyway.
+   Only the human can mark it done anyway, but in Approved, where an orchestrator may merge the PR
+   after the human says yes, it moves the ticket there itself (see
+   [Approved](#approved-the-one-place-agents-may-merge)).
    `needs` is the enforced rule; the review column's order is the merge order the agents propose,
    read top to bottom (top merges first). Moving your ticket to review, place it with
    `update_ticket` → `position` (1 is the top of its stage's column; with `status`, in the new
@@ -405,7 +407,8 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
 
 `update_ticket` → `review` then answers with `open`: every task and subtask still open, the
 ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text, auto}`.
-Merged is left out: merging is the human's. `auto: true` marks a phase the board ticks from its fact
+Merged is left out: merging is the human's, except on a ticket in Approved (below). `auto: true`
+marks a phase the board ticks from its fact
 (Pushed, PR, CI, Preview, Summary): settle it by making the fact hold (push, open the PR, get CI
 green, start the preview, rewrite the summary after your last commit), never by a tick. The move goes
 through anyway: fix each one; `open: []` means nothing is left. `get_ticket` returns the same `open`
@@ -413,7 +416,9 @@ while the ticket is in review, and its page shows them on the Tasks card.
 
 After that:
 
-1. `done` is the human's call unless the project instructions say otherwise.
+1. `done` is the human's call unless the project instructions say otherwise, or the ticket is in
+   Approved and the human agreed to its merge: see
+   [Approved](#approved-the-one-place-agents-may-merge).
 2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
    board flags a ticket that is further along than its lanes. Say in the summary which lanes it
    covers.
@@ -605,6 +610,27 @@ Without those skills, or for one ticket, orchestrate by hand:
 
 Never two builders on one branch; when no agent's notes fit a step, ask in a post rather than
 doing it yourself.
+
+## Approved: the one place agents may merge
+
+A ticket the human approved sits in **Approved**, the review-kind stage the default layout puts after
+In review. Nothing moves a ticket there by kind: the human's verdict on a ticket in review (or their
+move) does. It is work an orchestrator may pick up, like the review queue. For each ticket there:
+
+1. **Check the work is finished**: every task and subtask done (Implementation and its steps, the
+   hand-off phases) and `get_ticket` → `open` empty; if something is open, finish it or say what is
+   missing and leave the ticket in Approved.
+2. **Ask the human first**: post the PR(s) it will merge and what it will do, with `ask_decision`
+   (or a comment), and wait for a yes. Never merge on silence.
+3. **Merge, fixing what blocks it**: if the branch conflicts with its base, merge the base in, resolve
+   it, push, wait for CI green, then merge the PR.
+4. **Move the ticket to done** once the merge is in, naming the PR and the merge commit and what was
+   checked. If CI stays red or a conflict cannot be resolved, stop and explain; it is not moved. Its
+   `needs` still keep it from done until those branches are merged into its base.
+
+Merging is the human's everywhere except on a ticket in Approved, where an orchestrator may merge its
+PR(s) after the human says yes. The board never merges a PR itself and no code path in it does; an
+agent merges only a ticket's PR(s) in Approved, only after that yes.
 
 ## Reviews and the PR queue
 

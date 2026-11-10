@@ -187,7 +187,7 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Previe
     // The Stage filter, opened: All stages and every stage, each reachable, and still no sideways scroll.
     await page.getByRole('combobox', { name: 'Stage' }).tap()
     const options = page.getByRole('option')
-    await expect(options).toHaveCount(8)
+    await expect(options).toHaveCount(project.stages.length + 1)
     for (const option of await options.all()) {
       await option.scrollIntoViewIfNeeded()
       await expect(option).toBeInViewport()

@@ -102,6 +102,7 @@ describe('where work starts', () => {
       'in_progress',
       'blocked',
       'review',
+      'approved',
       'done',
       'cancelled',
     ])

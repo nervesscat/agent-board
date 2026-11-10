@@ -165,6 +165,7 @@ const STAGES = [
   ['in_progress', 'In progress', 'active', 'sky'],
   ['blocked', 'Blocked', 'blocked', 'amber'],
   ['review', 'In review', 'review', 'violet'],
+  ['approved', 'Approved', 'review', 'teal'],
   ['done', 'Done', 'done', 'emerald'],
   ['cancelled', 'Cancelled', 'cancelled', 'slate'],
 ]
@@ -174,6 +175,7 @@ const STATUS_WEIGHTS = [
   ['in_progress', 14],
   ['blocked', 5],
   ['review', 10],
+  ['approved', 5],
   ['done', 40],
   ['cancelled', 5],
 ]
@@ -571,7 +573,7 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
       const makeTicket = (parent, depth, big = false) => {
         const createdAt = parent ? Math.max(parent.createdAt, ago(plan.days)) : ago(plan.days)
         const status = big ? 'in_progress' : weighted(STATUS_WEIGHTS)
-        const working = ['in_progress', 'blocked', 'review', 'done'].includes(status)
+        const working = ['in_progress', 'blocked', 'review', 'approved', 'done'].includes(status)
         const assignee = working || r.chance(0.3) ? r.pick(people) : ''
         const branch = working || big ? `t${++ticketNo}-${r.pick(WORDS)}` : ''
         const baseBranch = parent?.branch || 'main'

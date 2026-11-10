@@ -49,6 +49,12 @@ export const DEFAULT_STAGES: { key: string; name: string; kind: StageKind; color
   { key: 'in_progress', name: 'In progress', kind: 'active', color: 'sky' },
   { key: 'blocked', name: 'Blocked', kind: 'blocked', color: 'amber' },
   { key: 'review', name: 'In review', kind: 'review', color: 'violet' },
+  /**
+   * The human approved it and the merge is left: a second review-kind stage, so nothing moves a ticket
+   * into it by kind (only the human's verdict or a move does), and its agents may merge the PR once
+   * the human has said yes.
+   */
+  { key: 'approved', name: 'Approved', kind: 'review', color: 'teal' },
   { key: 'done', name: 'Done', kind: 'done', color: 'emerald' },
   { key: 'cancelled', name: 'Cancelled', kind: 'cancelled', color: 'slate' },
 ]
