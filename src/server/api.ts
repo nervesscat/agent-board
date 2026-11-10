@@ -68,7 +68,6 @@ import * as reports from './reports'
 import * as settingsHistory from './reportSettingsHistory'
 import { reportsOverview } from './reportsOverview'
 import * as repos from './repos'
-import { withResume } from './resume'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
@@ -613,7 +612,7 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   )
   return json(await needs.newTicket(id(params), body, actor, { agent: isAgent(request) }), 201)
 })
-// ?lanes=1 folds the lanes' updates into the feed. `resume` is the resume note with what happened since.
+// ?lanes=1 folds the lanes' updates into the feed.
 api.get('/api/tickets/:id', async ({ request, params, url }) =>
   json(
     await forAgent(
@@ -745,16 +744,7 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
         .optional(),
     }),
   )
-  return json(await withResume(features.claimTicket(id(params), actor, body)))
-})
-// The resume note ("Where we left off"): the human and agents both write it; `as` is agents only.
-api.put('/api/tickets/:id/resume', async ({ request, params, actor }) => {
-  const body = await readJson(
-    request,
-    z.object({ note: z.string().min(1).max(50_000), as: AgentName.optional() }),
-  )
-  if (body.as) agentOnly(request)
-  return json(await features.setResumeNote(id(params), body.note, actor, { as: body.as }))
+  return json(features.claimTicket(id(params), actor, body))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await needs.ticketGitView(id(params))))
 // Whether the branch of every ticket in work is on origin, one batch of git per repo; refresh fetches now.

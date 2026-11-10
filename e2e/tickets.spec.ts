@@ -441,7 +441,7 @@ test('the features view (board or list) survives a reload, kept in the URL and r
   await expect(card).toBeVisible()
 })
 
-test('the author sits on the line of the text around it: "opened by", the "by" of a resume note', async ({
+test('the author sits on the line of the text around it: "opened by"', async ({
   page,
   api,
   agent,
@@ -449,12 +449,10 @@ test('the author sits on the line of the text around it: "opened by", the "by" o
   project,
 }) => {
   await ok(human.post(`/api/projects/${project.id}/agents/defaults`, { data: {} }))
-  const as = DEFAULT_AGENT_NAMES[0]
   const byAgent = await ok<TicketFull>(
     agent.post(`/api/projects/${project.id}/tickets`, { data: { title: 'Opened by an agent' } }),
   )
   const byHuman = await api.ticket({ title: 'Opened by the human', status: 'in_progress' })
-  await ok(agent.put(`/api/tickets/${byHuman.id}/resume`, { data: { note: 'Halfway there', as } }))
 
   for (const { ticket, name, title } of [
     // A bot glyph, as in the ticket's screenshot, and the Agent badge after the name.
@@ -479,16 +477,6 @@ test('the author sits on the line of the text around it: "opened by", the "by" o
     const updated = texts.find((t) => t.text === 'updated')
     aligned(`${name}: "opened by" on the baseline of "updated"`, openedBy!.bottom, updated!.bottom)
   }
-
-  // One of the project's agents wrote the resume note: its avatar, the agent's initial on a colour.
-  const line = page.getByRole('region', { name: 'Resume here' }).getByText(/^by /)
-  await expectTooltip(line.locator('span[data-slot="tooltip-trigger"]'), /one of the project's agents/)
-  const { texts, ...author } = await measure(line)
-  const [by, ago] = texts
-  expect(by!.text).toBe('by')
-  aligned(`${as}: the name on the baseline of "by"`, author.name.bottom, by!.bottom)
-  aligned(`${as}: the name on the baseline of the time`, author.name.bottom, ago!.bottom)
-  aligned(`${as}: the avatar centred on the text`, author.icon.mid, by!.mid)
 })
 
 test('an author in the header of a post or a reply stays centred on it, on a phone too', async ({

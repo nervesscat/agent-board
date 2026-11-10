@@ -1,5 +1,4 @@
 import {
-  Bookmark,
   Bot,
   BrushCleaning,
   CalendarDays,
@@ -45,7 +44,6 @@ export const LAYOUT_ICONS: Record<LayoutId, typeof Home> = {
   'overview.doneToday': CheckCircle2,
   'overview.next': ListTodo,
   'overview.carryingOver': Clock,
-  'ticket.resume': Bookmark,
   'ticket.instructions': ScrollText,
   'ticket.tasks': SquareCheckBig,
   'ticket.timeline': History,
