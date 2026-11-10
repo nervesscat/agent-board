@@ -106,6 +106,7 @@ describe('mergeLayout', () => {
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
+      'nav.instructions',
       'nav.settings',
     ])
     expect(nav.find((it) => it.id === 'nav.roadmap')!.hidden).toBe(false)
@@ -139,12 +140,22 @@ describe('mergeLayout', () => {
       'nav.agents',
       'nav.cleanup',
       'nav.repositories',
+      'nav.instructions',
     ])
     expect(merged.find((it) => it.id === 'nav.repositories')).toEqual({
       id: 'nav.repositories',
       area: 'nav',
       hidden: false,
     })
+  })
+
+  it('adds Instructions to a menu saved before the split, before Settings', () => {
+    // Every layout saved before the Instructions module existed: Settings is there, Instructions is not.
+    const merged = mergeLayout(without('nav.instructions'))
+    expect(merged).toEqual(defaultLayout())
+    const nav = shownIn(merged, 'nav')
+    expect(nav.slice(-2)).toEqual(['nav.instructions', 'nav.settings'])
+    expect(inArea(merged, 'nav').find((it) => it.id === 'nav.instructions')!.hidden).toBe(false)
   })
 
   it('puts a missing element first in its area when nothing before it in the default order is there', () => {

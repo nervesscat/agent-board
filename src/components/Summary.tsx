@@ -515,7 +515,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
               title={
                 <span>
                   <Link
-                    to="/projects/$id/settings"
+                    to="/projects/$id/instructions"
                     params={{ id: pid }}
                     hash="instructions-history"
                     className="hover:underline"

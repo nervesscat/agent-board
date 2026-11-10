@@ -15,6 +15,7 @@ const MENU = [
   'Cleanup',
   'Repositories',
   'Instructions',
+  'Settings',
 ]
 const CARDS = ['Needs you', 'In progress', 'Done today', 'Next', 'Carrying over']
 
@@ -55,7 +56,7 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await expect(status).toHaveText('No changes.')
   await expect(save).toBeDisabled()
   // The landing page, the board and this page can move but never hide.
-  for (const name of ['Overview', 'Ongoing features', 'Instructions'])
+  for (const name of ['Overview', 'Ongoing features', 'Settings'])
     await expect(layout.getByRole('switch', { name: `Show ${name} in the menu` })).toBeDisabled()
   await expect(layout.getByRole('switch', { name: 'Show Tasks on the ticket page' })).toBeDisabled()
 
@@ -77,15 +78,24 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await expect(up).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(up).toBeFocused()
-  const order = [...MENU.slice(0, 5), 'Daily', 'Gallery', 'Team', 'Cleanup', 'Repositories', 'Instructions']
+  const order = [
+    ...MENU.slice(0, 5),
+    'Daily',
+    'Gallery',
+    'Team',
+    'Cleanup',
+    'Repositories',
+    'Instructions',
+    'Settings',
+  ]
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   // At the top, the focus moves to its other arrow.
-  const settingsUp = layout.getByRole('button', { name: 'Move Instructions up in the menu' })
+  const settingsUp = layout.getByRole('button', { name: 'Move Settings up in the menu' })
   await settingsUp.focus()
   for (let i = 0; i < MENU.length - 1; i++) await page.keyboard.press('Enter')
-  await expect(layout.getByRole('button', { name: 'Move Instructions down in the menu' })).toBeFocused()
+  await expect(layout.getByRole('button', { name: 'Move Settings down in the menu' })).toBeFocused()
   await page.keyboard.press('Enter')
-  const reordered = ['Overview', 'Instructions', ...order.slice(1, -1)]
+  const reordered = ['Overview', 'Settings', ...order.slice(1, -1)]
   await expect(tiles(layout, 'Project menu')).toHaveText(reordered)
 
   // Saved from the keyboard too; the menu follows at once.
@@ -155,7 +165,7 @@ test('an edit made while a Save or a Reset is on its way stays, unsaved, and a s
   await expect(saving).toBeDisabled()
   await roadmap.click()
   await layout.getByRole('button', { name: 'Move Daily up in the menu' }).click()
-  const order = [...MENU.slice(0, 6), 'Daily', 'Team', 'Cleanup', 'Repositories', 'Instructions']
+  const order = [...MENU.slice(0, 6), 'Daily', 'Team', 'Cleanup', 'Repositories', 'Instructions', 'Settings']
   await expect(tiles(layout, 'Project menu')).toHaveText(order)
   await expect(status).toHaveText('Unsaved changes. 2 hidden.')
   release()

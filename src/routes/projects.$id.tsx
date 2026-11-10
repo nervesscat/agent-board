@@ -25,6 +25,7 @@ const MODULES = {
   'nav.daily': '/projects/$id/daily',
   'nav.cleanup': '/projects/$id/cleanup',
   'nav.repositories': '/projects/$id/repositories',
+  'nav.instructions': '/projects/$id/instructions',
   'nav.settings': '/projects/$id/settings',
 } as const satisfies Record<AreaId<'nav'>, string>
 
