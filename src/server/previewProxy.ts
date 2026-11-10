@@ -777,10 +777,25 @@ interface ProxiedSocket {
 const proxied = new Set<ProxiedSocket>()
 let sweepTimer: NodeJS.Timeout | null = null
 
+/** Stops the sweep once nothing is tracked: a board with no proxied socket has nothing to look at. */
+function stopSweepIfEmpty() {
+  if (proxied.size === 0 && sweepTimer) {
+    clearInterval(sweepTimer)
+    sweepTimer = null
+  }
+}
+
+/** Forgets a socket that closed on either side (the browser or the preview): it is no longer ours to watch. */
+function forgetProxied(s: ProxiedSocket) {
+  proxied.delete(s)
+  stopSweepIfEmpty()
+}
+
 function dropProxied(s: ProxiedSocket) {
   proxied.delete(s)
   s.client.destroy()
   s.upstream.destroy()
+  stopSweepIfEmpty()
 }
 
 /**
@@ -794,10 +809,11 @@ export function sweepPreviewSockets() {
     if (run && run.status === 'running' && run.port === s.port && run.runningAt === s.runningAt) continue
     dropProxied(s)
   }
-  if (proxied.size === 0 && sweepTimer) {
-    clearInterval(sweepTimer)
-    sweepTimer = null
-  }
+}
+
+/** How many proxied sockets are tracked and whether the sweep runs: for tests and diagnostics. */
+export function previewSocketState(): { sockets: number; sweeping: boolean } {
+  return { sockets: proxied.size, sweeping: sweepTimer !== null }
 }
 
 function trackProxied(s: ProxiedSocket) {
@@ -842,8 +858,9 @@ function headerLookupOf(req: IncomingMessage): HeaderLookup {
 }
 
 /**
- * The upgrade as a web Request, on the board's origin as the caller sent it, and its URL. A target that
- * starts with `//` stays a path on that origin, as it does for the HTTP proxy.
+ * The upgrade as a web Request, on the board's origin as the caller sent it, and its URL. The target is
+ * parsed as the listeners parse it: origin-form (`/p/1/2/`), absolute-form (`http://host/p/1/2/`, which a
+ * proxy may send) or `//host/x`. Only its path and query are kept, on the board's own origin.
  */
 function requestOfUpgrade(req: IncomingMessage): { request: Request; url: URL } | null {
   const host = req.headers.host ?? `localhost:${config.port}`
@@ -854,10 +871,9 @@ function requestOfUpgrade(req: IncomingMessage): { request: Request; url: URL } 
     return null
   }
   const raw = req.url ?? '/'
-  const target = raw.startsWith('/') ? raw : `/${raw}`
   let parsed: URL
   try {
-    parsed = new URL(`http://board.invalid${target}`)
+    parsed = new URL(raw, base)
   } catch {
     return null
   }
@@ -1037,13 +1053,7 @@ export async function handlePreviewUpgrade(
   if (handshake.head.length) socket.write(handshake.head)
   if (head.length) handshake.socket.write(head)
   const upstreamSocket = handshake.socket
-  socket.on('error', () => upstreamSocket.destroy())
-  upstreamSocket.on('error', () => socket.destroy())
-  socket.on('close', () => upstreamSocket.destroy())
-  upstreamSocket.on('close', () => socket.destroy())
-  socket.pipe(upstreamSocket)
-  upstreamSocket.pipe(socket)
-  trackProxied({
+  const live: ProxiedSocket = {
     workspaceId,
     runId,
     port: state.port,
@@ -1051,7 +1061,21 @@ export async function handlePreviewUpgrade(
     client: socket,
     upstream: upstreamSocket,
     statusOf: deps.statusOf,
+  }
+  socket.on('error', () => upstreamSocket.destroy())
+  upstreamSocket.on('error', () => socket.destroy())
+  // Either side closing ends the proxy's interest in it: forget it first so the set only holds live sockets.
+  socket.on('close', () => {
+    forgetProxied(live)
+    upstreamSocket.destroy()
   })
+  upstreamSocket.on('close', () => {
+    forgetProxied(live)
+    socket.destroy()
+  })
+  socket.pipe(upstreamSocket)
+  upstreamSocket.pipe(socket)
+  trackProxied(live)
   return true
 }
 

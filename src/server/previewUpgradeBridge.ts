@@ -48,7 +48,11 @@ export function startPreviewUpgradeBridge(): http.Server | null {
       socket.destroy()
       return
     }
-    void handlePreviewUpgrade(req, socket, head).catch(() => socket.destroy())
+    void handlePreviewUpgrade(req, socket, head)
+      .then((handled) => {
+        if (!handled) socket.destroy()
+      })
+      .catch(() => socket.destroy())
   })
   bridge.on('error', (err) => console.error('preview upgrade bridge:', err))
   bridge.listen(0, '127.0.0.1', () => {

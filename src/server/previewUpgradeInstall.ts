@@ -45,7 +45,12 @@ function attach(server: http.Server) {
 /** Wraps `http.createServer` (and https's) so every server the board creates gets the preview's listener. */
 export function installPreviewUpgradeHook(): void {
   kept.handle = (req, socket, head) => {
-    void handlePreviewUpgrade(req, socket, head).catch(() => socket.destroy())
+    void handlePreviewUpgrade(req, socket, head)
+      .then((handled) => {
+        // Not the proxy's path after all: nothing else will answer this upgrade.
+        if (!handled) socket.destroy()
+      })
+      .catch(() => socket.destroy())
   }
   if (kept.installed) return
   kept.installed = true

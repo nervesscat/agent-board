@@ -969,6 +969,14 @@ describe('a WebSocket upgrade to a preview', () => {
       })
     })
 
+  const waitFor = async (ok: () => boolean, ms = 2000) => {
+    for (const until = Date.now() + ms; Date.now() < until; ) {
+      if (ok()) return
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    expect(ok()).toBe(true)
+  }
+
   it('answers 401 JSON with no credential, before the handshake, and reaches no preview', async () => {
     const res = await upgrade(previewPath(wsA, RUN, 'live'))
     expect(res.status).toBe(401)
@@ -1065,6 +1073,28 @@ describe('a WebSocket upgrade to a preview', () => {
     const socket = res.socket!
     states.set(key(wsA, RUN), runningState({ status: 'stopped', port: null, runningAt: null }))
     await closeOf(socket)
+  })
+
+  it('answers an absolute-form target instead of leaving the socket unanswered', async () => {
+    const target = `http://${LOCAL}${previewPath(wsA, RUN, 'echo?x=1')}`
+    const res = await upgrade(target, bearer(TOKEN.builder))
+    expect(res.status).toBe(101)
+    expect(upgrades.at(-1)!.url).toBe('/echo?x=1')
+    res.socket!.destroy()
+    // Without a credential the same form is refused with its own 401, not left hanging.
+    const anon = await upgrade(`http://${LOCAL}${previewPath(wsA, RUN, 'live')}`)
+    expect(anon.status).toBe(401)
+  })
+
+  it('forgets a proxied socket when either side closes it, and stops the sweep with the last one', async () => {
+    // Whatever an earlier test's socket left is gone by now.
+    await waitFor(() => proxy.previewSocketState().sockets === 0)
+    const res = await upgrade(previewPath(wsA, RUN, 'live'), bearer(TOKEN.builder))
+    expect(res.status).toBe(101)
+    expect(proxy.previewSocketState()).toEqual({ sockets: 1, sweeping: true })
+    res.socket!.destroy()
+    await waitFor(() => proxy.previewSocketState().sockets === 0)
+    expect(proxy.previewSocketState()).toEqual({ sockets: 0, sweeping: false })
   })
 
   it('carries a preview WebSocket end to end: a message echoes back through the board', async () => {
