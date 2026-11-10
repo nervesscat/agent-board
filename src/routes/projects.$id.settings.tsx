@@ -95,7 +95,7 @@ function DefaultPhases({ projectId, saved }: { projectId: string; saved: string[
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <section aria-label="Default phases" className="max-w-3xl space-y-3">
+    <section id="default-phases" aria-label="Default phases" className="max-w-3xl scroll-mt-16 space-y-3">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Default phases</h2>
         <p className="text-sm text-muted-foreground">
@@ -173,7 +173,7 @@ function TagSuggestions({ projectId, saved }: { projectId: string; saved: string
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <section aria-label="Tag suggestions" className="max-w-3xl space-y-3">
+    <section id="tag-suggestions" aria-label="Tag suggestions" className="max-w-3xl scroll-mt-16 space-y-3">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Tag suggestions</h2>
         <p className="text-sm text-muted-foreground">
@@ -248,7 +248,7 @@ function StallMinutes({ projectId, saved }: { projectId: string; saved: number }
     onError: (err) => toast.error(errorMessage(err)),
   })
   return (
-    <section aria-label="Stalled tickets" className="max-w-3xl space-y-3">
+    <section id="stalled-tickets" aria-label="Stalled tickets" className="max-w-3xl scroll-mt-16 space-y-3">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Stalled tickets</h2>
         <p className="text-sm text-muted-foreground">
