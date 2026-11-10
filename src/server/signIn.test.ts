@@ -917,6 +917,28 @@ describe("agent roles: the human's call alone, bound to the token", () => {
     expect(await json(setRole(orch.id, 'orchestrator'))).toMatchObject({ role: 'orchestrator' })
   })
 
+  it('tells a connecting client a Connect token is an orchestrator by default', async () => {
+    const res = await send('POST', '/api/mcp', {
+      token: worker.token,
+      headers: { accept: 'application/json, text/event-stream' },
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'test', version: '0' },
+        },
+      },
+    })
+    expect(res.status).toBe(200)
+    const { result } = await res.json()
+    expect(result.instructions).toContain(
+      'An agent token made by Connect is an orchestrator by default; the human can make it a worker.',
+    )
+  })
+
   it('refuses any other role, and an unknown or revoked token', async () => {
     for (const role of ['admin', 'human', '', null, 1, 'Orchestrator']) {
       const res = await setRole(worker.id, role)
