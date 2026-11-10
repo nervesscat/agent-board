@@ -18,7 +18,7 @@ import {
   signPreviewValue,
   verifyPreviewValue,
 } from './previewLink'
-import { PREVIEW_PATH, previewCookieName, previewPathOf } from './previewPaths'
+import { PREVIEW_PATH, isPreviewPath, previewCookieName, previewPathOf } from './previewPaths'
 import { type RunState, runState, runStatus } from './runs'
 
 /**
@@ -33,7 +33,9 @@ import { type RunState, runState, runStatus } from './runs'
  *   Host never gets here.
  * - The target is `127.0.0.1:<port>` where the port is the run state's, never anything from the request. The
  *   preview's port must listen on loopback only (checked now, each time, through the listener lookup of
- *   linkPreview.ts): otherwise 502, and the preview is not reached.
+ *   linkPreview.ts): otherwise 502, and the preview is not reached. The request goes on under the run's
+ *   prefix, unchanged: a preview built for that path (the board's own Preview, vite.config.ts) serves its
+ *   base there, and its own `/p/…` paths are its own, not this proxy's again.
  * - Board credentials never reach the preview: no Authorization, no board session or preview cookie. Its own
  *   cookies are rewritten to the run's path; its Location headers that name the loopback address or a root
  *   path are rewritten to the prefix. Every other body streams byte for byte, except an HTML page, which gets
@@ -681,8 +683,9 @@ export async function servePreview(
 ): Promise<Response | null> {
   const deps = { ...DEFAULTS, ...over }
   const url = new URL(request.url)
-  const m = PREVIEW_PATH.exec(url.pathname)
-  if (!m) return null
+  // Under this build's own base (a preview of the board) every path is its own, whatever it looks like.
+  if (!isPreviewPath(url.pathname)) return null
+  const m = PREVIEW_PATH.exec(url.pathname) as RegExpExecArray
   const now = new Date(deps.now())
   const verdict = gateOf(request, url, m, deps, opts.peer, now)
   if ('refusal' in verdict) return json(verdict.refusal.status, verdict.refusal.error)
@@ -735,7 +738,9 @@ export async function servePreview(
   }
 
   // The query goes on as it came: a `pl` here is the preview's own (a link is redeemed on the root path only).
-  const path = `${rest}${url.search}`
+  // A preview built for this path (a checkout of the board) gets the whole path, base included, because it
+  // serves it; a plain preview is served at `/` and gets the path under the prefix as it always did.
+  const path = `${state.previewBase ? prefix + rest.slice(1) : rest}${url.search}`
   const headers = upstreamHeaders(request.headers, state.port)
   let res: IncomingMessage
   try {
@@ -973,8 +978,8 @@ export async function handlePreviewUpgrade(
     return true
   }
   const { request, url } = built
-  const m = PREVIEW_PATH.exec(url.pathname)
-  if (!m) return false
+  if (!isPreviewPath(url.pathname)) return false
+  const m = PREVIEW_PATH.exec(url.pathname) as RegExpExecArray
   const peer = req.socket.remoteAddress
   const guard = guardRequest(
     { method: request.method, headers: headerLookupOf(req), peer, path: url.pathname },
@@ -1032,7 +1037,9 @@ export async function handlePreviewUpgrade(
   const query = who.redeem
     ? withoutLink(url.search, url.searchParams.get(LINK_PARAM) ?? '')
     : url.search.replace(/^\?/, '')
-  const path = `${rest}${query ? `?${query}` : ''}`
+  // A base-built preview sees the prefix the browser asked under (its own base); a plain one sees the path
+  // under the prefix, as HTTP above.
+  const path = `${state.previewBase ? prefix + rest.slice(1) : rest}${query ? `?${query}` : ''}`
   const headers = upstreamHeaders(request.headers, state.port)
   headers.connection = 'Upgrade'
   headers.upgrade = 'websocket'
