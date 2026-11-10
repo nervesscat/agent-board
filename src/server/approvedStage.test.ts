@@ -16,33 +16,37 @@ const flat = (text: string) => text.replace(/\s+/g, ' ')
 const boardSkill = read(path.join(import.meta.dirname, 'skill', 'board.md'))
 const agentsDoc = read(path.join(repo, 'AGENTS.md'))
 
-/** The instructions a client gets when it connects to the MCP server. */
-let served: () => Promise<string>
+/** A JSON-RPC call to the MCP server, answered as its result. */
+let call: (method: string, params?: Record<string, unknown>) => Promise<any>
 beforeAll(async () => {
   const { handleMcp } = await import('./mcp')
   let id = 0
-  served = async () => {
+  call = async (method, params = {}) => {
     const res = await handleMcp(
       new Request('http://localhost/api/mcp', {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: ++id,
-          method: 'initialize',
-          params: {
-            protocolVersion: '2025-03-26',
-            capabilities: {},
-            clientInfo: { name: 'test', version: '0' },
-          },
-        }),
+        body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
       }),
       'claude',
     )
-    const body = (await res.json()) as { result?: { instructions?: string } }
-    return body.result?.instructions ?? ''
+    return ((await res.json()) as { result?: any }).result
   }
 })
+
+const INIT = {
+  protocolVersion: '2025-03-26',
+  capabilities: {},
+  clientInfo: { name: 'test', version: '0' },
+}
+
+/** The instructions a client gets when it connects to the MCP server. */
+const served = async (): Promise<string> => (await call('initialize', INIT))?.instructions ?? ''
+
+/** The description of one MCP tool, as a client gets it. */
+const descriptionOf = async (name: string): Promise<string> =>
+  ((await call('tools/list')).tools as { name: string; description: string }[]).find((t) => t.name === name)!
+    .description
 
 describe('Approved, in the texts agents read', () => {
   /** Every text that states the merge rule, by name. */
@@ -63,11 +67,12 @@ describe('Approved, in the texts agents read', () => {
       expect(flat(text).toLowerCase(), name).toContain(rule)
   })
 
-  it('gives the routine: work finished, ask, merge (the base in and CI green first when it conflicts), then move to done', async () => {
+  it('gives the routine: work finished, ask (without blocking the ticket), merge (the base in and CI green first when it conflicts), then move to done', async () => {
     for (const [name, text] of Object.entries(await texts())) {
       const flatText = flat(text).toLowerCase()
       for (const phrase of [
         'ask_decision',
+        'block: false',
         'on silence',
         'merge the base in',
         'wait for ci green',
@@ -76,6 +81,19 @@ describe('Approved, in the texts agents read', () => {
       ])
         expect(flatText, `${name}: ${phrase}`).toContain(phrase)
     }
+  })
+
+  it('carries the exception in the served update_ticket description too, not only in the instructions', async () => {
+    const description = flat(await descriptionOf('update_ticket')).toLowerCase()
+    expect(description).toContain(
+      "merge order is the human's, so leave it in review, except on a ticket in approved, where an orchestrator may merge its pr(s) after the human says yes",
+    )
+    expect(description).toContain(
+      "(merging is the human's everywhere except on a ticket in approved, where an orchestrator may merge its pr(s) after the human says yes)",
+    )
+    // The two claims the exception replaced, so they cannot creep back in beside it.
+    expect(description).not.toContain('so leave it in review. a move')
+    expect(description).not.toContain("(merging is the human's)")
   })
 
   it('has no code path that merges a PR: the board reads the queue, an agent merges', async () => {

@@ -503,7 +503,9 @@ orchestrator may pick up, like the review queue, and for each ticket there it ru
    hand-off phases) and `get_ticket` → `open` empty; if something is open, finish it or say what is
    missing and leave the ticket in Approved.
 2. **Ask the human first**: post the PR(s) it will merge and what it will do, with `ask_decision`
-   (or a comment), and wait for a yes. Never merge on silence.
+   (or a comment), and wait for a yes. Ask with `block: false`: a card blocks the ticket by default
+   (Blocked, then the work stage once answered), and the merge permission is only in Approved. Never
+   merge on silence.
 3. **Merge, fixing what blocks it**: if the branch conflicts with its base, merge the base in, resolve
    it, push, wait for CI green, then merge the PR.
 4. **Move the ticket to done** once the merge is in, naming the PR and the merge commit and what was
