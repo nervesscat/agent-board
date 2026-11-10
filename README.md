@@ -510,8 +510,10 @@ browsers signed in through the old name; their passkeys stay listed under Device
   device. Board-run previews never get the entrance as an environment value, and `pnpm dev` copies get
   `PUBLIC_ORIGIN` empty. A board with sign-in off (test mode, `AUTH=off`) ignores the entrance, refuses every
   request a proxy forwarded (`X-Forwarded-*`, `Forwarded`, `Tailscale-*`) and answers 404 on every `/p/` path.
-- WebSocket upgrades are not proxied yet: a preview's event streams (server-sent events) pass through,
-  but a WebSocket to a preview is not carried by the board.
+- WebSocket upgrades to a preview go through the board too, under the preview's own `/p/` path: the same
+  sign-in, the same loopback target, and only from the board's own origin (a page on another site cannot
+  open one with a visitor's session). A proxied socket closes when its run stops. Hot reload's own
+  WebSocket stays this machine's (the line above).
 - `HOST` stays `127.0.0.1`: nothing listens off this machine but Tailscale.
 
 ### Cloud agents
@@ -756,7 +758,7 @@ A running preview is also proxied at `/p/<workspaceId>/<runId>/` on the board's 
 `BOARD_PREVIEW_BASE` set to that path, so a build that honours it (the board's own Preview does: Vite's
 base and the router's basepath) loads its assets and API calls through the proxy. Other previews keep
 working through the link when their pages use relative URLs, and the proxy adds a small script to an HTML
-page that makes root-absolute `fetch`, `XMLHttpRequest` and `EventSource` URLs go through the prefix.
+page that makes root-absolute `fetch`, `XMLHttpRequest`, `EventSource` and `WebSocket` URLs go through the prefix.
 
 The proxy answers only a signed-in caller: a passkey session of the origin the request came through, an
 agent token whose name is a persona of the preview's project only (another project's, several projects'
@@ -771,9 +773,12 @@ Only the run's own port is checked. A run's commands are trusted config, set onl
 project's agents, and they run with the board's rights: a command that opens another port (on any
 interface) is not stopped or blocked by the board. Keep a preview's servers on loopback. Sandboxing
 previews is a follow-up, not part of the proxy.
-A stopped or never-started run gets 404 with the start hint. Event streams pass through as they are sent;
-WebSocket upgrades are not proxied. Cookies and `Authorization` from the board never reach the preview,
-and its own cookies are kept on the run's path. With sign-in off every `/p/` path answers 404.
+A stopped or never-started run gets 404 with the start hint. Event streams pass through as they are sent.
+A WebSocket upgrade under the same prefix is proxied too, after the same sign-in and only to the run's
+loopback port; its `Origin` must be the board's own entrance (it is rewritten to the preview's own origin
+before the preview sees it), and the socket closes when the run stops. Cookies and `Authorization` from the
+board never reach the preview, and its own cookies are kept on the run's path. With sign-in off every `/p/`
+path answers 404.
 
 A browser that cannot send the `Authorization` header gets a link: `POST /api/workspaces/:id/preview/link`
 (MCP `preview_link`) returns `url`, `/p/<w>/<r>/?pl=…`. The link works for anyone who holds it until it
