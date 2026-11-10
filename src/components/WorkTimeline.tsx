@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from 're
 
 import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import { Tip } from '#/components/ui/tooltip'
+import { nameParts, parentName, shortName } from '#/lib/actorName'
 import { clock, stamp } from '#/lib/format'
 import {
   buildChart,
@@ -140,6 +141,35 @@ const lanePx = (compact: boolean) => (compact ? 16 : 20)
 const RAIL_PX = 18
 const AXIS_PX = 14
 
+/**
+ * The row's label: the name it works as, with the parent it works under as a quiet prefix (`opencode/
+ * builder-832`), as the chart's own reading of who is who. A deep indent is not needed when the prefix
+ * already says it; a plain sub-agent (no prefix in its name) keeps the indent. The full name, and the
+ * parent the timeline knows it under, are the tooltip and the label's accessible name.
+ */
+function RowLabel({ name, depth, parent }: { name: string; depth: number; parent: string | null }) {
+  const parts = nameParts(name)
+  const prefix = parentName(parts.parent)
+  const full = `${name || 'unnamed'}${parent ? `, sub-agent of ${parent}` : ''}`
+  return (
+    <Tip content={full}>
+      <span
+        data-testid="agent-label"
+        aria-label={full}
+        className="flex min-w-0 items-baseline gap-1"
+        style={{ paddingLeft: prefix ? undefined : `${depth * 0.75}rem` }}
+      >
+        {prefix && (
+          <span aria-hidden className="min-w-0 shrink truncate font-normal text-muted-foreground">
+            {prefix}/
+          </span>
+        )}
+        <span className="min-w-0 shrink-0 truncate font-medium">{shortName(name, 16)}</span>
+      </span>
+    </Tip>
+  )
+}
+
 /** One row of the chart: the label on the left from sm up, above the track on a phone; the track scrolls. */
 function Row({
   label,
@@ -154,7 +184,7 @@ function Row({
 }) {
   return (
     <div className="flex flex-col sm:flex-row">
-      <div className="sticky left-0 z-10 w-max max-w-full shrink-0 bg-card pb-0.5 pr-2 text-[11px] sm:w-28 sm:pb-0">
+      <div className="sticky left-0 z-10 w-max max-w-full shrink-0 bg-card pb-0.5 pr-2 text-[11px] sm:w-40 sm:pb-0">
         {label}
       </div>
       <div className="relative min-w-0 sm:flex-1" style={{ height, minWidth }}>
@@ -232,7 +262,8 @@ function WaitSegment({
       {!seg.narrow && (
         <>
           <Icon className="size-3 shrink-0" aria-hidden />
-          <span className="truncate rounded-sm bg-card px-0.5">{w.reason}</span>
+          {/* The pill hides the hatch behind the word; a human wait has no hatch, so its own colour shows. */}
+          <span className={`truncate rounded-sm px-0.5 ${human ? '' : 'bg-card'}`}>{w.reason}</span>
         </>
       )}
     </Segment>
@@ -457,16 +488,7 @@ export function WorkTimelineBar({
               key={row.agent}
               minWidth={minWidth}
               height={row.lanes * h}
-              label={
-                <Tip content={`${row.agent || 'unnamed'}${row.parent ? `, sub-agent of ${row.parent}` : ''}`}>
-                  <span
-                    className="block truncate font-medium"
-                    style={{ paddingLeft: `${row.depth * 0.75}rem` }}
-                  >
-                    {row.name}
-                  </span>
-                </Tip>
-              }
+              label={<RowLabel name={row.agent} depth={row.depth} parent={row.parent} />}
             >
               {gridLines}
               {row.connectors.map((c) => (

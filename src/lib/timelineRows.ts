@@ -1,3 +1,4 @@
+import { shortName } from '#/lib/actorName'
 import { clock } from '#/lib/format'
 import {
   type Interval,
@@ -87,12 +88,8 @@ export function spokenDuration(ms: number): string {
   return m ? `${h} h ${m} min` : `${h} h`
 }
 
-/** A row's label: the name, or its last part when it is a path like `lead/builder`, shortened when long. */
-export function shortName(name: string, max = 20): string {
-  if (!name) return 'unnamed'
-  const base = name.includes('/') && name.length > max ? name.slice(name.lastIndexOf('/') + 1) : name
-  return base.length > max ? `${base.slice(0, max - 1)}…` : base
-}
+/** A row's label: the name's leaf, shortened at a word boundary when long (`builder-832` for `opencode/builder-832`). */
+export { shortName }
 
 /** The axis tick steps: 1 to 30 minutes, 1 to 12 hours, a day. */
 const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 180, 360, 720, 1440].map((m) => m * MIN)
