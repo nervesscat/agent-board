@@ -21,6 +21,7 @@ import { Route as ProjectsIdAgentsRouteImport } from './routes/projects.$id.agen
 import { Route as ProjectsIdCleanupRouteImport } from './routes/projects.$id.cleanup'
 import { Route as ProjectsIdDailyRouteImport } from './routes/projects.$id.daily'
 import { Route as ProjectsIdGalleryRouteImport } from './routes/projects.$id.gallery'
+import { Route as ProjectsIdInstructionsRouteImport } from './routes/projects.$id.instructions'
 import { Route as ProjectsIdPreviewsRouteImport } from './routes/projects.$id.previews'
 import { Route as ProjectsIdPrsRouteImport } from './routes/projects.$id.prs'
 import { Route as ProjectsIdRepositoriesRouteImport } from './routes/projects.$id.repositories'
@@ -90,6 +91,11 @@ const ProjectsIdGalleryRoute = ProjectsIdGalleryRouteImport.update({
   path: '/gallery',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
+const ProjectsIdInstructionsRoute = ProjectsIdInstructionsRouteImport.update({
+  id: '/instructions',
+  path: '/instructions',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 const ProjectsIdPreviewsRoute = ProjectsIdPreviewsRouteImport.update({
   id: '/previews',
   path: '/previews',
@@ -143,6 +149,7 @@ export interface FileRoutesByFullPath {
   '/projects/$id/cleanup': typeof ProjectsIdCleanupRoute
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
+  '/projects/$id/instructions': typeof ProjectsIdInstructionsRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
@@ -164,6 +171,7 @@ export interface FileRoutesByTo {
   '/projects/$id/cleanup': typeof ProjectsIdCleanupRoute
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
+  '/projects/$id/instructions': typeof ProjectsIdInstructionsRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
@@ -187,6 +195,7 @@ export interface FileRoutesById {
   '/projects/$id/cleanup': typeof ProjectsIdCleanupRoute
   '/projects/$id/daily': typeof ProjectsIdDailyRoute
   '/projects/$id/gallery': typeof ProjectsIdGalleryRoute
+  '/projects/$id/instructions': typeof ProjectsIdInstructionsRoute
   '/projects/$id/previews': typeof ProjectsIdPreviewsRoute
   '/projects/$id/prs': typeof ProjectsIdPrsRoute
   '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
@@ -211,6 +220,7 @@ export interface FileRouteTypes {
     | '/projects/$id/cleanup'
     | '/projects/$id/daily'
     | '/projects/$id/gallery'
+    | '/projects/$id/instructions'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/repositories'
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/projects/$id/cleanup'
     | '/projects/$id/daily'
     | '/projects/$id/gallery'
+    | '/projects/$id/instructions'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/repositories'
@@ -254,6 +265,7 @@ export interface FileRouteTypes {
     | '/projects/$id/cleanup'
     | '/projects/$id/daily'
     | '/projects/$id/gallery'
+    | '/projects/$id/instructions'
     | '/projects/$id/previews'
     | '/projects/$id/prs'
     | '/projects/$id/repositories'
@@ -361,6 +373,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdGalleryRouteImport
       parentRoute: typeof ProjectsIdRoute
     }
+    '/projects/$id/instructions': {
+      id: '/projects/$id/instructions'
+      path: '/instructions'
+      fullPath: '/projects/$id/instructions'
+      preLoaderRoute: typeof ProjectsIdInstructionsRouteImport
+      parentRoute: typeof ProjectsIdRoute
+    }
     '/projects/$id/previews': {
       id: '/projects/$id/previews'
       path: '/previews'
@@ -425,6 +444,7 @@ interface ProjectsIdRouteChildren {
   ProjectsIdCleanupRoute: typeof ProjectsIdCleanupRoute
   ProjectsIdDailyRoute: typeof ProjectsIdDailyRoute
   ProjectsIdGalleryRoute: typeof ProjectsIdGalleryRoute
+  ProjectsIdInstructionsRoute: typeof ProjectsIdInstructionsRoute
   ProjectsIdPreviewsRoute: typeof ProjectsIdPreviewsRoute
   ProjectsIdPrsRoute: typeof ProjectsIdPrsRoute
   ProjectsIdRepositoriesRoute: typeof ProjectsIdRepositoriesRoute
@@ -441,6 +461,7 @@ const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
   ProjectsIdCleanupRoute: ProjectsIdCleanupRoute,
   ProjectsIdDailyRoute: ProjectsIdDailyRoute,
   ProjectsIdGalleryRoute: ProjectsIdGalleryRoute,
+  ProjectsIdInstructionsRoute: ProjectsIdInstructionsRoute,
   ProjectsIdPreviewsRoute: ProjectsIdPreviewsRoute,
   ProjectsIdPrsRoute: ProjectsIdPrsRoute,
   ProjectsIdRepositoriesRoute: ProjectsIdRepositoriesRoute,

@@ -136,9 +136,9 @@ describe('tooltips', () => {
       'routes/projects.$id.cleanup.tsx',
       'routes/projects.$id.features.$ticketId.tsx',
       'routes/projects.$id.features.index.tsx',
+      'routes/projects.$id.instructions.tsx',
       'routes/projects.$id.previews.tsx',
       'routes/projects.$id.prs.tsx',
-      'routes/projects.$id.settings.tsx',
       'routes/projects.$id.tsx',
     ]
     const without = had.filter((file) => {

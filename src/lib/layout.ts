@@ -30,9 +30,10 @@ export const LAYOUT_ELEMENTS = [
   { id: 'nav.daily', label: 'Daily', area: 'nav' },
   { id: 'nav.cleanup', label: 'Cleanup', area: 'nav' },
   { id: 'nav.repositories', label: 'Repositories', area: 'nav' },
+  { id: 'nav.instructions', label: 'Instructions', area: 'nav' },
   {
     id: 'nav.settings',
-    label: 'Instructions',
+    label: 'Settings',
     area: 'nav',
     locked: 'The settings page, where this layout is changed',
   },

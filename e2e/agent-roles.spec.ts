@@ -227,7 +227,7 @@ test.describe('on a phone', () => {
       ).toBeVisible()
       expect(await scrollsSideways(page)).toBe(false)
 
-      await page.goto(`/projects/${project.id}/settings`)
+      await page.goto(`/projects/${project.id}/instructions`)
       const history = page.getByRole('region', { name: 'Instructions history' })
       await expect(history.getByRole('group', { name: 'What changed in the instructions' })).toBeVisible()
       expect(await scrollsSideways(page)).toBe(false)

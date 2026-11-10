@@ -549,7 +549,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
               title={
                 <span>
                   <Link
-                    to="/projects/$id/settings"
+                    to="/projects/$id/instructions"
                     params={{ id: pid }}
                     hash="instructions-history"
                     className="hover:underline"

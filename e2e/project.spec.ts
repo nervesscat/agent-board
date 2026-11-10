@@ -277,7 +277,7 @@ test('the PR queue stage tabs and filter fit every width from 375 to 1440px with
 })
 
 test('edits the project instructions with the rich editor', async ({ page, project, human }) => {
-  await page.goto(`/projects/${project.id}/settings`)
+  await page.goto(`/projects/${project.id}/instructions`)
   const section = page.getByRole('region', { name: 'Project instructions' })
   await section.getByRole('button', { name: 'No instructions yet. Click to write them.' }).click()
   const editor = section.getByRole('textbox', { name: 'Project instructions' })
@@ -314,7 +314,7 @@ test('edits the project instructions with the rich editor', async ({ page, proje
 })
 
 test('Esc in the instructions editor asks once and waits for an answer', async ({ page, project, human }) => {
-  await page.goto(`/projects/${project.id}/settings`)
+  await page.goto(`/projects/${project.id}/instructions`)
   const section = page.getByRole('region', { name: 'Project instructions' })
   await section.getByRole('button', { name: 'No instructions yet. Click to write them.' }).click()
   const editor = section.getByRole('textbox', { name: 'Project instructions' })
