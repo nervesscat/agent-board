@@ -1,5 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 
+import { startedAt, yesterdayNoon } from './db'
 import { expect, ok, section, test } from './fixtures'
 import { create, record, workedTicket } from './workTimeline'
 
@@ -178,4 +179,57 @@ test('a busy card with no other badge shows what it is doing now, as icon and ti
   const card = page.getByRole('link', { name: new RegExp(`#${t.id} Building right now`) })
   await expect(card.getByTestId('card-now')).toContainText(/^\s*\d+ min|under a minute\s*$/)
   await expect(card.getByTestId('stall-notice')).toHaveCount(0)
+})
+
+test('Carrying over is a full row of its own and caps the same way, at desktop and on a phone', async ({
+  page,
+  project,
+  api,
+}) => {
+  // Twelve tickets started yesterday: enough to run past the phone cap, and the desktop height.
+  for (let i = 1; i <= 12; i++) {
+    const t = await api.ticket({ title: `Carried over ${i}`, status: 'in_progress' })
+    startedAt(t.id, yesterdayNoon())
+  }
+
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto(`/projects/${project.id}`)
+  const carrying = section(page, 'Carrying over')
+  const needsYou = section(page, 'Needs you')
+  const inProgress = section(page, 'In progress')
+  const doneToday = section(page, 'Done today')
+  const next = section(page, 'Next: To do')
+  await expect(carrying).toContainText('Carried over 12')
+
+  // Its own row, below every other card.
+  const box = (await carrying.boundingBox())!
+  for (const card of [needsYou, inProgress, doneToday, next]) {
+    const b = (await card.boundingBox())!
+    expect(box.y).toBeGreaterThan(b.y + b.height - 1)
+  }
+  // Full row: from the grid's left edge to its right edge.
+  const above = await Promise.all(
+    [needsYou, inProgress, doneToday, next].map(async (card) => (await card.boundingBox())!),
+  )
+  expect(Math.round(box.x)).toBe(Math.round(Math.min(...above.map((b) => b.x))))
+  expect(Math.round(box.x + box.width)).toBe(Math.round(Math.max(...above.map((b) => b.x + b.width))))
+  // The same fixed height as the other scroll cards, its content scrolling under the header.
+  expect(await height(carrying)).toBe(await height(needsYou))
+  await overflows(carrying)
+  await shot(page, 'carrying-desktop', true)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  // The first three rows and a way to see the rest, like Needs you; no nested scroll while capped.
+  const rows = content(carrying).locator('li')
+  await expect(rows.nth(3)).toBeHidden()
+  const more = carrying.getByRole('button', { name: /View all/ })
+  await expect(more).toBeVisible()
+  expect(await content(carrying).evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
+  await shot(page, 'carrying-phone', true)
+  await more.click()
+  await expect(rows.nth(3)).toBeVisible()
+  await expect(carrying.getByRole('button', { name: 'Show fewer' })).toBeVisible()
+  const phone = (await carrying.boundingBox())!
+  expect(phone.x + phone.width).toBeLessThanOrEqual(390)
+  expect(await content(carrying).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
 })
