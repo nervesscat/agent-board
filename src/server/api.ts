@@ -1184,10 +1184,14 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
 
 // --- summary: what waits on the human, in progress, done today, next, carrying over ---
-// ?projectId= for one project; every project otherwise, one block each.
-api.get('/api/summary', ({ url }) => {
+// ?projectId= for one project; every project otherwise, one block each. `actor` names who asked, for the
+// Needs you entries this browser remembers as opened for them (per actor, src/lib/needsYou.ts).
+api.get('/api/summary', ({ url, actor }) => {
   const project = url.searchParams.get('projectId')
-  return json(getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }))
+  return json({
+    ...getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }),
+    actor,
+  })
 })
 
 // --- daily ---
