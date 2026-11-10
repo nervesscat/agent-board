@@ -428,6 +428,91 @@ describe('needs you', () => {
   })
 })
 
+describe('waits on the human', () => {
+  const wait = (projectId: number, ticketId: number, when: Date, note: string, agent = 'claude') => {
+    const { db, schema } = dbm
+    return db
+      .insert(schema.ticketEvents)
+      .values({
+        ticketId,
+        projectId,
+        kind: 'wait_start',
+        agent,
+        by: agent,
+        reason: 'human',
+        note,
+        at: iso(when),
+      })
+      .returning()
+      .get()
+  }
+  const endWait = (projectId: number, ticketId: number, waitId: number, when: Date) => {
+    const { db, schema } = dbm
+    db.insert(schema.ticketEvents)
+      .values({
+        ticketId,
+        projectId,
+        kind: 'wait_end',
+        agent: 'claude',
+        by: 'claude',
+        reason: 'human',
+        refId: waitId,
+        at: iso(when),
+      })
+      .run()
+  }
+
+  it('lists an open wait on an active ticket with its note, agent, since and ticket', () => {
+    const pid = project('human waits')
+    const t = ticket(pid, 'Approve the copy', { status: 'in_progress', assignee: 'claude' })
+    const w = wait(pid, t.id, at(7, 9), 'needs the copy approved')
+
+    const s = take(pid)
+    expect(s.needsYou.humanWaits).toEqual([
+      {
+        waitId: w.id,
+        ticketId: t.id,
+        ticketTitle: 'Approve the copy',
+        status: 'in_progress',
+        assignee: 'claude',
+        parent: null,
+        agent: 'claude',
+        note: 'needs the copy approved',
+        since: iso(at(7, 9)),
+      },
+    ])
+    expect(s.needsYou.total).toBe(1)
+    // An open wait on the human keeps the ticket out of the stalled list.
+    expect(s.needsYou.stalled).toEqual([])
+  })
+
+  it('leaves out a wait that ended, and one on a ticket that is not active', () => {
+    const pid = project('human waits closed')
+    const closed = ticket(pid, 'Answered', { status: 'in_progress' })
+    const w = wait(pid, closed.id, at(7, 14, 30), 'needs the copy approved')
+    endWait(pid, closed.id, w.id, at(7, 14, 50))
+    const review = ticket(pid, 'Review me', { status: 'review' })
+    wait(pid, review.id, at(7, 14), 'sign it off')
+
+    expect(take(pid).needsYou.humanWaits).toEqual([])
+  })
+
+  it('does not list a wait twice when the ticket already asks with an open decision card', () => {
+    const pid = project('human waits decided')
+    const t = ticket(pid, 'Decide', { status: 'in_progress', assignee: 'claude' })
+    wait(pid, t.id, at(7, 9), 'needs the copy approved')
+    post(t.id, 'Which cache?', at(7, 10), {
+      progress: false,
+      decision: [{ label: 'Redis' }, { label: 'Memory' }],
+    })
+
+    const s = take(pid)
+    expect(s.needsYou.decisions).toHaveLength(1)
+    expect(s.needsYou.humanWaits).toEqual([])
+    expect(s.needsYou.total).toBe(1)
+  })
+})
+
 describe('blocked tasks', () => {
   /** Tasks on the ticket, the ones named in `blocked` tagged with a reason; the rows by text. */
   function tasks(ticketId: number, items: import('./features').NewTask[], blocked: string[]) {

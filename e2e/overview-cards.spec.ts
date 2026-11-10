@@ -165,6 +165,31 @@ test('In progress says what a ticket waits on and since when, when a person has 
   await expect(row.getByTestId('stall-notice')).toHaveCount(0)
 })
 
+test('Needs you lists a ticket whose agent is waiting on the human, and links to it', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Approve the copy', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'spec' })
+  await record(agent, project, t.id, {
+    kind: 'wait_start',
+    reason: 'human',
+    note: 'needs the copy approved',
+  })
+
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  const link = needsYou.getByRole('link', { name: /Waiting on you since/ })
+  await expect(link).toContainText(/Waiting on you since \d{1,2}:\d{2}\s*[AP]M/)
+  await expect(link).toContainText('claude: needs the copy approved')
+  await expect(needsYou).toContainText(`#${t.id} Approve the copy`)
+  await expect(link).toHaveAttribute('href', new RegExp(`/projects/${project.id}/features/${t.id}`))
+  await link.click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}`))
+})
+
 test('a busy card with no other badge shows what it is doing now, as icon and time', async ({
   page,
   project,

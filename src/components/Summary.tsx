@@ -342,7 +342,8 @@ function Stale() {
 // --- the sections ---
 
 function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
-  const { decisions, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } = p.needsYou
+  const { decisions, humanWaits, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } =
+    p.needsYou
   const pid = String(p.project.id)
   const settle = useSettleInstructions(pid)
   return (
@@ -373,6 +374,30 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                   <span>
                     {plural(d.options, 'option')} · asked by {d.author} {ago(d.createdAt)}
                   </span>
+                </>
+              }
+            />
+          ))}
+          {humanWaits.map((w) => (
+            <Row
+              key={`w${w.waitId}`}
+              icon={<Hourglass className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <Link
+                  to="/projects/$id/features/$ticketId"
+                  params={{ id: pid, ticketId: String(w.ticketId) }}
+                  className="hover:underline"
+                >
+                  Waiting on you {since(w.since)} · {w.agent}
+                  {w.note ? `: ${w.note}` : ''}
+                </Link>
+              }
+              meta={
+                <>
+                  <span className="truncate">
+                    #{w.ticketId} {w.ticketTitle}
+                  </span>
+                  {w.parent && <span className="truncate">lane of #{w.parent.id}</span>}
                 </>
               }
             />
