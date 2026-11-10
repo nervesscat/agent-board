@@ -10,6 +10,13 @@ import { cn } from 'cn'
 const SHOWN_FOR = 1500
 
 /**
+ * Places a `CopyImageButton` over a thumbnail: out of the way on a desktop until its `group/thumb`
+ * ancestor is hovered or the button is focused, and always there on a phone, big enough to tap.
+ */
+export const COPY_IMAGE_OVERLAY =
+  'absolute top-2 right-2 z-10 sm:pointer-events-none sm:opacity-0 sm:group-hover/thumb:pointer-events-auto sm:group-hover/thumb:opacity-100 sm:focus-visible:pointer-events-auto sm:focus-visible:opacity-100'
+
+/**
  * A small button that puts an image on the clipboard, from the bytes at its URL. It says so for a
  * moment with a check, and with a toast when the browser has no Clipboard API or the copy failed.
  * Meant to sit over a thumbnail, so it never takes the click that opens the image.
@@ -60,13 +67,8 @@ export function CopyImageButton({
         data-slot="copy-image"
         data-state={state}
         onClick={copy}
-        // Out of the way on a desktop until the tile is hovered or the button focused; always there on a
-        // phone, and big enough to tap (44px).
-        className={cn(
-          'absolute top-2 right-2 z-10 size-11 shadow-sm sm:size-7 sm:opacity-0 sm:group-hover/tile:opacity-100 sm:focus-visible:opacity-100',
-          state !== 'idle' && 'opacity-100',
-          className,
-        )}
+        // 44px on a phone, small on a desktop; the caller places it and decides when it shows.
+        className={cn('size-11 shadow-sm sm:size-7', state !== 'idle' && 'opacity-100', className)}
       >
         <span aria-live="polite" className="sr-only">
           {state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : ''}
