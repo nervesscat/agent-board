@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, KeyRound } from 'lucide-react'
+import { Bot, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { useId, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -140,15 +140,19 @@ const WORKERS_SHOWN = 3
 
 /**
  * The workers seen under a token (`<token>/<name>`, always workers). A long list starts folded — its
- * count in the header and its first few rows showing, the rest behind the button — so a page of agents
- * stays short. The token's own row stays visible: it is the identity the human makes an orchestrator or
- * revokes. Unfolded rows are not in the page at all, so the page scrolls, never the list.
+ * count in the header and its first few rows showing, the rest behind an eye button that fills like the
+ * one that folds it back — so a page of agents stays short. The token's own row stays visible: it is the
+ * identity the human makes an orchestrator or revokes. Unfolded rows are not in the page at all, so the
+ * page scrolls, never the list.
  */
 function Workers({ token, subs }: { token: string; subs: ActorRow[] }) {
   const [open, setOpen] = useState(false)
   const listId = useId()
   const more = subs.length > WORKERS_SHOWN
   const shown = open || !more ? subs : subs.slice(0, WORKERS_SHOWN)
+  // One icon-only toggle, the same filled button in both states: an eye for the rows the list hides
+  // (press to show them), an eye with a line once they are shown (press to hide them again).
+  const label = open ? 'Hide the agents' : `Show the ${subs.length} agents`
   return (
     <div className="ml-7 space-y-1 border-l pl-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -157,17 +161,20 @@ function Workers({ token, subs }: { token: string; subs: ActorRow[] }) {
           <span className="rounded-full bg-muted px-1.5 font-normal tabular-nums">{subs.length}</span>
         </h3>
         {more && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="ml-auto"
-            aria-expanded={open}
-            aria-controls={listId}
-            onClick={() => setOpen((v) => !v)}
-          >
-            {open ? 'Hide' : `Show the ${subs.length} agents`}
-          </Button>
+          <Tip content={label}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="icon-sm"
+              className="ml-auto"
+              aria-expanded={open}
+              aria-controls={listId}
+              aria-label={label}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+            </Button>
+          </Tip>
         )}
       </div>
       <ul id={listId} aria-label={`Working under ${token}`} className="space-y-1">

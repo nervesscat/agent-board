@@ -163,7 +163,7 @@ commands**, and copy the MCP setup and skill install lines, which carry it
   text before it and waits in Needs you until you mark it **Reviewed** or **Revert** it (the
   project's settings have the whole history, with a diff). Settings, Agent tokens lists each token with its
   role, when it was last used, **Revoke**, and the sub-identities seen under it, the first few shown and
-  the rest behind **Show the N agents**.
+  the rest behind an eye button (one with a line once they are shown).
 - **Sub-identities.** An agent says which of its own workers makes a call with
   `X-Agent-Name: <token name>/<name>` (MCP: the `agentName` argument every tool takes): up to 4 names
   and 80 characters, each a letter or digit, then letters, digits, `.`, `_` or `-`. The call is then
