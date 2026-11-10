@@ -850,16 +850,16 @@ function idsText(ids: number[]): string {
   return parts.join(', ')
 }
 
-/** One line's worth of a group: a branch and a kind read once, with every ticket that stayed for it. */
-type Bucket = { branch: string; kind: DeleteKind; ids: number[] }
+/** One line's worth of a group: a branch and a kind read once, with every item that stayed for it. */
+type Bucket = { branch: string; kind: DeleteKind; items: DeleteResult[] }
 
 function bucketsOf(items: DeleteResult[]): Bucket[] {
   const buckets = new Map<string, Bucket>()
   for (const r of items) {
     const key = `${r.branch}\u0000${r.kind}`
     const found = buckets.get(key)
-    if (found) found.ids.push(r.ticketId)
-    else buckets.set(key, { branch: r.branch, kind: r.kind, ids: [r.ticketId] })
+    if (found) found.items.push(r)
+    else buckets.set(key, { branch: r.branch, kind: r.kind, items: [r] })
   }
   return [...buckets.values()]
 }
@@ -877,43 +877,85 @@ function groupsOf(items: DeleteResult[]) {
     const buckets = bucketsOf(list)
     // A message that opens with its own branch says it again below: the branch line keeps the fact.
     const only = buckets.length === 1 ? buckets[0] : null
-    const prefix = only ? `${only.branch}: ` : ''
+    const branch = only?.branch ?? ''
+    const prefix = branch
+      ? [`${branch}: `, `${branch} `, `origin's ${branch}: `, `origin's ${branch} `].find(
+          (p) => key.length > p.length && key.startsWith(p),
+        )
+      : undefined
     return {
       key,
-      reason: prefix && key.length > prefix.length && key.startsWith(prefix) ? key.slice(prefix.length) : key,
+      reason: prefix ? key.slice(prefix.length) : key,
+      // The patterns read the message whole: the branch and its space are part of what they look for.
+      advice: advice(key),
       buckets,
     }
   })
 }
 
-/** The items that stayed, each reason once, and under it the branches and tickets it kept. */
+/** What an item took with it, each fact once: the paths removed, the links, and how to put them back. */
+function Facts({ items }: { items: DeleteResult[] }) {
+  const removed = [...new Set(items.flatMap((r) => r.removed))]
+  const unlinked = [
+    ...new Map(items.flatMap((r) => r.unlinked).map((l) => [`${l.path}\u0000${l.target}`, l])).values(),
+  ]
+  const restore = [...new Set(items.flatMap((r) => r.restore))]
+  if (!removed.length && !unlinked.length && !restore.length) return null
+  return (
+    <div className="space-y-1">
+      {removed.map((p) => (
+        <p key={p} className="break-all font-mono text-[11px] text-muted-foreground">
+          removed {p}
+        </p>
+      ))}
+      {unlinked.map((l) => (
+        <p key={`${l.path}:${l.target}`} className="break-all font-mono text-[11px] text-muted-foreground">
+          removed the link {l.path} to {l.target}, which stays
+        </p>
+      ))}
+      {restore.map((cmd) => (
+        <div key={cmd} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1">
+          <code className="flex-1 overflow-x-auto font-mono">{cmd}</code>
+          <Tip content={`Copy: ${cmd}`}>
+            <button
+              type="button"
+              aria-label={`Copy: ${cmd}`}
+              onClick={() => copy(cmd)}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <Copy className="size-3.5" />
+            </button>
+          </Tip>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** The items that stayed, each reason once, and under it the branches, tickets and what it took with it. */
 function Groups({ outcome, items }: { outcome: DeleteResult['outcome']; items: DeleteResult[] }) {
   return (
     <ul className="space-y-2">
-      {groupsOf(items).map((g) => {
-        const next = advice(g.reason)
-        return (
-          <li key={g.key} className="space-y-1">
-            <div className="space-y-0.5">
-              <p className="break-words text-muted-foreground">{g.reason || 'No reason given'}</p>
-              {next && <p className="break-words text-muted-foreground/80">→ {next}</p>}
-            </div>
-            <ul className="space-y-0.5 pl-2">
-              {g.buckets.map((b) => (
-                <li
-                  key={`${b.branch}:${b.kind}`}
-                  data-outcome={outcome}
-                  className="flex flex-wrap items-baseline gap-x-2"
-                >
+      {groupsOf(items).map((g) => (
+        <li key={g.key} className="space-y-1">
+          <div className="space-y-0.5">
+            <p className="break-words text-muted-foreground">{g.reason || 'No reason given'}</p>
+            {g.advice && <p className="break-words text-muted-foreground/80">→ {g.advice}</p>}
+          </div>
+          <ul className="space-y-1 pl-2">
+            {g.buckets.map((b) => (
+              <li key={`${b.branch}:${b.kind}`} data-outcome={outcome} className="space-y-1">
+                <div className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-mono">{b.branch}</span>
                   <span className="text-muted-foreground">{kindLabel(b.kind)}</span>
-                  <span className="text-muted-foreground">{idsText(b.ids)}</span>
-                </li>
-              ))}
-            </ul>
-          </li>
-        )
-      })}
+                  <span className="text-muted-foreground">{idsText(b.items.map((r) => r.ticketId))}</span>
+                </div>
+                <Facts items={b.items} />
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
     </ul>
   )
 }
@@ -930,31 +972,7 @@ function Deleted({ items }: { items: DeleteResult[] }) {
               {kindLabel(r.kind)} · #{r.ticketId}
             </span>
           </div>
-          {r.removed.map((p) => (
-            <p key={p} className="break-all font-mono text-[11px] text-muted-foreground">
-              removed {p}
-            </p>
-          ))}
-          {r.unlinked.map((l) => (
-            <p key={l.path} className="break-all font-mono text-[11px] text-muted-foreground">
-              removed the link {l.path} to {l.target}, which stays
-            </p>
-          ))}
-          {r.restore.map((cmd) => (
-            <div key={cmd} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1">
-              <code className="flex-1 overflow-x-auto font-mono">{cmd}</code>
-              <Tip content={`Copy: ${cmd}`}>
-                <button
-                  type="button"
-                  aria-label={`Copy: ${cmd}`}
-                  onClick={() => copy(cmd)}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
-                >
-                  <Copy className="size-3.5" />
-                </button>
-              </Tip>
-            </div>
-          ))}
+          <Facts items={[r]} />
         </li>
       ))}
     </ul>
