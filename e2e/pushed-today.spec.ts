@@ -12,6 +12,19 @@ const ticket = (human: APIRequestContext, project: Project, title: string, branc
 /** The indicator in the Daily page's header. */
 const header = (page: Page) => page.locator('aside + section').getByRole('button', { name: /^Pushed today/ })
 
+/** The Daily page's subtitle, which the indicator sits under at every width. */
+const subtitle = (page: Page) => page.getByText(/^The period's report, and what got done hour by hour\.$/)
+
+/** It reads below the subtitle and its left edge lines up with it, not beside it. */
+async function sitsUnderTheSubtitle(page: Page) {
+  const pill = await header(page).boundingBox()
+  const text = await subtitle(page).boundingBox()
+  expect(pill, 'the pill has a box').not.toBeNull()
+  expect(text, 'the subtitle has a box').not.toBeNull()
+  expect(pill!.y, 'below the subtitle').toBeGreaterThanOrEqual(text!.y + text!.height)
+  expect(Math.abs(pill!.x - text!.x), 'left-aligned with it').toBeLessThanOrEqual(1)
+}
+
 const scrollsSideways = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
 
@@ -37,6 +50,7 @@ test('grey until a commit reaches origin, then green with the commits and lines,
   await page.goto(`/projects/${project.id}/daily`)
   await expect(header(page)).toHaveAttribute('data-pushed', 'no')
   await expect(header(page)).toHaveText('Nothing pushed today')
+  await sitsUnderTheSubtitle(page)
   await header(page).click()
   await expect(page.getByText("Nothing reached origin today on this project's repos.")).toBeVisible()
   await page.keyboard.press('Escape')
@@ -106,6 +120,7 @@ test.describe('on a phone', () => {
 
     await page.goto(`/projects/${busy.project.id}/daily`)
     await expect(header(page)).toHaveAttribute('data-pushed', 'yes')
+    await sitsUnderTheSubtitle(page)
     expect(await scrollsSideways(page)).toBe(false)
     await header(page).tap()
     const byRepo = page.getByRole('list', { name: 'Pushed today by repo' })
