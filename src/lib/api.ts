@@ -32,6 +32,7 @@ import type { DirListing } from '#/server/fs'
 import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { HostTool, HostTools } from '#/server/hostTools'
 import type { ManagedPreview } from '#/server/managedPreview'
+import type { OpencodeConfig } from '#/server/opencodeConfig'
 import type { RunState } from '#/server/runs'
 import type {
   AlsoRunning,
@@ -71,6 +72,7 @@ export type {
   HostTool,
   HostTools,
   ManagedPreview,
+  OpencodeConfig,
   PreviewState,
   ProjectAgent,
   RunConfig,
