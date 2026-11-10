@@ -1,7 +1,7 @@
 {
   "name": "agent-board",
   "productName": "CrossBoard",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "CrossBoard: the job board shared by one developer and their AI agents",
   "author": "Enrique Madrid",
   "homepage": "https://github.com/nervesscat/agent-board",
