@@ -438,6 +438,10 @@ function PreviewItem({
           cannotStart={p.cannotStart}
           linkStop={link ? p.linkStop : undefined}
           onChange={onChange}
+          ticketId={t.id}
+          ticketTitle={t.title}
+          label={p.managed ? `${w.name} · ${p.managed.runName}` : w.name}
+          runId={p.managed?.runId ?? null}
         />
       </div>
     </li>

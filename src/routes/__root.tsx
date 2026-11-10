@@ -14,6 +14,7 @@ import { CrossBoardMark } from '#/components/CrossBoardMark'
 import { Gallery } from '#/components/Gallery'
 import { GettingStartedEntry, GettingStartedMenuItem } from '#/components/GettingStarted'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
+import { PreviewWindows } from '#/components/PreviewWindow'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
 import { UpdateBadge } from '#/components/Updates'
@@ -138,6 +139,7 @@ function App() {
         <Outlet />
       </main>
       <Gallery />
+      <PreviewWindows />
       <Toaster />
     </TooltipProvider>
   )
