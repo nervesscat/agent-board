@@ -8,6 +8,7 @@ import type { Connect, Plugin, ViteDevServer } from 'vite'
 
 import { type PublicEntrance, StartupError } from './config.ts'
 import { signedIn } from './credentials.ts'
+import { forwardPreviewUpgrade } from './devPreviewUpgrade.ts'
 import { isPreviewPath } from './previewPaths.ts'
 import {
   type GuardConfig,
@@ -176,32 +177,42 @@ export function entranceMiddleware(live: () => GuardConfig, check: SignInCheck) 
 }
 
 /** For the server's `upgrade` event, ahead of Vite's own listener: a refused upgrade never gets a 101. */
-export function entranceUpgradeGuard(live: () => GuardConfig) {
-  return function refuseEntranceUpgrade(req: IncomingMessage, socket: Duplex) {
+export function entranceUpgradeGuard(
+  live: () => GuardConfig,
+  forward: (req: IncomingMessage, socket: Duplex, head: Buffer) => void,
+) {
+  return function refuseEntranceUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer) {
     const peer = req.socket.remoteAddress
+    const pathname = pathOf(req)
     const verdict = guardRequest(
-      { method: req.method ?? 'GET', headers: nodeHeaders(req), peer, path: pathOf(req) },
+      { method: req.method ?? 'GET', headers: nodeHeaders(req), peer, path: pathname },
       live(),
     )
-    const refusal = !verdict.allow
-      ? verdict
-      : verdict.entrance
-        ? { status: 403, error: 'no WebSocket through the tailnet entrance: hot reload is for this machine' }
-        : null
-    if (!refusal) {
-      if (!isLoopbackPeer(peer)) dropForwarding(req)
-      return
-    }
-    const body = JSON.stringify({ error: refusal.error })
-    // Vite's listener runs after this one and sees the socket closed: it writes nothing then.
-    socket.on('error', () => {})
-    socket.end(
-      `HTTP/1.1 ${refusal.status} ${STATUS_CODES[refusal.status]}\r\n` +
-        'Content-Type: application/json; charset=utf-8\r\n' +
-        `Content-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
-      () => socket.destroy(),
-    )
+    if (!verdict.allow) return refuseUpgrade(socket, verdict.status, verdict.error)
+    if (!isLoopbackPeer(peer)) dropForwarding(req)
+    // A preview's WebSocket is the preview proxy's: Vite's process forwards it to the board, which signs
+    // the caller in itself (previewProxy.ts), as it does for the preview's HTTP.
+    if (isPreviewPath(pathname)) return forward(req, socket, head)
+    if (verdict.entrance)
+      return refuseUpgrade(
+        socket,
+        403,
+        'no WebSocket through the tailnet entrance: hot reload is for this machine',
+      )
   }
+}
+
+/** A refused upgrade's answer, then the socket closes: Vite's listener runs after this one and writes nothing. */
+function refuseUpgrade(socket: Duplex, status: number, error: string) {
+  const body = JSON.stringify({ error })
+  // Vite's listener runs after this one and sees the socket closed: it writes nothing then.
+  socket.on('error', () => {})
+  socket.end(
+    `HTTP/1.1 ${status} ${STATUS_CODES[status]}\r\n` +
+      'Content-Type: application/json; charset=utf-8\r\n' +
+      `Content-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
+    () => socket.destroy(),
+  )
 }
 
 /**
@@ -254,7 +265,7 @@ export function entranceGuard(options: { env?: () => Record<string, string | und
         const live = () => guardConfig(env(), check.saved())
         admitSavedHost(server, live)
         server.middlewares.use(entranceMiddleware(live, check))
-        server.httpServer?.prependListener('upgrade', entranceUpgradeGuard(live))
+        server.httpServer?.prependListener('upgrade', entranceUpgradeGuard(live, forwardPreviewUpgrade))
         server.httpServer?.once('close', check.close)
       },
     },

@@ -293,6 +293,43 @@ test("a project's whole Daily page, every project's, and the reports-due banner 
   }
 })
 
+test('the top bar and the page paint the theme background, so the phone status bar is not white', async ({
+  page,
+}) => {
+  // The phone paints the strip behind its status icons (and the overscroll area) from the page when
+  // viewport-fit=cover is set, so every one of these has to be the theme's background: an opaque bar,
+  // a matching root canvas and body, and a theme-colour per scheme for the browsers that use it.
+  await page.goto('/')
+  await expect(page.locator('meta[name="viewport"]')).toHaveAttribute('content', /viewport-fit=cover/)
+  const themeColors = await page
+    .locator('meta[name="theme-color"]')
+    .evaluateAll((metas) => metas.map((m) => [m.getAttribute('content'), m.getAttribute('media')]))
+  expect(themeColors).toEqual([
+    ['#ffffff', '(prefers-color-scheme: light)'],
+    ['#0a0a0a', '(prefers-color-scheme: dark)'],
+  ])
+
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme })
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible()
+    if (colorScheme === 'dark') await expect(page.locator('html')).toHaveClass(/\bdark\b/)
+    else await expect(page.locator('html')).not.toHaveClass(/\bdark\b/)
+    const colors = await page.evaluate(() => {
+      const header = document.querySelector('header')!
+      return {
+        root: getComputedStyle(document.documentElement).backgroundColor,
+        body: getComputedStyle(document.body).backgroundColor,
+        bar: getComputedStyle(header).backgroundColor,
+      }
+    })
+    expect(colors.root, colorScheme).toBe(colors.body)
+    expect(colors.bar, colorScheme).toBe(colors.body)
+    // Opaque: a translucent bar leaves the canvas behind it to show through.
+    expect(colors.bar, colorScheme).not.toMatch(/\//)
+  }
+})
+
 test('the top bar folds its pages into a menu that opens', async ({ page }) => {
   await page.goto(`/projects/${seededProject().id}/prs`)
   await expect(page.getByRole('heading', { name: 'PR queue' })).toBeVisible()

@@ -42,6 +42,34 @@ test('the sidebar scrolls on its own when taller than the window', async ({ page
   expect(await aside.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
 })
 
+test('the focus ring of a sidebar item is drawn inside it, clear of the scroll container', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  const link = sidebar(page).getByRole('navigation').getByRole('link', { name: 'PR queue' })
+  await link.focus()
+  await expect(link).toBeFocused()
+  const ring = await link.evaluate((el) => {
+    const style = getComputedStyle(el)
+    const aside = el.closest('aside')!
+    return {
+      focusVisible: el.matches(':focus-visible'),
+      outline: style.outlineStyle,
+      shadow: style.boxShadow,
+      itemRight: el.getBoundingClientRect().right,
+      asideRight: aside.getBoundingClientRect().right,
+    }
+  })
+  expect(ring.focusVisible).toBe(true)
+  // The aside scrolls (overflow-y, so overflow-x is auto too): an outline outside the link would be
+  // cut at its right edge. The ring is a box shadow inset in the link instead, so all of it shows.
+  expect(ring.outline).toBe('none')
+  expect(ring.shadow).toContain('inset')
+  expect(ring.itemRight).toBeLessThanOrEqual(ring.asideRight)
+})
+
 test('at a narrow width the sidebar sits above the content and nothing scrolls sideways', async ({
   page,
   project,
