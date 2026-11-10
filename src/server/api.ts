@@ -55,6 +55,7 @@ import {
 import { handleMcp } from './mcp'
 import { linkFor } from './previewProxy'
 import * as needs from './needs'
+import { checkOpencodeConfig } from './opencodeConfig'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
@@ -211,7 +212,11 @@ api.delete('/api/agent-tokens/:id', ({ request, params }) => {
 })
 
 // --- connecting agents: board settings, and the skill each CLI installs ---
-api.get('/api/agent-setup', () => json(agents.agentSetup()))
+api.get('/api/agent-setup', () => json(agents.agentSetup(repos.listRepos().map((r) => r.repoPath))))
+// Whether OpenCode may run subagents from subagents: read again after the human edits its config.
+api.post('/api/agent-setup/opencode-check', () =>
+  json(checkOpencodeConfig(repos.listRepos().map((r) => r.repoPath))),
+)
 // The board skill as a SKILL.md (no projects in it: agents call find_project); the install commands curl this.
 api.get('/api/agent-setup/skill', ({ request, url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
