@@ -441,7 +441,6 @@ function PreviewItem({
           ticketId={t.id}
           ticketTitle={t.title}
           label={p.managed ? `${w.name} · ${p.managed.runName}` : w.name}
-          runId={p.managed?.runId ?? null}
         />
       </div>
     </li>

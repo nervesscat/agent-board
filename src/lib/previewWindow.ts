@@ -96,16 +96,37 @@ function previewPath(proxyUrl: string | null | undefined): string | null {
   }
 }
 
+/** The origin the page is opened at (scheme and host), for links that must be absolute; null on the server. */
+function pageOrigin(): string | null {
+  if (typeof window === 'undefined') return null
+  return window.location.origin
+}
+
+/** A board path as an absolute URL on the origin the page is opened at (kept as it is without one). */
+function absoluteUrl(path: string | null, origin: string | null): string | null {
+  if (!path) return null
+  if (/^https?:\/\//i.test(path)) return path
+  return origin ? `${origin}${path}` : path
+}
+
 /**
- * The link Open in browser opens: the proxy link when there is one (it works on this machine as from
- * another device, and is the same preview), else the loopback link on this machine, or a hosted link
- * wherever it is opened. Null when the only link is a loopback one off this machine.
+ * The link Copy link copies and Open in browser opens, for the machine or device the board is opened
+ * on. Off this machine a proxy link must not carry the board's own `localhost` (the server builds
+ * `proxyUrl` with it): the tailnet entrance (`remoteUrl`) comes first, then the proxy path resolved
+ * against the origin the board is opened at, which is the same preview and reaches that device. On this
+ * machine the proxy path there is the same link; a loopback link is the direct one when there is no
+ * proxy. A hosted link stays whatever it is, and a loopback one off this machine is no link at all.
  */
-export function previewBrowserUrl(run: PreviewLinks, here = openedHere()): string | null {
-  if (run.proxyUrl) return run.proxyUrl
+export function previewBrowserUrl(
+  run: PreviewLinks,
+  here = openedHere(),
+  origin = pageOrigin(),
+): string | null {
+  if (!here && run.remoteUrl) return run.remoteUrl
+  const proxied = absoluteUrl(previewPath(run.proxyUrl), origin)
+  if (proxied) return proxied
   if (here) return run.url ?? run.remoteUrl ?? null
-  if (!loopbackUrl(run.url)) return run.url ?? null
-  return run.remoteUrl ?? null
+  return loopbackUrl(run.url) ? null : (run.url ?? null)
 }
 
 /** What to call a preview: the run of a workspace, or the link an agent set. */
@@ -184,17 +205,23 @@ export function toggleMaximized(state: PreviewWindowsState): PreviewWindowsState
 /** Everything the window asked the board about a preview: whether it still runs, and why not. */
 export interface PreviewStateLike {
   running: boolean
+  /** Why the page refuses to be shown in a frame (its own headers), from the board's check of a link. */
+  frameBlocked?: string | null
+  /** The run showing: its state, when the tab is a run's own (not the workspace's first preview). */
   managed?: { status: string; reason?: string | null } | null
 }
 
-export type PreviewHealth = 'unknown' | 'running' | 'building' | 'stopped' | 'failed'
+export type PreviewHealth = 'unknown' | 'running' | 'building' | 'stopped' | 'failed' | 'blocked'
 
-/** Whether a tab's preview still runs, from the board's answer for its workspace. */
+/** Whether a tab's preview still runs, from the board's answer for its workspace or its own run. */
 export function previewHealth(
   tab: Pick<PreviewTab, 'through'>,
   state: PreviewStateLike | null | undefined,
 ): PreviewHealth {
   if (!state) return 'unknown'
+  // A link framed as it is (not through the board's proxy) may refuse the frame itself; the proxy path
+  // strips that refusal (previewProxy.ts).
+  if (!tab.through && state.running && state.frameBlocked) return 'blocked'
   if (tab.through) {
     const status = state.managed?.status
     if (status === 'running') return 'running'
@@ -206,17 +233,20 @@ export function previewHealth(
 }
 
 /**
- * What the window says over a preview that is not running. It never starts or stops a run itself:
- * it says where the Start is.
+ * What the window says over a preview that is not running or cannot be framed. It never starts or stops
+ * a run itself: it says where the Start is, and for a refused frame, where the preview opens instead.
  */
 export function previewNotice(
   health: PreviewHealth,
   tab: Pick<PreviewTab, 'through'>,
   reason?: string | null,
+  frameBlocked?: string | null,
 ): string | null {
   if (health === 'building') return 'Building… it shows here once it runs.'
   if (health === 'failed')
     return `The preview failed${reason ? `: ${reason}` : ''}. See its log on the ticket.`
+  if (health === 'blocked')
+    return `This preview will not be shown inside the board: ${frameBlocked ?? 'it refuses to be framed'}.`
   if (health === 'stopped')
     return tab.through
       ? "This preview is stopped. Start it from the ticket's Runs card or the Previews page."

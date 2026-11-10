@@ -55,7 +55,6 @@ export function PreviewActions({
   ticketId,
   ticketTitle,
   label,
-  runId,
 }: {
   workspaceId: number
   url: string
@@ -69,8 +68,6 @@ export function PreviewActions({
   ticketId?: number | null
   ticketTitle?: string
   label?: string
-  /** The run it is, when it is a run of the board's; null for a link an agent set. */
-  runId?: number | null
 }) {
   const action = useMutation({
     mutationFn: (what: 'start' | 'stop' | 'restart') =>
@@ -91,12 +88,16 @@ export function PreviewActions({
     },
   })
   const active = previewActive(managed)
-  const run = { url, proxyUrl: managed?.proxyUrl ?? null }
+  // The board-run preview, when it is the one whose link the row shows (a workspace has several runs; the
+  // board's `managed` is its first preview run, so a second one's link is just a link here): its run id
+  // is what the window asks about, and its proxy and tailnet links are the ones to offer.
+  const live = managed?.status === 'running' && managed.url === url ? managed : null
+  const run = { url, proxyUrl: live?.proxyUrl ?? null, remoteUrl: live?.remoteUrl ?? null }
   const tab = previewTab({
     ticketId: ticketId ?? null,
     title: ticketTitle ?? 'Preview',
     workspaceId,
-    runId: runId ?? null,
+    runId: live?.runId ?? null,
     label: label ?? 'Preview',
     run,
   })

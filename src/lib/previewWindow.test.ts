@@ -58,21 +58,34 @@ describe('the path the embedded window loads', () => {
   })
 })
 
-describe('the link Open in browser opens', () => {
-  it('is the proxy one wherever the page is opened: it is the same preview, and it reaches another device', () => {
-    expect(previewBrowserUrl(run, true)).toBe('http://localhost:47100/p/3/9/')
-    expect(previewBrowserUrl(run, false)).toBe('http://localhost:47100/p/3/9/')
+const BOARD = 'http://127.0.0.1:47100'
+
+describe('the link Copy link and Open in browser use', () => {
+  it('is the proxy path on the origin the board is opened at, absolute, on this machine', () => {
+    expect(previewBrowserUrl(run, true, BOARD)).toBe(`${BOARD}/p/3/9/`)
+  })
+
+  it('is the tailnet link off this machine, never the board’s own localhost (F1)', () => {
+    // The server builds proxyUrl with `localhost:<port>`, which a phone on the tailnet would resolve to
+    // itself: the entrance's remoteUrl comes first.
+    expect(previewBrowserUrl(run, false, BOARD)).toBe(run.remoteUrl)
+  })
+
+  it('falls back to the proxy path on the page origin off this machine when there is no entrance', () => {
+    expect(previewBrowserUrl({ ...run, remoteUrl: null }, false, 'https://devbox.example')).toBe(
+      'https://devbox.example/p/3/9/',
+    )
   })
 
   it('falls back to the loopback one here, and to a hosted one anywhere', () => {
-    expect(previewBrowserUrl({ url: 'http://127.0.0.1:47123' }, true)).toBe('http://127.0.0.1:47123')
-    expect(previewBrowserUrl({ url: 'https://example.com/x' }, true)).toBe('https://example.com/x')
-    expect(previewBrowserUrl({ url: 'https://example.com/x' }, false)).toBe('https://example.com/x')
+    expect(previewBrowserUrl({ url: 'http://127.0.0.1:47123' }, true, BOARD)).toBe('http://127.0.0.1:47123')
+    expect(previewBrowserUrl({ url: 'https://example.com/x' }, true, BOARD)).toBe('https://example.com/x')
+    expect(previewBrowserUrl({ url: 'https://example.com/x' }, false, BOARD)).toBe('https://example.com/x')
   })
 
   it('gives up on a loopback one off this machine, but not on its tailnet link', () => {
-    expect(previewBrowserUrl({ url: 'http://127.0.0.1:47123' }, false)).toBeNull()
-    expect(previewBrowserUrl({ url: 'http://127.0.0.1:47123', remoteUrl: run.remoteUrl }, false)).toBe(
+    expect(previewBrowserUrl({ url: 'http://127.0.0.1:47123' }, false, BOARD)).toBeNull()
+    expect(previewBrowserUrl({ url: 'http://127.0.0.1:47123', remoteUrl: run.remoteUrl }, false, BOARD)).toBe(
       run.remoteUrl,
     )
   })
@@ -87,12 +100,26 @@ describe('a preview tab', () => {
       title: '#12 Try it',
       subtitle: 'wt · Preview',
       src: '/p/3/9/',
-      browser: 'http://localhost:47100/p/3/9/',
+      browser: '/p/3/9/',
       workspaceId: 3,
       ticketId: 12,
       runId: 9,
       through: true,
     })
+  })
+
+  it('offers the tailnet link off this machine (F1)', () => {
+    expect(
+      previewTab({
+        ticketId: 12,
+        title: 'Try it',
+        workspaceId: 3,
+        runId: 9,
+        label: 'wt · Preview',
+        run,
+        here: false,
+      })?.browser,
+    ).toBe(run.remoteUrl)
   })
 
   it('is an agent link on this machine, not through the proxy', () => {
@@ -186,9 +213,22 @@ describe('whether the preview still runs', () => {
     expect(previewHealth(t, { running: false, managed: null })).toBe('stopped')
   })
 
-  it("reads an agent's link from whether it answers", () => {
+  it("reads an agent's link from whether it answers, and says when it refuses a frame (F3)", () => {
     expect(previewHealth({ through: false }, { running: true })).toBe('running')
     expect(previewHealth({ through: false }, { running: false })).toBe('stopped')
+    expect(
+      previewHealth({ through: false }, { running: false, frameBlocked: 'it sends X-Frame-Options: deny' }),
+    ).toBe('stopped')
+    expect(
+      previewHealth({ through: false }, { running: true, frameBlocked: 'it sends X-Frame-Options: deny' }),
+    ).toBe('blocked')
+    // The proxy path strips the refusal, so a proxied tab never reads it.
+    expect(
+      previewHealth(
+        { through: true },
+        { running: true, frameBlocked: 'it sends X-Frame-Options: deny', managed: { status: 'running' } },
+      ),
+    ).toBe('running')
   })
 
   it('says where the Start is, and never starts or stops the run itself', () => {
@@ -203,6 +243,12 @@ describe('whether the preview still runs', () => {
     )
     expect(previewNotice('stopped', { through: false })).toBe(
       'The preview does not answer on this machine. Start its server again where it runs.',
+    )
+    expect(previewNotice('blocked', { through: false }, null, 'it sends X-Frame-Options: deny')).toBe(
+      'This preview will not be shown inside the board: it sends X-Frame-Options: deny.',
+    )
+    expect(previewNotice('blocked', { through: false })).toBe(
+      'This preview will not be shown inside the board: it refuses to be framed.',
     )
   })
 })

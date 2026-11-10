@@ -3,9 +3,9 @@ import { Check, Copy, ExternalLink, Loader2, Maximize2, Minimize2, RotateCw, X }
 import { createElement, useEffect, useState, useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
 
-import { Button } from '#/components/ui/button'
+import { Button, buttonVariants } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
-import { get, type WorkspacePreview } from '#/lib/api'
+import { get, type RunState, type WorkspacePreview } from '#/lib/api'
 import { cn } from '#/lib/utils'
 import {
   activeTab,
@@ -14,6 +14,7 @@ import {
   openTab,
   previewHealth,
   previewNotice,
+  type PreviewStateLike,
   type PreviewTab,
   type PreviewWindowsState,
   reloadTabs,
@@ -74,10 +75,18 @@ export function PreviewWindows() {
   // the first client render agree.
   const [desktop, setDesktop] = useState(false)
   useEffect(() => setDesktop(inDesktop()), [])
-  // Whether the preview still runs: asked while the window shows it, never to change it.
+  // Whether the preview still runs: asked while the window shows it, never to change it. A run's tab
+  // asks for that run by id (the workspace's answer is its first preview run, not necessarily this one);
+  // a link an agent set asks for the link's own answer.
   const preview = useQuery({
-    queryKey: ['preview-window', tab?.workspaceId],
-    queryFn: () => get<WorkspacePreview>(`/api/workspaces/${tab!.workspaceId}/preview`),
+    queryKey: ['preview-window', tab?.workspaceId, tab?.runId],
+    queryFn: async (): Promise<PreviewStateLike> => {
+      if (tab!.runId !== null) {
+        const run = await get<RunState>(`/api/workspaces/${tab!.workspaceId}/runs/${tab!.runId}`)
+        return { running: run.status === 'running', managed: run }
+      }
+      return get<WorkspacePreview>(`/api/workspaces/${tab!.workspaceId}/preview`)
+    },
     enabled: !!tab,
     refetchInterval: 5_000,
     retry: false,
@@ -87,7 +96,8 @@ export function PreviewWindows() {
 
   if (!tab) return null
   const health = previewHealth(tab, preview.data)
-  const notice = previewNotice(health, tab, preview.data?.managed?.reason)
+  const notice = previewNotice(health, tab, preview.data?.managed?.reason, preview.data?.frameBlocked)
+  const blocked = health === 'blocked'
   const link =
     tab.browser ?? (typeof window === 'undefined' ? tab.src : `${window.location.origin}${tab.src}`)
   const loads = windows.loads[tab.key] ?? 0
@@ -227,7 +237,7 @@ export function PreviewWindows() {
         )}
       </div>
       <div className="relative min-h-0 flex-1 bg-muted">
-        {notice && (
+        {notice && !blocked && (
           <p
             role="status"
             data-testid="preview-notice"
@@ -236,7 +246,28 @@ export function PreviewWindows() {
             {notice}
           </p>
         )}
-        {desktop ? (
+        {blocked ? (
+          // The preview refuses to be framed (its X-Frame-Options or Content-Security-Policy): no blank
+          // pane, its reason and the way out instead.
+          <div
+            role="status"
+            data-testid="preview-notice"
+            className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground"
+          >
+            <p className="max-w-md [overflow-wrap:anywhere]">{notice}</p>
+            {tab.browser && (
+              <a
+                href={tab.browser}
+                target="_blank"
+                rel="noreferrer"
+                data-testid="preview-blocked-open"
+                className={buttonVariants({ size: 'sm' })}
+              >
+                Open in browser <ExternalLink />
+              </a>
+            )}
+          </div>
+        ) : desktop ? (
           // The desktop app's real browser view; PreviewWindows only asks for it once the page runs
           // inside the app (main.mjs turns the tag on for the board's own window).
           createElement('webview', {
@@ -252,8 +283,9 @@ export function PreviewWindows() {
             src={tab.src}
             title={frameTitle}
             data-testid="preview-frame"
-            // Same origin as the board (the proxy sets no X-Frame-Options) and its sign-in: the session
-            // cookie is what the proxy checks. Sandboxed to what a preview needs, when its engine allows.
+            // Same origin as the board and its sign-in (the session cookie is what the proxy checks), and
+            // the proxy strips a refusal to be framed. Sandboxed to what a preview needs, when its engine
+            // allows.
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads"
             className="h-full w-full border-0 bg-white"
           />

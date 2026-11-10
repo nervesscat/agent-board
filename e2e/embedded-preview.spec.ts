@@ -41,7 +41,7 @@ const windowOf = (page: Page) => page.getByRole('region', { name: 'Preview windo
 test(
   'a running preview opens inside the board from its Runs card, stays as the board moves, and opens in a browser too',
   BOARD_RUNS,
-  async ({ page, human, project }) => {
+  async ({ page, human, project, baseURL }) => {
     test.setTimeout(120_000)
     const repo = project.repos[0]!
     const { worktree, branch } = worktreeOf(`${project.id}-embedded`)
@@ -99,20 +99,20 @@ test(
       // With sign-in on the run is also proxied on the board's own origin. The test board has sign-in
       // off (so it proxies nothing): the proxy URL is put on the run's state, the shape a signed-in
       // board gives it, and the window loads and opens that path.
-      const proxied = `http://localhost:47100/p/${ws.id}/${run.id}/`
+      const proxiedPath = `/p/${ws.id}/${run.id}/`
       await page.route('**/api/tickets/*/runs', async (route) => {
         const res = await route.fetch()
         const body = (await res.json()) as TicketRuns
         for (const r of body.repos.flatMap((x) => x.runs))
-          if (r.state?.status === 'running') r.state.proxyUrl = proxied
+          if (r.state?.status === 'running') r.state.proxyUrl = `http://localhost:47100${proxiedPath}`
         await route.fulfill({ response: res, json: body })
       })
       await page.goto(`/projects/${project.id}/features/${t.id}`)
       await row.getByRole('button', { name: 'Open', exact: true }).click()
-      await expect(windowOf(page).getByTestId('preview-frame')).toHaveAttribute(
-        'src',
-        `/p/${ws.id}/${run.id}/`,
-      )
+      await expect(windowOf(page).getByTestId('preview-frame')).toHaveAttribute('src', proxiedPath)
+      // The link follows the origin the board is opened at, never the server's own `localhost` (F1).
+      const proxied = new URL(proxiedPath, page.url()).href
+      expect(proxied.startsWith(baseURL!)).toBe(true)
       await expect(windowOf(page).getByTestId('preview-open-browser')).toHaveAttribute('href', proxied)
       await expect(windowOf(page).getByTestId('preview-url')).toHaveValue(proxied)
     } finally {
@@ -120,6 +120,106 @@ test(
     }
   },
 )
+
+test(
+  'the window reads the run it shows, not the workspace’s first preview run (F2)',
+  BOARD_RUNS,
+  async ({ page, human, project }) => {
+    test.setTimeout(120_000)
+    const repo = project.repos[0]!
+    const { worktree, branch } = worktreeOf(`${project.id}-two-runs`)
+    const t = await ok<TicketFull>(
+      human.post(`/api/projects/${project.id}/tickets`, {
+        data: { title: 'Two preview runs', status: 'in_progress', branch },
+      }),
+    )
+    const ws = await ok<Workspace>(
+      human.post(`/api/tickets/${t.id}/workspaces`, { data: { name: 'wt', branch, path: worktree } }),
+    )
+    await addRun(human, repo.id, { name: 'First preview', start: FAKE_PREVIEW })
+    const second = await addRun(human, repo.id, { name: 'Second preview', start: FAKE_PREVIEW })
+    const state = async (name: string) =>
+      (await ok<TicketRuns>(human.get(`/api/tickets/${t.id}/runs`))).repos[0]!.runs.find(
+        (r) => r.name === name,
+      )!.state
+    try {
+      // Only the repo's second preview run runs: the workspace's `managed` (its first preview run) is
+      // empty, which is what the window used to read as "This preview is stopped".
+      expect((await human.post(`/api/workspaces/${ws.id}/runs/${second.id}/start`)).status()).toBe(202)
+      await expect
+        .poll(async () => (await state('Second preview'))?.status, { timeout: 40_000 })
+        .toBe('running')
+      const url = (await state('Second preview'))!.url!
+      expect(await state('First preview')).toBeNull()
+
+      // On a signed-in board the run is proxied and the tab loads through the proxy; its health then comes
+      // from the run's own id. The test board proxies nothing, so that one field is put on the state.
+      const proxiedPath = `/p/${ws.id}/${second.id}/`
+      await page.route('**/api/tickets/*/runs', async (route) => {
+        const res = await route.fetch()
+        const body = (await res.json()) as TicketRuns
+        for (const r of body.repos.flatMap((x) => x.runs))
+          if (r.state?.status === 'running') r.state.proxyUrl = `http://localhost:47100${proxiedPath}`
+        await route.fulfill({ response: res, json: body })
+      })
+
+      await page.goto(`/projects/${project.id}/features/${t.id}`)
+      const row = page.getByRole('region', { name: 'Runs' }).getByRole('listitem', { name: 'Second preview' })
+      await expect(row.getByTestId('run-status')).toHaveText('Running')
+      await row.getByRole('button', { name: 'Open', exact: true }).click()
+
+      const win = windowOf(page)
+      await expect(win.getByTestId('preview-frame')).toHaveAttribute('src', proxiedPath)
+      // The second run runs: not the "stopped" notice its workspace's first preview run would give.
+      await expect(win.getByTestId('preview-notice')).toHaveCount(0)
+      await expect(win.getByText('This preview is stopped')).toHaveCount(0)
+      expect(url).toMatch(/^http:\/\/127\.0\.0\.1:/)
+    } finally {
+      await human.post(`/api/tickets/${t.id}/runs/stop`)
+    }
+  },
+)
+
+test('a preview that refuses to be framed says so, with Open in browser, instead of a blank pane (F3)', async ({
+  page,
+  human,
+  project,
+}) => {
+  const refusing = http.createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html', 'x-frame-options': 'DENY' })
+    res.end('<!doctype html><html><head></head><body>no frames</body></html>')
+  })
+  await new Promise<void>((resolve) => refusing.listen(0, '127.0.0.1', resolve))
+  const url = `http://127.0.0.1:${(refusing.address() as AddressInfo).port}`
+  try {
+    const t = await ok<TicketFull>(
+      human.post(`/api/projects/${project.id}/tickets`, {
+        data: { title: 'Refuses to be framed', status: 'in_progress' },
+      }),
+    )
+    await ok<Workspace>(
+      human.post(`/api/tickets/${t.id}/workspaces`, { data: { name: 'wt', previewUrl: url } }),
+    )
+
+    await page.goto(`/projects/${project.id}/previews?stage=_all`)
+    await page
+      .getByRole('region', { name: /^(Running|Not running)$/ })
+      .getByRole('listitem')
+      .filter({ hasText: 'Refuses to be framed' })
+      .getByRole('button', { name: 'Open', exact: true })
+      .click()
+
+    const win = windowOf(page)
+    const notice = win.getByTestId('preview-notice')
+    await expect(notice).toBeVisible()
+    await expect(notice).toContainText('X-Frame-Options: deny')
+    await expect(win.getByTestId('preview-frame')).toHaveCount(0)
+    await expect(win.getByTestId('preview-blocked-open')).toHaveAttribute('href', url)
+    await expect(win.getByTestId('preview-blocked-open')).toContainText('Open in browser')
+  } finally {
+    await new Promise((resolve) => refusing.close(resolve))
+  }
+})
 
 test('the Previews page opens a link preview inside the board, and a second one adds a tab', async ({
   page,
