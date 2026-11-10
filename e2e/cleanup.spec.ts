@@ -185,6 +185,175 @@ test('the dialog names a server linked on this machine at the worktree, which it
   expect(fs.existsSync(tree)).toBe(true)
 })
 
+test('a reason that names the branch does not say it twice', async ({ page, human }) => {
+  // A repository of the test's own: no other test's ref listing is cached for it.
+  const { id } = await ok<{ id: number }>(
+    human.post('/api/projects', { data: { name: 'A branch that moved' } }),
+  )
+  const dir = path.join(e2eEnv().root, `moved-repo-${id}`)
+  const repo = ownRepo(dir)
+  await ok(human.post('/api/repos', { data: { projectId: id, repoPath: dir, name: 'repo' } }))
+  const branch = 'moved-work'
+  const base = 'moved-base'
+  const sha = repo.git('commit-tree', 'main^{tree}', '-p', 'main', '-m', 'moved work')
+  repo.git('update-ref', `refs/heads/${base}`, sha)
+  repo.git('update-ref', `refs/heads/${branch}`, sha)
+  await ok<TicketFull>(
+    human.post(`/api/projects/${id}/tickets`, {
+      data: { title: 'Moved after the page read it', status: 'done', branch, baseBranch: base },
+    }),
+  )
+
+  await page.goto(`/projects/${id}/cleanup`)
+  // The page has read the branch as it is: its delete button is there.
+  const sweep = page.getByRole('button', { name: /^Delete every eligible local branch/ })
+  await expect(sweep).toBeVisible()
+  // The branch moves after that read: deleting it is refused, and the reason names the branch.
+  const moved = repo.git('commit-tree', 'main^{tree}', '-p', sha, '-m', 'more work')
+  repo.git('update-ref', `refs/heads/${branch}`, moved)
+  expect(repo.git('rev-parse', `refs/heads/${branch}`)).toBe(moved)
+  // The board lists the refs again before a delete, but reuses a listing a few seconds old.
+  await page.waitForTimeout(3_500)
+  await sweep.click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete 1 local branch' }).click()
+
+  const results = page.getByRole('region', { name: 'Deletion results' })
+  await expect(results.locator('[data-outcome="refused"]')).toHaveCount(1)
+  await expect(results).toContainText('moved since: now at')
+  await expect(results).toContainText('Refresh, then confirm again on the new commit.')
+  // The branch is named once, on its own line, not again at the start of the reason.
+  const text = await results.innerText()
+  expect(text.match(new RegExp(branch, 'g'))).toHaveLength(1)
+})
+
+test('the last deletion says a shared reason once and lists every ticket it kept', async ({
+  page,
+  human,
+}) => {
+  // A repository of the test's own: it adds a worktree, which races no other test's listing.
+  const { id } = await ok<{ id: number }>(
+    human.post('/api/projects', { data: { name: 'Last deletion, one reason' } }),
+  )
+  const dir = path.join(e2eEnv().root, `shared-repo-${id}`)
+  const repo = ownRepo(dir)
+  await ok(human.post('/api/repos', { data: { projectId: id, repoPath: dir, name: 'repo' } }))
+
+  // One branch that landed, a worktree on it, and three tickets naming it: each is a leftover that
+  // stays for the very same reason.
+  const branch = 'shared-work'
+  const base = 'shared-base'
+  const sha = repo.git('commit-tree', 'main^{tree}', '-p', 'main', '-m', 'shared work')
+  repo.git('update-ref', `refs/heads/${base}`, sha)
+  repo.git('update-ref', `refs/heads/${branch}`, sha)
+  const tree = path.join(e2eEnv().root, `wt-shared-${id}`)
+  repo.git('worktree', 'add', '-q', tree, branch)
+  const ids: number[] = []
+  for (const title of ['Lane one', 'Lane two', 'Lane three']) {
+    const t = await ok<TicketFull>(
+      human.post(`/api/projects/${id}/tickets`, {
+        data: { title, status: 'done', branch, baseBranch: base },
+      }),
+    )
+    ids.push(t.id)
+    await ok(
+      human.post(`/api/tickets/${t.id}/workspaces`, {
+        data: { name: `wt-${t.id}`, branch, path: tree },
+      }),
+    )
+  }
+
+  await page.goto(`/projects/${id}/cleanup`)
+  // A file turns up in the worktree after the page read it: the page offers the removal, the board
+  // refuses it, and all three items stay for that one reason.
+  fs.writeFileSync(path.join(tree, 'untracked.txt'), 'x\n')
+  await page.getByRole('button', { name: /^Remove every eligible worktree with its branch/ }).click()
+  const dialog = page.getByRole('alertdialog')
+  await dialog.getByRole('button', { name: 'Remove worktrees and delete 3 branches' }).click()
+
+  const results = page.getByRole('region', { name: 'Deletion results' })
+  const kept = results.locator('[data-outcome="refused"]')
+  // One line for all three: the branch and its kind once, with every ticket it kept.
+  await expect(kept).toHaveCount(1)
+  await expect(kept).toContainText(branch)
+  await expect(kept).toContainText(`#${ids[0]}`)
+  await expect(kept).toContainText(`#${ids[ids.length - 1]}`)
+  // The reason reads once, not once per item, with what to do about it.
+  await expect(results.getByText(/has changes or untracked files/)).toHaveCount(1)
+  await expect(results).toContainText('Commit or stash them in the worktree, then refresh.')
+  // Nothing was removed.
+  expect(fs.existsSync(path.join(tree, 'untracked.txt'))).toBe(true)
+  expect(repo.hasRef(`refs/heads/${branch}`)).toBe(true)
+})
+
+test('a removal that fails part-way keeps the worktree it removed and its restore command', async ({
+  page,
+  human,
+}) => {
+  // A repository of the test's own: it adds worktrees, which race no other test's listing.
+  const { id } = await ok<{ id: number }>(
+    human.post('/api/projects', { data: { name: 'Removal that fails part-way' } }),
+  )
+  const dir = path.join(e2eEnv().root, `partial-repo-${id}`)
+  const repo = ownRepo(dir)
+  await ok(human.post('/api/repos', { data: { projectId: id, repoPath: dir, name: 'repo' } }))
+
+  const branch = 'partial-work'
+  const base = 'partial-base'
+  const sha = repo.git('commit-tree', 'main^{tree}', '-p', 'main', '-m', 'partial work')
+  repo.git('update-ref', `refs/heads/${base}`, sha)
+  repo.git('update-ref', `refs/heads/${branch}`, sha)
+  // The branch's worktree, then a detached one at the same commit: one item, two worktrees.
+  const wtA = path.join(e2eEnv().root, `wt-partial-a-${id}`)
+  const wtB = path.join(e2eEnv().root, `wt-partial-b-${id}`)
+  repo.git('worktree', 'add', '-q', wtA, branch)
+  repo.git('worktree', 'add', '-q', '--detach', wtB, sha)
+  const t = await ok<TicketFull>(
+    human.post(`/api/projects/${id}/tickets`, {
+      data: { title: 'Two worktrees', status: 'done', branch, baseBranch: base },
+    }),
+  )
+  for (const [name, worktree] of [
+    ['a', wtA],
+    ['b', wtB],
+  ] as const)
+    await ok(
+      human.post(`/api/tickets/${t.id}/workspaces`, {
+        data: { name: `wt-${name}`, branch, path: worktree },
+      }),
+    )
+
+  // Git reports nothing changed in wtB (the folder is ignored), but it may not write there: the
+  // board removes wtA, then fails on wtB, and wtA is really gone.
+  fs.writeFileSync(path.join(dir, '.git', 'info', 'exclude'), 'locked/\n')
+  const locked = path.join(wtB, 'locked')
+  fs.mkdirSync(locked)
+  fs.writeFileSync(path.join(locked, 'file'), 'x\n')
+  fs.chmodSync(locked, 0o500)
+
+  try {
+    await page.goto(`/projects/${id}/cleanup`)
+    await page.getByRole('button', { name: /^Remove every eligible worktree with its branch/ }).click()
+    const dialog = page.getByRole('alertdialog')
+    await dialog.getByRole('button', { name: 'Remove worktrees and delete 1 branch' }).click()
+
+    const results = page.getByRole('region', { name: 'Deletion results' })
+    // The failed item still says what did go, with the command that puts it back.
+    await expect(results.locator('[data-outcome="failed"]')).toHaveCount(1)
+    await expect(results).toContainText(`removed ${wtA.replace(/\\/g, '/')}`)
+    const restore = results.getByRole('button', { name: /^Copy: git worktree add/ })
+    await expect(restore).toHaveCount(1)
+    expect(await restore.getAttribute('aria-label')).toContain(wtA.replace(/\\/g, '/'))
+    // The worktree that could not go is the one the reason names.
+    await expect(results).toContainText(wtB.replace(/\\/g, '/'))
+    expect(fs.existsSync(wtA)).toBe(false)
+    expect(fs.existsSync(wtB)).toBe(true)
+  } finally {
+    fs.chmodSync(locked, 0o700)
+    fs.rmSync(wtB, { recursive: true, force: true })
+    repo.git('worktree', 'prune')
+  }
+})
+
 test('an agent deletes landed local branches alone: a request with a worktree or a branch on origin is 403 whole', async ({
   agent,
   human,
