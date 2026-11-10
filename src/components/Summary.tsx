@@ -148,6 +148,7 @@ function Section({
   icon: Icon,
   title,
   count,
+  rows,
   extra,
   className = '',
   scroll = false,
@@ -156,6 +157,8 @@ function Section({
   icon: typeof Inbox
   title: string
   count?: number
+  /** How many entries it renders, when the server sends fewer than `count`: what View all reveals. */
+  rows?: number
   /** After the count: what among them needs attention. */
   extra?: ReactNode
   className?: string
@@ -165,7 +168,8 @@ function Section({
 }) {
   // On a phone the scroll cards show their first three entries and a way to see the rest.
   const [expanded, setExpanded] = useState(false)
-  const more = scroll && (count ?? 0) > 3
+  const shown = Math.min(count ?? 0, rows ?? count ?? 0)
+  const more = scroll && shown > 3
   return (
     <Card size="sm" className={cn(scroll && 'lg:max-h-[28rem] lg:h-[28rem]', className)}>
       <CardHeader>
@@ -199,7 +203,7 @@ function Section({
             aria-expanded={expanded}
             onClick={() => setExpanded((v) => !v)}
           >
-            {expanded ? 'Show fewer' : `View all ${count}`}
+            {expanded ? 'Show fewer' : `View all ${shown}`}
           </Button>
         </div>
       )}
@@ -667,7 +671,7 @@ function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
 function DoneToday({ p }: { p: ProjectSummary }) {
   const { tickets, prs, activity } = p.doneToday
   return (
-    <Section icon={CheckCircle2} title="Done today" count={tickets.length + prs.length}>
+    <Section icon={CheckCircle2} title="Done today" count={tickets.length + prs.length} scroll>
       {!tickets.length && !prs.length ? (
         <Quiet>Nothing finished yet today.</Quiet>
       ) : (
@@ -725,7 +729,13 @@ function Next({ p }: { p: ProjectSummary }) {
   const { stage, tickets, total, blocked, backlog } = p.next
   const pid = String(p.project.id)
   return (
-    <Section icon={ListTodo} title={stage ? `Next: ${stage.name}` : 'Next'} count={total}>
+    <Section
+      icon={ListTodo}
+      title={stage ? `Next: ${stage.name}` : 'Next'}
+      count={total}
+      rows={tickets.length}
+      scroll
+    >
       {!tickets.length ? (
         <Quiet>Nothing lined up{stage ? ` in ${stage.name}` : ''}.</Quiet>
       ) : (
