@@ -117,7 +117,10 @@ Loop until nothing is pending or running:
   `depth=` was given and is not `auto`, `AS=<agent name>` when the ticket is reserved, and
   `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
   as the ticket's complexity sets it: `low` for low, `medium` for mid and high; the ticket agent passes
-  the same effort to every agent it starts (spec, builder, the review's phase agents). They run in the background; do
+  the same effort to every agent it starts (spec, builder, the review's phase agents). Tell it to
+  `get_ticket` the ticket before anything else and to carry its context — the instructions, the
+  human's posts and replies, the decisions and their answers, the attachments — into every agent
+  it starts (a phase agent may read the rest itself). They run in the background; do
   not poll. Continue when a completion notification arrives. Record each start on the ticket's work
   timeline: `handoff` with `projectId`, `ticketId` and `to` the ticket agent's name.
 - While runs are in flight, the ticket agents keep their tickets' work timelines (a `heartbeat`

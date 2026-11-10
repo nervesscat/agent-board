@@ -301,6 +301,10 @@ Every spawned agent and lane costs time: hand out only what is new, and only wha
   `list_review_results` for the branch's head SHA. Do not start or hand out what is already there.
 - A lookup of one or two calls (a grep, a file read, one board call) you do yourself; do not spawn
   an agent for it.
+- A brief carries the ticket's context, not just its title: `get_ticket` first, then put in the
+  brief its instructions (the body), the human's posts and replies in full (the Main tab's threads,
+  `list_comments` on each post), the decisions with their answers, and the attachments (their local
+  `path`s). Say the subagent may read the rest itself with `get_ticket` and `list_comments`.
 - Every brief you hand another agent (a subagent's prompt, a lane's `create_ticket` `body`, a
   project agent's run under [Orchestrating](#orchestrating-the-projects-agents)) has five parts:
   1. Goal: what to achieve.
@@ -559,7 +563,9 @@ Without those skills, or for one ticket, orchestrate by hand:
 1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its
    brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
 2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
-   prompt is its `instructions`, the project's `instructions` and a brief in the five parts of
+   prompt is its `instructions`, the project's `instructions`, the ticket's context (`get_ticket`:
+   its instructions, the human's posts and replies, the decisions and their answers, the attachments;
+   the subagent may read the rest itself) and a brief in the five parts of
    [Delegating](#delegating): the step's goal from the ticket (`get_ticket`), its focus, what is
    known (the worktree and branch, what earlier steps returned, the `agentName` it passes on every
    board call: subagents share nothing else),
