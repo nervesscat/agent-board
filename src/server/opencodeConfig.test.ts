@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_SUBAGENT_DEPTH,
   checkOpencodeConfig,
-  deprecatedDepth,
   experimentalDepth,
   globalConfigFiles,
+  hasDeprecatedKey,
   hasExperimentalBlock,
   opencodeConfig,
   parseJsonc,
@@ -72,8 +72,6 @@ describe('the depth a config sets', () => {
     expect(experimentalDepth({ experimental: { subagent_depth: 2 } })).toBe(2)
     expect(experimentalDepth({ experimental: { todo: true } })).toBeNull()
     expect(experimentalDepth({ subagent_depth: 3 })).toBeNull()
-    expect(deprecatedDepth({ subagent_depth: 3 })).toBe(3)
-    expect(deprecatedDepth({ experimental: { subagent_depth: 2 } })).toBeNull()
   })
 
   it('knows a document with an experimental block, even an empty or null one', () => {
@@ -83,6 +81,13 @@ describe('the depth a config sets', () => {
     expect(hasExperimentalBlock({ experimental: false })).toBe(false)
     expect(hasExperimentalBlock({ subagent_depth: 3 })).toBe(false)
     expect(hasExperimentalBlock(null)).toBe(false)
+  })
+
+  it('knows a document that still sets the deprecated top-level key', () => {
+    expect(hasDeprecatedKey({ subagent_depth: 3 })).toBe(true)
+    expect(hasDeprecatedKey({ subagent_depth: 'three' })).toBe(true)
+    expect(hasDeprecatedKey({ experimental: { subagent_depth: 2 } })).toBe(false)
+    expect(hasDeprecatedKey(null)).toBe(false)
   })
 })
 
@@ -127,12 +132,13 @@ describe('reading the effective depth', () => {
     expect(r).toMatchObject({ depth: 2, set: true, source: file, error: null })
   })
 
-  it('reads the deprecated top-level key when no document has an experimental block', () => {
+  it('ignores the deprecated top-level key, and names the document that still sets it', () => {
     const { env, file } = globalConfig('{ "subagent_depth": 3 }')
     expect(readOpencodeConfig({ env, projectDirs: [] })).toMatchObject({
-      depth: 3,
-      set: true,
+      depth: 1,
+      set: false,
       source: file,
+      ignoredDeprecated: file,
     })
   })
 
@@ -182,21 +188,25 @@ describe('reading the effective depth', () => {
     })
   })
 
-  it('does not use the deprecated key when any document defines an experimental block', () => {
-    // The block in the global document wins over a later project's deprecated key: OpenCode ignores it.
-    const global = globalConfig(JSON.stringify({ experimental: { todo: true } }))
-    const project = projectConfig('{ "subagent_depth": 3 }')
+  it('ignores the deprecated key in a later document, and names it', () => {
+    // The block in the global document decides; a later project's deprecated key has no effect.
+    const global = globalConfig(depthConfig(2))
+    const project = projectConfig('{ "subagent_depth": 1 }')
     expect(readOpencodeConfig({ env: global.env, projectDirs: [project.dir] })).toMatchObject({
-      depth: 1,
-      set: false,
+      depth: 2,
+      set: true,
       source: global.file,
+      ignoredDeprecated: project.file,
     })
 
-    // Even in the same document, the block (with no depth) is what OpenCode reads.
+    // A block with no depth turns it off; the deprecated key in the same document changes nothing.
+    const noDepth = globalConfig(JSON.stringify({ experimental: { todo: true } }))
     const both = projectConfig(JSON.stringify({ experimental: { todo: true }, subagent_depth: 3 }))
-    expect(readOpencodeConfig({ env: global.env, projectDirs: [both.dir] })).toMatchObject({
+    expect(readOpencodeConfig({ env: noDepth.env, projectDirs: [both.dir] })).toMatchObject({
       depth: 1,
+      set: false,
       source: both.file,
+      ignoredDeprecated: both.file,
     })
   })
 

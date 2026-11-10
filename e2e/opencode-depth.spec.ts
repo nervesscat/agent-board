@@ -110,15 +110,25 @@ test.describe('the OpenCode card', () => {
     await expect(card(page)).toContainText(jsonc())
   })
 
-  test('with the deprecated top-level key, shows depth on and where it was read', async ({ page, human }) => {
+  test('with only the deprecated top-level key, shows off and says OpenCode no longer reads it', async ({
+    page,
+    human,
+  }) => {
     reset()
     write(json(), '{ "subagent_depth": 3 }')
-    expect(await check(human)).toMatchObject({ depth: 3, set: true, source: json(), error: null })
+    expect(await check(human)).toMatchObject({
+      depth: 1,
+      set: false,
+      source: json(),
+      ignoredDeprecated: json(),
+      error: null,
+    })
 
     await openOpencode(page)
-    await expect(card(page)).toContainText('Multilevel delegation on (depth 3)')
+    await expect(card(page)).toContainText('Multilevel delegation is off')
+    await expect(card(page)).toContainText('is no longer read by OpenCode')
     await expect(card(page)).toContainText(json())
-    await expect(card(page)).not.toContainText('Multilevel delegation is off')
+    await expect(card(page)).not.toContainText('Multilevel delegation on')
   })
 
   test('a malformed config says it could not be read, not a crash; fixing it and checking again turns it on', async ({

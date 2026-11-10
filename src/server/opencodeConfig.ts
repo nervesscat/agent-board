@@ -12,9 +12,10 @@ import path from 'node:path'
  * at the root of a repo). OpenCode merges those documents in that order and the *last* one that defines
  * an `experimental` block decides the depth (`findLast(...)?.info.experimental?.subagent_depth ?? 1`), so
  * a later project block without the key turns delegation off, and a later lower depth overrides an
- * earlier higher one. The deprecated top-level `subagent_depth` is only a fallback when no config defines
- * an `experimental` block. A file that cannot be read or parsed is reported, never a crash, and the
- * user's config is never written.
+ * earlier higher one. The deprecated top-level `subagent_depth` is no longer read by OpenCode (v2.2.5
+ * drops it as an unsupported legacy setting), so it never turns delegation on; the check reports the
+ * document that still sets it, so the human can move it where OpenCode reads it. A file that cannot be
+ * read or parsed is reported, never a crash, and the user's config is never written.
  */
 
 /** The depth OpenCode uses when its config names none. */
@@ -31,6 +32,11 @@ export interface OpencodeConfig {
   checkedAt: string
   /** The first config file that could not be read or parsed, or null when every one there was readable. */
   error: string | null
+  /**
+   * The last document that sets the deprecated top-level `subagent_depth`, which OpenCode no longer reads;
+   * null when none does. The card says so, since the key looks like configuration but has no effect.
+   */
+  ignoredDeprecated: string | null
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -57,9 +63,9 @@ export function experimentalDepth(config: unknown): number | null {
   return validDepth(config.experimental.subagent_depth)
 }
 
-/** The deprecated top-level `subagent_depth` a document sets, or null. */
-export function deprecatedDepth(config: unknown): number | null {
-  return isRecord(config) ? validDepth(config.subagent_depth) : null
+/** Whether a document still sets the deprecated top-level `subagent_depth` (OpenCode ignores it). */
+export function hasDeprecatedKey(config: unknown): boolean {
+  return isRecord(config) && 'subagent_depth' in config
 }
 
 /**
@@ -161,12 +167,12 @@ export function readOpencodeConfig({
   let read: string | null = null
   let error: string | null = null
   /**
-   * The last document that defines an `experimental` block, and the last one that sets the deprecated
-   * top-level key: OpenCode's own order, where the last document with a block wins whether or not its
-   * block names a depth. The deprecated key is only used when no document has a block at all.
+   * The last document that defines an `experimental` block: OpenCode's own order, where the last document
+   * with a block wins whether or not its block names a depth. The deprecated top-level key is ignored
+   * (`ignoredDeprecated` keeps where it was set, to say so on the card).
    */
   let block: { file: string; depth: number | null } | null = null
-  let deprecated: { file: string; depth: number } | null = null
+  let ignoredDeprecated: string | null = null
   for (const file of files) {
     let text: string
     try {
@@ -185,8 +191,7 @@ export function readOpencodeConfig({
       if (error === null) error = `Could not parse ${file}: ${(err as Error).message}`
       continue
     }
-    const found = deprecatedDepth(config)
-    if (found !== null) deprecated = { file, depth: found }
+    if (hasDeprecatedKey(config)) ignoredDeprecated = file
     if (hasExperimentalBlock(config)) {
       // A block whose depth is not a whole number is rejected with its document, so it does not count.
       const raw =
@@ -195,21 +200,16 @@ export function readOpencodeConfig({
       if (raw === undefined || depth !== null) block = { file, depth }
     }
   }
-  let depth = DEFAULT_SUBAGENT_DEPTH
-  let source = read ?? global[0]!
-  if (block) {
-    depth = block.depth ?? DEFAULT_SUBAGENT_DEPTH
-    source = block.file
-  } else if (deprecated) {
-    depth = deprecated.depth
-    source = deprecated.file
-  }
+  // OpenCode no longer reads the deprecated top-level key, so only a block can turn delegation on.
+  const depth = block ? (block.depth ?? DEFAULT_SUBAGENT_DEPTH) : DEFAULT_SUBAGENT_DEPTH
+  const source = block ? block.file : (read ?? global[0]!)
   return {
     depth,
     source,
     set: depth > 1,
     checkedAt: new Date().toISOString(),
     error,
+    ignoredDeprecated,
   }
 }
 

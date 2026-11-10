@@ -186,6 +186,7 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
           <p className="text-xs">
             Fix that file, then check again. Multilevel delegation stays off until the config can be read.
           </p>
+          {config.ignoredDeprecated && <IgnoredDeprecated source={config.ignoredDeprecated} />}
           {again}
         </div>
       </section>
@@ -207,6 +208,9 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
           </p>
           {config.error && (
             <p className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{config.error}</p>
+          )}
+          {config.ignoredDeprecated && (
+            <IgnoredDeprecated source={config.ignoredDeprecated} className="text-muted-foreground" />
           )}
         </div>
         {again}
@@ -231,10 +235,29 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
             <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block decides, so
             a later one can override an earlier depth. The board only reads the file.
           </p>
+          {config.ignoredDeprecated && <IgnoredDeprecated source={config.ignoredDeprecated} />}
           <CopyBlock text={'"experimental": { "subagent_depth": 2 }'} label="Copy snippet" />
           {again}
         </div>
       </div>
     </section>
+  )
+}
+
+/**
+ * OpenCode v2.2.5 drops the top-level `subagent_depth` as an unsupported legacy setting: a document that
+ * still has it looks configured but does nothing. Say where it is, so the human moves it into the
+ * `experimental` block the card reads.
+ */
+function IgnoredDeprecated({ source, className = '' }: { source: string; className?: string }) {
+  return (
+    <p className={`text-xs [overflow-wrap:anywhere] ${className}`}>
+      The top-level{' '}
+      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">subagent_depth</code> in{' '}
+      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">{source}</code> is no longer read
+      by OpenCode; only{' '}
+      <code className="rounded bg-black/10 px-1 font-mono dark:bg-white/10">experimental.subagent_depth</code>{' '}
+      counts.
+    </p>
   )
 }
