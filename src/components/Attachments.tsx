@@ -1,5 +1,6 @@
 import { PlayIcon } from 'lucide-react'
 
+import { COPY_IMAGE_OVERLAY, CopyImageButton } from '#/components/CopyImage'
 import { galleryItem } from '#/components/Gallery'
 import { PdfThumb } from '#/components/PdfThumb'
 import { Tip } from '#/components/ui/tooltip'
@@ -13,16 +14,19 @@ export function Attachments({ items }: { items: (Attachment & { url: string })[]
       {items.map((a) => {
         const gallery = galleryItem({ src: a.url, name: a.name, mime: a.mime })
         return a.mime.startsWith('image/') ? (
-          <Tip key={a.id} content={a.name}>
-            <a href={a.url} target="_blank" rel="noreferrer" {...gallery}>
-              <img
-                src={a.url}
-                alt={a.name}
-                className="max-h-72 cursor-zoom-in rounded-md border object-contain"
-                loading="lazy"
-              />
-            </a>
-          </Tip>
+          <div key={a.id} className="group/thumb relative">
+            <Tip content={a.name}>
+              <a href={a.url} target="_blank" rel="noreferrer" {...gallery}>
+                <img
+                  src={a.url}
+                  alt={a.name}
+                  className="max-h-72 cursor-zoom-in rounded-md border object-contain"
+                  loading="lazy"
+                />
+              </a>
+            </Tip>
+            <CopyImageButton src={a.url} mime={a.mime} name={a.name} className={COPY_IMAGE_OVERLAY} />
+          </div>
         ) : a.mime.startsWith('video/') ? (
           <Tip key={a.id} content={a.name}>
             <a
