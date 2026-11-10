@@ -70,9 +70,9 @@ export function Summary({ projectId }: { projectId?: number }) {
   const now = onServerClock(Date.now(), useServerOffset(data?.generatedAt))
   if (isLoading)
     return (
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-40" />
+          <Skeleton key={i} className={cn('h-40', i === 0 && 'lg:col-span-full')} />
         ))}
       </div>
     )
@@ -147,7 +147,10 @@ function ProjectBlock({ p, now, dismiss }: CardProps) {
       </Empty>
     )
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    // On a desktop the first row is Needs you alone, the second Next, In progress and Done today in
+    // that order, and Carrying over closes the block full width. A phone keeps the layout's order,
+    // stacked, so the order classes start at `lg`.
+    <div className="grid gap-4 lg:grid-cols-3">
       {p.project.overview.map((card) => {
         const Shown = CARDS[card]
         return <Shown key={card} p={p} now={now} dismiss={dismiss} />
@@ -374,7 +377,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
   const pid = String(p.project.id)
   const settle = useSettleInstructions(pid)
   return (
-    <Section icon={Inbox} title="Needs you" count={total} scroll>
+    <Section icon={Inbox} title="Needs you" count={total} scroll className="lg:order-1 lg:col-span-full">
       {!total ? (
         <Quiet>Nothing waiting on you.</Quiet>
       ) : (
@@ -675,7 +678,7 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
 function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
   const items = p.inProgress
   return (
-    <Section icon={Play} title="In progress" count={items.length} scroll>
+    <Section icon={Play} title="In progress" count={items.length} scroll className="lg:order-3">
       {!items.length ? (
         <Quiet>Nothing in progress.</Quiet>
       ) : (
@@ -740,7 +743,13 @@ function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
 function DoneToday({ p }: { p: ProjectSummary }) {
   const { tickets, prs, activity } = p.doneToday
   return (
-    <Section icon={CheckCircle2} title="Done today" count={tickets.length + prs.length} scroll>
+    <Section
+      icon={CheckCircle2}
+      title="Done today"
+      count={tickets.length + prs.length}
+      scroll
+      className="lg:order-4"
+    >
       {!tickets.length && !prs.length ? (
         <Quiet>Nothing finished yet today.</Quiet>
       ) : (
@@ -804,6 +813,7 @@ function Next({ p }: { p: ProjectSummary }) {
       count={total}
       rows={tickets.length}
       scroll
+      className="lg:order-2"
     >
       {!tickets.length ? (
         <Quiet>Nothing lined up{stage ? ` in ${stage.name}` : ''}.</Quiet>
@@ -866,7 +876,7 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
           </Tip>
         )
       }
-      className="lg:col-span-full"
+      className="lg:order-5 lg:col-span-full"
       scroll
     >
       {!items.length ? (
