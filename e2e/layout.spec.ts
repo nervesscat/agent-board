@@ -517,13 +517,17 @@ test('Daily is in the project menu, never the top bar, and the old /daily opens 
   await page.goto(`/projects/${project.id}/daily`)
   await expect(page.getByRole('heading', { level: 1, name: 'Daily' })).toBeVisible()
   await expect(page.getByRole('banner').getByRole('link', { name: 'Daily' })).toHaveCount(0)
-  // In the project's menu, highlighted while its page shows.
+  // In the project's menu, highlighted while its page shows. The router marks the current link
+  // `aria-current="page"`, not only with a class.
   const daily = page.locator('aside nav').getByRole('link', { name: 'Daily' })
-  await expect(daily).toHaveClass(/\bactive\b/)
+  await expect(daily).toHaveAttribute('aria-current', 'page')
   // The old board-wide address opens this browser's current project.
   await page.goto('/daily')
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/daily$`))
-  await expect(page.locator('aside nav').getByRole('link', { name: 'Daily' })).toHaveClass(/\bactive\b/)
+  await expect(page.locator('aside nav').getByRole('link', { name: 'Daily' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
 
   // At 390 the project's pages are a picker, Daily among them, and the top bar still has none.
   await page.setViewportSize({ width: 390, height: 844 })
@@ -540,4 +544,16 @@ test('Daily is in the project menu, never the top bar, and the old /daily opens 
   await page.goto('/daily')
   await expect(page).toHaveURL(/\/$/)
   await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible()
+
+  // The project list failing is the same dead end as an empty one: Home, never stuck on "Opening
+  // Daily…". (The review found /daily depended on this call only since Daily became project-only.)
+  await page.route(
+    (url) => url.pathname === '/api/projects',
+    (route) =>
+      route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"restarting"}' }),
+  )
+  await page.goto('/daily')
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible()
+  await expect(page.getByText('Opening Daily…')).toHaveCount(0)
 })

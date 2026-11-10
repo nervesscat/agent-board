@@ -11,12 +11,18 @@ export const Route = createFileRoute('/daily')({ component: CurrentProjectDaily 
  */
 function CurrentProjectDaily() {
   const navigate = useNavigate()
-  const { data: projects, isPending } = useProjects()
+  const { data: projects, isPending, isError } = useProjects()
   useEffect(() => {
-    if (isPending || !projects) return
+    if (isPending) return
+    // No project to open: none exists, the list failed (a restart, an offline board), or the browser
+    // remembers one that is gone. Home is where a project is picked.
+    if (isError || !projects) {
+      void navigate({ to: '/', replace: true })
+      return
+    }
     const id = currentProjectId(projects.map((p) => p.id))
     if (id) void navigate({ to: '/projects/$id/daily', params: { id }, replace: true })
     else void navigate({ to: '/', replace: true })
-  }, [isPending, projects, navigate])
+  }, [isPending, isError, projects, navigate])
   return <p className="text-sm text-muted-foreground">Opening Daily…</p>
 }
