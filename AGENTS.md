@@ -20,8 +20,9 @@ and the human generates new commands.
 REST `GET /api/me` answers `{actor, agent, role, parent, boardEnv, authOff}`: `actor` is your name
 (your token's name, or `<token>/<name>` once you send `X-Agent-Name`), and it has no `token` field.
 
-- The human is `human`. An agent token is a `worker` unless the human made it an `orchestrator`
-  (Settings, Agent tokens). The role comes with the token: nothing an agent sends raises it.
+- The human is `human`. An agent token made by Connect an agent is an `orchestrator`; the human can
+  make it a `worker` (Settings, Agent tokens). The role comes with the token: nothing an agent sends
+  raises it.
 - Only the human and an orchestrator change a project's instructions (`set_project_instructions`,
   REST `PUT /api/projects/:id/instructions`), create a project with instructions (`POST /api/projects`)
   or move a repo to another project (`PATCH /api/repos/:id` `{projectId}`). A worker is refused with

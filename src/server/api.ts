@@ -188,11 +188,15 @@ const TokenName = z
 const tokensHumanOnly = (request: Request, what: string) => {
   if (isAgent(request)) throw new HttpError(403, `only the human ${what}`)
 }
-// The token itself is in this answer only: the board keeps its hash.
+// The token itself is in this answer only: the board keeps its hash. An orchestrator unless the human asks
+// for a worker: the token Connect an agent hands out is the one that runs and delegates.
 api.post('/api/agent-tokens', async ({ request }) => {
   tokensHumanOnly(request, 'makes agent tokens')
-  const { name } = await readJson(request, z.object({ name: TokenName }))
-  return json(tokens.mintAgentToken(name), 201)
+  const { name, role } = await readJson(
+    request,
+    z.object({ name: TokenName, role: z.enum(AGENT_ROLES).default('orchestrator') }),
+  )
+  return json(tokens.mintAgentToken(name, role), 201)
 })
 api.get('/api/agent-tokens', ({ request }) => {
   tokensHumanOnly(request, 'lists agent tokens')
