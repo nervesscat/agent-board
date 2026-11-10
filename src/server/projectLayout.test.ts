@@ -95,7 +95,6 @@ describe("a project's layout", () => {
     expect(res.body.layout.some((it: { id: string }) => it.id === 'nav.gone')).toBe(false)
     // Details in the main column, after the sections that come before it there by default.
     expect(inArea(res.body.layout, 'ticket.main').map((it) => it.id)).toEqual([
-      'ticket.resume',
       'ticket.instructions',
       'ticket.tasks',
       'ticket.timeline',

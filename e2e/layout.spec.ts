@@ -40,7 +40,6 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await expect(tiles(layout, 'Project menu')).toHaveText(MENU)
   await expect(tiles(layout, 'Overview cards')).toHaveText(CARDS)
   await expect(tiles(layout, 'Ticket page, main column')).toHaveText([
-    'Resume here',
     'Instructions',
     'Tasks',
     'Timeline',
@@ -228,19 +227,11 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   await expect(overview).toHaveText(['Carrying over', ...CARDS.slice(0, 4)])
   await layout.getByRole('switch', { name: 'Show Done today on the Overview' }).click()
 
-  // Details dropped on the top half of Resume here, in the main column: first there.
+  // Details dropped on the top half of Instructions, in the main column: first there.
   await side
     .filter({ hasText: 'Details' })
-    .dragTo(main.filter({ hasText: 'Resume here' }), { targetPosition: { x: 10, y: 3 } })
-  await expect(main).toHaveText([
-    'Details',
-    'Resume here',
-    'Instructions',
-    'Tasks',
-    'Timeline',
-    'Lanes',
-    'Activity',
-  ])
+    .dragTo(main.filter({ hasText: 'Instructions' }), { targetPosition: { x: 10, y: 3 } })
+  await expect(main).toHaveText(['Details', 'Instructions', 'Tasks', 'Timeline', 'Lanes', 'Activity'])
   await expect(side).toHaveText(['Runs', 'Branch', 'Workspaces'])
   // And Workspaces to the main column with its button, hidden there.
   await layout.getByRole('button', { name: 'Move Workspaces to the main column' }).click()
@@ -255,7 +246,6 @@ test('dragging reorders the Overview and moves a ticket section to the other col
   await expect(layout.getByRole('switch', { name: 'Show Done today on the Overview' })).not.toBeChecked()
   await expect(main).toHaveText([
     'Details',
-    'Resume here',
     'Instructions',
     'Tasks',
     'Timeline',
@@ -366,20 +356,6 @@ test('a ticket column with nothing to show on this ticket is not drawn; the othe
   await expect(main.getByRole('heading', { level: 2, name: 'Tasks' })).toBeVisible()
   await expect(side).toHaveCount(0)
   expect((await main.boundingBox())!.width).toBeCloseTo(grid, 0)
-
-  // The other way: on a cancelled ticket, a main column left with only Resume here (shown on open
-  // tickets alone) is not drawn, and the side column takes the width.
-  await arrange(
-    base.map((it) =>
-      it.area === 'ticket.main' && it.id !== 'ticket.resume' ? { ...it, area: 'ticket.side' as const } : it,
-    ),
-  )
-  await ok(human.patch(`/api/tickets/${ticket.id}`, { data: { status: 'cancelled' } }))
-  await page.reload()
-  ;({ grid, main, side } = await columns(page))
-  await expect(side.getByRole('heading', { level: 2, name: 'Tasks' })).toBeVisible()
-  await expect(main).toHaveCount(0)
-  expect((await side.boundingBox())!.width).toBeCloseTo(grid, 0)
 })
 
 /** The project's layout with one ticket section put last in a column. */
@@ -497,11 +473,17 @@ test('a layout saved while a ticket is open keeps the page as drawn: an unsent p
   await expect(main.locator(composer)).toHaveCount(0)
 })
 
-test('a layout saved with the Hand-off card still loads, without it', async ({ page, project, human }) => {
+test('a layout saved with cards since removed still loads, without them', async ({
+  page,
+  project,
+  human,
+}) => {
   const base = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
-  // As a board saved it while the card was there: Hand-off first in the side column.
+  // As a board saved it while the cards were there: the Hand-off card first in the side column, the
+  // Resume note first in the main one.
   const saved = [
-    ...base.filter((it) => it.area !== 'ticket.side'),
+    { id: 'ticket.resume', area: 'ticket.main', hidden: false },
+    ...base.filter((it) => it.area === 'ticket.main'),
     { id: 'ticket.handoff', area: 'ticket.side', hidden: false },
     ...base.filter((it) => it.area === 'ticket.side'),
   ]
@@ -509,6 +491,7 @@ test('a layout saved with the Hand-off card still loads, without it', async ({ p
   expect(res.status()).toBe(200)
   const stored = (await ok<Project>(human.get(`/api/projects/${project.id}`))).layout
   expect(stored.map((it) => it.id)).not.toContain('ticket.handoff')
+  expect(stored.map((it) => it.id)).not.toContain('ticket.resume')
   expect(stored).toEqual(base)
   await page.goto(`/projects/${project.id}/settings`)
   await expect(tiles(editor(page), 'Ticket page, side column')).toHaveText([

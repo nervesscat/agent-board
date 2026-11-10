@@ -3,8 +3,6 @@ import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
   ArrowRight,
-  Bookmark,
-  BookmarkX,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -851,24 +849,8 @@ function Next({ p }: { p: ProjectSummary }) {
 
 function CarryingOver({ p }: { p: ProjectSummary }) {
   const items = p.carryingOver
-  const missing = items.filter((t) => t.resume.noHandoff).length
   return (
-    <Section
-      icon={Clock}
-      title="Carrying over"
-      count={items.length}
-      extra={
-        missing > 0 && (
-          <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
-            <span className="inline-flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400">
-              <BookmarkX className="size-3" /> {missing} without a resume note
-            </span>
-          </Tip>
-        )
-      }
-      className="lg:col-span-full"
-      scroll
-    >
+    <Section icon={Clock} title="Carrying over" count={items.length} className="lg:col-span-full" scroll>
       {!items.length ? (
         <Quiet>Nothing carried over from before today.</Quiet>
       ) : (
@@ -890,9 +872,8 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
                     <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
                       <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
                     </Tip>
-                    {t.resume.noHandoff && <NoHandoff p={p} id={t.id} />}
                   </div>
-                  <Resume p={p} t={t} />
+                  <LastPost post={t.lastPost} />
                 </div>
               }
             />
@@ -900,84 +881,5 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
         </Rows>
       )}
     </Section>
-  )
-}
-
-/** The ticket page, scrolled to its "Resume here" card. */
-function ResumeLink({
-  p,
-  id,
-  className,
-  tip,
-  children,
-}: {
-  p: ProjectSummary
-  id: number
-  className: string
-  /** Its tooltip, if any. */
-  tip?: string
-  children: ReactNode
-}) {
-  return (
-    <Tip content={tip}>
-      <Link
-        to="/projects/$id/features/$ticketId"
-        params={{ id: String(p.project.id), ticketId: String(id) }}
-        hash="resume"
-        className={className}
-      >
-        {children}
-      </Link>
-    </Tip>
-  )
-}
-
-function NoHandoff({ p, id }: { p: ProjectSummary; id: number }) {
-  return (
-    <ResumeLink
-      p={p}
-      id={id}
-      className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 hover:underline dark:text-amber-400"
-      tip="Worked on an earlier day, and nobody left a resume note on where it was left: open it to write one"
-    >
-      <BookmarkX className="size-3" /> no resume note
-    </ResumeLink>
-  )
-}
-
-/**
- * Where the last session left off: the ticket's resume note, with its last progress post under it
- * when that came later; the last progress post alone when there is no note.
- */
-function Resume({ p, t }: { p: ProjectSummary; t: CarryOver }) {
-  const r = t.resume
-  if (!r.note) return <LastPost post={t.lastPost} />
-  return (
-    <>
-      <ResumeLink
-        p={p}
-        id={t.id}
-        className="mt-1 line-clamp-2 border-l-2 border-primary/40 pl-2 text-xs text-muted-foreground hover:text-foreground"
-        tip="Its resume note: open it on the ticket"
-      >
-        <Bookmark className="mr-1 inline size-3 align-[-1px]" />
-        {r.note}
-        {r.at && (
-          <span className="whitespace-nowrap">
-            {' '}
-            — {r.by ? `${r.by}, ` : ''}
-            {ago(r.at)}
-          </span>
-        )}
-      </ResumeLink>
-      {r.stale && (
-        <>
-          <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
-            Progress posted since this note:
-          </p>
-          <LastPost post={t.lastPost} />
-        </>
-      )}
-    </>
   )
 }

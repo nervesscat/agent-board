@@ -3,8 +3,6 @@ import { type HistoryState, Link, createFileRoute, useLocation, useNavigate } fr
 import {
   Archive,
   ArchiveRestore,
-  Bookmark,
-  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -12,12 +10,10 @@ import {
   Flag,
   FlagOff,
   GitBranch,
-  GitCommitHorizontal,
   Hand,
   History,
   Layers,
   ListPlus,
-  ListTodo,
   Lock,
   MessageSquare,
   Paperclip,
@@ -57,7 +53,7 @@ import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
 import { RunsCard, useTicketRuns } from '#/components/RunsCard'
 import { PrState } from '#/components/PrState'
-import { type FeedTab, RESUME_TEMPLATE } from '#/lib/constants'
+import type { FeedTab } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
@@ -245,7 +241,7 @@ function TicketPage() {
     enabled: Boolean(t) && !t?.parentId,
     refetchInterval: 10_000,
   })
-  // A link's #anchor (a post, a reply, the hand-off, the resume note) is brought into view once this
+  // A link's #anchor (a post, a reply, the hand-off) is brought into view once this
   // ticket is drawn: not while the previous ticket stays on screen until it loads. Stepping to another
   // ticket, the location (and its anchor) is the next one's before this route's params are.
   const anchor = useAnchor()
@@ -317,10 +313,6 @@ function TicketPage() {
   // null: a section with nothing to show on this ticket. It is left out of its column, so a column
   // with nothing left to show is not drawn and the other one takes the page's width.
   const sections: Record<AreaId<'ticket.main'>, ReactNode> = {
-    // Keyed by ticket, so an open editor and its draft do not follow to the next one. Not on a
-    // ticket that is finished or archived.
-    'ticket.resume':
-      t.archivedAt || isClosed(kind) ? null : <ResumeNote key={t.id} t={t} onChange={invalidate} />,
     'ticket.instructions': (
       <div id="instructions" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
         <Instructions key={t.id} t={t} onSave={(body) => update.mutate({ body })} onChange={invalidate} />
@@ -539,7 +531,8 @@ const ShownAnchor = createContext<Anchor | null>(null)
 
 /**
  * How far down the stuck header reaches (the top bar and itself), as --ticket-header on the page: what
- * the page scrolls to (#resume) stops below it rather than behind it. Not the page's scroll padding,
+ * the page scrolls to (an anchor such as #tasks) stops below it rather than behind it. Not the page's
+ * scroll padding,
  * which would count the header's own fields as hidden behind it and scroll away when they take focus.
  */
 function measureHeader(header: HTMLElement | null) {
@@ -834,182 +827,6 @@ function Instructions({
               </li>
             ))}
           </ul>
-        </div>
-      )}
-    </section>
-  )
-}
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-
-/**
- * "Resume here": the ticket's one current resume note, pinned above the instructions while the ticket
- * is open and has a note, or carried over from an earlier day without one. Alongside it, what is
- * true now: commits since the note, tasks left, open decisions and threads, which day of work this
- * is. Edited like the instructions; an empty note starts from the template. On any other open ticket
- * a one-line button writes the first one.
- */
-/** Shown only on a ticket still open and not archived: the page leaves it out otherwise. */
-function ResumeNote({ t, onChange }: { t: TicketFull; onChange: () => void }) {
-  const [editing, setEditing] = useState(false)
-  const [note, setNote] = useState('')
-  const r = t.resume
-  const save = useMutation({
-    mutationFn: () => put(`/api/tickets/${t.id}/resume`, { note }),
-    onSuccess: () => {
-      setEditing(false)
-      onChange()
-    },
-    onError: (err) => toast.error(errorMessage(err)),
-  })
-  const open = () => {
-    setNote(r.note || RESUME_TEMPLATE)
-    setEditing(true)
-  }
-  const submit = () => {
-    if (note.trim() && !save.isPending) save.mutate()
-  }
-  if (!r.note && !r.noHandoff && !editing)
-    return (
-      <button
-        type="button"
-        onClick={open}
-        className="-mb-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <Bookmark className="size-3.5" /> Leave a resume note: where the work stands, for whoever picks it up
-        next
-      </button>
-    )
-
-  const own = t.updates.filter((u) => !u.lane)
-  const tasksLeft = t.tasks.filter((x) => !x.done).length
-  const decisions = own.filter((u) => u.decision && !u.decidedAt).length
-  // Discussion where someone other than the assignee spoke last: waiting on whoever works the ticket.
-  const waiting = t.assignee
-    ? own.filter(
-        (u) => !u.progress && !u.decision && !u.summary && (u.thread.lastAuthor ?? u.author) !== t.assignee,
-      ).length
-    : 0
-  const commits = r.commitsSince ?? 0
-  const chip = 'inline-flex items-center gap-1 rounded px-1.5 py-0.5'
-  const warn = `${chip} bg-amber-500/10 text-amber-700 dark:text-amber-400`
-  return (
-    // Linked to as #resume (from the summary's Carrying over), and brought into view as any anchor is.
-    <section
-      id="resume"
-      className={cn(
-        // Below the stuck header, as far as it is at rest; until that is measured, below the top bar.
-        'scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border p-4',
-        r.noHandoff ? 'border-amber-500/60 bg-amber-500/5' : 'border-primary/30 bg-primary/5',
-      )}
-      aria-label="Resume here"
-    >
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h2 className="inline-flex items-center gap-1.5 text-sm font-medium">
-          <Bookmark className="size-4" /> Resume here
-        </h2>
-        {r.at && (
-          <Tip content={stamp(r.at)}>
-            <span className="text-xs text-muted-foreground">
-              by <Actor name={r.by} /> {ago(r.at)}
-              {r.sha && <span className="font-mono"> at {shortSha(r.sha)}</span>}
-            </span>
-          </Tip>
-        )}
-        {!editing && (
-          <Button type="button" variant="ghost" size="xs" className="ml-auto" onClick={open}>
-            <Pencil data-icon="inline-start" /> {r.note ? 'edit' : 'write'}
-          </Button>
-        )}
-      </div>
-      <div className="mb-3 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-        {commits > 0 && (
-          <Tip content="Commits on the ticket's branch after the note was written">
-            <span className={warn}>
-              <GitCommitHorizontal className="size-3.5" /> {plural(commits, 'commit')} since this note
-            </span>
-          </Tip>
-        )}
-        {r.stale && commits === 0 && (
-          <Tip content="A progress post came after the note">
-            <span className={warn}>
-              <TriangleAlert className="size-3.5" /> progress posted since this note
-            </span>
-          </Tip>
-        )}
-        {r.noHandoff && r.note && (
-          <Tip content="It was worked on a later day than this note was written">
-            <span className={warn}>
-              <TriangleAlert className="size-3.5" /> no resume note since the last session
-            </span>
-          </Tip>
-        )}
-        {t.tasks.length > 0 && (
-          <span className={cn(chip, 'bg-muted')}>
-            <ListTodo className="size-3.5" />{' '}
-            {tasksLeft ? `${plural(tasksLeft, 'task')} left` : 'all tasks done'}
-          </span>
-        )}
-        {decisions > 0 && (
-          <span className={warn}>
-            <Scale className="size-3.5" /> {plural(decisions, 'open decision')}
-          </span>
-        )}
-        {waiting > 0 && (
-          <Tip content={`Posts where someone spoke after ${t.assignee}, the assignee`}>
-            <span className={cn(chip, 'bg-muted')}>
-              <MessageSquare className="size-3.5" /> {plural(waiting, 'unanswered thread')}
-            </span>
-          </Tip>
-        )}
-        {r.day !== null && (
-          <Tip content={t.startedAt ? `Work on it started ${stamp(t.startedAt)}` : undefined}>
-            <span className={cn(chip, 'bg-muted')}>
-              <CalendarDays className="size-3.5" /> day {r.day} in progress
-            </span>
-          </Tip>
-        )}
-      </div>
-      {editing ? (
-        <div className="space-y-2">
-          <RichEditor
-            value={note}
-            onChange={setNote}
-            onSubmit={submit}
-            onCancel={() => setEditing(false)}
-            autoFocus
-            minHeight="min-h-40"
-            label="Resume note"
-            placeholder="Where the work stands, what is next, how to pick it up."
-          />
-          <div className="flex items-center justify-end gap-2">
-            <span className="mr-auto text-xs text-muted-foreground">
-              Saving also posts it to the feed, so earlier notes stay readable.
-            </span>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)}>
-              Cancel
-            </Button>
-            <Button type="button" size="sm" disabled={!note.trim() || save.isPending} onClick={submit}>
-              {save.isPending ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-        </div>
-      ) : r.note ? (
-        <Markdown>{r.note}</Markdown>
-      ) : (
-        <div className="text-sm">
-          <p className="font-medium">No resume note yet</p>
-          <p className="text-muted-foreground">
-            This ticket was already being worked on an earlier day, and nobody wrote down where it was left.{' '}
-            <button
-              type="button"
-              onClick={open}
-              className="underline underline-offset-2 hover:text-foreground"
-            >
-              Write the resume note
-            </button>{' '}
-            so the next session can pick it up without asking.
-          </p>
         </div>
       )}
     </section>
@@ -1988,8 +1805,8 @@ function useNewAgentPosts(t: TicketFull, posts: UpdateRow[], open: boolean) {
 /**
  * The ticket's feed in two tabs. Main, open on arrival, is the human's: the summary on top, then the
  * decisions still waiting on them, then the posts by their last activity, so a reply brings its post
- * up. Agents is the agents' working record, newest first: progress, the review phases, the builder's
- * notes, the resume note's versions. The board puts each post in one as it is posted; the box posts
+ * up. Agents is the agents' working record, newest first: progress, the review phases and the
+ * builder's notes. The board puts each post in one as it is posted; the box posts
  * in the tab that is open. A post marked progress is a step of the work; one written here is not,
  * until its mark progress action makes it one. Any post can have replies, which stay under it.
  */
@@ -2063,7 +1880,7 @@ function Activity({
                 Main
               </TabsTrigger>
             </Tip>
-            <Tip content="The agents' working record: progress, review phases, builder notes, resume notes">
+            <Tip content="The agents' working record: progress, review phases, builder notes">
               <TabsTrigger value="agents" className="after:hidden">
                 Agents
                 {fresh > 0 && (
@@ -2424,12 +2241,6 @@ function PostCard({ u, projectId, onChange }: { u: UpdateRow; projectId: string;
             <Tip content="The lane's summary: where its work stands, as its agents keep it">
               <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
                 <ScrollText className="size-3" /> summary
-              </span>
-            </Tip>
-          ) : u.handoff ? (
-            <Tip content="A resume note as it was saved: where the work was left off then">
-              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium">
-                <Bookmark className="size-3" /> resume note
               </span>
             </Tip>
           ) : (

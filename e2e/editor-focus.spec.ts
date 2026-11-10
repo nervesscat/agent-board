@@ -482,12 +482,6 @@ test('editors without an attach of their own have none in the toolbar; posts and
   await ok(human.post(`/api/tickets/${t.id}/updates`, { data: { body: 'A post to answer.' } }))
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
 
-  // The resume note.
-  await page.getByRole('button', { name: /^Leave a resume note/ }).click()
-  const note = page.getByRole('region', { name: 'Resume here' }).getByRole('textbox', { name: 'Resume note' })
-  await expect(note).toBeFocused()
-  await expectFormatsOnly(note)
-
   // New post and Reply: one attach each, the toolbar's, adding to that form's files.
   const actions = page.getByRole('article').getByRole('group', { name: 'Post actions' })
   await actions.hover()

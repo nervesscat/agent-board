@@ -44,7 +44,6 @@ export const LAYOUT_ELEMENTS = [
   { id: 'overview.next', label: 'Next', area: 'overview' },
   { id: 'overview.carryingOver', label: 'Carrying over', area: 'overview' },
   // A ticket's page.
-  { id: 'ticket.resume', label: 'Resume here', area: 'ticket.main', locked: 'Where resume links land' },
   { id: 'ticket.instructions', label: 'Instructions', area: 'ticket.main', locked: "The ticket's own text" },
   { id: 'ticket.tasks', label: 'Tasks', area: 'ticket.main', locked: 'Where blocked-task links land' },
   { id: 'ticket.timeline', label: 'Timeline', area: 'ticket.main' },

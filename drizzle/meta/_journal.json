@@ -323,6 +323,13 @@
       "when": 1794186995433,
       "tag": "0045_work_event_on",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1794293024618,
+      "tag": "0046_drop_resume_note",
+      "breakpoints": true
     }
   ]
 }
