@@ -197,6 +197,8 @@ type Section = {
   hash: string
   /** Only the human sees it: an agent's pages leave it out too. */
   humanOnly?: boolean
+  /** The page draws it only while sign-in is on (a board with sign-in off has no passkeys). */
+  signInOnly?: boolean
 }
 
 const BOARD_SETTINGS: Section[] = [
@@ -252,6 +254,7 @@ const BOARD_SETTINGS: Section[] = [
     keywords: ['passkeys', 'sessions', 'sign in', 'security'],
     hash: 'devices',
     humanOnly: true,
+    signInOnly: true,
   },
 ]
 
@@ -583,6 +586,8 @@ export function CommandPalette() {
   }
   for (const section of BOARD_SETTINGS) {
     if (section.humanOnly && me?.agent) continue
+    // The section is only on the page while sign-in is on; until that is known, leave it out.
+    if (section.signInOnly && me?.authOff !== false) continue
     staticItems.push({
       key: `setting:global:${section.key}`,
       kind: 'setting',

@@ -81,6 +81,20 @@ test('pages, settings and actions are searchable, recents come back when the box
   await expect(page.getByRole('option')).toHaveCount(0)
 })
 
+test('a section the page does not draw with sign-in off is not offered', async ({ page, project }) => {
+  await page.goto(`/projects/${project.id}/features`)
+  await openPalette(page)
+
+  // This board runs with sign-in off, so Settings draws no #devices: the palette must not send it there.
+  await box(page).fill('passkeys')
+  await expect(page.getByText('No matches for “passkeys”.')).toBeVisible()
+  await expect(page.getByRole('option').filter({ hasText: 'Devices and passkeys' })).toHaveCount(0)
+
+  // The rest of Settings is still there.
+  await box(page).fill('settings')
+  await expect(page.getByRole('option').filter({ hasText: 'Board-wide preferences' })).toBeVisible()
+})
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
