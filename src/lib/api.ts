@@ -56,6 +56,11 @@ import type { WorkTimeline } from './workTimeline'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
+/**
+ * `/api/summary`: the summary, and the name of the actor who asked for it. This browser remembers
+ * which Needs you entries that actor has opened (`needsYou.ts`), per actor.
+ */
+export type SummaryPayload = Summary & { actor: string }
 /** A row of `/api/projects`: the project, its repos, and how many tickets and open PRs it holds. */
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
