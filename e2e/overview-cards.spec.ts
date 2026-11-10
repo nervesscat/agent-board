@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test'
 
-import { expect, section, test } from './fixtures'
+import { expect, ok, section, test } from './fixtures'
 import { create, record, workedTicket } from './workTimeline'
 
 /**
@@ -35,57 +35,75 @@ async function overflows(card: Locator) {
 
 const height = async (l: Locator) => (await l.boundingBox())!.height
 
-const shot = (page: Page, name: string) =>
-  page.screenshot({ path: test.info().outputPath(`${name}.png`), animations: 'disabled' })
+const shot = (page: Page, name: string, fullPage = false) =>
+  page.screenshot({ path: test.info().outputPath(`${name}.png`), animations: 'disabled', fullPage })
 
 test('Needs you and In progress are as tall as each other and scroll what does not fit', async ({
   page,
   project,
   api,
+  human,
 }) => {
   // Many tickets waiting for a look fill Needs you; one is in progress.
   for (let i = 1; i <= 24; i++) await api.ticket({ title: `Ready for a look ${i}`, status: 'review' })
   await api.ticket({ title: 'Being built', status: 'in_progress' })
+  // Enough finished today and lined up next to run past the cap, as Needs you does.
+  for (let i = 1; i <= 8; i++) {
+    const t = await api.ticket({ title: `Shipped today ${i}`, status: 'todo' })
+    await ok(human.patch(`/api/tickets/${t.id}`, { data: { status: 'done' } }))
+  }
+  for (let i = 1; i <= 5; i++) await api.ticket({ title: `Lined up ${i}`, status: 'todo' })
 
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto(`/projects/${project.id}`)
   const needsYou = section(page, 'Needs you')
   const inProgress = section(page, 'In progress')
+  const doneToday = section(page, 'Done today')
+  const next = section(page, 'Next: To do')
   await expect(needsYou).toContainText('Ready for a look 24')
   await expect(inProgress).toContainText('Being built')
+  await expect(doneToday).toContainText('Shipped today 8')
+  await expect(next).toContainText('Lined up 5')
 
+  // Every card of the pair grid is the same fixed height, whatever it holds.
   const desktop = await height(needsYou)
-  expect(await height(inProgress)).toBe(desktop)
   expect(desktop).toBeGreaterThan(300)
   expect(desktop).toBeLessThan(500)
-  // The pair sit side by side.
+  for (const card of [inProgress, doneToday, next]) expect(await height(card)).toBe(desktop)
+  // The pairs sit side by side.
   expect((await needsYou.boundingBox())!.y).toBe((await inProgress.boundingBox())!.y)
+  expect((await doneToday.boundingBox())!.y).toBe((await next.boundingBox())!.y)
   await overflows(needsYou)
-  // In progress fits, and does not scroll; the other sections keep growing with what they hold.
-  expect(await content(inProgress).evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
-  expect(await content(section(page, 'Done today')).evaluate((el) => getComputedStyle(el).overflowY)).toBe(
-    'visible',
-  )
-  await content(needsYou).evaluate((el) => el.scrollTo(0, 200))
-  await shot(page, 'desktop')
+  await overflows(doneToday)
+  // In progress and Next fit, and do not scroll; their areas still scroll once they need to.
+  for (const card of [inProgress, next]) {
+    expect(await content(card).evaluate((el) => getComputedStyle(el).overflowY)).toBe('auto')
+    expect(await content(card).evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
+  }
+  await shot(page, 'desktop', true)
 
   await page.setViewportSize({ width: 390, height: 844 })
-  // On a phone the card shows its first three entries and a way to see the rest; no nested scroll.
-  const rows = content(needsYou).locator('li')
-  await expect(rows.nth(3)).toBeHidden()
-  const more = needsYou.getByRole('button', { name: /View all/ })
-  await expect(more).toBeVisible()
-  await more.click()
-  await expect(rows.nth(3)).toBeVisible()
-  await expect(needsYou.getByRole('button', { name: 'Show fewer' })).toBeVisible()
-  // Both cards and their scrolling areas stay within the phone's width.
-  for (const card of [needsYou, inProgress]) {
+  // Capped first, all four cards in one shot: three entries each, and the way to see the rest.
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await shot(page, 'phone-capped', true)
+  // On a phone each card shows its first three entries and a way to see the rest; no nested scroll.
+  for (const card of [needsYou, doneToday, next]) {
+    const rows = content(card).locator('li')
+    await expect(rows.nth(3)).toBeHidden()
+    const more = card.getByRole('button', { name: /View all/ })
+    await expect(more).toBeVisible()
+    await more.click()
+    await expect(rows.nth(3)).toBeVisible()
+    await expect(card.getByRole('button', { name: 'Show fewer' })).toBeVisible()
+  }
+  // Every card and its scrolling area stay within the phone's width.
+  for (const card of [needsYou, inProgress, doneToday, next]) {
     const b = (await card.boundingBox())!
     expect(b.x + b.width).toBeLessThanOrEqual(390)
     expect(await content(card).evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   }
   expect(await content(needsYou).evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
-  await needsYou.scrollIntoViewIfNeeded()
+  await doneToday.scrollIntoViewIfNeeded()
   await shot(page, 'phone')
 })
 
@@ -145,6 +163,31 @@ test('In progress says what a ticket waits on and since when, when a person has 
     /Waiting on you for [^·]+ since \d{1,2}:\d{2}\s*[AP]M/,
   )
   await expect(row.getByTestId('stall-notice')).toHaveCount(0)
+})
+
+test('Needs you lists a ticket whose agent is waiting on the human, and links to it', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Approve the copy', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'spec' })
+  await record(agent, project, t.id, {
+    kind: 'wait_start',
+    reason: 'human',
+    note: 'needs the copy approved',
+  })
+
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  const link = needsYou.getByRole('link', { name: /Waiting on you since/ })
+  await expect(link).toContainText(/Waiting on you since \d{1,2}:\d{2}\s*[AP]M/)
+  await expect(link).toContainText('claude: needs the copy approved')
+  await expect(needsYou).toContainText(`#${t.id} Approve the copy`)
+  await expect(link).toHaveAttribute('href', new RegExp(`/projects/${project.id}/features/${t.id}`))
+  await link.click()
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}`))
 })
 
 test('a busy card with no other badge shows what it is doing now, as icon and time', async ({

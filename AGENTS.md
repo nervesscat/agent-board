@@ -180,9 +180,15 @@ http_headers = { Authorization = "Bearer <token>" }
    does, where it stands now, each review round's verdict in one line, the PR, the preview and what
    to try there, and the proofs (screenshots, recordings) as `files`. Rewrite it to the current
    state whenever that changes, instead of adding posts for the human: each write is a new version
-   (`change` says in one line what changed, required from the second), the board keeps every
-   earlier one behind "history" (`get_ticket_summary`), and every write reaches the human like a
-   new post. Until one is written, the ticket's newest progress post stands in for it.
+   (the board keeps every earlier one behind "history", `get_ticket_summary`) and reaches the human
+   like a new post. A new version replaces the previous one in wording, never in facts: carry
+   forward every section and fact that still holds (what the change does, where it stands, each
+   review round's verdict, the PR, the preview and what to try there, how it was tested); keep the
+   latest screenshots and recordings in `files`, and older proofs while they still show the current
+   state, never dropping the proofs for a section that still stands. Add what changed this time
+   (`change`, one line, required from the second); do not delete the rest. If a fact no longer
+   holds, say what replaced it rather than silently removing the line. Until one is written, the
+   ticket's newest progress post stands in for it.
    **Previews:** when the change can be tried (a page, an API), have a preview the human can open
    before anything is merged, and post its link with what to try. Say that what the human posts
    there stays in a copy of the data. Keep it running while the ticket is in review.
@@ -317,8 +323,14 @@ http_headers = { Authorization = "Bearer <token>" }
       the summary.
    7. The summary, up to date (`set_ticket_summary`, not a new hand-off post): the PR link, **the
       preview link and what to try there**, how it was tested, the e2e result (the run's summary, or
-      its report when something failed), each review round's verdict, and screenshots of what
-      changed for a UI change in `files`.
+      its report when something failed), each review round's verdict, and the latest screenshots of
+      what changed for a UI change in `files`. A new version replaces the previous one in wording,
+      never in facts: carry forward every section and fact that still holds (what the change does,
+      where it stands, each review round's verdict, the PR, the preview and what to try there, how
+      it was tested); keep the latest screenshots and recordings in `files`, and older proofs while
+      they still show the current state, never dropping the proofs for a section that still stands.
+      Add what changed this time (`change`, one line); do not delete the rest. If a fact no longer
+      holds, say what replaced it rather than silently removing the line.
    8. Resume note if the ticket stays open past the session (step 9).
 
    `update_ticket` to `review` answers with `open`: every task and subtask still open, the

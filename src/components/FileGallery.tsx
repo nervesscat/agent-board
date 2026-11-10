@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { FileIcon, FileText, PlayIcon } from 'lucide-react'
 
+import { COPY_IMAGE_OVERLAY, CopyImageButton } from '#/components/CopyImage'
 import { galleryItem } from '#/components/Gallery'
 import { Tip } from '#/components/ui/tooltip'
 import type { GalleryFile } from '#/lib/api'
@@ -30,17 +31,25 @@ function FileTile({ projectId, file: f }: { projectId: string; file: GalleryFile
   const name = `#${f.ticket.id} ${f.ticket.title}`
   const lane = f.lane && `#${f.lane.id} ${f.lane.title}`
   return (
-    <li className="flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card" data-file={f.id}>
-      <a
-        href={f.url}
-        target="_blank"
-        rel="noreferrer"
-        aria-label={`Open ${f.name}`}
-        className="relative block aspect-[4/3] overflow-hidden bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        {...galleryItem({ src: f.url, name: f.name, mime: f.mime }, GROUP)}
-      >
-        <Thumb file={f} />
-      </a>
+    <li
+      className="group/thumb flex min-w-0 flex-col overflow-hidden rounded-lg border bg-card"
+      data-file={f.id}
+    >
+      <div className="relative">
+        <a
+          href={f.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Open ${f.name}`}
+          className="relative block aspect-[4/3] overflow-hidden bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          {...galleryItem({ src: f.url, name: f.name, mime: f.mime }, GROUP)}
+        >
+          <Thumb file={f} />
+        </a>
+        {f.kind === 'image' && (
+          <CopyImageButton src={f.url} mime={f.mime} name={f.name} className={COPY_IMAGE_OVERLAY} />
+        )}
+      </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1 p-2 text-xs">
         <Tip content={f.name}>
           <div data-slot="file-name" className="truncate text-sm font-medium">

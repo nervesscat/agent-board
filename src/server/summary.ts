@@ -274,6 +274,28 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       prNumber: t.prNumber,
       updatedAt: t.updatedAt,
     }))
+  // Open waits on the human on work still going. A ticket already asking with an open decision card
+  // is listed once, as that card.
+  const decided = new Set(decisions.map((d) => d.ticketId))
+  const humanWaits = tickets
+    .filter((t) => kind(t.status) === 'active' && !closed(t) && !decided.has(t.id))
+    .flatMap((t) =>
+      timelines
+        .get(t.id)!
+        .timeline.waits.filter((w) => w.open && w.reason === 'human')
+        .map((w) => ({
+          waitId: w.id,
+          ticketId: t.id,
+          ticketTitle: t.title,
+          status: t.status,
+          assignee: t.assignee,
+          parent: parentOf(t),
+          agent: w.agent,
+          note: w.note,
+          since: w.start,
+        })),
+    )
+    .sort((a, b) => Date.parse(a.since) - Date.parse(b.since))
 
   // --- in progress: since when and the last progress post, for every ticket in progress ---
   const working = top.filter((t) => inProgress(kind(t.status)))
@@ -443,6 +465,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
     agents: listAgents(project.id).map((a) => ({ name: a.name, avatarUrl: a.avatarUrl })),
     needsYou: {
       decisions,
+      humanWaits,
       prs: prsToReview,
       threads,
       reviews,
@@ -451,6 +474,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       stalled,
       total:
         decisions.length +
+        humanWaits.length +
         prsToReview.length +
         threads.length +
         reviews.length +
