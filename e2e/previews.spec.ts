@@ -198,12 +198,13 @@ test("lists the project's previews, the running ones apart, each with its ticket
     await expect(down).toContainText('feat/down')
     await expect(down).toContainText(dead)
     await expect(down).toContainText('In progress')
-    const open = down.getByRole('link', { name: 'Open preview' })
+    const open = down.getByRole('link', { name: 'Open in browser' })
     await expect(open).toHaveAttribute('href', dead)
     await expect(open).toHaveAttribute('target', '_blank')
     await expect(open).toHaveAttribute('rel', /\bnoreferrer\b/)
-    // Nothing for the board to run: a link only.
-    await expect(down.getByRole('button')).toHaveCount(0)
+    // The same link opens inside the board; nothing for the board to run, so no Start or Stop.
+    await expect(down.getByRole('button', { name: 'Open', exact: true })).toBeVisible()
+    await expect(down.getByRole('button', { name: /^(Start|Stop|Restart)$/ })).toHaveCount(0)
 
     // A closed ticket's preview stays, with its stage; a link off this machine is never checked.
     const hosted = stopped.getByRole('listitem').filter({ hasText: 'Shipped with a hosted link' })
@@ -563,7 +564,8 @@ test("Stop on a link row stops the agent's server when it runs from the workspac
       .getByRole('listitem')
       .filter({ hasText: 'Started by an agent' })
     await expect(row).toContainText('Running')
-    await expect(row.getByRole('link', { name: 'Open preview' })).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Open', exact: true })).toBeVisible()
+    await expect(row.getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', server.url)
     await expectTooltip(
       row.getByRole('button', { name: 'Stop', exact: true }),
       "Stop the server behind this link (it runs from the workspace's worktree) and free its port",
@@ -578,7 +580,7 @@ test("Stop on a link row stops the agent's server when it runs from the workspac
       .getByRole('listitem')
       .filter({ hasText: 'Started by an agent' })
     await expect(after).toContainText('Not running')
-    await expect(after.getByRole('link', { name: 'Open preview' })).toHaveAttribute('href', server.url)
+    await expect(after.getByRole('link', { name: 'Open in browser' })).toHaveAttribute('href', server.url)
     await expect(after.getByRole('button', { name: 'Stop', exact: true })).toHaveCount(0)
     const ticket = await ok<TicketFull>(human.get(`/api/tickets/${t.id}`))
     expect(ticket.workspaces.find((w) => w.id === ws.id)?.previewUrl).toBe(server.url)

@@ -176,7 +176,7 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Previe
       }),
     )
     await page.goto(`/projects/${project.id}/previews?stage=_all`)
-    await expect(page.getByRole('link', { name: 'Open preview' })).toHaveCount(2)
+    await expect(page.getByRole('link', { name: 'Open in browser' })).toHaveCount(2)
     await expect(page.getByText(/^The board will not stop it: a-very-long-relative/)).toBeVisible()
     await expect(page.getByLabel('Preview limit')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Stop all' })).toBeVisible()
@@ -195,7 +195,7 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Previe
     const stage = project.stages.find((s) => s.key === status)!
     await page.getByRole('option', { name: new RegExp(`^${stage.name} 2$`) }).tap()
     await expect(page).toHaveURL(new RegExp(`\\?stage=${status}$`))
-    await expect(page.getByRole('link', { name: 'Open preview' })).toHaveCount(2)
+    await expect(page.getByRole('link', { name: 'Open in browser' })).toHaveCount(2)
     expect(await scrollsSideways(page)).toBe(false)
   } finally {
     await new Promise((resolve) => live.close(resolve))

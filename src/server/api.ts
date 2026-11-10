@@ -882,6 +882,13 @@ api.post('/api/tickets/:id/runs/start', async ({ request, params, actor }) =>
 api.post('/api/tickets/:id/runs/stop', async ({ request, params, actor }) =>
   json(await ticketRuns.stopTicketRuns(id(params), actor, await optionalJson(request, RunsScope))),
 )
+// One run from one workspace: its state (building, running with its link, stopped, failed). A window
+// showing a run asks about that run, not the workspace's first preview one.
+api.get('/api/workspaces/:id/runs/:runId', ({ params }) => {
+  const state = runState(id(params), id(params, 'runId'))
+  if (!state) throw new HttpError(404, 'the board never ran that run of this workspace')
+  return json(state)
+})
 // One run from one workspace. Nothing in the body is read: what runs is the stored config.
 api.post('/api/workspaces/:id/runs/:runId/start', ({ params, actor }) =>
   json(startRun(id(params), id(params, 'runId'), actor), 202),

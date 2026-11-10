@@ -782,6 +782,26 @@ before the preview sees it), and the socket closes when the run stops. Cookies a
 board never reach the preview, and its own cookies are kept on the run's path. With sign-in off every `/p/`
 path answers 404.
 
+#### A preview inside the board
+
+**Open** on a running preview (a ticket's Runs card, the Previews page) shows it inside CrossBoard, in
+a window over the board's pages, instead of a browser tab: the ticket and the run it is over it, then
+reload, the URL, **Copy link**, **Open in browser**, maximize and close. Navigating the board leaves it
+where it is (the window is independent of the ticket's page), opening another preview adds a tab, and
+the window never starts or stops a run: one that is stopped, building or failed says so, with where its
+Start is. On a phone it fills the screen, with its close button.
+
+The web build frames the preview's path on the board's own origin (`/p/<workspaceId>/<runId>/`), which
+carries the board's sign-in and never a loopback port, so there is nothing for the preview's own
+`X-Frame-Options` to refuse: the proxy drops it and narrows any `Content-Security-Policy`
+`frame-ancestors` to `'self'`, the board's origin the path is served at. An `https` board never mixes in
+an `http` page. The desktop app frames it in a real embedded browser view (`<webview>`) with the same
+toolbar. A link that is not the board's proxy is framed only on this machine, and only when it is a
+loopback one; when its own headers refuse a frame, the window says why and offers **Open in browser**,
+and a hosted page keeps that button alone. **Open in browser** opens the proxy link when there is one
+(the same preview, and it reaches a phone or another device: off this machine it is the tailnet
+entrance's link, never the board's own `localhost`), else the loopback link on this machine.
+
 A browser that cannot send the `Authorization` header gets a link: `POST /api/workspaces/:id/preview/link`
 (MCP `preview_link`) returns `url`, `/p/<w>/<r>/?pl=…`. The link works for anyone who holds it until it
 expires, five minutes after it is returned, and it is not single-use: send it only to the person meant to
