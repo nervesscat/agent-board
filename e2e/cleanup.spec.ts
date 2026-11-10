@@ -185,6 +185,65 @@ test('the dialog names a server linked on this machine at the worktree, which it
   expect(fs.existsSync(tree)).toBe(true)
 })
 
+test('the last deletion says a shared reason once and lists every ticket it kept', async ({
+  page,
+  human,
+}) => {
+  // A repository of the test's own: it adds a worktree, which races no other test's listing.
+  const { id } = await ok<{ id: number }>(
+    human.post('/api/projects', { data: { name: 'Last deletion, one reason' } }),
+  )
+  const dir = path.join(e2eEnv().root, `shared-repo-${id}`)
+  const repo = ownRepo(dir)
+  await ok(human.post('/api/repos', { data: { projectId: id, repoPath: dir, name: 'repo' } }))
+
+  // One branch that landed, a worktree on it, and three tickets naming it: each is a leftover that
+  // stays for the very same reason.
+  const branch = 'shared-work'
+  const base = 'shared-base'
+  const sha = repo.git('commit-tree', 'main^{tree}', '-p', 'main', '-m', 'shared work')
+  repo.git('update-ref', `refs/heads/${base}`, sha)
+  repo.git('update-ref', `refs/heads/${branch}`, sha)
+  const tree = path.join(e2eEnv().root, `wt-shared-${id}`)
+  repo.git('worktree', 'add', '-q', tree, branch)
+  const ids: number[] = []
+  for (const title of ['Lane one', 'Lane two', 'Lane three']) {
+    const t = await ok<TicketFull>(
+      human.post(`/api/projects/${id}/tickets`, {
+        data: { title, status: 'done', branch, baseBranch: base },
+      }),
+    )
+    ids.push(t.id)
+    await ok(
+      human.post(`/api/tickets/${t.id}/workspaces`, {
+        data: { name: `wt-${t.id}`, branch, path: tree },
+      }),
+    )
+  }
+
+  await page.goto(`/projects/${id}/cleanup`)
+  // A file turns up in the worktree after the page read it: the page offers the removal, the board
+  // refuses it, and all three items stay for that one reason.
+  fs.writeFileSync(path.join(tree, 'untracked.txt'), 'x\n')
+  await page.getByRole('button', { name: /^Remove every eligible worktree with its branch/ }).click()
+  const dialog = page.getByRole('alertdialog')
+  await dialog.getByRole('button', { name: 'Remove worktrees and delete 3 branches' }).click()
+
+  const results = page.getByRole('region', { name: 'Deletion results' })
+  const kept = results.locator('[data-outcome="refused"]')
+  // One line for all three: the branch and its kind once, with every ticket it kept.
+  await expect(kept).toHaveCount(1)
+  await expect(kept).toContainText(branch)
+  await expect(kept).toContainText(`#${ids[0]}`)
+  await expect(kept).toContainText(`#${ids[ids.length - 1]}`)
+  // The reason reads once, not once per item, with what to do about it.
+  await expect(results.getByText(/has changes or untracked files/)).toHaveCount(1)
+  await expect(results).toContainText('Commit or stash them in the worktree, then refresh.')
+  // Nothing was removed.
+  expect(fs.existsSync(path.join(tree, 'untracked.txt'))).toBe(true)
+  expect(repo.hasRef(`refs/heads/${branch}`)).toBe(true)
+})
+
 test('an agent deletes landed local branches alone: a request with a worktree or a branch on origin is 403 whole', async ({
   agent,
   human,
