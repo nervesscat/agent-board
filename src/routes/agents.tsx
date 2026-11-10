@@ -225,8 +225,11 @@ function OpencodeDelegation({ config }: { config: OpencodeConfig }) {
             Multilevel delegation is off: subagents cannot launch subagents
           </p>
           <p className="text-xs [overflow-wrap:anywhere]">
-            Add this to <code className="rounded bg-black/10 px-1 dark:bg-white/10">{config.source}</code>,
-            then restart OpenCode. The board only reads the file.
+            Add this to <code className="rounded bg-black/10 px-1 dark:bg-white/10">{config.source}</code>{' '}
+            (inside its <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block
+            if it has one), then restart OpenCode. The last config file that defines an{' '}
+            <code className="rounded bg-black/10 px-1 dark:bg-white/10">experimental</code> block decides, so
+            a later one can override an earlier depth. The board only reads the file.
           </p>
           <CopyBlock text={'"experimental": { "subagent_depth": 2 }'} label="Copy snippet" />
           {again}

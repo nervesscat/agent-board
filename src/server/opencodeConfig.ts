@@ -4,23 +4,26 @@ import path from 'node:path'
 
 /**
  * Whether this machine lets OpenCode run a subagent from inside a subagent. OpenCode allows it only when
- * its config sets `experimental.subagent_depth` above 1 (the top-level `subagent_depth` key is deprecated
- * but still read); without it every agent the board starts is a dead end, and the Connect an agent page
- * should say so.
+ * its config sets `experimental.subagent_depth` above 1; without it every agent the board starts is a
+ * dead end, and the Connect an agent page should say so.
  *
  * Read only: the global config (`~/.config/opencode/opencode.json` and `.jsonc`, under `XDG_CONFIG_HOME`
  * when set) and, when it is there, the project's own (`opencode.json(c)` and `.opencode/opencode.json(c)`
- * at the root of a repo). The effective depth is the highest one found, 1 when none is. A file that
- * cannot be read or parsed is reported, never a crash, and the user's config is never written.
+ * at the root of a repo). OpenCode merges those documents in that order and the *last* one that defines
+ * an `experimental` block decides the depth (`findLast(...)?.info.experimental?.subagent_depth ?? 1`), so
+ * a later project block without the key turns delegation off, and a later lower depth overrides an
+ * earlier higher one. The deprecated top-level `subagent_depth` is only a fallback when no config defines
+ * an `experimental` block. A file that cannot be read or parsed is reported, never a crash, and the
+ * user's config is never written.
  */
 
 /** The depth OpenCode uses when its config names none. */
 export const DEFAULT_SUBAGENT_DEPTH = 1
 
 export interface OpencodeConfig {
-  /** The effective `subagent_depth`: the highest found, 1 when none. */
+  /** The effective `subagent_depth`: the last `experimental` block's, 1 when none. */
   depth: number
-  /** The file the depth came from, or (when none sets it) the global file to add it to. */
+  /** The document the depth came from, or (when none sets it) the config file to add it to. */
   source: string
   /** Whether a subagent can start another: `depth` above 1. */
   set: boolean
@@ -33,15 +36,30 @@ export interface OpencodeConfig {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+/** A depth OpenCode takes: a whole number of 0 or more. Fractions, negatives and strings are rejected. */
+export function validDepth(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null
+}
+
+/** Whether a parsed document defines an `experimental` block at all (an empty or null one counts). */
+export function hasExperimentalBlock(config: unknown): boolean {
+  if (!isRecord(config)) return false
+  return isRecord(config.experimental) || config.experimental === null
+}
+
 /**
- * The depth a parsed config sets: `experimental.subagent_depth`, else the deprecated top-level
- * `subagent_depth`. Null when it sets neither (or sets something that is not a whole depth).
+ * The depth a document's `experimental` block sets, as OpenCode reads it: the block's own
+ * `subagent_depth`, null when it names none (OpenCode then uses 1). Null too when the document has no
+ * block, or the key is not a whole depth (OpenCode rejects such a document).
  */
-export function subagentDepth(config: unknown): number | null {
-  if (!isRecord(config)) return null
-  const experimental = isRecord(config.experimental) ? config.experimental : null
-  const value = experimental?.subagent_depth ?? config.subagent_depth
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : null
+export function experimentalDepth(config: unknown): number | null {
+  if (!isRecord(config) || !isRecord(config.experimental)) return null
+  return validDepth(config.experimental.subagent_depth)
+}
+
+/** The deprecated top-level `subagent_depth` a document sets, or null. */
+export function deprecatedDepth(config: unknown): number | null {
+  return isRecord(config) ? validDepth(config.subagent_depth) : null
 }
 
 /**
@@ -139,11 +157,16 @@ export function readOpencodeConfig({
 }: ReadOptions = {}): OpencodeConfig {
   const global = globalConfigFiles(env)
   const files = [...global, ...projectDirs.flatMap(projectConfigFiles)]
-  let depth = DEFAULT_SUBAGENT_DEPTH
-  let source = global[0]!
   /** The first file that was there and read, even when it set no depth: the one to add the key to. */
   let read: string | null = null
   let error: string | null = null
+  /**
+   * The last document that defines an `experimental` block, and the last one that sets the deprecated
+   * top-level key: OpenCode's own order, where the last document with a block wins whether or not its
+   * block names a depth. The deprecated key is only used when no document has a block at all.
+   */
+  let block: { file: string; depth: number | null } | null = null
+  let deprecated: { file: string; depth: number } | null = null
   for (const file of files) {
     let text: string
     try {
@@ -162,14 +185,25 @@ export function readOpencodeConfig({
       if (error === null) error = `Could not parse ${file}: ${(err as Error).message}`
       continue
     }
-    const found = subagentDepth(config)
-    if (found !== null && found > depth) {
-      depth = found
-      source = file
+    const found = deprecatedDepth(config)
+    if (found !== null) deprecated = { file, depth: found }
+    if (hasExperimentalBlock(config)) {
+      // A block whose depth is not a whole number is rejected with its document, so it does not count.
+      const raw =
+        isRecord(config) && isRecord(config.experimental) ? config.experimental.subagent_depth : undefined
+      const depth = experimentalDepth(config)
+      if (raw === undefined || depth !== null) block = { file, depth }
     }
   }
-  // Nothing sets a depth above 1: name the config it read, else the global file to create.
-  if (depth === DEFAULT_SUBAGENT_DEPTH && read !== null) source = read
+  let depth = DEFAULT_SUBAGENT_DEPTH
+  let source = read ?? global[0]!
+  if (block) {
+    depth = block.depth ?? DEFAULT_SUBAGENT_DEPTH
+    source = block.file
+  } else if (deprecated) {
+    depth = deprecated.depth
+    source = deprecated.file
+  }
   return {
     depth,
     source,

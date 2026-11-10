@@ -7,13 +7,16 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_SUBAGENT_DEPTH,
   checkOpencodeConfig,
+  deprecatedDepth,
+  experimentalDepth,
   globalConfigFiles,
+  hasExperimentalBlock,
   opencodeConfig,
   parseJsonc,
   readOpencodeConfig,
   readyOpencodeConfig,
   setOpencodeConfig,
-  subagentDepth,
+  validDepth,
 } from './opencodeConfig'
 
 // Each test reads a config of its own: XDG_CONFIG_HOME under a throwaway folder, project dirs as given.
@@ -60,16 +63,26 @@ describe('the config files', () => {
 })
 
 describe('the depth a config sets', () => {
-  it('takes experimental.subagent_depth, else the deprecated top-level key', () => {
-    expect(subagentDepth({ experimental: { subagent_depth: 2 } })).toBe(2)
-    expect(subagentDepth({ subagent_depth: 3 })).toBe(3)
-    // The current key wins over the deprecated one in the same file.
-    expect(subagentDepth({ experimental: { subagent_depth: 2 }, subagent_depth: 4 })).toBe(2)
-    expect(subagentDepth({ experimental: { subagent_depth: 0 } })).toBeNull()
-    expect(subagentDepth({ experimental: { subagent_depth: '2' } })).toBeNull()
-    expect(subagentDepth({ experimental: { subagent_depth: 1.5 } })).toBeNull()
-    expect(subagentDepth({})).toBeNull()
-    expect(subagentDepth(null)).toBeNull()
+  it('reads a whole depth from the experimental block or the deprecated key', () => {
+    expect(validDepth(2)).toBe(2)
+    expect(validDepth(0)).toBe(0)
+    expect(validDepth(-1)).toBeNull()
+    expect(validDepth(1.5)).toBeNull()
+    expect(validDepth('2')).toBeNull()
+    expect(experimentalDepth({ experimental: { subagent_depth: 2 } })).toBe(2)
+    expect(experimentalDepth({ experimental: { todo: true } })).toBeNull()
+    expect(experimentalDepth({ subagent_depth: 3 })).toBeNull()
+    expect(deprecatedDepth({ subagent_depth: 3 })).toBe(3)
+    expect(deprecatedDepth({ experimental: { subagent_depth: 2 } })).toBeNull()
+  })
+
+  it('knows a document with an experimental block, even an empty or null one', () => {
+    expect(hasExperimentalBlock({ experimental: { subagent_depth: 2 } })).toBe(true)
+    expect(hasExperimentalBlock({ experimental: {} })).toBe(true)
+    expect(hasExperimentalBlock({ experimental: null })).toBe(true)
+    expect(hasExperimentalBlock({ experimental: false })).toBe(false)
+    expect(hasExperimentalBlock({ subagent_depth: 3 })).toBe(false)
+    expect(hasExperimentalBlock(null)).toBe(false)
   })
 })
 
@@ -114,7 +127,7 @@ describe('reading the effective depth', () => {
     expect(r).toMatchObject({ depth: 2, set: true, source: file, error: null })
   })
 
-  it('reads the deprecated top-level key', () => {
+  it('reads the deprecated top-level key when no document has an experimental block', () => {
     const { env, file } = globalConfig('{ "subagent_depth": 3 }')
     expect(readOpencodeConfig({ env, projectDirs: [] })).toMatchObject({
       depth: 3,
@@ -123,16 +136,68 @@ describe('reading the effective depth', () => {
     })
   })
 
-  it('lets a project config override the global one, and never lowers the depth', () => {
-    const { env, file: globalFile } = globalConfig(depthConfig(2))
-    const project = projectConfig(depthConfig(3), '.opencode/opencode.jsonc')
-    const r = readOpencodeConfig({ env, projectDirs: [project.dir] })
-    expect(r).toMatchObject({ depth: 3, set: true, source: project.file })
-
-    // A project that sets 1 does not turn off what the global config turns on; the highest wins.
+  it('takes the last experimental block, as OpenCode does, not the highest', () => {
+    const { env } = globalConfig(depthConfig(2))
+    // A later project document with a lower depth overrides the global one.
     const lower = projectConfig(depthConfig(1))
-    const high = readOpencodeConfig({ env, projectDirs: [lower.dir] })
-    expect(high).toMatchObject({ depth: 2, set: true, source: globalFile })
+    expect(readOpencodeConfig({ env, projectDirs: [lower.dir] })).toMatchObject({
+      depth: 1,
+      set: false,
+      source: lower.file,
+    })
+
+    // A later document with an experimental block but no depth turns delegation off.
+    const noDepth = projectConfig(JSON.stringify({ experimental: { todo: true } }))
+    expect(readOpencodeConfig({ env, projectDirs: [noDepth.dir] })).toMatchObject({
+      depth: DEFAULT_SUBAGENT_DEPTH,
+      set: false,
+      source: noDepth.file,
+    })
+
+    // And a higher later one still wins: the last block, not the highest.
+    const higher = projectConfig(depthConfig(3), '.opencode/opencode.jsonc')
+    expect(readOpencodeConfig({ env, projectDirs: [higher.dir] })).toMatchObject({
+      depth: 3,
+      set: true,
+      source: higher.file,
+    })
+  })
+
+  it('follows the merge order: json then jsonc, root then .opencode', () => {
+    const { env } = globalConfig(depthConfig(2))
+    const dir = tmp()
+    fs.writeFileSync(path.join(dir, 'opencode.json'), depthConfig(2))
+    fs.writeFileSync(path.join(dir, 'opencode.jsonc'), depthConfig(3))
+    expect(readOpencodeConfig({ env, projectDirs: [dir] })).toMatchObject({
+      depth: 3,
+      source: path.join(dir, 'opencode.jsonc'),
+    })
+
+    // The .opencode document comes after the root ones whatever their names.
+    fs.mkdirSync(path.join(dir, '.opencode'))
+    fs.writeFileSync(path.join(dir, '.opencode', 'opencode.json'), depthConfig(1))
+    expect(readOpencodeConfig({ env, projectDirs: [dir] })).toMatchObject({
+      depth: 1,
+      source: path.join(dir, '.opencode', 'opencode.json'),
+    })
+  })
+
+  it('does not use the deprecated key when any document defines an experimental block', () => {
+    // The block in the global document wins over a later project's deprecated key: OpenCode ignores it.
+    const global = globalConfig(JSON.stringify({ experimental: { todo: true } }))
+    const project = projectConfig('{ "subagent_depth": 3 }')
+    expect(readOpencodeConfig({ env: global.env, projectDirs: [project.dir] })).toMatchObject({
+      depth: 1,
+      set: false,
+      source: global.file,
+    })
+
+    // Even in the same document, the block (with no depth) is what OpenCode reads.
+    const both = projectConfig(JSON.stringify({ experimental: { todo: true }, subagent_depth: 3 }))
+    expect(readOpencodeConfig({ env: global.env, projectDirs: [both.dir] })).toMatchObject({
+      depth: 1,
+      source: both.file,
+    })
   })
 
   it('names the config file it read even when it sets no depth', () => {

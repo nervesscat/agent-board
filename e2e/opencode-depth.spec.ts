@@ -82,6 +82,34 @@ test.describe('the OpenCode card', () => {
     expect(await check(human)).toMatchObject({ depth: 2, set: true, source: jsonc(), error: null })
   })
 
+  test('a later config document overrides an earlier depth, as OpenCode merges them', async ({
+    page,
+    human,
+  }) => {
+    reset()
+    write(json(), JSON.stringify({ experimental: { subagent_depth: 2 } }))
+    // The .jsonc comes after the .json: its experimental block, even with no depth, wins.
+    write(jsonc(), JSON.stringify({ experimental: { todo: true } }))
+    expect(await check(human)).toMatchObject({ depth: 1, set: false, source: jsonc() })
+
+    await openOpencode(page)
+    await expect(card(page)).toContainText('Multilevel delegation is off')
+    await expect(card(page)).toContainText(jsonc())
+    await expect(card(page)).not.toContainText('depth 2')
+
+    // A later lower depth over an earlier higher one: the card follows it down.
+    write(jsonc(), JSON.stringify({ experimental: { subagent_depth: 1 } }))
+    await again(page).click()
+    await expect(card(page)).toContainText('Multilevel delegation is off')
+    expect(await check(human)).toMatchObject({ depth: 1, source: jsonc() })
+
+    // And a later higher one follows up.
+    write(jsonc(), JSON.stringify({ experimental: { subagent_depth: 3 } }))
+    await again(page).click()
+    await expect(card(page)).toContainText('Multilevel delegation on (depth 3)')
+    await expect(card(page)).toContainText(jsonc())
+  })
+
   test('with the deprecated top-level key, shows depth on and where it was read', async ({ page, human }) => {
     reset()
     write(json(), '{ "subagent_depth": 3 }')
