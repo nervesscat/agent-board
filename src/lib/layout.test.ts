@@ -41,7 +41,6 @@ describe('the catalogue', () => {
       'nav.overview',
       'nav.features',
       'nav.settings',
-      'ticket.resume',
       'ticket.instructions',
       'ticket.tasks',
       'ticket.activity',
@@ -80,7 +79,6 @@ describe('mergeLayout', () => {
     expect(shownIn(merged, 'overview')[0]).toBe('overview.carryingOver')
     expect(shownIn(merged, 'ticket.main')).toEqual([
       'ticket.details',
-      'ticket.resume',
       'ticket.instructions',
       'ticket.tasks',
       'ticket.timeline',
@@ -106,6 +104,7 @@ describe('mergeLayout', () => {
       'nav.daily',
       'nav.cleanup',
       'nav.repositories',
+      'nav.instructions',
       'nav.settings',
     ])
     expect(nav.find((it) => it.id === 'nav.roadmap')!.hidden).toBe(false)
@@ -139,12 +138,22 @@ describe('mergeLayout', () => {
       'nav.agents',
       'nav.cleanup',
       'nav.repositories',
+      'nav.instructions',
     ])
     expect(merged.find((it) => it.id === 'nav.repositories')).toEqual({
       id: 'nav.repositories',
       area: 'nav',
       hidden: false,
     })
+  })
+
+  it('adds Instructions to a menu saved before the split, before Settings', () => {
+    // Every layout saved before the Instructions module existed: Settings is there, Instructions is not.
+    const merged = mergeLayout(without('nav.instructions'))
+    expect(merged).toEqual(defaultLayout())
+    const nav = shownIn(merged, 'nav')
+    expect(nav.slice(-2)).toEqual(['nav.instructions', 'nav.settings'])
+    expect(inArea(merged, 'nav').find((it) => it.id === 'nav.instructions')!.hidden).toBe(false)
   })
 
   it('puts a missing element first in its area when nothing before it in the default order is there', () => {
@@ -170,7 +179,6 @@ describe('mergeLayout', () => {
       .map((it) => (it.id === 'ticket.lanes' ? { ...it, area: 'ticket.side' as const } : it))
     const merged = mergeLayout(saved)
     expect(ids(inArea(merged, 'ticket.main'))).toEqual([
-      'ticket.resume',
       'ticket.instructions',
       'ticket.tasks',
       'ticket.timeline',
@@ -248,7 +256,7 @@ describe('moveInLayout', () => {
   it('moves a ticket section to the other column, keeping it hidden or shown', () => {
     const hidden = defaultLayout().map((it) => (it.id === 'ticket.details' ? { ...it, hidden: true } : it))
     const moved = moveInLayout(hidden, 'ticket.details', 'ticket.main', 1)
-    expect(ids(inArea(moved, 'ticket.main')).slice(0, 2)).toEqual(['ticket.resume', 'ticket.details'])
+    expect(ids(inArea(moved, 'ticket.main')).slice(0, 2)).toEqual(['ticket.instructions', 'ticket.details'])
     expect(ids(inArea(moved, 'ticket.side'))).not.toContain('ticket.details')
     expect(moved.find((it) => it.id === 'ticket.details')!.hidden).toBe(true)
     expect(mergeLayout(moved)).toEqual(moved)

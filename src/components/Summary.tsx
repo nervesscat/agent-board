@@ -3,8 +3,6 @@ import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
   ArrowRight,
-  Bookmark,
-  BookmarkX,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -38,8 +36,15 @@ import { NowLine, StallNotice } from '#/components/WorkStatus'
 import { timelineFromActivity, stallStage } from '#/lib/activityTimeline'
 import { threadAnchor } from '#/lib/anchors'
 import type { AreaId } from '#/lib/layout'
-import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
+import {
+  errorMessage,
+  get,
+  type CarryOver,
+  type ProjectSummary,
+  type SummaryPayload as Payload,
+} from '#/lib/api'
 import { ago, clock } from '#/lib/format'
+import { needKeys, undismissed, useDismissedNeeds } from '#/lib/needsYou'
 import { stageBadge, stageOf } from '#/lib/stages'
 import { useServerOffset } from '#/lib/useNow'
 import { lastHeard, onServerClock, type WorkTimelineLike } from '#/lib/workStatus'
@@ -56,6 +61,8 @@ export function Summary({ projectId }: { projectId?: number }) {
     queryFn: () => get<Payload>(`/api/summary${projectId ? `?projectId=${projectId}` : ''}`),
     refetchInterval: 30_000,
   })
+  // What this browser remembers of Needs you as opened, for the actor who asked (this browser's alone).
+  const [dismissed, dismiss] = useDismissedNeeds(data?.actor)
   // The stall minutes are counted on the server's clock, from the moment this summary was taken, so a
   // browser whose clock is off shows the same minutes as the ticket page. 0 before the summary arrives.
   const now = onServerClock(Date.now(), useServerOffset(data?.generatedAt))
@@ -69,14 +76,16 @@ export function Summary({ projectId }: { projectId?: number }) {
     )
   if (error || !data) return <Empty>Could not load the summary: {errorMessage(error)}</Empty>
   if (!data.projects.length) return <GettingStarted />
-  if (projectId) return <ProjectBlock p={data.projects[0]!} now={now} />
+  // Only the entries the human has not opened yet, and counts to match.
+  const projects = data.projects.map((p) => undismissed(p, dismissed))
+  if (projectId) return <ProjectBlock p={projects[0]!} now={now} dismiss={dismiss} />
   return (
     <div className="space-y-10">
       {/* The top bar's Getting started entry folds into the Pages menu on a phone, which leads here. */}
       <div className="empty:hidden md:hidden">
         <GettingStarted dismissable />
       </div>
-      {data.projects.map((p) => (
+      {projects.map((p) => (
         <section key={p.project.id} className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-lg font-semibold tracking-tight">
@@ -88,12 +97,15 @@ export function Summary({ projectId }: { projectId?: number }) {
             </h2>
             <span className="text-xs text-muted-foreground">{headline(p)}</span>
           </div>
-          <ProjectBlock p={p} now={now} />
+          <ProjectBlock p={p} now={now} dismiss={dismiss} />
         </section>
       ))}
     </div>
   )
 }
+
+/** What every Overview card is given: the project, the clock, and how to remember an opened entry. */
+type CardProps = { p: ProjectSummary; now: number; dismiss: (key: string) => void }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
@@ -108,7 +120,7 @@ const headline = (p: ProjectSummary) =>
     .join(' · ')
 
 /** Each card of the block; which show and in what order is the project's layout. */
-const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary; now: number }) => ReactNode> = {
+const CARDS: Record<AreaId<'overview'>, (props: CardProps) => ReactNode> = {
   'overview.needsYou': NeedsYou,
   'overview.inProgress': InProgress,
   'overview.doneToday': DoneToday,
@@ -116,7 +128,7 @@ const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary; now: number
   'overview.carryingOver': CarryingOver,
 }
 
-function ProjectBlock({ p, now }: { p: ProjectSummary; now: number }) {
+function ProjectBlock({ p, now, dismiss }: CardProps) {
   if (!p.project.overview.length)
     return (
       <Empty>
@@ -136,7 +148,7 @@ function ProjectBlock({ p, now }: { p: ProjectSummary; now: number }) {
     <div className="grid gap-4 lg:grid-cols-2">
       {p.project.overview.map((card) => {
         const Shown = CARDS[card]
-        return <Shown key={card} p={p} now={now} />
+        return <Shown key={card} p={p} now={now} dismiss={dismiss} />
       })}
     </div>
   )
@@ -245,13 +257,26 @@ function Row({
 
 const Rows = ({ children }: { children: ReactNode }) => <ul className="space-y-3">{children}</ul>
 
-function TicketLink({ p, id, title, hash }: { p: ProjectSummary; id: number; title: string; hash?: string }) {
+function TicketLink({
+  p,
+  id,
+  title,
+  hash,
+  onClick,
+}: {
+  p: ProjectSummary
+  id: number
+  title: string
+  hash?: string
+  onClick?: () => void
+}) {
   return (
     <Link
       to="/projects/$id/features/$ticketId"
       params={{ id: String(p.project.id), ticketId: String(id) }}
       hash={hash}
       className="hover:underline"
+      onClick={onClick}
     >
       <span className="text-muted-foreground">#{id}</span> {title}
     </Link>
@@ -341,7 +366,7 @@ function Stale() {
 
 // --- the sections ---
 
-function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
+function NeedsYou({ p, now, dismiss }: CardProps) {
   const { decisions, humanWaits, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } =
     p.needsYou
   const pid = String(p.project.id)
@@ -362,6 +387,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                   params={{ id: pid, ticketId: String(d.ticketId) }}
                   hash={`post-${d.postId}`}
                   className="hover:underline"
+                  onClick={() => dismiss(needKeys.decision(d))}
                 >
                   Decide: {d.question}
                 </Link>
@@ -387,6 +413,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                   to="/projects/$id/features/$ticketId"
                   params={{ id: pid, ticketId: String(w.ticketId) }}
                   className="hover:underline"
+                  onClick={() => dismiss(needKeys.humanWait(w))}
                 >
                   Waiting on you {since(w.since)} · {w.agent}
                   {w.note ? `: ${w.note}` : ''}
@@ -412,6 +439,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                   params={{ id: pid }}
                   hash={`pr-${pr.id}`}
                   className="hover:underline"
+                  onClick={() => dismiss(needKeys.pr(pr))}
                 >
                   Review PR #{pr.number} {pr.title}
                 </Link>
@@ -433,6 +461,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                     rel="noreferrer"
                     className="text-muted-foreground hover:text-foreground"
                     aria-label="Open on GitHub"
+                    onClick={() => dismiss(needKeys.pr(pr))}
                   >
                     <ExternalLink className="size-3.5" />
                   </a>
@@ -451,6 +480,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                     params={{ id: pid, ticketId: String(th.ticketId) }}
                     hash={threadAnchor(th)}
                     className="hover:underline"
+                    onClick={() => dismiss(needKeys.thread(th))}
                   >
                     {th.parentType === 'ticket' && !th.prTicket ? `#${th.ticketId} ${th.title}` : th.title}
                   </Link>
@@ -461,6 +491,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                     search={th.parentType === 'review' ? { result: th.parentId } : {}}
                     hash={threadAnchor(th)}
                     className="hover:underline"
+                    onClick={() => dismiss(needKeys.thread(th))}
                   >
                     {th.title}
                   </Link>
@@ -501,6 +532,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                       id={task.ticketId}
                       title={task.ticketTitle}
                       hash={`task-${task.taskId}`}
+                      onClick={() => dismiss(needKeys.blockedTask(task))}
                     />
                   </span>
                   {task.parent && <span className="truncate">lane of #{task.parent.id}</span>}
@@ -515,10 +547,11 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
               title={
                 <span>
                   <Link
-                    to="/projects/$id/settings"
+                    to="/projects/$id/instructions"
                     params={{ id: pid }}
                     hash="instructions-history"
                     className="hover:underline"
+                    onClick={() => dismiss(needKeys.instructionChange(c))}
                   >
                     Project instructions changed
                   </Link>{' '}
@@ -574,6 +607,7 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
                     to="/projects/$id/features/$ticketId"
                     params={{ id: pid, ticketId: String(s.ticketId) }}
                     className="hover:underline"
+                    onClick={() => dismiss(needKeys.stalled(s))}
                   >
                     Stalled: #{s.ticketId} {s.title}
                   </Link>
@@ -610,7 +644,15 @@ function NeedsYou({ p, now }: { p: ProjectSummary; now: number }) {
             <Row
               key={`r${t.id}`}
               icon={<Eye />}
-              title={<TicketLink p={p} id={t.id} title={t.title} hash="tasks" />}
+              title={
+                <TicketLink
+                  p={p}
+                  id={t.id}
+                  title={t.title}
+                  hash="tasks"
+                  onClick={() => dismiss(needKeys.review(t))}
+                />
+              }
               meta={
                 <>
                   <StageBadge p={p} status={t.status} />
@@ -807,24 +849,8 @@ function Next({ p }: { p: ProjectSummary }) {
 
 function CarryingOver({ p }: { p: ProjectSummary }) {
   const items = p.carryingOver
-  const missing = items.filter((t) => t.resume.noHandoff).length
   return (
-    <Section
-      icon={Clock}
-      title="Carrying over"
-      count={items.length}
-      extra={
-        missing > 0 && (
-          <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
-            <span className="inline-flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400">
-              <BookmarkX className="size-3" /> {missing} without a resume note
-            </span>
-          </Tip>
-        )
-      }
-      className="lg:col-span-full"
-      scroll
-    >
+    <Section icon={Clock} title="Carrying over" count={items.length} className="lg:col-span-full" scroll>
       {!items.length ? (
         <Quiet>Nothing carried over from before today.</Quiet>
       ) : (
@@ -846,9 +872,8 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
                     <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
                       <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
                     </Tip>
-                    {t.resume.noHandoff && <NoHandoff p={p} id={t.id} />}
                   </div>
-                  <Resume p={p} t={t} />
+                  <LastPost post={t.lastPost} />
                 </div>
               }
             />
@@ -856,84 +881,5 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
         </Rows>
       )}
     </Section>
-  )
-}
-
-/** The ticket page, scrolled to its "Resume here" card. */
-function ResumeLink({
-  p,
-  id,
-  className,
-  tip,
-  children,
-}: {
-  p: ProjectSummary
-  id: number
-  className: string
-  /** Its tooltip, if any. */
-  tip?: string
-  children: ReactNode
-}) {
-  return (
-    <Tip content={tip}>
-      <Link
-        to="/projects/$id/features/$ticketId"
-        params={{ id: String(p.project.id), ticketId: String(id) }}
-        hash="resume"
-        className={className}
-      >
-        {children}
-      </Link>
-    </Tip>
-  )
-}
-
-function NoHandoff({ p, id }: { p: ProjectSummary; id: number }) {
-  return (
-    <ResumeLink
-      p={p}
-      id={id}
-      className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 hover:underline dark:text-amber-400"
-      tip="Worked on an earlier day, and nobody left a resume note on where it was left: open it to write one"
-    >
-      <BookmarkX className="size-3" /> no resume note
-    </ResumeLink>
-  )
-}
-
-/**
- * Where the last session left off: the ticket's resume note, with its last progress post under it
- * when that came later; the last progress post alone when there is no note.
- */
-function Resume({ p, t }: { p: ProjectSummary; t: CarryOver }) {
-  const r = t.resume
-  if (!r.note) return <LastPost post={t.lastPost} />
-  return (
-    <>
-      <ResumeLink
-        p={p}
-        id={t.id}
-        className="mt-1 line-clamp-2 border-l-2 border-primary/40 pl-2 text-xs text-muted-foreground hover:text-foreground"
-        tip="Its resume note: open it on the ticket"
-      >
-        <Bookmark className="mr-1 inline size-3 align-[-1px]" />
-        {r.note}
-        {r.at && (
-          <span className="whitespace-nowrap">
-            {' '}
-            — {r.by ? `${r.by}, ` : ''}
-            {ago(r.at)}
-          </span>
-        )}
-      </ResumeLink>
-      {r.stale && (
-        <>
-          <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
-            Progress posted since this note:
-          </p>
-          <LastPost post={t.lastPost} />
-        </>
-      )}
-    </>
   )
 }

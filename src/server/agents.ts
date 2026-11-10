@@ -14,6 +14,7 @@ import {
 import { type DiffHunk, diffLines } from '#/lib/hunks'
 import { config } from './config'
 import { HttpError, notFound } from './http'
+import { readyOpencodeConfig } from './opencodeConfig'
 import { getProject, listProjects } from './projects'
 import { getRepo } from './repos'
 import rawTemplate from './skill/board.md?raw'
@@ -113,9 +114,9 @@ export type SkillTransport = (typeof SKILL_TRANSPORTS)[number]
 /** `scripts/board-mcp.mjs`: the board's MCP tools over stdio, for a client that reaches the board through a proxy. */
 export const boardMcpBridge = (): string => boardMcpScript.replace(/\r\n/g, '\n')
 
-/** What the Connect an agent page builds its commands from. */
-export function agentSetup() {
-  return { boardUrl: config.boardUrl, settings: getSettings() }
+/** What the Connect an agent page builds its commands from, and OpenCode's subagent depth. */
+export function agentSetup(projectDirs: string[] = []) {
+  return { boardUrl: config.boardUrl, settings: getSettings(), opencode: readyOpencodeConfig(projectDirs) }
 }
 
 // --- the review skills: feature-review, review-queue, todo-review and their agents, installed as one tar ---

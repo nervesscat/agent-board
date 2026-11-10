@@ -45,7 +45,7 @@ export interface SummaryFacts {
   /** What the summary must come after when there is no commit to go by: when work last started. */
   since: string
   /** The ticket's own posts (not its lanes'); `summary` marks the versions of its summary. */
-  posts: { author: string; progress: boolean; handoff: boolean; summary: boolean; createdAt: string }[]
+  posts: { author: string; progress: boolean; summary: boolean; createdAt: string }[]
   /** The names the human signs in under: what they write does not count. */
   humans: string[]
 }
@@ -56,7 +56,7 @@ const time = (iso: string) => Date.parse(iso)
  * Whether the ticket's summary is up to date: a version of it written by an agent at or after the
  * branch's last commit (or, with no commit to go by, since work started). A ticket whose summary was
  * never written goes by what stands for one (the post summaryStandIn picks): any progress post by an
- * agent since then, a resume note's versions aside. Once a summary exists only the summary counts.
+ * agent since then. Once a summary exists only the summary counts.
  */
 export function summaryWritten(f: SummaryFacts): boolean {
   const after = time(f.lastCommitAt ?? f.since)
@@ -254,7 +254,6 @@ async function summaryFacts(t: FactsTicket, repoPath: string | null): Promise<Su
     .select({
       author: schema.updates.author,
       progress: schema.updates.progress,
-      handoff: schema.updates.handoff,
       summary: schema.updates.summary,
       createdAt: schema.updates.createdAt,
     })

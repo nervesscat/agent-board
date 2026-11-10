@@ -65,7 +65,6 @@ test('a report due soon shows on every page, links to the Daily page, and goes o
   try {
     for (const url of [
       '/',
-      '/daily',
       `/projects/${project.id}`,
       `/projects/${project.id}/features/${t.id}`,
       '/settings',
@@ -150,7 +149,7 @@ test('notifications are asked for only from Notify me, and come once per project
   await remind(human, project, 'due')
   try {
     // Pages load, the reminder shows: nobody is asked anything.
-    for (const url of ['/', `/projects/${project.id}/daily`, '/daily']) {
+    for (const url of ['/', `/projects/${project.id}/daily`]) {
       await page.goto(url)
       await expect(reminder(page, project)).toBeVisible()
     }

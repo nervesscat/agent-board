@@ -97,7 +97,7 @@ export function prng(seed) {
 const WORDS = (
   'board ticket lane branch review merge commit build server client query index cache poll render ' +
   'agent human preview worktree upload attachment summary inbox thread post reply decision stage ' +
-  'migration schema endpoint payload latency bundle route feed task progress handoff resume note ' +
+  'migration schema endpoint payload latency bundle route feed task progress handoff note ' +
   'origin fetch push queue check deploy fix test spec refactor layout dialog button sidebar column'
 ).split(' ')
 
@@ -388,9 +388,6 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
       'archived_at',
       'archived_by',
       'started_at',
-      'resume_note',
-      'resume_at',
-      'resume_by',
       'createdAt',
       'updatedAt',
     ]),
@@ -403,7 +400,6 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
       'via',
       'body',
       'progress',
-      'handoff',
       'decision',
       'decided_option',
       'decided_by',
@@ -597,9 +593,6 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
           archived ? iso(updatedAt) : null,
           archived ? GENERATED_HUMAN : '',
           working ? iso(createdAt) : null,
-          working && r.chance(0.5) ? markdown(r, 4) : '',
-          working ? iso(updatedAt) : null,
-          working ? r.pick(AGENTS) : '',
           iso(createdAt),
           iso(updatedAt),
         ).lastInsertRowid
@@ -644,7 +637,6 @@ export function generate(dest, { scale = 1, seed = 1, migrationsFolder, now: gen
             author === GENERATED_HUMAN ? '' : r.pick(['', AGENTS[0]]),
             markdown(r, r.int(1, 7)),
             r.chance(0.7) || latest ? 1 : 0,
-            r.chance(0.05) ? 1 : 0,
             decision
               ? JSON.stringify([
                   { label: sentence(r, 2, 4), detail: sentence(r), recommended: true },

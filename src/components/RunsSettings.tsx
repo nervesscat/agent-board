@@ -36,7 +36,7 @@ export function RunsSettings({ projectId }: { projectId: string }) {
   const { data: p } = useProject(projectId)
   if (!p) return null
   return (
-    <section aria-label="Runs" className="max-w-3xl space-y-3">
+    <section id="runs" aria-label="Runs" className="max-w-3xl scroll-mt-16 space-y-3">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Runs</h2>
         <p className="text-sm text-muted-foreground">

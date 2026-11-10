@@ -179,7 +179,7 @@ function ActivityLine({ line: a, withProject }: { line: Line; withProject: boole
       ) : a.refType === 'instruction-change' && a.projectId ? (
         // The change in the project's instructions history, with its diff.
         <Link
-          to="/projects/$id/settings"
+          to="/projects/$id/instructions"
           params={{ id: String(a.projectId) }}
           hash="instructions-history"
           className="min-w-0 wrap-anywhere hover:underline"
