@@ -110,6 +110,54 @@ test('a sub-identity reads as the name it works as, its parent before it and the
   expect(errors).toEqual([])
 })
 
+test('the chart scrolls under the ticket’s sticky header: its labels never paint over it', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  await page.emulateMedia({ colorScheme: 'dark' })
+  const t = await create(human, project, {
+    title: 'A title long enough to fill the ticket header and wrap under it',
+    status: 'in_progress',
+  })
+  await record(agent, project, t.id, { kind: 'handoff', from: 'opencode', to: 'opencode/builder-832' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build', agent: 'opencode/builder-832' })
+  await record(agent, project, t.id, { kind: 'wait_start', reason: 'lock', agent: 'opencode' })
+  age(t.id, 30)
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const bar = page.getByRole('region', { name: 'Timeline' }).getByTestId('work-timeline')
+  await expect(bar).toBeVisible()
+  // Scroll the chart up so its first rows sit inside the ticket header's own box.
+  const top = await bar.evaluate((el) => el.getBoundingClientRect().top + window.scrollY - 60)
+  await page.evaluate((y) => window.scrollTo(0, y), top)
+  await page.waitForTimeout(200)
+
+  // The ticket header is the one that says who opened the ticket; it is sticky and opaque.
+  const hit = await page.evaluate(() => {
+    const header = [...document.querySelectorAll('header')].find((h) => h.textContent?.includes('opened by'))!
+    const hr = header.getBoundingClientRect()
+    const under = [...document.querySelectorAll('[data-testid="agent-label"]')]
+      .filter((el) => {
+        const r = el.getBoundingClientRect()
+        return r.top < hr.bottom - 2 && r.bottom > hr.top + 2
+      })
+      .map((el) => {
+        const r = el.getBoundingClientRect()
+        const at = document.elementFromPoint(Math.max(2, r.left + 6), r.top + 4)
+        return { label: el.getAttribute('aria-label'), inHeader: !!at?.closest('header') }
+      })
+    return { headerTop: Math.round(hr.top), under }
+  })
+  // The labels do overlap the header's box (the chart is scrolled under it)…
+  expect(hit.under.length).toBeGreaterThan(0)
+  expect(hit.headerTop).toBeGreaterThan(0)
+  // …and the header paints above every one of them: the rows' z-10 stays inside the chart.
+  expect(hit.under).toEqual(hit.under.map((u) => ({ ...u, inHeader: true })))
+  await page.screenshot({ path: test.info().outputPath('labels-under-ticket-header.png') })
+})
+
 test('a delegated build: the builder on its own row, the orchestrator’s wait drawn as a connector, no second bar', async ({
   page,
   project,

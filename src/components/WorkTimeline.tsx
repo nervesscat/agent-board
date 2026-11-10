@@ -405,7 +405,9 @@ export function WorkTimelineBar({
       data-testid="work-timeline"
       data-live={live ? 'true' : 'false'}
       aria-describedby={summaryId}
-      className="space-y-1 text-xs"
+      // Isolated, so the rows' sticky labels (z-10, to sit over the track as it scrolls sideways) stay
+      // under the page's own sticky headers instead of painting over them as they scroll past.
+      className="isolate space-y-1 text-xs"
     >
       <p id={summaryId} className="sr-only">
         {chart.summary}
