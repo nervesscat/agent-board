@@ -5,9 +5,10 @@ import { expect, ok, section, test } from './fixtures'
 import { create, record, workedTicket } from './workTimeline'
 
 /**
- * Needs you and In progress, side by side on the Overview, are as tall as each other whatever they
- * hold; what does not fit scrolls under the card's header. On a phone the cards grow with their
- * content instead: the page scrolls, not the card.
+ * On a desktop the Overview's first row is Needs you alone, and the second row is Next, In progress
+ * and Done today in that order; every card is as tall as the others whatever it holds, and what does
+ * not fit scrolls under the card's header. On a phone the cards keep the layout's order, stacked,
+ * and grow with their content instead: the page scrolls, not the card.
  */
 
 const content = (card: Locator) => card.locator('[data-slot="card-content"]')
@@ -39,7 +40,7 @@ const height = async (l: Locator) => (await l.boundingBox())!.height
 const shot = (page: Page, name: string, fullPage = false) =>
   page.screenshot({ path: test.info().outputPath(`${name}.png`), animations: 'disabled', fullPage })
 
-test('Needs you and In progress are as tall as each other and scroll what does not fit', async ({
+test('the Overview cards are as tall as each other and scroll what does not fit', async ({
   page,
   project,
   api,
@@ -66,14 +67,24 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await expect(doneToday).toContainText('Shipped today 8')
   await expect(next).toContainText('Lined up 5')
 
-  // Every card of the pair grid is the same fixed height, whatever it holds.
+  // Every card of the grid is the same fixed height, whatever it holds.
   const desktop = await height(needsYou)
   expect(desktop).toBeGreaterThan(300)
   expect(desktop).toBeLessThan(500)
   for (const card of [inProgress, doneToday, next]) expect(await height(card)).toBe(desktop)
-  // The pairs sit side by side.
-  expect((await needsYou.boundingBox())!.y).toBe((await inProgress.boundingBox())!.y)
-  expect((await doneToday.boundingBox())!.y).toBe((await next.boundingBox())!.y)
+  // Needs you has the first row to itself, across the grid's width.
+  const needsBox = (await needsYou.boundingBox())!
+  const nextBox = (await next.boundingBox())!
+  expect(nextBox.y).toBeGreaterThan(needsBox.y + needsBox.height - 1)
+  // The second row, left to right: Next, In progress, Done today.
+  const inProgressBox = (await inProgress.boundingBox())!
+  const doneBox = (await doneToday.boundingBox())!
+  expect(inProgressBox.y).toBe(nextBox.y)
+  expect(doneBox.y).toBe(nextBox.y)
+  expect(nextBox.x).toBeLessThan(inProgressBox.x)
+  expect(inProgressBox.x).toBeLessThan(doneBox.x)
+  expect(Math.round(nextBox.x)).toBe(Math.round(needsBox.x))
+  expect(Math.round(doneBox.x + doneBox.width)).toBe(Math.round(needsBox.x + needsBox.width))
   await overflows(needsYou)
   await overflows(doneToday)
   // In progress and Next fit, and do not scroll; their areas still scroll once they need to.
@@ -86,6 +97,11 @@ test('Needs you and In progress are as tall as each other and scroll what does n
   await page.setViewportSize({ width: 390, height: 844 })
   // Capped first, all four cards in one shot: three entries each, and the way to see the rest.
   await page.evaluate(() => window.scrollTo(0, 0))
+  // A phone keeps the layout's order, stacked, with no row of its own.
+  const phoneY = async (card: Locator) => (await card.boundingBox())!.y
+  expect(await phoneY(needsYou)).toBeLessThan(await phoneY(inProgress))
+  expect(await phoneY(inProgress)).toBeLessThan(await phoneY(doneToday))
+  expect(await phoneY(doneToday)).toBeLessThan(await phoneY(next))
   await shot(page, 'phone-capped', true)
   // On a phone each card shows its first three entries and a way to see the rest; no nested scroll.
   for (const card of [needsYou, doneToday, next]) {

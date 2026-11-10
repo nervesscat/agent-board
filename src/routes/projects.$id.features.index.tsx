@@ -1,14 +1,14 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { cn } from 'cn'
-import { Archive, BrushCleaning, Columns3, List, Loader2, Search, Tags, X } from 'lucide-react'
+import { Archive, Columns3, List, Loader2, Search, Tags, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
-import { RefreshPush, checkedText, isUnpushed, useProjectPush } from '#/components/PushDot'
+import { useProjectPush } from '#/components/PushDot'
 import { tagTextClass } from '#/components/Tag'
 import { ArchivedList, type Placement, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
@@ -26,7 +26,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { errorMessage, get, patch, post, type CleanupReport, type Push, type TicketRow } from '#/lib/api'
+import { errorMessage, get, patch, post, type TicketRow } from '#/lib/api'
 import { useProject } from '#/lib/project'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
 import { positionBy, stageColumn, withPlacement } from '#/lib/stages'
@@ -164,21 +164,14 @@ function Features() {
     navigate({ search: (s) => ({ ...s, q: next || undefined }), replace: true })
   const { data: pushData } = useProjectPush(id)
   const push = useMemo(() => new Map(pushData?.tickets.map((t) => [t.id, t.push])), [pushData])
-  // Only the tickets whose branch is not on origin, from the line under the header.
-  const [onlyUnpushed, setOnlyUnpushed] = useState(false)
-  const unpushed = (data ?? []).filter((t) => isUnpushed(push.get(t.id)))
   // The tag picked narrows the Board and the List, searched or not; the archive shows them all.
   const tagged = (t: TicketRow) =>
     !tag || view === 'archived' || t.tags.some((x) => x.toLowerCase() === tag.toLowerCase())
-  const shown = (onlyUnpushed ? unpushed : (data ?? [])).filter(tagged)
+  const shown = (data ?? []).filter(tagged)
   const filterTag = (next: string) =>
     navigate({ search: (s) => ({ ...s, tag: next || undefined }), replace: true })
-  // The line narrows the List alone, searched or not; the archive shows every ticket it finds.
-  const listed = searching
-    ? (found.data ?? [])
-        .filter((t) => view !== 'list' || !onlyUnpushed || isUnpushed(push.get(t.id)))
-        .filter(tagged)
-    : shown
+  // The search narrows the List and the Archived tickets: the archive shows every ticket it finds.
+  const listed = searching ? (found.data ?? []).filter(tagged) : shown
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -206,16 +199,6 @@ function Features() {
           <NewTicket projectId={id} />
         </div>
       </div>
-      <LeftoverLine projectId={id} />
-      {view !== 'archived' && (unpushed.length > 0 || onlyUnpushed) && (
-        <UnpushedLine
-          projectId={id}
-          n={unpushed.length}
-          checked={(pushData?.repos ?? []).filter((r) => pushData!.tickets.some((t) => t.repoId === r.id))}
-          active={onlyUnpushed}
-          onToggle={() => setOnlyUnpushed((v) => !v)}
-        />
-      )}
       {view !== 'archived' ? (
         <div className="flex flex-wrap items-center gap-2">
           {view === 'list' && <TicketSearch q={q} onSearch={search} />}
@@ -232,7 +215,7 @@ function Features() {
       )}
       {searching ? (
         // A search not answered yet says nothing about its query: the rows kept from the last one
-        // show, dimmed, or none narrowed by the line under the header, the skeleton.
+        // show, dimmed, or none at all: the skeleton.
         found.data === undefined || (found.isPlaceholderData && listed.length === 0) ? (
           found.isError ? (
             <p className="text-sm text-destructive">{errorMessage(found.error)}</p>
@@ -558,93 +541,5 @@ function TicketSearch({ q, onSearch }: { q: string; onSearch: (q: string) => voi
         </button>
       )}
     </div>
-  )
-}
-
-const plural = (n: number, word: string, words = `${word}s`) => `${n} ${n === 1 ? word : words}`
-
-/**
- * How many tickets on the board have a branch that is not on origin; clicking it shows only those
- * (and clicking again, all of them). Refresh fetches origin now.
- */
-function UnpushedLine({
-  projectId,
-  n,
-  checked,
-  active,
-  onToggle,
-}: {
-  projectId: string
-  n: number
-  checked: Pick<Push, 'checkedAt'>[]
-  active: boolean
-  onToggle: () => void
-}) {
-  // The stalest repo is what the count can be trusted to.
-  const oldest = checked.reduce<Pick<Push, 'checkedAt'> | null>(
-    (a, r) => (!a || !r.checkedAt || (a.checkedAt && r.checkedAt < a.checkedAt) ? r : a),
-    null,
-  )
-  return (
-    <div
-      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
-        active ? 'border-red-500/50 bg-red-500/5' : 'border-dashed'
-      }`}
-    >
-      <Tip content={active ? 'Show every ticket' : 'Show only these'}>
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-pressed={active}
-          className="flex min-w-0 items-center gap-2 text-left hover:underline"
-        >
-          <span className="size-2 shrink-0 rounded-full bg-red-500" />
-          <span>
-            {n === 1 ? '1 branch' : `${n} branches`} not pushed
-            {active && (
-              <span className="text-muted-foreground"> · showing only {n === 1 ? 'it' : 'them'}</span>
-            )}
-          </span>
-        </button>
-      </Tip>
-      <span className="ml-auto shrink-0 text-xs text-muted-foreground">{oldest && checkedText(oldest)}</span>
-      <RefreshPush projectId={projectId} />
-    </div>
-  )
-}
-
-/** One line when closed tickets still hold worktrees or branches, linking to the Cleanup module. */
-function LeftoverLine({ projectId }: { projectId: string }) {
-  const { data } = useQuery({
-    queryKey: ['cleanup', projectId, 'counts'],
-    queryFn: () => get<CleanupReport>(`/api/projects/${projectId}/cleanup?reach=0`),
-    refetchInterval: 60_000,
-  })
-  const c = data?.counts
-  if (!c?.tickets && !data?.untracked.length) return null
-  const held = [
-    c!.worktrees && plural(c!.worktrees, 'worktree'),
-    c!.branches && plural(c!.branches, 'local branch', 'local branches'),
-    c!.remote && `${c!.remote} on origin`,
-    c!.workspaces && plural(c!.workspaces, 'registered workspace'),
-  ].filter(Boolean)
-  return (
-    <Link
-      to="/projects/$id/cleanup"
-      params={{ id: projectId }}
-      className="flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-    >
-      <BrushCleaning className="size-4 shrink-0" />
-      <span>
-        {c!.tickets > 0 && (
-          <>
-            {plural(c!.tickets, 'closed ticket')} still {c!.tickets === 1 ? 'has' : 'have'} {held.join(', ')}
-            {data!.untracked.length > 0 && '; '}
-          </>
-        )}
-        {data!.untracked.length > 0 && `${plural(data!.untracked.length, 'untracked worktree')}`}.
-      </span>
-      <span className="ml-auto shrink-0 underline">Review</span>
-    </Link>
   )
 }

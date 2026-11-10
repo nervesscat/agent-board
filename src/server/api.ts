@@ -55,6 +55,7 @@ import {
 import { handleMcp } from './mcp'
 import { linkFor } from './previewProxy'
 import * as needs from './needs'
+import { checkOpencodeConfig } from './opencodeConfig'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
@@ -68,7 +69,6 @@ import * as reports from './reports'
 import * as settingsHistory from './reportSettingsHistory'
 import { reportsOverview } from './reportsOverview'
 import * as repos from './repos'
-import { withResume } from './resume'
 import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
@@ -188,11 +188,15 @@ const TokenName = z
 const tokensHumanOnly = (request: Request, what: string) => {
   if (isAgent(request)) throw new HttpError(403, `only the human ${what}`)
 }
-// The token itself is in this answer only: the board keeps its hash.
+// The token itself is in this answer only: the board keeps its hash. An orchestrator unless the human asks
+// for a worker: the token Connect an agent hands out is the one that runs and delegates.
 api.post('/api/agent-tokens', async ({ request }) => {
   tokensHumanOnly(request, 'makes agent tokens')
-  const { name } = await readJson(request, z.object({ name: TokenName }))
-  return json(tokens.mintAgentToken(name), 201)
+  const { name, role } = await readJson(
+    request,
+    z.object({ name: TokenName, role: z.enum(AGENT_ROLES).default('orchestrator') }),
+  )
+  return json(tokens.mintAgentToken(name, role), 201)
 })
 api.get('/api/agent-tokens', ({ request }) => {
   tokensHumanOnly(request, 'lists agent tokens')
@@ -211,7 +215,11 @@ api.delete('/api/agent-tokens/:id', ({ request, params }) => {
 })
 
 // --- connecting agents: board settings, and the skill each CLI installs ---
-api.get('/api/agent-setup', () => json(agents.agentSetup()))
+api.get('/api/agent-setup', () => json(agents.agentSetup(repos.listRepos().map((r) => r.repoPath))))
+// Whether OpenCode may run subagents from subagents: read again after the human edits its config.
+api.post('/api/agent-setup/opencode-check', () =>
+  json(checkOpencodeConfig(repos.listRepos().map((r) => r.repoPath))),
+)
 // The board skill as a SKILL.md (no projects in it: agents call find_project); the install commands curl this.
 api.get('/api/agent-setup/skill', ({ request, url }) => {
   const client = z.enum(AGENT_CLIENTS).catch('claude').parse(url.searchParams.get('client'))
@@ -613,7 +621,7 @@ api.post('/api/projects/:id/tickets', async ({ request, params, actor }) => {
   )
   return json(await needs.newTicket(id(params), body, actor, { agent: isAgent(request) }), 201)
 })
-// ?lanes=1 folds the lanes' updates into the feed. `resume` is the resume note with what happened since.
+// ?lanes=1 folds the lanes' updates into the feed.
 api.get('/api/tickets/:id', async ({ request, params, url }) =>
   json(
     await forAgent(
@@ -732,6 +740,8 @@ api.put('/api/tickets/:id/repo', async ({ request, params, actor }) => {
   )
   return json(features.setTicketRepo(id(params), body, actor, { agent: isAgent(request) }))
 })
+// Assigns the ticket to the caller (or, with `as`, to the project agent the caller works it as) and
+// starts it. Answers with the ticket row; the summary is a read of its own (GET /api/tickets/:id).
 api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
   const body = await readJson(
     request,
@@ -745,16 +755,7 @@ api.post('/api/tickets/:id/claim', async ({ request, params, actor }) => {
         .optional(),
     }),
   )
-  return json(await withResume(features.claimTicket(id(params), actor, body)))
-})
-// The resume note ("Where we left off"): the human and agents both write it; `as` is agents only.
-api.put('/api/tickets/:id/resume', async ({ request, params, actor }) => {
-  const body = await readJson(
-    request,
-    z.object({ note: z.string().min(1).max(50_000), as: AgentName.optional() }),
-  )
-  if (body.as) agentOnly(request)
-  return json(await features.setResumeNote(id(params), body.note, actor, { as: body.as }))
+  return json(features.claimTicket(id(params), actor, body))
 })
 api.get('/api/tickets/:id/git', async ({ params }) => json(await needs.ticketGitView(id(params))))
 // Whether the branch of every ticket in work is on origin, one batch of git per repo; refresh fetches now.
@@ -877,6 +878,13 @@ api.post('/api/tickets/:id/runs/start', async ({ request, params, actor }) =>
 api.post('/api/tickets/:id/runs/stop', async ({ request, params, actor }) =>
   json(await ticketRuns.stopTicketRuns(id(params), actor, await optionalJson(request, RunsScope))),
 )
+// One run from one workspace: its state (building, running with its link, stopped, failed). A window
+// showing a run asks about that run, not the workspace's first preview one.
+api.get('/api/workspaces/:id/runs/:runId', ({ params }) => {
+  const state = runState(id(params), id(params, 'runId'))
+  if (!state) throw new HttpError(404, 'the board never ran that run of this workspace')
+  return json(state)
+})
 // One run from one workspace. Nothing in the body is read: what runs is the stored config.
 api.post('/api/workspaces/:id/runs/:runId/start', ({ params, actor }) =>
   json(startRun(id(params), id(params, 'runId'), actor), 202),
@@ -1184,10 +1192,14 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
 
 // --- summary: what waits on the human, in progress, done today, next, carrying over ---
-// ?projectId= for one project; every project otherwise, one block each.
-api.get('/api/summary', ({ url }) => {
+// ?projectId= for one project; every project otherwise, one block each. `actor` names who asked, for the
+// Needs you entries this browser remembers as opened for them (per actor, src/lib/needsYou.ts).
+api.get('/api/summary', ({ url, actor }) => {
   const project = url.searchParams.get('projectId')
-  return json(getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }))
+  return json({
+    ...getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }),
+    actor,
+  })
 })
 
 // --- daily ---

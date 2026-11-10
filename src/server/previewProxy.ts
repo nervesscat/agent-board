@@ -600,6 +600,17 @@ async function readCapped(res: IncomingMessage, cap: number): Promise<Buffer | n
 }
 
 /** The preview's answer as the board sends it: headers rewritten, the body as it is (HTML gets its script). */
+/**
+ * A Content-Security-Policy with every `frame-ancestors` directive narrowed to `'self'`: the board's own
+ * origin, where the run's proxy path is served, frames it (the preview window). The rest of the policy
+ * is kept as the preview sent it.
+ */
+export function frameAncestorsSelf(policy: string): string {
+  return policy.replace(/(^|[;,])\s*frame-ancestors\b[^;,]*/gi, (_match, separator: string) => {
+    return `${separator}${separator ? ' ' : ''}frame-ancestors 'self'`
+  })
+}
+
 async function answerOf(
   res: IncomingMessage,
   opts: { prefix: string; port: number; method: string; own: string | null },
@@ -624,6 +635,14 @@ async function answerOf(
     } else if (name === 'refresh') {
       const refresh = rewriteRefresh(String(value), opts.prefix, opts.port, opts.own)
       if (refresh !== null) headers.set(name, refresh)
+    } else if (name === 'x-frame-options') {
+      // The board frames its own proxy path in the preview window (PreviewWindow.tsx), same origin: a
+      // preview's own refusal would leave an empty pane. A link framed straight from this machine keeps
+      // its refusal, and the window says so (preview.ts `frameBlockedBy`).
+      continue
+    } else if (name === 'content-security-policy') {
+      // Every frame-ancestors narrowed to 'self', the board's own origin the proxy path is served at.
+      for (const policy of [value].flat()) headers.append(name, frameAncestorsSelf(String(policy)))
     } else {
       headers.set(name, [value].flat().join(', '))
     }

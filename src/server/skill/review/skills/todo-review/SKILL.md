@@ -178,7 +178,7 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    error and leave it where it is.
 
 **Sending back** is one more `todo-review-ticket` run for the same ticket with `RETRY=<what the
-check found>` added. It resumes from the ticket's resume note and posts, not from scratch. It goes
+check found>` added. It resumes from the ticket's summary and posts, not from scratch. It goes
 back in the queue and starts like any other ticket, only after the previous run of that ticket has
 returned (`ticket:<id>`). Each ticket is sent back or re-queued at most once; after that its result
 is recorded as it is.

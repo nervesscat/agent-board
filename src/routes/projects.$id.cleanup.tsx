@@ -805,15 +805,186 @@ function ConfirmDelete({
   )
 }
 
-const OUTCOME: Record<DeleteResult['outcome'], { label: string; className: string }> = {
-  deleted: { label: 'deleted', className: 'text-emerald-700 dark:text-emerald-400' },
-  gone: { label: 'already gone', className: 'text-muted-foreground' },
-  refused: { label: 'kept', className: 'text-amber-700 dark:text-amber-400' },
-  failed: { label: 'failed', className: 'text-destructive' },
+const OUTCOME: Record<DeleteResult['outcome'], { label: string; className: string; dot: string }> = {
+  deleted: {
+    label: 'Deleted',
+    className: 'text-emerald-700 dark:text-emerald-400',
+    dot: 'bg-emerald-600 dark:bg-emerald-400',
+  },
+  refused: {
+    label: 'Kept',
+    className: 'text-amber-700 dark:text-amber-400',
+    dot: 'bg-amber-600 dark:bg-amber-400',
+  },
+  failed: { label: 'Failed', className: 'text-destructive', dot: 'bg-destructive' },
+  gone: { label: 'Already gone', className: 'text-muted-foreground', dot: 'bg-muted-foreground/60' },
 }
 
-/** What the last deletion did, item by item, with the commands that put back what went. */
+/** What went first, then what stayed and why, then what could not be done, then what was gone already. */
+const OUTCOME_ORDER: DeleteResult['outcome'][] = ['deleted', 'refused', 'failed', 'gone']
+
+const kindLabel = (kind: DeleteKind) =>
+  kind === 'remote' ? 'on origin' : kind === 'worktrees' ? 'with its worktrees' : 'local'
+
+/** The next step for the reasons this page can name; null when the reason already says it. */
+function advice(reason: string): string | null {
+  if (/has changes or untracked files: /.test(reason))
+    return 'Commit or stash them in the worktree, then refresh.'
+  if (reason.endsWith(' is gone: git worktree prune drops it')) return 'Run git worktree prune, then refresh.'
+  if (/ moved since: now at /.test(reason)) return 'Refresh, then confirm again on the new commit.'
+  if (reason.startsWith('checked out in ')) return 'Check out another branch there first.'
+  return null
+}
+
+/** Ticket ids as they read best: a run of three or more as a range, the rest in full. */
+function idsText(ids: number[]): string {
+  const sorted = [...new Set(ids)].sort((a, b) => a - b)
+  const parts: string[] = []
+  for (let i = 0; i < sorted.length; ) {
+    let j = i
+    while (j + 1 < sorted.length && sorted[j + 1] === sorted[j]! + 1) j++
+    const run = sorted.slice(i, j + 1)
+    parts.push(run.length >= 3 ? `#${run[0]}–#${run.at(-1)}` : run.map((id) => `#${id}`).join(', '))
+    i = j + 1
+  }
+  return parts.join(', ')
+}
+
+/** One line's worth of a group: a branch and a kind read once, with every item that stayed for it. */
+type Bucket = { branch: string; kind: DeleteKind; items: DeleteResult[] }
+
+function bucketsOf(items: DeleteResult[]): Bucket[] {
+  const buckets = new Map<string, Bucket>()
+  for (const r of items) {
+    const key = `${r.branch}\u0000${r.kind}`
+    const found = buckets.get(key)
+    if (found) found.items.push(r)
+    else buckets.set(key, { branch: r.branch, kind: r.kind, items: [r] })
+  }
+  return [...buckets.values()]
+}
+
+/** The items that stayed for the very same reason, so it reads once for all of them. */
+function groupsOf(items: DeleteResult[]) {
+  const groups = new Map<string, DeleteResult[]>()
+  for (const r of items) {
+    const key = r.reason ?? ''
+    const found = groups.get(key)
+    if (found) found.push(r)
+    else groups.set(key, [r])
+  }
+  return [...groups].map(([key, list]) => {
+    const buckets = bucketsOf(list)
+    // A message that opens with its own branch says it again below: the branch line keeps the fact.
+    const only = buckets.length === 1 ? buckets[0] : null
+    const branch = only?.branch ?? ''
+    const prefix = branch
+      ? [`${branch}: `, `${branch} `, `origin's ${branch}: `, `origin's ${branch} `].find(
+          (p) => key.length > p.length && key.startsWith(p),
+        )
+      : undefined
+    return {
+      key,
+      reason: prefix ? key.slice(prefix.length) : key,
+      // The patterns read the message whole: the branch and its space are part of what they look for.
+      advice: advice(key),
+      buckets,
+    }
+  })
+}
+
+/** What an item took with it, each fact once: the paths removed, the links, and how to put them back. */
+function Facts({ items }: { items: DeleteResult[] }) {
+  const removed = [...new Set(items.flatMap((r) => r.removed))]
+  const unlinked = [
+    ...new Map(items.flatMap((r) => r.unlinked).map((l) => [`${l.path}\u0000${l.target}`, l])).values(),
+  ]
+  const restore = [...new Set(items.flatMap((r) => r.restore))]
+  if (!removed.length && !unlinked.length && !restore.length) return null
+  return (
+    <div className="space-y-1">
+      {removed.map((p) => (
+        <p key={p} className="break-all font-mono text-[11px] text-muted-foreground">
+          removed {p}
+        </p>
+      ))}
+      {unlinked.map((l) => (
+        <p key={`${l.path}:${l.target}`} className="break-all font-mono text-[11px] text-muted-foreground">
+          removed the link {l.path} to {l.target}, which stays
+        </p>
+      ))}
+      {restore.map((cmd) => (
+        <div key={cmd} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1">
+          <code className="flex-1 overflow-x-auto font-mono">{cmd}</code>
+          <Tip content={`Copy: ${cmd}`}>
+            <button
+              type="button"
+              aria-label={`Copy: ${cmd}`}
+              onClick={() => copy(cmd)}
+              className="shrink-0 text-muted-foreground hover:text-foreground"
+            >
+              <Copy className="size-3.5" />
+            </button>
+          </Tip>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** The items that stayed, each reason once, and under it the branches, tickets and what it took with it. */
+function Groups({ outcome, items }: { outcome: DeleteResult['outcome']; items: DeleteResult[] }) {
+  return (
+    <ul className="space-y-2">
+      {groupsOf(items).map((g) => (
+        <li key={g.key} className="space-y-1">
+          <div className="space-y-0.5">
+            <p className="break-words text-muted-foreground">{g.reason || 'No reason given'}</p>
+            {g.advice && <p className="break-words text-muted-foreground/80">→ {g.advice}</p>}
+          </div>
+          <ul className="space-y-1 pl-2">
+            {g.buckets.map((b) => (
+              <li key={`${b.branch}:${b.kind}`} data-outcome={outcome} className="space-y-1">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-mono">{b.branch}</span>
+                  <span className="text-muted-foreground">{kindLabel(b.kind)}</span>
+                  <span className="text-muted-foreground">{idsText(b.items.map((r) => r.ticketId))}</span>
+                </div>
+                <Facts items={b.items} />
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** The items that went, each with what it took and the commands that put it back. */
+function Deleted({ items }: { items: DeleteResult[] }) {
+  return (
+    <ul className="space-y-1.5">
+      {items.map((r, i) => (
+        <li key={`${r.ticketId}:${r.branch}:${r.kind}:${i}`} data-outcome={r.outcome} className="space-y-1">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-mono">{r.branch}</span>
+            <span className="text-muted-foreground">
+              {kindLabel(r.kind)} · #{r.ticketId}
+            </span>
+          </div>
+          <Facts items={[r]} />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** What the last deletion did, each item once, with what was kept and why, and what puts back what went. */
 function Results({ results, onClose }: { results: DeleteResult[]; onClose: () => void }) {
+  const sections = OUTCOME_ORDER.map((outcome) => ({
+    outcome,
+    items: results.filter((r) => r.outcome === outcome),
+  })).filter((s) => s.items.length)
   return (
     <section className="space-y-1.5" aria-label="Deletion results">
       <div className="flex items-center justify-between gap-2">
@@ -826,48 +997,18 @@ function Results({ results, onClose }: { results: DeleteResult[]; onClose: () =>
           </Button>
         </Tip>
       </div>
-      <ul className="space-y-1.5 rounded-lg border p-3 text-xs">
-        {results.map((r, i) => (
-          <li key={i} data-outcome={r.outcome} className="space-y-0.5">
-            <div>
-              <span className={`font-medium ${OUTCOME[r.outcome].className}`}>
-                {OUTCOME[r.outcome].label}
-              </span>{' '}
-              <span className="font-mono">{r.branch}</span>{' '}
-              <span className="text-muted-foreground">
-                {r.kind === 'remote' ? 'on origin' : r.kind === 'worktrees' ? 'with its worktrees' : 'local'}{' '}
-                · #{r.ticketId}
-              </span>
-            </div>
-            {r.reason && <div className="text-muted-foreground">{r.reason}</div>}
-            {r.removed.map((p) => (
-              <div key={p} className="font-mono text-muted-foreground">
-                removed {p}
-              </div>
-            ))}
-            {r.unlinked.map((l) => (
-              <div key={l.path} className="font-mono text-muted-foreground">
-                removed the link {l.path} to {l.target}, which stays
-              </div>
-            ))}
-            {r.restore.map((cmd) => (
-              <div key={cmd} className="flex items-center gap-2 rounded bg-muted/40 px-2 py-1">
-                <code className="flex-1 overflow-x-auto font-mono">{cmd}</code>
-                <Tip content={`Copy: ${cmd}`}>
-                  <button
-                    type="button"
-                    aria-label={`Copy: ${cmd}`}
-                    onClick={() => copy(cmd)}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <Copy className="size-3.5" />
-                  </button>
-                </Tip>
-              </div>
-            ))}
-          </li>
+      <div className="divide-y rounded-lg border px-3 text-xs">
+        {sections.map(({ outcome, items }) => (
+          <section key={outcome} aria-label={OUTCOME[outcome].label} className="space-y-1.5 py-3">
+            <h3 className={`flex items-center gap-1.5 font-medium ${OUTCOME[outcome].className}`}>
+              <span className={`size-1.5 shrink-0 rounded-full ${OUTCOME[outcome].dot}`} aria-hidden />
+              {OUTCOME[outcome].label}{' '}
+              <span className="font-normal text-muted-foreground">· {items.length}</span>
+            </h3>
+            {outcome === 'deleted' ? <Deleted items={items} /> : <Groups outcome={outcome} items={items} />}
+          </section>
         ))}
-      </ul>
+      </div>
     </section>
   )
 }

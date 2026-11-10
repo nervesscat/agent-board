@@ -2,11 +2,7 @@ import type { ProjectPush, TicketFull } from '#/lib/api'
 import { commitFile, e2eEnv, git } from './env'
 import { expect, ok, test } from './fixtures'
 
-test('a branch on origin shows a green dot, one that is not a red one, and the not-pushed line filters', async ({
-  page,
-  project,
-  human,
-}) => {
+test('a branch on origin shows a green dot, one that is not a red one', async ({ page, project, human }) => {
   // Branches of this test alone, in the run's repo (origin is a bare repo beside it).
   const name = (what: string) => `e2e-${project.id}-${what}`
   git('branch', name('pushed'), 'main')
@@ -44,24 +40,8 @@ test('a branch on origin shows a green dot, one that is not a red one, and the n
   await expect(dot('Only here')).toHaveClass(/bg-red-500/)
   await expect(dot('A commit ahead')).toHaveAttribute('aria-label', /^not pushed: 1 commit only here/)
   await expect(dot('A commit ahead')).toHaveClass(/bg-red-500/)
-
-  // "2 branches not pushed" shows only those two, and again everything.
-  const line = page.getByRole('button', { name: /^2 branches not pushed/ })
-  await expect(line).toHaveAttribute('aria-pressed', 'false')
-  await line.click()
-  await expect(line).toHaveAttribute('aria-pressed', 'true')
-  await expect(line).toContainText('showing only them')
-  await expect(card('Only here')).toBeVisible()
-  await expect(card('A commit ahead')).toBeVisible()
-  await expect(card('On origin')).toHaveCount(0)
-  await line.click()
-  await expect(card('On origin')).toBeVisible()
-
-  // The same filter on the list.
-  await page.getByRole('tab', { name: 'List' }).click()
-  await line.click()
-  await expect(page.getByRole('listitem').filter({ hasText: 'Only here' })).toBeVisible()
-  await expect(page.getByRole('listitem').filter({ hasText: 'On origin' })).toHaveCount(0)
+  // The dots are the tickets': the page itself says nothing about branches not pushed.
+  await expect(page.getByRole('button', { name: /branches not pushed/ })).toHaveCount(0)
 
   // The ticket page says it in words.
   await page.goto(`/projects/${project.id}/features/${local.id}`)

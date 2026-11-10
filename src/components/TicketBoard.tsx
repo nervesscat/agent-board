@@ -3,7 +3,6 @@ import {
   Archive,
   ArchiveRestore,
   ArrowDownUp,
-  BookmarkX,
   ChevronLeft,
   ChevronRight,
   GitBranch,
@@ -90,9 +89,11 @@ export function TicketBoard({
   // Dragging within its own column: the gap it would land in, 0 above the first card.
   const [slot, setSlot] = useState<number | null>(null)
   // A phone shows one stage at a time; this is the one picked (none: the first with tickets).
-  const [pickedStage, setPickedStage] = useState<string>()
+  const [pickedStage, pickStage] = useRememberedStage(`features.board.stage.${projectId}`, stages)
   const activeStage =
-    pickedStage ?? stages.find((s) => stageColumn(items, s.key).length > 0)?.key ?? stages[0]?.key
+    stages.find((s) => s.key === pickedStage)?.key ??
+    stages.find((s) => stageColumn(items, s.key).length > 0)?.key ??
+    stages[0]?.key
   const stageItems = Object.fromEntries(
     stages.map((s) => [s.key, `${s.name} (${stageColumn(items, s.key).length})`]),
   )
@@ -127,7 +128,7 @@ export function TicketBoard({
     <div ref={frame} className="flex flex-col md:min-h-80">
       {stages.length > 0 && activeStage && (
         <div className="mb-2 md:hidden">
-          <Select value={activeStage} onValueChange={(v) => v && setPickedStage(v)} items={stageItems}>
+          <Select value={activeStage} onValueChange={(v) => v && pickStage(v)} items={stageItems}>
             <SelectTrigger className="w-full" aria-label="Stage">
               <SelectValue />
             </SelectTrigger>
@@ -220,8 +221,7 @@ export function TicketBoard({
                     t.blockedTasks > 0 ||
                     !!t.stalled ||
                     t.needs.some((n) => !n.merged) ||
-                    after?.has(t.id) ||
-                    hasResumeBadge(t.resume)
+                    after?.has(t.id)
                   const words = nowWords(work, now)
                   const brief = badged ? null : nowBrief(work, now)
                   return (
@@ -254,8 +254,7 @@ export function TicketBoard({
                             t.stalled ||
                             brief ||
                             t.needs.some((n) => !n.merged) ||
-                            after?.has(t.id) ||
-                            hasResumeBadge(t.resume)) && (
+                            after?.has(t.id)) && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               {brief && <NowBadge brief={brief} words={words} />}
                               {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
@@ -268,7 +267,6 @@ export function TicketBoard({
                                 focusable={false}
                               />
                               <NeedsBadge needs={t.needs} />
-                              <ResumeBadges resume={t.resume} />
                             </div>
                           )}
                           {/* The time sits at the end of the last of these rows, so it always shares a line. */}
@@ -426,36 +424,6 @@ export function BlockedTasksBadge({ n, className = '' }: { n: number; className?
   )
 }
 
-/** Shown from the second day of work on: a ticket that carries over. */
-const multiDay = (resume: TicketRow['resume']) => resume.day !== null && resume.day > 1
-
-const hasResumeBadge = (resume: TicketRow['resume']) => resume.noHandoff || multiDay(resume)
-
-/**
- * A ticket that carried over to another day: which day of work this is, and "no resume note" when nobody
- * left a resume note for it since the last day it was worked.
- */
-function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
-  return (
-    <>
-      {resume.noHandoff && (
-        <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
-          <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-            <BookmarkX className="size-3" /> no resume note
-          </span>
-        </Tip>
-      )}
-      {multiDay(resume) && (
-        <Tip content="Which day of work this is, counted from when it was started">
-          <span className="inline-flex w-fit items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-            day {resume.day}
-          </span>
-        </Tip>
-      )}
-    </>
-  )
-}
-
 /** The card's now in little: an icon and how long, with the whole line (what, who, since when) in its tooltip. */
 function NowBadge({ brief, words }: { brief: { kind: string; text: string }; words: string }) {
   const Icon =
@@ -534,6 +502,45 @@ function writeScroll(key: string, value: SavedScroll) {
   }
 }
 
+function readStage(key: string) {
+  try {
+    return sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeStage(key: string, stage: string) {
+  try {
+    sessionStorage.setItem(key, stage)
+  } catch {
+    // storage unavailable (private mode, blocked): the board just starts at the first stage
+  }
+}
+
+/**
+ * The stage a phone was showing, for this tab: restored when the board comes back, however it is
+ * reached (a ticket's Back, the menu, a link), and across a reload. `stages` once the project's
+ * columns are known, since a stage that no longer exists must not hide every column.
+ */
+function useRememberedStage(key: string, stages: StageLike[]): [string | undefined, (stage: string) => void] {
+  const [stage, setStage] = useState<string>()
+  const restoredFor = useRef<string | undefined>(undefined)
+  useLayoutEffect(() => {
+    // Once per board: the saved stage of this project, or none (the first with tickets) when it has
+    // no say, is gone, or another project's board took this one's place.
+    if (!stages.length || restoredFor.current === key) return
+    restoredFor.current = key
+    const saved = readStage(key)
+    setStage(saved && stages.some((s) => s.key === saved) ? saved : undefined)
+  }, [key, stages])
+  const pick = (next: string) => {
+    setStage(next)
+    writeStage(key, next)
+  }
+  return [stage, pick]
+}
+
 /**
  * Where the board was scrolled, sideways and in each column, for this tab: restored when the page
  * comes back, however it is reached (a link, the menu, Back). `ready` once the columns are drawn.
@@ -555,12 +562,23 @@ function useRememberedScroll(key: string, scroller: RefObject<HTMLDivElement | n
     let pending = 0
     const save = () => {
       cancelAnimationFrame(pending)
-      pending = requestAnimationFrame(() =>
+      pending = requestAnimationFrame(() => {
+        const before = readScroll(key)
+        // A value the element coerces to 0 because it cannot scroll there is not where the reader
+        // was (a phone shows one column, with nothing sideways and nothing scrolling in it): keep
+        // what was saved, so a visit at phone width does not lose the desktop's position.
+        const sideways = el.scrollWidth > el.clientWidth
         writeScroll(key, {
-          left: el.scrollLeft,
-          columns: Object.fromEntries(columns().map((c) => [c.dataset.column!, c.scrollTop])),
-        }),
-      )
+          left: sideways ? el.scrollLeft : (before?.left ?? 0),
+          columns: Object.fromEntries(
+            columns().map((c) => {
+              const name = c.dataset.column!
+              const down = c.scrollHeight > c.clientHeight
+              return [name, down ? c.scrollTop : (before?.columns?.[name] ?? 0)]
+            }),
+          ),
+        })
+      })
     }
     // Scroll events do not bubble; listening while they travel down catches the columns' too.
     el.addEventListener('scroll', save, { capture: true, passive: true })
@@ -715,11 +733,6 @@ export function TicketList({
                     className="ml-2 align-[1px]"
                   />
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
-                  {hasResumeBadge(t.resume) && (
-                    <span className="ml-2 inline-flex gap-1 align-[1px]">
-                      <ResumeBadges resume={t.resume} />
-                    </span>
-                  )}
                   {t.tags.length > 0 && (
                     <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
                       {[...t.tags].sort(compareTags).map((tag) => (
