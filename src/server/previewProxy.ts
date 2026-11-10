@@ -738,9 +738,9 @@ export async function servePreview(
   }
 
   // The query goes on as it came: a `pl` here is the preview's own (a link is redeemed on the root path only).
-  // The preview gets the path as the browser asked for it, under the prefix: a preview built for that path
-  // (the board's own Preview) serves its base there. The prefix was taken off only to read the path above.
-  const path = `${prefix}${rest.slice(1)}${url.search}`
+  // A preview built for this path (a checkout of the board) gets the whole path, base included, because it
+  // serves it; a plain preview is served at `/` and gets the path under the prefix as it always did.
+  const path = `${state.previewBase ? prefix + rest.slice(1) : rest}${url.search}`
   const headers = upstreamHeaders(request.headers, state.port)
   let res: IncomingMessage
   try {
@@ -1037,8 +1037,9 @@ export async function handlePreviewUpgrade(
   const query = who.redeem
     ? withoutLink(url.search, url.searchParams.get(LINK_PARAM) ?? '')
     : url.search.replace(/^\?/, '')
-  // The prefix the browser asked under stays on the path the preview sees: its own base, as HTTP above.
-  const path = `${prefix}${rest.slice(1)}${query ? `?${query}` : ''}`
+  // A base-built preview sees the prefix the browser asked under (its own base); a plain one sees the path
+  // under the prefix, as HTTP above.
+  const path = `${state.previewBase ? prefix + rest.slice(1) : rest}${query ? `?${query}` : ''}`
   const headers = upstreamHeaders(request.headers, state.port)
   headers.connection = 'Upgrade'
   headers.upgrade = 'websocket'

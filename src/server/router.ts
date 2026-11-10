@@ -1,4 +1,5 @@
 import { HttpError } from './http'
+import { pathUnderAppBase } from './previewPaths'
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 export interface Ctx {
@@ -40,9 +41,11 @@ export class ApiRouter {
 
   async handle(request: Request, actor: string): Promise<Response> {
     const url = new URL(request.url)
+    // A preview of the board serves at its base on the board's origin: its own routes see the path under it.
+    const pathname = pathUnderAppBase(url.pathname)
     let pathMatched = false
     for (const r of this.routes) {
-      const m = r.re.exec(url.pathname)
+      const m = r.re.exec(pathname)
       if (!m) continue
       pathMatched = true
       if (r.method !== request.method) continue

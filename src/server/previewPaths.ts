@@ -32,6 +32,19 @@ const underAppBase = (pathname: string): boolean =>
 
 export const isPreviewPath = (pathname: string) => !underAppBase(pathname) && PREVIEW_PATH.test(pathname)
 
+/**
+ * The path an app serving at this build's base sees: the base taken off (`/` for the base itself), and the
+ * path left as it is when this build serves at the root or the request is outside its base. The app's own
+ * routes (its API, its pages) match on this, not on the full path on the board's origin.
+ */
+export function pathUnderAppBase(pathname: string): string {
+  if (appBase === '/') return pathname
+  const base = appBase.slice(0, -1)
+  if (pathname === base || pathname === appBase) return '/'
+  if (!pathname.startsWith(appBase)) return pathname
+  return pathname.slice(base.length) || '/'
+}
+
 /** The path of a run's preview on the board's origin, with its trailing slash. */
 export const previewPathOf = (workspaceId: number, runId: number) => `/p/${workspaceId}/${runId}/`
 

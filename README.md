@@ -754,15 +754,13 @@ the workspace's repo; a repo without one says so.
 #### Previews on the board's origin
 
 A running preview is also proxied at `/p/<workspaceId>/<runId>/` on the board's own origin, with
-`proxyUrl` in its state (and `remoteUrl` with `PUBLIC_ORIGIN`). The board builds and starts it with
-`BOARD_PREVIEW_BASE` set to that path and forwards each request under the prefix unchanged, so a build
-that honours it (the board's own Preview does: Vite's base and the router's basepath) loads its assets
-and API calls through the proxy. Under its own base a preview of the board serves every path itself,
-`/p/<w>/<r>/…` included, instead of proxying it a second time. A preview that does not honour the
-variable still answers at its own loopback URL; through the proxy its pages are asked for under the
-prefix, so a repo's preview meant to be opened there should read `BOARD_PREVIEW_BASE` too. The proxy adds
-a small script to an HTML page that makes root-absolute `fetch`, `XMLHttpRequest`, `EventSource` and
-`WebSocket` URLs go through the prefix.
+`proxyUrl` in its state (and `remoteUrl` with `PUBLIC_ORIGIN`). A checkout of the board (its `package.json`
+named `agent-board`) is built and started with `BOARD_PREVIEW_BASE` and `NITRO_APP_BASE_URL` set to that
+path, and the proxy forwards its requests under the prefix unchanged, so its Vite base, its router's
+basepath and Nitro's own routes and assets all serve it, and it serves every path itself, `/p/<w>/<r>/…`
+included, instead of proxying it a second time. Any other repo's preview stays at `/`: the proxy strips
+the prefix before forwarding, as it always did. The proxy adds a small script to an HTML page that makes
+root-absolute `fetch`, `XMLHttpRequest`, `EventSource` and `WebSocket` URLs go through the prefix.
 
 The proxy answers only a signed-in caller: a passkey session of the origin the request came through, an
 agent token whose name is a persona of the preview's project only (another project's, several projects'
