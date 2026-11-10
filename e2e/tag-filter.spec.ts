@@ -329,8 +329,8 @@ test.describe('at 390px', () => {
   }) => {
     await ok(human.patch(`/api/projects/${project.id}`, { data: { tagSuggestions: MANY } }))
     await page.goto(`/projects/${project.id}/features?view=board`)
-    // Opened from the keyboard: a tap where the trigger was can land on the line about leftovers that
-    // the page may show above it a moment later, pushing it down.
+    // Opened from the keyboard: a tap where the trigger was can land elsewhere if the page settles a
+    // moment later.
     await filter(page).focus()
     await page.keyboard.press('Enter')
     await expect(options(page)).toHaveCount(21)

@@ -1,5 +1,4 @@
-import type { ProjectPush, TicketFull, TicketRow } from '#/lib/api'
-import { git } from './env'
+import type { TicketRow } from '#/lib/api'
 import { expect, ok, test } from './fixtures'
 
 test('the List and the Archived tickets search by name first, then the thread, with the query in the URL', async ({
@@ -101,60 +100,6 @@ test('the List and the Archived tickets search by name first, then the thread, w
   )
   expect(found.map((t) => [t.id, t.match])).toEqual([[replied.id, 'reply']])
   expect(found[0]).not.toHaveProperty('updates')
-})
-
-test('the search keeps to the branches not pushed when that line is on, in the List alone', async ({
-  page,
-  api,
-  project,
-  human,
-}) => {
-  const name = (what: string) => `e2e-${project.id}-${what}`
-  git('branch', name('local'), 'main')
-  git('branch', name('other'), 'main')
-  git('branch', name('pushed'), 'main')
-  git('push', '-q', 'origin', name('pushed'))
-  const ticket = (title: string, branch: string) =>
-    ok<TicketFull>(
-      human.post(`/api/projects/${project.id}/tickets`, { data: { title, status: 'in_progress', branch } }),
-    )
-  const local = await ticket('Kiwi here', name('local'))
-  const other = await ticket('Mango here', name('other'))
-  const pushed = await ticket('Kiwi on origin', name('pushed'))
-  await expect
-    .poll(async () => {
-      const res = await ok<ProjectPush>(human.get(`/api/projects/${project.id}/push`))
-      return Object.fromEntries(res.tickets.map((t) => [t.id, t.push.state]))
-    })
-    .toEqual({ [local.id]: 'local-only', [other.id]: 'local-only', [pushed.id]: 'pushed' })
-
-  await page.goto(`/projects/${project.id}/features?view=list&q=kiwi`)
-  // The ticket rows: each links to its ticket.
-  const rows = page
-    .getByRole('main')
-    .getByRole('listitem')
-    .filter({ has: page.locator('a[href*="/features/"]') })
-  await expect(rows).toHaveText([/Kiwi/, /Kiwi/])
-  await page.getByRole('button', { name: /^2 branches not pushed/ }).click()
-  await expect(rows).toHaveText([/Kiwi here/])
-
-  // The line is the List's: left on, the archive still shows every ticket its search finds, though
-  // none of them has a branch to push.
-  const gone = await api.ticket({ title: 'Kiwi gone', status: 'done' })
-  await ok(human.post(`/api/tickets/${gone.id}/archive`))
-  const field = page.getByRole('searchbox', { name: 'Search tickets' })
-  await page.getByRole('tab', { name: /Archived/ }).click()
-  await expect(page).toHaveURL(/view=archived/)
-  await expect(rows).toHaveText([/Kiwi gone/])
-  await field.fill('gone')
-  await expect(page).toHaveURL(/[?&]q=gone(&|$)/)
-  await expect(rows).toHaveText([/Kiwi gone/])
-
-  // Back in the List, the line still narrows the search.
-  await page.getByRole('tab', { name: /List/ }).click()
-  await field.fill('kiwi')
-  await expect(page).toHaveURL(/[?&]q=kiwi(&|$)/)
-  await expect(rows).toHaveText([/Kiwi here/])
 })
 
 test('the first search shows a skeleton, not the whole list, and the next keeps the last results dimmed, if it found any', async ({
