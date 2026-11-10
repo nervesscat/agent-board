@@ -31,7 +31,8 @@ refute, merge) will try to break what you built. Build so it survives that.
 
 ## Input
 
-- The ticket: its instructions, tasks and posts (the spec's acceptance criteria among them).
+- The ticket: its instructions, tasks, posts and replies, decisions and attachments (the spec's
+  acceptance criteria among them).
 - The project's instructions: how to run its repos, conventions, what never to do. They win over
   your habits.
 - The worktree path and branch. Work only there; never touch the main checkout.
@@ -68,7 +69,8 @@ if the ticket's instructions change. Not on a low ticket: its criteria come from
 and the builder takes those as its spec. In a review, the feature-review skill runs it as its spec
 phase.
 
-**Give it:** the ticket (instructions, posts, attachments) as the context, the project's
+**Give it:** the ticket's context (its instructions, the human's posts and replies, the decisions and
+their answers, the attachments), the project's
 instructions, the worktree, and the diff when there is one (none before the first build).
 
 **Returns:** the spec: intent, acceptance criteria with how each is checked, out of scope, the
@@ -86,9 +88,10 @@ with \`parentTaskId\` = its id). A ticket with no tasks gets the project's defau
 takes its instructions as the spec), and after every review (**runner**) whose verdict
 is not SHIP, while the ticket has a round left. Never two builders on one branch.
 
-**Give it:** the ticket, the spec's acceptance criteria, the project's instructions, the worktree and
-branch, and on a fix round the confirmed and plausible findings and the failed criteria, each
-with its scenario.
+**Give it:** the ticket's context (its instructions, the human's posts and replies, the decisions and
+their answers, the attachments), the spec's acceptance criteria, the project's instructions, the
+worktree and branch, and on a fix round the confirmed and plausible findings and the failed criteria,
+each with its scenario.
 
 **Returns:** its commits, what changed per criterion or finding, the tests and checks it ran, and
 anything left open.
@@ -114,7 +117,8 @@ evidence, with no runner. One runner per PR or branch; two at once only when the
 port or browser.
 
 **Give it:** \`REPO\` (the main checkout), \`TARGET\` (the PR number or the branch), \`ticket=<id>\` (for a PR: its \`ticket\` in \`list_prs\`, the feature ticket that names the PR or else the PR's own ticket),
-its port range and whether it may use the browser.
+the ticket's context (its instructions, the human's posts and replies, the decisions and their
+answers, the attachments), its port range and whether it may use the browser.
 
 **Returns:** eight lines: status, verdict, the three checks, counts, SHA and the paths of
 \`review.md\` and \`summary.md\`. Its phases post on the ticket themselves, in its Agents tab.

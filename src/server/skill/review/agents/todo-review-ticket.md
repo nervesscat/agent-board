@@ -146,7 +146,12 @@ works when, who waits on what, and what stalled. Keep it, with `projectId: PROJE
    step had no agent.
 2. `get_ticket`: the instructions, the attachments (read each image and file at its local `path`:
    a ticket with an empty body and a screenshot is a bug report), the posts, the answered
-   decisions, and the **resume note first** when there is one. Its `complexity` is this run's level: the
+   decisions, and the **resume note first** when there is one. Read every post and each reply
+   under it (`list_comments` with the post's `parentType: update` and id), the human's above all:
+   they are part of the ticket, not background. This is the ticket's context, and every brief you
+   write (steps 2, 3 and 5) carries it: its instructions, the human's posts and replies, the
+   decisions with their answers, and the attachments. Say the subagent may read the rest itself
+   with `get_ticket` and `list_comments`. Its `complexity` is this run's level: the
    board's value wins when it differs from `COMPLEXITY`, and `NOTES` says so. You never change a
    ticket's complexity. On `RETRY`, start from the resume
    note and fix what `RETRY` names before anything else.
@@ -191,7 +196,9 @@ unless `RETRY` names it. A lane of a split ticket whose body carries its part of
 (**Escalation**) writes all of that part, Intent and Classification included, to
 `WORKDIR/01-spec.md`. Otherwise spawn a
 subagent briefed with the **spec** agent's `instructions`, the project's `instructions`, the
-ticket (everything from step 1.2), and a brief in four parts, so it reads only what matters.
+ticket's context (everything from step 1.2: its instructions, the human's posts and replies, the
+decisions and their answers, the attachments), and a brief in four parts, so it reads only what
+matters.
 Focus: the files the ticket names or its words point to, and the repo's rule files (`AGENTS.md`,
 `CLAUDE.md`, `CONTRIBUTING.md`). Known (facts it does not rediscover): the worktree and branch, the
 project's check commands, `PORTS`, and the repo's rule on what it may mention. Return: the spec's
@@ -218,7 +225,9 @@ is no diff yet). Then:
 ### 3. Build
 
 Spawn a subagent briefed with the **builder** agent's `instructions`, the project's `instructions`,
-the ticket, `WORKDIR/01-spec.md`, and a brief in the same four parts. Focus: the spec's Surfaces
+the ticket's context (everything from step 1.2: its instructions, the human's posts and replies,
+the decisions and their answers, the attachments), `WORKDIR/01-spec.md`, and a brief in the same
+four parts. Focus: the spec's Surfaces
 and their tests. Known: the worktree and branch, the project's check commands scoped as the gate
 runs them (step 4, item 1) with the **Local test flags**, never the full unit or end-to-end suite
 (GitHub CI runs those on the PR), `PORTS`, the repo's
