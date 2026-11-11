@@ -28,6 +28,9 @@ export function e2eEnv() {
     seedFile: path.join(root, 'seed.json'),
     /** The board's user-wide .claude folder (CLAUDE_HOME): never the real ~/.claude. Not there at first. */
     claudeHome: path.join(root, 'home', '.claude'),
+    /** The opencode global config folder (XDG_CONFIG_HOME): this run's own, never the machine's. */
+    opencodeConfigHome: path.join(root, 'home', '.config'),
+    opencodeConfigDir: path.join(root, 'home', '.config', 'opencode'),
     /** A second board, its PUBLIC_ORIGIN set in the environment (the Settings state "set by env"). */
     envPort: Number(process.env.E2E_ENV_PORT),
     envBaseURL: `http://127.0.0.1:${process.env.E2E_ENV_PORT}`,

@@ -627,6 +627,8 @@ describe('the agent tokens the board issues', () => {
       id: expect.any(Number),
       name: 'opencode',
       token: expect.stringMatching(/^[\w-]{43}$/),
+      // Connect an agent's token is the one that runs and delegates: an orchestrator unless asked otherwise.
+      role: 'orchestrator',
       createdAt: expect.any(String),
       expiresAt: expect.any(String),
     })
@@ -706,7 +708,7 @@ describe('the agent tokens the board issues', () => {
       createdAt: made.createdAt,
       lastUsedAt: expect.any(String),
       expiresAt: made.expiresAt,
-      role: 'worker',
+      role: 'orchestrator',
     })
     for (const t of list) expect(Object.keys(t).sort()).toEqual(Object.keys(row).sort())
     expect(JSON.stringify(list)).not.toContain(made.token)
@@ -812,9 +814,9 @@ describe('the devices section', () => {
 })
 
 describe("agent roles: the human's call alone, bound to the token", () => {
-  const mint = async (name: string) =>
-    json<{ id: number; token: string }>(
-      send('POST', '/api/agent-tokens', { cookie: hostSession, body: { name } }),
+  const mint = async (name: string, role?: string) =>
+    json<{ id: number; token: string; role: string }>(
+      send('POST', '/api/agent-tokens', { cookie: hostSession, body: { name, ...(role ? { role } : {}) } }),
     )
   const setRole = (id: number, role: unknown, o: Send = { cookie: hostSession }) =>
     send('PATCH', `/api/agent-tokens/${id}`, { ...o, body: { role } })
@@ -840,34 +842,50 @@ describe("agent roles: the human's call alone, bound to the token", () => {
     return result.isError ? { error: text } : JSON.parse(text)
   }
 
-  let orch: { id: number; token: string }
-  let worker: { id: number; token: string }
+  let orch: { id: number; token: string; role: string }
+  let worker: { id: number; token: string; role: string }
   let projectId: number
   beforeAll(async () => {
     orch = await mint('orch')
-    worker = await mint('wrk')
+    worker = await mint('wrk', 'worker')
     const res = await send('POST', '/api/projects', { cookie: hostSession, body: { name: 'roles' } })
     projectId = (await res.json()).id
   })
 
-  it('makes every token a worker, and only the human makes one an orchestrator', async () => {
-    expect(roleInDb(orch.id)).toBe('worker')
-    expect(await me(orch.token)).toMatchObject({ actor: 'orch', agent: true, role: 'worker', parent: '' })
+  it('makes a token an orchestrator by default, a worker when the human asks for one', async () => {
+    // Connect an agent hands the human commands whose token runs and delegates: an orchestrator.
+    expect(orch.role).toBe('orchestrator')
+    expect(roleInDb(orch.id)).toBe('orchestrator')
+    expect(await me(orch.token)).toMatchObject({
+      actor: 'orch',
+      agent: true,
+      role: 'orchestrator',
+      parent: '',
+    })
+    // A worker is still the human's to choose, at minting and with the switch.
+    expect(worker.role).toBe('worker')
+    expect(roleInDb(worker.id)).toBe('worker')
+    expect(await me(worker.token)).toMatchObject({ actor: 'wrk', agent: true, role: 'worker', parent: '' })
     // No agent changes a role, its own included, nor makes a token: whatever it sends.
     for (const token of [orch.token, worker.token])
       for (const headers of [{}, { 'x-agent-name': `${token === orch.token ? 'orch' : 'wrk'}/x` }] as Record<
         string,
         string
       >[]) {
-        const res = await setRole(orch.id, 'orchestrator', { token, headers })
-        expect(res.status).toBe(403)
-        expect(await res.json()).toEqual({ error: "only the human sets an agent token's role" })
-        const made = await send('POST', '/api/agent-tokens', { token, headers, body: { name: 'x' } })
+        for (const role of ['orchestrator', 'worker'])
+          expect((await setRole(orch.id, role, { token, headers })).status).toBe(403)
+        const refused = await setRole(orch.id, 'orchestrator', { token, headers })
+        expect(await refused.json()).toEqual({ error: "only the human sets an agent token's role" })
+        const made = await send('POST', '/api/agent-tokens', {
+          token,
+          headers,
+          body: { name: 'x', role: 'orchestrator' },
+        })
         expect(made.status).toBe(403)
       }
-    expect((await setRole(orch.id, 'orchestrator', {})).status).toBe(401)
-    expect(roleInDb(orch.id)).toBe('worker')
-    expect(await me(orch.token)).toMatchObject({ role: 'worker' })
+    expect((await setRole(orch.id, 'worker', {})).status).toBe(401)
+    expect(roleInDb(orch.id)).toBe('orchestrator')
+    expect(await me(orch.token)).toMatchObject({ role: 'orchestrator' })
 
     const res = await setRole(orch.id, 'orchestrator')
     expect(res.status).toBe(200)
@@ -893,16 +911,44 @@ describe("agent roles: the human's call alone, bound to the token", () => {
       ),
     ).toMatchObject({ role: 'orchestrator' })
 
-    // Back to a worker, and back again.
+    // The switch takes the default away, and gives it back.
     expect(await json(setRole(orch.id, 'worker'))).toMatchObject({ role: 'worker' })
     expect(await me(orch.token)).toMatchObject({ role: 'worker' })
     expect(await json(setRole(orch.id, 'orchestrator'))).toMatchObject({ role: 'orchestrator' })
+  })
+
+  it('tells a connecting client a Connect token is an orchestrator by default', async () => {
+    const res = await send('POST', '/api/mcp', {
+      token: worker.token,
+      headers: { accept: 'application/json, text/event-stream' },
+      body: {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'test', version: '0' },
+        },
+      },
+    })
+    expect(res.status).toBe(200)
+    const { result } = await res.json()
+    expect(result.instructions).toContain(
+      'An agent token made by Connect is an orchestrator by default; the human can make it a worker.',
+    )
   })
 
   it('refuses any other role, and an unknown or revoked token', async () => {
     for (const role of ['admin', 'human', '', null, 1, 'Orchestrator']) {
       const res = await setRole(worker.id, role)
       expect(res.status, JSON.stringify(role)).toBe(400)
+      // Not at mint time either.
+      const made = await send('POST', '/api/agent-tokens', {
+        cookie: hostSession,
+        body: { name: 'bad-role', role },
+      })
+      expect(made.status, JSON.stringify(role)).toBe(400)
     }
     expect(roleInDb(worker.id)).toBe('worker')
     expect((await setRole(999_999, 'orchestrator')).status).toBe(404)
@@ -910,7 +956,7 @@ describe("agent roles: the human's call alone, bound to the token", () => {
     await send('DELETE', `/api/agent-tokens/${gone.id}`, { cookie: hostSession })
     const res = await setRole(gone.id, 'orchestrator')
     expect(res.status).toBe(404)
-    expect(roleInDb(gone.id)).toBe('worker')
+    expect(roleInDb(gone.id)).toBe('orchestrator')
   })
 
   it('X-Agent-Name makes a REST call a worker sub-identity of the token; anything else is a 400', async () => {

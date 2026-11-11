@@ -67,7 +67,7 @@ board only.
 
 Other tickets of the same repo may run at the same time as yours, each in its own worktree on its
 own branch. Two things are still shared, and each has a rule. Before any `STATUS: error` below,
-`set_resume_note` with where you stopped, so the next run starts from there.
+update the ticket's summary with where you stopped, so the next run starts from there.
 
 **The main checkout's git.** Every git command that writes to `REPO`'s `.git` (`fetch`,
 `worktree add`, `worktree remove`, and `push` from your worktree, which updates `REPO`'s refs) can
@@ -146,10 +146,15 @@ works when, who waits on what, and what stalled. Keep it, with `projectId: PROJE
    step had no agent.
 2. `get_ticket`: the instructions, the attachments (read each image and file at its local `path`:
    a ticket with an empty body and a screenshot is a bug report), the posts, the answered
-   decisions, and the **resume note first** when there is one. Its `complexity` is this run's level: the
+   decisions, and the **summary first** when there is one. Read every post and each reply
+   under it (`list_comments` with the post's `parentType: update` and id), the human's above all:
+   they are part of the ticket, not background. This is the ticket's context, and every brief you
+   write (steps 2, 3 and 5) carries it: its instructions, the human's posts and replies, the
+   decisions with their answers, and the attachments. Say the subagent may read the rest itself
+   with `get_ticket` and `list_comments`. Its `complexity` is this run's level: the
    board's value wins when it differs from `COMPLEXITY`, and `NOTES` says so. You never change a
-   ticket's complexity. On `RETRY`, start from the resume
-   note and fix what `RETRY` names before anything else.
+   ticket's complexity. On `RETRY`, start from the summary
+   and posts and fix what `RETRY` names before anything else.
 3. Branch. The ticket's **own** branch is the `branch` that `get_ticket` showed in step 2, before
    this run claimed anything (a `RETRY` or re-queued run finds the one its first run claimed).
    Without one, choose a **new** name: three or four words saying what the change does,
@@ -191,7 +196,9 @@ unless `RETRY` names it. A lane of a split ticket whose body carries its part of
 (**Escalation**) writes all of that part, Intent and Classification included, to
 `WORKDIR/01-spec.md`. Otherwise spawn a
 subagent briefed with the **spec** agent's `instructions`, the project's `instructions`, the
-ticket (everything from step 1.2), and a brief in four parts, so it reads only what matters.
+ticket's context (everything from step 1.2: its instructions, the human's posts and replies, the
+decisions and their answers, the attachments), and a brief in four parts, so it reads only what
+matters.
 Focus: the files the ticket names or its words point to, and the repo's rule files (`AGENTS.md`,
 `CLAUDE.md`, `CONTRIBUTING.md`). Known (facts it does not rediscover): the worktree and branch, the
 project's check commands, `PORTS`, and the repo's rule on what it may mention. Return: the spec's
@@ -218,7 +225,9 @@ is no diff yet). Then:
 ### 3. Build
 
 Spawn a subagent briefed with the **builder** agent's `instructions`, the project's `instructions`,
-the ticket, `WORKDIR/01-spec.md`, and a brief in the same four parts. Focus: the spec's Surfaces
+the ticket's context (everything from step 1.2: its instructions, the human's posts and replies,
+the decisions and their answers, the attachments), `WORKDIR/01-spec.md`, and a brief in the same
+four parts. Focus: the spec's Surfaces
 and their tests. Known: the worktree and branch, the project's check commands scoped as the gate
 runs them (step 4, item 1) with the **Local test flags**, never the full unit or end-to-end suite
 (GitHub CI runs those on the PR), `PORTS`, the repo's
@@ -323,8 +332,8 @@ Agent tool's `effort` on every subagent you start (the spec agent, the builder),
 The review's `shots/` folder has the verify phase's screenshots. For a UI change you also need one
 of the finished thing in the preview (step 7) at the state the ticket is about. A low ticket has no
 review folder, so its screenshots come from the preview. With
-`BROWSER=no` and a UI change, do everything else, leave the ticket in progress with a resume note,
-and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
+`BROWSER=no` and a UI change, do everything else, leave the ticket in progress with its summary saying
+where you stopped, and return `STATUS: needs-browser`: the orchestrator runs you again with the browser.
 
 ### 7. Hand off
 
@@ -440,8 +449,8 @@ the ticket only when nothing else can go on.
 When you do block: move the ticket to `blocked` (an `ask_decision` card does it for you), and post
 the ask: what is needed, why, what you tried (at least two things), and what you will do once it is
 given. A decision card stays open for the human: this agent never answers a decision, and the
-BLOCKER line of your result names the question. Then `set_resume_note` with the state, the next steps and how to resume (branch, worktree,
-commands). A blocker the orchestrator finds weak comes back to you as `RETRY`.
+BLOCKER line of your result names the question. Then update the ticket's summary (`set_ticket_summary`) with the state, the next steps and how to
+resume (branch, worktree, commands). A blocker the orchestrator finds weak comes back to you as `RETRY`.
 
 ## Output
 

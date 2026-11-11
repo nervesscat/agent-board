@@ -47,12 +47,15 @@ function titles(file: string) {
 }
 
 /**
- * The `title`s that stay. Native ones: the PDF viewer's frame is named by its title, and a field with a
- * `pattern` shows its title in the browser's "match the requested format" message. The others are
+ * The `title`s that stay. Native ones: the PDF viewer's and the preview window's frames are named by
+ * their title, and a field with a `pattern` shows its title in the browser's "match the requested
+ * format" message. The others are
  * component props that only print a heading, never a tooltip.
  */
 const ALLOWED: Record<string, (t: { tag: string; attrs: string[] }) => boolean> = {
   'components/Gallery.tsx': (t) => t.tag === 'iframe',
+  // An iframe's title is what names it to a screen reader, never a tooltip.
+  'components/PreviewWindow.tsx': (t) => t.tag === 'iframe',
   'routes/projects.$id.agents.tsx': (t) =>
     (t.tag === 'Input' && t.attrs.includes('pattern')) || t.tag === 'AgentText',
   'components/Summary.tsx': (t) => ['Section', 'Row', 'TicketLink'].includes(t.tag),
@@ -136,9 +139,9 @@ describe('tooltips', () => {
       'routes/projects.$id.cleanup.tsx',
       'routes/projects.$id.features.$ticketId.tsx',
       'routes/projects.$id.features.index.tsx',
+      'routes/projects.$id.instructions.tsx',
       'routes/projects.$id.previews.tsx',
       'routes/projects.$id.prs.tsx',
-      'routes/projects.$id.settings.tsx',
       'routes/projects.$id.tsx',
     ]
     const without = had.filter((file) => {

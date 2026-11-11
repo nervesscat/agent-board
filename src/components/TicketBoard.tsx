@@ -3,7 +3,6 @@ import {
   Archive,
   ArchiveRestore,
   ArrowDownUp,
-  BookmarkX,
   ChevronLeft,
   ChevronRight,
   GitBranch,
@@ -222,8 +221,7 @@ export function TicketBoard({
                     t.blockedTasks > 0 ||
                     !!t.stalled ||
                     t.needs.some((n) => !n.merged) ||
-                    after?.has(t.id) ||
-                    hasResumeBadge(t.resume)
+                    after?.has(t.id)
                   const words = nowWords(work, now)
                   const brief = badged ? null : nowBrief(work, now)
                   return (
@@ -256,8 +254,7 @@ export function TicketBoard({
                             t.stalled ||
                             brief ||
                             t.needs.some((n) => !n.merged) ||
-                            after?.has(t.id) ||
-                            hasResumeBadge(t.resume)) && (
+                            after?.has(t.id)) && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               {brief && <NowBadge brief={brief} words={words} />}
                               {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
@@ -270,7 +267,6 @@ export function TicketBoard({
                                 focusable={false}
                               />
                               <NeedsBadge needs={t.needs} />
-                              <ResumeBadges resume={t.resume} />
                             </div>
                           )}
                           {/* The time sits at the end of the last of these rows, so it always shares a line. */}
@@ -425,36 +421,6 @@ export function BlockedTasksBadge({ n, className = '' }: { n: number; className?
     >
       <Hand className="size-3" /> {n === 1 ? '1 task blocked' : `${n} tasks blocked`}
     </span>
-  )
-}
-
-/** Shown from the second day of work on: a ticket that carries over. */
-const multiDay = (resume: TicketRow['resume']) => resume.day !== null && resume.day > 1
-
-const hasResumeBadge = (resume: TicketRow['resume']) => resume.noHandoff || multiDay(resume)
-
-/**
- * A ticket that carried over to another day: which day of work this is, and "no resume note" when nobody
- * left a resume note for it since the last day it was worked.
- */
-function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
-  return (
-    <>
-      {resume.noHandoff && (
-        <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
-          <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-            <BookmarkX className="size-3" /> no resume note
-          </span>
-        </Tip>
-      )}
-      {multiDay(resume) && (
-        <Tip content="Which day of work this is, counted from when it was started">
-          <span className="inline-flex w-fit items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-            day {resume.day}
-          </span>
-        </Tip>
-      )}
-    </>
   )
 }
 
@@ -767,11 +733,6 @@ export function TicketList({
                     className="ml-2 align-[1px]"
                   />
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
-                  {hasResumeBadge(t.resume) && (
-                    <span className="ml-2 inline-flex gap-1 align-[1px]">
-                      <ResumeBadges resume={t.resume} />
-                    </span>
-                  )}
                   {t.tags.length > 0 && (
                     <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
                       {[...t.tags].sort(compareTags).map((tag) => (

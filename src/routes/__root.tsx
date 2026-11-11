@@ -11,9 +11,11 @@ import { Menu } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { CrossBoardMark } from '#/components/CrossBoardMark'
+import { CommandPalette } from '#/components/CommandPalette'
 import { Gallery } from '#/components/Gallery'
 import { GettingStartedEntry, GettingStartedMenuItem } from '#/components/GettingStarted'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
+import { PreviewWindows } from '#/components/PreviewWindow'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
 import { UpdateBadge } from '#/components/Updates'
@@ -24,7 +26,7 @@ import { Toaster } from '#/components/ui/sonner'
 import { Tip, TooltipProvider } from '#/components/ui/tooltip'
 import { get, type Me } from '#/lib/api'
 import { KEY_ENTRIES } from '#/lib/reveal'
-import { followSystemTheme } from '#/lib/theme'
+import { followTheme } from '#/lib/theme'
 import appCss from '#/styles.css?url'
 
 interface RouterContext {
@@ -82,10 +84,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 
 /**
  * The board-wide pages, on the right of the top bar. Under `md` they fold into a menu: between `sm` and
- * `md` the lockup, the auth-off badge, the project switcher and the three links do not fit on one row.
+ * `md` the lockup, the auth-off badge, the project switcher and the links do not fit on one row.
+ * A project's pages, Daily among them, are in its own menu beside the page.
  */
 const PAGES = [
-  { to: '/daily', label: 'Daily' },
   { to: '/agents', label: 'Connect' },
   { to: '/settings', label: 'Settings' },
 ] as const
@@ -97,7 +99,7 @@ const PAGES = [
 const TOOLTIP_DELAY = 300
 
 function App() {
-  useEffect(followSystemTheme, [])
+  useEffect(followTheme, [])
   return (
     <TooltipProvider delay={TOOLTIP_DELAY}>
       {/* Opaque and padded for the phone's safe area: this bar is what paints the strip behind the status
@@ -115,6 +117,7 @@ function App() {
           <AuthOffBadge />
           <UpdateBadge />
           <ProjectSwitcher />
+          <CommandPalette />
           <div className="ml-auto flex shrink-0 items-center">
             <GettingStartedEntry />
           </div>
@@ -138,6 +141,7 @@ function App() {
         <Outlet />
       </main>
       <Gallery />
+      <PreviewWindows />
       <Toaster />
     </TooltipProvider>
   )

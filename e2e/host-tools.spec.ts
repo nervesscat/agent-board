@@ -88,7 +88,7 @@ test('names each missing tool, what it breaks and the fix; dismissed alone, back
   await claude.getByRole('button', { name: 'Dismiss the claude warning' }).click()
   await expect(claude).toHaveCount(0)
   await expect(gh).toBeVisible()
-  await page.goto('/daily')
+  await page.goto('/settings')
   await expect(gh).toBeVisible()
   await expect(claude).toHaveCount(0)
 

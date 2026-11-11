@@ -60,7 +60,9 @@ test('posts, replies and the assignee show who is who: Human, Orchestrator, Agen
     )
     // An old post by a name the human makes an orchestrator only afterwards: it shows the role now.
     await ok(old.post(`/api/tickets/${t.id}/updates`, { data: { body: 'An older post.', progress: false } }))
-    const token = await ok<{ id: number }>(human.post('/api/agent-tokens', { data: { name: legacy } }))
+    const token = await ok<{ id: number }>(
+      human.post('/api/agent-tokens', { data: { name: legacy, role: 'worker' } }),
+    )
     await ok(human.patch(`/api/agent-tokens/${token.id}`, { data: { role: 'orchestrator' } }))
     // The worker claims the ticket: the assignee is the sub-identity.
     expect((await ok<TicketFull>(worker.post(`/api/tickets/${t.id}/claim`, { data: {} }))).assignee).toBe(sub)
@@ -128,10 +130,14 @@ test('Settings > Agents: each token with its role, the Orchestrator switch, its 
       parent: name,
     })
 
+    // A token Connect an agent makes is an orchestrator: the switch that takes it away says so.
+    const tokens = await ok<AgentTokenRow[]>(human.get('/api/agent-tokens'))
+    expect(tokens.find((t) => t.id === token.id)).toMatchObject({ role: 'orchestrator' })
+
     await page.goto('/settings')
     const agents = page.getByRole('region', { name: 'Agent tokens' })
     const row = agents.getByRole('listitem', { name: `Agent ${name}` })
-    await expect(badge(row, 'Agent').first()).toBeVisible()
+    await expect(row.locator('span[data-role="orchestrator"]')).toHaveText('Orchestrator')
     const subs = row.getByRole('list', { name: `Working under ${name}` })
     await expect(subs).toContainText(`${name}/helper`)
     await expect(subs).toContainText(/seen/)
@@ -139,18 +145,21 @@ test('Settings > Agents: each token with its role, the Orchestrator switch, its 
     await expect(row.getByRole('button', { name: /Show the .* agents/ })).toHaveCount(0)
 
     const toggle = row.getByRole('switch', { name: `${name}: orchestrator` })
-    await expect(toggle).not.toBeChecked()
-    await expectTooltip(toggle.locator('xpath=ancestor::label[1]'), /also changes the projects' instructions/)
-    await toggle.click()
     await expect(toggle).toBeChecked()
-    // The role badge itself: the switch's label reads Orchestrator too.
-    await expect(row.locator('span[data-role="orchestrator"]')).toHaveText('Orchestrator')
-    const actors = await ok<ActorRow[]>(human.get('/api/actors'))
-    expect(actors.find((a) => a.name === name)).toMatchObject({ role: 'orchestrator', parent: '' })
-    expect(actors.find((a) => a.name === `${name}/helper`)).toMatchObject({ role: 'worker', parent: name })
+    await expectTooltip(toggle.locator('xpath=ancestor::label[1]'), /also changes the projects' instructions/)
+    // The human still makes it a worker, and the sub-identity stays one.
+    await toggle.click()
+    await expect(toggle).not.toBeChecked()
+    await expect(badge(row, 'Agent').first()).toBeVisible()
+    const after = await ok<ActorRow[]>(human.get('/api/actors'))
+    expect(after.find((a) => a.name === name)).toMatchObject({ role: 'worker', parent: '' })
+    expect(after.find((a) => a.name === `${name}/helper`)).toMatchObject({ role: 'worker', parent: name })
     expect(await ok(self.get('/api/me'))).toMatchObject({ actor: name, role: 'worker' })
-    const tokens = await ok<AgentTokenRow[]>(human.get('/api/agent-tokens'))
-    expect(tokens.find((t) => t.id === token.id)).toMatchObject({ role: 'orchestrator' })
+    expect(
+      (await ok<AgentTokenRow[]>(human.get('/api/agent-tokens'))).find((t) => t.id === token.id),
+    ).toMatchObject({
+      role: 'worker',
+    })
 
     // Connect an agent shows the role, read-only.
     await page.goto('/agents?shell=bash')
@@ -158,18 +167,23 @@ test('Settings > Agents: each token with its role, the Orchestrator switch, its 
       .getByRole('list', { name: 'Agent tokens' })
       .getByRole('listitem')
       .filter({ hasText: name })
-    await expect(badge(listed, 'Orchestrator')).toBeVisible()
+    await expect(badge(listed, 'Agent')).toBeVisible()
     await expect(listed.getByRole('switch')).toHaveCount(0)
 
-    // Back in Settings: a worker again, then revoked.
+    // Back in Settings: the switch gives the default back, then Revoke.
     await page.goto('/settings')
     await toggle.click()
-    await expect(toggle).not.toBeChecked()
-    await expect(badge(row, 'Agent').first()).toBeVisible()
+    await expect(toggle).toBeChecked()
+    // The role badge itself: the switch's label reads Orchestrator too.
+    await expect(row.locator('span[data-role="orchestrator"]')).toHaveText('Orchestrator')
+    expect((await ok<ActorRow[]>(human.get('/api/actors'))).find((a) => a.name === name)).toMatchObject({
+      role: 'orchestrator',
+      parent: '',
+    })
     expect(
       (await ok<AgentTokenRow[]>(human.get('/api/agent-tokens'))).find((t) => t.id === token.id),
     ).toMatchObject({
-      role: 'worker',
+      role: 'orchestrator',
     })
     await row.getByRole('button', { name: `Revoke ${name}` }).click()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Revoke' }).click()
@@ -299,7 +313,7 @@ test.describe('on a phone', () => {
       ).toBeVisible()
       expect(await scrollsSideways(page)).toBe(false)
 
-      await page.goto(`/projects/${project.id}/settings`)
+      await page.goto(`/projects/${project.id}/instructions`)
       const history = page.getByRole('region', { name: 'Instructions history' })
       await expect(history.getByRole('group', { name: 'What changed in the instructions' })).toBeVisible()
       expect(await scrollsSideways(page)).toBe(false)

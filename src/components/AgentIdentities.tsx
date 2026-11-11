@@ -63,9 +63,9 @@ export function AgentIdentities() {
     <section aria-label="Agent tokens" className="space-y-2">
       <h2 className="text-sm font-medium">Agent tokens</h2>
       <p className="text-sm text-muted-foreground">
-        Who is who: each agent token is an identity on the board, a worker unless you make it an orchestrator.
+        Who is who: each agent token is an identity on the board, an orchestrator unless you make it a worker.
         Its subagents that name themselves under it are listed with it, always as workers; a long list starts
-        folded, with a button for the rest.
+        folded, with an eye button for the rest.
       </p>
       {tokens.error && <p className="text-xs text-destructive">{errorMessage(tokens.error)}</p>}
       {tokens.data?.length === 0 && (

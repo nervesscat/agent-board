@@ -108,6 +108,14 @@ function route(req: IncomingMessage, res: ServerResponse, body: Buffer) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
     return res.end(Buffer.alloc(proxy.HTML_CAP_BYTES + 1, 'a'))
   }
+  if (p === '/framed') {
+    res.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'x-frame-options': 'DENY',
+      'content-security-policy': "default-src 'self'; frame-ancestors 'none'",
+    })
+    return res.end('<!doctype html><html><head></head><body>framed</body></html>')
+  }
   if (p === '/cookies') {
     res.writeHead(200, {
       'content-type': 'text/plain',
@@ -759,6 +767,26 @@ describe('the headers on each side', () => {
   it("drops a Set-Cookie named as the board's own, and keeps the preview's others on its path", async () => {
     const res = await serve(request(previewPath(wsA, RUN, 'cookies'), { headers: bearer(TOKEN.builder) }))
     expect(res.headers.getSetCookie()).toEqual([`lang=fr; Path=/p/${wsA}/${RUN}/`])
+  })
+
+  it("strips a preview's refusal to be framed, so the board's window can show its own proxy page (F3)", async () => {
+    const res = await serve(request(previewPath(wsA, RUN, 'framed'), { headers: bearer(TOKEN.builder) }))
+    expect(res.headers.get('x-frame-options')).toBeNull()
+    expect(res.headers.get('content-security-policy')).toBe("default-src 'self'; frame-ancestors 'self'")
+    expect(await res.text()).toContain('framed')
+  })
+
+  it('narrows every frame-ancestors to self, across comma-joined policies, and keeps the rest', () => {
+    expect(proxy.frameAncestorsSelf("default-src 'self'; frame-ancestors 'none'")).toBe(
+      "default-src 'self'; frame-ancestors 'self'",
+    )
+    expect(proxy.frameAncestorsSelf("default-src 'self', frame-ancestors 'none'")).toBe(
+      "default-src 'self', frame-ancestors 'self'",
+    )
+    expect(proxy.frameAncestorsSelf("frame-ancestors 'self' https://a.example; img-src *")).toBe(
+      "frame-ancestors 'self'; img-src *",
+    )
+    expect(proxy.frameAncestorsSelf("default-src 'self'")).toBe("default-src 'self'")
   })
 
   it("rewrites the preview's Set-Cookie to the run's path with no Domain, and its Location to the prefix", async () => {

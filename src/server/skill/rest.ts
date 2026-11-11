@@ -22,7 +22,6 @@ export const TOOL_ROUTES: Record<string, string> = {
   create_ticket: 'POST /api/projects/:id/tickets',
   update_ticket: 'PATCH /api/tickets/:id',
   claim_ticket: 'POST /api/tickets/:id/claim `{branch?, as?}`',
-  set_resume_note: 'PUT /api/tickets/:id/resume `{note, as?}`',
   add_tasks: 'POST /api/tickets/:id/tasks `{tasks[], parentTaskId?}`',
   set_task_done: 'PATCH /api/tasks/:id `{done}`',
   update_task: 'PATCH /api/tasks/:id `{text?, blocked?, blockedReason?}`',

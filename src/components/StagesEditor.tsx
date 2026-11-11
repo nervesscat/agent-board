@@ -94,7 +94,7 @@ export function StagesEditor({ projectId }: { projectId: string }) {
     reorder.mutate(ids)
   }
   return (
-    <section aria-label="Stages" className="max-w-3xl space-y-3">
+    <section id="stages" aria-label="Stages" className="max-w-3xl scroll-mt-16 space-y-3">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Stages</h2>
         <p className="text-sm text-muted-foreground">

@@ -2,9 +2,20 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams } from '@tanstack/react-router'
 
 import { get, type Project, type ProjectAgent, type ProjectRow } from '#/lib/api'
+import { recall, remember } from '#/lib/remembered'
 
 export const useProjects = () =>
   useQuery({ queryKey: ['projects'], queryFn: () => get<ProjectRow[]>('/api/projects') })
+
+/** The project this browser was last in, for an old address that names none (`/daily`). */
+const CURRENT_PROJECT = 'current-project'
+
+/** Keeps the project shown now as this browser's current one. */
+export const rememberCurrentProject = (id: string | number) => remember(CURRENT_PROJECT, String(id))
+
+/** The remembered project, when it is still one of `ids`. */
+export const currentProjectId = (ids: readonly number[]): string | undefined =>
+  recall(CURRENT_PROJECT, ids.map(String))
 
 /** The project with its repos; every module of a project reads repo names from here. */
 export const useProject = (id: string | number) =>
