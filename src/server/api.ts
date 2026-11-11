@@ -41,7 +41,8 @@ import { GalleryQuery, listGallery } from './gallery'
 import { listDirs } from './fs'
 import { assertRepo, listBranches } from './git'
 import { checkHostTools, readyHostTools } from './hostTools'
-import { HttpError, intParam, readJson } from './http'
+import { HttpError, intParam, notFound, readJson } from './http'
+import * as jobs from './jobs'
 import * as instructions from './instructionsHistory'
 import {
   isActive,
@@ -153,6 +154,9 @@ const RunBody = z.object({
 /** An optional JSON body: none (or an empty one) is `{}`. */
 const optionalJson = async <T extends z.ZodType>(request: Request, schema: T): Promise<z.infer<T>> =>
   (await request.clone().text()).trim() ? readJson(request, schema) : schema.parse({})
+
+/** The test-only affordances answer on a test-mode board alone (`BOARD_ENV=test`); anywhere else, 404. */
+export const testOnlyAllowed = (boardEnv: string) => boardEnv === 'test'
 
 export const api = new ApiRouter()
 
@@ -772,6 +776,62 @@ api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
 api.post('/api/projects/:id/cleanup/delete', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ items: DeleteItems }))
   return json(await deleteLeftovers(id(params), body.items, actor, { agent: isAgent(request) }))
+})
+
+// --- jobs: long operations reporting their progress, for the top bar to poll (jobs.ts) ---
+// The project's jobs the caller may see, newest first: the human every one of them, an agent only its
+// own there, so nothing leaks across projects or actors. Reads only, and no body.
+api.get('/api/projects/:id/jobs', ({ request, params, actor }) => {
+  const projectId = id(params)
+  projects.getProject(projectId)
+  return json(jobs.listJobs(projectId, { agent: isAgent(request) ? actor : null }))
+})
+// Dismiss one job for every caller: the human any it can see, an agent only its own; a job of another
+// project, another actor's or an unknown id is a 404. Dismissing a running one hides it, not the work.
+api.delete('/api/jobs/:id', ({ request, params, actor }) => {
+  const gone = jobs.dismissJob(id(params), { agent: isAgent(request) ? actor : null })
+  if (!gone) throw notFound('job')
+  return json({ ok: true })
+})
+// Test mode only, for the browser tests to watch a real job: starts one that ticks on a timer and
+// ends succeeded (or with `fail`, failed). Anywhere but a test-mode board this is a 404.
+const TestJob = z.object({
+  projectId: z.number().int(),
+  steps: z.number().int().min(1).max(100).default(6),
+  ms: z.number().int().min(0).max(60_000).default(500),
+  fail: z.boolean().default(false),
+})
+let testJobCount = 0
+api.post('/api/test/jobs', async ({ request, actor }) => {
+  if (!testOnlyAllowed(authMode().boardEnv)) throw notFound('endpoint')
+  const body = await readJson(request, TestJob)
+  projects.getProject(body.projectId)
+  const job = jobs.startJob({
+    kind: 'test',
+    // The e2e reads this from the answer, so its card and its toast are found by the same words.
+    title: `Test job ${++testJobCount}`,
+    projectId: body.projectId,
+    actor,
+    total: body.steps,
+    href: `/projects/${body.projectId}/cleanup`,
+  })
+  let done = 0
+  let timer: ReturnType<typeof setTimeout>
+  const tick = () => {
+    done += 1
+    if (done >= body.steps) {
+      if (body.fail) jobs.fail(job.id, 'The test job was asked to fail')
+      else jobs.succeed(job.id, { result: { summary: `Finished ${body.steps} steps` } })
+      return
+    }
+    // Dismissed meanwhile: the timer has nothing left to move.
+    if (!jobs.progress(job.id, { done, step: `Step ${done} of ${body.steps}` })) return
+    timer = setTimeout(tick, body.ms)
+    timer.unref()
+  }
+  timer = setTimeout(tick, body.ms)
+  timer.unref()
+  return json(job, 202)
 })
 
 // Every preview of the project's tickets, running or not, running first, and the board-wide use of the

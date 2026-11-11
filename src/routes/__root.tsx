@@ -15,6 +15,7 @@ import { CommandPalette } from '#/components/CommandPalette'
 import { Gallery } from '#/components/Gallery'
 import { GettingStartedEntry, GettingStartedMenuItem } from '#/components/GettingStarted'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
+import { NotificationCenter } from '#/components/NotificationCenter'
 import { PreviewWindows } from '#/components/PreviewWindow'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
@@ -105,7 +106,7 @@ function App() {
       {/* Opaque and padded for the phone's safe area: this bar is what paints the strip behind the status
           bar (viewport-fit=cover above), so a translucent bar would let the page's canvas show through. */}
       <header className="sticky top-0 z-20 border-b bg-background pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
-        <nav className="mx-auto flex h-12 max-w-7xl items-center gap-3 px-4 text-sm sm:gap-5">
+        <nav className="mx-auto flex h-12 max-w-7xl items-center gap-2 px-3 text-sm sm:gap-5 sm:px-4">
           <Tip content="Home">
             <Link to="/" className="flex shrink-0 items-center gap-2">
               <CrossBoardMark className="size-[22px] shrink-0" />
@@ -118,8 +119,9 @@ function App() {
           <UpdateBadge />
           <ProjectSwitcher />
           <CommandPalette />
-          <div className="ml-auto flex shrink-0 items-center">
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-5">
             <GettingStartedEntry />
+            <NotificationCenter />
           </div>
           <div className="hidden items-center gap-5 md:flex">
             {PAGES.map((p) => (
