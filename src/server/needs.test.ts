@@ -137,25 +137,20 @@ describe('declaring needs', () => {
   })
 })
 
-describe('with resume notes', () => {
-  it('reads carry the resume note, and a move through the needs rule starts the work', async () => {
+describe('with needs', () => {
+  it('reads carry the needs, and a move through the needs rule starts the work', async () => {
     const a = ticket('ra', 'feat/a')
     const t = ticket('rd', 'feat/d')
     await needs.changeTicket(t.id, { needs: [a.id] }, 'claude', agent)
     expect(features.getTicket(t.id).startedAt).toBeNull()
     await needs.changeTicket(t.id, { status: 'in_progress' }, 'claude', agent)
     expect(features.getTicket(t.id).startedAt).not.toBeNull()
-    await features.setResumeNote(t.id, '**State:** halfway', 'claude')
 
     const view = await needs.ticketView(t.id)
     expect(view.needs.map((n) => n.id)).toEqual([a.id])
-    expect(view.resume).toMatchObject({ note: '**State:** halfway', by: 'claude', day: 1, noHandoff: false })
-    expect('resumeNote' in view).toBe(false)
 
     const row = (await needs.ticketRows(projectId)).find((r) => r.id === t.id)!
     expect(row.needs.map((n) => n.id)).toEqual([a.id])
-    expect(row.resume).toEqual({ at: expect.any(String), stale: false, noHandoff: false, day: 1 })
-    expect('resumeNote' in row).toBe(false)
   })
 })
 

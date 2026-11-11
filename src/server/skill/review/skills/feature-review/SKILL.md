@@ -145,6 +145,10 @@ Parse `$ARGUMENTS` as space-separated tokens:
    - `00-context.md`: PR title, body and URL, commit messages since the merge base, any
      ticket text the user pasted, and the full contents of the project's rule files if
      present in the worktree (`CLAUDE.md`, `.claude/rules/*`, `CONTRIBUTING.md`, `AGENTS.md`).
+   - When the review is on a board ticket (`ticket=<id>`): `get_ticket` and append its context
+     above: its instructions, the human's posts and replies (each thread with `list_comments`),
+     the decisions and their answers, and its attachments (their local `path`s). Every phase
+     agent reads it there; one may also read the ticket itself.
    - `00-focus.md`, one path per line with a few words on why: the changed files
      (`git -C WORKTREE diff --name-only <merge-base> <commit>`, the same range as
      `00-diff.patch`, plus the working patch's files and the untracked files copied in step 3;
@@ -346,8 +350,10 @@ commit SHA, and the paths to `review.md` and `summary.md`.
 When the board's MCP tools are available (`get_project`, `post_update`, …) and the repo belongs to
 a board project, the review also runs **on the board**. Find the ticket: `ticket=<id>` when given,
 else, for a PR, the `ticket` that `list_prs` names for it (the feature ticket that names the PR, or
-the PR's own ticket), else the ticket whose `branch` is the target branch. No ticket: run as usual
-and skip this section.
+the PR's own ticket), else the ticket whose `branch` is the target branch. `get_ticket` it before
+the phases: its instructions, the human's posts and replies, the decisions and their answers and
+its attachments are the review's context (Setup step 4), not just what finds it. No ticket: run as
+usual and skip this section.
 
 Where posts go: a ticket's feed has two tabs. Agents is the agents' working record: every phase
 post and the review's result post below go there (posted `as` an agent or as progress, the board

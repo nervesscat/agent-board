@@ -233,6 +233,35 @@ describe('a write with the session cookie', () => {
       expect(write(method, 'https://evil.example'), method).toEqual({ allow: true, entrance: null })
   })
 
+  it("is checked under a preview's path whatever cookie comes with it: the preview's own, or none", () => {
+    const preview = (headers: Record<string, string>, method = 'POST') => ({
+      ...request({ host: 'localhost:47100', origin: 'https://evil.example', ...headers }, { method }),
+      path: '/p/1/2/api/save',
+    })
+    expect(guardRequest(preview({ cookie: 'board_preview_1_2=abc' }), on)).toMatchObject({
+      allow: false,
+      status: 403,
+    })
+    // No credential at all: the guard lets it on, and the proxy answers 401 (previewProxy.test.ts).
+    expect(guardRequest(preview({}), on)).toEqual({ allow: true, entrance: null })
+    expect(guardRequest(preview({ cookie: 'board_preview_1_2=abc' }, 'GET'), on)).toEqual({
+      allow: true,
+      entrance: null,
+    })
+    expect(guardRequest(preview({ cookie: 'board_preview_1_2=abc', authorization: 'Bearer t' }), on)).toEqual(
+      { allow: true, entrance: null },
+    )
+    expect(
+      guardRequest(
+        {
+          ...preview({ cookie: 'board_preview_1_2=abc', origin: 'http://localhost:47100' }),
+          path: '/p/1/2/x',
+        },
+        on,
+      ),
+    ).toEqual({ allow: true, entrance: null })
+  })
+
   it("is only this board's cookie: a board on another port of localhost has its own", () => {
     const write = (cookie: string) =>
       guardRequest(
@@ -308,6 +337,20 @@ describe('guardConfig', () => {
     })
     expect(() => guardConfig({ PUBLIC_ORIGIN: 'http://devbox' })).toThrow(/PUBLIC_ORIGIN must be/)
   })
+
+  it('takes the entrance Settings saved when PUBLIC_ORIGIN is not set, and only on the production board', () => {
+    const saved = { origin: `https://${PUBLIC}`, host: PUBLIC }
+    expect(guardConfig({ DATA_DIR: dataDir }, saved).entrance).toEqual(saved)
+    expect(guardConfig({ DATA_DIR: dataDir, BOARD_ENV: 'development' }, saved).entrance).toBeNull()
+    expect(guardConfig({ DATA_DIR: dataDir, BOARD_ENV: 'test' }, saved).entrance).toBeNull()
+    // The environment still wins over it.
+    expect(
+      guardConfig(
+        { ...keys, PORT: '47100' },
+        { origin: 'https://other.example.ts.net', host: 'other.example.ts.net' },
+      ).entrance,
+    ).toEqual(entrance)
+  })
 })
 
 describe('the guard on a request to the board itself', () => {
@@ -355,6 +398,31 @@ describe('the guard on a request to the board itself', () => {
     if (verdict.allow) return
     const res = refusalResponse(verdict)
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'the board does not answer for the host "evil.example"' })
+    expect(await res.json()).toEqual({
+      error:
+        'no tailnet entrance is configured (PUBLIC_ORIGIN): the board answers on this machine only, not the host "evil.example"',
+    })
+  })
+
+  it('names the missing entrance for a host the board would take as its tailnet name, once it is cleared', () => {
+    // Cleared (or never set): the name the entrance had is refused as "no tailnet entrance is configured".
+    const cleared = guardBoardRequest(
+      web('http://devbox.example-tailnet.ts.net/', { host: PUBLIC }),
+      production,
+      null,
+    )
+    expect(cleared).toMatchObject({ allow: false, status: 403 })
+    if (!cleared.allow) expect(cleared.error).toMatch(/^no tailnet entrance is configured/)
+    // While an entrance is set, a host that is not it still gets the host refusal.
+    const other = guardBoardRequest(
+      web('http://evil.example/', { host: 'evil.example' }),
+      production,
+      entrance,
+    )
+    expect(other).toMatchObject({
+      allow: false,
+      status: 403,
+      error: 'the board does not answer for the host "evil.example"',
+    })
   })
 })

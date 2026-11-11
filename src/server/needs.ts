@@ -2,6 +2,7 @@ import { asc, eq, inArray } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { isClosed } from '#/lib/stages'
+import { activityOf } from '#/lib/workTimeline'
 import { logActivity } from './activity'
 import { baseChain, baseRefs, branchRef, gitCache, type GitCache, memo, reachOf, refSha } from './cleanup'
 import * as features from './features'
@@ -10,7 +11,6 @@ import { type OpenTask, openTasks } from './openTasks'
 import { HttpError } from './http'
 import { getProject } from './projects'
 import { listRepos } from './repos'
-import { withResume, withResumeBriefs } from './resume'
 import {
   deleteStage,
   firstOfKind,
@@ -20,7 +20,7 @@ import {
   resolveStage,
   stageOf,
 } from './stages'
-import { stalledFor, timelinesFor, workOf } from './workTimeline'
+import { timelinesFor, workOf } from './workTimeline'
 
 /**
  * What a ticket needs merged before it can be done: other tickets of the project whose branches have
@@ -219,8 +219,8 @@ async function needsFor(rows: Ticket[], ctx: Context) {
 }
 
 /**
- * The ticket page's read: `getTicketWithPush` with what it needs (each with `merged`), what needs it, its
- * resume note under `resume`, and in a review stage `open`: what its tasks still have open (openTasks).
+ * The ticket page's read: `getTicketWithPush` with what it needs (each with `merged`), what needs it,
+ * and in a review stage `open`: what its tasks still have open (openTasks).
  */
 export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {}) {
   const full = await features.getTicketWithPush(id, opts)
@@ -240,7 +240,7 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
   const open: OpenTask[] | null =
     kindOf(ctx.stages, full.status) === 'review' && !full.prId ? openTasks(full.id) : null
   const { timeline } = timelinesFor([full]).get(full.id)!
-  return withResume({
+  return {
     ...full,
     needs,
     neededBy,
@@ -248,25 +248,28 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
     work: workOf(timeline),
-  })
+  }
 }
 
 /**
- * `listTickets` with each ticket's needs, met or not, whether its resume note holds (`resume`), and
- * whether it reads as stalled with when it was last heard from (the work timeline).
+ * `listTickets` with each ticket's needs, met or not, whether it reads as stalled with when it was last
+ * heard from (the work timeline), and its activity: the spans and waits still open and who was last
+ * heard from.
  */
 export async function ticketRows(projectId: number, filter: features.TicketFilter = {}) {
   const rows = features.listTickets(projectId, filter)
   const needs = await needsFor(rows, context(projectId))
-  const signals = stalledFor(rows)
-  return withResumeBriefs(
-    rows.map((t) => ({
+  const timelines = timelinesFor(rows)
+  return rows.map((t) => {
+    const { timeline } = timelines.get(t.id)!
+    return {
       ...t,
       needs: needs.get(t.id) ?? [],
-      stalled: signals.get(t.id)!.stalled,
-      lastSignalAt: signals.get(t.id)!.lastSignalAt,
-    })),
-  )
+      stalled: timeline.stalled,
+      lastSignalAt: timeline.lastSignalAt,
+      activity: activityOf(timeline),
+    }
+  })
 }
 
 // --- what a branch took in from other tickets' branches ---

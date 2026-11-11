@@ -22,7 +22,6 @@ export const TOOL_ROUTES: Record<string, string> = {
   create_ticket: 'POST /api/projects/:id/tickets',
   update_ticket: 'PATCH /api/tickets/:id',
   claim_ticket: 'POST /api/tickets/:id/claim `{branch?, as?}`',
-  set_resume_note: 'PUT /api/tickets/:id/resume `{note, as?}`',
   add_tasks: 'POST /api/tickets/:id/tasks `{tasks[], parentTaskId?}`',
   set_task_done: 'PATCH /api/tasks/:id `{done}`',
   update_task: 'PATCH /api/tasks/:id `{text?, blocked?, blockedReason?}`',
@@ -31,6 +30,8 @@ export const TOOL_ROUTES: Record<string, string> = {
   set_preview: 'PATCH /api/workspaces/:id `{previewUrl}`',
   start_preview: 'POST /api/workspaces/:id/preview/start (`/preview/restart` for restart: true)',
   preview_branch: 'POST /api/tickets/:id/branch-preview `{branch?, repoId?}`',
+  preview_link:
+    'POST /api/workspaces/:id/preview/link (the link `url` of a running preview: good for five minutes for anyone who holds it)',
   stop_preview: 'POST /api/workspaces/:id/preview/stop',
   list_runs: 'GET /api/tickets/:id/runs',
   start_run:
@@ -43,7 +44,8 @@ export const TOOL_ROUTES: Record<string, string> = {
   start_span: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "span_start", phase, round?}`',
   end_span: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "span_end", spanId?, phase?}`',
   handoff: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "handoff", from?, to?}`',
-  start_wait: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "wait_start", reason}`',
+  start_wait:
+    'POST /api/projects/:id/tickets/:ticketId/events `{kind: "wait_start", reason, on?}` (`on`: the agent a waiting ticket\'s work was handed to, a delegated wait that counts as working; 1 to 60 characters)',
   end_wait: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "wait_end", waitId?, reason?}`',
   heartbeat: 'POST /api/projects/:id/tickets/:ticketId/events `{kind: "heartbeat"}`',
   post_update: 'POST /api/tickets/:id/updates `{body, attachmentIds[], as?, progress?, tab?}`',

@@ -39,8 +39,8 @@ test('every hour starts closed under the day’s counts; each opens on its own, 
   // The counts stay on top: how many, of each kind, by whom.
   await expect(activity).toContainText('3 actions')
   await expect(activity.getByText('2 tickets', { exact: true })).toBeVisible()
-  await expect(activity.getByText('1 comments', { exact: true })).toBeVisible()
-  await expect(activity.getByText(/^by (enrique, claude|claude, enrique)$/)).toBeVisible()
+  await expect(activity.getByText('1 comment', { exact: true })).toBeVisible()
+  await expect(activity.getByText('by 2 contributors', { exact: true })).toBeVisible()
 
   // Closed on the first visit: the hours show, their lines do not.
   await expect(hour(page, '10:00')).toHaveAttribute('aria-expanded', 'false')
@@ -135,67 +135,41 @@ test('the page and the hours work when the browser refuses storage', async ({ pa
   expect(errors).toEqual([])
 })
 
-test('the all-projects Daily page has the same closed hours, each line tagged with its project', async ({
-  page,
-  project,
-}) => {
-  seedDay(project.id)
-  await page.goto('/daily')
-  const activity = activityOf(page)
-  await expect(activity).toBeVisible()
-  const triggers = activity.getByRole('button', { name: /^\d\d:00/ })
-  await expect(triggers.first()).toBeVisible()
-  for (const t of await triggers.all()) await expect(t).toHaveAttribute('aria-expanded', 'false')
-  const line = activity.locator('li', { hasText: 'created ticket #1 Parser' }).filter({
-    hasText: `[${project.name}]`,
-  })
-  await expect(line).toBeHidden()
-
-  await hour(page, '10:00').click()
-  await expect(line).toBeVisible()
-  await expect(line.getByText(`[${project.name}]`, { exact: true })).toBeVisible()
-})
-
 test.describe('at 390px with touch, light and dark', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
   test('the hours open by a tap, fit the screen and read in both themes', async ({ page, project }) => {
     seedDay(project.id)
-    for (const url of [`/projects/${project.id}/daily`, '/daily']) {
-      await page.goto(url)
-      const activity = activityOf(page)
-      await hour(page, '10:00').tap()
-      await expect(activity.getByText('created ticket #1 Parser').first()).toBeVisible()
-      await hour(page, '11:00').tap()
-      await expect(activity.getByText('commented on ticket #1 Parser').first()).toBeVisible()
+    const url = `/projects/${project.id}/daily`
+    await page.goto(url)
+    const activity = activityOf(page)
+    await hour(page, '10:00').tap()
+    await expect(activity.getByText('created ticket #1 Parser').first()).toBeVisible()
+    await hour(page, '11:00').tap()
+    await expect(activity.getByText('commented on ticket #1 Parser').first()).toBeVisible()
 
-      for (const colorScheme of ['light', 'dark'] as const) {
-        await page.emulateMedia({ colorScheme })
-        if (colorScheme === 'dark') await expect(page.locator('html')).toHaveClass(/\bdark\b/)
-        expect(await scrollsSideways(page), `${url} ${colorScheme}`).toBe(false)
-        // The hour, its count and a line stand out from what they sit on.
-        for (const el of [
-          hour(page, '10:00').locator('span').first(),
-          hour(page, '10:00').locator('span').nth(1),
-          activity.getByText('created ticket #1 Parser').first(),
-        ]) {
-          const [color, back] = await el.evaluate((e) => {
-            let bg = 'rgba(0, 0, 0, 0)'
-            for (
-              let n: Element | null = e;
-              n && /rgba\(0, 0, 0, 0\)|transparent/.test(bg);
-              n = n.parentElement
-            )
-              bg = getComputedStyle(n).backgroundColor
-            return [getComputedStyle(e).color, bg]
-          })
-          expect(color, `${url} ${colorScheme}`).not.toBe(back)
-        }
-        await activity.screenshot({
-          path: test.info().outputPath(`activity-${url === '/daily' ? 'all' : 'project'}-${colorScheme}.png`),
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme })
+      if (colorScheme === 'dark') await expect(page.locator('html')).toHaveClass(/\bdark\b/)
+      expect(await scrollsSideways(page), `${url} ${colorScheme}`).toBe(false)
+      // The hour, its count and a line stand out from what they sit on.
+      for (const el of [
+        hour(page, '10:00').locator('span').first(),
+        hour(page, '10:00').locator('span').nth(1),
+        activity.getByText('created ticket #1 Parser').first(),
+      ]) {
+        const [color, back] = await el.evaluate((e) => {
+          let bg = 'rgba(0, 0, 0, 0)'
+          for (let n: Element | null = e; n && /rgba\(0, 0, 0, 0\)|transparent/.test(bg); n = n.parentElement)
+            bg = getComputedStyle(n).backgroundColor
+          return [getComputedStyle(e).color, bg]
         })
+        expect(color, `${url} ${colorScheme}`).not.toBe(back)
       }
-      await page.emulateMedia({ colorScheme: 'light' })
+      await activity.screenshot({
+        path: test.info().outputPath(`activity-project-${colorScheme}.png`),
+      })
     }
+    await page.emulateMedia({ colorScheme: 'light' })
   })
 })

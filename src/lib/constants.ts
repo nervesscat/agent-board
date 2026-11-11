@@ -100,37 +100,14 @@ export type CommentParent = (typeof COMMENT_PARENTS)[number]
 /**
  * The two tabs of a ticket's feed. main is the human's: their posts with the agents' replies under them,
  * decision cards, questions to the human and the summary. agents is the agents' working record: progress
- * posts, posts made as one of the project's agents (the review phases, the builder), the resume note's
- * versions. Each post has one, picked when it is posted (`tabOf` in the server's features).
+ * posts, posts made as one of the project's agents (the review phases, the builder). Each post has
+ * one, picked when it is posted (`tabOf` in the server's features).
  */
 export const FEED_TABS = ['main', 'agents'] as const
 export type FeedTab = (typeof FEED_TABS)[number]
 
 /** One CI check on a PR's head commit, sorted into the buckets `gh pr checks` uses. */
 export type PrCheck = { name: string; state: 'pass' | 'fail' | 'pending' | 'skipped'; url: string | null }
-
-/**
- * Where we left off: each ticket has one current resume note, written at the end of a session for
- * whoever picks the ticket up next (another agent, the same one tomorrow, the human). This is how it
- * reads: the editor starts from it and the MCP tool describes it.
- */
-export const RESUME_TEMPLATE = [
-  '**State:** (one line)',
-  '',
-  '**Done so far:**',
-  '',
-  '- …',
-  '',
-  '**Next steps:**',
-  '',
-  '1. …',
-  '',
-  '**Open questions / blockers:**',
-  '',
-  '- …',
-  '',
-  '**How to resume:** branch, worktree, commands, preview, gotchas',
-].join('\n')
 
 /** How often a project's report is due: never tracked, every day, or once a week on a set weekday. */
 export const REPORT_CADENCES = ['off', 'daily', 'weekly'] as const

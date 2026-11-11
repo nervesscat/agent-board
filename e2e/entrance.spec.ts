@@ -106,8 +106,9 @@ test('a target starting with // meets the guard first: a foreign Host gets its 4
       const label = `${host} ${target}`
       expect(res.status, label).toBe(403)
       expect(res.location, label).toBeUndefined()
+      // Test mode has no entrance: a foreign host is refused with the reason that names none.
       expect(JSON.parse(res.body), label).toEqual({
-        error: `the board does not answer for the host ${JSON.stringify(host)}`,
+        error: `no tailnet entrance is configured (PUBLIC_ORIGIN): the board answers on this machine only, not the host ${JSON.stringify(host)}`,
       })
     }
 })

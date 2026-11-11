@@ -360,7 +360,8 @@ test('a trigger that also opens a dialog, a select or a tab shows its tooltip an
   await page.getByRole('alertdialog').getByRole('button', { name: 'Keep' }).click()
 
   // The gallery's close.
-  await page.getByRole('img', { name: 'shot.png' }).click()
+  // Clear of the copy button hovering in the thumbnail's top-right corner.
+  await page.getByRole('img', { name: 'shot.png' }).click({ position: { x: 2, y: 2 } })
   const gallery = page.getByRole('dialog')
   const close = gallery.getByRole('button', { name: 'Close (Esc)' })
   await expectTooltip(close, 'Close (Esc)')
@@ -454,7 +455,8 @@ test('a button disabled for a reason says why on hover, and stays disabled', asy
   )
   await postWithPicture(human, t.id, 'Zoom it.')
   await page.goto(`/projects/${project.id}/features/${t.id}`)
-  await page.getByRole('img', { name: 'shot.png' }).click()
+  // Clear of the copy button hovering in the thumbnail's top-right corner.
+  await page.getByRole('img', { name: 'shot.png' }).click({ position: { x: 2, y: 2 } })
   const gallery = page.getByRole('dialog')
   const zoomOut = gallery.getByRole('button', { name: 'Zoom out (-)' })
   await expect(zoomOut).toBeDisabled()
@@ -684,32 +686,12 @@ test('a long review result with replies opens at its top, every time, by click o
 test('nested tooltips: the innermost shows, the outer one on its own part, never two at once', async ({
   page,
   api,
-  agent,
   human,
 }) => {
   const base = await api.ticket({ title: 'Below', status: 'todo' })
   const t = await api.ticket({ title: 'Above', status: 'in_progress' })
   await ok(human.patch(`/api/tickets/${t.id}`, { data: { needs: [base.id] } }))
-  await ok(agent.put(`/api/tickets/${t.id}/resume`, { data: { note: 'Halfway there' } }))
-  const at = (await api.getTicket(t.id)).resume.at!
   await page.goto(`/projects/${t.projectId}/features/${t.id}`)
-
-  // "by <author> <when>": the author's own tooltip on the name, the time's on the rest of the line.
-  const line = page.getByRole('region', { name: 'Resume here' }).getByText(/^by /)
-  const author = line.locator('span[data-slot="tooltip-trigger"]')
-  await expectTooltip(author, `${AGENT} (Agent): an agent, signed in with a token`)
-  await expect(anyTooltip(page)).toHaveCount(1)
-  const when = await page.evaluate(
-    (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }),
-    at,
-  )
-  // From the name onto "by", the line's own text.
-  await line.hover({ position: { x: 2, y: 6 } })
-  await expect(tooltip(page)).toHaveText(when)
-  await expect(tooltip(page)).toHaveCount(1)
-  await author.hover()
-  await expect(tooltip(page)).toHaveText(`${AGENT} (Agent): an agent, signed in with a token`)
-  await expect(tooltip(page)).toHaveCount(1)
 
   // A need's chip, and its remove button inside it.
   const chip = page

@@ -1,6 +1,6 @@
 ---
 name: board
-description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, leave resume notes, and write the project's report. Use when the user says "pick up a ticket", "next ticket", "where did we leave off", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "daily report", "weekly report", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
+description: Work through the agent board ({{BOARD_URL}}, MCP server "board") - find this repo's project, pick up a ticket, break it into tasks, split parallel work into lanes, post progress with screenshots, answer threads, hand off for review, clean up finished branches and worktrees, and write the project's report. Use when the user says "pick up a ticket", "next ticket", "where did we leave off", "what's on the board", "report to the board", "post an update", "hand this off", "move it to review", "daily summary", "daily report", "weekly report", "board cleanup", "clean up branches" or "clean up worktrees", mentions a board ticket number, or when starting or finishing work in a repo that has a board project.
 ---
 
 # Working through the agent board
@@ -91,12 +91,10 @@ Then:
   Tickets are shared: claiming one another agent holds takes it over (the board logs it), so prefer
   unassigned ones and take over only what is stalled or handed to you. A ticket with
   `reserved: true` belongs to one of the project's agents: claim it only with `as`, below.
-- **Start of a session: read the resume note first.** For every ticket you pick up or come back
-  to, before anything else, read its `resume` (on `get_ticket`, and returned by `claim_ticket`):
-  `note` is where the last session left off (state, what is done, next steps, open questions, how
-  to resume), with `by` and `at`. `commitsSince` counts commits on the branch since it was written
-  and `stale` says the work moved on (new commits or a newer progress post): check the branch and
-  the latest posts too. `noHandoff` means it carried over from an earlier day without a note.
+- **Start of a session: read the summary first.** For every ticket you pick up or come back to,
+  before anything else, read its `summary` (on `get_ticket`, the one state post at the top of
+  Main): where the last session left off, what is done, the next steps, the PR and the preview.
+  Read the latest posts and the branch too when the summary is behind them.
 - A new ticket starts with its project's default phases as its top-level tasks (`get_project` →
   `defaultPhases`; built in: Implementation, then the hand-off's Pushed, PR, CI, Preview, Summary,
   Merged).
@@ -146,7 +144,9 @@ Lanes of a ticket you are working are yours to create (next section).
   - `start_wait` with the reason when you cannot go on (`lock`, `builder`, `mcp`, `human`, `other`
     with a `note`), and `end_wait` as soon as you can. A wait counts as waiting only while no span
     is open on the ticket: your wait on a sub-agent whose span runs reads as working. A `human` wait
-    counts as blocked on the human, span or not.
+    counts as blocked on the human, span or not. When you wait on an agent you briefed, pass `on`:
+    the agent the work was handed to (its full name, such as `orch/builder-1`). A wait with `on` is
+    delegated work and counts as working, not waiting; `on` is 1 to 60 characters.
   - `handoff` when you brief a sub-agent and when it hands back ([Delegating](#delegating)).
     `get_ticket` → `work.open` lists your open spans and waits to close.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
@@ -212,7 +212,7 @@ Lanes of a ticket you are working are yours to create (next section).
   fine, the board reads them through `/mnt/c/…`.
 - **Where posts go.** A ticket's feed has two tabs, and the board puts each post in one (`tab`):
   - **Agents**, your working record: progress posts, anything posted `as` one of the project's
-    agents (spec, builder, runner, the review phases), the resume note's versions.
+    agents (spec, builder, runner, the review phases).
   - **Main**, the human's: their posts with your replies under them, decision cards, your
     questions to them (`comment` on the ticket, not progress), and the summary on top.
 
@@ -223,10 +223,16 @@ Lanes of a ticket you are working are yours to create (next section).
 - **The summary** (`set_ticket_summary`): the one post at the top of Main, for the human. What the
   change does, where it stands now, each review round's verdict in one line, the PR, the preview
   and what to try there, and the proofs (screenshots, recordings) in `files`. Rewrite it to the
-  current state whenever that changes, never a new hand-off post: each write is a new version,
-  `change` says in one line what changed (required from the second version on), the board keeps
-  every earlier one behind "history" (`get_ticket_summary`), and each write reaches the human like
-  a new post. Until one is written, the newest agent progress post stands in for it.
+  current state whenever that changes, never a new hand-off post: each write is a new version
+  (the board keeps every earlier one behind "history", `get_ticket_summary`) and reaches the human
+  like a new post. A new version replaces the previous one in wording, never in facts: carry
+  forward every section and fact that still holds (what the change does, where it stands, each
+  review round's verdict, the PR, the preview and what to try there, how it was tested); keep the
+  latest screenshots and recordings in `files`, and older proofs while they still show the current
+  state, never dropping the proofs for a section that still stands. Add what changed this time
+  (`change`, one line, required from the second version on); do not delete the rest. If a fact no
+  longer holds, say what replaced it rather than silently removing the line. Until one is written,
+  the newest agent progress post stands in for it.
 - **Answering the human's post:** reply under it (`comment` with `replyTo` = its id), never with a
   new top-level post: first a reply with your plan, then, once done, a reply with the result and
   its proofs. A reply brings their post back to the top of Main.
@@ -249,6 +255,16 @@ Lanes of a ticket you are working are yours to create (next section).
     removed. `start_preview` / `stop_preview` still act on the first preview run. The human's
     preview limit (8 by default) caps how many runs the board runs at once; a start beyond it is
     refused with the limit.
+    A running preview also has a `proxyUrl`: `/p/<workspaceId>/<runId>/` on the board's own origin
+    (the human's `remoteUrl`, when set, is the same path on the tailnet name). Open it, and screenshot
+    it, with your token in a header, not in a URL: a headless browser (Playwright) sends
+    `Authorization: Bearer <token>` as its context's extra HTTP headers, from your environment; then
+    `goto` the board's origin plus that path, and the page, its assets, API calls and event stream load
+    through the board. Attach the screenshot to your summary. A browser that cannot send headers takes
+    a link from `preview_link` (REST `POST /api/workspaces/:id/preview/link`): its `url` works for anyone
+    who holds it for five minutes (send it only to the person meant to open it) and sets a cookie for the
+    preview's path, good for 15 minutes. Another project's token gets 403
+    there. Being in the cloud does not block the Preview task: a running preview ticks it.
   - A repo with no runs: start your branch from your worktree on a free port, with a copy of the data
     rather than the real one (the project's `instructions` say how), then `set_preview` with the
     `workspaceId` and `previewUrl` once it answers (or `previewUrl` on `add_workspace` when it
@@ -285,6 +301,10 @@ Every spawned agent and lane costs time: hand out only what is new, and only wha
   `list_review_results` for the branch's head SHA. Do not start or hand out what is already there.
 - A lookup of one or two calls (a grep, a file read, one board call) you do yourself; do not spawn
   an agent for it.
+- A brief carries the ticket's context, not just its title: `get_ticket` first, then put in the
+  brief its instructions (the body), the human's posts and replies in full (the Main tab's threads,
+  `list_comments` on each post), the decisions with their answers, and the attachments (their local
+  `path`s). Say the subagent may read the rest itself with `get_ticket` and `list_comments`.
 - Every brief you hand another agent (a subagent's prompt, a lane's `create_ticket` `body`, a
   project agent's run under [Orchestrating](#orchestrating-the-projects-agents)) has five parts:
   1. Goal: what to achieve.
@@ -374,10 +394,15 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    (docs only, a script), say why in the summary.
 7. The summary, up to date (`set_ticket_summary`, never a new hand-off post): the PR link, **the
    preview link and what to try there**, how it was tested, the e2e result (its summary, or its
-   report when something failed), each review round's verdict and, for a UI change, screenshots of
-   what changed, in `files`.
-8. Resume note if the ticket stays open past the session (`set_resume_note`, see
-   [End of session](#5-end-of-session)).
+   report when something failed), each review round's verdict and, for a UI change, the latest
+   screenshots of what changed, in `files`. A new version replaces the previous one in wording,
+   never in facts: carry forward every section and fact that still holds (what the change does,
+   where it stands, each review round's verdict, the PR, the preview and what to try there, how it
+   was tested); keep the latest screenshots and recordings in `files`, and older proofs while they
+   still show the current state, never dropping the proofs for a section that still stands. Add
+   what changed this time (`change`, one line); do not delete the rest. If a fact no longer holds,
+   say what replaced it rather than silently removing the line. It is the ticket's one state card:
+   the end of a session updates it rather than leaving a separate note.
 
 `update_ticket` → `review` then answers with `open`: every task and subtask still open, the
 ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text, auto}`.
@@ -400,32 +425,11 @@ After that:
 
 ## 5. End of session
 
-1. **Resume notes.** For every ticket and lane you leave in `in_progress`, `blocked` or `review`,
-   `set_resume_note` with this template filled in (`as` when you work it as one of the project's
-   agents), concretely enough that another agent can continue without asking:
-
-   ```markdown
-   **State:** (one line)
-
-   **Done so far:**
-
-   - …
-
-   **Next steps:**
-
-   1. …
-
-   **Open questions / blockers:**
-
-   - …
-
-   **How to resume:** branch, worktree, commands, preview, gotchas
-   ```
-
-   It replaces the ticket's previous note and is posted to its feed (the Agents tab) as a handoff,
-   so the older ones stay readable. It is for whoever works the ticket next; the human's hand-off
-   is the summary. The ticket page shows it at the top as "Resume here"; a ticket that carries over
-   to the next day without one shows "no handoff".
+1. **The summary up to date.** For every ticket and lane you leave in `in_progress`, `blocked` or
+   `review`, `set_ticket_summary` with where it stands, what is next and how to resume (branch,
+   worktree, commands, preview, gotchas), concretely enough that another agent can continue without
+   asking. It is the ticket's one current state card, rewritten to the current state (`change` says
+   in one line what changed); the board keeps every earlier version.
 
 2. `daily_report` with your `projectId` shows what else happened in the project today.
 
@@ -559,7 +563,9 @@ Without those skills, or for one ticket, orchestrate by hand:
 1. `get_project`: read every agent's `delegation` (your routing table) and `instructions` (its
    brief). Claim the ticket (with `as` when it is reserved), open its worktree, `add_workspace`.
 2. Per step: pick the agent whose notes match where the ticket is; run it as a subagent whose
-   prompt is its `instructions`, the project's `instructions` and a brief in the five parts of
+   prompt is its `instructions`, the project's `instructions`, the ticket's context (`get_ticket`:
+   its instructions, the human's posts and replies, the decisions and their answers, the attachments;
+   the subagent may read the rest itself) and a brief in the five parts of
    [Delegating](#delegating): the step's goal from the ticket (`get_ticket`), its focus, what is
    known (the worktree and branch, what earlier steps returned, the `agentName` it passes on every
    board call: subagents share nothing else),

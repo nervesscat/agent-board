@@ -62,12 +62,13 @@ export function ProjectSwitcher() {
             <Button
               variant="outline"
               size="sm"
-              className="min-w-0 shrink justify-between font-normal sm:min-w-44"
+              style={{ minWidth: 0 }}
+              className="min-w-0 shrink justify-between font-normal sm:w-44"
             />
           }
           aria-label="Project"
         >
-          <span className={current ? 'truncate' : 'truncate text-muted-foreground'}>
+          <span className={current ? 'min-w-0 truncate' : 'min-w-0 truncate text-muted-foreground'}>
             {current?.name ?? 'Select a project'}
           </span>
           <ChevronsUpDown className="text-muted-foreground" />
@@ -129,7 +130,7 @@ export function ProjectSwitcher() {
   )
 }
 
-function NewProject({
+export function NewProject({
   open,
   onOpenChange,
   onCreated,

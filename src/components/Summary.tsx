@@ -3,8 +3,6 @@ import { Link } from '@tanstack/react-router'
 import {
   AlertTriangle,
   ArrowRight,
-  Bookmark,
-  BookmarkX,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -20,11 +18,12 @@ import {
   Play,
   Scale,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { Actor, ClaimedActor } from '#/components/Actor'
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
+import { GettingStarted } from '#/components/GettingStarted'
 import { useSettleInstructions } from '#/components/InstructionsHistory'
 import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
@@ -32,13 +31,24 @@ import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { StalledBadge } from '#/components/WorkTimeline'
+import { stallFor } from '#/components/StallLine'
+import { NowLine, StallNotice } from '#/components/WorkStatus'
+import { timelineFromActivity, stallStage } from '#/lib/activityTimeline'
 import { threadAnchor } from '#/lib/anchors'
 import type { AreaId } from '#/lib/layout'
-import { errorMessage, get, type CarryOver, type ProjectSummary, type Summary as Payload } from '#/lib/api'
+import {
+  errorMessage,
+  get,
+  type CarryOver,
+  type ProjectSummary,
+  type SummaryPayload as Payload,
+} from '#/lib/api'
 import { ago, clock } from '#/lib/format'
+import { needKeys, undismissed, useDismissedNeeds } from '#/lib/needsYou'
 import { stageBadge, stageOf } from '#/lib/stages'
-import { formatDuration } from '#/lib/workTimeline'
+import { useServerOffset } from '#/lib/useNow'
+import { lastHeard, onServerClock, type WorkTimelineLike } from '#/lib/workStatus'
+import type { Stalled } from '#/lib/workTimeline'
 
 /**
  * Where things stand, for one project (its Overview) or every project (Home, one block each): what
@@ -51,26 +61,31 @@ export function Summary({ projectId }: { projectId?: number }) {
     queryFn: () => get<Payload>(`/api/summary${projectId ? `?projectId=${projectId}` : ''}`),
     refetchInterval: 30_000,
   })
+  // What this browser remembers of Needs you as opened, for the actor who asked (this browser's alone).
+  const [dismissed, dismiss] = useDismissedNeeds(data?.actor)
+  // The stall minutes are counted on the server's clock, from the moment this summary was taken, so a
+  // browser whose clock is off shows the same minutes as the ticket page. 0 before the summary arrives.
+  const now = onServerClock(Date.now(), useServerOffset(data?.generatedAt))
   if (isLoading)
     return (
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-3">
         {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-40" />
+          <Skeleton key={i} className={cn('h-40', i === 0 && 'lg:col-span-full')} />
         ))}
       </div>
     )
   if (error || !data) return <Empty>Could not load the summary: {errorMessage(error)}</Empty>
-  if (!data.projects.length)
-    return (
-      <Empty>
-        No projects yet. Create one from the project menu in the top bar, then add its checkouts on the
-        project's Repositories page.
-      </Empty>
-    )
-  if (projectId) return <ProjectBlock p={data.projects[0]!} />
+  if (!data.projects.length) return <GettingStarted />
+  // Only the entries the human has not opened yet, and counts to match.
+  const projects = data.projects.map((p) => undismissed(p, dismissed))
+  if (projectId) return <ProjectBlock p={projects[0]!} now={now} dismiss={dismiss} />
   return (
     <div className="space-y-10">
-      {data.projects.map((p) => (
+      {/* The top bar's Getting started entry folds into the Pages menu on a phone, which leads here. */}
+      <div className="empty:hidden md:hidden">
+        <GettingStarted dismissable />
+      </div>
+      {projects.map((p) => (
         <section key={p.project.id} className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="text-lg font-semibold tracking-tight">
@@ -82,12 +97,15 @@ export function Summary({ projectId }: { projectId?: number }) {
             </h2>
             <span className="text-xs text-muted-foreground">{headline(p)}</span>
           </div>
-          <ProjectBlock p={p} />
+          <ProjectBlock p={p} now={now} dismiss={dismiss} />
         </section>
       ))}
     </div>
   )
 }
+
+/** What every Overview card is given: the project, the clock, and how to remember an opened entry. */
+type CardProps = { p: ProjectSummary; now: number; dismiss: (key: string) => void }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
@@ -102,7 +120,7 @@ const headline = (p: ProjectSummary) =>
     .join(' · ')
 
 /** Each card of the block; which show and in what order is the project's layout. */
-const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary }) => ReactNode> = {
+const CARDS: Record<AreaId<'overview'>, (props: CardProps) => ReactNode> = {
   'overview.needsYou': NeedsYou,
   'overview.inProgress': InProgress,
   'overview.doneToday': DoneToday,
@@ -110,7 +128,7 @@ const CARDS: Record<AreaId<'overview'>, (props: { p: ProjectSummary }) => ReactN
   'overview.carryingOver': CarryingOver,
 }
 
-function ProjectBlock({ p }: { p: ProjectSummary }) {
+function ProjectBlock({ p, now, dismiss }: CardProps) {
   if (!p.project.overview.length)
     return (
       <Empty>
@@ -127,10 +145,13 @@ function ProjectBlock({ p }: { p: ProjectSummary }) {
       </Empty>
     )
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    // On a desktop the first row is Needs you alone, the second Next, In progress and Done today in
+    // that order, and Carrying over closes the block full width. A phone keeps the layout's order,
+    // stacked, so the order classes start at `lg`.
+    <div className="grid gap-4 lg:grid-cols-3">
       {p.project.overview.map((card) => {
         const Shown = CARDS[card]
-        return <Shown key={card} p={p} />
+        return <Shown key={card} p={p} now={now} dismiss={dismiss} />
       })}
     </div>
   )
@@ -142,6 +163,7 @@ function Section({
   icon: Icon,
   title,
   count,
+  rows,
   extra,
   className = '',
   scroll = false,
@@ -150,6 +172,8 @@ function Section({
   icon: typeof Inbox
   title: string
   count?: number
+  /** How many entries it renders, when the server sends fewer than `count`: what View all reveals. */
+  rows?: number
   /** After the count: what among them needs attention. */
   extra?: ReactNode
   className?: string
@@ -157,8 +181,12 @@ function Section({
   scroll?: boolean
   children: ReactNode
 }) {
+  // On a phone the scroll cards show their first three entries and a way to see the rest.
+  const [expanded, setExpanded] = useState(false)
+  const shown = Math.min(count ?? 0, rows ?? count ?? 0)
+  const more = scroll && shown > 3
   return (
-    <Card size="sm" className={cn(scroll && 'max-h-[28rem] lg:h-[28rem]', className)}>
+    <Card size="sm" className={cn(scroll && 'lg:max-h-[28rem] lg:h-[28rem]', className)}>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           <Icon className="size-4 text-muted-foreground" /> {title}
@@ -172,10 +200,28 @@ function Section({
       </CardHeader>
       <CardContent
         data-scroll={scroll ? '' : undefined}
-        className={cn('space-y-3', scroll && 'min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2')}
+        className={cn(
+          'space-y-3',
+          scroll && 'min-h-0 flex-1 overflow-x-hidden overflow-y-auto pr-2',
+          more && !expanded && 'max-md:[&>ul>*:nth-child(n+4)]:hidden',
+        )}
       >
         {children}
       </CardContent>
+      {more && (
+        <div className="px-(--card-spacing) md:hidden">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? 'Show fewer' : `View all ${shown}`}
+          </Button>
+        </div>
+      )}
     </Card>
   )
 }
@@ -214,13 +260,26 @@ function Row({
 
 const Rows = ({ children }: { children: ReactNode }) => <ul className="space-y-3">{children}</ul>
 
-function TicketLink({ p, id, title, hash }: { p: ProjectSummary; id: number; title: string; hash?: string }) {
+function TicketLink({
+  p,
+  id,
+  title,
+  hash,
+  onClick,
+}: {
+  p: ProjectSummary
+  id: number
+  title: string
+  hash?: string
+  onClick?: () => void
+}) {
   return (
     <Link
       to="/projects/$id/features/$ticketId"
       params={{ id: String(p.project.id), ticketId: String(id) }}
       hash={hash}
       className="hover:underline"
+      onClick={onClick}
     >
       <span className="text-muted-foreground">#{id}</span> {title}
     </Link>
@@ -273,21 +332,29 @@ function LastPost({ post }: { post: CarryOver['lastPost'] }) {
   )
 }
 
-/** Whole minutes since `since`: the summary carries the moment, the page counts up to now. */
-const silentMinutes = (since: string) => Math.max(0, Math.floor((Date.now() - Date.parse(since)) / 60_000))
-
-/** A stalled ticket's details, from the Needs you list that names it. */
-function stalledOf(p: ProjectSummary, id: number) {
+/** A stalled ticket's details, from the Needs you list that names it: its minutes counted on `now`. */
+function stalledOf(p: ProjectSummary, id: number, now: number): Stalled | null {
   const s = p.needsYou.stalled.find((x) => x.ticketId === id)
-  return s
-    ? {
-        since: s.lastSignalAt,
-        minutes: silentMinutes(s.lastSignalAt),
-        lastAgent: s.lastAgent,
-        lastBy: s.lastBy,
-        lastFrom: s.lastFrom,
-      }
-    : null
+  return s ? stallFor(s, now) : null
+}
+
+/** When an agent was last heard from, relative, and what it said: one line under the now line. */
+function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
+  const h = lastHeard(timeline)
+  if (!h)
+    return (
+      <p data-testid="last-heard" className="text-xs text-muted-foreground">
+        Nobody heard from yet
+      </p>
+    )
+  return (
+    <p data-testid="last-heard" className="flex min-w-0 gap-x-1 text-xs text-muted-foreground tabular-nums">
+      <span className="shrink-0">Last heard {ago(h.at)}</span>
+      {h.agent && (
+        <span className="min-w-0 truncate">{`· ${h.agent}${h.summary ? `: ${h.summary}` : ''}`}</span>
+      )}
+    </p>
+  )
 }
 
 function Stale() {
@@ -302,12 +369,13 @@ function Stale() {
 
 // --- the sections ---
 
-function NeedsYou({ p }: { p: ProjectSummary }) {
-  const { decisions, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } = p.needsYou
+function NeedsYou({ p, now, dismiss }: CardProps) {
+  const { decisions, humanWaits, prs, threads, reviews, blockedTasks, instructionChanges, stalled, total } =
+    p.needsYou
   const pid = String(p.project.id)
   const settle = useSettleInstructions(pid)
   return (
-    <Section icon={Inbox} title="Needs you" count={total} scroll>
+    <Section icon={Inbox} title="Needs you" count={total} scroll className="lg:order-1 lg:col-span-full">
       {!total ? (
         <Quiet>Nothing waiting on you.</Quiet>
       ) : (
@@ -322,6 +390,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                   params={{ id: pid, ticketId: String(d.ticketId) }}
                   hash={`post-${d.postId}`}
                   className="hover:underline"
+                  onClick={() => dismiss(needKeys.decision(d))}
                 >
                   Decide: {d.question}
                 </Link>
@@ -338,6 +407,31 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               }
             />
           ))}
+          {humanWaits.map((w) => (
+            <Row
+              key={`w${w.waitId}`}
+              icon={<Hourglass className="text-amber-600 dark:text-amber-400" />}
+              title={
+                <Link
+                  to="/projects/$id/features/$ticketId"
+                  params={{ id: pid, ticketId: String(w.ticketId) }}
+                  className="hover:underline"
+                  onClick={() => dismiss(needKeys.humanWait(w))}
+                >
+                  Waiting on you {since(w.since)} · {w.agent}
+                  {w.note ? `: ${w.note}` : ''}
+                </Link>
+              }
+              meta={
+                <>
+                  <span className="truncate">
+                    #{w.ticketId} {w.ticketTitle}
+                  </span>
+                  {w.parent && <span className="truncate">lane of #{w.parent.id}</span>}
+                </>
+              }
+            />
+          ))}
           {prs.map((pr) => (
             <Row
               key={`p${pr.id}`}
@@ -348,6 +442,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                   params={{ id: pid }}
                   hash={`pr-${pr.id}`}
                   className="hover:underline"
+                  onClick={() => dismiss(needKeys.pr(pr))}
                 >
                   Review PR #{pr.number} {pr.title}
                 </Link>
@@ -369,6 +464,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                     rel="noreferrer"
                     className="text-muted-foreground hover:text-foreground"
                     aria-label="Open on GitHub"
+                    onClick={() => dismiss(needKeys.pr(pr))}
                   >
                     <ExternalLink className="size-3.5" />
                   </a>
@@ -387,6 +483,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                     params={{ id: pid, ticketId: String(th.ticketId) }}
                     hash={threadAnchor(th)}
                     className="hover:underline"
+                    onClick={() => dismiss(needKeys.thread(th))}
                   >
                     {th.parentType === 'ticket' && !th.prTicket ? `#${th.ticketId} ${th.title}` : th.title}
                   </Link>
@@ -397,6 +494,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                     search={th.parentType === 'review' ? { result: th.parentId } : {}}
                     hash={threadAnchor(th)}
                     className="hover:underline"
+                    onClick={() => dismiss(needKeys.thread(th))}
                   >
                     {th.title}
                   </Link>
@@ -437,6 +535,7 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
                       id={task.ticketId}
                       title={task.ticketTitle}
                       hash={`task-${task.taskId}`}
+                      onClick={() => dismiss(needKeys.blockedTask(task))}
                     />
                   </span>
                   {task.parent && <span className="truncate">lane of #{task.parent.id}</span>}
@@ -451,10 +550,11 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               title={
                 <span>
                   <Link
-                    to="/projects/$id/settings"
+                    to="/projects/$id/instructions"
                     params={{ id: pid }}
                     hash="instructions-history"
                     className="hover:underline"
+                    onClick={() => dismiss(needKeys.instructionChange(c))}
                   >
                     Project instructions changed
                   </Link>{' '}
@@ -499,50 +599,63 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
               }
             />
           ))}
-          {stalled.map((s) => (
-            <Row
-              key={`s${s.ticketId}`}
-              icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" />}
-              title={
-                <Link
-                  to="/projects/$id/features/$ticketId"
-                  params={{ id: pid, ticketId: String(s.ticketId) }}
-                  className="hover:underline"
-                >
-                  Stalled: #{s.ticketId} {s.title}
-                </Link>
-              }
-              meta={
-                <>
-                  <StageBadge p={p} status={s.status} />
-                  {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
-                  <Tip content={`No heartbeat or event since ${clock(s.lastSignalAt)}`}>
-                    <span className="min-w-0">
-                      silent {formatDuration(silentMinutes(s.lastSignalAt) * 60_000)}
-                      {s.lastAgent && (
-                        <>
-                          {' · last '}
-                          {s.lastFrom === 'assignee' ? (
-                            // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
-                            <span data-testid="last-assignee" className="font-medium wrap-anywhere">
-                              {s.lastAgent}
-                            </span>
-                          ) : (
-                            <ClaimedActor name={s.lastAgent} by={s.lastBy} />
-                          )}
-                        </>
-                      )}
-                    </span>
-                  </Tip>
-                </>
-              }
-            />
-          ))}
+          {stalled.map((s) => {
+            const timeline = timelineFromActivity(s.activity, stallFor(s, now))
+            return (
+              <Row
+                key={`s${s.ticketId}`}
+                icon={<AlertTriangle className="text-amber-600 dark:text-amber-400" />}
+                title={
+                  <Link
+                    to="/projects/$id/features/$ticketId"
+                    params={{ id: pid, ticketId: String(s.ticketId) }}
+                    className="hover:underline"
+                    onClick={() => dismiss(needKeys.stalled(s))}
+                  >
+                    Stalled: #{s.ticketId} {s.title}
+                  </Link>
+                }
+                meta={
+                  <>
+                    <StageBadge p={p} status={s.status} />
+                    {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
+                    <StallNotice
+                      timeline={timeline}
+                      stage={stallStage(p.stages, s.status)}
+                      variant="inline"
+                      className="w-full"
+                    />
+                    {s.lastAgent && (
+                      <span className="min-w-0 wrap-anywhere">
+                        last{' '}
+                        {s.lastFrom === 'assignee' ? (
+                          // No event named anyone: the assignee, which nobody signed in recorded, so no badge.
+                          <span data-testid="last-assignee" className="font-medium">
+                            {s.lastAgent}
+                          </span>
+                        ) : (
+                          <ClaimedActor name={s.lastAgent} by={s.lastBy} />
+                        )}
+                      </span>
+                    )}
+                  </>
+                }
+              />
+            )
+          })}
           {reviews.map((t) => (
             <Row
               key={`r${t.id}`}
               icon={<Eye />}
-              title={<TicketLink p={p} id={t.id} title={t.title} hash="tasks" />}
+              title={
+                <TicketLink
+                  p={p}
+                  id={t.id}
+                  title={t.title}
+                  hash="tasks"
+                  onClick={() => dismiss(needKeys.review(t))}
+                />
+              }
               meta={
                 <>
                   <StageBadge p={p} status={t.status} />
@@ -560,58 +673,65 @@ function NeedsYou({ p }: { p: ProjectSummary }) {
   )
 }
 
-function InProgress({ p }: { p: ProjectSummary }) {
+function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
   const items = p.inProgress
   return (
-    <Section icon={Play} title="In progress" count={items.length} scroll>
+    <Section icon={Play} title="In progress" count={items.length} scroll className="lg:order-3">
       {!items.length ? (
         <Quiet>Nothing in progress.</Quiet>
       ) : (
         <Rows>
-          {items.map((t) => (
-            <Row
-              key={t.id}
-              title={<TicketLink p={p} id={t.id} title={t.title} />}
-              side={
-                <>
-                  {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
-                  {t.stalled && <StalledBadge stalled={stalledOf(p, t.id)} />}
-                  {t.stale && <Stale />}
-                </>
-              }
-              meta={
-                <div className="w-full min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <Who p={p} name={t.assignee} />
-                    <Tip content={new Date(t.since).toLocaleString()}>
-                      <span>{since(t.since)}</span>
-                    </Tip>
-                    {t.lanes > 0 && (
-                      <span className="inline-flex items-center gap-1">
-                        <Layers className="size-3" /> {plural(t.lanes, 'lane')}
-                      </span>
+          {items.map((t) => {
+            const timeline = timelineFromActivity(t.activity, t.stalled ? stalledOf(p, t.id, now) : null)
+            return (
+              <Row
+                key={t.id}
+                title={<TicketLink p={p} id={t.id} title={t.title} />}
+                side={
+                  <>
+                    {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
+                    {timeline.stalled && (
+                      <StallNotice timeline={timeline} stage={stallStage(p.stages, t.status)} />
                     )}
-                    {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                    {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
-                    {t.preview && (
-                      <Tip content={`Preview of ${t.preview.workspace}`}>
-                        <a
-                          href={t.preview.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-foreground hover:underline"
-                        >
-                          <ExternalLink className="size-3" /> Preview
-                        </a>
+                    {t.stale && <Stale />}
+                  </>
+                }
+                meta={
+                  <div className="w-full min-w-0">
+                    <NowLine timeline={timeline} />
+                    <HeardLine timeline={timeline} />
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <Who p={p} name={t.assignee} />
+                      <Tip content={new Date(t.since).toLocaleString()}>
+                        <span>{since(t.since)}</span>
                       </Tip>
-                    )}
+                      {t.lanes > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Layers className="size-3" /> {plural(t.lanes, 'lane')}
+                        </span>
+                      )}
+                      {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                      {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                      {t.preview && (
+                        <Tip content={`Preview of ${t.preview.workspace}`}>
+                          <a
+                            href={t.preview.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-foreground hover:underline"
+                          >
+                            <ExternalLink className="size-3" /> Preview
+                          </a>
+                        </Tip>
+                      )}
+                    </div>
+                    {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-1.5" />}
+                    <LastPost post={t.lastPost} />
                   </div>
-                  {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-1.5" />}
-                  <LastPost post={t.lastPost} />
-                </div>
-              }
-            />
-          ))}
+                }
+              />
+            )
+          })}
         </Rows>
       )}
     </Section>
@@ -621,7 +741,13 @@ function InProgress({ p }: { p: ProjectSummary }) {
 function DoneToday({ p }: { p: ProjectSummary }) {
   const { tickets, prs, activity } = p.doneToday
   return (
-    <Section icon={CheckCircle2} title="Done today" count={tickets.length + prs.length}>
+    <Section
+      icon={CheckCircle2}
+      title="Done today"
+      count={tickets.length + prs.length}
+      scroll
+      className="lg:order-4"
+    >
       {!tickets.length && !prs.length ? (
         <Quiet>Nothing finished yet today.</Quiet>
       ) : (
@@ -679,7 +805,14 @@ function Next({ p }: { p: ProjectSummary }) {
   const { stage, tickets, total, blocked, backlog } = p.next
   const pid = String(p.project.id)
   return (
-    <Section icon={ListTodo} title={stage ? `Next: ${stage.name}` : 'Next'} count={total}>
+    <Section
+      icon={ListTodo}
+      title={stage ? `Next: ${stage.name}` : 'Next'}
+      count={total}
+      rows={tickets.length}
+      scroll
+      className="lg:order-2"
+    >
       {!tickets.length ? (
         <Quiet>Nothing lined up{stage ? ` in ${stage.name}` : ''}.</Quiet>
       ) : (
@@ -726,22 +859,13 @@ function Next({ p }: { p: ProjectSummary }) {
 
 function CarryingOver({ p }: { p: ProjectSummary }) {
   const items = p.carryingOver
-  const missing = items.filter((t) => t.resume.noHandoff).length
   return (
     <Section
       icon={Clock}
       title="Carrying over"
       count={items.length}
-      extra={
-        missing > 0 && (
-          <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
-            <span className="inline-flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400">
-              <BookmarkX className="size-3" /> {missing} without a handoff
-            </span>
-          </Tip>
-        )
-      }
-      className="lg:col-span-2"
+      className="lg:order-5 lg:col-span-full"
+      scroll
     >
       {!items.length ? (
         <Quiet>Nothing carried over from before today.</Quiet>
@@ -764,9 +888,8 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
                     <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
                       <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
                     </Tip>
-                    {t.resume.noHandoff && <NoHandoff p={p} id={t.id} />}
                   </div>
-                  <Resume p={p} t={t} />
+                  <LastPost post={t.lastPost} />
                 </div>
               }
             />
@@ -774,84 +897,5 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
         </Rows>
       )}
     </Section>
-  )
-}
-
-/** The ticket page, scrolled to its "Resume here" card. */
-function ResumeLink({
-  p,
-  id,
-  className,
-  tip,
-  children,
-}: {
-  p: ProjectSummary
-  id: number
-  className: string
-  /** Its tooltip, if any. */
-  tip?: string
-  children: ReactNode
-}) {
-  return (
-    <Tip content={tip}>
-      <Link
-        to="/projects/$id/features/$ticketId"
-        params={{ id: String(p.project.id), ticketId: String(id) }}
-        hash="resume"
-        className={className}
-      >
-        {children}
-      </Link>
-    </Tip>
-  )
-}
-
-function NoHandoff({ p, id }: { p: ProjectSummary; id: number }) {
-  return (
-    <ResumeLink
-      p={p}
-      id={id}
-      className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 hover:underline dark:text-amber-400"
-      tip="Worked on an earlier day, and nobody left a resume note on where it was left: open it to write one"
-    >
-      <BookmarkX className="size-3" /> no handoff
-    </ResumeLink>
-  )
-}
-
-/**
- * Where the last session left off: the ticket's resume note, with its last progress post under it
- * when that came later; the last progress post alone when there is no note.
- */
-function Resume({ p, t }: { p: ProjectSummary; t: CarryOver }) {
-  const r = t.resume
-  if (!r.note) return <LastPost post={t.lastPost} />
-  return (
-    <>
-      <ResumeLink
-        p={p}
-        id={t.id}
-        className="mt-1 line-clamp-2 border-l-2 border-primary/40 pl-2 text-xs text-muted-foreground hover:text-foreground"
-        tip="Its resume note: open it on the ticket"
-      >
-        <Bookmark className="mr-1 inline size-3 align-[-1px]" />
-        {r.note}
-        {r.at && (
-          <span className="whitespace-nowrap">
-            {' '}
-            — {r.by ? `${r.by}, ` : ''}
-            {ago(r.at)}
-          </span>
-        )}
-      </ResumeLink>
-      {r.stale && (
-        <>
-          <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
-            Progress posted since this note:
-          </p>
-          <LastPost post={t.lastPost} />
-        </>
-      )}
-    </>
   )
 }

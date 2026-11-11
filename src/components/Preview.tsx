@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Loader2, Play, RotateCw, Square } from 'lucide-react'
+import { AppWindow, ExternalLink, Loader2, Play, RotateCw, Square } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { openPreview } from '#/components/PreviewWindow'
 import { Button, buttonVariants } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
@@ -17,6 +18,7 @@ import {
 } from '#/lib/api'
 import { PREVIEW_LIMIT } from '#/lib/constants'
 import { clock } from '#/lib/format'
+import { previewBrowserUrl, previewTab } from '#/lib/previewWindow'
 import { cn } from '#/lib/utils'
 import type { Settings } from '#/server/agents'
 
@@ -37,10 +39,11 @@ const STEP_LABEL: Record<NonNullable<ManagedPreview['step']>, string> = {
 }
 
 /**
- * Open the link in a new tab, and Start, Stop and Restart the board's own preview of the workspace:
- * Start only when none runs and the board would start one (`cannotStart` null), Stop and Restart while
- * it builds or runs. With `linkStop` null (a link that answers, whose server the board may stop), a Stop
- * of that server. Errors come up as a toast.
+ * Open a preview inside CrossBoard (the embedded window, PreviewWindow.tsx), Open in browser for a tab,
+ * and Start, Stop and Restart the board's own preview of the workspace: Start only when none runs and the
+ * board would start one (`cannotStart` null), Stop and Restart while it builds or runs. With `linkStop`
+ * null (a link that answers, whose server the board may stop), a Stop of that server. Errors come up as a
+ * toast. A link that cannot be embedded (one off this machine, a hosted page) gets Open in browser alone.
  */
 export function PreviewActions({
   workspaceId,
@@ -49,6 +52,9 @@ export function PreviewActions({
   cannotStart,
   linkStop,
   onChange,
+  ticketId,
+  ticketTitle,
+  label,
 }: {
   workspaceId: number
   url: string
@@ -58,6 +64,10 @@ export function PreviewActions({
   /** null: the board may stop the server behind the link; undefined or a reason: no Stop for it. */
   linkStop?: string | null
   onChange: () => void
+  /** The ticket the preview belongs to, for the window's title, and the workspace and run under it. */
+  ticketId?: number | null
+  ticketTitle?: string
+  label?: string
 }) {
   const action = useMutation({
     mutationFn: (what: 'start' | 'stop' | 'restart') =>
@@ -78,11 +88,37 @@ export function PreviewActions({
     },
   })
   const active = previewActive(managed)
+  // The board-run preview, when it is the one whose link the row shows (a workspace has several runs; the
+  // board's `managed` is its first preview run, so a second one's link is just a link here): its run id
+  // is what the window asks about, and its proxy and tailnet links are the ones to offer.
+  const live = managed?.status === 'running' && managed.url === url ? managed : null
+  const run = { url, proxyUrl: live?.proxyUrl ?? null, remoteUrl: live?.remoteUrl ?? null }
+  const tab = previewTab({
+    ticketId: ticketId ?? null,
+    title: ticketTitle ?? 'Preview',
+    workspaceId,
+    runId: live?.runId ?? null,
+    label: label ?? 'Preview',
+    run,
+  })
+  const browser = previewBrowserUrl(run)
   return (
     <>
-      {url && (
-        <a href={url} target="_blank" rel="noreferrer" className={buttonVariants({ size: 'sm' })}>
-          Open preview <ExternalLink />
+      {tab && (
+        <Tip content="Show the preview inside CrossBoard, over the page: the board stays as it was">
+          <Button size="sm" data-testid="preview-open" onClick={() => openPreview(tab)}>
+            <AppWindow /> Open
+          </Button>
+        </Tip>
+      )}
+      {browser && (
+        <a
+          href={browser}
+          target="_blank"
+          rel="noreferrer"
+          className={buttonVariants({ size: 'sm', variant: 'outline' })}
+        >
+          Open in browser <ExternalLink />
         </a>
       )}
       {!active && url && linkStop === null && (

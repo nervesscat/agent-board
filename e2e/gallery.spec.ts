@@ -2,7 +2,7 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
 import type { Gallery } from '#/lib/api'
 import { fileSize, localDate, shiftDate } from '#/lib/format'
-import { AGENT } from './env'
+import { AGENT, e2eEnv } from './env'
 import { uploadedAt } from './db'
 import { type Api, expect, expectTooltip, ok, test } from './fixtures'
 import { png, pdf } from './files'
@@ -16,6 +16,8 @@ import { box, coveredAt, feedDrawn, longTicket, ticketHeader } from './scrolling
 
 type Row = { id: number }
 type Upload = { id: number; url: string; size: number }
+
+const env = e2eEnv()
 
 // Not a playable video: enough for the tile to be a <video>, which only reads its metadata.
 const WEBM = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 0x01])
@@ -140,6 +142,111 @@ test('the Gallery module lists the files with their size, uploader, time and tic
   await expect(dialog.getByText('Download', { exact: true })).toHaveAttribute('href', blob.url)
   await page.keyboard.press('Escape')
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/gallery$`))
+})
+
+test('an image tile copies the image to the clipboard from its own button, and no other file has one', async ({
+  page,
+  context,
+  project,
+  api,
+  agent,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: env.baseURL })
+  const t = await api.ticket({ title: 'Copied screens', status: 'in_progress' })
+  const image = await upload(agent, 'shot.png', png(64))
+  const doc = await upload(agent, 'spec.pdf', pdf('Spec'))
+  await postWith(agent, t.id, [image.id, doc.id])
+
+  await gallery(page, project.id)
+  const shot = tile(page, 'shot.png')
+  const copy = shot.getByRole('button', { name: 'Copy image' })
+  await expect(copy).toHaveCount(1)
+  // Only images: a PDF tile has no button at all.
+  await expect(tile(page, 'spec.pdf').getByRole('button', { name: 'Copy image' })).toHaveCount(0)
+
+  // Out of the way until the tile is hovered.
+  await expect(copy).toHaveCSS('opacity', '0')
+  await shot.hover()
+  await expect(copy).toHaveCSS('opacity', '1')
+  await page.screenshot({ path: testInfo.outputPath('gallery-copy-image.png') })
+
+  await copy.click()
+  // Says it copied, then goes back on its own.
+  await expect(copy).toHaveAttribute('data-state', 'copied')
+  await expect(copy).toHaveAttribute('data-state', 'idle', { timeout: 5000 })
+  // The image itself is on the clipboard, not a link or its name.
+  const types = await page.evaluate(async () =>
+    (await navigator.clipboard.read()).flatMap((item) => item.types),
+  )
+  expect(types).toContain('image/png')
+
+  // Copying never opened the lightbox; a click on the tile still does.
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await thumb(shot).click()
+  await expect(page.getByRole('dialog').locator(`img[src="${image.url}"]`)).toBeVisible()
+})
+
+test('an image attachment on a ticket, and the lightbox it opens, copy it from their own button', async ({
+  page,
+  context,
+  project,
+  api,
+  agent,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: env.baseURL })
+  const t = await api.ticket({ title: 'Screens on a ticket', status: 'in_progress' })
+  const shot = await upload(agent, 'ticket-shot.png', png(64))
+  const doc = await upload(agent, 'ticket-spec.pdf', pdf('Spec'))
+  // In the Main tab, where the page opens.
+  await ok(
+    agent.post(`/api/tickets/${t.id}/updates`, {
+      data: { body: 'Two files.', attachmentIds: [shot.id, doc.id], progress: false },
+    }),
+  )
+
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const picture = page.getByRole('img', { name: 'ticket-shot.png' })
+  const copy = picture.locator('xpath=../..').getByRole('button', { name: 'Copy image' })
+  await expect(copy).toHaveCount(1)
+  // The image has one; the PDF beside it none.
+  await expect(page.getByRole('button', { name: 'Copy image' })).toHaveCount(1)
+  await expect(page.getByRole('link').filter({ hasText: 'ticket-spec.pdf' }).getByRole('button')).toHaveCount(
+    0,
+  )
+
+  // Out of the way until the thumbnail is hovered, as on the gallery's tiles. Hover its far corner: the
+  // button sits over the top-right one.
+  await page.mouse.move(0, 0)
+  await expect(copy).toHaveCSS('opacity', '0')
+  await picture.hover({ position: { x: 4, y: 4 } })
+  await expect(copy).toHaveCSS('opacity', '1')
+  await page.screenshot({ path: testInfo.outputPath('attachment-copy.png') })
+
+  await copy.click()
+  await expect(copy).toHaveAttribute('data-state', 'copied')
+  const types = await page.evaluate(async () =>
+    (await navigator.clipboard.read()).flatMap((item) => item.types),
+  )
+  expect(types).toContain('image/png')
+  // Copying never opened the lightbox; the picture still does.
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  await page.mouse.move(0, 0)
+  await picture.click({ position: { x: 4, y: 4 } })
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.locator(`img[src="${shot.url}"]`)).toBeVisible()
+  // The same button in the viewer's top-right corner, always shown there.
+  const opened = dialog.getByRole('button', { name: 'Copy image' })
+  await expect(opened).toHaveCount(1)
+  await page.screenshot({ path: testInfo.outputPath('lightbox-copy.png') })
+  await opened.click()
+  await expect(opened).toHaveAttribute('data-state', 'copied')
+  await page.keyboard.press('Escape')
+
+  // A PDF opens in the viewer without one.
+  await page.getByRole('link').filter({ hasText: 'ticket-spec.pdf' }).click()
+  await expect(dialog.locator('iframe')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Copy image' })).toHaveCount(0)
 })
 
 test('the type, day and archived filters live in the URL, survive a reload, and show an empty state', async ({
@@ -547,7 +654,7 @@ test.describe('on a phone', () => {
       `?type=other,docs&archived=include&from=${today}&to=${today}&sort=name-desc`,
     )
     await expect(tiles(page)).toHaveCount(60)
-    // The chips, both date pickers with a day and the sort control fit the screen, wrapping as they need.
+    // The chips scroll inside their own row instead of wrapping; each is reachable and inside the screen.
     await expect(chip(page, 'Other')).toHaveAttribute('aria-pressed', 'true')
     for (const control of [
       ...(await typeChips(page).getByRole('button').all()),
@@ -556,19 +663,62 @@ test.describe('on a phone', () => {
       page.getByRole('combobox', { name: 'Sort' }),
     ]) {
       await expect(control).toBeVisible()
+      await control.scrollIntoViewIfNeeded()
       const b = await box(control)
       expect(b.x).toBeGreaterThanOrEqual(0)
       expect(b.x + b.width).toBeLessThanOrEqual(390)
     }
     expect(await scrollsSideways(page)).toBe(false)
-    // Fewer columns than on a desktop: two tiles side by side.
+    // One tile per row on a phone: the gallery's cards get the whole width.
     const [a, b, c] = await Promise.all([0, 1, 2].map((i) => box(tiles(page).nth(i))))
-    expect(a!.y).toBe(b!.y)
-    expect(c!.y).toBeGreaterThan(a!.y)
+    expect(a!.y).toBeLessThan(b!.y)
+    expect(b!.y).toBeLessThan(c!.y)
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
     await expect(tiles(page)).toHaveCount(61)
     await expect(more(page)).toHaveCount(0)
     expect(new Set(await tileNames(page)).size).toBe(61)
     expect(await scrollsSideways(page)).toBe(false)
+  })
+
+  test('the copy button on an image tile is shown without a hover, and is big enough to tap', async ({
+    page,
+    project,
+    api,
+    agent,
+  }) => {
+    const t = await api.ticket({ title: 'Phone copy', status: 'in_progress' })
+    await postWith(agent, t.id, [(await upload(agent, 'phone.png', png())).id])
+    await gallery(page, project.id)
+    const copy = tile(page, 'phone.png').getByRole('button', { name: 'Copy image' })
+    await expect(copy).toHaveCSS('opacity', '1')
+    const b = await box(copy)
+    expect(b.width).toBeGreaterThanOrEqual(44)
+    expect(b.height).toBeGreaterThanOrEqual(44)
+    // Over the tile, not spilling out of it.
+    const tileBox = await box(tile(page, 'phone.png'))
+    expect(b.x + b.width).toBeLessThanOrEqual(tileBox.x + tileBox.width)
+    expect(await scrollsSideways(page)).toBe(false)
+  })
+
+  test('an attachment copy button is always shown and big enough to tap', async ({
+    page,
+    project,
+    api,
+    agent,
+  }) => {
+    const t = await api.ticket({ title: 'Phone attachment', status: 'in_progress' })
+    const shot = await upload(agent, 'phone-shot.png', png())
+    await ok(
+      agent.post(`/api/tickets/${t.id}/updates`, {
+        data: { body: 'A phone picture.', attachmentIds: [shot.id], progress: false },
+      }),
+    )
+    await page.goto(`/projects/${project.id}/features/${t.id}`)
+    const picture = page.getByRole('img', { name: 'phone-shot.png' })
+    const copy = picture.locator('xpath=../..').getByRole('button', { name: 'Copy image' })
+    await expect(copy).toHaveCSS('opacity', '1')
+    const b = await box(copy)
+    expect(b.width).toBeGreaterThanOrEqual(44)
+    expect(b.height).toBeGreaterThanOrEqual(44)
   })
 })

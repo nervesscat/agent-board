@@ -177,42 +177,19 @@ describe('in progress and carrying over', () => {
       since: iso(at(1, 9)),
       days: 6,
     })
-    // Read from the log (no start time on these tickets): no resume note, nothing known about a handoff.
-    expect(s.carryingOver.find((t) => t.id === gamma.id)?.resume).toEqual({
-      note: '',
-      at: null,
-      by: '',
-      noHandoff: false,
-      stale: false,
-      day: null,
-    })
   })
 
-  it('dates a ticket from when its work started and shows where its last session left off', () => {
+  it('dates a ticket from when its work started, carrying over only what was already in progress', () => {
     const pid = project('started')
-    // Started two days ago (the log only knows a later claim); a note written yesterday, after the
-    // last thing done on it: the note holds.
-    const fresh = ticket(pid, 'Fresh note', {
-      status: 'in_progress',
-      startedAt: iso(at(5, 10)),
-      resumeNote: '**State:** the form saves.\n\n**Next steps:**\n\n1. Validate the [email](http://x) field',
-      resumeAt: iso(at(6, 18)),
-      resumeBy: 'claude',
-    })
-    log(pid, fresh.id, `claimed ticket #${fresh.id} Fresh note (status To do → In progress)`, at(7, 9))
+    // Started two days ago (the log only knows a later claim).
+    const fresh = ticket(pid, 'Fresh', { status: 'in_progress', startedAt: iso(at(5, 10)) })
+    log(pid, fresh.id, `claimed ticket #${fresh.id} Fresh (status To do → In progress)`, at(7, 9))
     log(pid, fresh.id, 'set a task done', at(6, 17))
-    // Started three days ago, worked yesterday, nobody wrote a note: no handoff.
+    // Started three days ago, worked yesterday.
     const bare = ticket(pid, 'No note', { status: 'in_progress', startedAt: iso(at(4, 10)) })
     log(pid, bare.id, 'set a task done', at(6, 15))
     post(bare.id, 'tests pass', at(6, 15))
-    // A progress post came after the note: it no longer says where the work stands.
-    const moved = ticket(pid, 'Moved on', {
-      status: 'blocked',
-      startedAt: iso(at(6, 9)),
-      resumeNote: 'State: waiting on the key',
-      resumeAt: iso(at(6, 18)),
-      resumeBy: 'claude',
-    })
+    const moved = ticket(pid, 'Moved on', { status: 'blocked', startedAt: iso(at(6, 9)) })
     post(moved.id, 'got the key, resuming', at(7, 10))
     // Started this morning, though the log has it claimed days ago: not carried over.
     const today = ticket(pid, 'Started today', { status: 'in_progress', startedAt: iso(at(7, 8)) })
@@ -223,21 +200,15 @@ describe('in progress and carrying over', () => {
     expect(s.inProgress.find((t) => t.id === today.id)).toMatchObject({ since: iso(at(7, 8)), days: 0 })
     expect(s.carryingOver.map((t) => t.id).sort()).toEqual([fresh.id, bare.id, moved.id].sort())
     const carried = new Map(s.carryingOver.map((t) => [t.id, t]))
-    expect(carried.get(fresh.id)?.resume).toEqual({
-      note: 'State: the form saves. Next steps: Validate the email field',
-      at: iso(at(6, 18)),
-      by: 'claude',
-      noHandoff: false,
-      stale: false,
-      day: 3,
-    })
+    expect(carried.get(fresh.id)).toMatchObject({ since: iso(at(5, 10)), days: 2 })
     expect(carried.get(bare.id)).toMatchObject({
       since: iso(at(4, 10)),
       days: 3,
       lastPost: { text: 'tests pass' },
-      resume: { note: '', at: null, noHandoff: true, stale: false, day: 4 },
     })
-    expect(carried.get(moved.id)?.resume).toMatchObject({ noHandoff: false, stale: true, day: 2 })
+    expect(carried.get(moved.id)).toMatchObject({ days: 1 })
+    // The note is gone from the summary: the ticket's summary is its one state card.
+    expect(carried.get(fresh.id)).not.toHaveProperty('resume')
   })
 })
 
@@ -413,8 +384,103 @@ describe('needs you', () => {
       [asked.id, reported.id, answered.id].sort(),
     )
     expect(s.needsYou.total).toBe(4 + 3)
+    // Each stalled row carries its ticket's activity: the open spans and waits, and the last heard.
+    for (const x of s.needsYou.stalled) {
+      expect(x.activity).toEqual({
+        spans: [],
+        waits: [],
+        lastHeard: null,
+        lastClosedSpan: null,
+        now: expect.any(String),
+      })
+    }
     // Nobody signed in as the human yet: no threads, the rest stays.
     expect(take(pid, { humans: [] }).needsYou.threads).toEqual([])
+  })
+})
+
+describe('waits on the human', () => {
+  const wait = (projectId: number, ticketId: number, when: Date, note: string, agent = 'claude') => {
+    const { db, schema } = dbm
+    return db
+      .insert(schema.ticketEvents)
+      .values({
+        ticketId,
+        projectId,
+        kind: 'wait_start',
+        agent,
+        by: agent,
+        reason: 'human',
+        note,
+        at: iso(when),
+      })
+      .returning()
+      .get()
+  }
+  const endWait = (projectId: number, ticketId: number, waitId: number, when: Date) => {
+    const { db, schema } = dbm
+    db.insert(schema.ticketEvents)
+      .values({
+        ticketId,
+        projectId,
+        kind: 'wait_end',
+        agent: 'claude',
+        by: 'claude',
+        reason: 'human',
+        refId: waitId,
+        at: iso(when),
+      })
+      .run()
+  }
+
+  it('lists an open wait on an active ticket with its note, agent, since and ticket', () => {
+    const pid = project('human waits')
+    const t = ticket(pid, 'Approve the copy', { status: 'in_progress', assignee: 'claude' })
+    const w = wait(pid, t.id, at(7, 9), 'needs the copy approved')
+
+    const s = take(pid)
+    expect(s.needsYou.humanWaits).toEqual([
+      {
+        waitId: w.id,
+        ticketId: t.id,
+        ticketTitle: 'Approve the copy',
+        status: 'in_progress',
+        assignee: 'claude',
+        parent: null,
+        agent: 'claude',
+        note: 'needs the copy approved',
+        since: iso(at(7, 9)),
+      },
+    ])
+    expect(s.needsYou.total).toBe(1)
+    // An open wait on the human keeps the ticket out of the stalled list.
+    expect(s.needsYou.stalled).toEqual([])
+  })
+
+  it('leaves out a wait that ended, and one on a ticket that is not active', () => {
+    const pid = project('human waits closed')
+    const closed = ticket(pid, 'Answered', { status: 'in_progress' })
+    const w = wait(pid, closed.id, at(7, 14, 30), 'needs the copy approved')
+    endWait(pid, closed.id, w.id, at(7, 14, 50))
+    const review = ticket(pid, 'Review me', { status: 'review' })
+    wait(pid, review.id, at(7, 14), 'sign it off')
+
+    expect(take(pid).needsYou.humanWaits).toEqual([])
+  })
+
+  it('does not list a wait twice when the ticket already asks with an open decision card', () => {
+    const pid = project('human waits decided')
+    const t = ticket(pid, 'Decide', { status: 'in_progress', assignee: 'claude' })
+    wait(pid, t.id, at(7, 9), 'needs the copy approved')
+    post(t.id, 'Which cache?', at(7, 10), {
+      progress: false,
+      decision: [{ label: 'Redis' }, { label: 'Memory' }],
+    })
+
+    const s = take(pid)
+    expect(s.needsYou.decisions).toHaveLength(1)
+    expect(s.needsYou.humanWaits).toEqual([])
+    expect(s.needsYou.total).toBe(1)
   })
 })
 
@@ -706,5 +772,46 @@ describe('instruction changes in needs you', () => {
     history.revertInstructionChange(two.id, 'enrique')
     expect(take().instructionChanges).toEqual([])
     expect(take().total).toBe(before)
+  })
+})
+
+describe('the stalled rows of the Overview: the span that ended last', () => {
+  it('names the last closed span, so a stall with nothing open is dated by when its work ended', () => {
+    const pid = project('closed span')
+    const { db, schema } = dbm
+    const t = ticket(pid, 'Built, then silent', {
+      status: 'in_progress',
+      startedAt: iso(at(7, 9)),
+      createdAt: iso(at(7, 8)),
+    })
+    const event = (kind: 'span_start' | 'span_end', when: Date, refId: number | null = null) =>
+      db
+        .insert(schema.ticketEvents)
+        .values({
+          ticketId: t.id,
+          projectId: pid,
+          kind,
+          agent: 'builder',
+          by: 'builder',
+          phase: 'build',
+          refId,
+          at: iso(when),
+        })
+        .returning()
+        .get()
+    const start = event('span_start', at(7, 9))
+    event('span_end', at(7, 9, 30), start.id)
+    const row = take(pid).needsYou.stalled.find((x) => x.ticketId === t.id)!
+    expect(row.activity.spans).toEqual([])
+    expect(row.activity.lastClosedSpan).toEqual({
+      phase: 'build',
+      agent: 'builder',
+      start: iso(at(7, 9)),
+      end: iso(at(7, 9, 30)),
+    })
+    // The why reads from it: the build ended, nothing open since.
+    expect(
+      summary.getSummary(pid, { now: NOW, humans: [HUMAN] }).projects[0]!.needsYou.stalled,
+    ).toContainEqual(expect.objectContaining({ ticketId: t.id, lastSignalAt: iso(at(7, 9, 30)) }))
   })
 })

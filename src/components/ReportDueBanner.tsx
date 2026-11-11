@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import { get, type ReportDueList } from '#/lib/api'
+import { useNow } from '#/lib/useNow'
 import { cn } from '#/lib/utils'
 
 /**
@@ -164,16 +165,6 @@ function remember(key: string) {
   } catch {
     // Kept in memory, for this page only.
   }
-}
-
-/** The time now, again every `ms`. */
-function useNow(ms: number) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), ms)
-    return () => clearInterval(t)
-  }, [ms])
-  return now
 }
 
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })

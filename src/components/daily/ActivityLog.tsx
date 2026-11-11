@@ -7,6 +7,7 @@ import { ReviewResultButton } from '#/components/ReviewResult'
 import { SettingsChangeDiff } from '#/components/daily/SettingsChangeDiff'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '#/components/ui/accordion'
 import { Button } from '#/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import type { DailyPayload } from '#/lib/api'
 import { clock } from '#/lib/format'
 import { remember } from '#/lib/remembered'
@@ -23,7 +24,24 @@ const KIND_LABEL: Record<string, string> = {
   project: 'projects',
   summary: 'summaries',
   report: 'reports',
+  handoff: 'handoffs',
 }
+const KIND_ONE: Record<string, string> = {
+  ticket: 'ticket',
+  task: 'task',
+  update: 'update',
+  comment: 'comment',
+  pr: 'PR',
+  review: 'review',
+  workspace: 'workspace',
+  agent: 'agent',
+  project: 'project',
+  summary: 'summary',
+  report: 'report',
+  handoff: 'handoff',
+}
+const kindCount = (kind: string, n: number) =>
+  `${n} ${n === 1 ? (KIND_ONE[kind] ?? kind) : (KIND_LABEL[kind] ?? kind)}`
 
 type Line = DailyPayload['activity'][number]
 
@@ -59,13 +77,35 @@ export function ActivityLog({
   return (
     <section className="space-y-3" aria-label="Activity">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>{activity.length} actions</span>
+        <span>
+          {activity.length} {activity.length === 1 ? 'action' : 'actions'}
+        </span>
         {[...kinds].map(([k, n]) => (
           <span key={k} className="rounded bg-muted px-1.5 py-0.5">
-            {n} {KIND_LABEL[k] ?? k}
+            {kindCount(k, n)}
           </span>
         ))}
-        <span className="min-w-0 wrap-anywhere">by {[...actors].join(', ')}</span>
+        <Popover>
+          <PopoverTrigger
+            render={
+              <button type="button" className="underline-offset-4 hover:text-foreground hover:underline" />
+            }
+          >
+            by {actors.size} contributor{actors.size === 1 ? '' : 's'}
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 text-xs">
+            <p className="mb-2 font-medium">Contributors</p>
+            <ul className="space-y-1">
+              {[...actors]
+                .sort((a, b) => a.localeCompare(b))
+                .map((a) => (
+                  <li key={a} className="break-words">
+                    {a}
+                  </li>
+                ))}
+            </ul>
+          </PopoverContent>
+        </Popover>
         <div className="ml-auto flex gap-1">
           <Button
             type="button"
@@ -139,7 +179,7 @@ function ActivityLine({ line: a, withProject }: { line: Line; withProject: boole
       ) : a.refType === 'instruction-change' && a.projectId ? (
         // The change in the project's instructions history, with its diff.
         <Link
-          to="/projects/$id/settings"
+          to="/projects/$id/instructions"
           params={{ id: String(a.projectId) }}
           hash="instructions-history"
           className="min-w-0 wrap-anywhere hover:underline"

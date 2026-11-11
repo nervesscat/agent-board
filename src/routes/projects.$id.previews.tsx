@@ -31,6 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, post, type ProjectPreview, type ProjectPreviews, type StopAll } from '#/lib/api'
+import { previewOpenLinks } from '#/lib/previewLinks'
 import { useProject } from '#/lib/project'
 import { recall, remember, whenArrived } from '#/lib/remembered'
 import {
@@ -132,10 +133,7 @@ function Previews() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Previews</h1>
-          <p className="text-sm text-muted-foreground">
-            Every preview of the project's tickets, running or not: links the agents registered, and the
-            previews the board builds and runs from their worktrees. Archived tickets are left out.
-          </p>
+          <p className="text-sm text-muted-foreground">Every preview, running or not.</p>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0">
           {known ? (
@@ -360,6 +358,8 @@ function PreviewItem({
   const { workspace: w, ticket: t } = p
   // A link that answers, not a preview the board runs: whether the board may stop the server behind it.
   const link = !previewActive(p.managed) && !!p.check?.running
+  // The board's own preview of the workspace: its link on this machine, or the proxied path on the tailnet.
+  const links = p.managed?.proxyUrl ? previewOpenLinks(p.managed) : null
   return (
     <li className="min-w-0 space-y-1.5 rounded-lg border p-3 text-sm">
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -390,6 +390,33 @@ function PreviewItem({
         </Tip>
       )}
       {p.managed && <ManagedLine m={p.managed} workspaceId={w.id} />}
+      {links?.through && (
+        <p className="text-xs">
+          Through the board:{' '}
+          <a
+            href={links.through}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono break-all hover:underline"
+            data-testid="preview-through-board"
+          >
+            {links.through}
+          </a>
+        </p>
+      )}
+      {links && !links.through && links.open && (
+        <p className="text-xs">
+          <a
+            href={links.open}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono break-all hover:underline"
+            data-testid="preview-through-board"
+          >
+            Open through the board
+          </a>
+        </p>
+      )}
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         <Tip content={`workspace ${w.name}${w.path ? ` in ${w.path}` : ''}`}>
           <span className="inline-flex min-w-0 items-center gap-1 font-mono">
@@ -411,6 +438,9 @@ function PreviewItem({
           cannotStart={p.cannotStart}
           linkStop={link ? p.linkStop : undefined}
           onChange={onChange}
+          ticketId={t.id}
+          ticketTitle={t.title}
+          label={p.managed ? `${w.name} · ${p.managed.runName}` : w.name}
         />
       </div>
     </li>

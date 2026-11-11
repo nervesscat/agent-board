@@ -49,6 +49,8 @@ const overlaps = (a: Box, b: Box) =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 /** A control's box, or a failure saying it never laid out. */
 async function boxOf(el: Locator) {
+  // Waited for: the page lays the header out a moment after load, and a box taken before that is none.
+  await expect(el).toBeVisible()
   const b = await el.boundingBox()
   expect(b, 'the control is laid out').toBeTruthy()
   return b as Box
@@ -419,8 +421,8 @@ test.describe('at 390px', () => {
   }) => {
     await ok(human.patch(`/api/projects/${project.id}`, { data: { tagSuggestions: MANY } }))
     await page.goto(`/projects/${project.id}/features?view=board`)
-    // Opened from the keyboard: a tap where the trigger was can land on the line about leftovers that
-    // the page may show above it a moment later, pushing it down.
+    // Opened from the keyboard: a tap where the trigger was can land elsewhere if the page settles a
+    // moment later.
     await filter(page).focus()
     await page.keyboard.press('Enter')
     await expect(options(page)).toHaveCount(21)

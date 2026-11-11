@@ -1,8 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
-import { startedAt, yesterdayNoon } from './db'
-import { expect, expectTooltip, ok, section, test } from './fixtures'
-import { box, coveredAt, feedDrawn, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
+import { expect, test } from './fixtures'
+import { box, coveredAt, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
 
 const title = (page: Page) => page.getByRole('heading', { level: 1 })
 
@@ -70,6 +69,39 @@ test('the ticket header sticks under the top bar once scrolled to it, over the f
   await expectStuck(page)
 })
 
+test('the previous and next ticket controls stay in the stuck header while the page scrolls', async ({
+  page,
+  api,
+  human,
+}) => {
+  // One on either side: the ticket opened below the step controls has both.
+  await api.ticket({ title: 'An earlier ticket in the same stage', status: 'in_progress' })
+  const t = await longTicket(api, human, 'Keep the steps in reach')
+  await api.ticket({ title: 'A later ticket in the same stage', status: 'in_progress' })
+  await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
+
+  const prev = page.getByRole('link', { name: /^Previous ticket in / })
+  const next = page.getByRole('link', { name: /^Next ticket in / })
+  await expect(prev).toHaveCount(1)
+  await expect(next).toHaveCount(1)
+
+  await scrollTo(page, 'bottom')
+  await expect(prev).toBeInViewport()
+  await expect(next).toBeInViewport()
+  expect(await coveredAt(prev, 6)).toEqual([])
+  expect(await coveredAt(next, 6)).toEqual([])
+  // They sit in the stuck header, under the top bar, instead of scrolling away with the breadcrumb.
+  const header = await box(ticketHeader(page))
+  expect((await box(prev)).y).toBeGreaterThanOrEqual(header.y)
+  expect((await box(next)).y + (await box(next)).height).toBeLessThanOrEqual(header.y + header.height + 1)
+
+  // And they still take the reader to the next ticket from there.
+  const here = page.url()
+  await next.click()
+  await expect(page).not.toHaveURL(here)
+  await expect(title(page)).toBeVisible()
+})
+
 test('the stuck header has the page background, light and dark', async ({ page, api, human }) => {
   const t = await longTicket(api, human, 'Readable in both themes')
   const seen: string[] = []
@@ -125,30 +157,6 @@ test('renames the ticket from the stuck title, and the status changes from the s
   expect(await page.evaluate(() => window.scrollY)).toBe(end)
 })
 
-/** Asserts "Resume here" was scrolled to, and shows below the stuck header rather than under it. */
-async function expectResumeInView(page: Page) {
-  const heading = page
-    .getByRole('region', { name: 'Resume here' })
-    .getByRole('heading', { name: 'Resume here' })
-  await expect(heading).toBeInViewport()
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
-  const header = await box(ticketHeader(page))
-  expect((await box(heading)).y).toBeGreaterThanOrEqual(header.y + header.height)
-  expect(await coveredAt(heading)).toEqual([])
-}
-
-test('a link to #resume shows the resume note below the stuck header', async ({
-  page,
-  api,
-  human,
-  agent,
-}) => {
-  const t = await longTicket(api, human, 'Pick it up tomorrow')
-  await ok(agent.put(`/api/tickets/${t.id}/resume`, { data: { note: '**State:** halfway there' } }))
-  await openLong(page, `/projects/${t.projectId}/features/${t.id}#resume`)
-  await expectResumeInView(page)
-})
-
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
@@ -172,23 +180,23 @@ test.describe('on a phone', () => {
     ).toBe(false)
   })
 
-  test('the Overview resume link shows the note below the stuck header', async ({
-    page,
-    api,
-    human,
-    agent,
-    project,
-  }) => {
-    const t = await longTicket(api, human, 'Carried over with a long feed')
-    startedAt(t.id, yesterdayNoon())
-    await ok(agent.put(`/api/tickets/${t.id}/resume`, { data: { note: 'Halfway through the parser' } }))
+  test('the step controls stay in the stuck header on a phone', async ({ page, api, human }) => {
+    await api.ticket({ title: 'An earlier ticket in the same stage', status: 'in_progress' })
+    const t = await longTicket(api, human, 'Keep the steps in reach on a phone')
+    await api.ticket({ title: 'A later ticket in the same stage', status: 'in_progress' })
+    await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
 
-    await page.goto(`/projects/${project.id}`)
-    const note = section(page, 'Carrying over').getByRole('link', { name: /Halfway through the parser/ })
-    await expectTooltip(note, 'Its resume note: open it on the ticket')
-    await note.click()
-    await expect(page).toHaveURL(new RegExp(`/features/${t.id}#resume$`))
-    await feedDrawn(page)
-    await expectResumeInView(page)
+    const prev = page.getByRole('link', { name: /^Previous ticket in / })
+    const next = page.getByRole('link', { name: /^Next ticket in / })
+    await scrollTo(page, 'bottom')
+    await expect(prev).toBeInViewport()
+    await expect(next).toBeInViewport()
+    expect(await coveredAt(prev, 6)).toEqual([])
+    expect(await coveredAt(next, 6)).toEqual([])
+    // The extra row still leaves most of the screen for the page.
+    expect((await box(ticketHeader(page))).height).toBeLessThan(page.viewportSize()!.height / 3)
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth),
+    ).toBe(false)
   })
 })

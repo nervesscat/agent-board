@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { hashSecret } from './credentials'
 import { dropForwarding, entranceGuard, nodeHeaders } from './devEntrance'
+import { useAppBase } from './previewPaths'
 
 /**
  * The guard in front of `vite dev`'s own surface, on a real Vite dev server with the plugin vite.config.ts
@@ -92,9 +93,9 @@ const freePort = () =>
     })
   })
 
-function send(port: number, target: string, headers: Record<string, string>) {
+function send(port: number, target: string, headers: Record<string, string>, method = 'GET') {
   return new Promise<{ status: number; location?: string; body: string }>((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path: target, headers }, (res) => {
+    const req = http.request({ host: '127.0.0.1', port, path: target, headers, method }, (res) => {
       let body = ''
       res.setEncoding('utf8')
       res.on('data', (chunk) => (body += chunk))
@@ -190,6 +191,36 @@ describe('vite dev with sign-in on, through the tailnet entrance', () => {
     expect(res.status).toBe(302)
     expect(res.location).toBe('/login?next=%2Fsrc%2Fsecret.ts%3Fx%3D1')
     expect(res.body).not.toContain('MARK-SOURCE')
+  })
+
+  it("passes a preview's path on to the board, which answers it itself: the guard sends no login redirect", async () => {
+    // The board answers /p/ paths (previewProxy.ts): with no board behind this Vite, it is passed on to a 404.
+    const res = await send(on, '/p/1/2/api/x', { host: PUBLIC, ...SERVE, accept: 'text/html' })
+    expect(res.status).toBe(404)
+    expect(res.location).toBeUndefined()
+  })
+
+  it("takes the dev server's own preview base for the app's path, not for a preview to pass through", async () => {
+    // A preview of the board runs `pnpm dev` with its base (`vite.config.ts`): under that base it is the
+    // app, and the entrance guard must ask for a session as it does for every other page.
+    useAppBase('/p/1/2/')
+    try {
+      const res = await send(on, '/p/1/2/api/x', { host: PUBLIC, ...SERVE, accept: 'text/html' })
+      expect(res.status).toBe(302)
+      expect(res.location).toBe('/login?next=%2Fp%2F1%2F2%2Fapi%2Fx')
+    } finally {
+      useAppBase('/')
+    }
+  })
+
+  it("refuses a foreign page's write under a preview's path however the path is spelled, as the built server does", async () => {
+    // Only a preview's link cookie, from another site: the cross-site rule for /p/ applies. A raw `..` in the
+    // path resolves to the same preview path, so it is refused the same way, never passed on.
+    const headers = { host: PUBLIC, origin: 'https://evil.example', cookie: 'board_preview_1_2=link' }
+    for (const target of ['/p/1/2/api/save', '/x/../p/1/2/api/save', '/p/1/9/../2/api/save']) {
+      const res = await send(on, target, headers, 'POST')
+      expect(res.status, target).toBe(403)
+    }
   })
 
   it('lets the sign-in pages and their endpoints through to the board, and nothing else', async () => {
@@ -304,6 +335,88 @@ describe('vite dev with sign-in off', () => {
     expect(await upgrade(off, { host: `localhost:${off}`, ...SERVE })).toBe('HTTP/1.1 403 Forbidden')
     const direct = await send(off, '/src/secret.ts', { host: `localhost:${off}` })
     expect(direct.status).toBe(200)
+  })
+})
+
+// --- an entrance saved in Settings, in the database: `vite dev` reads it on each request ---
+const savedDir = path.join(root, 'saved')
+fs.mkdirSync(savedDir)
+{
+  const sqlite = new Database(path.join(savedDir, 'board.db'))
+  migrate(drizzle(sqlite), { migrationsFolder: path.resolve('drizzle') })
+  const future = '2099-01-01T00:00:00.000Z'
+  sqlite.prepare(`insert into account (id, name, user_handle) values (1, 'Enrique', 'AAAA')`).run()
+  const phone = Number(
+    sqlite
+      .prepare(
+        `insert into passkeys (credential_id, public_key, rp_id, name) values ('phone', 'AAAA', ?, 'Phone')`,
+      )
+      .run(PUBLIC).lastInsertRowid,
+  )
+  sqlite
+    .prepare('insert into sessions (token_hash, passkey_id, expires_at, last_seen_at) values (?, ?, ?, ?)')
+    .run(hashSecret('public-ok'), phone, future, future)
+  sqlite.close()
+}
+/** Sets the saved entrance row as Settings writes it (JSON), or removes it: the server reads it on each request. */
+function setSaved(value: string | null) {
+  const sqlite = new Database(path.join(savedDir, 'board.db'))
+  try {
+    if (value === null) sqlite.prepare("delete from settings where key = 'tailnetEntrance'").run()
+    else
+      sqlite.prepare("insert or replace into settings (key, value) values ('tailnetEntrance', ?)").run(value)
+  } finally {
+    sqlite.close()
+  }
+}
+const SAVED = JSON.stringify({ origin: `https://${PUBLIC}` })
+
+describe('vite dev with an entrance saved in Settings', () => {
+  let saved: number
+  let developmentCopy: number
+  beforeAll(async () => {
+    // Production, the entrance from the database only (no PUBLIC_ORIGIN in the environment).
+    saved = await vite({ BOARD_ENV: 'production', DATA_DIR: savedDir }, [])
+    // A development copy of the same database: its saved entrance is not served.
+    developmentCopy = await vite({ BOARD_ENV: 'development', DATA_DIR: savedDir }, [])
+  }, 60_000)
+
+  const signedIn = (port: number) => ({ host: PUBLIC, ...SERVE, cookie: `board_session_${port}=public-ok` })
+
+  it('admits the saved host at once, without a restart, and clearing it refuses it at once', async () => {
+    setSaved(SAVED)
+    expect((await send(saved, '/@vite/client', signedIn(saved))).status).toBe(200)
+    setSaved(null)
+    // Vite's own check refuses the name once it is not saved any more.
+    const gone = await send(saved, '/@vite/client', signedIn(saved))
+    expect(gone.status).toBe(403)
+    expect(gone.body).not.toContain('createHotContext')
+    // A proxy's request on this machine gets the guard's own answer: no entrance is configured.
+    const forwarded = await send(saved, '/@vite/client', { host: `localhost:${saved}`, ...SERVE })
+    expect(forwarded.status).toBe(403)
+    expect(forwarded.body).toMatch(/no tailnet entrance is configured/)
+    // Saved again: admitted again, and the session of the origin signs in as before.
+    setSaved(SAVED)
+    expect((await send(saved, '/@vite/client', signedIn(saved))).status).toBe(200)
+    expect((await send(saved, '/@vite/client', { host: PUBLIC, ...SERVE })).status).toBe(401)
+  })
+
+  it('still asks for a session through the saved entrance, and refuses a bad saved value without a crash', async () => {
+    setSaved(SAVED)
+    expect((await send(saved, '/src/secret.ts', { host: PUBLIC, ...SERVE })).status).toBe(401)
+    setSaved('{"origin":"http://devbox.example-tailnet.ts.net"}')
+    const refused = await send(saved, '/@vite/client', signedIn(saved))
+    expect(refused.status).toBe(403)
+    // The board itself still answers on this machine.
+    expect((await send(saved, '/@vite/client', { host: `localhost:${saved}` })).status).toBe(200)
+    setSaved(null)
+  })
+
+  it('serves no saved entrance from a development copy, whatever its database says', async () => {
+    setSaved(SAVED)
+    expect((await send(developmentCopy, '/@vite/client', signedIn(developmentCopy))).status).toBe(403)
+    expect(await upgrade(developmentCopy, { host: PUBLIC, ...SERVE })).toBe('HTTP/1.1 403 Forbidden')
+    setSaved(null)
   })
 })
 

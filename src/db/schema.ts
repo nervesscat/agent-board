@@ -255,13 +255,6 @@ export const tickets = sqliteTable(
     // When work on it last started: it entered an active, blocked or review stage from any other kind.
     // A multi-day ticket counts its days from here.
     startedAt: text('started_at'),
-    // Where we left off: the one current resume note (markdown), who wrote it and when, and the ticket
-    // branch's head at that moment (null when the branch was not there locally). Each save is also a
-    // handoff post in the feed, so the older notes stay readable.
-    resumeNote: text('resume_note').notNull().default(''),
-    resumeAt: text('resume_at'),
-    resumeBy: text('resume_by').notNull().default(''),
-    resumeSha: text('resume_sha'),
     // Whether the board has looked at the ticket for a missing Merged phase (added once, before its
     // Hand-off post, when it has the hand-off phases): set once looked at, and on a new ticket, so a
     // Merged phase someone removed does not come back.
@@ -301,6 +294,8 @@ export const ticketEvents = sqliteTable(
     fromAgent: text('from_agent').notNull().default(''),
     toAgent: text('to_agent').notNull().default(''),
     reason: text().notNull().default(''),
+    // On wait_start: the agent the work was handed to (a delegated wait counts as working); null otherwise.
+    on: text(),
     note: text().notNull().default(''),
     // On stage events: the stage keys it moved from ('' when the ticket was created) and to.
     fromStage: text('from_stage').notNull().default(''),
@@ -399,8 +394,6 @@ export const updates = sqliteTable(
     via: text().notNull().default(''),
     body: text().notNull(),
     progress: integer({ mode: 'boolean' }).notNull().default(true),
-    // A resume note as it was saved (see tickets.resumeNote): the ticket's handoffs, oldest to newest.
-    handoff: integer({ mode: 'boolean' }).notNull().default(false),
     // A decision the human is asked to make: the post's body is the question, these are the answers
     // to pick from. Null on any other post.
     decision: text({ mode: 'json' }).$type<DecisionOption[] | null>(),

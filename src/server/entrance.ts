@@ -10,6 +10,7 @@ import {
   servedEntrance,
 } from './config.ts'
 import { isBearer, sessionCookieName } from './credentials.ts'
+import { isPreviewPath } from './previewPaths.ts'
 
 /**
  * The guard in front of every request, before anyone's sign-in is checked: pages, /api/* and /api/mcp
@@ -43,6 +44,8 @@ export interface GuardRequest {
   headers: HeaderLookup
   /** The address the connection came from; undefined when the server cannot tell (counted as loopback). */
   peer: string | null | undefined
+  /** The request's path, without its query, where the caller knows it (a preview's writes are checked for it). */
+  path?: string
 }
 
 export interface GuardConfig {
@@ -61,12 +64,18 @@ export type Verdict =
   | { allow: true; entrance: PublicEntrance | null }
   | { allow: false; status: number; error: string }
 
-/** The guard's settings from the board's environment, as config.ts reads them. Throws StartupError. */
-export function guardConfig(e: Record<string, string | undefined>): GuardConfig {
+/**
+ * The guard's settings from the board's environment, as config.ts reads them, and the entrance the board's
+ * database saved (`stored`, null when none). Throws StartupError.
+ */
+export function guardConfig(
+  e: Record<string, string | undefined>,
+  stored: PublicEntrance | null = null,
+): GuardConfig {
   return {
     authOff: readAuthMode(e).off,
     port: readPort(e),
-    entrance: readServedEntrance(e),
+    entrance: readServedEntrance(e, stored),
     dataDir: expandPath(e.DATA_DIR || './data'),
   }
 }
@@ -114,16 +123,25 @@ export function boardOrigins(cfg: GuardConfig): string[] {
 
 const READS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
+/** A preview's link cookie of any run (previewPaths.ts: `board_preview_<workspace>_<run>`). */
+const PREVIEW_COOKIE = /(?:^|;)\s*board_preview_\d+_\d+=/
+
 /**
  * A write a page of another origin may have sent with the human's session: it carries the board's
  * session cookie and an Origin that is not one of the board's. No Origin (agents, curl) or a token is
- * not one.
+ * not one. Under a preview's path (`/p/…`) the check applies to any credential that comes with the write (the
+ * session cookie or a preview's link cookie): the preview's own cookie is no reason to let a foreign page
+ * write there. With no credential at all the write goes on to the proxy, which answers 401.
  */
 function crossSiteWrite(req: GuardRequest, cfg: GuardConfig): string | null {
   if (READS.has(req.method.toUpperCase())) return null
   const origin = req.headers.get('origin')
   if (origin === null || isBearer(req.headers.get('authorization'))) return null
-  if (!(req.headers.get('cookie') ?? '').includes(`${sessionCookieName(cfg.port)}=`)) return null
+  const cookie = req.headers.get('cookie') ?? ''
+  const session = cookie.includes(`${sessionCookieName(cfg.port)}=`)
+  // A write under a preview's path with no credential at all is the proxy's to refuse, 401 (previewProxy.ts).
+  const credential = isPreviewPath(req.path ?? '') ? session || PREVIEW_COOKIE.test(cookie) : session
+  if (!credential) return null
   return boardOrigins(cfg).includes(origin) ? null : origin
 }
 
@@ -142,7 +160,12 @@ export function guardBoardRequest(
   entrance: PublicEntrance | null = servedEntrance(),
 ): Verdict {
   return guardRequest(
-    { method: request.method, headers: request.headers, peer: peerOf(request) },
+    {
+      method: request.method,
+      headers: request.headers,
+      peer: peerOf(request),
+      path: new URL(request.url).pathname,
+    },
     { authOff: auth.off, port: config.port, entrance, dataDir: config.dataDir },
   )
 }
@@ -158,8 +181,16 @@ export function guardRequest(req: GuardRequest, cfg: GuardConfig): Verdict {
       'Tailscale Funnel is refused: the board answers on its tailnet only, never the internet',
     )
   const host = req.headers.get('host')
-  if (!hostOf(host, cfg.entrance))
-    return refuse(403, `the board does not answer for the host ${JSON.stringify(host ?? '')}`)
+  if (!hostOf(host, cfg.entrance)) {
+    // With no entrance set (none saved, cleared, or sign-in off), a foreign host is the case the message names.
+    const named = JSON.stringify(host ?? '')
+    return refuse(
+      403,
+      cfg.entrance
+        ? `the board does not answer for the host ${named}`
+        : `no tailnet entrance is configured (PUBLIC_ORIGIN): the board answers on this machine only, not the host ${named}`,
+    )
+  }
   const through = cameThroughEntrance(req, cfg.entrance)
   if (through && cfg.authOff)
     return refuse(403, 'sign-in is off: this board answers on this machine only, never through a proxy')

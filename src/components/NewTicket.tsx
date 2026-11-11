@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
@@ -39,9 +39,28 @@ import { cn } from '#/lib/utils'
  * another is picked, at the review level picked here (Mid unless changed); a lane has neither to pick,
  * so it starts where the server puts it (To do) at its parent's level.
  */
-export function NewTicket({ projectId, parent }: { projectId: string; parent?: TicketFull }) {
+export function NewTicket({
+  projectId,
+  parent,
+  open: externalOpen,
+  onOpenChange,
+  trigger = true,
+}: {
+  projectId: string
+  parent?: TicketFull
+  /** Its open state, when another control opens it (the command palette). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /** False when another control draws the trigger. */
+  trigger?: boolean
+}) {
   const qc = useQueryClient()
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = externalOpen ?? internalOpen
+  const setOpen = (next: boolean) => {
+    setInternalOpen(next)
+    onOpenChange?.(next)
+  }
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [tasks, setTasks] = useState<string[]>([])
@@ -100,6 +119,8 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
       qc.invalidateQueries({ queryKey: ticketsKey(projectId) })
       // Its tags are the project's used ones now, offered under the next ticket's field.
       qc.invalidateQueries({ queryKey: ['project', projectId] })
+      // The projects' ticket counts: Getting started's last step ticks on the first one.
+      qc.invalidateQueries({ queryKey: ['projects'] })
       if (parent) qc.invalidateQueries({ queryKey: ['ticket', String(parent.id)] })
       setOpen(false)
       setTitle('')
@@ -114,6 +135,10 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
     },
     onError: (err) => toast.error(errorMessage(err)),
   })
+  // Mid each time it opens, after a create too; the other fields are kept as typed.
+  useEffect(() => {
+    if (open) setComplexity(DEFAULT_COMPLEXITY)
+  }, [open])
   const noun = parent ? 'lane' : 'ticket'
   return (
     <Dialog
@@ -124,11 +149,13 @@ export function NewTicket({ projectId, parent }: { projectId: string; parent?: T
         setOpen(next)
       }}
     >
-      <DialogTrigger
-        render={<Button size={parent ? 'sm' : 'default'} variant={parent ? 'outline' : 'default'} />}
-      >
-        <Plus data-icon="inline-start" /> New {noun}
-      </DialogTrigger>
+      {trigger && (
+        <DialogTrigger
+          render={<Button size={parent ? 'sm' : 'default'} variant={parent ? 'outline' : 'default'} />}
+        >
+          <Plus data-icon="inline-start" /> New {noun}
+        </DialogTrigger>
+      )}
       {/* Long instructions, tasks or files scroll the form, which never outgrows the screen; the
           heading and the footer stick to its ends, so Create and the close button stay in reach. The
           caret is kept clear of them: below the heading as tall as it is, above the one-button footer. */}

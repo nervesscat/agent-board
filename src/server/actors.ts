@@ -4,8 +4,9 @@ import { db, schema } from '#/db'
 
 export type ActorKind = 'agent' | 'human'
 /**
- * What a caller may do. The human is the human; an agent token is a worker unless the human made it an
- * orchestrator (Settings > Agents), and a sub-identity `<token>/<name>` is always a worker.
+ * What a caller may do. The human is the human; an agent token made by Connect is an orchestrator
+ * unless the human made it a worker (Settings > Agents), and a sub-identity `<token>/<name>` is always
+ * a worker.
  */
 export type ActorRole = 'human' | 'orchestrator' | 'worker'
 /** An agent's role, the one an agent token carries. */

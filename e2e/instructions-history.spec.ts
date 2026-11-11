@@ -52,7 +52,7 @@ test("an orchestrator's change of the instructions waits in Needs you until the 
     await expect(row.getByRole('button', { name: 'Revert' })).toBeVisible()
     await expect(row.getByRole('link', { name: 'Project instructions changed' })).toHaveAttribute(
       'href',
-      `/projects/${project.id}/settings#instructions-history`,
+      `/projects/${project.id}/instructions#instructions-history`,
     )
     await row.getByRole('button', { name: 'Reviewed' }).click()
     await expect(row).toHaveCount(0)
@@ -70,7 +70,7 @@ test("an orchestrator's change of the instructions waits in Needs you until the 
   }
 })
 
-test('the project settings show the history with a diff; Revert puts the text back and adds an entry', async ({
+test('the instructions page shows the history with a diff; Revert puts the text back and adds an entry', async ({
   page,
   project,
   playwright,
@@ -79,7 +79,7 @@ test('the project settings show the history with a diff; Revert puts the text ba
   const orchName = `orch-h${info.workerIndex}`
   const orch = await as(playwright, baseURL, `orchestrator:${orchName}`)
   try {
-    await page.goto(`/projects/${project.id}/settings`)
+    await page.goto(`/projects/${project.id}/instructions`)
     await expect(history(page)).toContainText('No changes yet.')
 
     // The human's own edit, in the editor: kept as an accepted entry with the Human badge.

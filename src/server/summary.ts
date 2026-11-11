@@ -4,6 +4,7 @@ import { db, schema } from '#/db'
 import type { StageKind } from '#/lib/constants'
 import { mergeLayout, shownIn } from '#/lib/layout'
 import { stageColumn } from '#/lib/stages'
+import { activityOf } from '#/lib/workTimeline'
 import { dayBounds } from './activity'
 import { listActors } from './actors'
 import { today } from './daily'
@@ -14,9 +15,8 @@ import { refreshPrsInBackground } from './prs'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
 import { reportDueFor } from './reportDue'
-import { handoffStates } from './resume'
 import { listStages, type Stage } from './stages'
-import { stalledFor } from './workTimeline'
+import { timelinesFor } from './workTimeline'
 
 /**
  * The one-glance picture of a project (or of every project): what waits on the human, what is in
@@ -36,24 +36,8 @@ const inProgress = (kind: StageKind | undefined) => !!kind && IN_PROGRESS.includ
 const BACKLOG = /backlog|icebox|someday|later|parking/i
 export const isBacklog = (s: Pick<Stage, 'key' | 'name'>) => BACKLOG.test(s.key) || BACKLOG.test(s.name)
 
-/** A ticket as `listTickets` reads it, its resume columns included. */
+/** A ticket as `listTickets` reads it. */
 type Row = ReturnType<typeof listTickets>[number]
-
-/**
- * Where the last session on a carried-over ticket left off: its resume note as one line of plain text
- * (`''` when nobody wrote one) and who wrote it when. `stale` here is only a progress post after the
- * note; the ticket page also counts the commits on its branch since.
- */
-export interface ResumeNote {
-  note: string
-  at: string | null
-  by: string
-  /** Worked on an earlier day, and no note written since the last day it was worked. */
-  noHandoff: boolean
-  stale: boolean
-  /** Which day of work this is (1 on the day it started); null when its start is not on the ticket. */
-  day: number | null
-}
 
 /** A ticket that was already in progress before today. */
 export interface CarryOver {
@@ -67,7 +51,6 @@ export interface CarryOver {
   days: number
   lastPost: Post | null
   stale: boolean
-  resume: ResumeNote
 }
 
 export interface SummaryOptions {
@@ -239,10 +222,10 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       }
     })
   // Active tickets and lanes nobody was heard from on for longer than the project allows (the work timeline).
-  const signals = stalledFor(tickets, now)
+  const timelines = timelinesFor(tickets, now)
   const stalled = tickets
     .flatMap((t) => {
-      const s = signals.get(t.id)?.stalled
+      const s = timelines.get(t.id)!.timeline.stalled
       return s
         ? [
             {
@@ -255,6 +238,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
               lastAgent: s.lastAgent,
               lastBy: s.lastBy,
               lastFrom: s.lastFrom,
+              // The open spans and waits and the last heard, so the stall says why (the same read as `stalled`).
+              activity: activityOf(timelines.get(t.id)!.timeline),
             },
           ]
         : []
@@ -271,6 +256,28 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       prNumber: t.prNumber,
       updatedAt: t.updatedAt,
     }))
+  // Open waits on the human on work still going. A ticket already asking with an open decision card
+  // is listed once, as that card.
+  const decided = new Set(decisions.map((d) => d.ticketId))
+  const humanWaits = tickets
+    .filter((t) => kind(t.status) === 'active' && !closed(t) && !decided.has(t.id))
+    .flatMap((t) =>
+      timelines
+        .get(t.id)!
+        .timeline.waits.filter((w) => w.open && w.reason === 'human')
+        .map((w) => ({
+          waitId: w.id,
+          ticketId: t.id,
+          ticketTitle: t.title,
+          status: t.status,
+          assignee: t.assignee,
+          parent: parentOf(t),
+          agent: w.agent,
+          note: w.note,
+          since: w.start,
+        })),
+    )
+    .sort((a, b) => Date.parse(a.since) - Date.parse(b.since))
 
   // --- in progress: since when and the last progress post, for every ticket in progress ---
   const working = top.filter((t) => inProgress(kind(t.status)))
@@ -333,7 +340,9 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         days: Math.round((startOfToday - new Date(`${today(new Date(since))}T00:00:00`).getTime()) / DAY_MS),
         // Handed off for review, it waits on the human rather than on its own posts.
         // Active and silent past the project's threshold (the work timeline's rule).
-        stalled: !!signals.get(t.id)?.stalled,
+        stalled: !!timelines.get(t.id)!.timeline.stalled,
+        // The open spans and waits, and who was last heard from (the same read as `stalled`).
+        activity: activityOf(timelines.get(t.id)!.timeline),
         stale:
           kind(t.status) !== 'review' &&
           now.getTime() - new Date(post?.createdAt ?? since).getTime() > STALE_MS,
@@ -438,6 +447,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
     agents: listAgents(project.id).map((a) => ({ name: a.name, avatarUrl: a.avatarUrl })),
     needsYou: {
       decisions,
+      humanWaits,
       prs: prsToReview,
       threads,
       reviews,
@@ -446,6 +456,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       stalled,
       total:
         decisions.length +
+        humanWaits.length +
         prsToReview.length +
         threads.length +
         reviews.length +
@@ -470,46 +481,10 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       blocked: top.filter((t) => kind(t.status) === 'blocked').length,
       backlog: top.filter((t) => kind(t.status) === 'open' && t.status !== nextStage?.key).length,
     },
-    carryingOver: carryOver(
-      progress.filter((t) => new Date(t.since).getTime() < startOfToday),
-      byId,
-      now,
-    ),
+    carryingOver: progress.filter((t) => new Date(t.since).getTime() < startOfToday),
     // The project's report, while the board is reminding about it (due soon, or missing): null otherwise.
     reportDue: reportDueFor(project.id, now),
   }
-}
-
-/**
- * The tickets in progress since before today, each with where its last session left off: the resume
- * note and whether one is missing, from the ticket and its log only (no git), in one batch.
- */
-function carryOver(items: Omit<CarryOver, 'resume'>[], byId: Map<number, Row>, now: Date): CarryOver[] {
-  const rows = items.map((t) => byId.get(t.id)!)
-  const handoffs = handoffStates(rows, now)
-  return items.map(({ id, title, status, kind, assignee, since, days, lastPost, stale }, i) => {
-    const t = rows[i]!
-    const h = handoffs.get(id)!
-    return {
-      id,
-      title,
-      status,
-      kind,
-      assignee,
-      since,
-      days,
-      lastPost,
-      stale,
-      resume: {
-        note: excerpt(t.resumeNote),
-        at: t.resumeAt,
-        by: t.resumeBy,
-        noHandoff: h.noHandoff,
-        stale: h.newerProgress,
-        day: h.day,
-      },
-    }
-  })
 }
 
 /** Markdown as one line of plain text: line markers, emphasis and link targets dropped, cut to `max`. */

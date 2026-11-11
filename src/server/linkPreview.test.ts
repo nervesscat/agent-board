@@ -188,6 +188,9 @@ class FakeRunner implements PreviewRunner {
   async isFree() {
     return true
   }
+  async listening(port: number) {
+    return [`127.0.0.1:${port}`]
+  }
   async answers(url: string) {
     return this.up.has(url)
   }
@@ -265,6 +268,34 @@ describe('the rule, by itself', () => {
     expect(lp.isInside(path.join(wt, '..', 'outside', 'server.js'), wt)).toBe(false)
     expect(lp.isInside(path.dirname(wt), wt)).toBe(false)
     if (WIN) expect(lp.isInside(wt.toUpperCase() + '\\server.js', wt)).toBe(true)
+  })
+
+  it('reads every listening address when asked (what the preview proxy checks), LAN ones too', () => {
+    const netstat = [
+      '  TCP    127.0.0.1:8151         0.0.0.0:0              LISTENING       102',
+      '  TCP    192.168.1.5:8153       0.0.0.0:0              LISTENING       104',
+    ].join('\r\n')
+    expect(lp.parseNetstat(netstat, true).map((l) => [l.port, l.address])).toEqual([
+      [8151, '127.0.0.1:8151'],
+      [8153, '192.168.1.5:8153'],
+    ])
+    const ss = [
+      'LISTEN 0 511 127.0.0.1:8150 0.0.0.0:* users:(("node",pid=201,fd=20))',
+      'LISTEN 0 511 *:8152 *:*',
+      'LISTEN 0 511 10.0.0.2:8153 0.0.0.0:* users:(("node",pid=204,fd=20))',
+    ].join('\n')
+    expect(lp.parseSs(ss, true).map((l) => [l.port, l.address])).toEqual([
+      [8150, '127.0.0.1:8150'],
+      [8152, '*:8152'],
+      [8153, '10.0.0.2:8153'],
+    ])
+    const lsof = ['p301', 'n127.0.0.1:8150', 'n*:8151', 'n10.0.0.2:8152'].join('\n')
+    expect(lp.parseLsof(lsof, true).map((l) => [l.port, l.address])).toEqual([
+      [8150, '127.0.0.1:8150'],
+      [8151, '*:8151'],
+      [8152, '10.0.0.2:8152'],
+    ])
+    expect(lp.hostPort('[::1]:8154')).toEqual({ host: '::1', port: 8154 })
   })
 
   it('reads the listening sockets of netstat, ss and lsof, on loopback or every address only', () => {

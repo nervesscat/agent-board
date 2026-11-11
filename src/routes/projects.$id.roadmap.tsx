@@ -9,24 +9,47 @@ import { ChipTabs } from '#/components/Chips'
 import { Empty } from '#/components/Empty'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { StalledBadge, WorkTimelineBar, WorkTotals, hasWork } from '#/components/WorkTimeline'
+import { NowLine, StallNotice, WorkSummary } from '#/components/WorkStatus'
+import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
 import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
+import { stallStage } from '#/lib/activityTimeline'
 import { useStages } from '#/lib/project'
 import { STAGE_DOT, type StageLike, stageBadge, stageOf } from '#/lib/stages'
+import {
+  WINDOW_CHOICES,
+  WINDOW_LABELS,
+  type WindowChoice,
+  parseWindowChoice,
+  windowFor,
+} from '#/lib/roadmapWindow'
+import { useMounted, useNow, useServerOffset } from '#/lib/useNow'
+import { onServerClock } from '#/lib/workStatus'
+import type { Window } from '#/lib/timelineRows'
 
 const FILTERS = ['all', 'blocked', 'review'] as const
 type Filter = (typeof FILTERS)[number]
 
 // ?show= is the filter picked: every ticket, those with something blocked, or those in review.
+// ?window= is the time axis every row shares: today, the last 24 h or 7 d, or fit the rows. Absent: the default.
 export const Route = createFileRoute('/projects/$id/roadmap')({
   component: Roadmap,
-  validateSearch: z.object({ show: z.enum(FILTERS).optional().catch(undefined) }),
+  validateSearch: z.object({
+    show: z.enum(FILTERS).optional().catch(undefined),
+    window: z
+      .unknown()
+      .optional()
+      .transform((raw) => {
+        const choice = parseWindowChoice(raw)
+        return choice === 'default' ? undefined : choice
+      }),
+  }),
 })
 
 type Lane = RoadmapTicket['lanes'][number]
 /** A ticket or a lane as the view draws it: its stage and its timeline worked out. */
-type RoadmapItem = { row: RoadmapTicket | Lane; stage: StageLike; groups: StepGroup[] }
+/** `stall` is the stage a stall names when it is not the project's first active one (see stallStage). */
+type RoadmapItem = { row: RoadmapTicket | Lane; stage: StageLike; stall: string | null; groups: StepGroup[] }
 
 const hasState = (b: RoadmapItem, state: StepState) =>
   b.groups.some((g) => g.steps.some((s) => s.state === state))
@@ -34,9 +57,12 @@ const isBlocked = (b: RoadmapItem) => b.stage.kind === 'blocked' || hasState(b, 
 
 function Roadmap() {
   const { id } = Route.useParams()
-  const { show = 'all' } = Route.useSearch()
+  const { show = 'all', window: windowParam } = Route.useSearch()
   const navigate = Route.useNavigate()
   const stages = useStages(id)
+  const browserNow = useNow(15_000)
+  // The axis's end is the clock: drawn only after mount, so the server render and the first client render agree.
+  const mounted = useMounted()
   const { data, isLoading, error } = useQuery({
     queryKey: ['roadmap', id],
     queryFn: () => get<RoadmapTicket[]>(`/api/projects/${id}/roadmap`),
@@ -47,9 +73,12 @@ function Roadmap() {
     queryFn: () => get<ProjectWork>(`/api/projects/${id}/work`),
     refetchInterval: 10_000,
   })
+  // The axis ends at the server's now, so a span the server stamped is drawn to its real end.
+  const now = onServerClock(browserNow, useServerOffset(work?.now))
   const item = (row: RoadmapTicket | Lane): RoadmapItem => ({
     row,
     stage: stageOf(stages, row.status),
+    stall: stallStage(stages, row.status),
     groups: timeline(row.tasks),
   })
   const tickets = (data ?? []).map((t) => ({ ...item(t), lanes: t.lanes.map(item) }))
@@ -57,15 +86,23 @@ function Roadmap() {
   const review = tickets.filter((t) => t.stage.kind === 'review')
   const shown = show === 'blocked' ? blocked : show === 'review' ? review : tickets
   const every = tickets.flatMap((t) => [t, ...t.lanes])
+  // The one time axis for every row shown: computed here, from the shown rows' work, and ending now.
+  const range = windowFor(
+    parseWindowChoice(windowParam),
+    shown.flatMap((t) => [t.row, ...t.lanes.map((l) => l.row)]),
+    now,
+  )
+  // The chart takes the window as ISO times; every row's track uses this same one.
+  const timeWindow: Window = {
+    start: new Date(range.start).toISOString(),
+    end: new Date(range.end).toISOString(),
+  }
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Roadmap</h1>
-          <p className="text-sm text-muted-foreground">
-            Every ticket being worked, side by side: what is done, what is being worked now and what comes
-            next, for the ticket and each of its lanes.
-          </p>
+          <p className="text-sm text-muted-foreground">Every ticket in flight: done, now, next.</p>
         </div>
         <ChipTabs
           chips={[
@@ -74,8 +111,25 @@ function Roadmap() {
             { key: 'review', label: 'Needs review', count: review.length },
           ]}
           value={show}
-          onChange={(v: Filter) => navigate({ search: { show: v === 'all' ? undefined : v }, replace: true })}
+          onChange={(v: Filter) =>
+            navigate({ search: (prev) => ({ ...prev, show: v === 'all' ? undefined : v }), replace: true })
+          }
         />
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+        <span>Time axis, every row:</span>
+        <ChipTabs<WindowChoice | ''>
+          chips={WINDOW_CHOICES.map((key) => ({ key, label: WINDOW_LABELS[key] }))}
+          value={windowParam ?? ''}
+          onChange={(v) =>
+            navigate({ search: (prev) => ({ ...prev, window: v || undefined }), replace: true })
+          }
+        />
+        {mounted && (
+          <span>
+            {new Date(range.start).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} to now
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <div className="flex flex-wrap gap-4">
@@ -86,12 +140,11 @@ function Roadmap() {
           <Stat n={review.length} label="in review" />
           <Stat n={every.filter((b) => b.row.work.stalled).length} label="stalled" amber />
         </div>
-        <Legend />
       </div>
       {work && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>Project work, every ticket and lane:</span>
-          <WorkTotals totals={work.totals} />
+          <WorkSummary totals={work.totals} />
         </div>
       )}
       {error ? (
@@ -109,7 +162,14 @@ function Roadmap() {
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card" data-testid="roadmap">
           {shown.map((t) => (
-            <TicketRows key={t.row.id} projectId={id} ticket={t} lanes={t.lanes} />
+            <TicketRows
+              key={t.row.id}
+              projectId={id}
+              ticket={t}
+              lanes={t.lanes}
+              timeWindow={timeWindow}
+              windowKey={windowParam ?? 'default'}
+            />
           ))}
         </div>
       )}
@@ -130,40 +190,24 @@ function Stat({ n, label, amber = false }: { n: number; label: string; amber?: b
   )
 }
 
-function Legend() {
-  const items: [StepState, string][] = [
-    ['done', 'Done'],
-    ['now', 'Now'],
-    ['next', 'Next'],
-    ['later', 'Later'],
-    ['blocked', 'Blocked'],
-  ]
-  return (
-    <div className="flex flex-wrap items-center gap-3.5" aria-label="Legend">
-      {items.map(([state, label]) => (
-        <span key={state} className="inline-flex items-center gap-1.5">
-          <Dot state={state} small />
-          {label}
-        </span>
-      ))}
-    </div>
-  )
-}
-
 /** One ticket's row and, under it, a thinner row per lane; the lanes fold away. */
 function TicketRows({
   projectId,
   ticket,
   lanes,
+  timeWindow,
+  windowKey,
 }: {
   projectId: string
   ticket: RoadmapItem
   lanes: RoadmapItem[]
+  timeWindow: Window
+  windowKey: string
 }) {
   const [open, setOpen] = useState(true)
   return (
     <section className="border-b last:border-b-0" aria-label={`#${ticket.row.id} ${ticket.row.title}`}>
-      <Row projectId={projectId} item={ticket}>
+      <Row projectId={projectId} item={ticket} timeWindow={timeWindow} windowKey={windowKey}>
         {lanes.length > 0 && (
           <button
             type="button"
@@ -182,6 +226,8 @@ function TicketRows({
             key={lane.row.id}
             projectId={projectId}
             item={lane}
+            timeWindow={timeWindow}
+            windowKey={windowKey}
             lane={{ depth: 'depth' in lane.row ? lane.row.depth : 0, last: i === lanes.length - 1 }}
           />
         ))}
@@ -193,12 +239,18 @@ function Row({
   projectId,
   item,
   lane,
+  timeWindow,
+  windowKey,
   children,
 }: {
   projectId: string
   item: RoadmapItem
   /** Set on a lane's row: how deep it sits under the ticket, and whether it is the last one. */
   lane?: { depth: number; last: boolean }
+  /** The one axis every row shares. */
+  timeWindow: Window
+  /** The window choice from the URL ('default' when absent): changing it re-anchors the bar. */
+  windowKey: string
   children?: React.ReactNode
 }) {
   const { row, stage, groups } = item
@@ -222,7 +274,9 @@ function Row({
         >
           <span className="shrink-0 font-mono text-xs text-muted-foreground">#{row.id}</span>
           <Tip content={row.title}>
-            <span className={`truncate ${lane ? 'text-[13px]' : 'font-medium'}`}>{row.title}</span>
+            <span className={`line-clamp-2 min-w-0 ${lane ? 'text-[13px]' : 'font-medium'}`}>
+              {row.title}
+            </span>
           </Tip>
         </Link>
         <div
@@ -232,7 +286,8 @@ function Row({
           <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${stageBadge(stage)}`}>
             {stage.name}
           </span>
-          <StalledBadge stalled={row.work.stalled} />
+          <NowLine timeline={row.work} />
+          <StallNotice timeline={row.work} stage={item.stall} />
           {children}
           {total > 0 && (
             <Tip content={`${done} of ${total} done`}>
@@ -252,10 +307,16 @@ function Row({
         </div>
       </div>
       <div className="min-w-0">
-        <Track groups={groups} lane={Boolean(lane)} />
+        <div className="md:hidden">
+          <Steps groups={groups} />
+        </div>
+        <div className="hidden md:block">
+          <Track groups={groups} lane={Boolean(lane)} />
+        </div>
         <div role="group" className={`space-y-1 px-5 ${lane ? 'pb-2' : 'pb-3'}`} aria-label="Work timeline">
-          <WorkTimelineBar timeline={row.work} compact={Boolean(lane)} />
-          {hasWork(row.work) && <WorkTotals totals={row.work.totals} />}
+          {/* Keyed on the choice, not the times: a new choice re-anchors a live track at now; the ticking end does not. */}
+          <WorkTimelineBar key={windowKey} timeline={row.work} compact={Boolean(lane)} window={timeWindow} />
+          {hasWork(row.work) && <WorkSummary totals={row.work.totals} />}
         </div>
       </div>
     </div>
@@ -299,6 +360,42 @@ function Track({ groups, lane }: { groups: StepGroup[]; lane: boolean }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** The same tasks as `Track`, stacked on a phone: a status dot, the step, its state and a reason. */
+function Steps({ groups }: { groups: StepGroup[] }) {
+  if (!groups.length) return <div className="px-5 py-3 text-xs text-muted-foreground">No tasks yet.</div>
+  return (
+    <div className="space-y-3 px-5 py-3" aria-label="Tasks">
+      {groups.map((g) => (
+        <div key={g.steps[0]!.id}>
+          {g.caption && (
+            <div className="mb-1 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+              {g.caption}
+            </div>
+          )}
+          <ol className="space-y-2">
+            {g.steps.map((s) => (
+              <li key={s.id} className="flex items-start gap-2.5">
+                <Dot state={s.state} small />
+                <div className="min-w-0 flex-1">
+                  <div className={`text-sm leading-snug ${LABEL[s.state]}`}>{s.text}</div>
+                  {s.state === 'blocked' && s.blockedReason && (
+                    <div className="mt-0.5 text-[11px] leading-tight text-amber-700 dark:text-amber-300">
+                      {s.blockedReason}
+                    </div>
+                  )}
+                </div>
+                <span className="shrink-0 text-[10.5px] tracking-wide text-muted-foreground uppercase">
+                  {s.state}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
     </div>
   )
 }

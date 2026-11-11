@@ -19,7 +19,7 @@ import { HttpError, notFound } from './http'
 export type RunConfig = schema.RunConfig
 
 /** Whether the repo's checkout is the board itself: the repo its own preview is seeded for. */
-function isBoardCheckout(repoPath: string): boolean | null {
+export function isBoardCheckout(repoPath: string): boolean | null {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(repoPath, 'package.json'), 'utf8')) as {
       name?: string

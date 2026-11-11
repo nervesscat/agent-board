@@ -101,6 +101,9 @@ class FakeRunner implements PreviewRunner {
   async isFree(port: number) {
     return !this.busy.has(port)
   }
+  async listening(port: number) {
+    return [`127.0.0.1:${port}`]
+  }
   async answers(url: string) {
     return this.up.has(url)
   }

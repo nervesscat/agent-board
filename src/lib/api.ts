@@ -32,6 +32,7 @@ import type { DirListing } from '#/server/fs'
 import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { HostTool, HostTools } from '#/server/hostTools'
 import type { ManagedPreview } from '#/server/managedPreview'
+import type { OpencodeConfig } from '#/server/opencodeConfig'
 import type { RunState } from '#/server/runs'
 import type {
   AlsoRunning,
@@ -56,6 +57,11 @@ import type { WorkTimeline } from './workTimeline'
 
 /** A project as the API returns it: always with its repos. */
 export type Project = ProjectFull
+/**
+ * `/api/summary`: the summary, and the name of the actor who asked for it. This browser remembers
+ * which Needs you entries that actor has opened (`needsYou.ts`), per actor.
+ */
+export type SummaryPayload = Summary & { actor: string }
 /** A row of `/api/projects`: the project, its repos, and how many tickets and open PRs it holds. */
 export type ProjectRow = ReturnType<typeof listProjects>[number]
 
@@ -71,6 +77,7 @@ export type {
   HostTool,
   HostTools,
   ManagedPreview,
+  OpencodeConfig,
   PreviewState,
   ProjectAgent,
   RunConfig,

@@ -41,23 +41,24 @@ export async function copyText(text: string, what = 'Copied') {
 export function CopyBlock({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [done, setDone] = useState(false)
   return (
-    <div className="relative">
-      <pre className="overflow-x-auto rounded-md border bg-muted/50 p-3 pr-24 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all">
+    <div className="space-y-1">
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            if (await copyText(text)) {
+              setDone(true)
+              setTimeout(() => setDone(false), 1500)
+            }
+          }}
+        >
+          {done ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />} {label}
+        </Button>
+      </div>
+      <pre className="overflow-x-auto rounded-md border bg-muted/50 p-3 font-mono text-xs leading-relaxed whitespace-pre">
         {text}
       </pre>
-      <Button
-        variant="outline"
-        size="sm"
-        className="absolute top-2 right-2"
-        onClick={async () => {
-          if (await copyText(text)) {
-            setDone(true)
-            setTimeout(() => setDone(false), 1500)
-          }
-        }}
-      >
-        {done ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />} {label}
-      </Button>
     </div>
   )
 }

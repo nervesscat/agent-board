@@ -3,13 +3,15 @@ import {
   Archive,
   ArchiveRestore,
   ArrowDownUp,
-  BookmarkX,
   ChevronLeft,
   ChevronRight,
   GitBranch,
+  Hammer,
   Hand,
+  Hourglass,
   Layers,
   Scale,
+  UserRound,
 } from 'lucide-react'
 import { type DragEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
@@ -30,9 +32,11 @@ import {
   AlertDialogTrigger,
 } from '#/components/ui/alert-dialog'
 import { Button } from '#/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
-import { StalledBadge } from '#/components/WorkTimeline'
+import { NowLine, StallNotice } from '#/components/WorkStatus'
 import type { Push, TicketRow } from '#/lib/api'
+import { hasWork, nowBrief, nowWords, stallStage, timelineFromActivity } from '#/lib/activityTimeline'
 import { ago } from '#/lib/format'
 import { repoLabel, useProject } from '#/lib/project'
 import {
@@ -45,6 +49,8 @@ import {
   stageOf,
 } from '#/lib/stages'
 import { nameFirst } from '#/lib/tickets'
+import { useNow, useServerOffset } from '#/lib/useNow'
+import { onServerClock } from '#/lib/workStatus'
 
 /** Where a card goes in its own column: right above or below another card of it. */
 export type Placement = { anchor: number; side: 'above' | 'below' }
@@ -75,10 +81,22 @@ export function TicketBoard({
 }) {
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
+  const tick = useNow(60_000)
+  // The rows of one read share the server's time: the board's now is read on that clock, not the browser's.
+  const now = onServerClock(tick, useServerOffset(items[0]?.activity.now))
   const [dragging, setDragging] = useState<number | null>(null)
   const [over, setOver] = useState<string | null>(null)
   // Dragging within its own column: the gap it would land in, 0 above the first card.
   const [slot, setSlot] = useState<number | null>(null)
+  // A phone shows one stage at a time; this is the one picked (none: the first with tickets).
+  const [pickedStage, pickStage] = useRememberedStage(`features.board.stage.${projectId}`, stages)
+  const activeStage =
+    stages.find((s) => s.key === pickedStage)?.key ??
+    stages.find((s) => stageColumn(items, s.key).length > 0)?.key ??
+    stages[0]?.key
+  const stageItems = Object.fromEntries(
+    stages.map((s) => [s.key, `${s.name} (${stageColumn(items, s.key).length})`]),
+  )
   const draggedStatus = items.find((x) => x.id === dragging)?.status
   const endDrag = () => {
     setDragging(null)
@@ -107,12 +125,28 @@ export function TicketBoard({
     el.scrollTo({ left: (Math.round(el.scrollLeft / col) + dir) * col, behavior: 'smooth' })
   }
   return (
-    <div ref={frame} className="flex min-h-80 flex-col">
+    <div ref={frame} className="flex flex-col md:min-h-80">
+      {stages.length > 0 && activeStage && (
+        <div className="mb-2 md:hidden">
+          <Select value={activeStage} onValueChange={(v) => v && pickStage(v)} items={stageItems}>
+            <SelectTrigger className="w-full" aria-label="Stage">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {stages.map((s) => (
+                <SelectItem key={s.key} value={s.key}>
+                  {s.name} ({stageColumn(items, s.key).length})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {(edges.left || edges.right) && (
-        <div className="mb-2 flex justify-end gap-1">
+        <div className="mb-2 hidden justify-end gap-1 md:flex">
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon"
             disabled={!edges.left}
             onClick={() => step(-1)}
             aria-label="Previous stage"
@@ -121,7 +155,7 @@ export function TicketBoard({
           </Button>
           <Button
             variant="outline"
-            size="icon-sm"
+            size="icon"
             disabled={!edges.right}
             onClick={() => step(1)}
             aria-label="Next stage"
@@ -131,7 +165,7 @@ export function TicketBoard({
         </div>
       )}
       {/* Fixed-width columns side by side, scrolling sideways; each one as tall as the board, scrolling its own cards. */}
-      <div ref={scroller} className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-2">
+      <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-3 overflow-x-auto pb-2 md:flex-row">
         {stages.map(({ key: status, name, kind }) => {
           const column = stageColumn(items, status)
           const own = dragging !== null && draggedStatus === status
@@ -164,9 +198,9 @@ export function TicketBoard({
                 e.preventDefault()
                 drop(status, column, slotAt(e.currentTarget, e.clientY))
               }}
-              className={`flex w-72 shrink-0 flex-col rounded-lg bg-muted/40 p-2 transition-colors ${
-                over === status && draggedStatus !== status ? 'bg-primary/10 ring-2 ring-primary/40' : ''
-              }`}
+              className={`flex w-full shrink-0 flex-col rounded-lg bg-muted/40 p-2 transition-colors md:w-72 ${
+                status !== activeStage ? 'max-md:hidden' : ''
+              } ${over === status && draggedStatus !== status ? 'bg-primary/10 ring-2 ring-primary/40' : ''}`}
             >
               <div className="mb-2 flex items-center justify-between px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 <span className="truncate">{name}</span>
@@ -177,90 +211,108 @@ export function TicketBoard({
                   <span className="tabular-nums">{column.length}</span>
                 </span>
               </div>
-              <div data-column={status} className="min-h-12 flex-1 space-y-2 overflow-y-auto">
-                {column.map((t, i) => (
-                  <div key={t.id} data-card={t.id} className="relative">
-                    {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
-                    <Tip content={t.title}>
-                      <Link
-                        to="/projects/$id/features/$ticketId"
-                        params={{ id: projectId, ticketId: String(t.id) }}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.effectAllowed = 'move'
-                          e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
-                          setDragging(t.id)
-                        }}
-                        onDragEnd={endDrag}
-                        // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
-                        className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing ${
-                          dragging === t.id ? 'opacity-40' : ''
-                        }`}
-                      >
-                        <div className="flex items-start gap-1.5">
-                          <ComplexityChip level={t.complexity} className="mt-0.5" />
-                          <div className="line-clamp-2 min-w-0 font-medium leading-snug">
-                            <span className="text-muted-foreground">#{t.id}</span> {t.title}
-                          </div>
-                        </div>
-                        {(t.decisions > 0 ||
-                          t.blockedTasks > 0 ||
-                          t.stalled ||
-                          t.needs.some((n) => !n.merged) ||
-                          after?.has(t.id) ||
-                          hasResumeBadge(t.resume)) && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                            {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
-                            {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
-                            <StalledBadge stalled={t.stalled} focusable={false} />
-                            <NeedsBadge needs={t.needs} />
-                            <ResumeBadges resume={t.resume} />
-                          </div>
-                        )}
-                        {/* The time sits at the end of the last of these rows, so it always shares a line. */}
-                        {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
-                          <div className={INFO_ROW}>
-                            {repoLabel(project, t.repoId) && (
-                              <span className="shrink-0 rounded bg-muted px-1">
-                                {repoLabel(project, t.repoId)}
-                              </span>
-                            )}
-                            {/* A long name is cut short before its badge; the branch gives way first. */}
-                            {t.assignee && <Actor name={t.assignee} truncate />}
-                            {t.branch && (
-                              <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
-                                {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
-                                <GitBranch className="size-3 shrink-0" />{' '}
-                                <span className="truncate">{t.branch}</span>
-                              </span>
-                            )}
-                            {!t.tags.length && <Updated at={t.updatedAt} />}
-                          </div>
-                        )}
-                        {t.tags.length > 0 && (
-                          <div className={INFO_ROW}>
-                            {/* Tags clip on their own, so a long list never pushes the time out of view. */}
-                            <div className="flex min-w-0 gap-1 overflow-hidden">
-                              {[...t.tags].sort(compareTags).map((tag) => (
-                                <Tag key={tag} tag={tag} className="shrink-0" />
-                              ))}
+              <div data-column={status} className="min-h-12 flex-1 space-y-2 md:overflow-y-auto">
+                {column.map((t, i) => {
+                  // The card's work, from what its row carries: the now, and the stall (as the list and the ticket page word them).
+                  const work = timelineFromActivity(t.activity, t.stalled, hasWork(kind))
+                  // The now shows on a card with no other badge: a busy card is capped in height, and its time must not clip.
+                  const badged =
+                    t.decisions > 0 ||
+                    t.blockedTasks > 0 ||
+                    !!t.stalled ||
+                    t.needs.some((n) => !n.merged) ||
+                    after?.has(t.id)
+                  const words = nowWords(work, now)
+                  const brief = badged ? null : nowBrief(work, now)
+                  return (
+                    <div key={t.id} data-card={t.id} className="relative">
+                      {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
+                      <Tip content={t.title}>
+                        <Link
+                          to="/projects/$id/features/$ticketId"
+                          params={{ id: projectId, ticketId: String(t.id) }}
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move'
+                            e.dataTransfer.setData('text/plain', `#${t.id} ${t.title}`)
+                            setDragging(t.id)
+                          }}
+                          onDragEnd={endDrag}
+                          // As tall as what it shows, up to a cap: a bare ticket stays small, a busy one stops growing.
+                          className={`flex max-h-40 cursor-grab flex-col overflow-hidden rounded-md border bg-card p-2.5 text-sm transition-colors hover:border-foreground/30 active:cursor-grabbing max-md:max-h-none ${
+                            dragging === t.id ? 'opacity-40' : ''
+                          }`}
+                        >
+                          <div className="flex items-start gap-1.5">
+                            <ComplexityChip level={t.complexity} className="mt-0.5" />
+                            <div className="line-clamp-2 min-w-0 font-medium leading-snug max-md:line-clamp-none">
+                              <span className="text-muted-foreground">#{t.id}</span> {t.title}
                             </div>
-                            <Updated at={t.updatedAt} />
                           </div>
-                        )}
-                        {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
-                          <div className={INFO_ROW}>
-                            <Updated at={t.updatedAt} />
-                          </div>
-                        )}
-                        {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
-                        {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
-                      </Link>
-                    </Tip>
-                    {line === column.length && i === column.length - 1 && <DropLine at="bottom-0" />}
-                  </div>
-                ))}
+                          {(t.decisions > 0 ||
+                            t.blockedTasks > 0 ||
+                            t.stalled ||
+                            brief ||
+                            t.needs.some((n) => !n.merged) ||
+                            after?.has(t.id)) && (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              {brief && <NowBadge brief={brief} words={words} />}
+                              {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
+                              {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
+                              {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                              <StallNotice
+                                timeline={work}
+                                stage={stallStage(stages, t.status)}
+                                nowLine={words}
+                                focusable={false}
+                              />
+                              <NeedsBadge needs={t.needs} />
+                            </div>
+                          )}
+                          {/* The time sits at the end of the last of these rows, so it always shares a line. */}
+                          {(repoLabel(project, t.repoId) || t.assignee || t.branch) && (
+                            <div className={INFO_ROW}>
+                              {repoLabel(project, t.repoId) && (
+                                <span className="shrink-0 rounded bg-muted px-1">
+                                  {repoLabel(project, t.repoId)}
+                                </span>
+                              )}
+                              {/* A long name is cut short before its badge; the branch gives way first. */}
+                              {t.assignee && <Actor name={t.assignee} truncate short />}
+                              {t.branch && (
+                                <span className="inline-flex min-w-0 shrink-[1000] items-center gap-1 overflow-hidden font-mono">
+                                  {push?.has(t.id) && <PushDot push={push.get(t.id)!} />}
+                                  <GitBranch className="size-3 shrink-0" />{' '}
+                                  <span className="truncate">{t.branch}</span>
+                                </span>
+                              )}
+                              {!t.tags.length && <Updated at={t.updatedAt} />}
+                            </div>
+                          )}
+                          {t.tags.length > 0 && (
+                            <div className={INFO_ROW}>
+                              {/* Tags clip on their own, so a long list never pushes the time out of view. */}
+                              <div className="flex min-w-0 gap-1 overflow-hidden">
+                                {[...t.tags].sort(compareTags).map((tag) => (
+                                  <Tag key={tag} tag={tag} className="shrink-0" />
+                                ))}
+                              </div>
+                              <Updated at={t.updatedAt} />
+                            </div>
+                          )}
+                          {!repoLabel(project, t.repoId) && !t.assignee && !t.branch && !t.tags.length && (
+                            <div className={INFO_ROW}>
+                              <Updated at={t.updatedAt} />
+                            </div>
+                          )}
+                          {t.lanes.total > 0 && <LaneCount lanes={t.lanes} stages={stages} />}
+                          {t.rollup.total > 0 && <Progress rollup={t.rollup} className="mt-auto pt-2" />}
+                        </Link>
+                      </Tip>
+                      {line === column.length && i === column.length - 1 && <DropLine at="bottom-0" />}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )
@@ -372,33 +424,20 @@ export function BlockedTasksBadge({ n, className = '' }: { n: number; className?
   )
 }
 
-/** Shown from the second day of work on: a ticket that carries over. */
-const multiDay = (resume: TicketRow['resume']) => resume.day !== null && resume.day > 1
-
-const hasResumeBadge = (resume: TicketRow['resume']) => resume.noHandoff || multiDay(resume)
-
-/**
- * A ticket that carried over to another day: which day of work this is, and "no handoff" when nobody
- * left a resume note for it since the last day it was worked.
- */
-function ResumeBadges({ resume }: { resume: TicketRow['resume'] }) {
+/** The card's now in little: an icon and how long, with the whole line (what, who, since when) in its tooltip. */
+function NowBadge({ brief, words }: { brief: { kind: string; text: string }; words: string }) {
+  const Icon =
+    brief.kind === 'waiting-human' ? UserRound : brief.kind === 'waiting-agent' ? Hourglass : Hammer
   return (
-    <>
-      {resume.noHandoff && (
-        <Tip content="Worked on an earlier day, and nobody left a resume note on where it was left">
-          <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
-            <BookmarkX className="size-3" /> no handoff
-          </span>
-        </Tip>
-      )}
-      {multiDay(resume) && (
-        <Tip content="Which day of work this is, counted from when it was started">
-          <span className="inline-flex w-fit items-center rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-            day {resume.day}
-          </span>
-        </Tip>
-      )}
-    </>
+    <Tip content={words}>
+      <span
+        data-testid="card-now"
+        className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground/80 tabular-nums"
+      >
+        <Icon className="size-3" aria-hidden />
+        {brief.text}
+      </span>
+    </Tip>
   )
 }
 
@@ -420,7 +459,13 @@ function useFillHeight(ref: RefObject<HTMLDivElement | null>) {
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    // Only the desktop board fills the window: a phone shows one stage and scrolls the page.
+    const wide = window.matchMedia('(min-width: 768px)')
     const fit = () => {
+      if (!wide.matches) {
+        el.style.height = ''
+        return
+      }
       const top = el.getBoundingClientRect().top + window.scrollY
       // 24px: the page's bottom padding (main's py-6), so the board ends where the page does.
       const height = `${Math.max(320, window.innerHeight - top - 24)}px`
@@ -430,9 +475,11 @@ function useFillHeight(ref: RefObject<HTMLDivElement | null>) {
     const around = new ResizeObserver(fit)
     if (el.parentElement) around.observe(el.parentElement)
     window.addEventListener('resize', fit)
+    wide.addEventListener('change', fit)
     return () => {
       around.disconnect()
       window.removeEventListener('resize', fit)
+      wide.removeEventListener('change', fit)
     }
   }, [ref])
 }
@@ -453,6 +500,45 @@ function writeScroll(key: string, value: SavedScroll) {
   } catch {
     // storage unavailable (private mode, blocked): the board just starts at the top
   }
+}
+
+function readStage(key: string) {
+  try {
+    return sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeStage(key: string, stage: string) {
+  try {
+    sessionStorage.setItem(key, stage)
+  } catch {
+    // storage unavailable (private mode, blocked): the board just starts at the first stage
+  }
+}
+
+/**
+ * The stage a phone was showing, for this tab: restored when the board comes back, however it is
+ * reached (a ticket's Back, the menu, a link), and across a reload. `stages` once the project's
+ * columns are known, since a stage that no longer exists must not hide every column.
+ */
+function useRememberedStage(key: string, stages: StageLike[]): [string | undefined, (stage: string) => void] {
+  const [stage, setStage] = useState<string>()
+  const restoredFor = useRef<string | undefined>(undefined)
+  useLayoutEffect(() => {
+    // Once per board: the saved stage of this project, or none (the first with tickets) when it has
+    // no say, is gone, or another project's board took this one's place.
+    if (!stages.length || restoredFor.current === key) return
+    restoredFor.current = key
+    const saved = readStage(key)
+    setStage(saved && stages.some((s) => s.key === saved) ? saved : undefined)
+  }, [key, stages])
+  const pick = (next: string) => {
+    setStage(next)
+    writeStage(key, next)
+  }
+  return [stage, pick]
 }
 
 /**
@@ -476,12 +562,23 @@ function useRememberedScroll(key: string, scroller: RefObject<HTMLDivElement | n
     let pending = 0
     const save = () => {
       cancelAnimationFrame(pending)
-      pending = requestAnimationFrame(() =>
+      pending = requestAnimationFrame(() => {
+        const before = readScroll(key)
+        // A value the element coerces to 0 because it cannot scroll there is not where the reader
+        // was (a phone shows one column, with nothing sideways and nothing scrolling in it): keep
+        // what was saved, so a visit at phone width does not lose the desktop's position.
+        const sideways = el.scrollWidth > el.clientWidth
         writeScroll(key, {
-          left: el.scrollLeft,
-          columns: Object.fromEntries(columns().map((c) => [c.dataset.column!, c.scrollTop])),
-        }),
-      )
+          left: sideways ? el.scrollLeft : (before?.left ?? 0),
+          columns: Object.fromEntries(
+            columns().map((c) => {
+              const name = c.dataset.column!
+              const down = c.scrollHeight > c.clientHeight
+              return [name, down ? c.scrollTop : (before?.columns?.[name] ?? 0)]
+            }),
+          ),
+        })
+      })
     }
     // Scroll events do not bubble; listening while they travel down catches the columns' too.
     el.addEventListener('scroll', save, { capture: true, passive: true })
@@ -591,6 +688,7 @@ export function TicketList({
   useRememberedPageScroll(`features.list.${projectId}`)
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
+  const tick = useNow(60_000)
   const stageIndex = (key: string) => {
     const i = stages.findIndex((s) => s.key === key)
     return i < 0 ? stages.length : i
@@ -603,6 +701,7 @@ export function TicketList({
     <ul className="divide-y rounded-md border">
       {rows.map((t) => {
         const stage = stageOf(stages, t.status)
+        const work = timelineFromActivity(t.activity, t.stalled, hasWork(stage.kind))
         return (
           <li key={t.id} className="transition-colors hover:bg-muted/50">
             <Link
@@ -627,13 +726,13 @@ export function TicketList({
                   {t.blockedTasks > 0 && (
                     <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />
                   )}
-                  <StalledBadge stalled={t.stalled} focusable={false} className="ml-2 align-[1px]" />
+                  <StallNotice
+                    timeline={work}
+                    stage={stallStage(stages, t.status)}
+                    focusable={false}
+                    className="ml-2 align-[1px]"
+                  />
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
-                  {hasResumeBadge(t.resume) && (
-                    <span className="ml-2 inline-flex gap-1 align-[1px]">
-                      <ResumeBadges resume={t.resume} />
-                    </span>
-                  )}
                   {t.tags.length > 0 && (
                     <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
                       {[...t.tags].sort(compareTags).map((tag) => (
@@ -642,6 +741,7 @@ export function TicketList({
                     </span>
                   )}
                 </div>
+                {hasWork(stage.kind) && <NowLine timeline={work} now={tick} className="mt-0.5" />}
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   {repoLabel(project, t.repoId) && (
                     <span className="rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>

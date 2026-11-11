@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Tip } from '#/components/ui/tooltip'
+import { nameParts, truncateName } from '#/lib/actorName'
 import { type ActorRow, get } from '#/lib/api'
 import { useProjectAgent } from '#/lib/project'
 import { ROLE_LABEL, type Who, type WhoRole, chainOf, claimedShape, whoOf } from '#/lib/roles'
@@ -101,16 +102,21 @@ export function Actor({
   name,
   via,
   truncate,
+  short,
   className = '',
 }: {
   name: string
   via?: string
   /** Cut the name short on its one line before the badge after it (see `Name`). */
   truncate?: boolean
+  /** On a card, show only the leaf of a sub-identity (`builder-832`); the tooltip keeps the whole chain. */
+  short?: boolean
   className?: string
 }) {
   const who = useWho()
   const agent = useProjectAgent(name)
+  // A sub-identity shows the name it works as: the leaf, cut at a word boundary rather than mid-word.
+  const shown = short ? truncateName(nameParts(name).leaf) : name
   if (agent)
     return (
       <Tip
@@ -133,9 +139,9 @@ export function Actor({
         <Picture>
           <Icon className="size-3.5 text-muted-foreground" />
         </Picture>
-        <Name name={name} truncate={truncate} />
+        <Name name={shown} truncate={truncate} />
         <RoleBadge role={me.role} />
-        {me.role === 'worker' && me.parent && (
+        {!short && me.role === 'worker' && me.parent && (
           // Kept on one line, cut short with an ellipsis where it cannot fit (the tooltip has the chain).
           <span className="min-w-0 truncate font-normal text-muted-foreground">under {me.parent}</span>
         )}

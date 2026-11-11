@@ -123,6 +123,7 @@ class FakeRunner implements PreviewRunner {
   }
   killTreeSync() {}
   isFree = async () => true
+  listening = async (port: number) => [`127.0.0.1:${port}`]
   answers = async () => true
   copyData: PreviewRunner['copyData'] = async () => {}
 }

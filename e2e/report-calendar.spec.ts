@@ -97,7 +97,7 @@ test('a month of daily reports: done, missing and off days, a day opens, the jum
   await dayButton(page, monday, 'done').click()
   await day
   await expect(card).toContainText('Monday shipped the parser.')
-  await expect(page.getByRole('region', { name: 'Activity' })).toContainText('1 actions')
+  await expect(page.getByRole('region', { name: 'Activity' })).toContainText('1 action')
 
   // The nearest missing period after the one on show is the Tuesday after it.
   await calendar.getByRole('button', { name: 'Next missing' }).click()

@@ -443,3 +443,32 @@ describe('roles and sub-identities', () => {
     expect(ok).toMatchObject({ kind: 'actor', actor: 'orch/w', caller: { role: 'worker', parent: 'orch' } })
   })
 })
+
+describe('the entrance Settings saved, as auth loads it', () => {
+  it('is what the board serves once auth.ts is loaded, with no PUBLIC_ORIGIN in the environment', async () => {
+    const { db, schema } = await import('#/db')
+    const entranceConfig = await import('./config')
+    const saved = process.env.PUBLIC_ORIGIN
+    delete process.env.PUBLIC_ORIGIN
+    try {
+      // auth.ts registers the reader of the saved entrance (tailnetEntrance.ts) as it loads: nothing else is.
+      await import('./auth')
+      db.insert(schema.settings)
+        .values({ key: 'tailnetEntrance', value: { origin: 'https://auth-box.example-tailnet.ts.net' } })
+        .onConflictDoUpdate({
+          target: schema.settings.key,
+          set: { value: { origin: 'https://auth-box.example-tailnet.ts.net' } },
+        })
+        .run()
+      entranceConfig.resetServedEntrance()
+      expect(entranceConfig.servedEntrance()).toEqual({
+        origin: 'https://auth-box.example-tailnet.ts.net',
+        host: 'auth-box.example-tailnet.ts.net',
+      })
+    } finally {
+      db.delete(schema.settings).run()
+      entranceConfig.resetServedEntrance()
+      if (saved !== undefined) process.env.PUBLIC_ORIGIN = saved
+    }
+  })
+})

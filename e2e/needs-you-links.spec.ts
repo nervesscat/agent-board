@@ -107,12 +107,12 @@ test('a decision lands on its post, marked for a moment; Back is the Overview ag
   expect(await post(page, decision).evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none')
   await expectMarkGone(page)
 
-  // The reveal added no step to the history.
+  // Back is the Overview again. The click filed the entry away: Needs you no longer asks for it.
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
   await expect(
     needsYou(page).getByRole('link', { name: 'Decide: Which way should the parser go' }),
-  ).toBeVisible()
+  ).toHaveCount(0)
   await page.goForward()
   await expect(page).toHaveURL(new RegExp(`/features/${t.id}#post-${decision}$`))
   await expectInView(post(page, decision), ticketHeader(page))
@@ -719,24 +719,40 @@ test('a PR to review lands on its card, whatever filter this browser remembers',
  * Overview's link to the PR: the list is drawn at once, then filtered as remembered, then switched to
  * the filter that shows the PR.
  */
+async function expandNeedsYouOnPhone(page: Page) {
+  if ((page.viewportSize()?.width ?? 0) > 640) return
+  const more = needsYou(page).getByRole('button', { name: /^View all/ })
+  await expect(more).toBeVisible()
+  await more.click()
+}
+
 async function reviewFromCachedQueue(page: Page, project: Project) {
   const target = seedPr(project, { title: 'Review me again', updatedAt: '2026-01-01T00:00:00.000Z' })
   for (let i = 0; i < 12; i++) seedPr(project, { title: `Queued PR ${i}` })
   await overview(page, project)
   const link = needsYou(page).getByRole('link', { name: `Review PR #${target.number} Review me again` })
+  await expandNeedsYouOnPhone(page)
   await link.click()
   await expect(page.locator(`#pr-${target.id}`)).toHaveAttribute('data-revealed', '')
   await page.getByRole('tab', { name: /^Waiting on others/ }).click()
   await expect(page.locator(`#pr-${target.id}`)).toHaveCount(0)
   expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('others')
+  // Back is the Overview, the entry filed away by the click, and the queue still loaded.
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
+  await expect(link).toHaveCount(0)
+
+  // Another PR to review: the queue is loaded and the filter this browser remembers hides it.
+  const again = seedPr(project, { title: 'Review me once more', updatedAt: '2026-01-01T00:00:00.000Z' })
+  await overview(page, project)
+  const next = needsYou(page).getByRole('link', { name: `Review PR #${again.number} Review me once more` })
+  await expandNeedsYouOnPhone(page)
   await recordMarks(page)
-  await link.click()
-  await expect(page).toHaveURL(new RegExp(`filter=me#pr-${target.id}$`))
+  await next.click()
+  await expect(page).toHaveURL(new RegExp(`filter=me#pr-${again.id}$`))
   await expect(page.getByRole('tab', { name: /^To review/ })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('tab', { name: /^All/ })).toHaveCount(0)
-  const card = page.locator(`#pr-${target.id}`)
+  const card = page.locator(`#pr-${again.id}`)
   await expectRevealed(page, card, topBar(page))
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0)
   expect(await noSidewaysScroll(page)).toBe(true)
@@ -745,7 +761,7 @@ async function reviewFromCachedQueue(page: Page, project: Project) {
   // Revealed once, after the list settled, and the filter put in the URL on the way is no step of
   // the history.
   await expectMarkGone(page)
-  expect((await marks(page)).map((m) => m.id)).toEqual([`pr-${target.id}`])
+  expect((await marks(page)).map((m) => m.id)).toEqual([`pr-${again.id}`])
   await page.goBack()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
 }
@@ -1353,7 +1369,7 @@ test("Back from the project's Agents, its shell remembered, scrolled as the link
   )
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/agents\\?shell=powershell$`))
   await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible()
-  await expect(page.getByText('The roles agents work as in this project.')).toBeVisible()
+  await expect(page.getByText('The roles agents work as.')).toBeVisible()
   await expectBackAt(page, project, left)
 })
 

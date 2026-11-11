@@ -21,6 +21,8 @@ import {
 } from './entrance'
 import { HttpError } from './http'
 import { getAccount, hasAccount, liveSession } from './passkeys'
+// Registers the entrance Settings saved as the one config.ts serves, before any request is admitted.
+import './tailnetEntrance'
 
 /**
  * Who a request is. The board signs people in itself (passkeys.ts, README: "Signing in"): the browser's
@@ -32,8 +34,8 @@ import { getAccount, hasAccount, liveSession } from './passkeys'
  * every request is the human; in test the X-Test-Actor header says who calls, and a request without it
  * is the human. In production and development that header is never read.
  *
- * An agent's role comes with its credential: the token's (worker unless the human made it an
- * orchestrator), in test the X-Test-Actor's. Nothing else an agent sends raises it. An agent may say
+ * An agent's role comes with its credential: the token's (an orchestrator unless the human made it a
+ * worker), in test the X-Test-Actor's. Nothing else an agent sends raises it. An agent may say
  * which of its own workers calls, `X-Agent-Name: <its name>/<worker>` (MCP: the `agentName` argument):
  * that sub-identity is a worker, whatever the token is (asSubIdentity).
  */
