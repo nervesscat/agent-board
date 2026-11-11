@@ -714,6 +714,33 @@ test('a PR to review lands on its card, whatever filter this browser remembers',
   expect(await page.evaluate(() => localStorage.getItem('prs.filter'))).toBe('others')
 })
 
+test('a link to a PR that Just me as reviewer hides lands on its card, with All PRs for the visit', async ({
+  page,
+  project,
+}) => {
+  // A PR for me to review that GitHub does not ask of me (a seeded row's default), below the fold.
+  const target = seedPr(project, { title: 'Not asked of me', updatedAt: '2026-01-01T00:00:00.000Z' })
+  for (let i = 0; i < 12; i++) seedPr(project, { title: `Queue filler ${i}` })
+  // From another page, so the link is a full load with the queue mounting on it.
+  await overview(page, project)
+  await page.evaluate(() => {
+    localStorage.setItem('prs.filter', 'me')
+    localStorage.setItem('prs.reviewer', 'mine')
+  })
+
+  // The remembered switch hides it, so the visit opens the side to every PR, as a filter that hides it
+  // does: the hash stays, and the card comes into view.
+  const card = page.locator(`#pr-${target.id}`)
+  await page.goto(`/projects/${project.id}/prs#pr-${target.id}`)
+  await expectRevealed(page, card, topBar(page))
+  await expect(card).toContainText('Not asked of me')
+  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(/[?&]reviewer=all(&|#|$)/)
+  await expect(page).toHaveURL(new RegExp(`#pr-${target.id}$`))
+  // Shown for this visit, not remembered.
+  expect(await page.evaluate(() => localStorage.getItem('prs.reviewer'))).toBe('mine')
+})
+
 /**
  * The PR queue visited once (its list now loaded), a filter that hides the PR picked there, then the
  * Overview's link to the PR: the list is drawn at once, then filtered as remembered, then switched to
@@ -751,7 +778,10 @@ async function reviewFromCachedQueue(page: Page, project: Project) {
   await next.click()
   await expect(page).toHaveURL(new RegExp(`filter=me#pr-${again.id}$`))
   await expect(page.getByRole('tab', { name: /^To review/ })).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByRole('tab', { name: /^All/ })).toHaveCount(0)
+  // The queued PR lands on To review with the switch it starts on: All PRs, since none was picked.
+  const filterRow = page.getByRole('tablist').filter({ has: page.getByRole('tab', { name: /^To review/ }) })
+  await expect(filterRow.getByRole('tab')).toHaveCount(2)
+  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveAttribute('aria-selected', 'true')
   const card = page.locator(`#pr-${again.id}`)
   await expectRevealed(page, card, topBar(page))
   await expect.poll(() => scrollY(page)).toBeGreaterThan(0)

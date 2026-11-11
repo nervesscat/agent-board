@@ -175,6 +175,9 @@ export const prs = sqliteTable(
     reviewDecision: text('review_decision'),
     // The human's standing review verdict (approved / changes_requested / commented), or `none`.
     myReview: text('my_review').notNull().default('none'),
+    // GitHub still asks me for a review (its `review-requested:@me` search found it): what the To
+    // review switch's Just me as reviewer narrows to. GitHub drops the request once the review is given.
+    requested: integer({ mode: 'boolean' }).notNull().default(false),
     // `me`: someone else's PR, for the human to review. `others`: the human authored it.
     waitingOn: text('waiting_on').$type<'me' | 'others'>().notNull().default('me'),
     // Where its reviews stand on GitHub as of the last refresh; a hold or a merge overrides it.
