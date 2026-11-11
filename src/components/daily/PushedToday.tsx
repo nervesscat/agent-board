@@ -15,16 +15,16 @@ const lines = (t: { added: number; removed: number }) => `+${t.added} −${t.rem
 
 /**
  * What reached origin today on the project's repos: green with the commits and lines when something
- * did, grey when nothing; the breakdown by repo, branch and ticket on demand. `compact` for the
- * project's sidebar, where it shows only on a day something was pushed.
+ * did, grey when nothing; the breakdown by repo, branch and ticket on demand. In the Daily page's
+ * header.
  */
-export function PushedTodayBadge({ projectId, compact = false }: { projectId: number; compact?: boolean }) {
+export function PushedTodayBadge({ projectId }: { projectId: number }) {
   const { data } = useQuery({
     queryKey: ['pushed-today', projectId],
     queryFn: () => get<PushedToday>(`/api/projects/${projectId}/pushed-today`),
     refetchInterval: 60_000,
   })
-  if (!data || (compact && !data.commits)) return null
+  if (!data) return null
   const pushed = data.commits > 0
   const label = pushed
     ? `Pushed today: ${plural(data.commits, 'commit')}, ${data.added} lines added, ${data.removed} removed`
@@ -37,7 +37,6 @@ export function PushedTodayBadge({ projectId, compact = false }: { projectId: nu
         data-pushed={pushed ? 'yes' : 'no'}
         className={cn(
           'inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          compact && 'mt-1',
           pushed
             ? 'border-emerald-600/40 bg-emerald-500/10 text-emerald-800 hover:bg-emerald-500/20 dark:border-emerald-400/40 dark:text-emerald-300'
             : 'text-muted-foreground hover:bg-muted',
