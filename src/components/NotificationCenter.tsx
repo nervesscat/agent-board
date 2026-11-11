@@ -41,16 +41,21 @@ export function NotificationCenter() {
     setOpen(next)
   }
 
-  // The previous poll's states, so an end is told apart from a job that was already over. The first
-  // read only remembers: a job that finished before the page opened is not news here.
-  const previous = useRef<Map<number, JobState['state']> | null>(null)
+  // The previous poll's states, per watched project, so an end is told apart from a job that was
+  // already over. The first read of a project only remembers: a job that finished before the page
+  // opened is not news here. A job that first shows up in a later poll already over still counts as
+  // an end, since its whole life can fit between two polls while another job keeps the poll going.
+  const previous = useRef<{ projectId: string; states: Map<number, JobState['state']> } | null>(null)
   useEffect(() => {
-    if (!data) return
-    const before = previous.current
-    previous.current = new Map(data.map((job) => [job.id, job.state]))
+    if (!data || !projectId) return
+    const before = previous.current?.projectId === projectId ? previous.current.states : null
+    previous.current = { projectId, states: new Map(data.map((job) => [job.id, job.state])) }
     if (!before || openRef.current) return
     for (const job of data) {
-      if (before.get(job.id) !== 'running' || job.state === 'running') continue
+      // Absent from the previous poll means it started since: its end is news even when this is the
+      // first poll to see it at all.
+      const was = before.get(job.id) ?? 'running'
+      if (was !== 'running' || job.state === 'running') continue
       if (job.state === 'failed') toast.error(`${job.title} failed`, { description: job.reason ?? undefined })
       else toast.success(`${job.title} finished`)
     }

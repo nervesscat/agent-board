@@ -148,6 +148,23 @@ test('a job that ends while the panel is closed raises a toast', async ({ page, 
   await expect(toast).toContainText('finished', { timeout: 15_000 })
 })
 
+test('a job started and ended between two polls raises a toast', async ({ page, project, human }) => {
+  // A long job keeps the panel polling, so the quick one below is first read when it is already over.
+  await startJob(human, project, { steps: 100, ms: 1000 })
+  await page.goto(`/projects/${project.id}`)
+
+  // Start the quick one right after a poll's answer arrived: the next poll is a second away, well
+  // after it ended, so no poll ever sees it running.
+  await page.waitForResponse((res) => res.url().endsWith(`/api/projects/${project.id}/jobs`) && res.ok())
+  const quick = await startJob(human, project, { steps: 1, ms: 0 })
+  await expect
+    .poll(async () => (await jobsOf(human, project)).find((job) => job.id === quick.id)?.state)
+    .toBe('succeeded')
+
+  const toast = page.locator('[data-sonner-toast]').filter({ hasText: quick.title })
+  await expect(toast).toContainText('finished', { timeout: 15_000 })
+})
+
 test('a job that ends while the panel is open raises no toast', async ({ page, project, human }) => {
   const job = await startJob(human, project, { steps: 4, ms: 700 })
   await page.goto(`/projects/${project.id}`)
