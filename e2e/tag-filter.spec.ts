@@ -42,6 +42,19 @@ async function expectBoundedAndScrolling(page: Page) {
   expect(popup!.height).toBeLessThan(b.viewport)
 }
 
+/** Where a control's box sits, and whether two of them overlap. */
+type Box = { x: number; y: number; width: number; height: number }
+const centreY = (b: Box) => b.y + b.height / 2
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+/** A control's box, or a failure saying it never laid out. */
+async function boxOf(el: Locator) {
+  const b = await el.boundingBox()
+  expect(b, 'the control is laid out').toBeTruthy()
+  return b as Box
+}
+const tablist = (page: Page) => page.getByRole('tablist')
+
 /** The tag filter's pages from the server; no `cursor` is the first. */
 const TAGS = '**/api/projects/*/tags?*'
 const cursorOf = (url: string) => new URL(url).searchParams.get('cursor') ?? ''
@@ -294,8 +307,9 @@ test('the tag filter works from the keyboard', async ({ page, project, api }) =>
   await api.ticket({ title: 'Styled', status: 'todo', tags: ['UI'] })
   await api.ticket({ title: 'Broken', status: 'todo', tags: ['Bug'] })
   await page.goto(`/projects/${project.id}/features?view=list`)
-  await page.getByRole('searchbox', { name: 'Search tickets' }).focus()
-  await page.keyboard.press('Tab')
+  // The tag filter leads the header row: one step back from the picked view's tab reaches it.
+  await page.getByRole('tab', { name: 'List' }).focus()
+  await page.keyboard.press('Shift+Tab')
   await expect(filter(page)).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(search(page)).toBeFocused()
@@ -319,8 +333,84 @@ test('the tag filter works from the keyboard', async ({ page, project, api }) =>
   await expect(page.getByText('Broken')).toBeVisible()
 })
 
+test('the tag filter sits in the header row beside the view switch, never inside it', async ({
+  page,
+  project,
+  api,
+}) => {
+  await api.ticket({ title: 'Styled', status: 'todo', tags: ['UI'] })
+  await api.ticket({ title: 'Broken', status: 'todo', tags: ['Bug'] })
+  await page.goto(`/projects/${project.id}/features?view=board&tag=UI`)
+  // The project's tags are still offered and the picked one still says how many it shows.
+  await expect(filter(page).locator('[data-slot="combobox-value"]')).toHaveText('UI')
+  await expect(page.getByText('1 ticket')).toBeVisible()
+  await expect(page.getByText('Broken')).toHaveCount(0)
+  await filter(page).click()
+  await expect(page.getByRole('option', { name: 'UI' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('option', { name: 'Bug' })).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // It shares the header row with the view switch and New ticket: their centres line up, in that
+  // order left to right, and it is not one of the switch's tabs.
+  const filterBox = await boxOf(filter(page))
+  const switchBox = await boxOf(tablist(page))
+  const newBox = await boxOf(page.getByRole('button', { name: 'New ticket' }))
+  expect(Math.abs(centreY(filterBox) - centreY(switchBox))).toBeLessThanOrEqual(4)
+  expect(Math.abs(centreY(filterBox) - centreY(newBox))).toBeLessThanOrEqual(4)
+  expect(filterBox.x + filterBox.width).toBeLessThanOrEqual(switchBox.x)
+  expect(switchBox.x + switchBox.width).toBeLessThanOrEqual(newBox.x)
+  await expect(tablist(page).getByRole('combobox', { name: 'Filter by tag' })).toHaveCount(0)
+
+  // The List keeps its search row and the tag still narrows it; the filter stays in the header row.
+  await page.getByRole('tab', { name: 'List' }).click()
+  await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible()
+  await expect(page.getByText('Styled')).toBeVisible()
+  await expect(page.getByText('Broken')).toHaveCount(0)
+  expect(
+    Math.abs(centreY(await boxOf(filter(page))) - centreY(await boxOf(tablist(page)))),
+  ).toBeLessThanOrEqual(4)
+
+  // Archived hides the filter and keeps its own search row.
+  await page.getByRole('tab', { name: /^Archived/ }).click()
+  await expect(filter(page)).toHaveCount(0)
+  await expect(page.getByRole('searchbox', { name: 'Search tickets' })).toBeVisible()
+  await expect(page.getByText('1 ticket')).toHaveCount(0)
+})
+
 test.describe('at 390px', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+  test('the header wraps without overlap: the tag filter and the view switch stay usable', async ({
+    page,
+    project,
+  }) => {
+    await page.goto(`/projects/${project.id}/features?view=board`)
+    const filterBox = await boxOf(filter(page))
+    const switchBox = await boxOf(tablist(page))
+    const newBox = await boxOf(page.getByRole('button', { name: 'New ticket' }))
+    // Each control is on screen whole, none of them over another.
+    for (const b of [filterBox, switchBox, newBox]) {
+      expect(b.x).toBeGreaterThanOrEqual(0)
+      expect(b.x + b.width).toBeLessThanOrEqual(390)
+    }
+    expect(overlaps(filterBox, switchBox)).toBe(false)
+    expect(overlaps(filterBox, newBox)).toBe(false)
+    expect(overlaps(switchBox, newBox)).toBe(false)
+    expect(await scrollsSideways(page)).toBe(false)
+    // Its label reads whole inside its trigger.
+    const label = await boxOf(filter(page).locator('[data-slot="combobox-value"]'))
+    expect(label.x).toBeGreaterThanOrEqual(filterBox.x)
+    expect(label.x + label.width).toBeLessThanOrEqual(filterBox.x + filterBox.width)
+
+    // Both are usable: the filter narrows the board, the switch changes the view.
+    await filter(page).click()
+    await page.getByRole('option', { name: 'UI' }).click()
+    await expect.poll(() => tagParam(page)).toBe('UI')
+    await expect(filter(page).locator('[data-slot="combobox-value"]')).toHaveText('UI')
+    await page.getByRole('tab', { name: 'List' }).click()
+    await expect(page).toHaveURL(/[?&]view=list(&|$)/)
+    expect(await scrollsSideways(page)).toBe(false)
+  })
 
   test('the open tag filter scrolls within the screen, without a sideways scroll', async ({
     page,

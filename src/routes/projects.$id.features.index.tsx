@@ -181,8 +181,8 @@ function Features() {
     : shown
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="sm:min-w-32 sm:flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Ongoing features</h1>
           <p className="text-sm text-muted-foreground">
             Tickets agents pick up. Each one carries its todo list, branch, workspaces, updates, a thread, and
@@ -191,7 +191,16 @@ function Features() {
             done or cancelled column can archive its tickets, which then wait under Archived.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:shrink-0">
+          {view !== 'archived' && (
+            <TagFilter
+              projectId={id}
+              // The rows on screen: those the search found, else the board's or the list's.
+              count={searching ? (found.data === undefined ? undefined : listed.length) : shown.length}
+              value={tag}
+              onChange={filterTag}
+            />
+          )}
           <Tabs value={view} onValueChange={(v) => pickView(v as View)}>
             <TabsList>
               <TabsTrigger value="board" aria-label="Board">
@@ -221,20 +230,8 @@ function Features() {
           onToggle={() => setOnlyUnpushed((v) => !v)}
         />
       )}
-      {view !== 'archived' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {view === 'list' && <TicketSearch q={q} onSearch={search} />}
-          <TagFilter
-            projectId={id}
-            // The rows on screen: those the search found, else the board's or the list's.
-            count={searching ? (found.data === undefined ? undefined : listed.length) : shown.length}
-            value={tag}
-            onChange={filterTag}
-          />
-        </div>
-      ) : (
-        <TicketSearch q={q} onSearch={search} />
-      )}
+      {/* The search of the List and the Archived tickets keeps its own row under the header. */}
+      {view !== 'board' && <TicketSearch q={q} onSearch={search} />}
       {searching ? (
         // A search not answered yet says nothing about its query: the rows kept from the last one
         // show, dimmed, or none narrowed by the line under the header, the skeleton.
