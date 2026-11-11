@@ -26,6 +26,7 @@ import {
   type StageKind,
   type FeedTab,
 } from '#/lib/constants'
+import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
 import type { RunType } from '#/lib/runs'
 
@@ -463,6 +464,9 @@ export const attachments = sqliteTable('attachments', {
   storedAs: text('stored_as').notNull(),
   uploadedBy: text('uploaded_by').notNull(),
   createdAt: now(),
+  // What was drawn on the picture before it was attached: the shapes and their notes, the file itself
+  // being the flattened picture. Null when nothing was drawn on it (an agent's upload included).
+  annotations: text({ mode: 'json' }).$type<AnnotationDoc>(),
 })
 
 export const reviewResults = sqliteTable(
