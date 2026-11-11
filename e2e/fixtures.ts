@@ -29,14 +29,37 @@ export async function ok<T>(res: APIResponse | Promise<APIResponse>): Promise<T>
 }
 
 /**
+ * How long to wait before each retry of a seeding call the board answered with a 5xx, in order. Only a
+ * 5xx is tried again: a 5xx means the board failed, not that the call was wrong, and a create that
+ * failed writes nothing (its ticket and rows land together). A 4xx, and a 5xx after the last retry, fail
+ * the test with the URL, the status and the body, exactly as `ok` does.
+ */
+const RETRY_AFTER_MS = [250, 750]
+
+/** `ok` for a seeding call, trying it again when the board answers a 5xx. */
+export async function okRetrying<T>(send: () => Promise<APIResponse>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    const r = await send()
+    const pause = RETRY_AFTER_MS[attempt]
+    if (r.status() < 500 || pause === undefined) {
+      expect(r.ok(), `${r.url()} answered ${r.status()}: ${await r.text()}`).toBe(true)
+      return (await r.json()) as T
+    }
+    await new Promise((wait) => setTimeout(wait, pause))
+  }
+}
+
+/**
  * A project of its own, pointing at the run's git repo, with its stages: the defaults, which the board
  * creates as they are first read.
  */
 export async function seedProject(human: APIRequestContext, name: string) {
   const { repoPath } = e2eEnv()
-  const created = await ok<{ id: number }>(human.post('/api/projects', { data: { name } }))
-  await ok<Repo>(human.post('/api/repos', { data: { projectId: created.id, repoPath, name: 'repo' } }))
-  const project = await ok<Project>(human.get(`/api/projects/${created.id}`))
+  const created = await okRetrying<{ id: number }>(() => human.post('/api/projects', { data: { name } }))
+  await okRetrying<Repo>(() =>
+    human.post('/api/repos', { data: { projectId: created.id, repoPath, name: 'repo' } }),
+  )
+  const project = await okRetrying<Project>(() => human.get(`/api/projects/${created.id}`))
   expect(project.stages.map((s) => s.key)).toEqual(
     expect.arrayContaining(['todo', 'in_progress', 'blocked', 'done']),
   )
@@ -142,8 +165,8 @@ export const test = base.extend<{
   api: async ({ human, project }, use) => {
     await use({
       ticket: (input) =>
-        ok<TicketFull>(human.post(`/api/projects/${project.id}/tickets`, { data: input })).then((t) =>
-          ok<TicketFull>(human.get(`/api/tickets/${t.id}`)),
+        okRetrying<TicketFull>(() => human.post(`/api/projects/${project.id}/tickets`, { data: input })).then(
+          (t) => okRetrying<TicketFull>(() => human.get(`/api/tickets/${t.id}`)),
         ),
       getTicket: (id) => ok<TicketFull>(human.get(`/api/tickets/${id}`)),
     })
