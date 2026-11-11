@@ -141,6 +141,8 @@ test('Settings > Agents: each token with its role, the Orchestrator switch, its 
     const subs = row.getByRole('list', { name: `Working under ${name}` })
     await expect(subs).toContainText(`${name}/helper`)
     await expect(subs).toContainText(/seen/)
+    // One worker: the list is short enough to show whole, with no button.
+    await expect(row.getByRole('button', { name: /Show the .* agents/ })).toHaveCount(0)
 
     const toggle = row.getByRole('switch', { name: `${name}: orchestrator` })
     await expect(toggle).toBeChecked()
@@ -191,6 +193,76 @@ test('Settings > Agents: each token with its role, the Orchestrator switch, its 
     )
   } finally {
     await Promise.all([self.dispose(), helper.dispose()])
+  }
+})
+
+test('Settings > Agents: a long worker list starts folded, its count in the header and the first few rows showing', async ({
+  page,
+  human,
+  playwright,
+  baseURL,
+}, info) => {
+  const name = `many-${info.workerIndex}-${Date.now() % 100_000}`
+  await ok(human.post('/api/agent-tokens', { data: { name } }))
+  // The token signs in, and nine of its subagents say who they are.
+  const worker = await as(playwright, baseURL, `agent:${name}`)
+  const subs = Array.from({ length: 9 }, (_, i) => `${name}/arena-${String(i + 1).padStart(2, '0')}`)
+  try {
+    for (const sub of subs) await ok(worker.get('/api/me', { headers: { 'X-Agent-Name': sub } }))
+
+    await page.goto('/settings')
+    const row = page
+      .getByRole('region', { name: 'Agent tokens' })
+      .getByRole('listitem', { name: `Agent ${name}` })
+    const list = row.getByRole('list', { name: `Working under ${name}` })
+    const rows = list.getByRole('listitem')
+    // The token is the identity the human manages: it stays visible, folded list or not.
+    await expect(row.getByRole('switch', { name: `${name}: orchestrator` })).toBeVisible()
+    await expect(row.getByRole('button', { name: `Revoke ${name}` })).toBeVisible()
+    // Its header carries how many workers it has; the first three show, in name order.
+    const header = row.getByRole('heading', { name: new RegExp(`Working under ${name}`) })
+    await expect(header).toContainText(String(subs.length))
+    await expect(rows).toHaveCount(3)
+    for (const [i, sub] of subs.slice(0, 3).entries()) await expect(rows.nth(i)).toContainText(sub)
+
+    // One icon-only toggle, named for what it reveals, and it is the list's control: an eye with the
+    // same filled background the hiding state has, never bare text.
+    const more = row.getByRole('button', { name: `Show the ${subs.length} agents` })
+    await expect(more).toHaveAttribute('aria-expanded', 'false')
+    await expect(more).toHaveAttribute('aria-controls', (await list.getAttribute('id'))!)
+    await expect(more).toHaveText('')
+    await expect(more.locator('svg.lucide-eye')).toHaveCount(1)
+    await expect(more.locator('svg.lucide-eye-off')).toHaveCount(0)
+    await expectTooltip(more, `Show the ${subs.length} agents`)
+    // The fill is the point: the toggle carries a background in both states, the same filled variant
+    // the hiding state showed, so only the eye tells them apart.
+    const fill = async (el: Locator) => {
+      await page.mouse.move(0, 0)
+      return el.evaluate((n) => getComputedStyle(n).backgroundColor)
+    }
+    expect(await fill(more)).not.toBe('rgba(0, 0, 0, 0)')
+    await expect(more).toHaveClass(/(?:^|\s)bg-secondary(?:\s|$)/)
+    // The folded list does not scroll on its own: the page does.
+    expect(await list.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true)
+
+    // Keyboard too: focus the button and press Enter, and the rest show; the eye gains its line.
+    await more.focus()
+    await page.keyboard.press('Enter')
+    await expect(rows).toHaveCount(subs.length)
+    for (const [i, sub] of subs.entries()) await expect(rows.nth(i)).toContainText(sub)
+    const hide = row.getByRole('button', { name: 'Hide the agents' })
+    await expect(hide).toHaveAttribute('aria-expanded', 'true')
+    await expect(hide.locator('svg.lucide-eye-off')).toHaveCount(1)
+    await expect(hide.locator('svg.lucide-eye')).toHaveCount(0)
+    // The same button, filled the same way; the icon alone says which way it goes.
+    expect(await fill(hide)).not.toBe('rgba(0, 0, 0, 0)')
+    await expect(hide).toHaveClass(/(?:^|\s)bg-secondary(?:\s|$)/)
+    await expect(hide.getByText('Hide')).toHaveCount(0)
+    await hide.click()
+    await expect(rows).toHaveCount(3)
+    await expect(more).toBeVisible()
+  } finally {
+    await worker.dispose()
   }
 })
 
@@ -251,6 +323,51 @@ test.describe('on a phone', () => {
       expect(await scrollsSideways(page)).toBe(false)
     } finally {
       await Promise.all([sub.dispose(), orch.dispose()])
+    }
+  })
+
+  test('a long worker list folds to a few rows and unfolds on a phone, never scrolling sideways', async ({
+    page,
+    human,
+    playwright,
+    baseURL,
+  }, info) => {
+    const name = `ph-${info.workerIndex}-${Date.now() % 100_000}`.slice(0, 40)
+    await ok(human.post('/api/agent-tokens', { data: { name } }))
+    const worker = await as(playwright, baseURL, `agent:${name}`)
+    const subs = Array.from(
+      { length: 12 },
+      (_, i) => `${name}/worker-with-a-long-name-${String(i + 1).padStart(2, '0')}`,
+    )
+    try {
+      for (const sub of subs) await ok(worker.get('/api/me', { headers: { 'X-Agent-Name': sub } }))
+
+      await page.goto('/settings')
+      const row = page
+        .getByRole('region', { name: 'Agent tokens' })
+        .getByRole('listitem', { name: `Agent ${name}` })
+      const rows = row.getByRole('list', { name: `Working under ${name}` }).getByRole('listitem')
+      await expect(rows).toHaveCount(3)
+      expect(await scrollsSideways(page)).toBe(false)
+      // The icon-only toggle fits the phone's width, and the unfolded state swaps its eye for eye-off.
+      const more = row.getByRole('button', { name: `Show the ${subs.length} agents` })
+      await more.scrollIntoViewIfNeeded()
+      const box = (await more.boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(390)
+      await expect(more.locator('svg.lucide-eye')).toHaveCount(1)
+      await more.click()
+      await expect(rows).toHaveCount(subs.length)
+      await expect(
+        row.getByRole('button', { name: 'Hide the agents' }).locator('svg.lucide-eye-off'),
+      ).toHaveCount(1)
+      // Unfolded, the first three rows are told apart from the rest.
+      await expect(rows.nth(0)).toContainText(subs[0])
+      await expect(rows.nth(11)).toContainText(subs[11])
+      expect(await scrollsSideways(page)).toBe(false)
+      await page.screenshot({ path: test.info().outputPath('worker-list-unfolded-390.png') })
+    } finally {
+      await worker.dispose()
     }
   })
 

@@ -164,7 +164,8 @@ commands**, and copy the MCP setup and skill install lines, which carry it
   Make a token a **worker** with its switch in Settings, **Agents**, or when it is made (`POST
 /api/agent-tokens` takes `role`: `worker`); only the human's calls change a role (an agent gets 403,
   whatever it sends). Settings, Agent tokens lists each token with its
-  role, when it was last used, **Revoke**, and the sub-identities seen under it.
+  role, when it was last used, **Revoke**, and the sub-identities seen under it, the first few shown and
+  the rest behind an eye button (one with a line once they are shown).
 - **Sub-identities.** An agent says which of its own workers makes a call with
   `X-Agent-Name: <token name>/<name>` (MCP: the `agentName` argument every tool takes): up to 4 names
   and 80 characters, each a letter or digit, then letters, digits, `.`, `_` or `-`. The call is then
