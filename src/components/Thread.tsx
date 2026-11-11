@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Actor } from '#/components/Actor'
+import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
 import { Attachments } from '#/components/Attachments'
 import { cn } from '#/lib/utils'
 import { PendingFiles, useFileDrop } from '#/components/PendingFiles'
@@ -12,6 +13,7 @@ import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostToo
 import { RichEditor } from '#/components/RichEditor'
 import { Button } from '#/components/ui/button'
 import { del, errorMessage, get, patch, post, upload, type CommentRow } from '#/lib/api'
+import { annotationsOf } from '#/lib/annotations'
 import { ago } from '#/lib/format'
 import { useProjectAgents } from '#/lib/project'
 
@@ -135,13 +137,15 @@ export function Thread({
   const [body, setBody] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const fileInput = useRef<HTMLInputElement>(null)
-  const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
+  // A picture opens the canvas before it joins the reply's files; the rest go straight in.
+  const annotate = useAnnotations((added) => setFiles((prev) => [...prev, ...added]))
+  const drop = useFileDrop(annotate.add)
   const agents = useProjectAgents()
   const ask = agents.length ? ` · @${agents[0]!.name} asks that agent` : ''
 
   const send = useMutation({
     mutationFn: async () => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
+      const attachmentIds = await Promise.all(files.map((f) => upload(f, annotationsOf(f)).then((a) => a.id)))
       return post('/api/comments', { parentType, parentId, replyTo, body, attachmentIds })
     },
     onSuccess: () => {
@@ -180,7 +184,7 @@ export function Thread({
         <RichEditor
           value={body}
           onChange={setBody}
-          onFiles={(added) => setFiles((prev) => [...prev, ...added])}
+          onFiles={annotate.add}
           onAttach={() => fileInput.current?.click()}
           onSubmit={() => body.trim() && !send.isPending && send.mutate()}
           minHeight={compact ? 'min-h-12' : 'min-h-20'}
@@ -194,7 +198,8 @@ export function Thread({
             multiple
             hidden
             onChange={(e) => {
-              setFiles([...files, ...Array.from(e.target.files ?? [])])
+              const picked = Array.from(e.target.files ?? [])
+              if (picked.length) annotate.add(picked)
               // Clear it, so picking a file that was just removed registers again.
               e.target.value = ''
             }}
@@ -205,6 +210,13 @@ export function Thread({
           </Button>
         </div>
       </form>
+      <AnnotateImage
+        file={annotate.current}
+        onAttach={annotate.attach}
+        onAttachOriginal={annotate.attachOriginal}
+        onCancel={annotate.cancel}
+        finalFocus={annotate.finalFocus}
+      />
     </div>
   )
 }

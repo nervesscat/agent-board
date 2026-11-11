@@ -17,6 +17,7 @@ import type {
   Workspace,
   Activity,
 } from '#/db/schema'
+import type { AnnotationDoc } from '#/lib/annotations'
 import type { ReportStatus } from '#/lib/reports'
 import type { PushedToday } from '#/server/pushedToday'
 import type { ReportDue } from '#/server/reportDue'
@@ -188,9 +189,17 @@ export const patch = <T>(url: string, body?: unknown) => request<T>(url, jsonIni
 export const put = <T>(url: string, body?: unknown) => request<T>(url, jsonInit('PUT', body))
 export const del = <T>(url: string) => request<T>(url, jsonInit('DELETE'))
 
-export function upload(file: File): Promise<Attachment & { url: string }> {
+/**
+ * Sends a file; with `annotations`, the document the canvas drew on it, so the attachment keeps both
+ * the flattened picture and the notes that explain it.
+ */
+export function upload(
+  file: File,
+  annotations?: AnnotationDoc | null,
+): Promise<Attachment & { url: string }> {
   const form = new FormData()
   form.append('file', file)
+  if (annotations) form.append('annotations', JSON.stringify(annotations))
   return request('/api/uploads', { method: 'POST', body: form })
 }
 

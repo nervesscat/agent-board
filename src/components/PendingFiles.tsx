@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { galleryItem } from '#/components/Gallery'
 import { Tip } from '#/components/ui/tooltip'
+import { annotationsOf } from '#/lib/annotations'
 import { errorMessage, upload } from '#/lib/api'
 import { fileSize } from '#/lib/format'
 import { cn } from '#/lib/utils'
@@ -176,7 +177,7 @@ export function useFileDrop(add: (files: File[]) => void) {
  * Files uploaded as soon as they are added, for a form whose owner does not exist yet (a new
  * ticket): `ids` are the uploads to send along with it, `uploading` is true until every one has
  * arrived. A file that fails to upload is dropped with a toast. Uploads that are removed or never
- * sent stay on the server unattached.
+ * sent stay on the server unattached. A picture the canvas flattened goes with the notes drawn on it.
  */
 export function useUploads() {
   // Kept apart, so the list (and its thumbnails) changes only when files are added or removed.
@@ -186,7 +187,7 @@ export function useUploads() {
     const picked = added.map(named)
     setFiles((prev) => [...prev, ...picked])
     for (const file of picked)
-      upload(file).then(
+      upload(file, annotationsOf(file)).then(
         (a) => setIds((prev) => new Map(prev).set(file, a.id)),
         (err) => {
           toast.error(`${file.name}: ${errorMessage(err)}`)

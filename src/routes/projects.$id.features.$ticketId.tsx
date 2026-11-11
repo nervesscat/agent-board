@@ -39,6 +39,7 @@ import {
 import { toast } from 'sonner'
 
 import { Actor, useActorKinds } from '#/components/Actor'
+import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
 import { ComplexitySelect } from '#/components/Complexity'
 import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
@@ -83,6 +84,7 @@ import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { autoPhaseOf, autoPhaseTip } from '#/lib/autoPhases'
+import { annotationsOf } from '#/lib/annotations'
 import { WorkTimelineCard } from '#/components/WorkTimelineCard'
 import {
   del,
@@ -694,7 +696,7 @@ function Instructions({
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const attach = useMutation({
     mutationFn: async (files: File[]) => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
+      const attachmentIds = await Promise.all(files.map((f) => upload(f, annotationsOf(f)).then((a) => a.id)))
       return post(`/api/tickets/${t.id}/attachments`, { attachmentIds })
     },
     onSuccess: onChange,
@@ -705,7 +707,9 @@ function Instructions({
     onSuccess: onChange,
     onError,
   })
-  const drop = useFileDrop((files) => attach.mutate(files))
+  // A picture opens the canvas before it is attached; the rest go straight on.
+  const annotate = useAnnotations((files) => attach.mutate(files))
+  const drop = useFileDrop(annotate.add)
   const open = () => {
     setBody(t.body)
     setEditing(true)
@@ -730,7 +734,7 @@ function Instructions({
             hidden
             onChange={(e) => {
               const files = Array.from(e.target.files ?? [])
-              if (files.length) attach.mutate(files)
+              if (files.length) annotate.add(files)
               e.target.value = ''
             }}
           />
@@ -751,7 +755,7 @@ function Instructions({
           <RichEditor
             value={body}
             onChange={setBody}
-            onFiles={(files) => attach.mutate(files)}
+            onFiles={(files) => annotate.add(files)}
             onAttach={() => fileInput.current?.click()}
             attaching={attach.isPending}
             onSubmit={save}
@@ -829,6 +833,13 @@ function Instructions({
           </ul>
         </div>
       )}
+      <AnnotateImage
+        file={annotate.current}
+        onAttach={annotate.attach}
+        onAttachOriginal={annotate.attachOriginal}
+        onCancel={annotate.cancel}
+        finalFocus={annotate.finalFocus}
+      />
     </section>
   )
 }
@@ -1825,7 +1836,9 @@ function Activity({
   const [files, setFiles] = useState<File[]>([])
   const [tab, setTab] = useState<FeedTab>('main')
   const fileInput = useRef<HTMLInputElement>(null)
-  const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
+  // A picture opens the canvas before it joins the post's files; the rest go straight in.
+  const annotate = useAnnotations((added) => setFiles((prev) => [...prev, ...added]))
+  const drop = useFileDrop(annotate.add)
 
   // A link to a post (or to a reply under one) in the other tab opens that tab, once per link.
   const anchor = useContext(ShownAnchor)
@@ -1840,7 +1853,7 @@ function Activity({
 
   const send = useMutation({
     mutationFn: async () => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
+      const attachmentIds = await Promise.all(files.map((f) => upload(f, annotationsOf(f)).then((a) => a.id)))
       // Said outright: the API makes a post progress unless told otherwise, as agents post.
       return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress: false, tab })
     },
@@ -1912,7 +1925,7 @@ function Activity({
         <RichEditor
           value={body}
           onChange={setBody}
-          onFiles={(added) => setFiles((prev) => [...prev, ...added])}
+          onFiles={annotate.add}
           onAttach={() => fileInput.current?.click()}
           onSubmit={submit}
           label="New post"
@@ -1929,7 +1942,8 @@ function Activity({
             multiple
             hidden
             onChange={(e) => {
-              setFiles([...files, ...Array.from(e.target.files ?? [])])
+              const picked = Array.from(e.target.files ?? [])
+              if (picked.length) annotate.add(picked)
               // Clear it, so picking a file that was just removed registers again.
               e.target.value = ''
             }}
@@ -1940,6 +1954,13 @@ function Activity({
           </Button>
         </div>
       </form>
+      <AnnotateImage
+        file={annotate.current}
+        onAttach={annotate.attach}
+        onAttachOriginal={annotate.attachOriginal}
+        onCancel={annotate.cancel}
+        finalFocus={annotate.finalFocus}
+      />
       {feed.length === 0 ? (
         <Empty>
           {t.updates.length === 0

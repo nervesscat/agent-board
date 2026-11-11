@@ -1,6 +1,6 @@
 import zlib from 'node:zlib'
 
-import type { Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
 
 /** A real PNG of one color, `size` pixels square: a browser decodes it, so a thumbnail of it is not broken. */
 export function png(size = 8, [r, g, b] = [220, 40, 40]): Buffer {
@@ -79,4 +79,37 @@ export async function sendFile(
     },
     { how, name: file.name, mime: file.mime, base64: file.data.toString('base64') },
   )
+}
+
+/** The canvas a picture opens on its way into a form. */
+export const canvasOf = (page: Page) => page.getByRole('dialog', { name: 'Annotate image' })
+
+/**
+ * Waits for the annotation canvas a picture opens and hands the file over as it was picked, the way a
+ * test that only cares about the attach point gets past it. With more pictures queued behind it the
+ * canvas stays open on the next one; it closes after the last.
+ */
+export async function attachOriginal(page: Page) {
+  const canvas = canvasOf(page)
+  await canvas.waitFor()
+  // The picture on the canvas, by the name in its description; '' when it has none (on its way out).
+  const name = async () => {
+    if (!(await canvas.count())) return null
+    const text = await canvas
+      .locator('[data-slot="dialog-description"]')
+      .innerText()
+      .catch(() => '')
+    const at = text.indexOf(':')
+    return at > 0 ? text.slice(0, at + 1) : ''
+  }
+  const was = await name()
+  // A canvas on its way out shows no name, which is not the next picture: that reads as unchanged
+  // until it has left the page, so the next step never runs against a dialog still fading out.
+  const shown = async () => {
+    const now = await name()
+    if (now === null) return null
+    return now || was
+  }
+  await canvas.getByRole('button', { name: 'Attach original', exact: true }).click()
+  await expect.poll(shown).not.toBe(was)
 }
