@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, placeInColumn, stageColumn } from '#/lib/stages'
@@ -610,48 +611,60 @@ export function createTicket(
       ? resolveStage(stages, input.status, projectWorkStage(projectId, stages))
       : startStage(stages)
   ).key
-  const row = db
-    .insert(schema.tickets)
-    .values({
-      projectId,
-      repoId: repo.id,
-      parentId: parent?.id ?? null,
-      title: input.title,
-      body: input.body ?? '',
-      status,
-      ...startedPatch(stages, null, status),
-      // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
-      complexity: input.complexity ?? parent?.complexity ?? DEFAULT_COMPLEXITY,
-      assignee: input.assignee ?? '',
-      branch: input.branch ?? '',
-      baseBranch,
-      tags: cleanTags(input.tags ?? []),
-      prNumber: input.prNumber ?? null,
-      createdBy: actor,
-      // Seeded with the phases in effect now: Merged is not added to it later.
-      mergedPhaseChecked: true,
-    })
-    .returning()
-    .get()
-  syncPrimaryRow(row)
-  if (input.repos) writeOtherRepos(row.id, resolveTicketRepos(row, input.repos))
-  noteStageMove(row.id, null, row.status)
-  if (row.prNumber) noteBoardEvent(row.id, 'pr', { note: `PR #${row.prNumber}` })
-  if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
-  if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
-  if (parent) touch(parent.id)
-  logActivity({
-    projectId,
-    actor,
-    kind: 'ticket',
-    text: parent
-      ? `opened lane #${row.id} ${row.title} under #${parent.id} ${parent.title}`
-      : `created ticket #${row.id} ${row.title}`,
-    refType: 'ticket',
-    refId: row.id,
-  })
-  if (row.prNumber || row.branch) takeOverPrTickets(row, actor)
-  return row
+  // The ticket and everything a create writes with it land together, and a create that lost the
+  // database's write lock to another connection tries again rather than answering a 500: neither a
+  // burst of creates nor a failed one leaves a ticket without its rows or its rows without a ticket.
+  // `IMMEDIATE` takes the lock before the first read, so a competing writer is waited out instead of
+  // making the transaction's snapshot stale.
+  return retryWhileLocked(() =>
+    db.transaction(
+      () => {
+        const row = db
+          .insert(schema.tickets)
+          .values({
+            projectId,
+            repoId: repo.id,
+            parentId: parent?.id ?? null,
+            title: input.title,
+            body: input.body ?? '',
+            status,
+            ...startedPatch(stages, null, status),
+            // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
+            complexity: input.complexity ?? parent?.complexity ?? DEFAULT_COMPLEXITY,
+            assignee: input.assignee ?? '',
+            branch: input.branch ?? '',
+            baseBranch,
+            tags: cleanTags(input.tags ?? []),
+            prNumber: input.prNumber ?? null,
+            createdBy: actor,
+            // Seeded with the phases in effect now: Merged is not added to it later.
+            mergedPhaseChecked: true,
+          })
+          .returning()
+          .get()
+        syncPrimaryRow(row)
+        if (input.repos) writeOtherRepos(row.id, resolveTicketRepos(row, input.repos))
+        noteStageMove(row.id, null, row.status)
+        if (row.prNumber) noteBoardEvent(row.id, 'pr', { note: `PR #${row.prNumber}` })
+        if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
+        if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
+        if (parent) touch(parent.id)
+        logActivity({
+          projectId,
+          actor,
+          kind: 'ticket',
+          text: parent
+            ? `opened lane #${row.id} ${row.title} under #${parent.id} ${parent.title}`
+            : `created ticket #${row.id} ${row.title}`,
+          refType: 'ticket',
+          refId: row.id,
+        })
+        if (row.prNumber || row.branch) takeOverPrTickets(row, actor)
+        return row
+      },
+      { behavior: 'immediate' },
+    ),
+  )
 }
 
 /**
