@@ -73,6 +73,7 @@ import * as reviews from './reviews'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
+import * as skillTokens from './skillTokens'
 import * as tokens from './tokens'
 import { changeUpdateSettings, checkForUpdates, installUpdate, updatesState } from './updates'
 import { getSummary } from './summary'
@@ -267,6 +268,27 @@ api.get('/api/agent-setup/review-skills/diff', async ({ url }) => {
   const repo = url.searchParams.get('repoId')
   const diff = await agents.reviewSkillDiff(file, repo === null ? undefined : intParam(repo, 'repoId'))
   return Response.json(diff, { headers: { 'cache-control': 'no-store' } })
+})
+// A short-lived credential for the install lines, minted when one is copied: it downloads the board skill
+// and the review bundle, and reaches no other route (auth.ts admit). The human's alone.
+api.post('/api/agent-setup/skill-token', ({ request }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human makes a skill download token')
+  return json(skillTokens.mintSkillToken(), 201)
+})
+// Writes the skills on this machine, with node:fs, under the home the board runs as (the board skill) and
+// CLAUDE_HOME (the review bundle): no shell, and the human's alone.
+const InstallBody = z.object({
+  client: z.enum(AGENT_CLIENTS).optional(),
+  kind: z.enum(['skill', 'review-skills']),
+})
+api.post('/api/agent-setup/skill/install', async ({ request }) => {
+  if (isAgent(request)) throw new HttpError(403, 'only the human installs the skills on this machine')
+  const { client, kind } = await readJson(request, InstallBody)
+  if (kind === 'skill') {
+    if (!client) throw new HttpError(400, 'client is required to install the board skill')
+    return json(await agents.installSkill(client))
+  }
+  return json(await agents.installReviewSkills())
 })
 api.get('/api/settings', () => json(agents.getSettings()))
 api.patch('/api/settings', async ({ request }) => {
