@@ -27,6 +27,7 @@ import { Tip, TooltipProvider } from '#/components/ui/tooltip'
 import { get, type Me } from '#/lib/api'
 import { KEY_ENTRIES } from '#/lib/reveal'
 import { followTheme } from '#/lib/theme'
+import { useHydrated } from '#/lib/useHydrated'
 import appCss from '#/styles.css?url'
 
 interface RouterContext {
@@ -150,7 +151,9 @@ function App() {
 /** Outside production sign-in can be off: say so, so no screenshot is ever taken for the live board. */
 function AuthOffBadge() {
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
-  if (!me?.authOff) return null
+  // Read after mount: /api/me can answer before React has hydrated the top bar.
+  const hydrated = useHydrated()
+  if (!hydrated || !me?.authOff) return null
   return (
     <Tip content={`BOARD_ENV=${me.boardEnv}, sign-in off: signed in as ${me.actor}. Not the live board.`}>
       <Badge variant="destructive" className="shrink-0 uppercase">
