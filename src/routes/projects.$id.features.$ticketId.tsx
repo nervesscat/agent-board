@@ -22,7 +22,6 @@ import {
   RefreshCw,
   Scale,
   ScrollText,
-  Trash2,
   TriangleAlert,
   X,
 } from 'lucide-react'
@@ -56,6 +55,7 @@ import { PrState } from '#/components/PrState'
 import type { FeedTab } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
+import { TrashIcon } from '#/components/TrashIcon'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
@@ -450,7 +450,7 @@ function TicketPage() {
           {!t.prId && (
             <AlertDialog>
               <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
-                <Trash2 />
+                <TrashIcon />
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>

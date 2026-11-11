@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useParams } from '@tanstack/react-router'
-import { Check, ChevronsUpDown, FolderGit2, Plus, Settings2, Trash2 } from 'lucide-react'
+import { Check, ChevronsUpDown, FolderGit2, Plus, Settings2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { TrashIcon } from '#/components/TrashIcon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -271,7 +272,7 @@ function ProjectRowEditor({ p, onDeleted }: { p: ProjectRow; onDeleted: () => vo
             <AlertDialogTrigger
               render={<Button type="button" variant="ghost" size="icon-sm" aria-label={`Delete ${p.name}`} />}
             >
-              <Trash2 className="text-destructive" />
+              <TrashIcon />
             </AlertDialogTrigger>
           </Tip>
           <AlertDialogContent>

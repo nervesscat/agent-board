@@ -361,3 +361,38 @@
     box-shadow: 0 0 0 4px var(--revealed);
   }
 }
+
+/*
+ * The trash icon (components/TrashIcon.tsx) on every delete button: neutral at rest, the theme's
+ * destructive red while its button is hovered or keyboard-focused, with its lid tilted open. Both
+ * live here, not at the buttons, so every delete button gets them from the same place. The hook is
+ * the button element, not a `data-slot`: a dialog trigger takes its own slot name but is still a
+ * button. Only the lid group moves; the can and the button keep their box, so nothing shifts.
+ */
+.trash-icon {
+  transition: color 150ms ease-out;
+}
+.trash-icon .trash-icon-lid {
+  transform-box: view-box;
+  transform-origin: 12px 6px;
+  transition: transform 180ms ease-out;
+}
+button:hover:not(:disabled) .trash-icon,
+button:focus-visible .trash-icon {
+  color: var(--destructive);
+}
+button:hover:not(:disabled) .trash-icon .trash-icon-lid,
+button:focus-visible .trash-icon .trash-icon-lid {
+  transform: rotate(-16deg);
+}
+/* Still red without motion, just not moving. */
+@media (prefers-reduced-motion: reduce) {
+  .trash-icon,
+  .trash-icon .trash-icon-lid {
+    transition: none;
+  }
+  button:hover:not(:disabled) .trash-icon .trash-icon-lid,
+  button:focus-visible .trash-icon .trash-icon-lid {
+    transform: none;
+  }
+}
