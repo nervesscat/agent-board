@@ -16,6 +16,9 @@ const sectionTab = (page: Page, name: string) => sections(page).getByRole('tab',
 const headerBox = (page: Page) => box(ticketHeader(page))
 const nextTicket = (page: Page) => ticketHeader(page).getByRole('link', { name: /^Next ticket in / })
 
+/** A stage name at the length a project takes it (40 characters), in capitals: the widest it gets. */
+const LONG_STAGE = "WAITING FOR THE CLIENT'S FINAL APPROVAL"
+
 /** Points over the target's top strip: what a jump brings just under the header. */
 const coveredAtTop = (l: Locator, height = 24) =>
   l.evaluate((el, height) => {
@@ -206,6 +209,57 @@ test.describe('on a phone', () => {
       ),
     ).toBe(true)
     expect((await headerBox(page)).height).toBeLessThan(page.viewportSize()!.height / 3)
+  })
+
+  test('a stage name at the character limit wraps in the steps instead of widening the page', async ({
+    page,
+    api,
+    human,
+    project,
+  }) => {
+    await api.ticket({ title: 'An earlier ticket in the same stage', status: 'in_progress' })
+    const t = await longTicket(api, human, 'Sections beside a long stage name')
+    await api.ticket({ title: 'A later ticket in the same stage', status: 'in_progress' })
+    // As long as a stage name may be, in capitals: wide letters, with no room to spare in the row.
+    const stage = project.stages.find((s) => s.kind === 'active')!
+    await ok(human.patch(`/api/projects/${t.projectId}/stages/${stage.id}`, { data: { name: LONG_STAGE } }))
+
+    await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
+    const label = ticketHeader(page).getByText(/of \d+ in WAITING FOR THE CLIENT'S FINAL APPROVAL/)
+    const tabs = sections(page)
+    const next = nextTicket(page)
+    await expect(label).toBeVisible()
+    await expect(tabs).toBeVisible()
+    await expect(next).toBeInViewport()
+
+    // The row wraps its label rather than pushing the step control past the page's edge.
+    const widths = await page.evaluate(() => ({
+      client: document.documentElement.clientWidth,
+      scroll: document.documentElement.scrollWidth,
+    }))
+    expect(widths.scroll).toBe(widths.client)
+
+    // Both stay in the header's step row, inside the page, with the selector still left of the steps.
+    const header = await headerBox(page)
+    const tabsBox = await box(tabs)
+    const nextBox = await box(next)
+    for (const b of [tabsBox, nextBox]) {
+      expect(b.y).toBeGreaterThanOrEqual(header.y)
+      expect(b.y + b.height).toBeLessThanOrEqual(header.y + header.height + 1)
+      expect(b.x + b.width).toBeLessThanOrEqual(header.x + header.width)
+    }
+    expect(Math.abs(tabsBox.y - nextBox.y)).toBeLessThanOrEqual(8)
+    expect(tabsBox.x + tabsBox.width).toBeLessThanOrEqual(nextBox.x)
+    // The label gives way, not the buttons: they keep a full tap target beside it.
+    expect(nextBox.width).toBeGreaterThanOrEqual(24)
+    expect(nextBox.height).toBeGreaterThanOrEqual(24)
+
+    // The strip is still usable: it scrolls to a tab, which lands on its section.
+    const tasks = sectionTab(page, 'Tasks')
+    await tasks.scrollIntoViewIfNeeded()
+    await tasks.click()
+    await expect(tasks).toHaveAttribute('aria-selected', 'true')
+    await expectLanded(page, page.locator('#tasks'))
   })
 })
 

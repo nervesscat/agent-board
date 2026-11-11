@@ -479,11 +479,13 @@ function TicketPage() {
         {/* The section selector and the step controls share this row, riding in the sticky header: the
               page can scroll past the breadcrumb, but its sections and going to the previous or next
               ticket stay one click away. The row keeps its height while the board or the parent ticket
-              loads, so the header does not grow under a heading the page has already scrolled to. */}
+              loads, so the header does not grow under a heading the page has already scrolled to. The
+              steps shrink with the row, their label wrapping, and never take it past the page's edge,
+              however long the stage's name is. */}
         {(main.length > 0 || !t.prId) && (
           <div className="-mt-1 flex min-h-7 w-full items-center gap-2 text-xs">
             {main.length > 0 && <TicketSectionNav hasSummary={Boolean(t.summary)} />}
-            <div className="ml-auto flex shrink-0 items-center gap-2">
+            <div className="ml-auto flex items-center gap-2">
               {!t.prId && parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
               {!t.prId && !t.parentId && board && (
                 <StageNav
@@ -1543,7 +1545,7 @@ function StepNav({
           params={{ id: projectId, ticketId: String(to.id) }}
           search={search}
           state={state}
-          className="inline-flex size-7 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
           aria-label={`${dir === 'prev' ? 'Previous' : 'Next'} ${noun}`}
           aria-keyshortcuts={dir === 'prev' ? '[' : ']'}
         >
@@ -1551,7 +1553,7 @@ function StepNav({
         </Link>
       </Tip>
     ) : (
-      <span className="inline-flex size-7 items-center justify-center rounded-md border opacity-40">
+      <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border opacity-40">
         {icon}
       </span>
     )
@@ -1980,7 +1982,8 @@ const SECTION_ITEMS = [
 /**
  * The ticket's sections, one tap away on a phone instead of a long scroll. It rides in the ticket
  * header's step row: at a narrow width the strip scrolls within itself instead of wrapping onto a
- * second line, which would make the stuck header taller.
+ * second line, which would make the stuck header taller. It takes its tabs' width as its share of the
+ * row, so the steps beside it keep their own, and the two shrink together when the row is too narrow.
  */
 function TicketSectionNav({ hasSummary }: { hasSummary: boolean }) {
   const [active, setActive] = useState('summary')
@@ -1989,7 +1992,7 @@ function TicketSectionNav({ hasSummary }: { hasSummary: boolean }) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   return (
-    <div className="-my-1 flex min-w-0 flex-1 overflow-x-auto py-1">
+    <div className="-my-1 flex min-w-0 flex-auto overflow-x-auto py-1">
       <Tabs value={active} onValueChange={(v) => go(String(v))}>
         <TabsList aria-label="Ticket sections" className="w-max">
           {SECTION_ITEMS.filter((s) => s.key !== 'summary' || hasSummary).map((s) => (
