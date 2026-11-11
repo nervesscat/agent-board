@@ -1,8 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
-import { startedAt, yesterdayNoon } from './db'
-import { expect, expectTooltip, ok, section, test } from './fixtures'
-import { box, coveredAt, feedDrawn, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
+import { expect, test } from './fixtures'
+import { box, coveredAt, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
 
 const title = (page: Page) => page.getByRole('heading', { level: 1 })
 
@@ -158,30 +157,6 @@ test('renames the ticket from the stuck title, and the status changes from the s
   expect(await page.evaluate(() => window.scrollY)).toBe(end)
 })
 
-/** Asserts "Resume here" was scrolled to, and shows below the stuck header rather than under it. */
-async function expectResumeInView(page: Page) {
-  const heading = page
-    .getByRole('region', { name: 'Resume here' })
-    .getByRole('heading', { name: 'Resume here' })
-  await expect(heading).toBeInViewport()
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
-  const header = await box(ticketHeader(page))
-  expect((await box(heading)).y).toBeGreaterThanOrEqual(header.y + header.height)
-  expect(await coveredAt(heading)).toEqual([])
-}
-
-test('a link to #resume shows the resume note below the stuck header', async ({
-  page,
-  api,
-  human,
-  agent,
-}) => {
-  const t = await longTicket(api, human, 'Pick it up tomorrow')
-  await ok(agent.put(`/api/tickets/${t.id}/resume`, { data: { note: '**State:** halfway there' } }))
-  await openLong(page, `/projects/${t.projectId}/features/${t.id}#resume`)
-  await expectResumeInView(page)
-})
-
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 
@@ -223,25 +198,5 @@ test.describe('on a phone', () => {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth),
     ).toBe(false)
-  })
-
-  test('the Overview resume link shows the note below the stuck header', async ({
-    page,
-    api,
-    human,
-    agent,
-    project,
-  }) => {
-    const t = await longTicket(api, human, 'Carried over with a long feed')
-    startedAt(t.id, yesterdayNoon())
-    await ok(agent.put(`/api/tickets/${t.id}/resume`, { data: { note: 'Halfway through the parser' } }))
-
-    await page.goto(`/projects/${project.id}`)
-    const note = section(page, 'Carrying over').getByRole('link', { name: /Halfway through the parser/ })
-    await expectTooltip(note, 'Its resume note: open it on the ticket')
-    await note.click()
-    await expect(page).toHaveURL(new RegExp(`/features/${t.id}#resume$`))
-    await feedDrawn(page)
-    await expectResumeInView(page)
   })
 })

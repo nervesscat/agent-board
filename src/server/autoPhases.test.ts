@@ -312,7 +312,6 @@ describe('the Summary rule', () => {
   const post = (author: string, createdAt: string, extra: Partial<Post> = {}) => ({
     author,
     progress: true,
-    handoff: false,
     summary: false,
     createdAt,
     ...extra,
@@ -358,13 +357,12 @@ describe('the Summary rule', () => {
     ).toBe(false)
   })
 
-  it('without a summary ever written, an agent progress post after the last commit stands in, a resume note does not', () => {
+  it('without a summary ever written, an agent progress post after the last commit stands in', () => {
     expect(written({ posts: [post('claude', '2026-01-10T13:00:00.000Z')] })).toBe(true)
-    // Before the last commit; the human's, a discussion post, a resume note do not.
+    // Before the last commit; the human's or a discussion post does not.
     expect(written({ posts: [post('claude', '2026-01-10T11:00:00.000Z')] })).toBe(false)
     expect(written({ posts: [post('enrique', '2026-01-10T13:00:00.000Z')] })).toBe(false)
     expect(written({ posts: [post('claude', '2026-01-10T13:00:00.000Z', { progress: false })] })).toBe(false)
-    expect(written({ posts: [post('claude', '2026-01-10T13:00:00.000Z', { handoff: true })] })).toBe(false)
   })
 
   it('with no commit to go by (no branch, or git cannot tell), goes by when work started', () => {

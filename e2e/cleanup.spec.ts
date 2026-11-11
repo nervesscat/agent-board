@@ -83,6 +83,10 @@ test('the human removes a worked branch with its worktree, after a dialog listin
   const report = await ok<CleanupReport>(human.get(`/api/projects/${project.id}/cleanup`))
   expect(report.tickets).toHaveLength(3)
 
+  // The leftovers are the Cleanup module's: the Ongoing features page shows no line about them.
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  await expect(page.getByRole('link', { name: /closed ticket/ })).toHaveCount(0)
+
   const sent: unknown[] = []
   page.on('request', (r) => {
     if (r.method() === 'POST' && r.url().endsWith('/cleanup/delete')) sent.push(r.postDataJSON())

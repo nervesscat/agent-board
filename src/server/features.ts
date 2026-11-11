@@ -1,13 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import {
-  COMMENT_PARENTS,
-  type Complexity,
-  DEFAULT_COMPLEXITY,
-  type FeedTab,
-  RESUME_TEMPLATE,
-} from '#/lib/constants'
+import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, placeInColumn, stageColumn } from '#/lib/stages'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
@@ -15,7 +9,7 @@ import { logActivity } from './activity'
 import { reconcileTicket } from './autoPhases'
 import { isHumanName, lastHuman, listActors } from './actors'
 import { baseChain, gitCache, type GitCache, infoOf, reachOf } from './cleanup'
-import { branchHead, NO_BRANCH } from './git'
+import { NO_BRANCH } from './git'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
 import { actingAs, findAgent, listAgents, mentions } from './projectAgents'
@@ -50,7 +44,6 @@ import {
   workspaceRepo,
   writeOtherRepos,
 } from './ticketRepos'
-import { type WithResume, type WithResumeBrief, resumeState, withoutResume } from './resume'
 import {
   firstOfKind,
   kindOf,
@@ -164,8 +157,8 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
 export const reservedFor = (t: Pick<schema.Ticket, 'projectId' | 'assignee'>) =>
   findAgent(t.projectId, t.assignee)
 
-/** A row of a ticket list as reads hand it out (`withResumeBriefs`). */
-export type TicketRow = WithResumeBrief<ReturnType<typeof projectTickets>[number]>
+/** A row of a ticket list as reads hand it out. */
+export type TicketRow = ReturnType<typeof projectTickets>[number]
 
 /** The lanes under a ticket, all the way down, nearest first. */
 export function laneTree<T extends Pick<schema.Ticket, 'id' | 'parentId'>>(all: T[], id: number): T[] {
@@ -430,7 +423,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     lanes: lanes.map((l) => {
       const u = lastUpdate.get(l.id)
       return {
-        ...withoutResume(l),
+        ...l,
         lastUpdate: u ? { author: u.author, text: gist(u.body), createdAt: u.createdAt } : null,
       }
     }),
@@ -473,13 +466,12 @@ function summaryOf(own: Post[], humans: string[], files: schema.Attachment[]) {
 
 /**
  * The post shown as the summary of a ticket that has none yet, from its posts newest first: the newest
- * progress post by an agent that is not a resume note's version (what a hand-off post was before the
- * summary). The Summary phase goes by the same post until a summary is written.
+ * progress post by an agent. The Summary phase goes by the same post until a summary is written.
  */
-export const summaryStandIn = <T extends Pick<Post, 'author' | 'progress' | 'handoff' | 'summary'>>(
+export const summaryStandIn = <T extends Pick<Post, 'author' | 'progress' | 'summary'>>(
   own: T[],
   humans: string[],
-) => own.find((u) => u.progress && !u.handoff && !u.summary && !humans.includes(u.author))
+) => own.find((u) => u.progress && !u.summary && !humans.includes(u.author))
 
 export type TicketSummary = NonNullable<ReturnType<typeof summaryOf>>
 
@@ -499,8 +491,8 @@ export function summaryHistory(ticketId: number) {
   return rows.map((u) => summaryVersion(u, files))
 }
 
-/** A ticket in full as reads hand it out (`withResume`): its resume note and state under `resume`. */
-export type TicketFull = WithResume<ReturnType<typeof getTicketFull>>
+/** A ticket in full as reads hand it out. */
+export type TicketFull = ReturnType<typeof getTicketFull>
 
 /** Where a new ticket goes: its parent (in the same project), its repo, and the branch it starts from. */
 export function placement(
@@ -1928,21 +1920,18 @@ function signer(projectId: number, actor: string, as?: string) {
 
 /**
  * The tab of the ticket's feed a new post goes to when its writer names none, by the first rule that
- * fits: a decision card, main; a resume note's version, agents (the human's too); the human's post,
- * main; the summary, main; a progress post or one made as one of the project's agents (`via` set: the
- * review phases, the builder), agents; anything else (a question to the human, an answer), main.
- * Migration 0029 sorted the posts written before it by the same rules.
+ * fits: a decision card, main; the human's post, main; the summary, main; a progress post or one made
+ * as one of the project's agents (`via` set: the review phases, the builder), agents; anything else
+ * (a question to the human, an answer), main.
  */
 export function tabOf(p: {
   decision: boolean
-  handoff: boolean
   human: boolean
   summary: boolean
   progress: boolean
   via: string
 }): FeedTab {
   if (p.decision) return 'main'
-  if (p.handoff) return 'agents'
   if (p.human || p.summary) return 'main'
   if (p.progress || p.via) return 'agents'
   return 'main'
@@ -1962,7 +1951,6 @@ export function postUpdate(
   opts: {
     as?: string
     progress?: boolean
-    handoff?: boolean
     tab?: FeedTab
     decision?: boolean
     summary?: { change: string; first: boolean }
@@ -1972,12 +1960,10 @@ export function postUpdate(
   const { author, via } = signer(ticket.projectId, actor, opts.as)
   const summary = Boolean(opts.summary)
   const progress = !summary && (opts.progress ?? true)
-  const handoff = opts.handoff ?? false
   const tab =
     opts.tab ??
     tabOf({
       decision: opts.decision ?? false,
-      handoff,
       human: !via && isHumanName(author),
       summary,
       progress,
@@ -1995,7 +1981,6 @@ export function postUpdate(
         via,
         body,
         progress,
-        handoff,
         tab,
         summary,
         summaryChange: opts.summary?.change ?? '',
@@ -2010,10 +1995,10 @@ export function postUpdate(
   logActivity({
     projectId: ticket.projectId,
     actor: author,
-    kind: summary ? 'summary' : handoff ? 'handoff' : progress ? 'update' : 'comment',
+    kind: summary ? 'summary' : progress ? 'update' : 'comment',
     text: opts.summary
       ? `${opts.summary.first ? 'wrote the summary of' : 'updated the summary of'} ${on}: ${opts.summary.change || gist(body)}`
-      : `${handoff ? 'left a resume note on' : progress ? 'posted an update on' : 'posted on'} ${on}: ${handoff ? gist(body) : firstLine(body)}`,
+      : `${progress ? 'posted an update on' : 'posted on'} ${on}: ${firstLine(body)}`,
     refType: 'ticket',
     refId: ticketId,
   })
@@ -2075,40 +2060,6 @@ export function gist(body: string, max = 120) {
 export const firstLine = (s: string, max = 120) => {
   const line = s.trim().split('\n')[0] ?? ''
   return line.length > max ? `${line.slice(0, max - 1)}…` : line
-}
-
-// --- the resume note ("Where we left off") ---
-
-/**
- * Write the ticket's resume note, for whoever picks it up next: `actor`, or with `as` one of the project's
- * agents (via `actor`). It records the ticket branch's head (when the branch is here locally) so later
- * commits show up as commits since the note. Each new version is also a handoff post in the feed, so
- * the earlier ones stay readable; saving the same note again only marks it as still current.
- */
-export async function setResumeNote(
-  ticketId: number,
-  note: string,
-  actor: string,
-  opts: { as?: string } = {},
-) {
-  const ticket = getTicket(ticketId)
-  const text = note.trim()
-  if (!text) throw new HttpError(400, 'the resume note is empty')
-  if (text === RESUME_TEMPLATE) throw new HttpError(400, 'fill in the template before saving it')
-  const { author } = signer(ticket.projectId, actor, opts.as)
-  const repo = ticketRepo(ticket)
-  const sha = repo ? await branchHead(repo.repoPath, ticket.branch) : null
-  const row = db
-    .update(schema.tickets)
-    .set({ resumeNote: text, resumeAt: new Date().toISOString(), resumeBy: author, resumeSha: sha })
-    .where(eq(schema.tickets.id, ticketId))
-    .returning()
-    .get()!
-  const post =
-    text === ticket.resumeNote
-      ? null
-      : postUpdate(ticketId, text, [], actor, { as: opts.as, progress: true, handoff: true })
-  return { resume: await resumeState(row), postId: post?.id ?? null }
 }
 
 // --- comments (threads on tickets, updates, PRs, review results) ---

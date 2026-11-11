@@ -31,20 +31,51 @@ export const isLocalUrl = (value: string) => {
   }
 }
 
-export type PreviewState = { running: boolean; status?: number; checkedAt: string }
+export type PreviewState = {
+  running: boolean
+  status?: number
+  checkedAt: string
+  /**
+   * Why the page cannot be shown in a frame (its X-Frame-Options or Content-Security-Policy
+   * `frame-ancestors`), null when it may; only a check of a link has it, never the board's own proxy.
+   */
+  frameBlocked?: string | null
+}
+
+/**
+ * Why a page's own headers refuse to be framed by the board, in a few words, or null when they do not.
+ * The board frames a link as it is on this machine (PreviewWindow.tsx): that is another origin (another
+ * port), so any X-Frame-Options refuses it, and a frame-ancestors that does not name `*` does too.
+ */
+export function frameBlockedBy(headers: Headers): string | null {
+  const xfo = headers.get('x-frame-options')?.trim()
+  if (xfo) return `it sends X-Frame-Options: ${xfo.toLowerCase()}`
+  const csp = headers.get('content-security-policy')
+  if (!csp) return null
+  // Directives, across the policies a preview sends (a second header is joined with a comma): a
+  // frame-ancestors source list is space-separated, so a comma or a semicolon ends the one looked at.
+  for (const directive of csp.split(/[;,]/)) {
+    const [name, ...sources] = directive.trim().split(/\s+/)
+    if (name?.toLowerCase() !== 'frame-ancestors') continue
+    if (sources.includes('*')) continue
+    return `it sends a Content-Security-Policy frame-ancestors ${sources.join(' ') || '(none)'}`
+  }
+  return null
+}
 
 /**
  * Whether something answers at `url`: any HTTP response (an error page or a redirect too) means it is
  * running; a refused connection or no answer within `timeoutMs` means it is not. Redirects are not
- * followed, so the check never leaves the URL's host.
+ * followed, so the check never leaves the URL's host. A page that refuses to be framed says why.
  */
 export async function checkPreview(url: string, timeoutMs = 1500): Promise<PreviewState> {
   if (!isLocalUrl(url)) throw new HttpError(400, 'only previews on localhost are checked')
   try {
     const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) })
-    // Only the status matters; do not wait for the page.
+    const frameBlocked = frameBlockedBy(res.headers)
+    // Only the status and the framing policy matter; do not wait for the page.
     res.body?.cancel().catch(() => {})
-    return { running: true, status: res.status, checkedAt: new Date().toISOString() }
+    return { running: true, status: res.status, checkedAt: new Date().toISOString(), frameBlocked }
   } catch {
     return { running: false, checkedAt: new Date().toISOString() }
   }

@@ -31,7 +31,9 @@ function tables(): string[] {
   return db
     .all<{
       name: string
-    }>(sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not like '__drizzle%'`)
+    }>(
+      sql`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' and name not like '__drizzle%'`,
+    )
     .map((r) => r.name)
 }
 

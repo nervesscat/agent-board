@@ -111,7 +111,7 @@ test(
       // The preview: running with an Open link that answers.
       await previewRow.getByRole('button', { name: 'Start', exact: true }).click()
       await expect(previewRow.getByTestId('run-status')).toHaveText('Running', { timeout: 30_000 })
-      const open = previewRow.getByRole('link', { name: 'Open' })
+      const open = previewRow.getByRole('link', { name: 'Open in browser' })
       const url = await open.getAttribute('href')
       expect(url).toMatch(/^http:\/\/127\.0\.0\.1:471\d\d$/)
       expect(await (await fetch(url!)).text()).toBe('fake preview')
@@ -119,7 +119,8 @@ test(
       // The job: running, no link, and its log's last lines on the card.
       await jobRow.getByRole('button', { name: 'Start', exact: true }).click()
       await expect(jobRow.getByTestId('run-status')).toHaveText('Running', { timeout: 30_000 })
-      await expect(jobRow.getByRole('link', { name: 'Open' })).toHaveCount(0)
+      await expect(jobRow.getByRole('link', { name: 'Open in browser' })).toHaveCount(0)
+      await expect(jobRow.getByRole('button', { name: 'Open', exact: true })).toHaveCount(0)
       await expect(jobRow.getByLabel('Fake job log')).toContainText('job started', { timeout: 20_000 })
       expect(await state('Fake job')).toMatchObject({ status: 'running', url: null, port: null })
 

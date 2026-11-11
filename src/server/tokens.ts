@@ -13,8 +13,10 @@ import { getAccount } from './passkeys'
  * it as `Authorization: Bearer <token>` (README: "Signing in"). A token's name is the agent's name
  * on the board. Kept as its hash only, so the token itself is shown once, when it is made; it signs in for
  * a year (AGENT_TOKEN_DAYS), until then unless revoked. Only the signed-in human makes, lists and revokes
- * them (api.ts); the Bearer check is credentials.ts `agentTokenOf`. A token is a worker until the human
- * makes it an orchestrator (setAgentTokenRole): nothing an agent sends changes its role.
+ * them (api.ts); the Bearer check is credentials.ts `agentTokenOf`. A token is an **orchestrator** unless
+ * the human made it a worker when making it, or afterwards (setAgentTokenRole): the token Connect an
+ * agent's commands carry runs the work and delegates it, so that is the role it gets. Nothing an agent
+ * sends changes its role, and a `<token>/<name>` sub-identity is always a worker (auth.ts).
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -24,12 +26,21 @@ export interface NewAgentToken {
   name: string
   /** The token itself: in this answer only. */
   token: string
+  /** What it signs in as: an orchestrator unless a worker was asked for. */
+  role: AgentRole
   createdAt: string
   expiresAt: string
 }
 
-/** A new token for the agent `name`, valid for AGENT_TOKEN_DAYS from `now`. Never a human's name, in any case. */
-export function mintAgentToken(name: string, now = new Date()): NewAgentToken {
+/**
+ * A new token for the agent `name`, an orchestrator unless `role` says a worker, valid for AGENT_TOKEN_DAYS
+ * from `now`. Never a human's name, in any case.
+ */
+export function mintAgentToken(
+  name: string,
+  role: AgentRole = 'orchestrator',
+  now = new Date(),
+): NewAgentToken {
   // Told apart without case, as project agents' names are (projectAgents.ts).
   const n = name.toLowerCase()
   const humans = [
@@ -45,10 +56,13 @@ export function mintAgentToken(name: string, now = new Date()): NewAgentToken {
   const expiresAt = new Date(now.getTime() + AGENT_TOKEN_DAYS * DAY_MS).toISOString()
   const row = db
     .insert(schema.agentTokens)
-    .values({ tokenHash: hashSecret(token), name, createdAt, expiresAt })
+    .values({ tokenHash: hashSecret(token), name, role, createdAt, expiresAt })
     .returning({ id: schema.agentTokens.id })
     .get()
-  return { id: row.id, name, token, createdAt, expiresAt }
+  // A name the board already knows shows its new role before this token's first request (its
+  // sub-identities stay workers: setActorRole reaches the parent row only).
+  setActorRole(name, role)
+  return { id: row.id, name, token, role, createdAt, expiresAt }
 }
 
 /** The tokens not revoked, expired ones included, oldest first: never the token or its hash. */

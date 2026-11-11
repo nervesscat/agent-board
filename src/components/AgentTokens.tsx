@@ -79,15 +79,16 @@ export function GenerateCommands({
       <p className="text-xs text-muted-foreground" role={token ? 'status' : undefined}>
         {token ? (
           <>
-            The commands below carry a new token for <strong>{token.name}</strong>, valid until{' '}
-            {stamp(token.expiresAt)}. It is shown this once: copy what you need now. Leaving the page loses
-            it; pressing again makes another.
+            The commands below carry a new {token.role === 'orchestrator' ? 'orchestrator' : 'worker'} token
+            for <strong>{token.name}</strong>, valid until {stamp(token.expiresAt)}. It is shown this once:
+            copy what you need now. Leaving the page loses it; pressing again makes another.
           </>
         ) : (
           <>
-            Makes a token for this agent and fills it into every command on this page. The name is the
-            agent&apos;s name on the board. A token signs in for 1 year, unless revoked, and is shown only
-            once.
+            Makes a token for this agent and fills it into every command on this page. It is an{' '}
+            <strong>orchestrator</strong> by default, so it can also change the projects&apos; instructions;
+            make it a worker in Settings, Agent tokens. The name is the agent&apos;s name on the board. A
+            token signs in for 1 year, unless revoked, and is shown only once.
           </>
         )}
       </p>
@@ -106,14 +107,14 @@ export function AgentTokenList() {
   })
   const now = Date.now()
   return (
-    <section className="space-y-2" aria-labelledby="agent-tokens-title">
+    <section id="agent-tokens" className="scroll-mt-16 space-y-2" aria-labelledby="agent-tokens-title">
       <h2 id="agent-tokens-title" className="text-sm font-medium">
         Agent tokens
       </h2>
       <p className="text-xs text-muted-foreground">
-        The tokens the commands above carry, each with its role: a worker, or an orchestrator, which also
-        changes the projects' instructions (set in Settings, Agent tokens). Revoke one and the agent using it
-        is signed out at its next request.
+        The tokens the commands above carry, each with its role: an orchestrator, which also changes the
+        projects&apos; instructions, or a worker (both set in Settings, Agent tokens; a new one is an
+        orchestrator). Revoke one and the agent using it is signed out at its next request.
       </p>
       {tokens.error && <p className="text-xs text-destructive">{errorMessage(tokens.error)}</p>}
       {tokens.data?.length === 0 && <p className="text-xs text-muted-foreground">None yet.</p>}

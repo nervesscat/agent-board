@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { checkPreview, isLocalUrl, previewState, previewUrl } from './preview'
+import { checkPreview, frameBlockedBy, isLocalUrl, previewState, previewUrl } from './preview'
 
 describe('previewUrl', () => {
   it('keeps http and https links as given, trimmed', () => {
@@ -59,6 +59,14 @@ describe('checkPreview', () => {
   let closedPort: number
   beforeAll(async () => {
     server = http.createServer((req, res) => {
+      if (req.url === '/framed') {
+        res.writeHead(200, {
+          'content-type': 'text/html',
+          'x-frame-options': 'DENY',
+          'content-security-policy': "default-src 'self'; frame-ancestors 'none'",
+        })
+        return res.end('<p>no frames</p>')
+      }
       res.writeHead(req.url === '/missing' ? 404 : 200, { 'content-type': 'text/plain' })
       res.end('ok')
     })
@@ -99,6 +107,34 @@ describe('checkPreview', () => {
       silent.closeAllConnections()
       await new Promise((resolve) => silent.close(resolve))
     }
+  })
+
+  it('says whether a page refuses to be framed, from its own headers (F3)', async () => {
+    expect(frameBlockedBy(new Headers())).toBeNull()
+    expect(frameBlockedBy(new Headers({ 'x-frame-options': 'SAMEORIGIN' }))).toBe(
+      'it sends X-Frame-Options: sameorigin',
+    )
+    expect(frameBlockedBy(new Headers({ 'x-frame-options': 'DENY' }))).toBe('it sends X-Frame-Options: deny')
+    expect(
+      frameBlockedBy(
+        new Headers({ 'content-security-policy': "default-src 'self'; frame-ancestors 'none'" }),
+      ),
+    ).toBe("it sends a Content-Security-Policy frame-ancestors 'none'")
+    expect(
+      frameBlockedBy(
+        new Headers({ 'content-security-policy': "frame-ancestors 'self' https://board.example" }),
+      ),
+    ).toBe("it sends a Content-Security-Policy frame-ancestors 'self' https://board.example")
+    // A policy without frame-ancestors, or one that allows any parent, has nothing to refuse.
+    expect(frameBlockedBy(new Headers({ 'content-security-policy': "default-src 'self'" }))).toBeNull()
+    expect(frameBlockedBy(new Headers({ 'content-security-policy': 'frame-ancestors *' }))).toBeNull()
+
+    const state = await checkPreview(`http://127.0.0.1:${port}/framed`)
+    expect(state).toMatchObject({ running: true, frameBlocked: 'it sends X-Frame-Options: deny' })
+    expect(await checkPreview(`http://127.0.0.1:${port}/`)).toMatchObject({
+      running: true,
+      frameBlocked: null,
+    })
   })
 
   it('is cached for a few seconds per URL', async () => {
