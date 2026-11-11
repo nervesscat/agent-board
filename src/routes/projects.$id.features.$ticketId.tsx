@@ -476,16 +476,25 @@ function TicketPage() {
             </AlertDialog>
           )}
         </div>
-        {/* The step controls ride in the sticky header, in their own row: the page can scroll past
-              the breadcrumb, but going to the previous or next ticket stays one click away. The row
-              keeps its height while the board or the parent ticket loads, so the header does not grow
-              under a heading the page has already scrolled to. */}
-        {!t.prId && (
+        {/* The section selector and the step controls share this row, riding in the sticky header: the
+              page can scroll past the breadcrumb, but its sections and going to the previous or next
+              ticket stay one click away. The row keeps its height while the board or the parent ticket
+              loads, so the header does not grow under a heading the page has already scrolled to. */}
+        {(main.length > 0 || !t.prId) && (
           <div className="-mt-1 flex min-h-7 w-full items-center gap-2 text-xs">
-            {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
-            {!t.parentId && board && (
-              <StageNav key={t.id} projectId={id} tickets={board} t={t} pageIsNewer={readAt >= boardReadAt} />
-            )}
+            {main.length > 0 && <TicketSectionNav hasSummary={Boolean(t.summary)} />}
+            <div className="ml-auto flex shrink-0 items-center gap-2">
+              {!t.prId && parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
+              {!t.prId && !t.parentId && board && (
+                <StageNav
+                  key={t.id}
+                  projectId={id}
+                  tickets={board}
+                  t={t}
+                  pageIsNewer={readAt >= boardReadAt}
+                />
+              )}
+            </div>
           </div>
         )}
       </header>
@@ -501,7 +510,6 @@ function TicketPage() {
               widen the page */}
         {main.length > 0 && (
           <div data-ticket-column="main" className="min-w-0 space-y-6">
-            <TicketSectionNav hasSummary={Boolean(t.summary)} />
             {t.summary && (
               <div id="summary" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
                 <ShownAnchor value={drawn ? anchor : null}>
@@ -1969,7 +1977,11 @@ const SECTION_ITEMS = [
   { key: 'lanes', label: 'Lanes' },
 ] as const
 
-/** The ticket's sections, one tap away on a phone instead of a long scroll. */
+/**
+ * The ticket's sections, one tap away on a phone instead of a long scroll. It rides in the ticket
+ * header's step row: at a narrow width the strip scrolls within itself instead of wrapping onto a
+ * second line, which would make the stuck header taller.
+ */
 function TicketSectionNav({ hasSummary }: { hasSummary: boolean }) {
   const [active, setActive] = useState('summary')
   const go = (id: string) => {
@@ -1977,11 +1989,18 @@ function TicketSectionNav({ hasSummary }: { hasSummary: boolean }) {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   return (
-    <div className="-mx-1 overflow-x-auto px-1 py-2">
+    <div className="-my-1 flex min-w-0 flex-1 overflow-x-auto py-1">
       <Tabs value={active} onValueChange={(v) => go(String(v))}>
         <TabsList aria-label="Ticket sections" className="w-max">
           {SECTION_ITEMS.filter((s) => s.key !== 'summary' || hasSummary).map((s) => (
-            <TabsTrigger key={s.key} value={s.key} className="after:hidden">
+            <TabsTrigger
+              key={s.key}
+              value={s.key}
+              className="after:hidden"
+              // A tab clicked again is already the selected one, so its value does not change: it
+              // still jumps to its section rather than doing nothing.
+              onClick={s.key === active ? () => go(s.key) : undefined}
+            >
               {s.label}
             </TabsTrigger>
           ))}
