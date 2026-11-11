@@ -12,9 +12,12 @@ const SHOWN_FOR = 1500
 /**
  * Places a `CopyImageButton` over a thumbnail: out of the way on a desktop until its `group/thumb`
  * ancestor is hovered or the button is focused, and always there on a phone, big enough to tap.
+ * Deliberately without a z-index: positioned, it paints over the picture it comes after, and under
+ * whatever the page paints above that picture — a sticky header, the step controls riding in it —
+ * as the thumbnail scrolls beneath them.
  */
 export const COPY_IMAGE_OVERLAY =
-  'absolute top-2 right-2 z-10 sm:pointer-events-none sm:opacity-0 sm:group-hover/thumb:pointer-events-auto sm:group-hover/thumb:opacity-100 sm:focus-visible:pointer-events-auto sm:focus-visible:opacity-100'
+  'absolute top-2 right-2 sm:pointer-events-none sm:opacity-0 sm:group-hover/thumb:pointer-events-auto sm:group-hover/thumb:opacity-100 sm:focus-visible:pointer-events-auto sm:focus-visible:opacity-100'
 
 /**
  * A small button that puts an image on the clipboard, from the bytes at its URL. It says so for a

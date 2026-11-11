@@ -6,7 +6,16 @@ import { AGENT, e2eEnv } from './env'
 import { uploadedAt } from './db'
 import { type Api, expect, expectTooltip, ok, test } from './fixtures'
 import { png, pdf } from './files'
-import { box, coveredAt, feedDrawn, longTicket, ticketHeader } from './scrolling'
+import {
+  addPosts,
+  box,
+  coveredAt,
+  feedDrawn,
+  longTicket,
+  openLong,
+  scrollTo,
+  ticketHeader,
+} from './scrolling'
 
 /**
  * The project's Gallery: every file on its tickets as a grid, filtered by kind and upload day in the
@@ -36,6 +45,32 @@ const names = (page: Page) => tiles(page).locator('[data-slot="file-name"]')
 /** The names on the tiles now: only once the tiles are known to be there (allInnerTexts does not wait). */
 const tileNames = (page: Page) => names(page).allInnerTexts()
 const thumb = (t: Locator) => t.getByRole('link', { name: /^Open .+\./ })
+
+/**
+ * What the pointer would hit at the middle of `l`, and which bar that is when a bar it is: the
+ * ticket's own sticky header (`inTicketHeader`) or the one at the very top (`inTopBar`). A copy
+ * button lets the pointer through until it is hovered or focused, so `l` has to be one of those for
+ * this to say anything about it. `html` is what is there, for a failure that says what instead.
+ */
+const topAt = (l: Locator) =>
+  l.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    const bar = hit?.closest('header') ?? null
+    return {
+      self: Boolean(hit && el.contains(hit)),
+      inTicketHeader: Boolean(bar?.closest('main')),
+      inTopBar: Boolean(bar && !bar.closest('main')),
+      html: hit ? hit.outerHTML.slice(0, 120) : 'nothing',
+    }
+  })
+
+/** Scrolls the page by `dy`, the way a wheel does, and returns where it landed. */
+const scrollBy = (page: Page, dy: number) =>
+  page.evaluate((dy) => {
+    window.scrollBy(0, dy)
+    return window.scrollY
+  }, dy)
 
 const typeChips = (page: Page) => page.getByRole('group', { name: 'File type' })
 const chip = (page: Page, name: string) => typeChips(page).getByRole('button', { name, exact: true })
@@ -247,6 +282,134 @@ test('an image attachment on a ticket, and the lightbox it opens, copy it from t
   await page.getByRole('link').filter({ hasText: 'ticket-spec.pdf' }).click()
   await expect(dialog.locator('iframe')).toBeVisible()
   await expect(dialog.getByRole('button', { name: 'Copy image' })).toHaveCount(0)
+})
+
+test("an attachment's copy button goes under the ticket's sticky header as the picture scrolls beneath it", async ({
+  page,
+  context,
+  project,
+  api,
+  human,
+  agent,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: env.baseURL })
+  // The picture is the newest post, at the top of a feed several screens long below it: the page can
+  // scroll it up under the header, and go on past it.
+  const t = await api.ticket({
+    title: 'Screens down a long feed',
+    status: 'in_progress',
+    body: Array.from({ length: 4 }, (_, i) => `Paragraph ${i + 1} of the instructions.`).join('\n\n'),
+  })
+  await addPosts(human, t.id)
+  const shot = await upload(agent, 'scrolled-shot.png', png(64))
+  await ok(
+    human.post(`/api/tickets/${t.id}/updates`, {
+      data: { body: 'A picture.', attachmentIds: [shot.id], progress: false },
+    }),
+  )
+  await openLong(page, `/projects/${project.id}/features/${t.id}`)
+
+  const picture = page.getByRole('img', { name: 'scrolled-shot.png' })
+  const copy = picture.locator('xpath=../..').getByRole('button', { name: 'Copy image' })
+  const header = ticketHeader(page)
+  // The header's last row: the step controls, the pager among them.
+  const pager = header.locator('> div').last()
+
+  // Reached by the keyboard, which shows the button too, and leaves it taking the pointer: a hit
+  // test at its middle then means something.
+  await picture.locator('xpath=..').focus()
+  await page.keyboard.press('Tab')
+  await expect(copy).toBeFocused()
+  await expect(copy).toHaveCSS('opacity', '1')
+
+  // Down the page, past where its header stops at the top: it stays put from here on, whatever the
+  // page does under it.
+  await scrollTo(page, 1000)
+  const pagerBefore = await box(pager)
+  const at = await box(copy)
+  const dy = at.y + at.height / 2 - (pagerBefore.y + pagerBefore.height / 2)
+  // The thumbnail's top-right corner, the button with it, now lies in the pager's row.
+  await scrollBy(page, dy)
+  expect((await box(pager)).y).toBe(pagerBefore.y)
+  const under = await box(copy)
+  expect(under.y + under.height / 2).toBeGreaterThanOrEqual(pagerBefore.y)
+  expect(under.y + under.height / 2).toBeLessThanOrEqual(pagerBefore.y + pagerBefore.height)
+  await page.screenshot({ path: testInfo.outputPath('attachment-under-header.png') })
+
+  // A click there lands on the header, the pager in it, not on the button the thumbnail carries.
+  const scrolled = await topAt(copy)
+  expect(scrolled.self, scrolled.html).toBe(false)
+  expect(scrolled.inTicketHeader, scrolled.html).toBe(true)
+
+  // Back up where the picture shows whole: the button takes the click at its middle again, and it
+  // copies the picture without opening it.
+  await scrollBy(page, -300)
+  const open = await topAt(copy)
+  expect(open.self, open.html).toBe(true)
+  await copy.click()
+  await expect(copy).toHaveAttribute('data-state', 'copied')
+  const types = await page.evaluate(async () =>
+    (await navigator.clipboard.read()).flatMap((item) => item.types),
+  )
+  expect(types).toContain('image/png')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('an image tile scrolled under the top bar keeps the bar over its copy button', async ({
+  page,
+  context,
+  project,
+  api,
+  agent,
+}, testInfo) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: env.baseURL })
+  // Enough tiles for the grid to scroll a row up under the top bar.
+  const t = await api.ticket({ title: 'A grid to scroll', status: 'in_progress' })
+  const ids: number[] = []
+  for (let i = 0; i < 18; i++)
+    ids.push((await upload(agent, `grid-${String(i).padStart(2, '0')}.png`, png())).id)
+  await postWith(agent, t.id, ids)
+
+  await gallery(page, project.id)
+  // The newest, which is the first tile: the row that can be scrolled up under the bar.
+  const shot = tiles(page).first()
+  const copy = shot.getByRole('button', { name: 'Copy image' })
+  const bar = page.getByRole('banner')
+
+  // The keyboard shows the button and leaves it taking the pointer, as on a ticket's attachment.
+  await thumb(shot).focus()
+  await page.keyboard.press('Tab')
+  await expect(copy).toBeFocused()
+  await expect(copy).toHaveCSS('opacity', '1')
+
+  // The first row scrolls up until the button's middle is under the bar at the top.
+  const barBefore = await box(bar)
+  const at = await box(copy)
+  const dy = at.y + at.height / 2 - (barBefore.y + barBefore.height / 2)
+  expect(dy).toBeGreaterThan(0)
+  await scrollBy(page, dy)
+  expect((await box(bar)).y).toBe(barBefore.y)
+  const under = await box(copy)
+  expect(under.y + under.height / 2).toBeGreaterThanOrEqual(barBefore.y)
+  expect(under.y + under.height / 2).toBeLessThanOrEqual(barBefore.y + barBefore.height)
+  await page.screenshot({ path: testInfo.outputPath('tile-under-top-bar.png') })
+
+  // The bar takes the click there, never the tile's button.
+  const scrolled = await topAt(copy)
+  expect(scrolled.self, scrolled.html).toBe(false)
+  expect(scrolled.inTopBar, scrolled.html).toBe(true)
+
+  // Back down, the button is over its own tile again: it copies the picture and opens nothing.
+  await scrollBy(page, -dy)
+  const open = await topAt(copy)
+  expect(open.self, open.html).toBe(true)
+  await copy.click()
+  await expect(copy).toHaveAttribute('data-state', 'copied')
+  const types = await page.evaluate(async () =>
+    (await navigator.clipboard.read()).flatMap((item) => item.types),
+  )
+  expect(types).toContain('image/png')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 })
 
 test('the type, day and archived filters live in the URL, survive a reload, and show an empty state', async ({
