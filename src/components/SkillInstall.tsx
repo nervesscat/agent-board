@@ -16,8 +16,9 @@ export interface SkillToken {
 }
 
 /**
- * The download credential the install lines carry: minted once, when the first one is copied, and reused
- * by every line and copy on the page until it is left (a new visit mints its own). Nothing is made on load.
+ * The download credential the install lines carry: minted when the first one is copied, and reused by every
+ * line and copy on the page until it expires or the page is left (a later copy mints a new one). Nothing is
+ * made on load.
  */
 export function useSkillToken() {
   const [made, setMade] = useState<SkillToken | null>(null)
@@ -35,10 +36,13 @@ export function useSkillToken() {
   const { mutateAsync } = mint
   /**
    * The text of one install line to put on the clipboard, built with this page's credential, which the
-   * first copy mints: null when it could not be had, and nothing is copied.
+   * first copy mints and a copy after it expired mints again: null when it could not be had, and nothing
+   * is copied.
    */
   const copyLine = async (build: (token: string) => string): Promise<string | null> => {
-    if (current.current) return build(current.current.token)
+    // An `expiresAt` at or before now is no credential to copy: the board refuses it, so a new one is made.
+    if (current.current && Date.parse(current.current.expiresAt) > Date.now())
+      return build(current.current.token)
     try {
       inFlight.current ??= mutateAsync().finally(() => {
         inFlight.current = null

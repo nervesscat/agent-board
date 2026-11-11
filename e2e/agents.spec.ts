@@ -855,6 +855,27 @@ test.describe('the review skills on the Connect an agent page: the copy it track
         },
     )
     expect(row.token_hash).toBe(createHash('sha256').update(token).digest('hex'))
+
+    // Ten minutes on the page's clock, that credential has expired: the next copy makes a new one instead
+    // of copying the dead one, and every line on the page carries the new one.
+    await page.clock.install()
+    await page.clock.fastForward(Date.parse(expiresAt) - Date.now() + 2_000)
+    const fresh = await copy(step2)
+    expect(mints).toHaveLength(2)
+    expect(fresh.token).not.toBe(token)
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(skillInstall('claude', 'bash', boardUrl, fresh.token))
+    await expect(
+      page.getByText(skillInstall('claude', 'bash', boardUrl, token), { exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByText(skillInstall('claude', 'bash', boardUrl, fresh.token), { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText(reviewSkillsInstall('bash', boardUrl, fresh.token), { exact: true }),
+    ).toBeVisible()
+    await expect(note.locator('time')).toHaveAttribute('datetime', fresh.expiresAt)
   })
 
   test("a repo's own install line mints the page's credential too", async ({
