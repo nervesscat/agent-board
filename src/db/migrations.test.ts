@@ -697,7 +697,8 @@ describe('0036_pr_left_as', () => {
 
     const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
     expect(prs.map((p) => p.left_as)).toEqual([null, null, null])
-    expect(prs.map(({ left_as: _l, ...rest }) => rest)).toEqual(before)
+    // A later migration adds the review request column.
+    expect(prs.map(({ left_as: _l, requested: _r, ...rest }) => rest)).toEqual(before)
     sqlite.close()
   })
 })
