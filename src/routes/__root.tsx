@@ -19,6 +19,7 @@ import { NotificationCenter } from '#/components/NotificationCenter'
 import { PreviewWindows } from '#/components/PreviewWindow'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
+import { UpdateCard } from '#/components/UpdateCard'
 import { UpdateBadge } from '#/components/Updates'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
@@ -148,6 +149,7 @@ function App() {
       <main className="mx-auto w-full max-w-7xl px-4 pt-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         <Outlet />
       </main>
+      <UpdateCard />
       <Gallery />
       <PreviewWindows />
       <Toaster />
