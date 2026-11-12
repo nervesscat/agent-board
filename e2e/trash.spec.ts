@@ -38,6 +38,24 @@ const lidStyle = (trigger: Locator) =>
     return { animation: s.animationName, transform: s.transform }
   })
 
+/**
+ * The lid's computed transform as the matrix it resolves to: `f` is how far it rose (negative is up)
+ * and `b` is its rotation, so a lift and a swing are both visible here, or `null` while it is shut.
+ */
+const lidMatrix = (trigger: Locator) =>
+  lid(trigger).evaluate((el) => {
+    const matrix = getComputedStyle(el).transform.match(/^matrix\(([^)]+)\)$/)
+    if (!matrix) return null
+    const [a, b, c, d, e, f] = matrix[1]!.split(',').map(Number)
+    return { a: a!, b: b!, c: c!, d: d!, e: e!, f: f! }
+  })
+
+/** It opens: the lid lifts off the rim and swings from its hinge, rather than tilting in place. */
+async function expectLidOpen(trigger: Locator) {
+  await expect.poll(() => lidMatrix(trigger).then((m) => m?.f ?? 0)).toBeLessThanOrEqual(-2)
+  await expect.poll(() => lidMatrix(trigger).then((m) => Math.abs(m?.b ?? 0))).toBeGreaterThan(0.3)
+}
+
 const buttonChrome = (trigger: Locator) =>
   trigger.evaluate((el) => {
     const s = getComputedStyle(el)
@@ -76,19 +94,27 @@ async function expectHoverRed(trigger: Locator) {
   const before = {
     button: await docBox(trigger),
     can: await docBox(trigger.locator('[data-trash-part="can"]')),
+    lid: await docBox(lid(trigger)),
   }
   await trigger.hover()
   await expect.poll(() => iconStyle(trigger).then((s) => s.color)).toBe(dest)
   await expect.poll(() => lidStyle(trigger).then((s) => s.transform)).not.toBe('none')
+  await expectLidOpen(trigger)
   const after = {
     button: await docBox(trigger),
     can: await docBox(trigger.locator('[data-trash-part="can"]')),
+    lid: await docBox(lid(trigger)),
   }
   // The lid alone moves: no box shifts, so nothing below it reflows.
-  expect(after).toEqual(before)
+  expect(after.button).toEqual(before.button)
+  expect(after.can).toEqual(before.can)
+  // And it opened upward: its box sits higher than shut and is taller than a lid lying flat.
+  expect(after.lid.y).toBeLessThan(before.lid.y)
+  expect(after.lid.height).toBeGreaterThan(before.lid.height)
   // And back to rest when the pointer leaves.
   await page.mouse.move(0, 0)
   await expect.poll(() => lidStyle(trigger).then((s) => s.transform)).toBe('none')
+  await expect.poll(() => docBox(lid(trigger))).toEqual(before.lid)
 }
 
 const expectTrashButton = async (page: Page, trigger: Locator) => {
@@ -200,12 +226,16 @@ test('without motion the lid stays shut but the red stays; keyboard focus is as 
   const trigger = page.locator('header').locator('button:has(svg.trash-icon)')
   const destructive = await themeColor(page, '--destructive')
 
-  // Reduced motion: the colour still changes, the lid does not.
+  // Reduced motion: the colour still changes, the lid neither moves nor lifts.
   await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.mouse.move(0, 0)
+  const shut = await docBox(lid(trigger))
   await trigger.hover()
   await expect.poll(() => iconStyle(trigger).then((s) => s.color)).toBe(destructive)
   const still = await lidStyle(trigger)
   expect(still).toEqual({ animation: 'none', transform: 'none' })
+  expect(await lidMatrix(trigger)).toBeNull()
+  expect(await docBox(lid(trigger))).toEqual(shut)
   await page.mouse.move(0, 0)
 
   // Keyboard focus: the red, the open lid and the button's ring, unclipped.
@@ -221,6 +251,8 @@ test('without motion the lid stays shut but the red stays; keyboard focus is as 
   expect(reached, 'the ticket trash button is reachable by Tab').toBe(true)
   await expect.poll(() => iconStyle(trigger).then((s) => s.color)).toBe(destructive)
   await expect.poll(() => lidStyle(trigger).then((s) => s.transform)).not.toBe('none')
+  // Keyboard parity is the same opening lid, not just the colour.
+  await expectLidOpen(trigger)
   const chrome = await buttonChrome(trigger)
   expect(chrome.shadow).not.toBe('none')
   expect(chrome.shadow).toContain('3px')

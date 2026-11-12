@@ -4,8 +4,9 @@ import { cn } from '#/lib/utils'
 
 /**
  * The trash icon on every delete button in the board: lucide's `Trash2` outline, drawn here so its lid
- * (the bar and the handle above it) is a group of its own and can lift on hover while the can stays
- * put. The red and the motion live beside it in `styles.css` (`.trash-icon`), so a delete button gets
+ * (the bar and the handle above it) is a group of its own and can lift and swing open from its hinge
+ * on hover while the can stays put. The red and the motion live beside it in `styles.css`
+ * (`.trash-icon`), so a delete button gets
  * both by showing this and nothing else; its size still follows the button's own `[&_svg]` rules.
  */
 export function TrashIcon({ className, ...props }: ComponentProps<'svg'>) {

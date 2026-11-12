@@ -101,7 +101,7 @@ describe('the trash icon', () => {
     expect(lid).toContain('d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"')
   })
 
-  it('turns red on hover or focus and only the lid moves, also with reduced motion', () => {
+  it('turns red on hover or focus and opens only the lid, also with reduced motion', () => {
     const css = read('styles.css')
     // The red is on the button's state, not inside the motion block: no motion still keeps it.
     expect(css).toMatch(/button:hover:not\(:disabled\) \.trash-icon,[\s\S]*?color: var\(--destructive\);/)
@@ -113,12 +113,24 @@ describe('the trash icon', () => {
     expect(reduced[0]).toContain('transition: none')
     expect(reduced[0]).toContain('transform: none')
     expect(reduced[0]).not.toContain('color: var(--destructive)')
-    // Only the lid rule rotates on hover; the icon root itself never gets a transform.
-    expect(css.match(/transform: rotate\(/g)).toHaveLength(1)
-    const at = css.indexOf('transform: rotate(-16deg)')
-    expect(at).toBeGreaterThan(0)
-    const open = css.lastIndexOf('{', at)
-    expect(css.slice(css.lastIndexOf('\n\n', open), open)).toContain('.trash-icon .trash-icon-lid')
+
+    // The lid opens: one rule lifts it off the can's rim and swings it from its hinge, and it is the
+    // only rule in the sheet that moves anything.
+    const opens = [...css.matchAll(/transform: translate\(([^)]+)\) rotate\(([^)]+)\);/g)]
+    expect(opens).toHaveLength(1)
+    const [liftX, liftY] = opens[0]![1]!.split(',').map((v) => Number.parseFloat(v))
+    const swing = Number.parseFloat(opens[0]![2]!)
+    // A lift, not a tilt in place: it rises off the rim and turns a readable way.
+    expect(liftY).toBeLessThanOrEqual(-2)
+    expect(Math.abs(liftX)).toBeLessThanOrEqual(1)
+    expect(swing).toBeLessThanOrEqual(-20)
+    // The hinge is the lid's left end, and the raised lid is allowed to paint above the icon's box.
+    expect(css).toContain('transform-origin: 3px 6px')
+    expect(css).toMatch(/\.trash-icon \{[^}]*overflow: visible;/)
+    // That one rule is the lid's, on the button's hover and focus; the icon root never moves.
+    const at = css.indexOf('transform: translate(')
+    const ruleStart = css.lastIndexOf('\n\n', css.lastIndexOf('{', at))
+    expect(css.slice(ruleStart, css.lastIndexOf('{', at))).toContain('.trash-icon .trash-icon-lid')
     expect(css).not.toMatch(/\.trash-icon \{[^}]*transform:/)
   })
 })
