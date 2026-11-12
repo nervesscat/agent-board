@@ -715,6 +715,16 @@ export const enrolCodes = sqliteTable('enrol_codes', {
   usedAt: text('used_at'),
 })
 
+// The short-lived credentials an install line carries (skillTokens.ts): only the hash is kept, and they
+// reach the two skill downloads and nothing else (credentials.ts, auth.ts `admit`). Expired rows are
+// deleted when the next one is made.
+export const skillTokens = sqliteTable('skill_tokens', {
+  id: id(),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: now(),
+  expiresAt: text('expires_at').notNull(),
+})
+
 // The tokens agents sign in with (`Authorization: Bearer <token>`): only the hash is kept, and the
 // name is the agent's name on the board. The role is the human's call (Settings > Agents): an
 // orchestrator also changes the projects' instructions; every token starts as a worker.
