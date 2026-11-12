@@ -56,6 +56,7 @@ import {
 import { handleMcp } from './mcp'
 import { linkFor } from './previewProxy'
 import * as needs from './needs'
+import { getLiveWork } from './liveWork'
 import { checkOpencodeConfig } from './opencodeConfig'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
@@ -1300,6 +1301,16 @@ api.get('/api/summary', ({ url, actor }) => {
     ...getSummary(project ? intParam(project, 'projectId') : undefined, { refreshPrs: true }),
     actor,
   })
+})
+
+// What is happening on one project right now, for a session that is starting: live now, recently
+// active, what waits on the human, what is in review, the last posts, and the clock it measured
+// against. `?windowMinutes=` widens or narrows the live window (the project's stallMinutes by default).
+api.get('/api/projects/:id/live-work', ({ params, url }) => {
+  const window = url.searchParams.get('windowMinutes')
+  return json(
+    getLiveWork(id(params), { windowMinutes: window ? intParam(window, 'windowMinutes') : undefined }),
+  )
 })
 
 // --- daily ---

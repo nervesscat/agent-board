@@ -12,6 +12,7 @@ export const TOOL_ROUTES: Record<string, string> = {
   set_project_instructions: 'PUT /api/projects/:id/instructions `{instructions}`',
   set_tag_suggestions: 'PATCH /api/projects/:id `{tagSuggestions}`',
   get_summary: 'GET /api/summary?projectId=',
+  get_live_work: 'GET /api/projects/:id/live-work?windowMinutes=',
   list_prs: 'GET /api/projects/:id/prs?refresh=1',
   set_pr_hold: 'PATCH /api/prs/:id `{hold, holdNote}`',
   post_review_result: 'POST /api/projects/:id/reviews/results',

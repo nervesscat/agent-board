@@ -2,7 +2,7 @@ import { McpServer, type ToolCallback } from '@modelcontextprotocol/sdk/server/m
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { z } from 'zod'
 
-import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS } from '#/lib/constants'
+import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, STALL_MINUTES } from '#/lib/constants'
 import type { RunConfigInput } from '#/lib/runs'
 import { listActors, noteActor } from './actors'
 import { asSubIdentity, type Caller, callerInfo } from './auth'
@@ -16,6 +16,7 @@ import { findProject } from './findProject'
 import { galleryShape, listGallery } from './gallery'
 import { HttpError } from './http'
 import { setInstructions } from './instructionsHistory'
+import { getLiveWork } from './liveWork'
 import * as needs from './needs'
 import { isActive, managedPreview, restartPreview, startPreview, stopPreview } from './managedPreview'
 import * as runConfig from './runConfig'
@@ -225,6 +226,23 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
     "Where a project stands, in one read (every project, one block each, without projectId): reportDue (the project's report while the board is reminding about it: { projectId, project, cadence, period, label, dueAt, alertAt, state due or missing, minutesLeft, negative once overdue }, null otherwise), needsYou (open decisions, humanWaits: each open wait on the human on an active ticket ({waitId, ticketId, ticketTitle, status, assignee, parent, agent, note, since}; none when the ticket already has an open decision card), PRs waiting on the human's review, threads waiting on the human, tickets in a review stage, stalled: each ticket or lane in an active stage nobody recorded a work-timeline event on for longer than the project's stallMinutes, oldest signal first ({ticketId, title, status, assignee, parent, lastSignalAt, lastAgent, lastBy, lastFrom}; lastAgent is the name the latest event claims, or the assignee when no agent's event names one, lastBy who recorded it as signed in, '' when unknown, lastFrom 'event' or 'assignee': where lastAgent came from; how long it has been silent is generatedAt minus lastSignalAt), instructionChanges (an orchestrator's changes of the project's instructions the human has not reviewed or reverted yet: changeId, projectId, changedBy, role, createdAt, excerpt of the new text, revertable), and blockedTasks: each task or subtask tagged blocked that is the next step to work in its ticket or lane (the first open task in tree order with no open subtask), on a ticket still being worked, not done, cancelled or archived nor under one that is: taskId, text, reason, parentTask (the text of the task it is a step of, null for a top-level one), ticketId, ticketTitle, status, parent (the ticket it is a lane of); a blocked step further down that order is left out here but still counted in its ticket's blockedTasks (blockedNext says whether a next step is blocked); total counts the listed ones), inProgress (tickets in active or blocked stages: assignee, task progress, blockedTasks, lanes, last progress post, preview, since when, stale when no progress post in 24 hours, stalled when silent on the work timeline past the project's stallMinutes, activity: the open spans ({phase, agent, since}), the open waits ({reason, agent, on, since}: on is the agent a delegated wait hands the work to, null when none), lastHeard and lastClosedSpan (the span that ended last, {phase, agent, start, end}, null when none)), doneToday (tickets that reached a done stage today, PRs that left the queue today, today's activity count), next (the head of the first open stage that is not a backlog, with how many are blocked and in the backlog) and carryingOver (tickets in progress since before today, each with since, days, lastPost and stale). A PR's own ticket is in none of these lists: its decisions and threads waiting on the human are in needsYou as PR rows (prTicket true). Today is the board's local day. Read it when starting a session.",
     { projectId: z.number().int().optional() },
     ({ projectId }) => getSummary(projectId, { refreshPrs: true }),
+  )
+  tool(
+    'get_live_work',
+    "What is happening on a project right now, in one read, for a session that is starting: liveNow (the tickets and lanes with an open span or wait, or an agent event such as a heartbeat inside the window: each with ticketId, title, status, stage, parent, agents (names), phase and round of the open span, lastHeardAt and lastHeardBy, silentMinutes, waitingFor ({reason, note, agent, on, since} or null) and stalled), recentlyActive (the rest that were heard from, nothing running now, newest first, at most 10: same fields plus lastSignalAt and state, its one-line summary or newest progress post), waitingOnHuman (open decision cards, next-step tasks tagged blocked, and tickets in a blocked stage: kind decision, blocked-task or blocked-ticket, one line each, postId or taskId, a ticket listed once), inReview (tickets in a review stage with a PR: prNumber, prUrl, reviewStage, the latest recorded verdict, and the preview link when one is registered), recentPosts (the last 10 posts across the project, newest first: author, ticket, time, first line), and totals. now is the clock every duration was measured against, windowMinutes the window used (the project's stallMinutes unless windowMinutes is given), stallMinutes the project's threshold. Scoped to one project, another project's tickets, posts and PRs never appear; an unknown project is refused. Silence is not idleness: lastHeardAt and silentMinutes say how long a ticket has been quiet, and a quiet ticket is not proof that nobody is working (agents keep the timeline by their own spans and heartbeats, so an agent that records nothing stays invisible). Do not take or duplicate a live ticket; pick up what nobody holds.",
+    {
+      projectId: z.number().int(),
+      windowMinutes: z
+        .number()
+        .int()
+        .min(STALL_MINUTES.min)
+        .max(STALL_MINUTES.max)
+        .optional()
+        .describe(
+          "how many minutes back count as live now; the project's stallMinutes by default. The answer names the window it used",
+        ),
+    },
+    ({ projectId, windowMinutes }) => getLiveWork(projectId, { windowMinutes }),
   )
 
   // PR queue
