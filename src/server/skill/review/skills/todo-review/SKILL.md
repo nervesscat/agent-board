@@ -1,6 +1,6 @@
 ---
 name: todo-review
-description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket builds the change and runs the /feature-review cycle (verify and hunt, refute) as many rounds as the ticket's complexity sets (low none, mid one, high three), at a depth scaled to the change, until the change survives it, then pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
+description: "Works a board project's To do tickets to hand-off, several at once (same repo included): one unattended todo-review-ticket agent per ticket builds the change and runs the /feature-review cycle (verify and hunt, refute) as many rounds as the ticket's complexity sets (low none, mid one, high three, max up to ten for work built from scratch), at a depth scaled to the change, until the change survives it, then pushes, opens the PR, starts a preview and posts screenshots; a ticket is moved to blocked only for what only the human can provide, after the agent has gone as far as it can. The orchestrator schedules, checks each result against the board, and sends weak blockers back."
 user-invocable: true
 argument-hint: "[project=<id>] [<ticket id> ...] [parallel=N] [depth=auto|light|standard|deep] [model=<name>] [dry]"
 ---
@@ -112,11 +112,11 @@ Loop until nothing is pending or running:
 - Fill every free slot with the first pending ticket whose lanes are free. Spawn one
   `todo-review-ticket` agent per ticket, all in one message when several start together, with:
   `PROJECT=<id>`, `TICKET=<id>`, `REPO=<checkout path>`, `REPO_ID=<id>`, `BASE=<base branch>`,
-  `PORTS=<slot range>`, `BROWSER=<yes|no>`, `COMPLEXITY=<low, mid or high>`,
+  `PORTS=<slot range>`, `BROWSER=<yes|no>`, `COMPLEXITY=<low, mid, high or max>`,
   `DEPTH=<light|standard|deep>` when
   `depth=` was given and is not `auto`, `AS=<agent name>` when the ticket is reserved, and
   `QUEUE`. Pass `model` on the Agent call when `model=` was given. Pass `effort` on the Agent call
-  as the ticket's complexity sets it: `low` for low, `medium` for mid and high; the ticket agent passes
+  as the ticket's complexity sets it: `low` for low, `medium` for mid and high, `high` for max; the ticket agent passes
   the same effort to every agent it starts (spec, builder, the review's phase agents). Tell it to
   `get_ticket` the ticket before anything else and to carry its context — the instructions, the
   human's posts and replies, the decisions and their answers, the attachments — into every agent
@@ -145,7 +145,7 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    change cannot be tried. The ticket's summary (`summary` on `get_ticket`, `fallback: false`:
    the hand-off is the summary the agent wrote, not a separate post) has
    screenshots in its attachments when the change has a UI, and a "Tested" part that names the
-   level and what checked it (for mid and high, the review depth and why). Unless `depth=` was given
+   level and what checked it (for mid, high and max, the review depth and why). Unless `depth=` was given
    (other than `auto`), measure the branch
    yourself the way the ticket agent's "Review depth" says
    (`git -C REPO diff --numstat origin/BASE...<branch>`, lockfiles and generated files left out,

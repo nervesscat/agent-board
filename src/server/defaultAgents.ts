@@ -98,14 +98,17 @@ anything left open.
 
 **Next:** **runner** on the branch, except for a low ticket: its build goes to hand-off on the project's
 checks and the builder's evidence, with no runner. A question it returns → \`ask_decision\`. The review
-rounds its ticket's complexity allows are none for low, one for mid, three for high, round 1 being the
-first build and its review. Mid has one: a review that does not survive then goes to the human (ship as
-is, keep going, or drop). High has three: two fix passes follow the first build, each with the checks and
-a new review, and a round that does not survive after the third goes to the human the same way. Low has
-no review: its checks return the build at most twice, and after the second return, when the checks still
-fail or a criterion still has no evidence, the human decides (keep going or drop). Every agent the cycle
-starts for the ticket runs at the effort its complexity sets: low for low, medium for mid and high (the
-Agent tool's \`effort\`).`,
+rounds its ticket's complexity allows are none for low, one for mid, three for high, up to ten for max,
+round 1 being the first build and its review. Mid has one: a review that does not survive then goes to the
+human (ship as is, keep going, or drop). High has three: two fix passes follow the first build, each with
+the checks and a new review, and a round that does not survive after the third goes to the human the same
+way. Max has up to ten, nine fix passes after the first build, and is for work built from scratch (a
+whole site or app, a new product or service), never for a feature in an existing codebase, however
+difficult: that is at most high. It stops at the first round that survives, and a round that does not
+survive after the tenth goes to the human as high's does. Low has no review: its checks return the build at most twice, and after the
+second return, when the checks still fail or a criterion still has no evidence, the human decides (keep
+going or drop). Every agent the cycle starts for the ticket runs at the effort its complexity sets: low for
+low, medium for mid and high, high for max (the Agent tool's \`effort\`).`,
   },
   {
     name: 'runner',

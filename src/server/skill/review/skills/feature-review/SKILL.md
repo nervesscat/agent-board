@@ -87,7 +87,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `frontend=<path>` | main checkout of the UI repo that talks to this backend; the env agent starts its dev server against the review backend and the verify agent drives it | none |
 | `scoped` | run only the scoped checks even where no CI runs the full suite (`CI: none`): the caller runs the full suite once at the final head | off |
 | `post` | post the report as a PR comment when the target is a PR | off |
-| `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high) | the session's |
+| `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high, `high` for max) | the session's |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
 
 ## Setup
