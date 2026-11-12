@@ -330,6 +330,13 @@
       "when": 1794293024618,
       "tag": "0046_drop_resume_note",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1794370000000,
+      "tag": "0047_approved_stage",
+      "breakpoints": true
     }
   ]
 }

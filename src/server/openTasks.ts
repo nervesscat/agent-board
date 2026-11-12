@@ -7,8 +7,9 @@ import { kindOf, listStages } from './stages'
 /**
  * What a ticket in review still has open, from its tasks: every task and subtask not done, of it and of
  * its lanes that are not cancelled (the rollup's scope), in tree order (the ticket's own tasks, then
- * each lane's, a lane before its own lanes). The Merged phases are left out: merging is the human's step,
- * done after the hand-off, so listing them would keep this from ever being empty in review. `auto`: a
+ * each lane's, a lane before its own lanes). The Merged phases are left out: merging is the human's step
+ * (except in Approved, where an agent may merge after the human says yes), done after the hand-off, so
+ * listing them would keep this from ever being empty in review. `auto`: a
  * phase the board ticks itself (Pushed, PR, CI, Preview, Summary), which follows its fact, not a tick.
  */
 export interface OpenTask {

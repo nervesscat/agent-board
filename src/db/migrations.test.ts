@@ -1300,3 +1300,95 @@ describe('0046_drop_resume_note', () => {
     sqlite.close()
   })
 })
+
+describe('0047_approved_stage', () => {
+  it('adds Approved right after In review, moving the stages below it down and keeping the others as they were', () => {
+    const sqlite = databaseAt('0046_drop_resume_note')
+    const project = (name: string) =>
+      Number(sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid)
+    const stage = sqlite.prepare(
+      'INSERT INTO stages (project_id, key, name, kind, color, position) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    const defaults = [
+      ['backlog', 'Backlog', 'open', 'slate'],
+      ['todo', 'To do', 'open', 'gray'],
+      ['in_progress', 'In progress', 'active', 'sky'],
+      ['blocked', 'Blocked', 'blocked', 'amber'],
+      ['review', 'In review', 'review', 'violet'],
+      ['done', 'Done', 'done', 'emerald'],
+      ['cancelled', 'Cancelled', 'cancelled', 'slate'],
+    ]
+    const seed = (pid: number, stages: string[][], start = 0) =>
+      stages.forEach((s, i) => stage.run(pid, ...s, start + i))
+    const a = project('defaults')
+    seed(a, defaults)
+    // A stage of its own after In review: it stays, one place further down.
+    const b = project('custom')
+    seed(b, [...defaults.slice(0, 5), ['release', 'Release', 'done', 'gray'], ...defaults.slice(5)])
+    // A project that never had In review: its own layout is left alone.
+    const c = project('no review')
+    seed(c, [
+      ['todo', 'To do', 'open', 'gray'],
+      ['doing', 'Doing', 'active', 'sky'],
+      ['done', 'Done', 'done', 'emerald'],
+    ])
+    // A project that already has an Approved stage: nothing is added.
+    const d = project('already')
+    seed(d, [...defaults.slice(0, 5), ['approved', 'Approved', 'review', 'teal'], ...defaults.slice(5)])
+    // Tickets keep their stage.
+    const ticket = sqlite.prepare(
+      'INSERT INTO tickets (project_id, title, created_by, status) VALUES (?, ?, ?, ?)',
+    )
+    const shipped = Number(ticket.run(a, 'Shipped', 'claude', 'done').lastInsertRowid)
+    const waiting = Number(ticket.run(b, 'Waiting', 'claude', 'review').lastInsertRowid)
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    const stages = (pid: number) =>
+      sqlite
+        .prepare(
+          'SELECT key, name, kind, color, position FROM stages WHERE project_id = ? ORDER BY position, id',
+        )
+        .all(pid) as { key: string; position: number }[]
+    expect(stages(a).map((s) => s.key)).toEqual([
+      'backlog',
+      'todo',
+      'in_progress',
+      'blocked',
+      'review',
+      'approved',
+      'done',
+      'cancelled',
+    ])
+    expect(stages(a).find((s) => s.key === 'approved')).toMatchObject({
+      name: 'Approved',
+      kind: 'review',
+      color: 'teal',
+      position: 5,
+    })
+    expect(stages(b).map((s) => s.key)).toEqual([
+      'backlog',
+      'todo',
+      'in_progress',
+      'blocked',
+      'review',
+      'approved',
+      'release',
+      'done',
+      'cancelled',
+    ])
+    // Nothing lands on the same place.
+    for (const pid of [a, b, d])
+      expect(new Set(stages(pid).map((s) => s.position)).size).toBe(stages(pid).length)
+    // No In review: no Approved either; one already there is the one kept.
+    expect(stages(c).map((s) => s.key)).toEqual(['todo', 'doing', 'done'])
+    expect(stages(d).filter((s) => s.key === 'approved')).toHaveLength(1)
+    expect(stages(d).find((s) => s.key === 'approved')!.position).toBe(5)
+
+    const status = (id: number) =>
+      (sqlite.prepare('SELECT status FROM tickets WHERE id = ?').get(id) as { status: string }).status
+    expect(status(shipped)).toBe('done')
+    expect(status(waiting)).toBe('review')
+    sqlite.close()
+  })
+})

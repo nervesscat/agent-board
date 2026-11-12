@@ -1035,10 +1035,16 @@ export const verdictOf = (t: Pick<schema.Ticket, 'approvedAt' | 'disapprovedAt'>
 
 /**
  * The human's call on a ticket or lane: approve it, disapprove it (which moves it to the project's
- * first cancelled stage), or clear the call. Approving a PR review (a ticket tagged `PR`) also moves
- * it to the first done stage; taking that back returns it to `reopenTo` or the first review stage. Taking back a disapproval puts a cancelled ticket back
- * to `reopenTo` (the stage it had, when an undo knows it) or the stage new tickets start in. Callers make sure
- * the actor is the human.
+ * first cancelled stage), or clear the call. Approving a ticket in a review stage moves it to Approved
+ * (the review-kind stage the default layout puts after In review), where its agents may merge the PR
+ * once the human has said yes; approving a PR review (a ticket tagged `PR`) finishes it in the first
+ * done stage instead. Taking that back returns it to `reopenTo` or the first review stage. Taking back
+ * a disapproval puts a cancelled ticket back to `reopenTo` (the stage it had, when an undo knows it) or
+ * the stage new tickets start in. Callers make sure the actor is the human.
+ *
+ * Only the verdict and a move put a ticket in Approved: no stage kind sends one there, since it is a
+ * `review` stage, the same as In review. The default `review` stage stays the first of its kind, so
+ * the board's by-kind picks (the PR sync's `reviewed`, the preview filter) still land in In review.
  */
 export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { reopenTo?: string } = {}) {
   const t = getTicket(id)
@@ -1056,16 +1062,29 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
   const pr = t.tags.some((tag) => tag.toLowerCase() === 'pr')
   const finish = verdict === 'approved' && pr ? firstOfKind(stages, 'done') : undefined
   const kind = kindOf(stages, t.status)
+  // The ticket's own Approved stage, when the project kept it: a key, and a review stage still.
+  const approved = stages.find((s) => s.key === 'approved' && s.kind === 'review')
+  const approve = verdict === 'approved' && kind === 'review' && approved ? approved : undefined
   const reopen =
     (before === 'disapproved' && kind === 'cancelled') ||
-    (before === 'approved' && pr && kind === 'done' && verdict === null)
+    (before === 'approved' && pr && kind === 'done' && verdict === null) ||
+    // Taking back an approval returns a ticket in Approved to the review column it came from.
+    (before === 'approved' && kind === 'review' && verdict === null)
   const reopenTo = opts.reopenTo
     ? resolveStage(stages, opts.reopenTo, projectWorkStage(t.projectId, stages))
     : before === 'approved'
       ? (firstOfKind(stages, 'review') ?? startStage(stages))
       : startStage(stages)
   const status =
-    verdict === 'disapproved' && cancel ? cancel.key : finish ? finish.key : reopen ? reopenTo.key : t.status
+    verdict === 'disapproved' && cancel
+      ? cancel.key
+      : finish
+        ? finish.key
+        : approve
+          ? approve.key
+          : reopen
+            ? reopenTo.key
+            : t.status
   const row = db
     .update(schema.tickets)
     .set({
@@ -1090,7 +1109,7 @@ export function setVerdict(id: number, verdict: Verdict, actor: string, opts: { 
     kind: 'ticket',
     text:
       verdict === 'approved'
-        ? `approved ${what}${finish ? ` (${finish.name})` : ''}`
+        ? `approved ${what}${finish ? ` (${finish.name})` : approve ? ` (${approve.name})` : ''}`
         : verdict === 'disapproved'
           ? `disapproved ${what}${cancel ? ` (${cancel.name})` : ''}`
           : `withdrew the ${before === 'approved' ? 'approval' : 'disapproval'} of ${what}${reopen ? ` (back to ${reopenTo.name})` : ''}`,

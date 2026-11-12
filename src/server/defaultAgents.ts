@@ -193,6 +193,15 @@ moment).
 
 **Returns:** NO ISSUE, CONFLICTS, TESTS FAIL AFTER MERGE or UNVERIFIED, and the worktree restored.
 
+**Merging:** a review never merges, and merging is the human's everywhere except on a ticket in
+Approved, where an orchestrator may merge its PR(s) after the human says yes. Its routine: every task
+and subtask done and the open list empty; post the PRs and \`ask_decision\`, never on silence, with
+\`block: false\` so the ticket stays in Approved (a card blocks by default); merge,
+and when the branch conflicts with its base, merge the base in, resolve it, push and wait for CI
+green first; then move the ticket to done naming the PR and the merge commit. A red CI or a conflict
+it cannot resolve stops it, and it is not moved. That is the orchestrator's work, not this check's:
+this agent only says whether the base would conflict.
+
 **Next:** the report. CONFLICTS or new failures in a build → **builder** merges the base in and
 fixes them while the ticket has a round left.`,
   },

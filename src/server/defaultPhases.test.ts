@@ -550,7 +550,7 @@ describe('what agents are told', () => {
     expect(instructions).not.toContain('Hand-off post is yours')
     expect(instructions).toContain('Implementation and its steps are the ones you tick')
     expect(instructions).toContain(
-      "update_ticket to review answers with open: [{taskId, ticketId, text, auto}], every task and subtask still open, the ticket's and its lanes' that are not cancelled, in tree order (Merged aside: merging is the human's)",
+      "update_ticket to review answers with open: [{taskId, ticketId, text, auto}], every task and subtask still open, the ticket's and its lanes' that are not cancelled, in tree order (Merged aside: merging is the human's, except on a ticket in Approved, below)",
     )
     expect(instructions).not.toContain('tick each hand-off phase')
     expect(instructions).not.toContain('the board ticks nothing itself')

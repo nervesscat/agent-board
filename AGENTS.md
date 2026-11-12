@@ -304,14 +304,15 @@ http_headers = { Authorization = "Bearer <token>" }
       with `needs: [<its ticket id>]` (or `needs` on `create_ticket`), instead of only writing
       "builds on …" in the PR. The PR queue then marks your PR "merge after #<its PR>", and the
       ticket cannot move to `done` until that branch is merged into its base (the refusal says
-      which; only the human can mark it done anyway). `get_ticket_git` → `includes` lists the open
-      tickets whose unmerged work your branch already holds; `get_ticket` → `needs` says whether
-      each is `merged`. `needs` is the enforced rule; the review column's order is the merge order
-      the agents propose, read top to bottom (top merges first). Moving your ticket to review, place
-      it with `update_ticket` → `position` (1 is the top; with `status`, in the new stage): below
-      every open ticket it `needs`, otherwise where it should merge relative to the others. The
-      board flags a card placed above a ticket it needs ("merge after #<id>"); any move to another
-      stage clears the place.
+      which; only the human can mark it done anyway, but in Approved an orchestrator moves it to
+      `done` after the human agreed to the merge, below). `get_ticket_git` → `includes` lists the
+      open tickets whose unmerged work your branch already holds; `get_ticket` → `needs` says
+      whether each is `merged`. `needs` is the enforced rule; the review column's order is the
+      merge order the agents propose, read top to bottom (top merges first). Moving your ticket to
+      review, place it with `update_ticket` → `position` (1 is the top; with `status`, in the new
+      stage): below every open ticket it `needs`, otherwise where it should merge relative to the
+      others. The board flags a card placed above a ticket it needs ("merge after #<id>"); any move
+      to another stage clears the place.
    5. PR open, assigned to the human (`gh pr create --assignee <their login>`, or `--assignee @me`
       when you push with their account; GitHub never lets a PR's author be its requested reviewer,
       and the PR queue lists their own PRs under Waiting on others), and `update_ticket` with its
@@ -339,13 +340,15 @@ http_headers = { Authorization = "Bearer <token>" }
 
    `update_ticket` to `review` answers with `open`: every task and subtask still open, the
    ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text,
-   auto}`. Merged is left out: merging is the human's. `auto: true` marks a phase the board ticks
-   from its fact (Pushed, PR, CI, Preview, Summary): settle it by making the fact hold (push, open
-   the PR, get CI green, start the preview, rewrite the summary after your last commit), never by a
-   tick. The move goes through anyway: fix each one; `open: []` means nothing is left. `get_ticket`
-   returns the same `open` while the ticket is in review.
+   auto}`. Merged is left out: merging is the human's, except on a ticket in Approved (below).
+   `auto: true` marks a phase the board ticks from its fact (Pushed, PR, CI, Preview, Summary):
+   settle it by making the fact hold (push, open the PR, get CI green, start the preview, rewrite the
+   summary after your last commit), never by a tick. The move goes through anyway: fix each one;
+   `open: []` means nothing is left. `get_ticket` returns the same `open` while the ticket is in
+   review.
 
-   `done` is the human's call unless the instructions say otherwise. A ticket with lanes goes to
+   `done` is the human's call unless the instructions say otherwise, or the ticket is in Approved
+   and the human agreed to its merge (below). A ticket with lanes goes to
    `review` once its lanes are in `review`, `done` or `cancelled` (`cancelled` is work that was
    dropped: say why in a comment). The human's verdict on a lane or ticket is `approvedAt` /
    `approvedBy` or `disapprovedAt` / `disapprovedBy` (disapproving also cancels it; approving a
@@ -494,6 +497,29 @@ routine.
   findings, how to test, checks): that is how findings reach the human, as the verdict on the PR
   queue and on the ticket's Branch card, which open the result in full, and as a progress post on
   the PR's ticket when it has one. Never post the review to GitHub.
+
+## Approved: the one place agents may merge
+
+**Approved** is the review-kind stage the default layout puts after **In review**. Nothing moves a
+ticket there by kind: the human's verdict on a ticket in review (or their move) does. It is work an
+orchestrator may pick up, like the review queue, and for each ticket there it runs this routine:
+
+1. **Check the work is finished**: every task and subtask done (Implementation and its steps, the
+   hand-off phases) and `get_ticket` → `open` empty; if something is open, finish it or say what is
+   missing and leave the ticket in Approved.
+2. **Ask the human first**: post the PR(s) it will merge and what it will do, with `ask_decision`
+   (or a comment), and wait for a yes. Ask with `block: false`: a card blocks the ticket by default
+   (Blocked, then the work stage once answered), and the merge permission is only in Approved. Never
+   merge on silence.
+3. **Merge, fixing what blocks it**: if the branch conflicts with its base, merge the base in, resolve
+   it, push, wait for CI green, then merge the PR.
+4. **Move the ticket to done** once the merge is in, naming the PR and the merge commit and what was
+   checked. If CI stays red or a conflict cannot be resolved, stop and explain; it is not moved. Its
+   `needs` still keep it from done until those branches are merged into its base.
+
+Merging is the human's everywhere except on a ticket in Approved, where an orchestrator may merge its
+PR(s) after the human says yes. The board never merges a PR itself and no code path in it does; an
+agent merges only a ticket's PR(s) in Approved, only after that yes.
 
 ## Writing style on the board
 
