@@ -257,8 +257,9 @@ function StallMinutes({ projectId, saved }: { projectId: string; saved: number }
           <span className="font-medium">Lost contact</span> — the agent is gone, not waiting on you. A ticket
           with nothing open reads as <span className="font-medium">Stalled</span> once no agent's word (a
           heartbeat, a span, a wait, a hand-off) and nothing the board has seen of it (a push, its PR, its
-          preview) has come for this long. This dial sets that silence threshold; the lease's ten minutes stay
-          fixed.
+          preview) has come for this long. This dial sets that silence threshold, and it decides first: a
+          threshold under ten minutes flags a silent ticket before the lease runs out. The lease's ten minutes
+          stay fixed.
         </p>
       </div>
       <form

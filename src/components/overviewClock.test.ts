@@ -41,9 +41,7 @@ const activity = {
     lastSignalAt: START,
     lastWordAt: START,
     silentMinutes: 43,
-    spans: [
-      { phase: 'build', agent: 'claude', since: START, lastWordAt: START, silentMinutes: 43 },
-    ],
+    spans: [{ phase: 'build', agent: 'claude', since: START, lastWordAt: START, silentMinutes: 43 }],
   },
 }
 

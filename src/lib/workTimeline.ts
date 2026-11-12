@@ -173,7 +173,7 @@ export type TimelineOptions = {
   stallMinutes: number
   /** Its posts: an agent's refreshes the lease, a human's proves a person spoke, not that the run is alive. */
   posts?: TimelinePost[]
-  /** Why it waits on the human outside its events: an undecided decision card, or an open blocked task. */
+  /** Why it waits on the human outside its events: an undecided decision card, or a blocked next step. */
   waiting?: { decision?: boolean; blockedTask?: boolean }
 }
 

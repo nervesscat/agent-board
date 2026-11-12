@@ -629,7 +629,7 @@ describe('the stalled flag', () => {
     expect(lost.stalled).toBeNull()
   })
 
-  it('waits on the human from each fact: a human wait, a pending decision and an open blocked task', async () => {
+  it('waits on the human from each fact: a human wait, a pending decision and a blocked next step', async () => {
     const pid = newProject()
     const { db, schema } = dbm
     const byWait = activeTicket(pid, 'wait')
@@ -671,7 +671,11 @@ describe('the stalled flag', () => {
   it('waits on a blocked step of its own, never on its parent’s, and says so on both reads', async () => {
     const pid = newProject()
     const parent = activeTicket(pid, 'parent')
-    const lane = features.createTicket(pid, { title: 'lane', status: 'in_progress', parentId: parent.id }, HUMAN)
+    const lane = features.createTicket(
+      pid,
+      { title: 'lane', status: 'in_progress', parentId: parent.id },
+      HUMAN,
+    )
     const [keys] = features.addTasks(parent.id, ['keys'], AGENT)
     features.updateTask(keys!.id, { blocked: true, blockedReason: 'the human gets the key' }, AGENT)
     const [draft] = features.addTasks(lane.id, ['draft the docs'], AGENT)
@@ -679,9 +683,12 @@ describe('the stalled flag', () => {
     await tool('heartbeat', { projectId: pid, ticketId: lane.id })
 
     const reads = async (id: number) => {
-      const row = ((await tool('list_tickets', { projectId: pid })) as { id: number; liveness: { state: string } | null }[]).find(
-        (r) => r.id === id,
-      )!
+      const row = (
+        (await tool('list_tickets', { projectId: pid })) as {
+          id: number
+          liveness: { state: string } | null
+        }[]
+      ).find((r) => r.id === id)!
       const full = await tool('get_ticket', { ticketId: id })
       return { list: row.liveness?.state, get: full.work.liveness?.state }
     }

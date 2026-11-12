@@ -140,11 +140,14 @@ Lanes of a ticket you are working are yours to create (next section).
     post, a span, a hand-off — or the board's own push, PR or preview event — refreshes the ticket's
     lease, and the lease lasts ten minutes. Within it the ticket reads **Working**. Needs you is the
     human's turn: an open span never puts a ticket there.
-  - The four states: **Waiting on you** (a `human` wait, an undecided decision card or a blocked
-    task), **Working** (a live lease, or a span younger than the lease), **Lost contact** (the lease
-    ran out with a span still open: the agent is gone, which is not Waiting on you and not Stalled)
-    and **Stalled** (nothing open, silence past the project's `stallMinutes`, 30 by default). An
-    open span alone never keeps a dead run reading as Working: Lost contact shows within the lease.
+  - The four states: **Waiting on you** (a `human` wait, an undecided decision card, or a blocked
+    task that is the ticket's next step — or a lane's own next step, rolled up), **Working** (a span
+    open and a live lease or a young span; nothing open, a live lease and silence inside
+    `stallMinutes`), **Lost contact** (the lease ran out with a span still open: the agent is gone,
+    which is not Waiting on you and not Stalled) and **Stalled** (nothing open, silence past the
+    project's `stallMinutes`, 30 by default; the silence decides before the lease does, so a
+    threshold under ten minutes takes effect at once). An open span alone never keeps a dead run
+    reading as Working: Lost contact shows within the lease.
   - **Beat during long calls without remembering.** Save the beater from
     `{{BOARD_URL}}/api/agent-setup/board-beat` as `board-beat.mjs` and run it around the heavy
     commands, or wire it as an OpenCode plugin's tool-start/tool-end hook:
@@ -165,8 +168,12 @@ Lanes of a ticket you are working are yours to create (next section).
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
   they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
-  rest. It shows on the task, on the ticket's card (`blockedTasks`) and in the human's Needs you
-  (`get_summary` → `needsYou.blockedTasks`). It still counts as open and does not move the ticket.
+  rest. It shows on the task and the ticket page; the ticket's card and the human's Needs you
+  (`get_summary` → `needsYou.blockedTasks`) show it only while it is the ticket's next step to work
+  (the first open task with no open subtask; a lane's own next step counts for its parent too) —
+  `blockedNext` on the ticket says whether one of them is, while `blockedTasks` stays the full count
+  of blocked steps. It still counts as open and does not move the ticket. A blocked step further
+  down the order surfaces once the steps before it are done.
   Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole
   ticket to `blocked` (or `ask_decision`) only when nothing else can go on.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another

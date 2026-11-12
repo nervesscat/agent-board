@@ -374,6 +374,13 @@ test('on a 375 and a 440px phone the PR queue fits without sideways scroll, and 
     await page.goto(`/projects/${project.id}/prs?filter=me`)
     await expect(page.getByText('Nothing pending to review.'), `${width}px`).toBeVisible()
     expect(await scrollsSideways(page), `${width}px`).toBe(false)
+    // The To review switch fits beside the filters, and answers a tap.
+    await tab('Just me as reviewer').tap()
+    await expect(tab('Just me as reviewer'), `${width}px`).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByText('Nothing pending to review.'), `${width}px`).toBeVisible()
+    expect(await scrollsSideways(page), `${width}px`).toBe(false)
+    await tab('All PRs').tap()
+    await expect(tab('All PRs'), `${width}px`).toHaveAttribute('aria-selected', 'true')
     for (const stage of ['Reviewed', 'On hold', 'Done']) {
       await tab(stage).tap()
       await expect(tab(stage), `${width}px`).toHaveAttribute('aria-selected', 'true')

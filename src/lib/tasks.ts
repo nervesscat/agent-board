@@ -1,8 +1,19 @@
 /**
- * A ticket's tasks as a tree: the first open step a ticket works next, with an open parent counted as a
- * container rather than a step. Pure, so every read that has to know what a ticket works next — the
- * blocked badge, Needs you, and whether the ticket waits on the human — picks the same task.
+ * Tasks as the board shapes them: the tree a ticket's tasks make, the step it works next, and the words
+ * a task composer adds at the end.
  */
+
+/**
+ * `tasks` with the tasks in `text` added at the end: one per line, trimmed, blank lines left out.
+ * Repeats are kept, as the server keeps them: two tasks may read the same.
+ */
+export function addTasks(tasks: string[], text: string): string[] {
+  const added = text
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return added.length ? [...tasks, ...added] : tasks
+}
 
 type TaskLike = { id: number; parentId: number | null; position: number; done: boolean }
 

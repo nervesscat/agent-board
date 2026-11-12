@@ -758,7 +758,7 @@ export function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
                         </span>
                       )}
                       {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
-                      {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                      {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} />}
                       {t.preview && (
                         <Tip content={`Preview of ${t.preview.workspace}`}>
                           <a

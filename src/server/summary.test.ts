@@ -497,7 +497,7 @@ describe('blocked tasks', () => {
     return byText
   }
 
-  it('are listed under needs you, each with its ticket, and counted in the total', () => {
+  it('surfaces each ticket’s next blocked step, with its ticket, and counts it in the total', () => {
     const pid = project('blocked tasks')
     const t = ticket(pid, 'Payments', { status: 'in_progress', assignee: 'claude' })
     const own = tasks(
@@ -513,22 +513,13 @@ describe('blocked tasks', () => {
     const base = take(pid)
     // Newest ticket activity first; the order between tickets touched in the same moment is not fixed.
     const byTask = (list: typeof base.needsYou.blockedTasks) => [...list].sort((a, b) => a.taskId - b.taskId)
+    // `keys` is the first open step under Implementation, so it surfaces; `deploy` waits behind it.
     expect(byTask(base.needsYou.blockedTasks)).toEqual([
       {
         taskId: own.get('keys')!.id,
         text: 'keys',
         reason: 'do keys',
         parentTask: 'Implementation',
-        ticketId: t.id,
-        ticketTitle: 'Payments',
-        status: 'in_progress',
-        parent: null,
-      },
-      {
-        taskId: own.get('deploy')!.id,
-        text: 'deploy',
-        reason: 'do deploy',
-        parentTask: null,
         ticketId: t.id,
         ticketTitle: 'Payments',
         status: 'in_progress',
@@ -545,30 +536,118 @@ describe('blocked tasks', () => {
         status: 'review',
       }),
     ])
+    expect(base.needsYou.blockedTasks.map((x) => x.taskId)).not.toContain(own.get('deploy')!.id)
     // The ticket in review is there twice: once to review, once for its blocked task.
     expect(base.needsYou.reviews.map((r) => r.id)).toEqual([review.id])
-    // An open blocked task (the lane's included) makes them Waiting on you: never stalled, not counted
-    // among the stalled rows.
+    // Each ticket's blocked step is the one it works next: the ticket and its lane read Waiting on you
+    // from it, so neither is stalled, and the ticket in review is waiting on its own blocked step.
     expect(base.needsYou.stalled).toEqual([])
-    expect(base.needsYou.total).toBe(5)
+    expect(base.needsYou.total).toBe(3 + 1)
 
-    // In progress carries the count of each ticket, its lanes' included.
+    // In progress carries the true count of each ticket, its lanes' included, and says a blocked step
+    // is the one it works next.
     const payments = base.inProgress.find((x) => x.id === t.id)!
     expect(payments.blockedTasks).toBe(3)
+    expect(payments.blockedNext).toBe(true)
     expect(payments.blockedTasks).toBe(features.listTickets(pid).find((x) => x.id === t.id)!.blockedTasks)
 
-    // One more tagged: one more entry, and the total goes up by one.
+    // One more tagged behind the next step: counted, not surfaced, and the total does not move.
     features.updateTask(own.get('webhook')!.id, { blocked: true }, 'claude')
     const more = take(pid)
-    expect(more.needsYou.blockedTasks).toHaveLength(5)
-    expect(more.needsYou.blockedTasks.find((x) => x.text === 'webhook')).toMatchObject({
-      parentTask: 'Implementation',
-      reason: '',
-    })
-    expect(more.needsYou.total).toBe(6)
-    // Ticked done: gone.
+    expect(more.needsYou.blockedTasks).toHaveLength(3)
+    expect(more.needsYou.blockedTasks.map((x) => x.taskId)).not.toContain(own.get('webhook')!.id)
+    expect(more.inProgress.find((x) => x.id === t.id)!.blockedTasks).toBe(4)
+    expect(more.needsYou.total).toBe(3 + 1)
+    // Ticked done: gone from the count too (it never surfaced).
     features.updateTask(own.get('webhook')!.id, { done: true }, 'claude')
-    expect(take(pid).needsYou.total).toBe(5)
+    expect(take(pid).needsYou.total).toBe(3 + 1)
+  })
+
+  it('leaves a blocked step out while an earlier open one comes first, and still counts it', () => {
+    const pid = project('blocked behind')
+    const t = ticket(pid, 'Wait', { status: 'in_progress' })
+    const own = tasks(t.id, ['write', 'publish'], ['publish'])
+    const s = take(pid)
+    expect(s.needsYou.blockedTasks).toEqual([])
+    expect(s.needsYou.blockedTasks.map((x) => x.taskId)).not.toContain(own.get('publish')!.id)
+    expect(features.listTickets(pid).find((x) => x.id === t.id)!.blockedTasks).toBe(1)
+    expect(features.listTickets(pid).find((x) => x.id === t.id)!.blockedNext).toBe(false)
+    expect(features.getTicketFull(t.id).blockedTasks).toBe(1)
+  })
+
+  it('follows the ticket’s order: only the first open step surfaces, then the next one as it is reached', () => {
+    const pid = project('blocked next')
+    const t = ticket(pid, 'Ship', { status: 'in_progress', assignee: 'claude' })
+    const own = tasks(
+      t.id,
+      [{ text: 'Implementation', subtasks: ['keys', 'webhook'] }, 'deploy'],
+      ['keys', 'deploy'],
+    )
+    const row = () => features.listTickets(pid).find((x) => x.id === t.id)!
+    // The open parent is a container: its first open subtask is the next step, and the blocked one after
+    // it (`deploy`) stays out though it is counted.
+    expect(take(pid).needsYou.blockedTasks).toEqual([
+      expect.objectContaining({ text: 'keys', parentTask: 'Implementation', reason: 'do keys' }),
+    ])
+    expect(row().blockedTasks).toBe(2)
+    expect(row().blockedNext).toBe(true)
+    expect(features.getTicketFull(t.id).blockedTasks).toBe(2)
+    // `total` counts the surfaced step alone, not every blocked one.
+    const before = take(pid)
+    expect(before.needsYou.blockedTasks).toHaveLength(1)
+    expect(before.needsYou.total).toBe(
+      before.needsYou.decisions.length +
+        before.needsYou.humanWaits.length +
+        before.needsYou.prs.length +
+        before.needsYou.threads.length +
+        before.needsYou.reviews.length +
+        before.needsYou.blockedTasks.length +
+        before.needsYou.instructionChanges.length +
+        before.needsYou.stalled.length,
+    )
+
+    // `keys` done: `webhook` is the step being worked, so nothing of the ticket's surfaces, and `deploy`
+    // is still counted behind it.
+    features.updateTask(own.get('keys')!.id, { done: true }, 'claude')
+    expect(take(pid).needsYou.blockedTasks).toEqual([])
+    expect(row().blockedTasks).toBe(1)
+    expect(row().blockedNext).toBe(false)
+
+    // `webhook` done settles Implementation done: `deploy` is next now, and surfaces.
+    features.updateTask(own.get('webhook')!.id, { done: true }, 'claude')
+    expect(take(pid).needsYou.blockedTasks).toEqual([expect.objectContaining({ text: 'deploy' })])
+    expect(row().blockedTasks).toBe(1)
+    expect(row().blockedNext).toBe(true)
+  })
+
+  it('rolls a lane’s next blocked step up to its parent, whose own next step is not blocked', () => {
+    const pid = project('blocked lane')
+    const parent = ticket(pid, 'Parent', { status: 'in_progress', assignee: 'claude' })
+    const own = tasks(parent.id, ['write', 'publish'], ['publish'])
+    const lane = ticket(pid, 'Docs', { status: 'in_progress', parentId: parent.id })
+    const laneTasks = tasks(lane.id, ['proofread'], ['proofread'])
+    const row = (id: number) => features.listTickets(pid).find((x) => x.id === id)!
+    const s = take(pid)
+    // The parent's own next step (`write`) is unblocked, so its blocked `publish` stays out; its lane's
+    // blocked next step does not.
+    expect(s.needsYou.blockedTasks).toEqual([
+      expect.objectContaining({
+        taskId: laneTasks.get('proofread')!.id,
+        text: 'proofread',
+        ticketId: lane.id,
+        ticketTitle: 'Docs',
+        status: 'in_progress',
+        parent: { id: parent.id, title: 'Parent' },
+      }),
+    ])
+    expect(s.needsYou.blockedTasks.map((x) => x.taskId)).not.toContain(own.get('publish')!.id)
+    expect(row(parent.id).blockedTasks).toBe(2)
+    expect(row(parent.id).blockedNext).toBe(true)
+    expect(row(lane.id).blockedNext).toBe(true)
+    expect(s.inProgress.find((x) => x.id === parent.id)).toMatchObject({
+      blockedTasks: 2,
+      blockedNext: true,
+    })
   })
 
   it('leave out done tasks, and tickets that are done, cancelled, archived or under a cancelled lane', () => {
@@ -594,7 +673,7 @@ describe('blocked tasks', () => {
 
     const s = take(pid)
     expect(s.needsYou.blockedTasks.map((x) => [x.ticketId, x.text])).toEqual([[live.id, 'open']])
-    // Every ticket in progress but the parent has an open blocked task: Waiting on you, never stalled.
+    // Every ticket in progress but the parent works a blocked step next: Waiting on you, never stalled.
     // The parent has nothing blocked and nothing open, so it is the one stalled row.
     expect(s.needsYou.stalled.map((x) => x.ticketId)).toEqual([parent.id])
     expect(s.needsYou.total).toBe(1 + 1)

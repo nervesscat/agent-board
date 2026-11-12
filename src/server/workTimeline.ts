@@ -402,8 +402,7 @@ export function timelinesFor(
   const blockedNext = (id: number): boolean =>
     nextBlocked.get(id) === true ||
     (lanes.get(id) ?? []).some(
-      (lane) =>
-        kindOf(projectOf(lane.projectId).stages, lane.status) !== 'cancelled' && blockedNext(lane.id),
+      (lane) => kindOf(projectOf(lane.projectId).stages, lane.status) !== 'cancelled' && blockedNext(lane.id),
     )
   return new Map(
     tickets.map((t) => {

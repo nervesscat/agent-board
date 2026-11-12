@@ -133,12 +133,14 @@ http_headers = { Authorization = "Bearer <token>" }
    that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
    they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
    rest. Every task carries `blocked` and `blockedReason` (`''` when none); a ticket's
-   `blockedTasks` counts its blocked tasks, its lanes' included, and its card shows them; the
-   summary lists each one under Needs you (`needsYou.blockedTasks`). A blocked task still counts as
-   open and does not move the ticket. Ticking it done clears the tag (on the subtasks a tick
-   reaches and on a parent its last subtask ticks, too); `blocked: false` clears it once resolved.
-   Tagging a done task reopens it. Move the whole ticket to `blocked` only when nothing else can go
-   on (step 6).
+   `blockedTasks` counts its blocked tasks, its lanes' included, and `blockedNext` says whether one
+   of them is the step to work next (the first open task with no open subtask, its lanes' own next
+   steps counting too). Only that next step shows on its card and in the summary's Needs you
+   (`needsYou.blockedTasks`); one further down the order surfaces once the steps before it are done.
+   A blocked task still counts as open and does not move the ticket. Ticking it done clears the tag
+   (on the subtasks a tick reaches and on a parent its last subtask ticks, too); `blocked: false`
+   clears it once resolved. Tagging a done task reopens it. Move the whole ticket to `blocked` only
+   when nothing else can go on (step 6).
 
 4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
    agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and
@@ -269,9 +271,10 @@ http_headers = { Authorization = "Bearer <token>" }
      steps). A heartbeat, a post, a span, a hand-off or the board's own push/PR/preview event refreshes
      the ticket's lease, which lasts ten minutes. The ticket reads **Working** while the lease is live
      or a span is younger than it, **Waiting on you** for a `human` wait, an undecided decision card or
-     a blocked task, **Lost contact** when the lease ran out with a span still open (the agent is
-     gone), and **Stalled** when nothing is open and the silence is past the project's `stallMinutes`
-     (30 by default, set by the human). An open span never puts a ticket in Needs you: that is the
+     a blocked task that is the step it works next (its lanes' next steps count), **Lost contact** when
+     the lease ran out with a span still open (the agent is gone), and **Stalled** when nothing is open
+     and the silence is past the project's `stallMinutes` (30 by default, set by the human; the silence
+     decides before the lease does). An open span never puts a ticket in Needs you: that is the
      human's turn.
    - **Beat during long calls without remembering**: save `board-beat.mjs` from the board's
      `/api/agent-setup/board-beat` and run it around the heavy commands

@@ -296,7 +296,16 @@ describe('the wrapper as an operator runs it', () => {
     try {
       const started = Date.now()
       const run = runBeat(
-        ['--project', '1', '--ticket', '7', '--', process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`],
+        [
+          '--project',
+          '1',
+          '--ticket',
+          '7',
+          '--',
+          process.execPath,
+          '-e',
+          `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`,
+        ],
         { BOARD_URL: `http://127.0.0.1:${port}`, BOARD_BEAT_TIMEOUT_MS: '150' },
       )
       try {

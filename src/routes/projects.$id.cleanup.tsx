@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { Copy, FolderGit2, GitBranch, Layers, Paperclip, RefreshCw, Trash2, X } from 'lucide-react'
+import { Copy, FolderGit2, GitBranch, Layers, Paperclip, RefreshCw, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Empty } from '#/components/Empty'
 import { ReachBadge } from '#/components/ReachBadge'
+import { TrashIcon } from '#/components/TrashIcon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -228,7 +229,7 @@ function Cleanup() {
                       disabled={remove.isPending}
                       onClick={() => ask(kind, eligible(kind))}
                     >
-                      <Trash2 data-icon="inline-start" /> {ACTIONS[kind].all} ({eligible(kind).length})
+                      <TrashIcon data-icon="inline-start" /> {ACTIONS[kind].all} ({eligible(kind).length})
                     </Button>
                   ),
               )}
@@ -449,7 +450,7 @@ function Cleanup() {
                     disabled={remove.isPending}
                     onClick={() => ask('remote', eligible('remote'))}
                   >
-                    <Trash2 data-icon="inline-start" /> {ACTIONS.remote.all} ({eligible('remote').length})
+                    <TrashIcon data-icon="inline-start" /> {ACTIONS.remote.all} ({eligible('remote').length})
                   </Button>
                 )}
               </div>
