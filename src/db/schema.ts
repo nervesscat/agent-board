@@ -26,6 +26,7 @@ import {
   type StageKind,
   type FeedTab,
 } from '#/lib/constants'
+import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
 import type { RunType } from '#/lib/runs'
 
@@ -252,7 +253,8 @@ export const tickets = sqliteTable(
     // Where it was placed in its stage's column (its siblings in that stage): placed tickets come first,
     // lowest rank first, then the rest last updated first. Null until placed; any change of stage clears it.
     rank: integer(),
-    // How much review the ticket gets: low none, mid one round, high three (COMPLEXITIES).
+    // How much review the ticket gets: low none, mid one round, high three, max up to ten
+    // (COMPLEXITIES).
     complexity: text().$type<Complexity>().notNull().default(DEFAULT_COMPLEXITY),
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
@@ -289,7 +291,7 @@ export const tickets = sqliteTable(
   },
   (t) => [
     index('tickets_parent').on(t.parentId),
-    check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high')`),
+    check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high', 'max')`),
   ],
 )
 
@@ -488,6 +490,9 @@ export const attachments = sqliteTable('attachments', {
   storedAs: text('stored_as').notNull(),
   uploadedBy: text('uploaded_by').notNull(),
   createdAt: now(),
+  // What was drawn on the picture before it was attached: the shapes and their notes, the file itself
+  // being the flattened picture. Null when nothing was drawn on it (an agent's upload included).
+  annotations: text({ mode: 'json' }).$type<AnnotationDoc>(),
 })
 
 export const reviewResults = sqliteTable(
