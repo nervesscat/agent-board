@@ -21,7 +21,7 @@ export const record = (
     agent.post(`/api/projects/${project.id}/tickets/${ticketId}/events`, { data }),
   )
 
-/** Moves a ticket's whole past `minutes` back: its events, its creation and its start. */
+/** Moves a ticket's whole past `minutes` back: its events, its creation, its start and its posts. */
 export function age(ticketId: number, minutes: number) {
   const shift = `-${minutes} minutes`
   inDatabase((db) => {
@@ -32,6 +32,10 @@ export function age(ticketId: number, minutes: number) {
     db.prepare(
       'update tickets set "createdAt" = strftime(\'%Y-%m-%dT%H:%M:%fZ\', "createdAt", ?), started_at = strftime(\'%Y-%m-%dT%H:%M:%fZ\', started_at, ?) where id = ?',
     ).run(shift, shift, ticketId)
+    // A post is a lease signal: ageing it is how a fixture says the agent has not spoken for a while.
+    db.prepare(
+      "update updates set createdAt = strftime('%Y-%m-%dT%H:%M:%fZ', createdAt, ?) where ticket_id = ?",
+    ).run(shift, ticketId)
   })
 }
 
@@ -57,9 +61,31 @@ export async function workedTicket(human: APIRequestContext, agent: APIRequestCo
   return { t, lane }
 }
 
-export type Playwright = { request: { newContext: (o: object) => Promise<APIRequestContext> } }
+/** A ticket in progress with a lane, worked and then silent: the same shape as `workedTicket`, with its
+ * build span closed. A 20-minute wait on the test lock, a hand-off, a 40-minute build that ended 40
+ * minutes ago and nothing since: nothing open, so it reads as Stalled, not Lost contact. */
+export async function stalledTicket(human: APIRequestContext, agent: APIRequestContext, project: Project) {
+  const t = await create(human, project, { title: 'Ship the importer', status: 'in_progress' })
+  const lane = await create(human, project, { title: 'Importer docs', status: 'in_progress', parentId: t.id })
+  await record(agent, project, t.id, { kind: 'wait_start', reason: 'lock', note: 'test lock' })
+  age(t.id, 20)
+  await record(agent, project, t.id, { kind: 'wait_end' })
+  await record(agent, project, t.id, {
+    kind: 'handoff',
+    agent: 'orchestrator',
+    from: 'orchestrator',
+    to: 'builder-sub-1',
+  })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'build' })
+  age(t.id, 40)
+  await record(agent, project, t.id, { kind: 'span_end' })
+  age(t.id, 40)
+  return { t, lane }
+}
 
-/** REST as whoever `actor` names in test mode (orchestrator:<name>, agent:<name>), with any other headers. */
+export type Playwright = {
+  request: { newContext: (o: object) => Promise<APIRequestContext> }
+} /** REST as whoever `actor` names in test mode (orchestrator:<name>, agent:<name>), with any other headers. */
 export const as = (playwright: Playwright, baseURL: string | undefined, actor: string, headers = {}) =>
   playwright.request.newContext({ baseURL, extraHTTPHeaders: { 'X-Test-Actor': actor, ...headers } })
 

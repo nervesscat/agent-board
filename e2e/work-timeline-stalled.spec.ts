@@ -1,7 +1,7 @@
 import type { Project } from '#/lib/api'
 import { HUMAN } from './env'
 import { expect, expectTooltip, ok, section, test } from './fixtures'
-import { as, age, create, record, workedTicket } from './workTimeline'
+import { as, age, create, record, stalledTicket, workedTicket } from './workTimeline'
 
 /**
  * Stalled tickets: the warning on a card, a list row and Needs you (its why and since when, in the same words
@@ -14,7 +14,7 @@ test('a stalled ticket shows on its card, in the list and in Needs you, linking 
   human,
   agent,
 }) => {
-  const { t } = await workedTicket(human, agent, project)
+  const { t } = await stalledTicket(human, agent, project)
   const other = await create(human, project, { title: 'All quiet', status: 'in_progress' })
   await record(agent, project, other.id, { kind: 'heartbeat' })
 
@@ -22,10 +22,7 @@ test('a stalled ticket shows on its card, in the list and in Needs you, linking 
   const card = page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) })
   await expect(card).toContainText('Stalled')
   // The badge's tooltip: the Now line, then the why.
-  await expectTooltip(
-    card.getByTestId('stall-notice'),
-    /Building · claude · \d+ min\nclaude has a build open/,
-  )
+  await expectTooltip(card.getByTestId('stall-notice'), /Nothing open\nnothing open since the build ended/)
   await expect(page.getByRole('link', { name: /All quiet/ })).not.toContainText('Stalled')
   await page.getByRole('tab', { name: 'List' }).click()
   await expect(page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) })).toContainText(
@@ -41,9 +38,7 @@ test('a stalled ticket shows on its card, in the list and in Needs you, linking 
   const row = needsYou
     .getByRole('listitem')
     .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` }) })
-  await expect(row).toContainText(
-    /Stalled \d+ min: claude has a build open, nobody heard from since .*last\s*claude/,
-  )
+  await expect(row).toContainText(/Stalled \d+ min: nothing open since the build ended at .*last\s*claude/)
   await expect(needsYou.getByRole('link', { name: /Stalled: .*All quiet/ })).toHaveCount(0)
   await link.click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}$`))
@@ -170,6 +165,9 @@ test('the human sets after how many minutes a ticket reads as stalled', async ({
 }) => {
   await page.goto(`/projects/${project.id}/settings`)
   const settings = page.getByRole('region', { name: 'Stalled tickets' })
+  // The settings copy names both clocks: the fixed lease and the human's stall threshold.
+  await expect(settings).toContainText('Lost contact')
+  await expect(settings).toContainText(/lease/i)
   const minutes = settings.getByLabel('Stalled after (minutes)')
   await expect(minutes).toHaveValue('30')
   await minutes.fill('45')
@@ -183,4 +181,65 @@ test('the human sets after how many minutes a ticket reads as stalled', async ({
   // An agent cannot change it.
   const refused = await agent.patch(`/api/projects/${project.id}`, { data: { stallMinutes: 5 } })
   expect(refused.status()).toBe(403)
+})
+
+test('a run whose lease expired mid-span reads Lost contact, never Stalled and never in Needs you', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // The build span is 40 minutes old with nothing heard since: the agent is gone, its span still open.
+  const { t } = await workedTicket(human, agent, project)
+
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  const card = page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) })
+  await expect(card.getByTestId('lost-contact')).toContainText('Lost contact')
+  await expectTooltip(
+    card.getByTestId('lost-contact'),
+    /Lost contact · claude · build · \d+ min · last word \d+ min ago/,
+  )
+  await expect(card.getByTestId('stall-notice')).toHaveCount(0)
+
+  // The ticket card says whose span is open and when it last spoke.
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const timeline = page.getByRole('region', { name: 'Timeline' })
+  await expect(timeline.getByTestId('lost-contact')).toContainText(
+    /Lost contact · claude · build · \d+ min · last word \d+ min ago/,
+  )
+
+  // Needs you is the human's turn: the ticket is in the Overview's own Lost contact block instead.
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  await expect(needsYou.getByRole('link', { name: /Lost contact: .*Ship the importer/ })).toHaveCount(0)
+  await expect(needsYou.getByRole('link', { name: /Stalled: .*Ship the importer/ })).toHaveCount(0)
+  const lost = section(page, 'Lost contact')
+  const row = lost.getByRole('listitem').filter({ hasText: `#${t.id} Ship the importer` })
+  await expect(row).toContainText(/claude · build · since .* · last word \d+ min ago/)
+})
+
+test('a long span kept alive by the agent’s posts reads Working, and stays out of Needs you', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Review round four', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'review', round: 4 })
+  // The span opened 49 minutes ago; the posts came 6 to 31 minutes ago, inside the ten-minute lease.
+  age(t.id, 49)
+  for (const body of ['hunt: two candidates', 'verify: 25/25 pass', 'refute: neither holds'])
+    await ok(agent.post(`/api/tickets/${t.id}/updates`, { data: { body, progress: true } }))
+  await ok(agent.post(`/api/projects/${project.id}/tickets/${t.id}/events`, { data: { kind: 'heartbeat' } }))
+
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  const card = page.getByRole('link', { name: new RegExp(`#${t.id} Review round four`) })
+  await expect(card.getByTestId('card-now')).toBeVisible()
+  await expect(card.getByTestId('stall-notice')).toHaveCount(0)
+  await expect(card.getByTestId('lost-contact')).toHaveCount(0)
+
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  await expect(needsYou.getByRole('link', { name: /Review round four/ })).toHaveCount(0)
+  await expect(section(page, 'In progress').getByRole('link', { name: /Review round four/ })).toBeVisible()
 })

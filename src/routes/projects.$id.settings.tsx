@@ -252,9 +252,13 @@ function StallMinutes({ projectId, saved }: { projectId: string; saved: number }
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Stalled tickets</h2>
         <p className="text-sm text-muted-foreground">
-          A ticket in an active stage reads as stalled once its agents have recorded nothing on its work
-          timeline (a heartbeat, a span, a wait, a hand-off) and the board has seen nothing of it (a push, its
-          PR, its preview) for this long. Agents keep it off by sending a heartbeat every few minutes.
+          Two clocks decide how a ticket reads. The lease is what an agent's heartbeat or post keeps alive: it
+          lasts ten minutes, and when it runs out with a span still open the ticket reads as{' '}
+          <span className="font-medium">Lost contact</span> — the agent is gone, not waiting on you. A ticket
+          with nothing open reads as <span className="font-medium">Stalled</span> once no agent's word (a
+          heartbeat, a span, a wait, a hand-off) and nothing the board has seen of it (a push, its PR, its
+          preview) has come for this long. This dial sets that silence threshold; the lease's ten minutes stay
+          fixed.
         </p>
       </div>
       <form

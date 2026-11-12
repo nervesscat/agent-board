@@ -7,6 +7,9 @@ import { useNow, useServerOffset } from '#/lib/useNow'
 import {
   currentActivity,
   lastHeard,
+  livenessLines,
+  livenessOf,
+  minutesBetween,
   onServerClock,
   stallReason,
   workShares,
@@ -82,10 +85,99 @@ export function LastHeard({ timeline, className = '' }: { timeline: WorkTimeline
 function stallWhy(r: StallReason): string {
   if (r.stage) return `in ${r.stage}, no agent heard from since ${clock(r.since)}`
   if (r.kind === 'waiting') return `waiting on ${r.on}, nobody heard from since ${clock(r.since)}`
-  if (r.kind === 'working')
-    return `${r.agent} has a ${r.phase || 'span'} open, nobody heard from since ${clock(r.since)}`
   if (!r.endedAt) return `nothing open since ${clock(r.since)}`
   return `nothing open since the ${r.phase || 'work'} ended at ${clock(r.endedAt)}${r.quote ? ` ('${r.quote}')` : ''}`
+}
+
+/**
+ * One line per open span, with its state word: a working span keeps today's `Building · claude · 43 min`
+ * and adds the agent's last word; a lost one reads `Lost contact · claude · build · 46 min · last word
+ * 26 min ago`. Null when the read has no per-agent state or nothing is open.
+ */
+export function LivenessLines({
+  timeline,
+  now,
+  className = '',
+}: {
+  timeline: WorkTimelineLike
+  now?: Date | number
+  className?: string
+}) {
+  const l = livenessOf(timeline)
+  if (!l || !l.spans.length || (l.state !== 'working' && l.state !== 'lost')) return null
+  const base = `${className} text-sm tabular-nums`
+  const lost = l.state === 'lost'
+  return (
+    <>
+      {livenessLines(l, now ?? Date.now()).map((line) => (
+        <p
+          key={line}
+          data-testid={lost ? 'lost-contact' : 'now-line'}
+          className={`${base} ${lost ? 'text-rose-800 dark:text-rose-300' : 'text-foreground'}`}
+        >
+          {lost && <AlertTriangle className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />}
+          {line}
+        </p>
+      ))}
+    </>
+  )
+}
+
+/** What the ticket is doing now: the per-agent lines when the read carries them, else the old Now line. */
+export function WorkNow(props: { timeline: WorkTimelineLike; now?: Date | number; className?: string }) {
+  const l = livenessOf(props.timeline)
+  if (l && l.spans.length && (l.state === 'working' || l.state === 'lost'))
+    return <LivenessLines {...props} />
+  return <NowLine {...props} />
+}
+
+/**
+ * A lost-contact ticket's notice: the agent is gone while its span is still open. Its own badge (never
+ * Stalled) on cards and lists, or an `inline` sentence for a page.
+ */
+export function LostContactNotice({
+  timeline,
+  now,
+  variant = 'badge',
+  focusable = true,
+  className = '',
+}: {
+  timeline: WorkTimelineLike
+  now?: Date | number
+  variant?: 'badge' | 'inline'
+  focusable?: boolean
+  className?: string
+}) {
+  const l = livenessOf(timeline)
+  if (l?.state !== 'lost') return null
+  const at = now ?? Date.now()
+  const since = minutesBetween(l.since, at)
+  const word = l.lastWordAt ? `last word ${l.silentMinutes} min ago` : 'no word yet'
+  const why = `${l.agent} has a ${l.phase || 'span'} open, ${word}`
+  const line = `Lost contact · ${l.agent} · ${l.phase} · ${since} min · ${word}`
+  if (variant === 'inline')
+    return (
+      <p
+        data-testid="lost-contact"
+        className={`${className} flex items-start gap-1.5 text-sm font-medium text-rose-800 dark:text-rose-300`}
+      >
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0">{line}</span>
+      </p>
+    )
+  return (
+    <Tip content={line}>
+      <span
+        tabIndex={focusable ? 0 : undefined}
+        data-testid="lost-contact"
+        title={why}
+        className={`${className} inline-flex shrink-0 items-center gap-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-medium text-rose-800 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring dark:bg-rose-400/15 dark:text-rose-300`}
+      >
+        <AlertTriangle className="size-3" aria-hidden />
+        Lost contact
+      </span>
+    </Tip>
+  )
 }
 
 /**

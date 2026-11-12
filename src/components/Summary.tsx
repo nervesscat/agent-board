@@ -32,7 +32,7 @@ import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { stallFor } from '#/components/StallLine'
-import { NowLine, StallNotice } from '#/components/WorkStatus'
+import { LostContactNotice, StallNotice, WorkNow } from '#/components/WorkStatus'
 import { timelineFromActivity, stallStage } from '#/lib/activityTimeline'
 import { threadAnchor } from '#/lib/anchors'
 import type { AreaId } from '#/lib/layout'
@@ -153,6 +153,7 @@ function ProjectBlock({ p, now, dismiss }: CardProps) {
         const Shown = CARDS[card]
         return <Shown key={card} p={p} now={now} dismiss={dismiss} />
       })}
+      {p.lostContact.length > 0 && <LostContactCard p={p} />}
     </div>
   )
 }
@@ -673,6 +674,50 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
   )
 }
 
+/**
+ * Lost contact: the agents whose lease expired with their span still open. Its own block, outside
+ * Needs you (that is the human's turn), naming each agent, its phase, since when and its last word.
+ */
+function LostContactCard({ p }: { p: ProjectSummary }) {
+  const rows = p.lostContact
+  return (
+    <Section
+      icon={AlertTriangle}
+      title="Lost contact"
+      count={rows.length}
+      scroll
+      className="lg:order-2 lg:col-span-full"
+    >
+      <Rows>
+        {rows.map((l) => (
+          <Row
+            key={l.ticketId}
+            icon={<AlertTriangle className="text-rose-600 dark:text-rose-400" />}
+            title={
+              <Link
+                to="/projects/$id/features/$ticketId"
+                params={{ id: String(p.project.id), ticketId: String(l.ticketId) }}
+                className="hover:underline"
+              >
+                Lost contact: <span className="text-muted-foreground">#{l.ticketId}</span> {l.title}
+              </Link>
+            }
+            meta={
+              <>
+                <StageBadge p={p} status={l.status} />
+                {l.parent && <span className="truncate">lane of #{l.parent.id}</span>}
+                <span className="min-w-0 wrap-anywhere">
+                  {l.agent} · {l.phase} · {since(l.since)} · last word {l.silentMinutes} min ago
+                </span>
+              </>
+            }
+          />
+        ))}
+      </Rows>
+    </Section>
+  )
+}
+
 function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
   const items = p.inProgress
   return (
@@ -693,12 +738,13 @@ function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
                     {timeline.stalled && (
                       <StallNotice timeline={timeline} stage={stallStage(p.stages, t.status)} />
                     )}
+                    <LostContactNotice timeline={timeline} now={now} />
                     {t.stale && <Stale />}
                   </>
                 }
                 meta={
                   <div className="w-full min-w-0">
-                    <NowLine timeline={timeline} />
+                    <WorkNow timeline={timeline} now={now} />
                     <HeardLine timeline={timeline} />
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <Who p={p} name={t.assignee} />

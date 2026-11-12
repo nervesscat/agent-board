@@ -34,7 +34,7 @@ import {
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
-import { NowLine, StallNotice } from '#/components/WorkStatus'
+import { LostContactNotice, StallNotice, WorkNow } from '#/components/WorkStatus'
 import type { Push, TicketRow } from '#/lib/api'
 import { hasWork, nowBrief, nowWords, stallStage, timelineFromActivity } from '#/lib/activityTimeline'
 import { ago } from '#/lib/format'
@@ -220,6 +220,7 @@ export function TicketBoard({
                     t.decisions > 0 ||
                     t.blockedTasks > 0 ||
                     !!t.stalled ||
+                    work.liveness?.state === 'lost' ||
                     t.needs.some((n) => !n.merged) ||
                     after?.has(t.id)
                   const words = nowWords(work, now)
@@ -252,6 +253,7 @@ export function TicketBoard({
                           {(t.decisions > 0 ||
                             t.blockedTasks > 0 ||
                             t.stalled ||
+                            work.liveness?.state === 'lost' ||
                             brief ||
                             t.needs.some((n) => !n.merged) ||
                             after?.has(t.id)) && (
@@ -260,6 +262,7 @@ export function TicketBoard({
                               {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                               {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
                               {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                              <LostContactNotice timeline={work} now={now} focusable={false} />
                               <StallNotice
                                 timeline={work}
                                 stage={stallStage(stages, t.status)}
@@ -732,6 +735,12 @@ export function TicketList({
                     focusable={false}
                     className="ml-2 align-[1px]"
                   />
+                  <LostContactNotice
+                    timeline={work}
+                    now={tick}
+                    focusable={false}
+                    className="ml-2 align-[1px]"
+                  />
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
                   {t.tags.length > 0 && (
                     <span className="ml-2 inline-flex flex-wrap gap-1 align-[1px]">
@@ -741,7 +750,7 @@ export function TicketList({
                     </span>
                   )}
                 </div>
-                {hasWork(stage.kind) && <NowLine timeline={work} now={tick} className="mt-0.5" />}
+                {hasWork(stage.kind) && <WorkNow timeline={work} now={tick} className="mt-0.5" />}
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   {repoLabel(project, t.repoId) && (
                     <span className="rounded bg-muted px-1">{repoLabel(project, t.repoId)}</span>

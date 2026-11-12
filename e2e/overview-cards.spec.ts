@@ -2,7 +2,7 @@ import type { Locator, Page } from '@playwright/test'
 
 import { startedAt, yesterdayNoon } from './db'
 import { expect, ok, section, test } from './fixtures'
-import { create, record, workedTicket } from './workTimeline'
+import { create, record, stalledTicket } from './workTimeline'
 
 /**
  * On a desktop the Overview's first row is Needs you alone, and the second row is Next, In progress
@@ -130,10 +130,10 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
   human,
   agent,
 }) => {
-  const { t } = await workedTicket(human, agent, project)
+  const { t } = await stalledTicket(human, agent, project)
   const title = new RegExp(`#${t.id} Ship the importer`)
-  // The ticket's open build and the agent that has it, as the why names them everywhere.
-  const why = /Stalled \d+ min: claude has a build open, nobody heard from since \d{1,2}:\d{2}\s*[AP]M/
+  // Nothing is open: the why is the build that ended 40 minutes ago.
+  const why = /Stalled \d+ min: nothing open since the build ended at \d{1,2}:\d{2}\s*[AP]M/
 
   await page.goto(`/projects/${project.id}`)
   const row = section(page, 'Needs you')
@@ -146,7 +146,7 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
   const progress = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${t.id} Ship the importer` })
-  await expect(progress.getByTestId('now-line')).toContainText(/Building · claude · \d+ min/)
+  await expect(progress.getByTestId('now-line')).toContainText('Nothing open')
   await expect(progress.getByTestId('last-heard')).toContainText(/Last heard \d+ min ago/)
   await expect(progress.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
 
@@ -159,7 +159,7 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
   await page.getByRole('tab', { name: 'List' }).click()
   const listRow = page.getByRole('link', { name: title })
   await expect(listRow.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
-  await expect(listRow.getByTestId('now-line')).toContainText(/Building · claude · \d+ min/)
+  await expect(listRow.getByTestId('now-line')).toContainText('Nothing open')
 })
 
 test('In progress says what a ticket waits on and since when, when a person has to act', async ({

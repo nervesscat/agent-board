@@ -1,5 +1,5 @@
 import { expect, expectTooltip, ok, test, tooltip } from './fixtures'
-import { age, create, errorsOn, record, workedTicket } from './workTimeline'
+import { age, create, errorsOn, record, stalledTicket, workedTicket } from './workTimeline'
 
 /**
  * The work timeline on the Roadmap: each ticket's bar, its totals and the stalled count.
@@ -12,7 +12,7 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   agent,
 }) => {
   const errors = errorsOn(page)
-  const { t, lane } = await workedTicket(human, agent, project)
+  const { t, lane } = await stalledTicket(human, agent, project)
 
   await page.goto(`/projects/${project.id}/roadmap`)
   const ticket = page.getByTestId('roadmap').getByRole('region', { name: `#${t.id} Ship the importer` })
@@ -22,7 +22,8 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   const span = bar.locator('[data-kind="span"][data-phase="build"]')
   await expect(span).toBeVisible()
   await expect(span).toHaveText('build')
-  await expect(span).toHaveAttribute('data-open', 'true')
+  // Its work stopped: the span is closed, which is what lets the ticket read as Stalled.
+  await expect(span).toHaveAttribute('data-open', 'false')
   const wait = bar.locator('[data-kind="wait"][data-reason="lock"]')
   await expect(wait).toBeVisible()
   await expect(wait).toHaveText('lock')
@@ -45,8 +46,8 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   void lane
 
   // From the keyboard: Tab reaches the span, which has its story as its name and shows its tooltip.
-  // It started an hour back and is still open.
-  const named = ticket.getByRole('button', { name: /^build by claude, .* to now, 4\d min, open$/ })
+  // It ran for 40 minutes and is closed now.
+  const named = ticket.getByRole('button', { name: /^build by claude, .* to .*, 40 min$/ })
   await expect(named).toHaveCount(1)
   await ticket.getByRole('button', { name: '1 lane' }).focus()
   for (let i = 0; i < 6 && !(await named.evaluate((el) => el === document.activeElement)); i++)
@@ -60,10 +61,7 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
     bar.locator('[data-kind="handoff"]'),
     /^orchestrator passed the work to builder-sub-1, /,
   )
-  await expectTooltip(
-    ticket.getByTestId('stall-notice'),
-    /^claude has a build open, nobody heard from since /,
-  )
+  await expectTooltip(ticket.getByTestId('stall-notice'), /^nothing open since the build ended at /)
 
   await ticket.screenshot({ path: test.info().outputPath('roadmap-work-timeline.png') })
   expect(errors).toEqual([])
