@@ -40,6 +40,12 @@ const point = z.tuple([z.number(), z.number()])
 const rect = z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
 
 /**
+ * How long a mark's text or its note may be. The server refuses a longer document and drops the
+ * picture with it, so the canvas caps both fields at the same number.
+ */
+export const ANNOTATION_TEXT_MAX = 2_000
+
+/**
  * The document `POST /api/uploads` takes in its `annotations` field: what the canvas wrote, and
  * nothing else. Bounds are generous but finite, so a broken client cannot fill the database.
  */
@@ -58,8 +64,8 @@ export const annotationDocSchema = z.object({
         from: point.optional(),
         to: point.optional(),
         rect: rect.optional(),
-        text: z.string().max(2_000).optional(),
-        note: z.string().max(2_000).optional(),
+        text: z.string().max(ANNOTATION_TEXT_MAX).optional(),
+        note: z.string().max(ANNOTATION_TEXT_MAX).optional(),
       }),
     )
     .max(2_000),

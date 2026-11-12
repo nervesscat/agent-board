@@ -15,7 +15,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Tip } from '#/components/ui/tooltip'
 import type { Annotation, AnnotationDoc, AnnotationKind } from '#/lib/annotations'
-import { annotatable, keepAnnotations } from '#/lib/annotations'
+import { ANNOTATION_TEXT_MAX, annotatable, keepAnnotations } from '#/lib/annotations'
 import { errorMessage } from '#/lib/api'
 import { cn } from '#/lib/utils'
 
@@ -189,7 +189,9 @@ function paint(canvas: HTMLCanvasElement, bitmap: ImageBitmap, items: Annotation
 
 /**
  * The canvas dialog. `file` is the picture to annotate; closing without attaching calls `onCancel`, and
- * `onAttachOriginal` keeps the file exactly as it was picked.
+ * `onAttachOriginal` keeps the file exactly as it was picked. `onAttach` gets the picture the canvas was
+ * showing along with the flattened one: the step belongs to that picture, not to whoever is at the
+ * front of the queue by the time the encode has finished.
  */
 export function AnnotateImage({
   file,
@@ -199,7 +201,7 @@ export function AnnotateImage({
   finalFocus,
 }: {
   file: File | null
-  onAttach: (annotated: AnnotatedImage) => void
+  onAttach: (annotated: AnnotatedImage, source: File) => void
   onAttachOriginal: () => void
   onCancel: () => void
   /** What the focus goes back to when the canvas closes: whatever opened it. */
@@ -321,7 +323,9 @@ export function AnnotateImage({
   const selectedItem = items.find((i) => i.id === selected)
 
   const setNote = (note: string) =>
-    setItems((prev) => prev.map((i) => (i.id === selected ? { ...i, note } : i)))
+    setItems((prev) =>
+      prev.map((i) => (i.id === selected ? { ...i, note: note.slice(0, ANNOTATION_TEXT_MAX) } : i)),
+    )
 
   const remove = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id))
@@ -334,12 +338,17 @@ export function AnnotateImage({
   }
 
   const attach = async () => {
-    if (!bitmap || !file) return
+    if (!bitmap || !file || busy) return
+    // The picture this encode is for, and its size: the flattened image and the document go with it,
+    // whichever picture the canvas is showing by the time the encode has finished.
+    const shown = file
+    const width = bitmap.width
+    const height = bitmap.height
     setBusy(true)
     try {
       const canvas = document.createElement('canvas')
-      canvas.width = bitmap.width
-      canvas.height = bitmap.height
+      canvas.width = width
+      canvas.height = height
       const ctx = canvas.getContext('2d')
       if (!ctx) throw new Error('this browser cannot draw the picture')
       paint(canvas, bitmap, items, null)
@@ -350,11 +359,14 @@ export function AnnotateImage({
         ),
       )
       // The attachment is the annotated render, under a name that says it is a PNG.
-      const name = `${file.name.replace(/\.[^./\\]+$/, '')}.png`
-      onAttach({
-        file: new File([blob], name, { type: 'image/png', lastModified: Date.now() }),
-        annotations: { version: 1, width: bitmap.width, height: bitmap.height, items },
-      })
+      const name = `${shown.name.replace(/\.[^./\\]+$/, '')}.png`
+      onAttach(
+        {
+          file: new File([blob], name, { type: 'image/png', lastModified: Date.now() }),
+          annotations: { version: 1, width, height, items },
+        },
+        shown,
+      )
     } catch (err) {
       toast.error(errorMessage(err, 'the picture could not be saved'))
     } finally {
@@ -377,7 +389,9 @@ export function AnnotateImage({
     <Dialog
       open
       onOpenChange={(next) => {
-        if (!next) onCancel()
+        // While the encode runs the picture is on its way out: a close request would leave it behind
+        // and take whatever is queued after it with it, so Escape, the X and the backdrop wait.
+        if (!next && !busy) onCancel()
       }}
     >
       <DialogContent className="sm:max-w-4xl" finalFocus={finalFocus}>
@@ -429,7 +443,8 @@ export function AnnotateImage({
               <Input
                 aria-label="Text"
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                maxLength={ANNOTATION_TEXT_MAX}
+                onChange={(e) => setText(e.target.value.slice(0, ANNOTATION_TEXT_MAX))}
                 placeholder="Text to place"
                 className="h-7 w-48"
               />
@@ -459,6 +474,7 @@ export function AnnotateImage({
               id="annotation-note"
               aria-label="Note"
               value={selectedItem?.note ?? ''}
+              maxLength={ANNOTATION_TEXT_MAX}
               onChange={(e) => setNote(e.target.value)}
               disabled={!selectedItem}
               placeholder={
@@ -486,7 +502,12 @@ export function AnnotateImage({
             )}
           </div>
           {notes.length > 0 && (
-            <div aria-label="Notes" className="text-xs text-muted-foreground">
+            // A long note (the field takes thousands of characters) scrolls here rather than growing
+            // the dialog past the window, which would put the buttons below the edge.
+            <div
+              aria-label="Notes"
+              className="max-h-24 overflow-y-auto text-xs wrap-anywhere text-muted-foreground"
+            >
               <span className="font-medium text-foreground">Notes</span>
               <ol className="mt-1 space-y-0.5">
                 {notes.map((item, i) => (
@@ -499,7 +520,7 @@ export function AnnotateImage({
           )}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onAttachOriginal}>
+          <Button type="button" variant="outline" onClick={onAttachOriginal} disabled={busy}>
             Attach original
           </Button>
           <Button type="button" onClick={attach} disabled={!bitmap || busy}>
@@ -540,8 +561,16 @@ export function useAnnotations(accept: (files: File[]) => void) {
     send(ready)
     setQueue([...pending.current])
   }, [send])
-  const next = () => {
-    pending.current.shift()
+  // Takes one picture out of the queue, by its own identity: a step that arrives for a picture the
+  // canvas has already left finds nothing to take, so it can never stand in for the one behind it.
+  const drop = (file: File) => {
+    const at = pending.current.indexOf(file)
+    if (at < 0) return false
+    pending.current.splice(at, 1)
+    return true
+  }
+  const next = (shown: File) => {
+    if (!drop(shown)) return
     drain()
     // Nothing left to annotate: the focus goes back to whatever opened the canvas (the attach
     // button, the editor a picture was pasted into), so a form driven from the keyboard carries on.
@@ -565,19 +594,26 @@ export function useAnnotations(accept: (files: File[]) => void) {
     finalFocus,
     /** The picture the canvas is open on, if any. */
     current: queue[0] ?? null,
-    /** The flattened picture and the notes drawn on it. */
-    attach: (annotated: AnnotatedImage) => {
+    /** The flattened picture and the notes drawn on it, for the picture the canvas was showing. */
+    attach: (annotated: AnnotatedImage, shown: File) => {
+      // A cancelled picture (or one the canvas left some other way) keeps the queue as it is, and the
+      // picture behind it still gets its turn.
+      if (!pending.current.includes(shown)) return
       keepAnnotations(annotated.file, annotated.annotations)
       send([annotated.file])
-      next()
+      next(shown)
     },
     /** The picture as it was picked, with nothing on it. */
     attachOriginal: () => {
       const picked = pending.current[0]
-      if (picked) send([picked])
-      next()
+      if (!picked) return
+      send([picked])
+      next(picked)
     },
     /** The picture left out of the form. */
-    cancel: next,
+    cancel: () => {
+      const shown = pending.current[0]
+      if (shown) next(shown)
+    },
   }
 }

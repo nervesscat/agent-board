@@ -18,6 +18,7 @@ import type {
   Activity,
 } from '#/db/schema'
 import type { AnnotationDoc } from '#/lib/annotations'
+import { annotationsOf } from '#/lib/annotations'
 import type { ReportStatus } from '#/lib/reports'
 import type { PushedToday } from '#/server/pushedToday'
 import type { ReportDue } from '#/server/reportDue'
@@ -201,6 +202,17 @@ export function upload(
   form.append('file', file)
   if (annotations) form.append('annotations', JSON.stringify(annotations))
   return request('/api/uploads', { method: 'POST', body: form })
+}
+
+/**
+ * Uploads a batch one file after another, so the board numbers its rows in the order the files were
+ * picked: the attachments of a ticket, a post or a reply are listed by when they arrived, and uploads
+ * sent at once would arrive in whichever order they finished.
+ */
+export async function uploadAll(files: File[]): Promise<number[]> {
+  const ids: number[] = []
+  for (const file of files) ids.push((await upload(file, annotationsOf(file))).id)
+  return ids
 }
 
 export function errorMessage(err: unknown, fallback = 'something went wrong'): string {

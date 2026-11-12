@@ -84,7 +84,6 @@ import { Label } from '#/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
 import { autoPhaseOf, autoPhaseTip } from '#/lib/autoPhases'
-import { annotationsOf } from '#/lib/annotations'
 import { WorkTimelineCard } from '#/components/WorkTimelineCard'
 import {
   del,
@@ -93,7 +92,7 @@ import {
   patch,
   post,
   put,
-  upload,
+  uploadAll,
   type TicketFull,
   type TicketGit,
   type SummaryHistory,
@@ -696,7 +695,7 @@ function Instructions({
   const onError = (err: unknown) => toast.error(errorMessage(err))
   const attach = useMutation({
     mutationFn: async (files: File[]) => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f, annotationsOf(f)).then((a) => a.id)))
+      const attachmentIds = await uploadAll(files)
       return post(`/api/tickets/${t.id}/attachments`, { attachmentIds })
     },
     onSuccess: onChange,
@@ -1853,7 +1852,7 @@ function Activity({
 
   const send = useMutation({
     mutationFn: async () => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f, annotationsOf(f)).then((a) => a.id)))
+      const attachmentIds = await uploadAll(files)
       // Said outright: the API makes a post progress unless told otherwise, as agents post.
       return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress: false, tab })
     },

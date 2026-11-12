@@ -434,3 +434,154 @@ test('a PDF and a markdown file attach as they are, with no canvas', async ({ pa
     ['shot.png', null],
   ])
 })
+
+test('closing the canvas while the picture is attaching waits for it, and the next picture still arrives', async ({
+  page,
+  project,
+  human,
+}) => {
+  // The encode is held for a moment: the test closes the canvas while the button reads "Attaching…",
+  // rather than hoping a large picture takes long enough.
+  await page.addInitScript(() => {
+    const toBlob = HTMLCanvasElement.prototype.toBlob
+    HTMLCanvasElement.prototype.toBlob = function (
+      this: HTMLCanvasElement,
+      callback: BlobCallback,
+      ...rest: [string?, number?]
+    ) {
+      setTimeout(() => toBlob.call(this, callback, ...rest), 1_500)
+    }
+  })
+  const dialog = await openNewTicket(page, project.id, 'Two pictures at once')
+  const chooser = page.waitForEvent('filechooser')
+  await dialog.getByRole('button', { name: 'attach' }).click()
+  await (
+    await chooser
+  ).setFiles([
+    { name: 'first.png', mimeType: 'image/png', buffer: png(300, [235, 235, 235]) },
+    { name: 'second.png', mimeType: 'image/png', buffer: png(200, [215, 215, 215]) },
+  ])
+  const canvas = canvasOf(page)
+  await expect(canvas).toBeVisible()
+
+  await canvas.getByRole('button', { name: 'Attach', exact: true }).click()
+  await expect(canvas.getByRole('button', { name: 'Attaching…' })).toBeVisible()
+  // A second copy taken while the first encodes would go in without its document and take the queued
+  // picture with it, so both wait: Attach original is out, and Escape (like the X and the backdrop)
+  // leaves the canvas where it is.
+  await expect(canvas.getByRole('button', { name: 'Attach original', exact: true })).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(canvas).toBeVisible()
+
+  // The encode finishes on the picture it started on, and the one queued behind it gets its turn.
+  await expect(canvas.locator('[data-slot="dialog-description"]')).toContainText('second.png')
+  await canvas.getByRole('button', { name: 'Attach original', exact: true }).click()
+  await expect(canvas).toBeHidden()
+  // The picture that was encoding is in the form, once, with its (empty) document; the second follows.
+  await expect(dialog.getByRole('img', { name: 'first.png' })).toBeVisible()
+  await expect(dialog.getByRole('img', { name: 'second.png' })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  const ticket = await ok<TicketFull>(human.get(`/api/tickets/${row!.id}`))
+  expect(ticket.attachments.map((a) => [a.name, a.annotations?.items.length ?? null])).toEqual([
+    ['first.png', 0],
+    ['second.png', null],
+  ])
+})
+
+test('a note or a text longer than the document allows is capped, and the picture is kept', async ({
+  page,
+  project,
+  human,
+}) => {
+  // The server refuses a document whose note or text is over 2000 characters, and the failed upload
+  // drops the picture with the marks on it, so the canvas holds both fields at that length.
+  const long = (c: string) => c.repeat(2_500)
+  const capped = (c: string) => c.repeat(2_000)
+  const dialog = await openNewTicket(page, project.id, 'A note too long to store')
+  await pickWith(page, dialog.getByRole('button', { name: 'attach' }), {
+    name: 'long.png',
+    buffer: png(300, [240, 240, 240]),
+  })
+  const canvas = canvasOf(page)
+  await expect(canvas).toBeVisible()
+
+  await canvas.getByRole('button', { name: 'Text', exact: true }).click()
+  const textField = canvas.getByRole('textbox', { name: 'Text' })
+  const noteField = canvas.getByRole('textbox', { name: 'Note' })
+  await textField.fill(long('t'))
+  await expect(textField).toHaveValue(capped('t'))
+  const box = (await pictureOf(canvas).boundingBox())!
+  await page.mouse.click(box.x + 20, box.y + 20)
+  await expect(noteField).toBeEnabled()
+  await noteField.fill(long('n'))
+  await expect(noteField).toHaveValue(capped('n'))
+  await canvas.getByRole('button', { name: 'Attach', exact: true }).click()
+  await expect(canvas).toBeHidden()
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  const ticket = await ok<TicketFull>(human.get(`/api/tickets/${row!.id}`))
+  expect(ticket.attachments).toHaveLength(1)
+  const [item] = ticket.attachments[0]!.annotations!.items
+  expect(item!.kind).toBe('text')
+  expect(item!.text).toHaveLength(2_000)
+  expect(item!.note).toHaveLength(2_000)
+})
+
+test('a batch is stored in the order it was picked, however long its first file takes to upload', async ({
+  page,
+  project,
+  human,
+}) => {
+  // A picture with megabytes of filler uploads far slower than the tiny PDF picked after it, which is
+  // exactly the pair that showed the order following whichever upload finished first.
+  const big = png(300, [205, 205, 205], 4_000_000)
+  const dialog = await openNewTicket(page, project.id, 'Big picture first')
+  const chooser = page.waitForEvent('filechooser')
+  await dialog.getByRole('button', { name: 'attach' }).click()
+  await (
+    await chooser
+  ).setFiles([
+    { name: 'big.png', mimeType: 'image/png', buffer: big },
+    { name: 'spec.pdf', mimeType: 'application/pdf', buffer: pdf('Spec') },
+  ])
+  const canvas = canvasOf(page)
+  await expect(canvas).toBeVisible()
+  await expect(pictureOf(canvas)).toBeVisible()
+  await attachOriginal(page)
+  const pending = () =>
+    dialog
+      .getByRole('button', { name: /^Remove / })
+      .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')))
+  await expect.poll(pending).toEqual(['Remove big.png', 'Remove spec.pdf'])
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  const [first] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  const ticket = await ok<TicketFull>(human.get(`/api/tickets/${first!.id}`))
+  expect(ticket.attachments.map((a) => a.name)).toEqual(['big.png', 'spec.pdf'])
+
+  // The other way round: a tiny file first, the picture after it.
+  const second = await openNewTicket(page, project.id, 'Small file first')
+  const secondChooser = page.waitForEvent('filechooser')
+  await second.getByRole('button', { name: 'attach' }).click()
+  await (
+    await secondChooser
+  ).setFiles([
+    { name: 'tiny.pdf', mimeType: 'application/pdf', buffer: pdf('Tiny') },
+    { name: 'second.png', mimeType: 'image/png', buffer: big },
+  ])
+  await expect(canvas).toBeVisible()
+  await attachOriginal(page)
+  await second.getByRole('button', { name: 'Create' }).click()
+  await expect(second).toBeHidden()
+
+  const rows = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  const row = rows.find((r) => r.title === 'Small file first')!
+  const other = await ok<TicketFull>(human.get(`/api/tickets/${row.id}`))
+  expect(other.attachments.map((a) => a.name)).toEqual(['tiny.pdf', 'second.png'])
+})

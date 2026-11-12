@@ -12,8 +12,7 @@ import { Markdown } from '#/components/Markdown'
 import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostTools'
 import { RichEditor } from '#/components/RichEditor'
 import { Button } from '#/components/ui/button'
-import { del, errorMessage, get, patch, post, upload, type CommentRow } from '#/lib/api'
-import { annotationsOf } from '#/lib/annotations'
+import { del, errorMessage, get, patch, post, uploadAll, type CommentRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { useProjectAgents } from '#/lib/project'
 
@@ -145,7 +144,7 @@ export function Thread({
 
   const send = useMutation({
     mutationFn: async () => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f, annotationsOf(f)).then((a) => a.id)))
+      const attachmentIds = await uploadAll(files)
       return post('/api/comments', { parentType, parentId, replyTo, body, attachmentIds })
     },
     onSuccess: () => {

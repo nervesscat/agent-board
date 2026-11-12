@@ -183,16 +183,21 @@ export function useUploads() {
   // Kept apart, so the list (and its thumbnails) changes only when files are added or removed.
   const [files, setFiles] = useState<File[]>([])
   const [ids, setIds] = useState<ReadonlyMap<File, number>>(new Map())
+  // One upload after another, so the board numbers a batch's rows in the order the files were picked
+  // (it lists the ticket's attachments by when they arrived).
+  const sending = useRef<Promise<unknown>>(Promise.resolve())
   const add = (added: File[]) => {
     const picked = added.map(named)
     setFiles((prev) => [...prev, ...picked])
     for (const file of picked)
-      upload(file, annotationsOf(file)).then(
-        (a) => setIds((prev) => new Map(prev).set(file, a.id)),
-        (err) => {
-          toast.error(`${file.name}: ${errorMessage(err)}`)
-          setFiles((prev) => prev.filter((f) => f !== file))
-        },
+      sending.current = sending.current.then(() =>
+        upload(file, annotationsOf(file)).then(
+          (a) => setIds((prev) => new Map(prev).set(file, a.id)),
+          (err) => {
+            toast.error(`${file.name}: ${errorMessage(err)}`)
+            setFiles((prev) => prev.filter((f) => f !== file))
+          },
+        ),
       )
   }
   return {

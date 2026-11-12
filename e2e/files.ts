@@ -2,8 +2,12 @@ import zlib from 'node:zlib'
 
 import { expect, type Page } from '@playwright/test'
 
-/** A real PNG of one color, `size` pixels square: a browser decodes it, so a thumbnail of it is not broken. */
-export function png(size = 8, [r, g, b] = [220, 40, 40]): Buffer {
+/**
+ * A real PNG of one color, `size` pixels square: a browser decodes it, so a thumbnail of it is not
+ * broken. `pad` bytes of filler go in a chunk decoders skip, for a file big enough to upload like a
+ * screenshot does.
+ */
+export function png(size = 8, [r, g, b] = [220, 40, 40], pad = 0): Buffer {
   const chunk = (type: string, data: Buffer) => {
     const length = Buffer.alloc(4)
     length.writeUInt32BE(data.length)
@@ -21,10 +25,15 @@ export function png(size = 8, [r, g, b] = [220, 40, 40]): Buffer {
     Buffer.from(Array.from({ length: size }, () => [r, g, b]).flat()),
   ])
   const pixels = zlib.deflateSync(Buffer.concat(Array.from({ length: size }, () => row)))
+  // A text chunk a decoder reads past: the picture stays the same, the file is as big as asked.
+  const filler: Buffer[] = pad
+    ? [chunk('tEXt', Buffer.concat([Buffer.from('Comment\0'), Buffer.alloc(pad, 65)]))]
+    : []
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', header),
     chunk('IDAT', pixels),
+    ...filler,
     chunk('IEND', Buffer.alloc(0)),
   ])
 }
