@@ -262,7 +262,7 @@ export function TicketBoard({
                               {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                               {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
                               {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
-                              <LostContactNotice timeline={work} now={now} focusable={false} />
+                              <LostContactNotice timeline={work} focusable={false} />
                               <StallNotice
                                 timeline={work}
                                 stage={stallStage(stages, t.status)}

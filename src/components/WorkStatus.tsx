@@ -127,7 +127,11 @@ export function LivenessLines({
   )
 }
 
-/** What the ticket is doing now: the per-agent lines when the read carries them, else the old Now line. */
+/**
+ * What the ticket is doing now: the per-agent lines when the read carries them, else the old Now line.
+ * The clock correction to the server's is made once, inside these components (and the ticket page's
+ * card): a caller passes the browser's own tick or nothing, never a time already put on the server's.
+ */
 export function WorkNow(props: { timeline: WorkTimelineLike; now?: Date | number; className?: string }) {
   const l = livenessOf(props.timeline)
   if (l && l.spans.length && (l.state === 'working' || l.state === 'lost'))

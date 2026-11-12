@@ -718,7 +718,8 @@ function LostContactCard({ p }: { p: ProjectSummary }) {
   )
 }
 
-function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
+/** The Overview's in-progress rows: each ticket's now line, the agent's last word and how long on it. */
+export function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
   const items = p.inProgress
   return (
     <Section icon={Play} title="In progress" count={items.length} scroll className="lg:order-3">
@@ -738,13 +739,13 @@ function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
                     {timeline.stalled && (
                       <StallNotice timeline={timeline} stage={stallStage(p.stages, t.status)} />
                     )}
-                    <LostContactNotice timeline={timeline} now={now} />
+                    <LostContactNotice timeline={timeline} />
                     {t.stale && <Stale />}
                   </>
                 }
                 meta={
                   <div className="w-full min-w-0">
-                    <WorkNow timeline={timeline} now={now} />
+                    <WorkNow timeline={timeline} />
                     <HeardLine timeline={timeline} />
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <Who p={p} name={t.assignee} />
