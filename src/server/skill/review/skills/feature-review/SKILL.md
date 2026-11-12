@@ -178,7 +178,9 @@ Parse `$ARGUMENTS` as space-separated tokens:
 Every agent prompt from here on includes: `MAIN`, `WORKTREE`, `WORKDIR`, `SLUG`, the
 absolute paths of the files it reads and writes, `00-context.md` as the context pack (every
 phase reads it: spec, env, verify, hunt, refute and merge), the `SLOTS` directory when `slots=`
-was given (its record is the `Test slots:` line in `00-env.md`), the full text of the contract,
+was given (its record is the `Test slots:` line in `00-env.md`), the ticket id (`TICKET`) when
+the review is on a ticket — every phase that takes a test slot writes it in its `holder.txt` —
+the full text of the contract,
 and the path of
 `00-focus.md` with this rule: start from it; read outside it only to follow a reference from it.
 With `scoped`, it also includes the word `scoped`. Agents treat `WORKTREE` as the repo root.
@@ -313,6 +315,11 @@ typecheck, lint
 and scoped unit runs take none. Because it merged the base, it never reuses the caller's build
 record, `E2E_SKIP_BUILD=1` or not: it builds once on the merged tree in a slot and runs the
 end-to-end tests against that build, since the head's artifact never shows what the merge broke.
+It builds with the test build's own output directory (`BOARD_BUILD_DIR=.output-e2e pnpm build`,
+or the project's equivalent), or, when the recorded end-to-end command carries
+`E2E_SKIP_BUILD=1` inline, with that flag removed so the command's own build step builds the
+merged tree; never with the flag, or the run serves the head's artifact again. A scoped run that
+finds `tests-<repo>-full` releases its slot and waits for the full suite, as the gate does.
 Wait for
 it. Read its `Result` line and its `Worktree restored` line; if the worktree was not restored,
 run `git -C WORKTREE reset --hard <commit>` yourself before continuing. For `diff`,

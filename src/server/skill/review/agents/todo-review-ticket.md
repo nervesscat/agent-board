@@ -123,7 +123,8 @@ has N = 2 of them, and a light run holds none.
   after that run; you, around the gate's end-to-end build and run (step 4), the full-suite
   fallback and the preview build you start (step 7), released when each ends; `/feature-review`,
   around its own heavy runs (step 5): its verify phase takes one for the end-to-end run and the
-  full suite, its merge check for a heavy test run, and its hunt and refute phases take none.
+  full suite, its merge check for a heavy test run, and its hunt and refute phases only for a
+  targeted end-to-end run; their unit and probe tests take none.
   Nothing you hold while you wait for a slot is something its holder waits on, so the wait
   always ends.
 
@@ -345,7 +346,7 @@ is `light` and `deep` when it is `deep` (nothing more for `standard`). With `sco
 run only the scoped checks, since CI runs the full suites on the PR. With `slots=`, its verify
 phase takes a test slot around the end-to-end run and the full suite and its merge check around
 a heavy test run; its typecheck, lint and scoped unit runs and the hunt's and refute's targeted
-tests take none, so hold no slot while you wait for it. With `build=`, its env phase copies the
+unit and probe tests take none, so hold no slot while you wait for it. With `build=`, its env phase copies the
 gate's artifact at the same head instead of building it again. It reviews the branch's
 commits in a worktree of its own, posts its phases on the ticket, and writes `review.md` and
 `summary.md`. When it would ask a question, go on with the spec's assumption and note it. When it
@@ -415,21 +416,26 @@ Implementation and its steps (`set_task_done`).
    like a gate failure. When it passes, comment on the PR `CI run locally: green on <sha>` with
    that head SHA (`gh pr comment`): that ticks CI. After each later push, run it again and comment
    again.
-5. The preview, from the one build this head gets. Prefer the board's own preview run:
-   `start_run` the repo's preview (or `start_preview` on the workspace), wait until it is
-   `running` (on `failed`, read its log tail and fix), and treat its build as this head's one
-   build. When you start it by hand from the gate's artifact instead — `WORKDIR/02-build.md`
-   names the final head, and the build was made with `BOARD_BUILD_DIR=.output-e2e`, which only
-   sets the build's output directory and does nothing at run time — run
-   `node .output-e2e/server/index.mjs` from the worktree with the repo's preview environment,
-   never the defaults: a free loopback port from `PORTS` as `PORT` and `NITRO_PORT`,
-   `HOST=127.0.0.1`, `DATA_DIR` a copy of the data (never the live one),
+5. The preview, from at most one build of this head: either the gate's artifact, or the
+   preview's own build, never both. When the repo lets you start from the artifact —
+   `WORKDIR/02-build.md` names the final head, and the build was made with
+   `BOARD_BUILD_DIR=.output-e2e`, which only sets the build's output directory and does nothing
+   at run time — do that: run `node .output-e2e/server/index.mjs` from the worktree with the
+   repo's preview environment, never the defaults: a free loopback port from `PORTS` as `PORT`
+   and `NITRO_PORT`, `HOST=127.0.0.1`, `DATA_DIR` a copy of the data (never the live one),
    `BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`, and
-   `BOARD_URL=http://127.0.0.1:<port>`. Then `set_preview` with the URL it answers on, keep it
-   running while the ticket is in review, and once it is merged or dropped stop the process and
-   clear the link (`set_preview` with `""`). A managed preview run that must build its own counts
-   as this head's one build, and so does a hand build at a final head whose artifact is older.
-   Say in the summary which of them happened. When the change cannot be tried (docs, a script),
+   `BOARD_URL=http://127.0.0.1:<port>`, then `set_preview` with the URL it answers on. An
+   artifact at an older head is rebuilt once at the final head, with the same
+   `BOARD_BUILD_DIR=.output-e2e`, then started the same way. A preview started by hand lives in
+   your session: it stops when the session ends, and the human can stop it meanwhile from the
+   project's Previews page. Otherwise use the board's own preview run: `start_run` the repo's
+   preview (or `start_preview` on the workspace), wait until it is `running` (on `failed`, read
+   its log tail and fix). The board rebuilds on every start, so its build is the preview's one
+   build for this head — the reason a hand start comes first where the repo allows it — and a
+   board-run preview outlives your session. Keep the preview running while the ticket is in
+   review; once it is merged or dropped, stop a hand-started process and clear the link
+   (`set_preview` with `""`), and the board stops its own. In the summary say which of the two
+   ran and how many times this head was built. When the change cannot be tried (docs, a script),
    say why in the summary instead.
    A preview build you start here is a heavy run, in a test slot like any other (holder
    `#<TICKET> preview <ISO time>`): take the first free one before the start and release it once

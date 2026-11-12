@@ -56,9 +56,16 @@ result, and the orchestrator asks the human.
    merged the base, so that artifact and the app it starts are at `HEAD_SHA`, never the merged
    tree, and an end-to-end run against it cannot see what the merge broke (or fails on the base's
    own specs against the old app). Build once on the merged tree in a test slot — a build is
-   heavy like the run — then run the end-to-end command against that build. The recorded build is
+   heavy like the run — with the test build's own output directory
+   (`BOARD_BUILD_DIR=.output-e2e pnpm build`, or the project's equivalent): a plain build writes
+   `.output`, which the end-to-end webServer never serves, so the run would start the head's
+   artifact again. When the recorded end-to-end command carries `E2E_SKIP_BUILD=1` inline, run
+   that same command with the flag removed, so its own build step builds the merged tree into
+   `.output-e2e`. Then run the end-to-end command against that build, never with
+   `E2E_SKIP_BUILD=1`. The recorded build is
    reused only when the base was already an ancestor (step 2), and then this step never runs.
-   Never delete a slot folder whose `holder.txt` names someone
+   A scoped run that finds `tests-<repo>-full` releases its slot and waits for the full suite, as
+   the gate does. Never delete a slot folder whose `holder.txt` names someone
    else. Compare failures with
    the head run in `02-verification.md`. Failures that were not present at head are
    **new**. Result `TESTS FAIL AFTER MERGE` with the new failures, or `NO ISSUE`. If the

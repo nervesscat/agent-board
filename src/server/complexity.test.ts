@@ -692,6 +692,10 @@ describe('the review texts the board ships', () => {
       "Do not reuse the caller's build here, even when `00-env.md` records `E2E_SKIP_BUILD=1`",
     )
     expect(merge).toContain('Build once on the merged tree in a test slot')
+    expect(merge).toContain('`BOARD_BUILD_DIR=.output-e2e pnpm build`')
+    expect(merge).toContain('run that same command with the flag removed')
+    expect(merge).toContain('never with `E2E_SKIP_BUILD=1`')
+    expect(merge).toContain('releases its slot and waits for the full suite, as the gate does')
     expect(merge).toContain(
       'The recorded build is reused only when the base was already an ancestor (step 2)',
     )
@@ -699,6 +703,9 @@ describe('the review texts the board ships', () => {
     expect(review).toContain(
       "Because it merged the base, it never reuses the caller's build record, `E2E_SKIP_BUILD=1` or not",
     )
+    expect(review).toContain("It builds with the test build's own output directory")
+    expect(review).toContain('never with the flag, or the run serves the head')
+    expect(review).toContain('releases its slot and waits for the full suite, as the gate does')
     const text = flat(ticketAgent)
     expect(text).toContain(
       'a fix pass that built nothing deletes the record, and the next review builds once at the new head',
@@ -709,19 +716,33 @@ describe('the review texts the board ships', () => {
   })
 
   it('takes a test slot for a targeted end-to-end run in the hunt and refute phases too', () => {
+    const phase = (file: string) => flat(read(path.join(skills, 'agents', file)))
     for (const file of ['feature-review-hunt.md', 'feature-review-refute.md']) {
-      const text = flat(read(path.join(skills, 'agents', file)))
+      const text = phase(file)
       expect(text, file).toContain('Targeted unit tests and probe tests are light and take no test slot')
       expect(text, file).toContain(
         'A targeted end-to-end spec is heavy like any end-to-end run and takes a test slot',
       )
+      expect(text, file).toContain('releases its slot and waits for the full suite, as the gate does')
     }
+    expect(phase('feature-review-hunt.md')).toContain('write `holder.txt` with `#<TICKET> hunt <ISO time>`')
+    expect(phase('feature-review-refute.md')).toContain(
+      'write `holder.txt` with `#<TICKET> refute <ISO time>`',
+    )
+    const ticket = flat(ticketAgent)
+    expect(ticket).toContain(
+      'its hunt and refute phases only for a targeted end-to-end run; their unit and probe tests take none',
+    )
+    expect(ticket).toContain("the hunt's and refute's targeted unit and probe tests take none")
   })
 
   it('passes the slot folder to every phase, and verify and merge also read it from 00-env.md', () => {
     const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
     expect(review).toContain(
       'the `SLOTS` directory when `slots=` was given (its record is the `Test slots:` line in `00-env.md`)',
+    )
+    expect(review).toContain(
+      'the ticket id (`TICKET`) when the review is on a ticket — every phase that takes a test slot writes it in its `holder.txt`',
     )
     for (const file of ['feature-review-verify.md', 'feature-review-merge.md']) {
       expect(flat(read(path.join(skills, 'agents', file))), file).toContain(
@@ -732,11 +753,17 @@ describe('the review texts the board ships', () => {
 
   it("starts a hand preview with the repo's environment on a free loopback port, and stops it with the ticket", () => {
     const text = flat(ticketAgent)
-    expect(text).toContain("Prefer the board's own preview run")
+    expect(text).toContain('The preview, from at most one build of this head')
+    expect(text).toContain(
+      "The board rebuilds on every start, so its build is the preview's one build for this head",
+    )
+    expect(text).toContain('A preview started by hand lives in your session: it stops when the session ends')
     expect(text).toContain('`BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`')
     expect(text).toContain('`HOST=127.0.0.1`')
     expect(text).toContain('`DATA_DIR` a copy of the data (never the live one)')
-    expect(text).toContain('keep it running while the ticket is in review')
+    expect(text).toContain('a board-run preview outlives your session')
+    expect(text).toContain('Keep the preview running while the ticket is in review')
     expect(text).toContain('clear the link (`set_preview` with `""`)')
+    expect(text).toContain('how many times this head was built')
   })
 })
