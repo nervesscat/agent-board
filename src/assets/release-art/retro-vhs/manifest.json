@@ -1,0 +1,113 @@
+{
+  "direction": "retro-vhs",
+  "generator": "scripts/release-art/retro-vhs.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "tapeBlack": "#101014",
+    "signal": "#E6E1D6",
+    "chromaRed": "#FF4D6D",
+    "chromaCyan": "#4DE1FF"
+  },
+  "variants": {
+    "light": {
+      "ground": "#E6E1D6",
+      "ink": "#101014"
+    },
+    "dark": {
+      "ground": "#101014",
+      "ink": "#E6E1D6"
+    }
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 1431639788,
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "themes": {
+        "density": 0.958,
+        "hands": 0.894,
+        "precision": 0.365,
+        "wayfinding": 0.387
+      },
+      "field": {
+        "summits": 16,
+        "levels": 18,
+        "wobble": 1.608,
+        "ridge": false,
+        "corridor": false
+      },
+      "tape": {
+        "split": 2.806,
+        "bands": 3,
+        "bandShift": 3.937,
+        "dropouts": 18,
+        "drift": 2.11
+      },
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 1448417407,
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "themes": {
+        "density": 0.534,
+        "hands": 0.393,
+        "precision": 0.556,
+        "wayfinding": 0
+      },
+      "field": {
+        "summits": 10,
+        "levels": 17,
+        "wobble": 1.455,
+        "ridge": true,
+        "corridor": false
+      },
+      "tape": {
+        "split": 2.311,
+        "bands": 2,
+        "bandShift": 2,
+        "dropouts": 11,
+        "drift": 1.532
+      },
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 1398084550,
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "themes": {
+        "density": 0.511,
+        "hands": 0.445,
+        "precision": 0,
+        "wayfinding": 0.473
+      },
+      "field": {
+        "summits": 11,
+        "levels": 13,
+        "wobble": 1.9,
+        "ridge": false,
+        "corridor": true
+      },
+      "tape": {
+        "split": 2.171,
+        "bands": 3,
+        "bandShift": 4.367,
+        "dropouts": 13,
+        "drift": 2.626
+      },
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      }
+    }
+  ]
+}
