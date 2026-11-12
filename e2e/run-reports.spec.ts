@@ -114,7 +114,8 @@ test('the project lists one kind of agent’s reports side by side across ticket
   // Newest first, and both tickets' hunt reports in one list.
   await expect(rows).toHaveCount(3)
   await expect(rows.first()).toContainText('verify')
-  await expect(rows.filter({ hasText: `#${first.id}` })).toContainText('Import the ledger')
+  // Two reports on the first ticket (hunt and verify), one on the second.
+  await expect(rows.filter({ hasText: `#${first.id}` })).toHaveCount(2)
   await expect(rows.filter({ hasText: `#${second.id}` })).toContainText('Export the ledger')
 
   // One kind of agent: both hunt reports, from the two tickets, and nothing else.
@@ -123,7 +124,7 @@ test('the project lists one kind of agent’s reports side by side across ticket
   await expect(rows).toHaveCount(2)
   await expect(rows.filter({ hasText: `#${first.id}` })).toContainText('round 1')
   await expect(rows.filter({ hasText: `#${second.id}` })).toContainText('round 2')
-  await expect(page.getByText('verify', { exact: true })).toHaveCount(0)
+  await expect(rows.filter({ hasText: 'verify' })).toHaveCount(0)
 
   // And a ticket filter narrows it further.
   await page.getByRole('textbox', { name: 'Ticket number' }).fill(String(second.id))
@@ -140,7 +141,7 @@ test('a project agent starts with the common part and keeps a template of its ow
   await page.getByRole('button', { name: 'New agent' }).click()
   const template = page.getByLabel('Run report template')
   await expect(template).toHaveValue(/the kind of run/)
-  await page.getByLabel('Name').fill('auditor')
+  await page.getByLabel('Name', { exact: true }).fill('auditor')
   const own = '## The rule\n\nAudit the audit: one run report, before the hand-off.'
   await template.fill(own)
   await page.getByRole('button', { name: 'Add agent' }).click()

@@ -79,9 +79,8 @@ test('the human hides a page and reorders the menu from the keyboard; both persi
   await page.keyboard.press('Enter')
   await expect(up).toBeFocused()
   const order = [
-    ...MENU.slice(0, 5),
+    ...MENU.slice(0, 6),
     'Daily',
-    'Gallery',
     'Team',
     'Run reports',
     'Cleanup',

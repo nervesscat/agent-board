@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ImagePlus, Lock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 
@@ -46,6 +46,12 @@ function Agents() {
   // Every ticket, lanes included: an agent can hold a lane as much as a top-level ticket.
   const { data: tickets = [] } = useQuery(ticketsQuery(id, 'all'))
   const [adding, setAdding] = useState(false)
+  // What a new agent's report template starts as: the common part every template carries.
+  const { data: commonTemplate } = useQuery({
+    queryKey: ['run-report-template'],
+    queryFn: () => get<{ template: string }>('/api/run-reports/template'),
+    enabled: adding,
+  })
   if (!project) return null
   const reservedFor = (a: ProjectAgent) =>
     tickets.filter((t) => t.assignee.toLowerCase() === a.name.toLowerCase())
@@ -65,7 +71,13 @@ function Agents() {
         )}
       </div>
       <DefaultAgents projectId={id} agents={project.agents} />
-      {adding && <AgentForm projectId={id} onDone={() => setAdding(false)} />}
+      {adding && (
+        <AgentForm
+          projectId={id}
+          defaultTemplate={commonTemplate?.template}
+          onDone={() => setAdding(false)}
+        />
+      )}
       {project.agents.length === 0 && !adding ? (
         <Empty>No agents yet. Every ticket is shared by the connected agents.</Empty>
       ) : (
@@ -276,17 +288,25 @@ function AgentText({
 function AgentForm({
   projectId,
   agent,
+  defaultTemplate,
   onDone,
 }: {
   projectId: string
   agent?: ProjectAgent
+  /** The common part a new agent's report template starts as, once it is read. */
+  defaultTemplate?: string
   onDone: () => void
 }) {
   const qc = useQueryClient()
   const [name, setName] = useState(agent?.name ?? '')
   const [instructions, setInstructions] = useState(agent?.instructions ?? '')
   const [delegation, setDelegation] = useState(agent?.delegation ?? '')
-  const [reportTemplate, setReportTemplate] = useState(agent?.reportTemplate ?? '')
+  const [reportTemplate, setReportTemplate] = useState(agent?.reportTemplate ?? defaultTemplate ?? '')
+  // The common part comes from the board a moment after the form opens; it fills the field if it is
+  // still untouched.
+  useEffect(() => {
+    if (!agent && defaultTemplate) setReportTemplate((current) => current || defaultTemplate)
+  }, [agent, defaultTemplate])
   const [avatar, setAvatar] = useState<{ id: number; url: string } | null>(
     agent?.avatarId ? { id: agent.avatarId, url: agent.avatarUrl! } : null,
   )

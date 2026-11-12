@@ -1215,6 +1215,8 @@ api.post('/api/projects/:id/run-reports', async ({ request, params, actor }) => 
 api.get('/api/projects/:id/run-reports/:reportId', ({ params }) =>
   json(runReports.getReport(id(params), id(params, 'reportId'))),
 )
+// The common part every template carries: what a new project agent's report template starts as.
+api.get('/api/run-reports/template', () => json({ template: projectAgents.commonRunReportTemplate }))
 
 // --- summary: what waits on the human, in progress, done today, next, carrying over ---
 // ?projectId= for one project; every project otherwise, one block each. `actor` names who asked, for the
