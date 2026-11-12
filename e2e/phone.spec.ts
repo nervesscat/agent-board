@@ -19,6 +19,12 @@ test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true
 const scrollsSideways = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
 
+type Box = { x: number; y: number; width: number; height: number }
+
+/** Whether two boxes on the page share any pixels. */
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
 test('no sideways scroll at 390px on Home, Repositories, the PR queue, the board and a ticket', async ({
   page,
   api,
@@ -85,7 +91,20 @@ test("a ticket's feed tabs, a long summary with its history open and long lane c
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const summary = page.getByRole('article', { name: 'Summary' })
   await expect(summary).toContainText('again')
-  await summary.getByRole('button', { name: 'history (1)' }).click()
+  // The toggle floats in the card's top-right, clear of its title and the line under it.
+  const history = summary.getByRole('button', { name: 'History (1)' })
+  await expect(history).toHaveAccessibleName('History (1)')
+  const historyBox = (await history.boundingBox())!
+  for (const el of [
+    summary.getByRole('heading', { level: 3, name: 'Summary', exact: true }),
+    summary.getByText(/updated .*: a change line/),
+  ]) {
+    const box = await el.boundingBox()
+    expect(box, await el.innerText()).not.toBeNull()
+    expect(overlaps(historyBox, box!), await el.innerText()).toBe(false)
+  }
+  await history.tap()
+  await expect(history).toHaveAttribute('aria-expanded', 'true')
   await expect(summary.getByRole('list', { name: 'Earlier versions' })).toBeVisible()
   // Its reply box, open.
   await summary
@@ -244,7 +263,7 @@ test("a project's whole Daily page and the reports-due banner fit 390px and answ
     await expect(page.getByRole('list', { name: 'Pushed today by repo' })).toContainText(ticket.title)
     expect(await scrollsSideways(page)).toBe(false)
     await page.keyboard.press('Escape')
-    await card.getByRole('button', { name: 'show 1 earlier version' }).tap()
+    await card.getByRole('button', { name: 'History (1)' }).tap()
     await expect(card.getByRole('list', { name: 'Earlier versions' })).toContainText('first pass')
     await page.getByRole('region', { name: 'Activity' }).getByRole('button', { name: 'Open all' }).tap()
     await expect(page.getByText('posted the daily report').first()).toBeVisible()

@@ -2162,9 +2162,10 @@ function SummaryCard({ t }: { t: TicketFull }) {
     <article
       id={s.fallback ? undefined : `post-${s.postId}`}
       aria-label="Summary"
-      className="mb-4 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border border-primary/30 bg-primary/5 p-3"
+      className="relative mb-4 scroll-mt-[calc(var(--ticket-header,4rem)+1rem)] rounded-lg border border-primary/30 bg-primary/5 p-3"
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      {/* pr-9 keeps the header's line clear of the history button, floating in the card's top-right. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-9 text-xs text-muted-foreground">
         <h3 className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground">
           <ScrollText className="size-4" /> Summary
         </h3>
@@ -2176,16 +2177,19 @@ function SummaryCard({ t }: { t: TicketFull }) {
           </span>
         </Tip>
         {s.versions > 1 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            className="ml-auto"
-            aria-expanded={history}
-            onClick={() => setHistory((v) => !v)}
-          >
-            <History data-icon="inline-start" /> {history ? 'hide history' : `history (${s.versions - 1})`}
-          </Button>
+          <Tip content={`History (${s.versions - 1})`}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="absolute top-2 right-2 text-muted-foreground"
+              aria-expanded={history}
+              aria-label={`History (${s.versions - 1})`}
+              onClick={() => setHistory((v) => !v)}
+            >
+              <History />
+            </Button>
+          </Tip>
         )}
       </div>
       {s.fallback && (

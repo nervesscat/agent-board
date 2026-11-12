@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test'
 
 import type { UpdateRow } from '#/lib/api'
-import { expect, expectTooltip, ok, test } from './fixtures'
+import { expect, expectTooltip, ok, test, tooltip } from './fixtures'
 
 /** The feed's tabs, and the posts shown under the one that is open, in order. */
 const tab = (page: Page, name: 'Main' | 'Agents') =>
@@ -97,7 +97,23 @@ test('the summary sits on top of Main with its history, and stands in with the l
   // It is not repeated in the feed below it.
   await expect(page.locator('ol > li article').filter({ hasText: 'Adds x.' })).toHaveCount(0)
 
-  await card.getByRole('button', { name: 'history (2)' }).click()
+  // The history toggle: an icon alone, floating at the card's top-right, its tip and name the count.
+  const history = card.getByRole('button', { name: 'History (2)' })
+  await expect(history).toHaveCount(1)
+  await expect(history).toHaveAccessibleName('History (2)')
+  await expect(history.locator('svg')).toHaveCount(1)
+  expect(await history.evaluate((el) => (el as HTMLElement).innerText.trim())).toBe('')
+  await expect(history).toHaveAttribute('aria-expanded', 'false')
+  const cardBox = (await card.boundingBox())!
+  const toggleBox = (await history.boundingBox())!
+  expect(toggleBox.y - cardBox.y).toBeLessThan(12)
+  expect(cardBox.x + cardBox.width - (toggleBox.x + toggleBox.width)).toBeLessThan(12)
+  await expectTooltip(history, 'History (2)')
+  await history.focus()
+  await expect(tooltip(page)).toHaveText('History (2)')
+  await page.mouse.move(0, 0)
+  await history.click()
+  await expect(history).toHaveAttribute('aria-expanded', 'true')
   const earlier = card.getByRole('list', { name: 'Earlier versions' }).getByRole('listitem')
   await expect(earlier).toHaveCount(2)
   await expect(earlier.nth(0)).toContainText('round 1 verdict')

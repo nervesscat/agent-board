@@ -50,8 +50,9 @@ export function ReportCard({ projectId, date }: { projectId: number; date: strin
   const period = tracked ? (list?.periods[0] ?? null) : null
 
   return (
-    <section className="min-w-0 rounded-lg border p-4" aria-label="Report">
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+    <section className="relative min-w-0 rounded-lg border p-4" aria-label="Report">
+      {/* pr-9 keeps the header's line clear of the history button, floating in the card's top-right. */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 pr-9">
         <h2 className="text-sm font-medium">Report</h2>
         <span className="text-xs text-muted-foreground">{describeSchedule(settings)}</span>
         <div className="ml-auto">
@@ -117,17 +118,20 @@ function PeriodReport({
       )}
       {period.versions > 1 && (
         <div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            aria-expanded={history}
-            onClick={() => setHistory(!history)}
-          >
-            <History data-icon="inline-start" />
-            {history ? 'hide' : 'show'} {period.versions - 1} earlier version
-            {period.versions === 2 ? '' : 's'}
-          </Button>
+          {/* The card's section is the positioned ancestor: it floats in the card's top-right. */}
+          <Tip content={`History (${period.versions - 1})`}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="absolute top-2 right-2 text-muted-foreground"
+              aria-expanded={history}
+              aria-label={`History (${period.versions - 1})`}
+              onClick={() => setHistory(!history)}
+            >
+              <History />
+            </Button>
+          </Tip>
           {history && (
             <ol className="mt-2 space-y-4 border-l pl-3" aria-label="Earlier versions">
               {(versions ?? []).slice(1).map((v, i, earlier) => (
