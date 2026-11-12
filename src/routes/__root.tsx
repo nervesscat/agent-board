@@ -15,6 +15,7 @@ import { CommandPalette } from '#/components/CommandPalette'
 import { Gallery } from '#/components/Gallery'
 import { GettingStartedEntry, GettingStartedMenuItem } from '#/components/GettingStarted'
 import { HostToolsBanner } from '#/components/HostToolsBanner'
+import { NotificationCenter } from '#/components/NotificationCenter'
 import { PreviewWindows } from '#/components/PreviewWindow'
 import { ProjectSwitcher } from '#/components/ProjectSwitcher'
 import { ReportDueBanner } from '#/components/ReportDueBanner'
@@ -124,8 +125,9 @@ function App() {
           <UpdateBadge />
           <ProjectSwitcher />
           <CommandPalette />
-          <div className="ml-auto flex shrink-0 items-center">
+          <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-5">
             <GettingStartedEntry />
+            <NotificationCenter />
           </div>
           <div className="hidden items-center gap-5 md:flex">
             {PAGES.map((p) => (
