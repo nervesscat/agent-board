@@ -40,13 +40,17 @@ function scopedTicket(projectId: number, ticketId: number) {
 /** A name as it is compared: the last segment of a sub-identity (`orch/hunt-1` is `hunt-1`), lowercased. */
 const segment = (name: string) => name.trim().toLowerCase().split('/').at(-1) ?? ''
 
-/** The kind of run a name stands for: a known agent (`hunt`) or that agent's numbered worker (`hunt-1`). */
+/**
+ * The kind of run a name stands for: a known agent (`hunt`) or that agent's numbered worker (`hunt-1`).
+ * A known name wins before the number is stripped, so a project agent actually named `hunt-1` is not
+ * folded into `hunt`.
+ */
 function runKindOf(name: string, known: Set<string>) {
   const seg = segment(name)
   if (!seg) return null
+  if (known.has(seg)) return seg
   const base = seg.replace(/-\d+$/, '')
-  for (const kind of known) if (seg === kind || base === kind) return kind
-  return null
+  return base !== seg && known.has(base) ? base : null
 }
 
 /** The run kinds a ticket's timeline can name: the default subagents and the project's own agents. */
@@ -57,7 +61,9 @@ function knownKinds(projectId: number) {
 /**
  * The closed span that measured a run of `agent` in `round`, if the work timeline has one: the one the
  * report's own times overlap most (two runs of one agent in one round each find their own), else the
- * latest. With no times from the report, the latest is all there is.
+ * latest. With no times from the report, the latest is all there is. With times that overlap no span,
+ * or two spans at least as well, there is no telling which run they belong to, so nothing is measured
+ * and the report's own estimate stands.
  */
 function measuredRun(
   ticketId: number,
@@ -79,14 +85,28 @@ function measuredRun(
   if (own.start !== null || own.end !== null) {
     const from = own.start ?? own.end!
     const to = own.end ?? own.start!
+    let best: (typeof spans)[number] | null = null
     let bestOverlap = 0
+    let tied = false
     for (const span of spans) {
-      const overlap = Math.min(to, Date.parse(span.end)) - Math.max(from, Date.parse(span.start))
-      if (overlap > 0 && overlap >= bestOverlap) {
+      const spanStart = Date.parse(span.start)
+      const spanEnd = Date.parse(span.end)
+      // One known time is a moment: it overlaps the span it falls in.
+      const overlap =
+        from === to
+          ? from >= spanStart && from <= spanEnd
+            ? 1
+            : 0
+          : Math.min(to, spanEnd) - Math.max(from, spanStart)
+      if (overlap <= 0) continue
+      if (overlap > bestOverlap) {
+        best = span
         bestOverlap = overlap
-        chosen = span
-      }
+        tied = false
+      } else if (overlap === bestOverlap) tied = true
     }
+    if (!best || tied) return null
+    chosen = best
   }
   return {
     start: chosen.start,
@@ -196,6 +216,9 @@ export function writeReport(
   const round = input.round ?? null
   const ownStart = input.startedAt ? Date.parse(input.startedAt) : null
   const ownEnd = input.endedAt ? Date.parse(input.endedAt) : null
+  // A run cannot end before it starts: storing that would read as a measured-looking 0-minute run.
+  if (ownStart !== null && ownEnd !== null && ownEnd < ownStart)
+    throw new HttpError(400, "endedAt is before startedAt: give the run's start and end in order")
   const measured = measuredRun(t.id, agent, round, { start: ownStart, end: ownEnd })
   const own =
     input.durationMs ?? (ownStart !== null && ownEnd !== null ? Math.max(0, ownEnd - ownStart) : null)
@@ -286,7 +309,10 @@ export interface MissingRunReport {
   runs: number
   /** How many spans of them. */
   spans: number
-  /** How many reports of that agent and round the ticket has: fewer than `runs` is what flags it. */
+  /**
+   * How many reports cover them: of that agent and round, or any round when only a hand-off recorded
+   * the run. Fewer than `runs` is what flags it.
+   */
   reports: number
   /** The earliest of them. */
   since: string
@@ -348,16 +374,24 @@ export function missingReports(ticketId: number): MissingRunReport[] {
   }
   if (!groups.size) return []
   const reported = new Map<string, number>()
+  const reportedByKind = new Map<string, number>()
   for (const r of db
     .select({ agent: schema.runReports.agent, round: schema.runReports.round })
     .from(schema.runReports)
     .where(eq(schema.runReports.ticketId, ticketId))
     .all()) {
-    const key = `${runKindOf(r.agent, known) ?? segment(r.agent)}|${r.round ?? ''}`
+    const kind = runKindOf(r.agent, known) ?? segment(r.agent)
+    const key = `${kind}|${r.round ?? ''}`
     reported.set(key, (reported.get(key) ?? 0) + 1)
+    reportedByKind.set(kind, (reportedByKind.get(kind) ?? 0) + 1)
   }
   return [...groups.entries()]
-    .map(([key, g]) => ({ ...g, reports: reported.get(key) ?? 0 }))
+    .map(([key, g]) => ({
+      ...g,
+      // A hand-off names no round, so any report of that agent on the ticket is its evidence it finished;
+      // a group with spans is matched by its round, where each run writes its own report.
+      reports: g.spans === 0 ? (reportedByKind.get(g.agent) ?? 0) : (reported.get(key) ?? 0),
+    }))
     .filter((g) => g.reports < Math.max(g.spans, g.handoffs))
     .map(({ agent, round, spans, handoffs, reports, since }) => ({
       agent,
