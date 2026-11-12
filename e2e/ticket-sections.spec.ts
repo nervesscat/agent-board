@@ -6,15 +6,68 @@ import { expect, ok, test } from './fixtures'
 import { addPosts, box, coveredAt, longTicket, openLong, scrollTo, ticketHeader } from './scrolling'
 
 /**
- * The sections of a ticket (Summary, Tasks, Timeline, Activity, Lanes) share the row of the prev/next
- * step control, inside the ticket's stuck header: they stay in view while the page scrolls, and each
- * one still jumps to its section, which lands below the header rather than behind it.
+ * The sections of a ticket (Summary, Tasks, Timeline, Lanes, Activity) share the row of the prev/next
+ * step control, inside the ticket's stuck header: they stay in view while the page scrolls, each one
+ * still jumps to its section, which lands below the header rather than behind it, and the selected one
+ * follows the page as it is scrolled.
  */
 
 const sections = (page: Page) => ticketHeader(page).getByRole('tablist', { name: 'Ticket sections' })
 const sectionTab = (page: Page, name: string) => sections(page).getByRole('tab', { name, exact: true })
+const selectedTab = (page: Page) => sections(page).locator('[role="tab"][aria-selected="true"]')
 const headerBox = (page: Page) => box(ticketHeader(page))
 const nextTicket = (page: Page) => ticketHeader(page).getByRole('link', { name: /^Next ticket in / })
+
+/**
+ * How far below the stuck header's bottom a section counts as the one being read: a tab's jump leaves
+ * its section 1rem (16px) down, so the selector's line reaches a little further.
+ */
+const SPY_LINE = 24
+
+/**
+ * Scrolls the window so the section's top is `past` pixels past the stuck header's bottom edge (above
+ * it when negative), the way a hand's scroll would.
+ */
+const scrollSection = (page: Page, id: string, past: number) =>
+  page.evaluate(
+    ({ id, past }) => {
+      const header = document.querySelector('main header')!
+      // --ticket-header is where the header's bottom sits once it sticks: the reference a section's
+      // top has to cross. Without it, the header's place before sticking is used.
+      const stuck = parseFloat(getComputedStyle(header.parentElement!).getPropertyValue('--ticket-header'))
+      const bottom = Number.isFinite(stuck) ? stuck : header.getBoundingClientRect().bottom
+      const section = document.getElementById(id)!
+      window.scrollTo(0, section.getBoundingClientRect().top + window.scrollY - bottom + past)
+    },
+    { id, past },
+  )
+
+/**
+ * The tab the page is at, read off the DOM: the last section whose top is at or above the header's
+ * bottom (plus the landing room a jump leaves), and the last tab at the page's end. Null when the
+ * strip has no tabs.
+ */
+const tabAtTheHeader = (page: Page) =>
+  page.evaluate((line) => {
+    const header = document.querySelector('main header')
+    if (!header) return null
+    const at = header.getBoundingClientRect().bottom + line
+    const tabs = [...document.querySelectorAll<HTMLElement>('[aria-label="Ticket sections"] [role="tab"]')]
+    const keys = tabs.map((tab) => (tab.textContent ?? '').trim().toLowerCase())
+    if (keys.length === 0) return null
+    let current = keys[0]!
+    for (const key of keys) {
+      const section = document.getElementById(key)
+      if (section && section.getBoundingClientRect().top <= at) current = key
+    }
+    const document_ = document.documentElement
+    if (
+      document_.scrollHeight > window.innerHeight + 2 &&
+      window.scrollY + window.innerHeight >= document_.scrollHeight - 2
+    )
+      current = keys[keys.length - 1]!
+    return current
+  }, SPY_LINE)
 
 /** A stage name at the length a project takes it (40 characters), in capitals: the widest it gets. */
 const LONG_STAGE = "WAITING FOR THE CLIENT'S FINAL APPROVAL"
@@ -162,9 +215,11 @@ test('Summary is offered only when the ticket has one, and lands on its card', a
   expect(await sections(page).getByRole('tab').allInnerTexts()).toEqual([
     'Tasks',
     'Timeline',
-    'Activity',
     'Lanes',
+    'Activity',
   ])
+  // With no Summary tab, the first section is the one the strip starts on, not none at all.
+  await expect(selectedTab(page)).toHaveText('Tasks')
 
   const written = await longTicket(api, human, 'With a summary')
   await ok(agent.put(`/api/tickets/${written.id}/summary`, { data: { body: 'What it does.' } }))
@@ -173,14 +228,106 @@ test('Summary is offered only when the ticket has one, and lands on its card', a
     'Summary',
     'Tasks',
     'Timeline',
-    'Activity',
     'Lanes',
+    'Activity',
   ])
+  await expect(selectedTab(page)).toHaveText('Summary')
 
   await scrollTo(page, 'bottom')
   await sectionTab(page, 'Summary').click()
   await expect(sectionTab(page, 'Summary')).toHaveAttribute('aria-selected', 'true')
   await expectLanded(page, page.locator('#summary'))
+})
+
+test('the strip and the page draw the sections in one order, Activity last', async ({ page, api, agent }) => {
+  const t = await api.ticket({ title: 'Sections in the page order', status: 'in_progress' })
+  await ok(agent.put(`/api/tickets/${t.id}/summary`, { data: { body: 'What it does.' } }))
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+
+  const strip = sections(page).getByRole('tab')
+  await expect(strip).toHaveCount(5)
+  expect(await strip.allInnerTexts()).toEqual(['Summary', 'Tasks', 'Timeline', 'Lanes', 'Activity'])
+  await expect(strip.last()).toHaveText('Activity')
+
+  // The page draws them in that same order down the main column: Activity after Lanes, nowhere else.
+  const ids = ['summary', 'tasks', 'timeline', 'lanes', 'activity']
+  const ys: number[] = []
+  for (const id of ids) ys.push((await box(page.locator(`#${id}`))).y)
+  for (let i = 1; i < ys.length; i++)
+    expect(ys[i]!, `#${ids[i]} is drawn below #${ids[i - 1]}`).toBeGreaterThan(ys[i - 1]!)
+})
+
+test('scrolling selects the section it brings under the header, and the page end the last one', async ({
+  page,
+  api,
+  human,
+}) => {
+  const t = await longTicket(api, human, 'Sections that follow the scroll')
+  await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
+
+  // No click: each section's top crossing the header's bottom picks its tab, one at a time.
+  for (const name of ['Tasks', 'Timeline', 'Lanes', 'Activity']) {
+    await scrollSection(page, name.toLowerCase(), 6)
+    await expect(sectionTab(page, name)).toHaveAttribute('aria-selected', 'true')
+    await expect(selectedTab(page)).toHaveText(name)
+    await expect(selectedTab(page)).toHaveCount(1)
+  }
+
+  // The end of the page is its last section: Activity is selected there and is in view, so a scroll to
+  // the end never leaves the strip on the section before it.
+  await scrollTo(page, 'bottom')
+  await expect(selectedTab(page)).toHaveText('Activity')
+  await expect(page.locator('#activity')).toBeInViewport()
+  const header = await headerBox(page)
+  expect((await box(page.locator('#activity'))).y).toBeLessThanOrEqual(header.y + header.height)
+})
+
+test('the selected tab is the section at the header at every stop, down and back up', async ({
+  page,
+  api,
+  human,
+  agent,
+}) => {
+  const t = await longTicket(api, human, 'Sections that stay truthful while scrolled')
+  await ok(agent.put(`/api/tickets/${t.id}/summary`, { data: { body: 'What it does.' } }))
+  await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
+
+  // Nothing has passed the header yet: the first tab, rather than none selected.
+  await scrollTo(page, 0)
+  await expect(selectedTab(page)).toHaveText('Summary')
+
+  const stops = await page.evaluate(() => {
+    const max = document.documentElement.scrollHeight - window.innerHeight
+    return Array.from({ length: 8 }, (_, i) => Math.round((max * i) / 7))
+  })
+  for (const y of [...stops, ...[...stops].reverse().slice(1)]) {
+    await scrollTo(page, y)
+    const expected = await tabAtTheHeader(page)
+    await expect
+      .poll(async () => (await selectedTab(page).textContent())?.trim().toLowerCase(), {
+        timeout: 2_000,
+        message: `the tab of the section at the header, scrolled to ${y}px`,
+      })
+      .toBe(expected)
+    await expect(selectedTab(page)).toHaveCount(1)
+  }
+})
+
+test('a clicked tab stays selected once its smooth scroll settles', async ({ page, api, human, agent }) => {
+  const t = await longTicket(api, human, 'Sections that do not fight a click')
+  await ok(agent.put(`/api/tickets/${t.id}/summary`, { data: { body: 'What it does.' } }))
+  await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
+  await expect(selectedTab(page)).toHaveText('Summary')
+
+  await sectionTab(page, 'Lanes').click()
+  await expect(sectionTab(page, 'Lanes')).toHaveAttribute('aria-selected', 'true')
+  await expectLanded(page, page.locator('#lanes'))
+
+  // Well after the scroll has passed Timeline on its way: the tab the human picked is still the one
+  // shown, and its section still sits below the header.
+  await page.waitForTimeout(1_500)
+  await expect(selectedTab(page)).toHaveText('Lanes')
+  await expectLanded(page, page.locator('#lanes'))
 })
 
 test.describe('on a phone', () => {

@@ -118,7 +118,7 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
-import { type AreaId, type Layout, defaultLayout, shownIn } from '#/lib/layout'
+import { type AreaId, type Layout, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -344,6 +344,13 @@ function TicketPage() {
   }
   const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
   const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
+  // The selector's tabs, in the order the page draws its sections rather than in a list of their own:
+  // the summary rides on top of the main column when the ticket has one, and Instructions has no tab
+  // (it is the ticket's own text, at the top, not something to jump to).
+  const tabs: { key: string; label: string }[] = [
+    ...(t.summary ? [{ key: 'summary', label: 'Summary' }] : []),
+    ...main.filter(hasTab).map(tabOf),
+  ]
 
   return (
     <div className="flex flex-col gap-6">
@@ -484,7 +491,7 @@ function TicketPage() {
               however long the stage's name is. */}
         {(main.length > 0 || !t.prId) && (
           <div className="-mt-1 flex min-h-7 w-full items-center gap-2 text-xs">
-            {main.length > 0 && <TicketSectionNav hasSummary={Boolean(t.summary)} />}
+            {tabs.length > 0 && <TicketSectionNav key={t.id} items={tabs} />}
             <div className="ml-auto flex items-center gap-2">
               {!t.prId && parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
               {!t.prId && !t.parentId && board && (
@@ -1971,38 +1978,135 @@ function Activity({
   )
 }
 
-const SECTION_ITEMS = [
-  { key: 'summary', label: 'Summary' },
-  { key: 'tasks', label: 'Tasks' },
-  { key: 'timeline', label: 'Timeline' },
-  { key: 'activity', label: 'Activity' },
-  { key: 'lanes', label: 'Lanes' },
-] as const
+/** The main column's sections that get a tab, with the anchor id the tab jumps to (its area without
+ *  the "ticket." prefix). The order is the page's own (`main`), so the strip cannot disagree with it. */
+const TAB_AREAS = ['ticket.tasks', 'ticket.timeline', 'ticket.lanes', 'ticket.activity'] as const
+type TabArea = (typeof TAB_AREAS)[number]
+const hasTab = (id: AreaId<'ticket.main'>): id is TabArea => (TAB_AREAS as readonly string[]).includes(id)
+const tabOf = (area: TabArea) => ({ key: area.slice('ticket.'.length), label: layoutElement(area).label })
+
+/**
+ * How far below the stuck header's bottom a section's top counts as the one being read: a tab's jump
+ * leaves its section 1rem down (its scroll-mt), so the line has to reach that far to agree with the
+ * click that brought the page there.
+ */
+const SPY_LINE = 24
+
+/** How long a click's smooth scroll may take before the spy takes over regardless. */
+const SPY_SETTLE_MS = 1200
 
 /**
  * The ticket's sections, one tap away on a phone instead of a long scroll. It rides in the ticket
  * header's step row: at a narrow width the strip scrolls within itself instead of wrapping onto a
  * second line, which would make the stuck header taller. It takes its tabs' width as its share of the
  * row, so the steps beside it keep their own, and the two shrink together when the row is too narrow.
+ *
+ * The selected tab also follows the page: scrolling a section's top under the stuck header selects
+ * that section's tab, back up too, and the page's end selects its last section. So the strip says
+ * where the page is, not only where it was last tapped.
  */
-function TicketSectionNav({ hasSummary }: { hasSummary: boolean }) {
-  const [active, setActive] = useState('summary')
-  const go = (id: string) => {
-    setActive(id)
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+function TicketSectionNav({ items }: { items: readonly { key: string; label: string }[] }) {
+  const [active, setActive] = useState(items[0]?.key ?? '')
+  const root = useRef<HTMLDivElement | null>(null)
+  // The tab a click asked for, while the scroll it started runs: no section passing the header on the
+  // way there is what the human asked for, so the spy stands aside until that scroll has settled.
+  const clicked = useRef<string | null>(null)
+  // Starts the wait for that scroll to settle; the spy's effect owns it and its cleanup.
+  const settleWhenScrolled = useRef<() => void>(() => {})
+  // One key per tab in order: the spy restarts only when that order changes, not on every render.
+  const order = items.map((i) => i.key).join(' ')
+
+  useEffect(() => {
+    const el = root.current
+    if (!el) return
+    const keys = order.split(' ').filter(Boolean)
+    let frame = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    // The section under the header: the last tab whose section starts above the header's bottom, or
+    // the last tab at the page's end, where the last section may be too short to reach the line.
+    // Read once per frame at most, and never written to the DOM.
+    const read = () => {
+      frame = 0
+      if (keys.length === 0) return
+      const line = (el.closest('header')?.getBoundingClientRect().bottom ?? 0) + SPY_LINE
+      let at = keys[0]!
+      for (const key of keys) {
+        const section = document.getElementById(key)
+        if (section && section.getBoundingClientRect().top <= line) at = key
+      }
+      const page = document.documentElement
+      if (
+        page.scrollHeight > window.innerHeight + 2 &&
+        window.scrollY + window.innerHeight >= page.scrollHeight - 2
+      )
+        at = keys[keys.length - 1]!
+      setActive(at)
+    }
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(read)
+    }
+
+    const settled = () => {
+      window.removeEventListener('scrollend', settled)
+      if (timer !== undefined) clearTimeout(timer)
+      timer = undefined
+      if (clicked.current === null) return
+      clicked.current = null
+      schedule()
+    }
+    settleWhenScrolled.current = () => {
+      window.addEventListener('scrollend', settled, { once: true })
+      if (timer !== undefined) clearTimeout(timer)
+      timer = setTimeout(settled, SPY_SETTLE_MS)
+    }
+
+    // A scroll anywhere counts, a scrolling ancestor's too; each is one read at most.
+    const onScroll = () => {
+      if (clicked.current === null) schedule()
+    }
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true })
+    window.addEventListener('resize', schedule)
+    // Sections grow as their cards load (a feed, a lane list), which moves the ones after them with no
+    // scroll at all.
+    const resized = new ResizeObserver(schedule)
+    for (const key of keys) {
+      const section = document.getElementById(key)
+      if (section) resized.observe(section)
+    }
+    read()
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      if (timer !== undefined) clearTimeout(timer)
+      window.removeEventListener('scroll', onScroll, { capture: true })
+      window.removeEventListener('resize', schedule)
+      window.removeEventListener('scrollend', settled)
+      resized.disconnect()
+      settleWhenScrolled.current = () => {}
+    }
+  }, [order])
+
+  const go = (key: string) => {
+    setActive(key)
+    clicked.current = key
+    settleWhenScrolled.current()
+    document.getElementById(key)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+  // A tab the layout no longer draws must not leave the strip with none selected.
+  const current = items.some((i) => i.key === active) ? active : (items[0]?.key ?? '')
   return (
-    <div className="-my-1 flex min-w-0 flex-auto overflow-x-auto py-1">
-      <Tabs value={active} onValueChange={(v) => go(String(v))}>
+    <div ref={root} className="-my-1 flex min-w-0 flex-auto overflow-x-auto py-1">
+      <Tabs value={current} onValueChange={(v) => go(String(v))}>
         <TabsList aria-label="Ticket sections" className="w-max">
-          {SECTION_ITEMS.filter((s) => s.key !== 'summary' || hasSummary).map((s) => (
+          {items.map((s) => (
             <TabsTrigger
               key={s.key}
               value={s.key}
               className="after:hidden"
               // A tab clicked again is already the selected one, so its value does not change: it
               // still jumps to its section rather than doing nothing.
-              onClick={s.key === active ? () => go(s.key) : undefined}
+              onClick={s.key === current ? () => go(s.key) : undefined}
             >
               {s.label}
             </TabsTrigger>
