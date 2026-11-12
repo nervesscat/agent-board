@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import type { LastHeard, TimelineSpan, TimelineWait, WorkTotals } from '#/lib/workTimeline'
+import type { LastHeard, Liveness, TimelineSpan, TimelineWait, WorkTotals } from '#/lib/workTimeline'
 
 import {
   currentActivity,
   lastHeard,
+  lastWord,
+  livenessLines,
+  lostContact,
   measureOffset,
   onServerClock,
   stallReason,
@@ -187,6 +190,42 @@ describe('lastHeard', () => {
   })
 })
 
+describe('per-agent liveness lines', () => {
+  const liveness: Liveness = {
+    state: 'working',
+    agent: 'claude',
+    phase: 'build',
+    since: at('11:47'),
+    lastSignalAt: at('12:10'),
+    lastWordAt: at('12:10'),
+    silentMinutes: 20,
+    spans: [
+      { phase: 'build', agent: 'claude', since: at('11:47'), lastWordAt: at('12:10'), silentMinutes: 20 },
+      { phase: 'review', agent: 'codex', since: at('12:00'), lastWordAt: at('12:20'), silentMinutes: 10 },
+    ],
+  }
+
+  it('gives every open span its own agent, phase, time and last word', () => {
+    expect(livenessLines(liveness, NOW)).toEqual([
+      'Building · claude · 43 min · last word 20 min ago',
+      'Reviewing · codex · 30 min · last word 10 min ago',
+    ])
+    // A lost run says so in each line, with the phase named.
+    expect(livenessLines({ ...liveness, state: 'lost' }, NOW)).toEqual([
+      'Lost contact · claude · build · 43 min · last word 20 min ago',
+      'Lost contact · codex · review · 30 min · last word 10 min ago',
+    ])
+  })
+
+  it("reads the ticket's last word and how many minutes ago", () => {
+    expect(lastWord({ ...timeline(), liveness }, NOW)).toEqual({
+      at: at('12:10'),
+      agent: 'claude',
+      minutes: 20,
+    })
+  })
+})
+
 describe('stallReason', () => {
   it('is null when the ticket is not stalled', () => {
     expect(stallReason(timeline())).toBeNull()
@@ -236,15 +275,41 @@ describe('stallReason', () => {
     expect(stallReason(t, 'Bug Found')).toMatchObject({ kind: 'nothing-open', stage: 'Bug Found' })
   })
 
-  it('says an open span with a silent agent is still working, but silent', () => {
+  it('never names an open span: a span whose lease ran out is Lost contact, not a stall', () => {
+    // A stalled ticket has nothing open; an open span with an expired lease belongs to `lostContact`.
     const t = timeline({ stalled: stall(at('12:02')), spans: [span({ agent: 'builder' })] })
-    expect(stallReason(t)).toEqual({
-      kind: 'working',
+    expect(stallReason(t)).toMatchObject({ kind: 'nothing-open' })
+    const lost: WorkTimelineLike = {
+      ...timeline(),
+      liveness: {
+        state: 'lost',
+        agent: 'builder',
+        phase: 'build',
+        since: at('11:18'),
+        lastSignalAt: at('11:18'),
+        lastWordAt: at('12:04'),
+        silentMinutes: 26,
+        spans: [
+          {
+            phase: 'build',
+            agent: 'builder',
+            since: at('11:18'),
+            lastWordAt: at('12:04'),
+            silentMinutes: 26,
+          },
+        ],
+      },
+    }
+    expect(lostContact(lost)).toEqual({
       agent: 'builder',
       phase: 'build',
-      since: at('12:02'),
-      stage: null,
+      since: at('11:18'),
+      silentMinutes: 26,
+      lastWordAt: at('12:04'),
     })
+    expect(livenessLines(lost.liveness, NOW)).toEqual([
+      'Lost contact · builder · build · 72 min · last word 26 min ago',
+    ])
   })
 
   it('reads a stall on a ticket with no events as nothing open since its last signal', () => {

@@ -1,4 +1,12 @@
-import type { Stalled, TimelineSpan, TimelineWait, WorkTimeline, WorkTotals } from './workTimeline'
+import type {
+  Liveness,
+  LivenessState,
+  Stalled,
+  TimelineSpan,
+  TimelineWait,
+  WorkTimeline,
+  WorkTotals,
+} from './workTimeline'
 
 /**
  * The short answers every place that shows a ticket's work gives: what is going on now, who was heard
@@ -13,6 +21,8 @@ export type WorkTimelineLike = Pick<
 > & {
   /** The server's time when the timeline was read (absent for one built from an activity: then no offset). */
   now?: string
+  /** The ticket's state and per-agent facts, when the read carried one. */
+  liveness?: Liveness | null
 }
 
 /**
@@ -121,6 +131,87 @@ export function lastHeard(t: WorkTimelineLike): LastHeardLine | null {
   return { at: h.at, agent: h.agent, by: h.by, summary: h.note || h.reason || h.phase }
 }
 
+/** The ticket's last word: when the agent last spoke, who, and how many whole minutes ago. */
+export type LastWord = { at: string; agent: string; minutes: number }
+
+/**
+ * `last word N min ago`: the latest agent event or agent post, counted on the clock the caller gives
+ * (the server's, through `onServerClock`). Null when no agent has said anything on the ticket.
+ */
+export function lastWord(t: WorkTimelineLike, now: Date | number): LastWord | null {
+  const at = t.liveness?.lastWordAt ?? t.lastHeard?.at ?? null
+  if (!at) return null
+  return {
+    at,
+    agent: t.liveness?.agent || t.lastHeard?.agent || '',
+    minutes: Math.max(0, Math.floor((+now - Date.parse(at)) / 60_000)),
+  }
+}
+
+/** The ticket's state, when the read carried one (rows may carry the activity's). */
+export const livenessOf = (t: WorkTimelineLike): Liveness | null =>
+  t.liveness ?? (t as { activity?: { liveness?: Liveness | null } }).activity?.liveness ?? null
+
+/** The verb a phase's line opens with, as the Now line has always said it. */
+export const PHASE_VERB: Record<string, string> = {
+  spec: 'Specifying',
+  build: 'Building',
+  review: 'Reviewing',
+  verify: 'Verifying',
+  pr: 'Opening PR',
+  preview: 'Previewing',
+  merge: 'Merging',
+}
+
+/** Whole minutes between `from` and `now`, never negative. */
+export const minutesBetween = (from: string, now: Date | number) =>
+  Math.max(0, Math.floor((+now - Date.parse(from)) / 60_000))
+
+/**
+ * One line per open span, in the words every surface uses: `Lost contact · claude · build · 46 min ·
+ * last word 26 min ago`, or a working span as today's `Building · claude · 43 min` plus its last word.
+ */
+export function livenessLines(l: Liveness | null | undefined, now: Date | number): string[] {
+  if (!l) return []
+  return l.spans.map((s) => {
+    const word = s.lastWordAt ? `last word ${s.silentMinutes} min ago` : 'no word yet'
+    const forSpan = minutesBetween(s.since, now)
+    if (l.state === 'lost') return `Lost contact · ${s.agent} · ${s.phase} · ${forSpan} min · ${word}`
+    return `${PHASE_VERB[s.phase] ?? 'Working'} · ${s.agent} · ${forSpan} min · ${word}`
+  })
+}
+
+/** A lost-contact ticket as the notice reads it: the agent, its phase, since when and its last word. */
+export type LostContactWhy = {
+  agent: string
+  phase: string
+  since: string
+  silentMinutes: number
+  lastWordAt: string | null
+}
+
+/** Why an agent is lost: its lease expired with a span still open. Null for every other state. */
+export function lostContact(t: WorkTimelineLike): LostContactWhy | null {
+  const l = livenessOf(t)
+  if (l?.state !== 'lost') return null
+  return {
+    agent: l.agent,
+    phase: l.phase,
+    since: l.since,
+    silentMinutes: l.silentMinutes,
+    lastWordAt: l.lastWordAt,
+  }
+}
+
+/** A state word for the UI: what the ticket's own state is called. */
+export const LIVENESS_LABEL: Record<LivenessState, string> = {
+  waiting: 'Waiting on you',
+  working: 'Working',
+  lost: 'Lost contact',
+  stalled: 'Stalled',
+  idle: 'Nothing open',
+}
+
 export type StallReason =
   /** Nothing is open; the last closed span (if any) ended at `endedAt`. `quote` is what that event said. */
   | {
@@ -133,13 +224,12 @@ export type StallReason =
     }
   /** A wait is open on an agent (`on`) and nobody has been heard from since. */
   | { kind: 'waiting'; on: string; reason: string; since: string; stage: string | null }
-  /** A span is open, its agent silent since `since`. */
-  | { kind: 'working'; agent: string; phase: string; since: string; stage: string | null }
 
 /**
  * Why a stalled ticket is stalled, or null when it is not. An open wait is the answer when there is
- * one, else an open span, else nothing is open and the last closed span says when the work stopped.
- * `stage` is the name of the active stage when it is not the project's default one (else null).
+ * one, else nothing is open and the last closed span says when the work stopped. A span is never open
+ * on a stalled ticket any more: an expired lease with a span open reads as Lost contact (see
+ * `lostContact`). `stage` is the name of the active stage when it is not the project's default one.
  */
 export function stallReason(t: WorkTimelineLike, stage: string | null = null): StallReason | null {
   const s: Stalled | null = t.stalled
@@ -147,8 +237,6 @@ export function stallReason(t: WorkTimelineLike, stage: string | null = null): S
   const since = s.since
   const open = latestFirst(t.waits.filter((w) => w.open))[0]
   if (open) return { kind: 'waiting', on: waitTarget(open), reason: open.reason, since, stage }
-  const span = latestFirst(t.spans.filter((x) => x.open))[0]
-  if (span) return { kind: 'working', agent: span.agent, phase: span.phase, since, stage }
   const closed = t.spans.filter((x: TimelineSpan) => !x.open).sort((a, b) => ms(b.end) - ms(a.end))[0]
   const h = t.lastHeard
   const quote = closed && h && h.at === closed.end ? h.reason : ''

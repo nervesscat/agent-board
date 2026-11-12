@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { StageLike } from './stages'
 import type { Activity, Stalled } from './workTimeline'
 import { hasWork, nowBrief, nowWords, stallStage, timelineFromActivity } from './activityTimeline'
-import { stallReason } from './workStatus'
+import { lostContact, stallReason } from './workStatus'
 
 const at = (hhmm: string) => `2026-10-20T${hhmm}:00.000Z`
 const NOW = Date.parse(at('12:30'))
@@ -57,12 +57,39 @@ describe('the why of a stall comes from the activity', () => {
     expect(stallReason(t)).toMatchObject({ kind: 'waiting', on: 'builder-1', reason: 'lock' })
   })
 
-  it('an open span with its agent silent is the why when nothing waits', () => {
+  it('an open span is never a stall: with an expired lease it reads Lost contact', () => {
     const t = timelineFromActivity(
       { ...NONE, spans: [{ phase: 'build', agent: 'claude', since: at('11:00') }] },
       stalled(at('11:00')),
     )
-    expect(stallReason(t)).toMatchObject({ kind: 'working', agent: 'claude', phase: 'build' })
+    // A stalled activity has nothing open, so the why cannot name a working span.
+    expect(stallReason(t)).toMatchObject({ kind: 'nothing-open' })
+    const lost = timelineFromActivity(
+      {
+        ...NONE,
+        spans: [{ phase: 'build', agent: 'claude', since: at('11:00') }],
+        liveness: {
+          state: 'lost',
+          agent: 'claude',
+          phase: 'build',
+          since: at('11:00'),
+          lastSignalAt: at('11:00'),
+          lastWordAt: at('11:30'),
+          silentMinutes: 26,
+          spans: [
+            {
+              phase: 'build',
+              agent: 'claude',
+              since: at('11:00'),
+              lastWordAt: at('11:30'),
+              silentMinutes: 26,
+            },
+          ],
+        },
+      },
+      null,
+    )
+    expect(lostContact(lost)).toMatchObject({ agent: 'claude', phase: 'build', silentMinutes: 26 })
   })
 
   it('with nothing open, the why says nothing is open since the last signal', () => {

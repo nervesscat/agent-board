@@ -63,6 +63,7 @@ export function timelineFromActivity(
     end: null,
     lastHeard: activity?.lastHeard ?? null,
     now: activity?.now,
+    liveness: activity?.liveness ?? null,
   }
 }
 

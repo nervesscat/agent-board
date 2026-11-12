@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { DEFAULT_STAGES } from './constants'
+import { DEFAULT_STAGES, LEASE_TTL_MINUTES } from './constants'
 import {
   activityOf,
   buildTimeline,
@@ -375,6 +375,24 @@ describe('activityOf', () => {
       },
       lastClosedSpan: null,
       now: at('10:30'),
+      liveness: {
+        state: 'working',
+        agent: 'claude',
+        phase: 'build',
+        since: at('10:00'),
+        lastSignalAt: at('10:20'),
+        lastWordAt: at('10:20'),
+        silentMinutes: 10,
+        spans: [
+          {
+            phase: 'build',
+            agent: 'claude',
+            since: at('10:00'),
+            lastWordAt: at('10:20'),
+            silentMinutes: 10,
+          },
+        ],
+      },
     })
   })
 
@@ -398,6 +416,16 @@ describe('activityOf', () => {
       lastHeard: null,
       lastClosedSpan: null,
       now: at('10:00'),
+      liveness: {
+        state: 'stalled',
+        agent: 'claude',
+        phase: '',
+        since: at('09:00'),
+        lastSignalAt: at('09:00'),
+        lastWordAt: null,
+        silentMinutes: 60,
+        spans: [],
+      },
     })
   })
 })
@@ -514,6 +542,156 @@ describe('the stalled rule', () => {
     }
     expect(isStalled({ ...base, now: ms('10:30') })).toBe(false)
     expect(isStalled({ ...base, now: ms('10:30') + 1 })).toBe(true)
+  })
+})
+
+describe('liveness: the lease, the open spans and waiting on the human', () => {
+  const TTL = LEASE_TTL_MINUTES * MIN
+  const spanStart = (time: string, more: Partial<TimelineEvent> = {}) =>
+    event('span_start', time, { phase: 'review', round: 4, ...more })
+  const post = (time: string, agent = 'claude', human = false) => ({ at: at(time) + '', agent, human })
+  const buildLiveness = (
+    events: TimelineEvent[],
+    now: string,
+    opts: {
+      posts?: { at: string; agent: string; human: boolean }[]
+      waiting?: { decision?: boolean; blockedTask?: boolean }
+    } = {},
+    t: Partial<TimelineTicket> = {},
+    stallMinutes = 30,
+  ) =>
+    buildTimeline(events, {
+      now: ms(now),
+      stages,
+      ticket: ticket(t),
+      stallMinutes,
+      posts: opts.posts,
+      waiting: opts.waiting,
+    })
+
+  it('the #861 case: a long review round kept alive by its posts reads working, not stalled', () => {
+    // A review round-4 span opened at 17:15; the agent posted at 17:33, 17:41 and 17:58; read at 18:04
+    // with stallMinutes 30. The span is much older than the threshold, the posts are the lease.
+    const t = buildLiveness(
+      [spanStart('17:15')],
+      '18:04',
+      {
+        posts: [post('17:33'), post('17:41'), post('17:58')],
+      },
+      { createdAt: at('17:00') },
+    )
+    expect(t.liveness).toMatchObject({
+      state: 'working',
+      agent: 'claude',
+      phase: 'review',
+      since: at('17:15'),
+      lastWordAt: at('17:58'),
+      silentMinutes: 6,
+      spans: [{ phase: 'review', agent: 'claude', since: at('17:15'), silentMinutes: 6 }],
+    })
+    expect(t.stalled).toBeNull()
+    expect(t.lastSignalAt).toBe(at('17:58'))
+    expect(t.lastWordAt).toBe(at('17:58'))
+  })
+
+  it('a run killed mid-span is lost from the TTL on, and never stalled', () => {
+    const events = [spanStart('10:00')]
+    const atTtl = buildLiveness(events, '10:10')
+    expect(atTtl.liveness?.state).toBe('working')
+    const lost = buildLiveness(events, '10:11')
+    expect(lost.liveness).toMatchObject({ state: 'lost', phase: 'review', since: at('10:00') })
+    expect(lost.stalled).toBeNull()
+    // Silence grows: still lost, never working and never stalled, with the open span named.
+    const later = buildLiveness(events, '11:31')
+    expect(later.liveness).toMatchObject({ state: 'lost', phase: 'review' })
+    expect(later.stalled).toBeNull()
+  })
+
+  it('the gap between the lease and stallMinutes is neutral: idle, not working, lost or stalled', () => {
+    const t = buildLiveness([event('heartbeat', '10:00')], '10:11')
+    expect(t.liveness?.state).toBe('idle')
+    expect(t.stalled).toBeNull()
+    // Both ends: the lease is live a minute inside it, and the stall starts a minute past the threshold.
+    expect(buildLiveness([event('heartbeat', '10:00')], '10:09').liveness?.state).toBe('working')
+    expect(buildLiveness([event('heartbeat', '10:00')], '10:31').liveness?.state).toBe('stalled')
+  })
+
+  it('heartbeat boundaries: working through TTL-1, lost at TTL+1 with an open span, stalled past stallMinutes without one', () => {
+    expect(TTL).toBe(10 * MIN)
+    const span = [spanStart('10:00'), event('heartbeat', '10:00')]
+    expect(buildLiveness(span, '10:09').liveness?.state).toBe('working')
+    expect(buildLiveness(span, '10:11').liveness?.state).toBe('lost')
+    const noSpan = [event('heartbeat', '10:00')]
+    expect(buildLiveness(noSpan, '10:09').liveness?.state).toBe('working')
+    expect(buildLiveness(noSpan, '10:11').liveness?.state).toBe('idle')
+    expect(buildLiveness(noSpan, '10:31').liveness?.state).toBe('stalled')
+  })
+
+  it('an agent post refreshes the lease; an old one leaves the state to the spans', () => {
+    const live = buildLiveness([spanStart('10:00')], '10:09', { posts: [post('10:00')] })
+    expect(live.liveness?.state).toBe('working')
+    const expired = buildLiveness([spanStart('09:00')], '10:00', { posts: [post('09:49')] })
+    expect(expired.liveness?.state).toBe('lost')
+    // A human's post is not a signal: it proves a person spoke, not that the run is alive.
+    const human = buildLiveness([spanStart('09:00')], '10:00', { posts: [post('09:59', 'human', true)] })
+    expect(human.liveness?.state).toBe('lost')
+    expect(human.lastSignalAt).toBe(at('09:00'))
+  })
+
+  it('waiting on the human outranks the rest, from each of its facts', () => {
+    expect(buildLiveness([event('wait_start', '10:00', { reason: 'human' })], '10:01').liveness?.state).toBe(
+      'waiting',
+    )
+    expect(
+      buildLiveness([event('heartbeat', '10:00')], '10:01', { waiting: { decision: true } }).liveness?.state,
+    ).toBe('waiting')
+    expect(
+      buildLiveness([event('heartbeat', '10:00')], '10:01', { waiting: { blockedTask: true } }).liveness
+        ?.state,
+    ).toBe('waiting')
+    // Waiting is not a stall, and an open span does not change that.
+    const waitAndSpan = buildLiveness(
+      [spanStart('10:00'), event('wait_start', '10:05', { reason: 'human' })],
+      '11:00',
+    )
+    expect(waitAndSpan.liveness?.state).toBe('waiting')
+    expect(waitAndSpan.stalled).toBeNull()
+  })
+
+  it('an open span never reads stalled: with every signal older than the lease it is lost', () => {
+    const t = buildLiveness([spanStart('10:00')], '11:00')
+    expect(t.stalled).toBeNull()
+    expect(t.liveness?.state).toBe('lost')
+    expect(t.liveness?.spans).toEqual([
+      { phase: 'review', agent: 'claude', since: at('10:00'), lastWordAt: at('10:00'), silentMinutes: 60 },
+    ])
+  })
+
+  it('keeps a per-agent last word for every open span, falling back to the ticket last word', () => {
+    const events = [
+      spanStart('10:00', { agent: 'builder', by: 'orch' }),
+      spanStart('10:10', { agent: 'claude', by: 'orch' }),
+      event('heartbeat', '10:20', { agent: 'claude', by: 'orch' }),
+      event('heartbeat', '10:30', { agent: 'claude', by: 'orch' }),
+    ]
+    const t = buildLiveness(events, '10:31')
+    const spans = t.liveness!.spans
+    expect(spans.map((s) => [s.agent, s.lastWordAt, s.silentMinutes])).toEqual([
+      ['builder', at('10:00'), 31],
+      ['claude', at('10:30'), 1],
+    ])
+    expect(t.liveness?.lastWordAt).toBe(at('10:30'))
+  })
+
+  it('gives no state to tickets outside an active stage, archived ones or a PR ticket', () => {
+    for (const t of [
+      { status: 'review' },
+      { status: 'blocked' },
+      { status: 'done' },
+      { archivedAt: at('10:00') },
+      { prId: 3 },
+    ])
+      expect(buildLiveness([spanStart('10:00')], '11:00', {}, t).liveness).toBeNull()
   })
 })
 

@@ -1,4 +1,4 @@
-import type { EventKind, StageKind } from './constants'
+import { LEASE_TTL_MINUTES, type EventKind, type StageKind } from './constants'
 import { isBoardRecord } from './roles'
 
 /**
@@ -76,6 +76,8 @@ export type Activity = {
   lastHeard: LastHeard | null
   lastClosedSpan?: ClosedSpan | null
   now?: string
+  /** The ticket's state and per-agent facts, when it has one (see Liveness). */
+  liveness?: Liveness | null
 }
 /**
  * Since when an active ticket has been silent, for how many whole minutes, and who was heard from last:
@@ -90,6 +92,39 @@ export type Stalled = {
   lastAgent: string
   lastBy: string
   lastFrom: 'event' | 'assignee'
+}
+
+/**
+ * What a ticket (or lane) is doing, from its lease, its open spans and why it waits on the human:
+ * `waiting` (the human's turn), `working` (a live lease, or a span younger than the TTL), `lost` (the
+ * lease expired with a span still open: the agent is gone), `stalled` (nothing open, silence past the
+ * project's `stallMinutes`) and the neutral `idle` in the gap between the TTL and `stallMinutes`.
+ */
+export type LivenessState = 'waiting' | 'working' | 'lost' | 'stalled' | 'idle'
+/** One open span as the state reports it: who works it, since when, and when that agent last spoke. */
+export type LivenessSpan = {
+  phase: string
+  agent: string
+  since: string
+  /** That agent's latest event or post; the ticket's latest when that agent never spoke. */
+  lastWordAt: string | null
+  /** Whole minutes since `lastWordAt` (or the lease's clock when it is null). */
+  silentMinutes: number
+}
+/**
+ * A ticket's state and the per-agent facts behind it: the state word, the open span it reads from
+ * (agent, phase, since), the lease's clock (`lastSignalAt`), the agent's last word and how long ago,
+ * in whole minutes, and every open span with its own agent and last word.
+ */
+export type Liveness = {
+  state: LivenessState
+  agent: string
+  phase: string
+  since: string
+  lastSignalAt: string
+  lastWordAt: string | null
+  silentMinutes: number
+  spans: LivenessSpan[]
 }
 
 export type WorkTimeline = {
@@ -107,9 +142,16 @@ export type WorkTimeline = {
   blockedStretches: { start: string; end: string }[]
   totals: WorkTotals
   lastSignalAt: string
+  /** The latest agent event or agent post: when the agent last said something. */
+  lastWordAt: string | null
+  /** Null for a ticket that cannot have a state: not in an active stage, archived, or a PR's own ticket. */
+  liveness: Liveness | null
   stalled: Stalled | null
   lastHeard: LastHeard | null
 }
+
+/** A post on the ticket as the lease reads it: when it was written, by whom, and whether a human wrote it. */
+export type TimelinePost = { at: string; agent: string; human: boolean }
 
 /** What the timeline needs of the ticket itself. */
 export type TimelineTicket = {
@@ -119,6 +161,8 @@ export type TimelineTicket = {
   assignee: string
   createdAt: string
   startedAt: string | null
+  /** The ticket it is a lane of; kept out of the timeline's own reads, the server uses it for waits. */
+  parentId?: number | null
 }
 
 export type TimelineOptions = {
@@ -127,6 +171,10 @@ export type TimelineOptions = {
   stages: { key: string; kind: StageKind }[]
   ticket: TimelineTicket
   stallMinutes: number
+  /** Its posts: an agent's refreshes the lease, a human's proves a person spoke, not that the run is alive. */
+  posts?: TimelinePost[]
+  /** Why it waits on the human outside its events: an undecided decision card, or an open blocked task. */
+  waiting?: { decision?: boolean; blockedTask?: boolean }
 }
 
 /** The kinds of stage a ticket is live in: its open spans and waits run to now there. */
@@ -287,18 +335,8 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
     blockedStretches.map(interval),
   )
 
-  const lastSignalAt = latest(o.ticket.createdAt, o.ticket.startedAt, last?.at)
-  const stalledNow = isStalled({
-    kind: ticketKind,
-    archived: !!o.ticket.archivedAt,
-    prTicket: o.ticket.prId !== null,
-    waitingOnHuman: waits.some((w) => w.open && w.reason === 'human'),
-    lastSignalAt,
-    now,
-    stallMinutes: o.stallMinutes,
-  })
   // Who was last heard from: any event but the board's own. A worker's event under the name 'board'
-  // counts (it is a claim, shown with who recorded it), as it counts for the stall clock above.
+  // counts (it is a claim, shown with who recorded it), as it counts for the lease clock below.
   const lastEvent = [...sorted].reverse().find((e) => e.agent && !isBoardRecord(e.agent, e.by))
   const lastAgent = lastEvent?.agent ?? o.ticket.assignee
   const lastBy = lastEvent?.by ?? ''
@@ -314,6 +352,68 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
         note: lastEvent.note,
       }
     : null
+
+  // The lease's clock: the latest event of any kind, an agent's post, the ticket's start or creation.
+  // A human's post is not a signal: it proves a person spoke, not that the run is alive.
+  const posts = o.posts ?? []
+  const agentPosts = posts.filter((p) => !p.human)
+  const lastPostAt = agentPosts.length ? latest(...agentPosts.map((p) => p.at)) : null
+  const lastSignalAt = latest(o.ticket.createdAt, o.ticket.startedAt, last?.at, lastPostAt)
+  const lastWordAt = lastEvent || lastPostAt ? latest(lastEvent?.at, lastPostAt) : null
+  const silence = (signal: string | null) =>
+    signal ? Math.max(0, Math.floor((now - Date.parse(signal)) / 60_000)) : 0
+
+  const waitingOnHuman = waits.some((w) => w.open && w.reason === 'human')
+  const waitingByFacts = waitingOnHuman || !!o.waiting?.decision || !!o.waiting?.blockedTask
+  const stateful = ticketKind === 'active' && !o.ticket.archivedAt && o.ticket.prId === null
+  const openSpans = spans.filter((s) => s.open)
+  const ttlMs = LEASE_TTL_MINUTES * 60_000
+  const leaseLive = now - Date.parse(lastSignalAt) <= ttlMs
+  const spanYounger = openSpans.some((s) => now - Date.parse(s.start) <= ttlMs)
+  const state: LivenessState = waitingByFacts
+    ? 'waiting'
+    : leaseLive || spanYounger
+      ? 'working'
+      : openSpans.length
+        ? 'lost'
+        : now - Date.parse(lastSignalAt) > o.stallMinutes * 60_000
+          ? 'stalled'
+          : 'idle'
+  const latestSpan = openSpans.reduce<TimelineSpan | null>(
+    (a, b) => (!a || Date.parse(b.start) >= Date.parse(a.start) ? b : a),
+    null,
+  )
+  const wordOf = (agent: string): string | null => {
+    const ownEvent = [...sorted].reverse().find((e) => e.agent === agent && !isBoardRecord(e.agent, e.by))
+    const ownPost = agentPosts.filter((p) => p.agent === agent).at(-1)
+    if (!ownEvent && !ownPost) return lastWordAt
+    return latest(ownEvent?.at, ownPost?.at)
+  }
+  const liveness: Liveness | null = stateful
+    ? {
+        state,
+        agent: latestSpan?.agent ?? lastAgent,
+        phase: latestSpan?.phase ?? lastEvent?.phase ?? '',
+        since:
+          state === 'waiting'
+            ? (waits.find((w) => w.open && w.reason === 'human')?.start ?? lastSignalAt)
+            : (latestSpan?.start ?? lastSignalAt),
+        lastSignalAt,
+        lastWordAt,
+        silentMinutes: silence(lastWordAt ?? lastSignalAt),
+        spans: openSpans.map((s) => {
+          const word = wordOf(s.agent)
+          return {
+            phase: s.phase,
+            agent: s.agent,
+            since: s.start,
+            lastWordAt: word,
+            silentMinutes: silence(word),
+          }
+        }),
+      }
+    : null
+  const stalledNow = stateful && state === 'stalled'
   return {
     now: iso(now),
     start: startMs === null ? null : iso(startMs),
@@ -326,10 +426,12 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
     blockedStretches,
     totals: sums,
     lastSignalAt,
+    lastWordAt,
+    liveness,
     stalled: stalledNow
       ? {
           since: lastSignalAt,
-          minutes: Math.floor((now - Date.parse(lastSignalAt)) / 60_000),
+          minutes: silence(lastSignalAt),
           lastAgent,
           lastBy,
           lastFrom,
@@ -356,6 +458,7 @@ export function activityOf(timeline: WorkTimeline): Activity {
       ? { phase: closed.phase, agent: closed.agent, start: closed.start, end: closed.end }
       : null,
     now: timeline.now,
+    liveness: timeline.liveness,
   }
 }
 
