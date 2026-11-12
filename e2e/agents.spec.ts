@@ -11,6 +11,7 @@ import {
   mcpSetup,
   repoClaudeDir,
   reviewSkillsInstall,
+  sessionSkillInstall,
   skillInstall,
 } from '#/lib/agents'
 import { AGENT_CLIENTS } from '#/lib/constants'
@@ -40,7 +41,7 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   await expect(page).toHaveURL(/[?&]shell=powershell(&|$)/)
   // One choice for the page: the review skills' line follows.
   for (const tab of await tabs('PowerShell').all()) await expect(tab).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByText(/^New-Item -ItemType Directory/)).toBeVisible()
+  await expect(page.getByText(/^New-Item -ItemType Directory .*\\skills\\board"/)).toBeVisible()
   await expect(reviewLine).toBeVisible()
 
   await page.reload()
@@ -140,6 +141,53 @@ test('Generate commands makes a token per agent, fills it into the MCP setup lin
   await expect(page.getByText(/Bearer <token>/).first()).toBeVisible()
   await expect(page.getByText(renamed.token)).toHaveCount(0)
   expect(mints).toHaveLength(AGENT_CLIENTS.length + 1)
+})
+
+test('the session skill installs from its own line in section 2, which keeps one pair of shell tabs', async ({
+  page,
+  human,
+  agent,
+}) => {
+  const servedResponse = await human.get('/api/agent-setup/session-skill')
+  expect(servedResponse.ok()).toBe(true)
+  const served = await servedResponse.text()
+  expect(served).toContain('name: session')
+  // An agent gets the same bytes.
+  expect(await (await agent.get('/api/agent-setup/session-skill')).text()).toBe(served)
+  const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+
+  await page.goto('/agents?shell=bash')
+  const install = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: '2. Install the skill' }) })
+  // One shell picker for the section, as before, and the session skill's line beside the board skill's.
+  await expect(install.getByRole('tab')).toHaveCount(2)
+  await expect(install.getByText('/session', { exact: true })).toBeVisible()
+  const blocks = install.locator(':scope > div.space-y-1').filter({ has: page.locator('pre') })
+  await expect(blocks).toHaveCount(2)
+  const lines = blocks.locator('pre')
+  await expect(lines.nth(0)).toHaveText(skillInstall('claude', 'bash', boardUrl, ''))
+  await expect(lines.nth(1)).toHaveText(sessionSkillInstall('claude', 'bash', boardUrl, ''))
+
+  // The section's picker switches both lines, and neither carries a credential before one is copied.
+  await install.getByRole('tab', { name: 'PowerShell' }).click()
+  await expect(lines.nth(0)).toHaveText(skillInstall('claude', 'powershell', boardUrl, ''))
+  await expect(lines.nth(1)).toHaveText(sessionSkillInstall('claude', 'powershell', boardUrl, ''))
+  await install.getByRole('tab', { name: 'bash / zsh' }).click()
+  await expect(lines.nth(1)).toHaveText(sessionSkillInstall('claude', 'bash', boardUrl, ''))
+  // Copying the session skill's own line mints the short-lived credential, which both lines then carry.
+  const { token } = await copyInstallLine(page, blocks.nth(1))
+  await expect(lines.nth(0)).toHaveText(skillInstall('claude', 'bash', boardUrl, token))
+  await expect(lines.nth(1)).toHaveText(sessionSkillInstall('claude', 'bash', boardUrl, token))
+
+  // Run as shown, into a home of its own: the served bytes, at <skills>/session/SKILL.md.
+  // PowerShell's line writes to $HOME, which this run cannot redirect; its shape is checked above.
+  if (process.platform !== 'win32') {
+    const scratch = await runShownLine(page, blocks.nth(1))
+    expect(fs.readFileSync(path.join(scratch, '.claude', 'skills', 'session', 'SKILL.md'), 'utf8')).toBe(
+      served,
+    )
+  }
 })
 
 test("a token that answers after the page moved to another CLI never fills that CLI's commands", async ({
@@ -279,6 +327,7 @@ async function runShownLine(page: Page, entry: Locator) {
       env: { ...process.env, TEMP: scratch, PATH: `${system32};${process.env.PATH}` },
     })
   }
+  return scratch
 }
 
 /**

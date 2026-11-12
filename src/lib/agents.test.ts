@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AGENT_TOKEN_NAME,
+  AGENTS,
   mcpSetup,
   repoClaudeDir,
   reviewSkillsInstall,
+  sessionSkillInstall,
   skillInstall,
   TOKEN_PLACEHOLDER,
 } from './agents'
@@ -193,6 +195,41 @@ http_headers = { Authorization = "Bearer ${token}" }`,
       for (const shell of ['bash', 'powershell'] as const)
         expect(skillInstall(client, shell, board, ''), client).toContain(`Bearer ${TOKEN_PLACEHOLDER}`)
     }
+  })
+})
+
+describe('the session skill install line', () => {
+  it('goes to each CLI skills folder as session/SKILL.md, in either shell, with the token or its placeholder', () => {
+    const url = `${board}/api/agent-setup/session-skill`
+    for (const client of AGENT_CLIENTS) {
+      const dir = AGENTS[client].sessionSkillDir
+      const bash = sessionSkillInstall(client, 'bash', board, 'Xy-9_tok')
+      expect(bash, client).toBe(
+        `mkdir -p ${dir.unix} && curl -fsS -H "Authorization: Bearer Xy-9_tok" "${url}" -o ${dir.unix}/SKILL.md`,
+      )
+      const powershell = sessionSkillInstall(client, 'powershell', board, 'Xy-9_tok')
+      expect(powershell, client).toBe(
+        `New-Item -ItemType Directory -Force "${dir.windows}" | Out-Null; ` +
+          `Invoke-WebRequest -UseBasicParsing -Headers @{ Authorization = 'Bearer Xy-9_tok' } '${url}' -OutFile "${dir.windows}\\SKILL.md"`,
+      )
+      for (const shell of ['bash', 'powershell'] as const) {
+        expect(sessionSkillInstall(client, shell, board, ''), `${client} ${shell}`).toContain(
+          `Bearer ${TOKEN_PLACEHOLDER}`,
+        )
+        expect(sessionSkillInstall(client, shell, board, 'Xy-9_tok'), `${client} ${shell}`).toContain(
+          'Bearer Xy-9_tok',
+        )
+        expect(sessionSkillInstall(client, shell, board, ''), `${client} ${shell}`).toContain(url)
+      }
+      expect(powershell, client).toContain(`-OutFile "${dir.windows}\\SKILL.md"`)
+    }
+    // Each CLI's own skills folder, the board skill's beside it, with `session` for its name.
+    expect(AGENTS.claude.sessionSkillDir).toEqual({
+      unix: '~/.claude/skills/session',
+      windows: '$HOME\\.claude\\skills\\session',
+    })
+    expect(AGENTS.codex.sessionSkillDir.unix).toBe('~/.agents/skills/session')
+    expect(AGENTS.opencode.sessionSkillDir.unix).toBe('~/.config/opencode/skills/session')
   })
 })
 

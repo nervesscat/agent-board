@@ -70,6 +70,113 @@ describe('the board skill', () => {
   })
 })
 
+describe('the session skill', () => {
+  const file = path.join(import.meta.dirname, 'skill', 'session.md')
+  const onDisk = () => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
+
+  it('is one file with its frontmatter, names /session and has no token to fill in', () => {
+    const skill = agents.sessionSkill()
+    expect(skill).toMatch(/^---\nname: session\n/)
+    expect(skill).toContain('user-invocable: true')
+    expect(skill).toContain('description:')
+    expect(skill).toContain("For the agent in the human's conversation only")
+    expect(skill).toContain('/session')
+    expect(skill).not.toMatch(/\{\{[A-Z_]+\}\}/)
+    expect(skill).not.toContain('TODO')
+    expect(skill).toBe(onDisk())
+  })
+
+  it('is the orchestrator protocol: the brief, delegation, quiet, writing, one shape and the close', () => {
+    const skill = agents.sessionSkill()
+    for (const text of [
+      // The opening brief.
+      'finished yesterday',
+      'in progress',
+      'what waits on the human',
+      'what is next',
+      'get_summary',
+      'handful of lines',
+      'no ticket bodies',
+      // Staying with the human, and the one exception.
+      'no repo edits',
+      'the human explicitly asks you to do by hand',
+      'you say so',
+      // Every start is a delegation.
+      'Do not start the ticket yourself',
+      'one background agent per named ticket',
+      'todo-review',
+      'todo-review-ticket',
+      'feature-review',
+      'in no worktree',
+      // Quiet about delegated work.
+      'By default, say nothing about how the work went',
+      'very important',
+      'plain terms',
+      'not ordinary findings a round already fixed',
+      // How it writes.
+      'No code, file, module or function names',
+      'answer first',
+      'detail stays on the board, with a link',
+      // One message shape, and where its list lives.
+      'Needs you',
+      'Running',
+      'never reused',
+      'Every message uses it',
+      'leaves only when',
+      'points at it',
+      '~/.agent-session/<projectId>.md',
+      // The backstop.
+      'a ticket still in progress whose work is done',
+      'work.open',
+      'set_task_done',
+      'Routine updates stay',
+      // Stalls.
+      'The agent broke',
+      'stopped on purpose',
+      "never restart without the human's yes",
+      // The close.
+      'what got done',
+      'what is still running',
+      'needs-you',
+      'cleanup_report',
+      'cleanup_delete',
+      'stop_run',
+      'stop_preview',
+      'never touched',
+      // The mechanics live in the other texts.
+      'board skill',
+    ])
+      expect(skill, text).toContain(text)
+  })
+
+  it('is served to the human and to agents alike, verbatim and never cached, with no parameters', async () => {
+    const { api } = await import('./api')
+    const route = 'http://localhost/api/agent-setup/session-skill'
+    const want = onDisk()
+    const read = async (url: string, headers: Record<string, string> = {}) => {
+      const res = await api.handle(new Request(url, { headers }), 'claude')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('text/markdown; charset=utf-8')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      return (await res.text()).replace(/\r\n/g, '\n')
+    }
+    expect(await read(route)).toBe(want)
+    expect(await read(route, { authorization: 'Bearer token-of-agent' })).toBe(want)
+    // No parameter changes it: the same text for every client and without one.
+    expect(await read(`${route}?client=codex`)).toBe(want)
+    expect(await read(route, { 'x-test-actor': 'human:enrique' })).toBe(want)
+  })
+
+  it('stays out of the review bundle and the MCP instructions', () => {
+    expect(agents.reviewBundlePaths().some((p) => p.includes('session'))).toBe(false)
+    expect(agents.reviewBundle().toString('utf8')).not.toContain('name: session')
+    const mcp = fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8')
+    expect(mcp.slice(mcp.indexOf('const INSTRUCTIONS'), mcp.indexOf('const STATUS'))).not.toContain(
+      '/session',
+    )
+  })
+})
+
 describe('settings', () => {
   it('default to Claude Code and the global copy of the review skills, and keep what is picked', () => {
     expect(agents.getSettings()).toEqual({

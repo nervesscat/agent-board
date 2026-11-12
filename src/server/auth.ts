@@ -56,7 +56,7 @@ export interface Caller {
   parent: string
   /** The credential's own name: the agent token's (in test the X-Test-Actor's); null for the human. */
   token: string | null
-  /** A skill download credential's scope: the two skill downloads, and no other route (admit). */
+  /** A skill download credential's scope: the skill downloads, and no other route (admit). */
   scope?: 'skill'
 }
 
@@ -273,13 +273,18 @@ export function isBrowserNavigation(request: Request): boolean {
 const PUBLIC = new Set(['/api/health'])
 
 /**
- * The only routes a skill download credential reaches: the board skill and the review bundle, whatever
- * their query string (`?client=`, `?transport=`, `?list`). Anything else, `/api/mcp` included, is refused
- * here, before a handler runs: a check inside these two routes could not keep it off the rest.
+ * The only routes a skill download credential reaches: the board skill, the session skill and the review
+ * bundle, whatever their query string (`?client=`, `?transport=`, `?list`). Anything else, `/api/mcp`
+ * included, is refused here, before a handler runs: a check inside these routes could not keep it off the
+ * rest.
  */
-const SKILL_DOWNLOADS = new Set(['/api/agent-setup/skill', '/api/agent-setup/review-skills'])
+const SKILL_DOWNLOADS = new Set([
+  '/api/agent-setup/skill',
+  '/api/agent-setup/session-skill',
+  '/api/agent-setup/review-skills',
+])
 
-/** The refusal for a skill credential asking for anything but those two, else null. */
+/** The refusal for a skill credential asking for anything but those, else null. */
 function skillScopeRefusal(caller: Caller, pathname: string): Response | null {
   if (caller.scope !== 'skill') return null
   if (SKILL_DOWNLOADS.has(pathname.replace(/\/+$/, ''))) return null

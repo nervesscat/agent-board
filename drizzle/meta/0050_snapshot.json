@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2e19e767-1124-40ba-baf8-a95942ebc732",
-  "prevId": "44adbe73-3660-4eee-ab32-97ed004b4168",
+  "id": "065c35e7-8e3e-4549-9e86-ff1a1dbad5ca",
+  "prevId": "c9397463-83e9-41d6-aeea-a0eca565c7bf",
   "tables": {
     "account": {
       "name": "account",
@@ -454,6 +454,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+        },
+        "annotations": {
+          "name": "annotations",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -1200,6 +1207,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'none'"
+        },
+        "requested": {
+          "name": "requested",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "waiting_on": {
           "name": "waiting_on",
@@ -2160,53 +2175,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "skill_tokens": {
-      "name": "skill_tokens",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "skill_tokens_token_hash_unique": {
-          "name": "skill_tokens_token_hash_unique",
-          "columns": [
-            "token_hash"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "stages": {
       "name": "stages",
       "columns": {
@@ -3018,7 +2986,7 @@
       "checkConstraints": {
         "tickets_complexity": {
           "name": "tickets_complexity",
-          "value": "\"tickets\".\"complexity\" IN ('low', 'mid', 'high')"
+          "value": "\"tickets\".\"complexity\" IN ('low', 'mid', 'high', 'max')"
         }
       }
     },
