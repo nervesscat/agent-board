@@ -95,17 +95,15 @@ test('posts, replies and the assignee show who is who: Human, Orchestrator, Agen
     const legacyPost = page.getByRole('article').filter({ hasText: 'An older post.' })
     await expect(badge(legacyPost.locator('span[data-role]').first(), 'Orchestrator')).toBeVisible()
 
-    // The assignee: in the ticket's Assignee field, and on the board card.
+    // The assignee: in the ticket's Assignee field. The card previews the ticket alone: its number,
+    // title, badges, tags and time, not who holds it, its repo or its branch.
     const field = page.locator('#assignee')
     await expect(field).toContainText(sub)
     await expect(badge(field, 'Agent')).toBeVisible()
     await page.goto(`/projects/${project.id}/features?view=board`)
     const card = page.locator('[data-column="in_progress"]').getByRole('link', { name: /Who is who/ })
-    const assignee = card.locator('span[data-slot="tooltip-trigger"][data-role="worker"]').first()
-    await expect(badge(assignee, 'Agent')).toBeVisible()
-    // The card shows the leaf of the sub-identity; the whole chain is in the tooltip.
-    await expect(assignee).toContainText('worker-2')
-    await expectTooltip(assignee, /worker-2/)
+    await expect(card).toContainText('Who is who')
+    await expect(card).not.toContainText(sub)
   } finally {
     await Promise.all([orch.dispose(), worker.dispose(), old.dispose()])
   }
@@ -442,51 +440,6 @@ test.describe('on a phone', () => {
       await expectInside(actorIn(stalled), needsYou)
       await expectInside(actorIn(working), section(page, 'In progress'))
       await page.screenshot({ path: test.info().outputPath('deep-sub-identity-overview-390.png') })
-    } finally {
-      await worker.dispose()
-    }
-  })
-
-  test("a deep sub-identity on a board card is cut short: its badge and the card's time stay in view", async ({
-    page,
-    project,
-    api,
-    playwright,
-    baseURL,
-  }, info) => {
-    const orchName = `orch-c${info.workerIndex}`
-    const sub = `${orchName}/builder-with-a-long-sub-identity/importer-lane-one`
-    const worker = await as(playwright, baseURL, `orchestrator:${orchName}`, { 'X-Agent-Name': sub })
-    try {
-      const t = await api.ticket({ title: 'Card with a deep assignee', status: 'in_progress' })
-      await ok(worker.post(`/api/tickets/${t.id}/claim`, { data: {} }))
-
-      await page.goto(`/projects/${project.id}/features?view=board`)
-      const card = page
-        .locator('[data-column="in_progress"]')
-        .getByRole('link', { name: /Card with a deep assignee/ })
-      await card.scrollIntoViewIfNeeded()
-      const actor = card.locator('span[data-slot="tooltip-trigger"][data-role="worker"]').first()
-      const name = actor.getByTestId('actor-name')
-      const role = actor.locator('[data-role="worker"]').getByText('Agent', { exact: true })
-      const time = card.getByTestId('card-time')
-      // The card shows the leaf; its badge and time stay in view.
-      await expect(name).toHaveText('importer-lane-one')
-      await expect(role).toBeVisible()
-      await expect(time).toBeVisible()
-      const row = time.locator('..')
-      for (const inner of [role, time]) {
-        await expectInside(inner, card)
-        await expectInside(inner, row)
-      }
-      // The whole name and chain are in the tooltip.
-      await expectTooltip(
-        actor,
-        new RegExp(
-          `^${sub} \\(Agent\\) ← ${orchName}/builder-with-a-long-sub-identity \\(Agent\\) ← ${orchName} `,
-        ),
-      )
-      await page.screenshot({ path: test.info().outputPath('deep-sub-identity-card-390.png') })
     } finally {
       await worker.dispose()
     }
