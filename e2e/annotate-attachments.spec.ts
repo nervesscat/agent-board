@@ -532,6 +532,122 @@ test('a note or a text longer than the document allows is capped, and the pictur
   expect(item!.note).toHaveLength(2_000)
 })
 
+test("a batch on a ticket's instructions is stored in the order it was picked, however long its first file takes to upload", async ({
+  page,
+  api,
+}) => {
+  const t = await api.ticket({ title: 'Instructions in pick order' })
+  // The first upload is held before it leaves the page, so the tiny file picked after it would land
+  // first on the board if the two batches the canvas accepts were sent at once instead of one after
+  // the other.
+  await page.addInitScript(() => {
+    const real = globalThis.fetch
+    let held = false
+    globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!held && String(input).includes('/api/uploads')) {
+        held = true
+        await new Promise((done) => setTimeout(done, 1_500))
+      }
+      return real(input, init)
+    }
+  })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const instructions = page.getByRole('region', { name: 'Instructions' })
+  const chooser = page.waitForEvent('filechooser')
+  await instructions.getByRole('button', { name: /attach/i }).click()
+  await (
+    await chooser
+  ).setFiles([
+    { name: 'big.png', mimeType: 'image/png', buffer: png(300, [205, 205, 205], 4_000_000) },
+    { name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes') },
+  ])
+  const canvas = canvasOf(page)
+  await expect(canvas).toBeVisible()
+  await attachOriginal(page)
+
+  // The list under the instructions has them in pick order, and so does the ticket.
+  const listed = () =>
+    instructions.locator('ul > li').evaluateAll((els) => els.map((el) => el.textContent?.trim()))
+  await expect.poll(listed).toEqual(['big.png', 'notes.md'])
+  await expect
+    .poll(async () => (await api.getTicket(t.id)).attachments.map((a) => a.name))
+    .toEqual(['big.png', 'notes.md'])
+})
+
+test('the marks are locked while the picture is attaching, so the document is what Attach showed', async ({
+  page,
+  api,
+}) => {
+  // The encode is held so the button reads "Attaching…" long enough to try every control.
+  await page.addInitScript(() => {
+    const toBlob = HTMLCanvasElement.prototype.toBlob
+    HTMLCanvasElement.prototype.toBlob = function (
+      this: HTMLCanvasElement,
+      callback: BlobCallback,
+      ...rest: [string?, number?]
+    ) {
+      setTimeout(() => toBlob.call(this, callback, ...rest), 4_000)
+    }
+  })
+  const t = await api.ticket({ title: 'Locked while attaching' })
+  await page.goto(`/projects/${t.projectId}/features/${t.id}`)
+  const instructions = page.getByRole('region', { name: 'Instructions' })
+  await pickWith(page, instructions.getByRole('button', { name: /attach/i }), {
+    name: 'locked.png',
+    buffer: png(300, [220, 220, 220]),
+  })
+  const canvas = canvasOf(page)
+  await expect(canvas).toBeVisible()
+  await draw(page, canvas, 'Box', [40, 40], [180, 140])
+  await canvas.getByLabel('Note').fill('the box that stays')
+  // The Text tool and its field are on screen too, so both fields are part of the freeze.
+  await canvas.getByRole('button', { name: 'Text', exact: true }).click()
+
+  await canvas.getByRole('button', { name: 'Attach', exact: true }).click()
+  await expect(canvas.getByRole('button', { name: 'Attaching…' })).toBeVisible()
+  // Said on screen, not only through greyed controls.
+  await expect(canvas.getByRole('status')).toHaveText('The marks are locked until the picture is attached.')
+
+  const note = canvas.getByRole('textbox', { name: 'Note', exact: true })
+  const text = canvas.getByRole('textbox', { name: 'Text', exact: true })
+  for (const name of ['Pencil', 'Box', 'Arrow', 'Ellipse', 'Text', 'Note', 'Undo', 'Clear']) {
+    const control = canvas.getByRole('button', { name, exact: true })
+    await expect(control).toBeDisabled()
+    // Forced, the click does nothing: the mark and the tool stay as they were.
+    await control.click({ force: true })
+  }
+  await expect(note).toBeDisabled()
+  await expect(text).toBeDisabled()
+  await expect(canvas.getByLabel('Colour')).toBeDisabled()
+  await expect(canvas.getByLabel('Stroke width')).toBeDisabled()
+  await canvas.getByLabel('Colour').click({ force: true })
+  await canvas.getByLabel('Stroke width').click({ force: true })
+  // Typing at the locked fields goes nowhere.
+  await note.click({ force: true })
+  await page.keyboard.type('changed')
+  await text.click({ force: true })
+  await page.keyboard.type('changed')
+  await expect(note).toHaveValue('the box that stays')
+  await expect(text).toHaveValue('')
+  await expect(canvas.getByRole('button', { name: 'Text', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+
+  await expect(canvas).toBeHidden()
+  // What was attached is the one mark there was when Attach was clicked: no undo, no clear, no extra
+  // mark, no colour or width change, and the note that was written.
+  await expect.poll(async () => (await api.getTicket(t.id)).attachments.length).toBe(1)
+  const stored = (await api.getTicket(t.id)).attachments[0]!
+  expect(stored.annotations!.items).toHaveLength(1)
+  expect(stored.annotations!.items[0]).toMatchObject({
+    kind: 'rect',
+    color: '#e11d48',
+    width: 4,
+    note: 'the box that stays',
+  })
+})
+
 test('a batch is stored in the order it was picked, however long its first file takes to upload', async ({
   page,
   project,

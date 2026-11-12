@@ -691,23 +691,38 @@ function Instructions({
   const [editing, setEditing] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [body, setBody] = useState(t.body)
+  // The batches on their way, queued or in flight: the attach button reads "attaching…" until the
+  // last one has landed.
+  const [attaching, setAttaching] = useState(0)
   const fileInput = useRef<HTMLInputElement>(null)
+  // One batch after another. A picture and the files picked after it are accepted as separate
+  // batches in the same task, so two uploads would otherwise run at once and the board would number
+  // them in whichever order they finished rather than the order they were picked. A batch that fails
+  // is toasted and the queue moves on.
+  const sending = useRef<Promise<unknown>>(Promise.resolve())
   const onError = (err: unknown) => toast.error(errorMessage(err))
-  const attach = useMutation({
-    mutationFn: async (files: File[]) => {
-      const attachmentIds = await uploadAll(files)
-      return post(`/api/tickets/${t.id}/attachments`, { attachmentIds })
-    },
-    onSuccess: onChange,
-    onError,
-  })
+  const accept = (files: File[]) => {
+    if (!files.length) return
+    setAttaching((n) => n + 1)
+    sending.current = sending.current.then(async () => {
+      try {
+        const attachmentIds = await uploadAll(files)
+        await post(`/api/tickets/${t.id}/attachments`, { attachmentIds })
+        onChange()
+      } catch (err) {
+        onError(err)
+      } finally {
+        setAttaching((n) => n - 1)
+      }
+    })
+  }
   const detach = useMutation({
     mutationFn: (attachmentId: number) => del(`/api/tickets/${t.id}/attachments/${attachmentId}`),
     onSuccess: onChange,
     onError,
   })
   // A picture opens the canvas before it is attached; the rest go straight on.
-  const annotate = useAnnotations((files) => attach.mutate(files))
+  const annotate = useAnnotations(accept)
   const drop = useFileDrop(annotate.add)
   const open = () => {
     setBody(t.body)
@@ -740,7 +755,7 @@ function Instructions({
           {!editing && (
             <>
               <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
-                <Paperclip data-icon="inline-start" /> {attach.isPending ? 'attaching…' : 'attach'}
+                <Paperclip data-icon="inline-start" /> {attaching > 0 ? 'attaching…' : 'attach'}
               </Button>
               <Button type="button" variant="ghost" size="xs" onClick={open}>
                 <Pencil data-icon="inline-start" /> edit
@@ -756,7 +771,7 @@ function Instructions({
             onChange={setBody}
             onFiles={(files) => annotate.add(files)}
             onAttach={() => fileInput.current?.click()}
-            attaching={attach.isPending}
+            attaching={attaching > 0}
             onSubmit={save}
             onCancel={() => setEditing(false)}
             autoFocus

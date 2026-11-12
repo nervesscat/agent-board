@@ -412,6 +412,7 @@ export function AnnotateImage({
                   variant={tool === name ? 'secondary' : 'ghost'}
                   aria-pressed={tool === name}
                   onClick={() => setTool(name)}
+                  disabled={busy}
                 >
                   <Icon data-icon="inline-start" /> {label}
                 </Button>
@@ -424,6 +425,7 @@ export function AnnotateImage({
                 aria-label="Colour"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
+                disabled={busy}
                 className="h-7 w-8 cursor-pointer rounded-md border bg-background p-0.5"
               />
             </Tip>
@@ -436,6 +438,7 @@ export function AnnotateImage({
                 step={1}
                 value={width}
                 onChange={(e) => setWidth(Number(e.target.value))}
+                disabled={busy}
                 className="w-24 accent-primary"
               />
             </Tip>
@@ -445,12 +448,13 @@ export function AnnotateImage({
                 value={text}
                 maxLength={ANNOTATION_TEXT_MAX}
                 onChange={(e) => setText(e.target.value.slice(0, ANNOTATION_TEXT_MAX))}
+                disabled={busy}
                 placeholder="Text to place"
                 className="h-7 w-48"
               />
             )}
             <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
-            <Button type="button" size="sm" variant="ghost" onClick={undo} disabled={!items.length}>
+            <Button type="button" size="sm" variant="ghost" onClick={undo} disabled={!items.length || busy}>
               <Undo2 data-icon="inline-start" /> Undo
             </Button>
             <Button
@@ -461,7 +465,7 @@ export function AnnotateImage({
                 setItems([])
                 setSelected(null)
               }}
-              disabled={!items.length}
+              disabled={!items.length || busy}
             >
               <Trash2 data-icon="inline-start" /> Clear
             </Button>
@@ -476,7 +480,7 @@ export function AnnotateImage({
               value={selectedItem?.note ?? ''}
               maxLength={ANNOTATION_TEXT_MAX}
               onChange={(e) => setNote(e.target.value)}
-              disabled={!selectedItem}
+              disabled={!selectedItem || busy}
               placeholder={
                 selectedItem ? 'What does this mark mean?' : 'Draw a mark, or pick Note and click one'
               }
@@ -520,6 +524,13 @@ export function AnnotateImage({
           )}
         </div>
         <DialogFooter>
+          {busy && (
+            // Said outright, not only through greyed controls: what is drawn here goes into the
+            // picture being encoded now, so edits made meanwhile would be silently left out.
+            <p role="status" className="text-xs text-muted-foreground sm:mr-auto">
+              The marks are locked until the picture is attached.
+            </p>
+          )}
           <Button type="button" variant="outline" onClick={onAttachOriginal} disabled={busy}>
             Attach original
           </Button>
