@@ -308,6 +308,102 @@ test('a picture in a post and in a reply opens the canvas, and an agent reads th
     .toEqual(['and here the column is missing'])
 })
 
+test('a screenshot the canvas flattens to image.png keeps its notes on the new ticket', async ({
+  page,
+  project,
+  human,
+}) => {
+  const dialog = await openNewTicket(page, project.id, 'A pasted screenshot')
+
+  // A screenshot pasted in the Instructions editor arrives as "image.png", which the form renames
+  // once the canvas has flattened it; the document has to go with the file that is uploaded.
+  await sendFile(page, '[role="dialog"] [contenteditable="true"]', 'paste', {
+    name: 'image.png',
+    mime: 'image/png',
+    data: png(160, [245, 245, 245]),
+  })
+  const canvas = canvasOf(page)
+  await expect(canvas).toBeVisible()
+  await draw(page, canvas, 'Box', [20, 20], [130, 110])
+  await canvas.getByLabel('Note').fill('pasted note')
+  await canvas.getByRole('button', { name: 'Attach', exact: true }).click()
+  await expect(canvas).toBeHidden()
+  await expect(dialog.getByRole('img', { name: /^pasted-.*\.png$/ })).toBeVisible()
+
+  // A file picked under that same name is renamed the same way, and keeps its document too.
+  await pickWith(page, dialog.getByRole('button', { name: 'attach' }), {
+    name: 'image.png',
+    buffer: png(140, [240, 240, 240]),
+  })
+  const pickedCanvas = canvasOf(page)
+  await expect(pickedCanvas).toBeVisible()
+  await draw(page, pickedCanvas, 'Arrow', [10, 10], [120, 100])
+  await pickedCanvas.getByLabel('Note').fill('picked note')
+  await pickedCanvas.getByRole('button', { name: 'Attach', exact: true }).click()
+  await expect(pickedCanvas).toBeHidden()
+
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  const ticket = await ok<TicketFull>(human.get(`/api/tickets/${row!.id}`))
+  expect(ticket.attachments.map((a) => [a.name, a.annotations?.items[0]?.note])).toEqual([
+    [expect.stringMatching(/^pasted-.*\.png$/), 'pasted note'],
+    [expect.stringMatching(/^pasted-.*\.png$/), 'picked note'],
+  ])
+})
+
+test('a batch picked together keeps its order whichever member is a picture', async ({
+  page,
+  project,
+  human,
+}) => {
+  const dialog = await openNewTicket(page, project.id, 'Picked together')
+
+  // A picture first and a PDF after it in one selection: the PDF waits for the canvas instead of
+  // overtaking the picture in the form and on the ticket.
+  const chooser = page.waitForEvent('filechooser')
+  await dialog.getByRole('button', { name: 'attach' }).click()
+  await (
+    await chooser
+  ).setFiles([
+    { name: 'shot.png', mimeType: 'image/png', buffer: png(80, [220, 220, 220]) },
+    { name: 'spec.pdf', mimeType: 'application/pdf', buffer: pdf('Spec') },
+  ])
+  const canvas = canvasOf(page)
+  await expect(canvas).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Remove spec.pdf' })).toHaveCount(0)
+  await attachOriginal(page)
+  // The form lists them in the order they were picked; the Remove buttons are in that same order.
+  const pending = () =>
+    dialog
+      .getByRole('button', { name: /^Remove / })
+      .evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')))
+  await expect.poll(pending).toEqual(['Remove shot.png', 'Remove spec.pdf'])
+
+  // A non-picture first goes in at once, and the picture behind it still opens the canvas.
+  const second = page.waitForEvent('filechooser')
+  await dialog.getByRole('button', { name: 'attach' }).click()
+  await (
+    await second
+  ).setFiles([
+    { name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes') },
+    { name: 'second.png', mimeType: 'image/png', buffer: png(80, [210, 210, 210]) },
+  ])
+  await expect(canvas).toBeVisible()
+  await attachOriginal(page)
+  await expect
+    .poll(pending)
+    .toEqual(['Remove shot.png', 'Remove spec.pdf', 'Remove notes.md', 'Remove second.png'])
+
+  await dialog.getByRole('button', { name: 'Create' }).click()
+  await expect(dialog).toBeHidden()
+
+  const [row] = await ok<TicketRow[]>(human.get(`/api/projects/${project.id}/tickets`))
+  const ticket = await ok<TicketFull>(human.get(`/api/tickets/${row!.id}`))
+  expect(ticket.attachments.map((a) => a.name)).toEqual(['shot.png', 'spec.pdf', 'notes.md', 'second.png'])
+})
+
 test('a PDF and a markdown file attach as they are, with no canvas', async ({ page, project, human }) => {
   const original = png(8, [10, 10, 10])
   const dialog = await openNewTicket(page, project.id, 'No canvas for these')

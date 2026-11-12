@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 
 import { galleryItem } from '#/components/Gallery'
 import { Tip } from '#/components/ui/tooltip'
-import { annotationsOf } from '#/lib/annotations'
+import { annotationsOf, keepAnnotations } from '#/lib/annotations'
 import { errorMessage, upload } from '#/lib/api'
 import { fileSize } from '#/lib/format'
 import { cn } from '#/lib/utils'
@@ -214,8 +214,13 @@ export function useUploads() {
 function named(f: File) {
   if (!/^image\.\w+$/.test(f.name)) return f
   const stamp = new Date().toISOString().slice(0, 19).replace('T', '-').replaceAll(':', '')
-  return new File([f], `pasted-${stamp}.${f.name.split('.').pop()}`, {
+  const renamed = new File([f], `pasted-${stamp}.${f.name.split('.').pop()}`, {
     type: f.type,
     lastModified: f.lastModified,
   })
+  // A renamed File is a different object: the document the canvas drew on the one it replaces goes
+  // with it, since the upload looks the document up on the file it is handed.
+  const doc = annotationsOf(f)
+  if (doc) keepAnnotations(renamed, doc)
+  return renamed
 }

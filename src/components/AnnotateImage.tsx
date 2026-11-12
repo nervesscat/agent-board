@@ -512,12 +512,18 @@ export function AnnotateImage({
 }
 
 /**
- * The canvas step every attach point shares. Pictures wait for `AnnotateImage` and join the form
- * through `accept` once they are attached (or as they came, with Attach original); every other file
- * goes straight to `accept`. `annotationsOf` finds the document drawn on a pending file.
+ * The canvas step every attach point shares. A picture waits for `AnnotateImage` and joins the form
+ * through `accept` once it is attached (or as it came, with Attach original); every other file joins
+ * it as soon as the files picked before it have, so a batch keeps its pick order whichever of its
+ * members opens the canvas. `annotationsOf` finds the document drawn on a pending file.
  */
 export function useAnnotations(accept: (files: File[]) => void) {
+  // The files waiting their turn, in pick order: `queue[0]` is the picture the canvas is open on,
+  // when there is one, and the files picked after it wait behind it.
   const [queue, setQueue] = useState<File[]>([])
+  // The same list, read and written between renders: two batches arriving together must not both
+  // start from the list React has yet to update.
+  const pending = useRef<File[]>([])
   // What had the focus when a picture came in: the canvas gives it back when it closes, so a form
   // driven from the keyboard carries on where it was.
   const finalFocus = useRef<HTMLElement | null>(null)
@@ -526,12 +532,20 @@ export function useAnnotations(accept: (files: File[]) => void) {
   const send = useCallback((files: File[]) => {
     if (files.length) latest.current(files)
   }, [])
+  // Hands `accept` the files at the head that need no canvas, up to the next picture: a file with
+  // nothing picked before it still waiting goes in at once.
+  const drain = useCallback(() => {
+    const ready: File[] = []
+    while (pending.current.length && !annotatable(pending.current[0]!)) ready.push(pending.current.shift()!)
+    send(ready)
+    setQueue([...pending.current])
+  }, [send])
   const next = () => {
-    const rest = queue.slice(1)
-    setQueue(rest)
+    pending.current.shift()
+    drain()
     // Nothing left to annotate: the focus goes back to whatever opened the canvas (the attach
     // button, the editor a picture was pasted into), so a form driven from the keyboard carries on.
-    if (!rest.length) {
+    if (!pending.current.length) {
       const el = finalFocus.current
       if (el?.isConnected) requestAnimationFrame(() => el.focus())
     }
@@ -542,11 +556,10 @@ export function useAnnotations(accept: (files: File[]) => void) {
       (files: File[]) => {
         if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement)
           finalFocus.current = document.activeElement
-        send(files.filter((f) => !annotatable(f)))
-        const pictures = files.filter(annotatable)
-        if (pictures.length) setQueue((q) => [...q, ...pictures])
+        pending.current = [...pending.current, ...files]
+        drain()
       },
-      [send],
+      [drain],
     ),
     /** Where the focus goes when the canvas closes. */
     finalFocus,
@@ -560,7 +573,7 @@ export function useAnnotations(accept: (files: File[]) => void) {
     },
     /** The picture as it was picked, with nothing on it. */
     attachOriginal: () => {
-      const picked = queue[0]
+      const picked = pending.current[0]
       if (picked) send([picked])
       next()
     },
