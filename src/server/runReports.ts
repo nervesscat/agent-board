@@ -305,13 +305,14 @@ export function ticketReports(ticketId: number): RunReport[] {
 export interface MissingRunReport {
   agent: string
   round: number | null
-  /** How many runs it recorded: its spans, or its hand-offs when there are more (a run has both). */
+  /** How many runs it recorded: its spans, plus a hand-off that no span answered. */
   runs: number
   /** How many spans of them. */
   spans: number
   /**
-   * How many reports cover them: of that agent and round, or any round when only a hand-off recorded
-   * the run. Fewer than `runs` is what flags it.
+   * How many reports cover them: of that agent and round for the runs a span recorded; for the runs only
+   * a hand-off recorded, the reports of that agent written after those hand-offs, one apiece. Fewer than
+   * `runs` is what flags it.
    */
   reports: number
   /** The earliest of them. */
@@ -321,9 +322,12 @@ export interface MissingRunReport {
 /**
  * The subagent runs of a ticket's work timeline that no report covers, by agent and round: spans whose
  * agent is one of the default subagents or the project's own (a numbered worker counts as its agent),
- * and hand-offs to one of them, which record a run that left no span. A run has both a span and the
- * hand-off that briefed it, so a group's runs are the larger of its two counts, not their sum, and it
- * is flagged when it has fewer reports than runs. The orchestrator's own spans name no such agent, so a
+ * and the hand-offs to one of them that no span answered, which record a run of their own. A hand-off
+ * carries a time and an agent, never a round: it briefs the run of its agent that started next, so its
+ * span is the one of that agent with the earliest start at or after it, each span briefed by one
+ * hand-off, matched in time order. A hand-off that fits no span is its own run, with no round, and only
+ * a report written after it covers it, one report each: a report from before it never does. A group is
+ * flagged when it has fewer reports than runs. The orchestrator's own spans name no such agent, so a
  * ticket worked only by the orchestrator has an empty list. Enforcement is a flag: a move to review
  * goes through and answers with this.
  */
@@ -332,13 +336,14 @@ export function missingReports(ticketId: number): MissingRunReport[] {
   if (!t) return []
   const known = knownKinds(t.projectId)
   type Group = { agent: string; round: number | null; spans: number; handoffs: number; since: string }
+  type Span = { id: number; round: number | null; start: string }
   const groups = new Map<string, Group>()
-  const spansByKind = new Map<string, { round: number | null; start: string; end: string }[]>()
+  const spansByKind = new Map<string, Span[]>()
   const { timeline } = ticketTimeline(ticketId)
   for (const span of timeline.spans) {
     const kind = runKindOf(span.agent, known)
     if (!kind) continue
-    const key = `${kind}|${span.round ?? ''}`
+    const key = `span|${kind}|${span.round ?? ''}`
     const found = groups.get(key)
     if (found) {
       found.spans += 1
@@ -346,57 +351,76 @@ export function missingReports(ticketId: number): MissingRunReport[] {
     } else {
       groups.set(key, { agent: kind, round: span.round ?? null, spans: 1, handoffs: 0, since: span.start })
     }
-    spansByKind.set(kind, [...(spansByKind.get(kind) ?? []), span])
+    spansByKind.set(kind, [
+      ...(spansByKind.get(kind) ?? []),
+      { id: span.id, round: span.round ?? null, start: span.start },
+    ])
   }
-  // A hand-off briefs a run; an agent that recorded no span is recorded by it alone. It joins the span
-  // of its kind it sits nearest, so a normal run (span and hand-off) is one run, not two.
-  for (const handoff of timeline.handoffs) {
+  for (const spans of spansByKind.values())
+    spans.sort((a, b) => a.start.localeCompare(b.start) || a.id - b.id)
+  // A hand-off briefs the run that starts next of its kind, each span briefed once, in time order; one
+  // with no span left to brief records a run of its own. A briefed hand-off does not add a run.
+  const briefed = new Set<number>()
+  const unanswered: { agent: string; at: string }[] = []
+  const handoffs = [...timeline.handoffs].sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id)
+  for (const handoff of handoffs) {
     const kind = runKindOf(handoff.to, known)
     if (!kind) continue
-    let round: number | null = null
-    let nearest = Number.POSITIVE_INFINITY
-    for (const span of spansByKind.get(kind) ?? []) {
-      const at = Date.parse(handoff.at)
-      const gap = Math.max(0, Date.parse(span.start) - at, at - Date.parse(span.end))
-      if (gap < nearest) {
-        nearest = gap
-        round = span.round ?? null
-      }
-    }
-    const key = `${kind}|${round ?? ''}`
+    const span = (spansByKind.get(kind) ?? []).find((s) => !briefed.has(s.id) && s.start >= handoff.at)
+    if (span) briefed.add(span.id)
+    else unanswered.push({ agent: kind, at: handoff.at })
+  }
+  for (const { agent, at } of unanswered) {
+    const key = `handoff|${agent}`
     const found = groups.get(key)
     if (found) {
       found.handoffs += 1
-      if (handoff.at < found.since) found.since = handoff.at
+      if (at < found.since) found.since = at
     } else {
-      groups.set(key, { agent: kind, round, spans: 0, handoffs: 1, since: handoff.at })
+      groups.set(key, { agent, round: null, spans: 0, handoffs: 1, since: at })
     }
   }
   if (!groups.size) return []
   const reported = new Map<string, number>()
-  const reportedByKind = new Map<string, number>()
+  const reportsByKind = new Map<string, string[]>()
   for (const r of db
-    .select({ agent: schema.runReports.agent, round: schema.runReports.round })
+    .select({
+      agent: schema.runReports.agent,
+      round: schema.runReports.round,
+      createdAt: schema.runReports.createdAt,
+    })
     .from(schema.runReports)
     .where(eq(schema.runReports.ticketId, ticketId))
     .all()) {
     const kind = runKindOf(r.agent, known) ?? segment(r.agent)
     const key = `${kind}|${r.round ?? ''}`
     reported.set(key, (reported.get(key) ?? 0) + 1)
-    reportedByKind.set(kind, (reportedByKind.get(kind) ?? 0) + 1)
+    reportsByKind.set(kind, [...(reportsByKind.get(kind) ?? []), r.createdAt])
   }
-  return [...groups.entries()]
-    .map(([key, g]) => ({
-      ...g,
-      // A hand-off names no round, so any report of that agent on the ticket is its evidence it finished;
-      // a group with spans is matched by its round, where each run writes its own report.
-      reports: g.spans === 0 ? (reportedByKind.get(g.agent) ?? 0) : (reported.get(key) ?? 0),
-    }))
-    .filter((g) => g.reports < Math.max(g.spans, g.handoffs))
+  /**
+   * How many of the runs a report covers: a group with spans counts its own round's reports; a run only
+   * a hand-off recorded needs a report of that agent written after it, one apiece, taken in time order
+   * so two such runs need two reports. A report in the hand-off's own millisecond counts: the two cannot
+   * be put in order, and refusing it would leave a flag no later report clears.
+   */
+  const covered = (g: Group) => {
+    if (g.spans > 0) return reported.get(`${g.agent}|${g.round ?? ''}`) ?? 0
+    const written = [...(reportsByKind.get(g.agent) ?? [])].sort()
+    const times = unanswered
+      .filter((h) => h.agent === g.agent)
+      .map((h) => h.at)
+      .sort()
+    let taken = 0
+    for (const at of written) if (taken < times.length && at >= times[taken]!) taken += 1
+    return taken
+  }
+  return [...groups.values()]
+    .map((g) => ({ ...g, reports: covered(g) }))
+    .filter((g) => g.reports < g.spans + g.handoffs)
     .map(({ agent, round, spans, handoffs, reports, since }) => ({
       agent,
       round,
-      runs: Math.max(spans, handoffs),
+      runs: spans + handoffs,
       spans,
       reports,
       since,

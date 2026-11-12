@@ -153,6 +153,22 @@ function spanBetween(
   return started.spanId
 }
 
+/** A hand-off to `agent` at a chosen moment, so a test decides which run it briefs. */
+function handoffAt(projectId: number, ticketId: number, agent: string, at: string) {
+  const { event } = work.handoff(projectId, ticketId, { to: agent }, AGENT)
+  dbm.db.update(dbm.schema.ticketEvents).set({ at }).where(eq(dbm.schema.ticketEvents.id, event.id)).run()
+  return event
+}
+
+/** Move a report's written time back, so "written after the hand-off" is decided by the test, not the clock. */
+function reportWrittenAt(reportId: number, at: string) {
+  dbm.db
+    .update(dbm.schema.runReports)
+    .set({ createdAt: at })
+    .where(eq(dbm.schema.runReports.id, reportId))
+    .run()
+}
+
 describe('storing a run report', () => {
   it('writes one through the MCP tool and reads it by id and by ticket', async () => {
     const pid = newProject()
@@ -575,6 +591,49 @@ describe('the hand-off flag', () => {
     await tool('write_run_report', { projectId: pid, ticketId: normal.id, agent: 'hunt', round: 1 })
     const clean = await needs.changeTicket(normal.id, { status: 'review' }, HUMAN, { agent: false })
     expect(clean.missingRunReports).toEqual([])
+  })
+
+  it('flags a hand-off with no span as its own run, and clears it only with a later report', async () => {
+    const pid = newProject()
+    const t = newTicket(pid, 'reported, then briefed again')
+    // A report of an earlier hunt run, written before this hand-off: it cannot cover the run it briefs.
+    const earlier = await tool('write_run_report', {
+      projectId: pid,
+      ticketId: t.id,
+      agent: 'hunt',
+      round: 1,
+    })
+    reportWrittenAt(earlier.id, ago(300))
+    handoffAt(pid, t.id, 'hunt', ago(60))
+    const flagged = await needs.changeTicket(t.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(flagged.missingRunReports).toEqual([
+      expect.objectContaining({ agent: 'hunt', round: null, runs: 1, spans: 0, reports: 0 }),
+    ])
+    // A report written after the hand-off is its evidence, whatever round it names.
+    await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt', round: 2 })
+    await needs.changeTicket(t.id, { status: 'in_progress' }, HUMAN, { agent: false })
+    const cleared = await needs.changeTicket(t.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(cleared.missingRunReports).toEqual([])
+  })
+
+  it('briefs the run that starts after a hand-off, not the nearest round that came before', async () => {
+    const pid = newProject()
+    const t = newTicket(pid, 'a round, then a run that left no span')
+    // A round-1 run: its hand-off, the span that started after it, and the report it wrote.
+    handoffAt(pid, t.id, 'hunt', ago(600))
+    spanBetween(pid, t.id, 'hunt', 1, ago(580), ago(500))
+    const first = await tool('write_run_report', {
+      projectId: pid,
+      ticketId: t.id,
+      agent: 'hunt',
+      round: 1,
+    })
+    reportWrittenAt(first.id, ago(400))
+    // A later hand-off that records a run of its own, and that run's own report, written after it.
+    handoffAt(pid, t.id, 'hunt', ago(120))
+    await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt', round: 2 })
+    const moved = await needs.changeTicket(t.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(moved.missingRunReports).toEqual([])
   })
 })
 
