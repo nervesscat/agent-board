@@ -93,6 +93,9 @@ export function readThemes(body) {
     .filter(Boolean)
   const bullets = lines.filter((line) => /^(?:[*-]|\d+\.)\s+/.test(line))
   const counted = bullets.length > 0 ? bullets : lines
+  // No notes at all is a valid input: the version alone still decides a piece, it just has nothing
+  // to tilt it. Dividing by zero would put NaN in every coordinate.
+  if (counted.length === 0) return { many: 0, precision: 0, wayfinding: 0 }
   const hits = (re) => counted.reduce((sum, line) => sum + (line.match(re) ?? []).length, 0)
   return {
     many: saturate(Math.sqrt(Math.min(counted.length, 80) / 80)),
@@ -523,8 +526,9 @@ async function main(argv) {
     const cache = await readNotesCache()
     const versions = (flag('versions') ?? cache.map((r) => r.version).join(','))
       .split(',')
-      .map((v) => v.trim())
+      .map((v) => v.trim().replace(/^v/, ''))
       .filter(Boolean)
+    if (versions.length === 0) throw new Error('--capture needs --versions, or a cache to name them')
     const releases = capture(versions)
     await fs.mkdir(path.dirname(NOTES_FILE), { recursive: true })
     await fs.writeFile(NOTES_FILE, `${JSON.stringify(releases, null, 2)}\n`)

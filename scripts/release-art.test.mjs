@@ -94,6 +94,12 @@ describe('release art', () => {
     }
   })
 
+  it('still draws a piece when a release has no notes yet', () => {
+    const svg = draw(plan('0.2.5', ''), 'light')
+    expect(svg).not.toContain('NaN')
+    expect(svg).toContain('viewBox="0 0 1600 900"')
+  })
+
   it('puts the empty quarter somewhere the ink is not', () => {
     for (const release of releases) {
       const made = plan(release.version, release.body)
