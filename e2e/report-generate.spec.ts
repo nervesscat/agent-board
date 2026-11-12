@@ -187,6 +187,8 @@ test('Generate is off, with the reason and the fix in words, while claude is mis
   const card = page.getByRole('region', { name: 'Report', exact: true })
   const generate = card.getByRole('button', { name: 'Generate with claude' })
   await expect(generate).toBeDisabled()
+  // The reason and the fix reach a screen reader on the disabled button too.
+  await expect(generate).toHaveAccessibleDescription(/claude was not found: CLAUDE_BIN is claude/)
   // The reason and the fix are on the card, not only in a tooltip.
   await expect(card).toContainText('claude was not found: CLAUDE_BIN is claude')
   await expect(card).toContainText('install Claude Code')

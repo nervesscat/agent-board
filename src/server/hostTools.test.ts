@@ -197,8 +197,11 @@ describe('the check', () => {
       signedIn: null,
       ok: false,
       optional: false,
+      breaks: "the board's check that gh is signed in",
       problem: 'gh 2.45.0 is too old for this check: it does not know --active',
     })
+    // The queue, CI and PR tickets use calls this gh has: only the sign-in check fails.
+    expect(gh.breaks).not.toMatch(/PR queue/)
     expect(gh.fix).toMatch(/upgrade the GitHub CLI .*sudo apt install --only-upgrade gh/)
   })
 
@@ -447,8 +450,10 @@ describe('what each tool breaks and how to fix it', () => {
       signedIn: null,
       ok: false,
       optional: false,
+      breaks: "the board's check that gh is signed in",
       problem: 'gh 2.45.0 is too old for this check: it does not know --active',
     })
+    expect(tooOld.breaks).not.toMatch(/PR queue/)
     expect(tooOld.fix).toMatch(/upgrade the GitHub CLI .*sudo apt install --only-upgrade gh/)
 
     const home = path.join(tmp, 'no-such-home')

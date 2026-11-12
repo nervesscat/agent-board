@@ -73,7 +73,7 @@ export function GenerateReportButton({
             variant="outline"
             size="xs"
             disabled={busy || Boolean(why) || Boolean(missing)}
-            aria-description={why ?? undefined}
+            aria-description={why ?? missing ?? undefined}
             onClick={() => generate.mutate()}
           >
             {busy ? (

@@ -263,8 +263,9 @@ function StepBody({ step, o, onGo, onNewProject }: { step: Step; o: Onboarding }
       return (
         <>
           <Hint>
-            The board runs <code>git</code>, <code>gh</code> (signed in) and <code>claude</code> on its PATH;{' '}
-            <code>node</code> and <code>pnpm</code> only for previews.
+            The board runs <code>git</code> and <code>gh</code> (signed in) on its PATH; <code>claude</code>{' '}
+            is optional, only for the board&apos;s own reports (Reports → Generate); <code>node</code> and{' '}
+            <code>pnpm</code> only for previews.
           </Hint>
           <Failed step={step} o={o} />
           {missingTools(o.tools).map((t) => (

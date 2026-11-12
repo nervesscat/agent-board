@@ -69,6 +69,8 @@ const ghTooOld = tool('gh', {
   signedIn: null,
   version: '2.45.0',
   ok: false,
+  // Only the sign-in check wants --active; the queue, CI and PR tickets work on this gh.
+  breaks: "the board's check that gh is signed in",
   problem: 'gh 2.45.0 is too old for this check: it does not know --active',
   fix: 'upgrade the GitHub CLI (https://cli.github.com; on Debian or Ubuntu: sudo apt install --only-upgrade gh, on macOS: brew upgrade gh), then Check again',
 })
@@ -147,7 +149,8 @@ test('shows a gh too old for this check with the upgrade it needs', async ({ pag
   await answer(page, check(ghTooOld))
   await page.goto('/')
   const row = warning(page).getByRole('listitem').filter({ hasText: 'gh 2.45.0 is too old' })
-  await expect(row).toContainText('the PR queue, CI status and PR tickets will not work')
+  await expect(row).toContainText("the board's check that gh is signed in will not work")
+  await expect(row).not.toContainText('the PR queue')
   await expect(row).toContainText('Fix: upgrade the GitHub CLI')
   await expect(row).toContainText('sudo apt install --only-upgrade gh')
 })

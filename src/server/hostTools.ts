@@ -81,6 +81,12 @@ const GH_UPGRADE =
   'upgrade the GitHub CLI (https://cli.github.com; on Debian or Ubuntu: sudo apt install ' +
   '--only-upgrade gh, on macOS: brew upgrade gh)'
 
+/**
+ * What a gh too old for `--active` breaks: the sign-in check alone. The PR queue, CI status and PR
+ * tickets call `gh api` and `gh pr view`, which gh 2.45 has; `BREAKS.gh` would be a false alarm.
+ */
+const GH_TOO_OLD_BREAKS = "the board's check that gh is signed in"
+
 /** What a probe found of one tool, before it is judged. */
 export interface Probe {
   path: string | null
@@ -145,7 +151,7 @@ export function toolEntry(
     ...(name === 'gh' && { signedIn }),
     ok: problem === null,
     optional: name === 'claude',
-    breaks: BREAKS[name],
+    breaks: auth === 'too-old' ? GH_TOO_OLD_BREAKS : BREAKS[name],
     problem,
     fix,
   }
