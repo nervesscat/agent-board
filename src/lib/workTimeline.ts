@@ -370,14 +370,19 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
   const ttlMs = LEASE_TTL_MINUTES * 60_000
   const leaseLive = now - Date.parse(lastSignalAt) <= ttlMs
   const spanYounger = openSpans.some((s) => now - Date.parse(s.start) <= ttlMs)
+  // With nothing open the silence rule decides first: a stall threshold under the lease is the human's
+  // dial, and the lease must not hide it. An open span keeps reading working (a live lease or a young
+  // one) or lost (the lease ran out while it ran), never stalled.
   const state: LivenessState = waitingByFacts
     ? 'waiting'
-    : leaseLive || spanYounger
-      ? 'working'
-      : openSpans.length
-        ? 'lost'
-        : now - Date.parse(lastSignalAt) > o.stallMinutes * 60_000
-          ? 'stalled'
+    : openSpans.length
+      ? leaseLive || spanYounger
+        ? 'working'
+        : 'lost'
+      : now - Date.parse(lastSignalAt) > o.stallMinutes * 60_000
+        ? 'stalled'
+        : leaseLive
+          ? 'working'
           : 'idle'
   const latestSpan = openSpans.reduce<TimelineSpan | null>(
     (a, b) => (!a || Date.parse(b.start) >= Date.parse(a.start) ? b : a),

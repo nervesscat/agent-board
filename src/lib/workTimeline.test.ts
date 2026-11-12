@@ -627,6 +627,21 @@ describe('liveness: the lease, the open spans and waiting on the human', () => {
     expect(buildLiveness(noSpan, '10:31').liveness?.state).toBe('stalled')
   })
 
+  it('a stall threshold under the lease is honoured: silence decides before the lease does', () => {
+    // The human set the dial to five minutes: nothing open, the last word six minutes ago.
+    const noSpan = [event('heartbeat', '10:00')]
+    const six = buildLiveness(noSpan, '10:06', {}, {}, 5)
+    expect(six.liveness).toMatchObject({ state: 'stalled' })
+    expect(six.stalled).toMatchObject({ since: at('10:00'), minutes: 6 })
+    // Inside the threshold the lease still keeps it working, and the threshold's edge is not over it.
+    expect(buildLiveness(noSpan, '10:04', {}, {}, 5).liveness?.state).toBe('working')
+    expect(buildLiveness(noSpan, '10:05', {}, {}, 5).liveness?.state).toBe('working')
+    expect(buildLiveness(noSpan, '10:05').stalled).toBeNull()
+    // An open span is not the silence rule's: it keeps reading working or lost, whatever the dial.
+    expect(buildLiveness([spanStart('10:00')], '10:06', {}, {}, 5).liveness?.state).toBe('working')
+    expect(buildLiveness([spanStart('10:00')], '10:11', {}, {}, 5).liveness?.state).toBe('lost')
+  })
+
   it('an agent post refreshes the lease; an old one leaves the state to the spans', () => {
     const live = buildLiveness([spanStart('10:00')], '10:09', { posts: [post('10:00')] })
     expect(live.liveness?.state).toBe('working')
