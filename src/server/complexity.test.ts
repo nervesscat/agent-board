@@ -763,22 +763,26 @@ describe('the review texts the board ships', () => {
     )
   })
 
-  it("runs the board's own preview as configured, or a hand start on a free loopback port, and stops it with the ticket", () => {
+  it("serves the gate artifact through the board's preview run only where its base matches, and otherwise builds the preview's own", () => {
     const text = flat(ticketAgent)
     expect(text).toContain('The preview, from at most one build of this head for the preview')
-    expect(text).toContain("Use the board's own preview run as configured")
+    expect(text).toContain("Prefer the board's own preview run")
     expect(text).toContain("Its build is the preview's one build for this head")
     expect(text).toContain('it lives on after your session')
-    expect(text).toContain("Do not point it at the gate's `.output-e2e`")
+    expect(text).toContain('When the artifact was built for the base the preview is served under')
+    expect(text).toContain(
+      "A checkout served under the board's preview base (the board's own case) builds its own",
+    )
+    expect(text).toContain('`test -d .output-e2e`')
+    expect(text).toContain('put back the run')
     expect(text).toContain('a commit is built twice overall where the preview must build')
-    expect(text).not.toContain('`test -d .output-e2e`')
-    expect(text).not.toContain('put back the run')
     expect(text).toContain('`BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`')
     expect(text).toContain('`HOST=127.0.0.1`')
     expect(text).toContain('`DATA_DIR` a copy of the data (never the live one)')
     expect(text).toContain('That preview lives in your session, so it stops when the session ends')
     expect(text).toContain('Keep the preview running while the ticket is in review')
     expect(text).toContain('clear the link (`set_preview` with `""`)')
-    expect(text).toContain('In the summary say which of the two ran')
+    expect(text).toContain('In the summary say which of the three ran (the artifact through the board')
+    expect(text).toContain('how many times this head was built')
   })
 })
