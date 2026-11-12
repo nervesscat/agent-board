@@ -17,6 +17,10 @@ export const TOOL_ROUTES: Record<string, string> = {
   post_review_result: 'POST /api/projects/:id/reviews/results',
   list_review_results: 'GET /api/projects/:id/reviews/results?pr=&sha=&repoId=',
   get_review_result: 'GET /api/reviews/results/:id',
+  write_run_report:
+    'POST /api/projects/:id/run-reports `{ticketId, agent, round?, branch?, headSha?, model?, effort?, briefedBy?, startedAt?, endedAt?, durationMs?, time?, difficulty?, confidence?, steps?, counts?, sections?}`',
+  get_run_report: 'GET /api/projects/:id/run-reports/:reportId',
+  list_run_reports: 'GET /api/projects/:id/run-reports?agent=&ticketId=&round=&limit=',
   list_tickets: 'GET /api/projects/:id/tickets?status=&assignee=&q=&tag=&parent=',
   get_ticket: 'GET /api/tickets/:id',
   create_ticket: 'POST /api/projects/:id/tickets',

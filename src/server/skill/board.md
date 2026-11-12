@@ -327,6 +327,19 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   in its brief too: the `projectId` and `ticketId`, a `heartbeat` every few minutes, `start_span` /
   `end_span` around its phase, `start_wait` / `end_wait` with the reason while it waits (a lock,
   the builder, the MCP server down).
+- One report per subagent run, written before the hand-off: it is part of finishing, not a step
+  after it, and the orchestrator writes none. Its template ships with the
+  review bundle as `run-reports/<agent>.md` for `spec`, `builder`, `runner`, `env`, `verify`, `hunt`,
+  `refute` and `merge`; a project agent's own is on the Team page (`get_project` →
+  `agents[].reportTemplate`, the common part until the human writes one). The report is
+  `write_run_report` with structured fields (identity, start, end, duration, where the time went,
+  difficulty and confidence, steps as `{name, done, note}`, counts) and its prose in named sections
+  (`brief`, `readRan`, `problems`, `gaps`, `moreTime`, `improvements`, then the ones of that agent).
+  One report per run: a ticket with three review rounds has three `hunt` reports, each with its
+  round. The ticket's Agents side shows them and `list_run_reports` reads one kind across tickets.
+  Put this in every brief. `update_ticket` → `review` answers with `missingRunReports` for each run
+  the work timeline records with no report: flagged, not refused; get them written before the
+  hand-off.
 
 ### Watch for feedback
 
