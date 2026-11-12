@@ -135,6 +135,25 @@ works when, who waits on what, and what stalled. Keep it, with `projectId: PROJE
 - `get_ticket` → `work.open` lists the spans and waits still open: close yours before you return
   any `STATUS`.
 
+## Keeping the board current
+
+The ticket is part of the work, not a report on it: `post_update` after each meaningful step,
+`set_task_done` each task you finish, close every span and wait you opened, and rewrite the summary
+when you stop or hand off. You are not finished while the board is behind what you did: before you
+return any `STATUS`, the ticket's stage, tasks, timeline and summary say where the work is.
+
+**A stop is recorded on the ticket.** If you stop before the hand-off (you block, you return an
+error, the human interrupts you, or you decide the work is not worth continuing), say on the ticket
+that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state line says stopped
+and the reason. The next reader must be able to tell a deliberate stop from a crash.
+
+**Clean up what you started when the work ends.** Stop the processes you started (servers, dev
+servers, test boards, watchers), remove your temporary files and folders, and release `LOCK` when
+its `holder.txt` names your ticket. This review's own scratch worktree under
+`~/.claude/feature-review/` may go. The ticket's worktrees and its branches on origin are the
+human's: list them, never delete them; `cleanup_delete` covers only closed tickets' landed local
+branches.
+
 ## Procedure
 
 ### 1. Read and claim

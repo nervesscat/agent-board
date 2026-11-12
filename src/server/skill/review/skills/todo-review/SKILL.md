@@ -175,7 +175,8 @@ The agent returns nine lines (`STATUS`, `TICKET`, `VERDICT`, `ROUNDS`, `DEPTH`, 
    test lock waited on too long), re-queue once to run alone after everything else: it starts
    only when no other ticket is in flight, and nothing else starts while it runs. Otherwise record
    it, and make sure the ticket is not left in progress with no word: `comment` on it with the
-   error and leave it where it is.
+   error, say that the work was stopped and why, and leave the ticket's summary saying stopped, so
+   the next reader can tell a stop from a failure.
 
 **Sending back** is one more `todo-review-ticket` run for the same ticket with `RETRY=<what the
 check found>` added. It resumes from the ticket's summary and posts, not from scratch. It goes
@@ -184,6 +185,24 @@ returned (`ticket:<id>`). Each ticket is sent back or re-queued at most once; af
 is recorded as it is.
 
 Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview, blocker, notes.
+
+## Keeping the board current
+
+The board is part of the work: post progress, tick the ticket's steps, close the spans and waits its
+ticket agents opened, and see that each ticket's summary says where it stands when a run returns.
+You are not finished while the board is behind what you did: a ticket whose agent returned is checked
+against the board (Step 4), never left in progress with a claim and no word.
+
+**A stop is recorded on the ticket.** When work stops before its end (you interrupt it, its agent
+returns `error`, or you stop it at the human's word or your own), record on every ticket in flight
+that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state says stopped and the
+reason. The next reader must be able to tell a deliberate stop from a failure.
+
+**Clean up what you started when the work ends.** Stop what you or your agents started (the review's
+servers, test boards, watchers), remove this run's temporary files and folders, and release the test
+lock when its `holder.txt` names a ticket whose run returned. The review's own scratch worktree may
+go; the tickets' worktrees and their branches on origin are the human's: list them, never delete
+them.
 
 ## Step 5: Report
 
@@ -217,7 +236,9 @@ Record the row: ticket, title, repo, status, verdict, rounds, depth, PR, preview
   does both; when you check a `handed-off` result, see that it did.
 - Nothing here merges, approves, or comments on GitHub. Pushing the ticket's own branch and opening
   its PR (the project's way) are the ticket agent's only remote writes.
-- If the user interrupts, tell them which tickets were in flight. Their worktrees are registered
+- If the user interrupts, tell them which tickets were in flight, and record on each of those
+  tickets that it was stopped and why: a `comment`, and a `set_ticket_summary` saying stopped and
+  the reason. Their worktrees are registered
   on the tickets (`get_ticket` → `workspaces`), and `git worktree list` in each repo shows what is
   left, review worktrees under `~/.claude/feature-review/` included. The test locks live in this
   run's `QUEUE` only: a new run starts with none.

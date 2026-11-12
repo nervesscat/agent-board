@@ -149,6 +149,13 @@ Lanes of a ticket you are working are yours to create (next section).
     delegated work and counts as working, not waiting; `on` is 1 to 60 characters.
   - `handoff` when you brief a sub-agent and when it hands back ([Delegating](#delegating)).
     `get_ticket` → `work.open` lists your open spans and waits to close.
+- **The board is part of the work**, not a report on it: post as you go, `set_task_done` each step,
+  close your spans and waits, and rewrite the summary when you stop or hand off. You are not
+  finished while the board is behind what you did. If you stop a ticket before the end, at the
+  human's word or your own, record on the ticket that it was stopped and why (a `comment` and a line
+  in the summary), so the next reader can tell a stop from a failure. When the work ends, clean up
+  what you started: processes, temporary files, locks, and any scratch worktree of your own. A
+  ticket's worktrees and origin branches are the human's: list them and never delete them.
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
   they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
@@ -462,6 +469,11 @@ for `post_report` on the current period: use `post_report`.
 
 Finished work leaves worktrees and branches behind. The rule, for every ticket and lane you
 worked:
+
+- What you started goes too: stop the processes you or your agents started (previews, dev servers,
+  test boards, watchers), remove your temporary files and folders, and release any test lock you
+  hold. The review's own scratch worktree under `~/.claude/feature-review/` may go; the ticket's
+  worktrees and origin branches stay the human's, listed below.
 
 - A **lane** can go once its work is on its parent's branch (a lane's base branch is the parent's
   branch). A **ticket** can go once its branch is in its base (dev, main).

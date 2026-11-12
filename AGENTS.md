@@ -64,6 +64,12 @@ http_headers = { Authorization = "Bearer <token>" }
                       "headers": { "Authorization": "Bearer <token>" } } } }
 ```
 
+To open a session, install the session skill beside the board skill and type `/session` alone: it
+briefs you on the board, delegates every ticket you name to the project's protocol, and keeps one
+short message shape with the numbered list of what needs the human. Its line is
+`mkdir -p ~/.claude/skills/session && curl -fsS -H "Authorization: Bearer <token>" "http://localhost:47100/api/agent-setup/session-skill" -o ~/.claude/skills/session/SKILL.md`
+(the Connect an agent page shows it for each CLI and shell).
+
 ## The rhythm
 
 1. **Before touching a project**: `get_project` — its `instructions` are the rules for its repos
@@ -282,6 +288,13 @@ http_headers = { Authorization = "Bearer <token>" }
      `get_ticket` → `work.open` lists your open spans and waits to close. The board adds its own
      events (pushes, the PR, the preview, the merge, stage moves); nothing of this goes to the feed
      or the Daily view.
+     **The board is part of the work**, not a report on it: post as you go, tick each task you finish,
+     close your spans and waits, and rewrite the summary when you stop or hand off; you are not
+     finished while the board is behind what you did. If you stop work on a ticket before the end, at
+     the human's word or your own, record on the ticket that it was stopped and why (a comment and a
+     line in the summary), so the next reader can tell a stop from a failure. When the work ends,
+     clean up what you started (processes, temporary files, locks, and any scratch worktree of your
+     own), and leave the ticket's worktrees and origin branches to the human, listed, never deleted.
 7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
    PR, CI, Preview, Summary and Merged as their facts hold; Implementation and its steps are ticked
    by hand):
