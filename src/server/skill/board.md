@@ -108,8 +108,8 @@ Then:
   tasks and subtasks, all counted, and the open ones are what a move to review answers with (`open`).
 
 Creating a top-level ticket (only when the human asks): `create_ticket` with your `projectId` and
-`repoId` and, when the human says how much review it gets, `complexity` (`low`, `mid` or `high`;
-`mid` when left out); it starts with the default phases, the `tasks` you give as plain texts under
+`repoId` and, when the human says how much review it gets, `complexity` (`low`, `mid`, `high` or
+`max`; `mid` when left out); it starts with the default phases, the `tasks` you give as plain texts under
 the first.
 Lanes of a ticket you are working are yours to create (next section).
 
@@ -550,13 +550,15 @@ The project's Team page adds a default set, the build and review cycle of the
 criteria) → **builder** (the code) → **runner** (a `/feature-review` of the branch, whose phases
 **env**, **verify**, **hunt**, **refute** and **merge** try to break it) → (a fix pass by the
 **builder** on the confirmed findings, each with the project's checks and a new review, for as many
-review rounds as the ticket's complexity allows: none for low, one for mid, three for high; round 1 is
-the first build and its review, so a mid ticket stops after its review, and a review that does not
-survive after the last round goes to a human decision; a high ticket gets two fix passes; a low ticket
+review rounds as the ticket's complexity allows: none for low, one for mid, three for high, up to ten
+for max (for work built from scratch: a whole site or app, a new product or standalone service; a
+feature in an existing codebase is at most high, however difficult); round 1 is the first build and
+its review, so a mid ticket stops after its review, and a review that does not survive after the last
+round goes to a human decision; a high ticket gets two fix passes and a max ticket nine; a low ticket
 has no review, and its checks return the build at most twice; after the second return, when the checks
 still fail or a criterion still has no evidence, the human decides (keep going or drop), and the build goes
 to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
-high; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
+high, `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
 (the ticket agent, the spec agent, the builder and the review's phase agents). `/todo-review` is that
 orchestrator for
 the To do tickets: one agent per ticket runs the cycle, checks the proof itself (criteria seen
