@@ -15,6 +15,8 @@
 //   BOARD_AGENT_NAME  optional sub-identity, as the board calls it
 //   BOARD_BEAT_MS     default beat interval in milliseconds when --interval is not given
 //                     (default 120000: two minutes)
+//   BOARD_BEAT_TIMEOUT_MS  how long one beat waits for the board before it is given up
+//                     (default 15000: a beat older than this is worthless)
 //
 // stdout carries the command's output only; the beater's own notes go to stderr.
 
@@ -25,6 +27,11 @@ import { pathToFileURL } from 'node:url'
 const log = (msg) => process.stderr.write(`board-beat: ${msg}\n`)
 
 export const DEFAULT_INTERVAL_MS = 120_000
+/** How long a beat waits for the board before it is given up: a beat older than this is worthless. */
+export const DEFAULT_BEAT_TIMEOUT_MS = 15_000
+
+const USAGE =
+  'usage: board-beat.mjs --project <id> --ticket <id> [--interval <ms>, default BOARD_BEAT_MS or 120000] [--once] [-- <command>]'
 
 /** The board this machine runs when BOARD_URL is not set: loopback and its port, never another host. */
 const defaultUrl = (env) => {
@@ -34,14 +41,24 @@ const defaultUrl = (env) => {
 
 /**
  * The beater's arguments: the project and ticket it beats for, the interval, a single beat, and the
- * command it wraps (`--` and everything after it).
+ * command it wraps (`--` and everything after it). Anything else is refused: a command's words without
+ * the `--` must not be dropped as if there were none.
  */
 export function parseArgs(argv) {
   // BOARD_BEAT_MS is the default interval; --interval wins over it, and either must be a whole, positive
-  // number of milliseconds.
+  // number of milliseconds. BOARD_BEAT_TIMEOUT_MS bounds one beat the same way.
   const envBeatMs = (process.env.BOARD_BEAT_MS ?? '').trim()
   const defaultIntervalMs = envBeatMs === '' ? DEFAULT_INTERVAL_MS : Number(envBeatMs)
-  const out = { project: null, ticket: null, intervalMs: defaultIntervalMs, once: false, command: [] }
+  const envTimeoutMs = (process.env.BOARD_BEAT_TIMEOUT_MS ?? '').trim()
+  const defaultTimeoutMs = envTimeoutMs === '' ? DEFAULT_BEAT_TIMEOUT_MS : Number(envTimeoutMs)
+  const out = {
+    project: null,
+    ticket: null,
+    intervalMs: defaultIntervalMs,
+    timeoutMs: defaultTimeoutMs,
+    once: false,
+    command: [],
+  }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--') {
@@ -54,16 +71,14 @@ export function parseArgs(argv) {
       if (arg === '--project') out.project = Number(value)
       else if (arg === '--ticket') out.ticket = Number(value)
       else out.intervalMs = Number(value)
-    }
+    } else return { problem: USAGE }
   }
   const whole = (n) => Number.isInteger(n) && n > 0
-  if (!whole(out.project) || !whole(out.ticket))
-    return {
-      problem:
-        'usage: board-beat.mjs --project <id> --ticket <id> [--interval <ms>, default BOARD_BEAT_MS or 120000] [--once] [-- <command>]',
-    }
+  if (!whole(out.project) || !whole(out.ticket)) return { problem: USAGE }
   if (!whole(out.intervalMs))
     return { problem: '--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds' }
+  if (!whole(out.timeoutMs))
+    return { problem: 'BOARD_BEAT_TIMEOUT_MS must be a whole number of milliseconds' }
   const url = (process.env.BOARD_URL ?? defaultUrl(process.env)).trim().replace(/\/+$/, '')
   let target
   try {
@@ -83,13 +98,25 @@ export function parseArgs(argv) {
 }
 
 /** One heartbeat: the board's events route for that ticket, as the agent token. */
-export async function beatBoard({ url, token, agentName, project, ticket, at, fetch: request = fetch }) {
+export async function beatBoard({
+  url,
+  token,
+  agentName,
+  project,
+  ticket,
+  at,
+  timeoutMs = DEFAULT_BEAT_TIMEOUT_MS,
+  fetch: request = fetch,
+}) {
   const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' }
   if (agentName) headers['x-agent-name'] = agentName
   const res = await request(`${url}/api/projects/${project}/tickets/${ticket}/events`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ kind: 'heartbeat', note: '' }),
+    // A board that accepts the connection and never answers must not hold the wrapper before its
+    // command: the beat gives up on its own timeout, as a missed beat always does.
+    signal: AbortSignal.timeout(timeoutMs),
   })
   if (!res.ok) {
     let said = ''
@@ -140,10 +167,11 @@ export function createBeater({
     if (running) return
     running = true
     await beat('start')
+    // The interval timer stays referenced: with no command to run, it is what keeps a backgrounded
+    // beater's process alive between its beats.
     timer = setTimer(() => {
       void beat('interval')
     }, intervalMs)
-    timer?.unref?.()
   }
   const stop = async () => {
     if (!running) return
@@ -189,6 +217,7 @@ async function main() {
       agentName: cfg.agentName,
       project: cfg.project,
       ticket: cfg.ticket,
+      timeoutMs: cfg.timeoutMs,
       at,
     })
   const beater = createBeater({ post: http, intervalMs: cfg.intervalMs })

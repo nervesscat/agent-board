@@ -1,4 +1,8 @@
+import { spawn } from 'node:child_process'
+import fs from 'node:fs'
 import http from 'node:http'
+import os from 'node:os'
+import path from 'node:path'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -155,21 +159,22 @@ describe('the beater', () => {
   })
 })
 
-describe('the interval', () => {
-  /** Sets env values for one test and gives back what restores them, deleting the ones that were unset. */
-  const withEnv = (values) => {
-    const before = Object.fromEntries(Object.keys(values).map((k) => [k, process.env[k]]))
-    for (const [k, v] of Object.entries(values)) {
+/** Sets env values for one test and gives back what restores them, deleting the ones that were unset. */
+function withEnv(values) {
+  const before = Object.fromEntries(Object.keys(values).map((k) => [k, process.env[k]]))
+  for (const [k, v] of Object.entries(values)) {
+    if (v === undefined) delete process.env[k]
+    else process.env[k] = v
+  }
+  return () => {
+    for (const [k, v] of Object.entries(before)) {
       if (v === undefined) delete process.env[k]
       else process.env[k] = v
     }
-    return () => {
-      for (const [k, v] of Object.entries(before)) {
-        if (v === undefined) delete process.env[k]
-        else process.env[k] = v
-      }
-    }
   }
+}
+
+describe('the interval', () => {
   const args = ['--project', '1', '--ticket', '7']
 
   it('defaults from BOARD_BEAT_MS, and --interval wins over it', async () => {
@@ -219,6 +224,159 @@ describe('the interval', () => {
         problem: expect.stringContaining(
           '--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds',
         ),
+      })
+    } finally {
+      restore()
+    }
+  })
+})
+
+const SCRIPT = path.join(import.meta.dirname, 'board-beat.mjs')
+
+/** The script as an operator runs it: a real child process, its own clock, the stub board as its board. */
+function runBeat(args, env = {}) {
+  const child = spawn(process.execPath, [SCRIPT, ...args], {
+    env: { ...process.env, BOARD_URL: url, BOARD_TOKEN: 'secret', ...env },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stderr = ''
+  child.stderr.on('data', (chunk) => (stderr += chunk))
+  let exited = null
+  child.on('exit', (code, signal) => (exited = { code, signal }))
+  return { child, stderr: () => stderr, exited: () => exited }
+}
+
+/** Waits for `done`, or fails saying what the run looked like instead. */
+async function until(done, what, ms = 4000) {
+  const end = Date.now() + ms
+  while (Date.now() < end) {
+    if (done()) return
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  throw new Error(`waited ${ms}ms for ${what}`)
+}
+
+describe('the wrapper as an operator runs it', () => {
+  it('keeps beating with no command until it is stopped, and posts the last beat then', async () => {
+    seen.length = 0
+    status = 201
+    const run = runBeat(['--project', '1', '--ticket', '7'], { BOARD_BEAT_MS: '120' })
+    try {
+      // Several intervals of a backgrounded phase: a beat each, and the process still up for them.
+      await until(
+        () => seen.length >= 3 || run.exited() !== null,
+        `3 beats (beats=${seen.length} exit=${JSON.stringify(run.exited())} stderr=${run.stderr()})`,
+      )
+      expect(run.exited(), 'a background beat must stay up between its beats').toBeNull()
+      expect(seen.length).toBeGreaterThanOrEqual(3)
+    } finally {
+      run.child.kill('SIGTERM')
+      await until(() => run.exited() !== null, 'the beater to stop')
+    }
+    expect(run.exited()).toEqual({ code: 0, signal: null })
+    expect(seen.length).toBeGreaterThanOrEqual(4)
+    expect(seen.every((s) => s.url === '/api/projects/1/tickets/7/events')).toBe(true)
+  })
+
+  it('refuses a command that is not behind --, instead of dropping it silently', async () => {
+    seen.length = 0
+    status = 201
+    const run = runBeat(['--project', '1', '--ticket', '7', 'pnpm', 'build'])
+    await until(() => run.exited() !== null, 'the bad invocation to exit')
+    expect(run.exited()).toEqual({ code: 2, signal: null })
+    expect(run.stderr()).toContain('usage: board-beat.mjs')
+    // Nothing ran and nothing was beaten: the invocation is refused before it starts.
+    expect(seen).toHaveLength([])
+  })
+
+  it('starts the wrapped command even when the board accepts and never answers', async () => {
+    const hang = http.createServer(() => {})
+    const port = await listen(hang)
+    const marker = path.join(os.tmpdir(), `board-beat-ran-${process.pid}-${Date.now()}`)
+    try {
+      const started = Date.now()
+      const run = runBeat(
+        ['--project', '1', '--ticket', '7', '--', process.execPath, '-e', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`],
+        { BOARD_URL: `http://127.0.0.1:${port}`, BOARD_BEAT_TIMEOUT_MS: '150' },
+      )
+      try {
+        await until(() => run.exited() !== null, 'the wrapper to finish')
+        expect(run.exited()).toEqual({ code: 0, signal: null })
+        expect(fs.readFileSync(marker, 'utf8')).toBe('ran')
+        // One start beat and one end beat, each given up: the board never delays the command for long.
+        expect(Date.now() - started).toBeLessThan(5000)
+      } finally {
+        run.child.kill('SIGKILL')
+      }
+    } finally {
+      fs.rmSync(marker, { force: true })
+      hang.closeAllConnections()
+      await new Promise((r) => hang.close(r))
+    }
+  })
+
+  it('gives a beat its own timeout, so a board that never answers cannot hold it', async () => {
+    const hang = http.createServer(() => {})
+    const port = await listen(hang)
+    try {
+      const started = Date.now()
+      const outcome = await Promise.race([
+        beatBoard({
+          url: `http://127.0.0.1:${port}`,
+          token: 'secret',
+          project: 1,
+          ticket: 7,
+          at: new Date(T0).toISOString(),
+          timeoutMs: 100,
+        }).then(
+          () => 'beat',
+          (err) => err,
+        ),
+        new Promise((r) => setTimeout(() => r('still-waiting'), 3000)),
+      ])
+      expect(outcome, 'the beat must give up on its own, not wait out undici').not.toBe('still-waiting')
+      expect(outcome).toBeInstanceOf(Error)
+      expect(Date.now() - started).toBeLessThan(2000)
+    } finally {
+      hang.closeAllConnections()
+      await new Promise((r) => hang.close(r))
+    }
+  })
+
+  it('asks for the beat with an abort signal of its own timeout', async () => {
+    let init
+    await beatBoard({
+      url,
+      token: 'secret',
+      project: 1,
+      ticket: 7,
+      at: new Date(T0).toISOString(),
+      timeoutMs: 250,
+      fetch: async (_url, options) => {
+        init = options
+        return new Response(JSON.stringify({ at: new Date(T0).toISOString() }), { status: 201 })
+      },
+    })
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+})
+
+describe('the arguments a command must come behind', () => {
+  const env = { BOARD_TOKEN: 'secret' }
+
+  it('takes only a command after --, and refuses an argument it does not know', () => {
+    const restore = withEnv(env)
+    try {
+      // Without the -- the command's words are stray arguments: refused, never run.
+      expect(parseArgs(['--project', '1', '--ticket', '7', 'pnpm', 'build'])).toEqual({
+        problem: expect.stringContaining('usage: board-beat.mjs'),
+      })
+      expect(parseArgs(['--project', '1', '--ticket', '7', '--watch'])).toEqual({
+        problem: expect.stringContaining('usage: board-beat.mjs'),
+      })
+      // Behind it they are the command, as before.
+      expect(parseArgs(['--project', '1', '--ticket', '7', '--', 'pnpm', 'build'])).toMatchObject({
+        command: ['pnpm', 'build'],
       })
     } finally {
       restore()
