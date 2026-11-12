@@ -15,7 +15,9 @@
 // A REMOTE_BOARD_URL in its settings makes it a window onto a board on another machine instead
 // (startConnect): no server, no data folder, no port of its own, and no updater, which is driven over
 // the local server's IPC channel. A board that cannot be reached is shown in the window with its
-// address and retried by the app (showUnreachable), never in a dialog: the app stays until Quit.
+// address and retried by the app (showUnreachable), never in a dialog: the app stays until Quit. One
+// that answered and then goes away is found by a slow check made while its page is shown
+// (liveness.mjs), so it is reported the same way.
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -47,6 +49,7 @@ import {
   trayHostPresent,
   withLoginPath,
 } from './settings.mjs'
+import { watchLiveness } from './liveness.mjs'
 import { exitLine, exitSentence, logServer, spawnFailedLine, startLine } from './serverLog.mjs'
 import {
   BRIDGE,
@@ -123,6 +126,10 @@ let boardUnreachable = false
 let retryStep = 0
 /** @type {ReturnType<typeof setTimeout> | null} */
 let retryTimer = null
+// Remote mode: the slow check that the board the window shows is still there (liveness.mjs), kept
+// while its page is loaded.
+/** @type {import('./liveness.mjs').Liveness | null} */
+let liveness = null
 /** @type {import('./updates.mjs').Updates | null} */
 let updates = null
 
@@ -151,6 +158,7 @@ if (homeError) {
     if (restartTimer) clearTimeout(restartTimer)
     restartTimer = null
     clearRetry()
+    stopLiveness()
     if (!server) return
     event.preventDefault()
     void stopServer().then(() => app.quit())
@@ -602,6 +610,7 @@ function createWindow() {
   // Closed for good (once the app is failing or quitting): nothing may show it again.
   win.on('closed', () => {
     win = null
+    stopLiveness()
   })
   win.on('close', (event) => {
     if (quitting) return
@@ -673,8 +682,32 @@ function loadBoard() {
     refreshMenus()
   }
   if (!win || win.isDestroyed()) return
+  startLiveness()
   // A load that fails anyway is did-fail-load's, which shows the page that says so.
   void win.loadURL(`${settings.url}/`).catch(() => {})
+}
+
+/**
+ * Remote mode: has the board the window shows checked every so often, and takes the first check that
+ * fails as the board going away (showUnreachable), which retries until it answers again (loadBoard).
+ */
+function startLiveness() {
+  if (settings.mode !== 'remote' || quitting) return
+  stopLiveness()
+  liveness = watchLiveness({
+    check: boardAnswers,
+    onLost: () => {
+      liveness = null
+      showUnreachable()
+    },
+  })
+  liveness.start()
+}
+
+/** Stops the checks: the board's page is not in the window, or the app is going. */
+function stopLiveness() {
+  liveness?.stop()
+  liveness = null
 }
 
 /**
@@ -683,6 +716,7 @@ function loadBoard() {
  * by itself on a growing wait (scheduleRetry), so the board's return needs no restart and no dialog.
  */
 function showUnreachable() {
+  stopLiveness()
   if (!win || win.isDestroyed()) return
   if (!boardUnreachable) {
     boardUnreachable = true

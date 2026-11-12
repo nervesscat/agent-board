@@ -274,8 +274,10 @@ tray's Open in browser and Start at login work as before, and you sign in with t
 passkeys, as in a browser. When the address does not answer (the machine is off, the tailnet is down,
 the board is restarting), the window says so, names the address and tries again by itself every few
 seconds; **Retry now** in the window and in the tray tries at once, and the app keeps trying while it
-runs, so the board coming back needs no restart. The app does not update itself in this mode, since
-that goes through the local board: install a newer build over it as usual.
+runs, so the board coming back needs no restart. A board that answered and then goes away is found
+while its page is shown (the app checks it every 15 seconds or so) and reported the same way, so the
+window names the address rather than keeping a page that no longer loads. The app does not update
+itself in this mode, since that goes through the local board: install a newer build over it as usual.
 
 Switching back: clear the value (or delete the line), start the app again, and it runs the board on
 this machine as before.
