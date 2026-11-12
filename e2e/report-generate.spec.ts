@@ -2,7 +2,7 @@ import fs from 'node:fs'
 
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
-import type { ReportList, ReportView } from '#/lib/api'
+import type { HostTool, HostTools, ReportList, ReportView } from '#/lib/api'
 import { localDate } from '#/lib/format'
 import { periodLabel } from '#/lib/reports'
 import { expect, expectTooltip, ok, test } from './fixtures'
@@ -138,6 +138,68 @@ test('the button says why it is off: no cadence, or a project whose reports are 
   await expectTooltip(why, /^This project's reports are files/)
   const refused = await human.post(`/api/projects/${project.id}/reports/generate`, { data: {} })
   expect(refused.status()).toBe(400)
+})
+
+/** The page's tools check, with claude missing or found: the board's own claude is the test's stand-in. */
+function hostToolCheck(claudeMissing: boolean): HostTools {
+  const tool = (name: HostTool['name'], over: Partial<HostTool> = {}): HostTool => ({
+    name,
+    found: true,
+    path: `/usr/bin/${name}`,
+    version: '1.0.0',
+    ...(name === 'gh' && { signedIn: true }),
+    ok: true,
+    optional: name === 'claude',
+    breaks: 'things',
+    problem: null,
+    fix: null,
+    ...over,
+  })
+  return {
+    checkedAt: '2026-11-11T10:00:00.000Z',
+    tools: [
+      tool('git'),
+      tool('gh'),
+      claudeMissing
+        ? tool('claude', {
+            found: false,
+            path: null,
+            version: null,
+            ok: false,
+            problem: 'claude was not found: CLAUDE_BIN is claude',
+            fix: 'install Claude Code (https://docs.claude.com/en/docs/claude-code/setup), or set CLAUDE_BIN in .env (config.env for the desktop app) to its full path, then restart the board',
+          })
+        : tool('claude'),
+      tool('node'),
+      tool('pnpm'),
+    ],
+  }
+}
+
+test('Generate is off, with the reason and the fix in words, while claude is missing; on when it is there', async ({
+  page,
+  project,
+  human,
+}) => {
+  await daily(human, project.id, 'A couple of lines.')
+  await page.route('**/api/host-tools', (route) => route.fulfill({ json: hostToolCheck(true) }))
+  await page.goto(`/projects/${project.id}/daily`)
+  const card = page.getByRole('region', { name: 'Report', exact: true })
+  const generate = card.getByRole('button', { name: 'Generate with claude' })
+  await expect(generate).toBeDisabled()
+  // The reason and the fix are on the card, not only in a tooltip.
+  await expect(card).toContainText('claude was not found: CLAUDE_BIN is claude')
+  await expect(card).toContainText('install Claude Code')
+  await expect(card).toContainText('CLAUDE_BIN in .env')
+  // It is this page's feature that needs it: the global banner stays out of it.
+  await expect(page.getByRole('region', { name: 'Missing tools' })).toHaveCount(0)
+
+  // Found again: the button works as before.
+  await page.unroute('**/api/host-tools')
+  await page.route('**/api/host-tools', (route) => route.fulfill({ json: hostToolCheck(false) }))
+  await page.reload()
+  await expect(generate).toBeEnabled()
+  await expect(card).not.toContainText('claude was not found')
 })
 
 test.describe('at 390px, light and dark', () => {

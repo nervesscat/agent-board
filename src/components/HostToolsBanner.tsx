@@ -9,8 +9,9 @@ import { errorMessage, get, type HostTools, post } from '#/lib/api'
 
 /**
  * On every page, while a tool the board runs is missing on its machine (or gh is signed out): each one,
- * what it breaks and how to fix it. Each can be dismissed on its own until the next check (Check again,
- * or the board's restart) finds it still missing; one found again goes away.
+ * what it breaks and how to fix it. Optional tools stay out: claude only writes the board's own reports,
+ * which the Reports page asks for and explains there. Each can be dismissed on its own until the next
+ * check (Check again, or the board's restart) finds it still missing; one found again goes away.
  */
 export function HostToolsBanner() {
   const queryClient = useQueryClient()
@@ -27,7 +28,10 @@ export function HostToolsBanner() {
   const [dismissed, setDismissed] = useState<Dismissed>({})
   useEffect(() => setDismissed(readDismissed()), [])
 
-  const shown = (data?.tools ?? []).filter((t) => !t.ok && dismissed[t.name] !== data!.checkedAt)
+  // Not what the human is looking at: an optional tool's absence is told where that tool is used.
+  const shown = (data?.tools ?? []).filter(
+    (t) => !t.ok && !t.optional && dismissed[t.name] !== data!.checkedAt,
+  )
   if (!data || !shown.length) return null
   const dismiss = (name: string) => {
     const next = { ...dismissed, [name]: data.checkedAt }
