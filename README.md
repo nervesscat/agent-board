@@ -248,8 +248,11 @@ install**. Nothing is downloaded or installed until you press it. Only stable re
 **Include pre-releases** there offers `0.3.0-beta.1` and the like too. The download is checked against
 the sha512 in the release's `latest.yml` (Linux: `latest-linux.yml`), and one that does not match is
 refused with nothing installed. Then the app stops its board server (as Quit does), runs the new
-installer for you alone, as the first one did (no admin prompt), and starts the new version. The data
-folder and `config.env` stay as they are. These settings are kept in `updates.json` beside
+installer for you alone, as the first one did (no admin prompt), and starts the new version. With the
+Linux deb, rpm and pacman packages the order is the same for all three: the board's server is stopped
+before the package manager runs, then the app starts the installed version itself and waits until it
+answers on its port; a start that does not come back is written to `board.err.log` with the binary to
+run by hand. The data folder and `config.env` stay as they are. These settings are kept in `updates.json` beside
 `config.env`. The update state and its actions are on the board's API (`/api/updates`) for the
 signed-in human only: an agent's token gets 403, so no agent can start an install. A board run from a
 checkout has no updater: its Updates section says to `git pull` on `main` there, then `pnpm start`
@@ -381,11 +384,14 @@ a newer one over it by hand works too, the data kept:
 - **AppImage:** the new AppImage, once its sha512 matched, replaces the old file where it is, and starts.
 - **deb, rpm, pacman:** the app installs the downloaded package with the system's package manager
   (`dpkg -i` or `apt`, `dnf`, `zypper` or `rpm`, `pacman -U`) through polkit's `pkexec`, which asks for
-  your authorization in its own dialog; the app never asks for or keeps a password. Once installed, it
-  stops the board and starts again as the new version. It asks polkit once per press of Download and
-  install. Without `pkexec` (polkit not installed), with the authorization declined, or with the package
-  manager failing, the board keeps running and the Updates section shows the error and the exact command
-  to run in a terminal, with the downloaded file's path, e.g.
+  your authorization in its own dialog; the app never asks for or keeps a password. It stops the board's
+  server before the package manager runs, so no old board is left on the port, then starts the installed
+  version itself and waits until it answers on that port; a start that does not come back is written to
+  `board.err.log` with the binary to run by hand (e.g. `/opt/CrossBoard/agent-board`). It asks polkit
+  once per press of Download and install. Without `pkexec` (polkit not installed), with the authorization
+  declined, or with the package manager failing, the board comes back (it is only stopped for an install
+  that can run) and the Updates section shows the error and the exact command to run in a terminal, with
+  the downloaded file's path, e.g.
   `sudo pacman -U ~/.cache/agent-board-updater/pending/agent-board-0.3.0.pacman` (`sudo apt install …`,
   `sudo dnf install …` and the like by distribution); start the app again after it.
 

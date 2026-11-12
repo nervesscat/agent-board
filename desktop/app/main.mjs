@@ -261,6 +261,9 @@ function startUpdates() {
     )
   const feed = process.env.AGENT_BOARD_UPDATE_FEED
   if (feed) updater.setFeedURL({ provider: 'generic', url: feed })
+  // The installed version's board, as waitUntilUp asks this instance's: an update's start is checked
+  // the same way, on the same port (updates.mjs).
+  const health = `http://127.0.0.1:${settings.port}/api/health`
   /** @param {unknown} m */
   const line = (m) => `agent-board desktop: ${m instanceof Error ? m.message : String(m)}`
   return createUpdates({
@@ -275,6 +278,26 @@ function startUpdates() {
     settings: readUpdateSettings(home),
     saveSettings: (s) => writeUpdateSettings(home, s),
     spawnSync,
+    // The installed binary of a deb, rpm or pacman package: the app starts it itself once the package
+    // is in, so it can see the new version answer before it ends (updates.mjs). Detached, so that
+    // start outlives this instance.
+    binary: process.execPath,
+    health,
+    launch: (binary) => {
+      const child = spawn(binary, [], { detached: true, stdio: 'ignore' })
+      child.on('error', (err) =>
+        console.error(`agent-board desktop: ${binary} could not be started: ${err.message}`),
+      )
+      child.unref()
+    },
+    probe: async () => {
+      try {
+        const res = await fetch(health, { signal: AbortSignal.timeout(2000) })
+        return res.ok
+      } catch {
+        return false
+      }
+    },
     // As Quit does: an exit asked for, so it is not restarted (onServerExit) and its line says so.
     stopServer: async () => {
       quitting = true
@@ -290,7 +313,6 @@ function startUpdates() {
     },
     releaseLock: () => app.releaseSingleInstanceLock(),
     takeLock: () => void app.requestSingleInstanceLock(),
-    relaunch: () => app.relaunch(),
     quit: () => app.quit(),
     log: {
       info: (m) => console.log(line(m)),
