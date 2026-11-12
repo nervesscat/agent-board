@@ -12,8 +12,8 @@ agent does that.
 ## Input
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
-`WORKDIR`, a temp-file prefix, the review contract, a browser flag, the `SLOTS` folder when the
-caller passed `slots=`, and paths to
+`WORKDIR`, a temp-file prefix, the review contract, a browser flag, the `SLOTS` folder your
+prompt or `00-env.md`'s **Test slots** line gives, and paths to
 `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, and your output
 file. Start from `00-focus.md`; read outside it only to follow a reference from it.
 
@@ -43,13 +43,15 @@ result, and the orchestrator asks the human.
   the result: the typecheck, lint and format on the changed files, the migration check when it
   applies, the unit tests related to them, and the end-to-end specs covering the changed pages or
   routes (none when the diff touches neither). It is the review's only run at head. Only the heavy
-  runs take a test slot, from the `SLOTS` folder when your prompt gives one: take the first free
+  runs take a test slot, from the `SLOTS` folder your prompt or `00-env.md`'s **Test slots** line
+  gives: take the first free
   one (`mkdir tests-<repo id>-<n>`, never `mkdir -p`; write `holder.txt` with
-  `#<ticket> verify <ISO time>`) right before the end-to-end run and before the full suite, and
+  `#<TICKET> verify <ISO time>`) right before the end-to-end run and before the full suite, and
   `rm -r` it right after each. A full suite takes `tests-<repo id>-full` first and then waits
   until every slot is free; a scoped run that finds `-full` releases its slot and waits for it.
   The typecheck, lint, format, migration check and scoped unit run take none, and neither does a
-  probe test. With no `SLOTS`, run every check without a slot. When `00-env.md` records a reused
+  probe test. When neither the prompt nor `00-env.md` names a `SLOTS` folder, run every check
+  without a slot. When `00-env.md` records a reused
   build (`E2E_SKIP_BUILD=1`), run the end-to-end command with that value: the artifact is the
   commit under review's own build. The full
   suite runs in CI on the pull request. When `00-env.md` says no CI runs it (`CI: none`) and your

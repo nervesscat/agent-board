@@ -177,7 +177,9 @@ Parse `$ARGUMENTS` as space-separated tokens:
 
 Every agent prompt from here on includes: `MAIN`, `WORKTREE`, `WORKDIR`, `SLUG`, the
 absolute paths of the files it reads and writes, `00-context.md` as the context pack (every
-phase reads it: spec, env, verify, hunt, refute and merge), the full text of the contract, and the path of
+phase reads it: spec, env, verify, hunt, refute and merge), the `SLOTS` directory when `slots=`
+was given (its record is the `Test slots:` line in `00-env.md`), the full text of the contract,
+and the path of
 `00-focus.md` with this rule: start from it; read outside it only to follow a reference from it.
 With `scoped`, it also includes the word `scoped`. Agents treat `WORKTREE` as the repo root.
 
@@ -244,7 +246,8 @@ Spawn in a single message:
 | `feature-review-hunt` (deep mode only, second instance) | `_frh2_` | `03-candidates-b.md`, `03-hunt-notes-b.md` |
 
 Each prompt includes paths to `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`,
-`00-focus.md`, `checklists.md`, its output paths, and the browser flag; the hunt's also names its
+`00-focus.md`, `checklists.md`, its output paths, the `SLOTS` directory when `slots=` was given,
+and the browser flag; the hunt's also names its
 checklist sections from the strategy table. Agents use the test command, interpreter, and base
 URLs from `00-env.md` and start no servers of their own. Verify runs the scoped checks from
 `00-env.md`, once: the only run at head. They cover what the change affects: the whole
@@ -257,8 +260,9 @@ Only the heavy runs take a test slot, from `slots=` when it was given: verify ta
 free one right before the end-to-end run and before the full suite, and releases it right after
 each; a full suite takes `tests-<repo id>-full` first and waits until every slot is free. Its
 typecheck, lint, format, migration check and scoped unit run take none, and neither do the hunt's
-and refute's targeted tests. With `E2E_SKIP_BUILD=1` in `00-env.md`, verify's end-to-end command
-reuses the caller's build instead of building again.
+and refute's targeted unit tests and probes; a targeted end-to-end spec is heavy like any
+end-to-end run, so it takes a slot the same way, released right after it. With `E2E_SKIP_BUILD=1`
+in `00-env.md`, verify's end-to-end command reuses the caller's build instead of building again.
 
 Wait for all. Then build the refutation input, `03-all-candidates.md`:
 - every candidate from `03-candidates.md` (and `03-candidates-b.md` in deep mode,
@@ -290,20 +294,26 @@ Spawn `feature-review-refute` with temp-file prefix `_frr_` and paths to `01-spe
 `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, `02-verification.md`,
 `03-all-candidates.md`, and
 the output path `04-verdicts.md`. Like the hunt, it runs only targeted tests, never the full
-suite, and those targeted runs take no test slot. Wait for it.
+suite, and those targeted unit tests and probes take no test slot; a targeted end-to-end spec is
+heavy like any end-to-end run and takes one. Wait for it.
 
 ## Phase 3b: Merge check (1 agent)
 
 Runs after every other agent has finished, because it temporarily changes the worktree.
-Spawn `feature-review-merge` with `HEAD_SHA`, the base branch name, and paths to
+Spawn `feature-review-merge` with `HEAD_SHA`, the base branch name, the `SLOTS` directory when
+`slots=` was given, and paths to
 `00-env.md`, `00-context.md`, `00-focus.md`, `02-verification.md`, and the output path
 `05-merge.md`. It runs the
 scoped checks once, on the merged tree, over the files both the branch and the base changed since
 the merge base plus the branch's own: that scoped run is the merge check, and CI on the merged PR
 covers the rest (the full suite instead, where no CI runs it and `scoped` was not given). Its
-heavy part — the end-to-end run, and the full suite where no CI runs it — takes the repo's first
-free test slot from `slots=` (the full-suite folder first for a full suite); its typecheck, lint
-and scoped unit runs take none. Wait for
+heavy part — the build, the end-to-end run, and the full suite where no CI runs it — takes the
+repo's first free test slot from `slots=` (the full-suite folder first for a full suite); its
+typecheck, lint
+and scoped unit runs take none. Because it merged the base, it never reuses the caller's build
+record, `E2E_SKIP_BUILD=1` or not: it builds once on the merged tree in a slot and runs the
+end-to-end tests against that build, since the head's artifact never shows what the merge broke.
+Wait for
 it. Read its `Result` line and its `Worktree restored` line; if the worktree was not restored,
 run `git -C WORKTREE reset --hard <commit>` yourself before continuing. For `diff`,
 `staged`, and path targets the base is `HEAD`, so the result is `NO ISSUE (up to date)`

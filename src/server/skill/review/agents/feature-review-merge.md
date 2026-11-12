@@ -14,7 +14,7 @@ branch in the developer's checkout beyond fetching.
 
 `WORKTREE` (detached at the commit under review, clean), `MAIN` (the developer's
 checkout, fetch only), `WORKDIR`, `HEAD_SHA`, `BASE` (the base branch name), the `SLOTS` folder
-when the caller passed `slots=`, and paths to
+your prompt or `00-env.md`'s **Test slots** line gives, and paths to
 `00-env.md` (scoped checks, test command and interpreter), `00-context.md` (the context pack:
 read it first), `00-focus.md` (start from it; read outside it only
 to follow a reference from it), `02-verification.md` (test results at head, for comparison), and
@@ -47,12 +47,18 @@ result, and the orchestrator asks the human.
    run on the merged tree is the merge check; CI on the merged PR covers the rest. When
    `00-env.md` says no CI runs the full suite (`CI: none`) and your prompt does not say `scoped`,
    run the full suite once with the test command instead. Take a test slot only for a heavy
-   run: with the `SLOTS` folder, the end-to-end run and the full suite take the first free slot
+   run: with the `SLOTS` folder your prompt or `00-env.md`'s **Test slots** line gives, the
+   end-to-end run and the full suite take the first free slot
    (`mkdir tests-<repo id>-<n>`, never `mkdir -p`; `holder.txt` with `#<TICKET> merge <ISO
    time>`) and release it right after, and a full suite takes `tests-<repo id>-full` first and
-   then waits until every slot is free. The typecheck, lint and scoped unit runs take none. With
-   `E2E_SKIP_BUILD=1` in `00-env.md`, run the end-to-end command with it: the artifact is the
-   commit under review's own build. Never delete a slot folder whose `holder.txt` names someone
+   then waits until every slot is free. The typecheck, lint and scoped unit runs take none. Do
+   not reuse the caller's build here, even when `00-env.md` records `E2E_SKIP_BUILD=1`: step 4
+   merged the base, so that artifact and the app it starts are at `HEAD_SHA`, never the merged
+   tree, and an end-to-end run against it cannot see what the merge broke (or fails on the base's
+   own specs against the old app). Build once on the merged tree in a test slot — a build is
+   heavy like the run — then run the end-to-end command against that build. The recorded build is
+   reused only when the base was already an ancestor (step 2), and then this step never runs.
+   Never delete a slot folder whose `holder.txt` names someone
    else. Compare failures with
    the head run in `02-verification.md`. Failures that were not present at head are
    **new**. Result `TESTS FAIL AFTER MERGE` with the new failures, or `NO ISSUE`. If the

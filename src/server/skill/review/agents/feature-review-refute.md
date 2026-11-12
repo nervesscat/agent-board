@@ -22,8 +22,10 @@ your output file. You are deliberately not given the hunting agent's reasoning. 
 
 Everything you execute runs from the worktree using the interpreter, test command, and
 base URLs in `00-env.md`. Run only targeted tests: a probe or the focus file's tests for one
-candidate; never the full suite. Those targeted runs are light and take no test slot: never wait
-on one. Never start a server or container, and never call a port that
+candidate; never the full suite. Targeted unit tests and probe tests are light and take no test
+slot: never wait on one. A targeted end-to-end spec is heavy like any end-to-end run and takes a
+test slot (from the `SLOTS` folder your prompt or `00-env.md`'s **Test slots** line gives),
+released right after it; a full suite follows the `-full` rule. Never start a server or container, and never call a port that
 `00-env.md` does not list. Data you create through the app carries your prefix.
 
 This agent never answers a decision (`answer_decision`): a question for the human goes in its

@@ -672,15 +672,71 @@ describe('the review texts the board ships', () => {
   it('takes a slot only around a heavy run in each phase: verify and merge yes, hunt and refute never', () => {
     const phase = (file: string) => flat(read(path.join(skills, 'agents', file)))
     expect(phase('feature-review-verify.md')).toContain(
-      'Only the heavy runs take a test slot, from the `SLOTS` folder when your prompt gives one',
+      "Only the heavy runs take a test slot, from the `SLOTS` folder your prompt or `00-env.md`'s **Test slots** line gives",
     )
     expect(phase('feature-review-merge.md')).toContain('Take a test slot only for a heavy run')
     for (const file of ['feature-review-hunt.md', 'feature-review-refute.md']) {
-      expect(phase(file), file).toContain('Those targeted runs are light and take no test slot')
+      expect(phase(file), file).toContain(
+        'Targeted unit tests and probe tests are light and take no test slot',
+      )
     }
     const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
     expect(review).toContain('Only the heavy runs take a test slot, from `slots=` when it was given')
     expect(review).toContain('Its heavy part')
     expect(review).toContain('and neither do the hunt')
+  })
+
+  it('builds on the merged tree for the merge check, and never labels an old artifact with a new head', () => {
+    const merge = flat(read(path.join(skills, 'agents', 'feature-review-merge.md')))
+    expect(merge).toContain(
+      "Do not reuse the caller's build here, even when `00-env.md` records `E2E_SKIP_BUILD=1`",
+    )
+    expect(merge).toContain('Build once on the merged tree in a test slot')
+    expect(merge).toContain(
+      'The recorded build is reused only when the base was already an ancestor (step 2)',
+    )
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain(
+      "Because it merged the base, it never reuses the caller's build record, `E2E_SKIP_BUILD=1` or not",
+    )
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      'a fix pass that built nothing deletes the record, and the next review builds once at the new head',
+    )
+    expect(text).toContain(
+      'rewrites `WORKDIR/02-build.md` at the new head only when it ran the end-to-end run',
+    )
+  })
+
+  it('takes a test slot for a targeted end-to-end run in the hunt and refute phases too', () => {
+    for (const file of ['feature-review-hunt.md', 'feature-review-refute.md']) {
+      const text = flat(read(path.join(skills, 'agents', file)))
+      expect(text, file).toContain('Targeted unit tests and probe tests are light and take no test slot')
+      expect(text, file).toContain(
+        'A targeted end-to-end spec is heavy like any end-to-end run and takes a test slot',
+      )
+    }
+  })
+
+  it('passes the slot folder to every phase, and verify and merge also read it from 00-env.md', () => {
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain(
+      'the `SLOTS` directory when `slots=` was given (its record is the `Test slots:` line in `00-env.md`)',
+    )
+    for (const file of ['feature-review-verify.md', 'feature-review-merge.md']) {
+      expect(flat(read(path.join(skills, 'agents', file))), file).toContain(
+        "`SLOTS` folder your prompt or `00-env.md`'s **Test slots** line gives",
+      )
+    }
+  })
+
+  it("starts a hand preview with the repo's environment on a free loopback port, and stops it with the ticket", () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain("Prefer the board's own preview run")
+    expect(text).toContain('`BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`')
+    expect(text).toContain('`HOST=127.0.0.1`')
+    expect(text).toContain('`DATA_DIR` a copy of the data (never the live one)')
+    expect(text).toContain('keep it running while the ticket is in review')
+    expect(text).toContain('clear the link (`set_preview` with `""`)')
   })
 })

@@ -306,7 +306,9 @@ From the worktree:
    commit again. A record whose SHA is not the head is stale: the gate runs on the next commit
    and rewrites it. A fix pass reruns the failed end-to-end spec file(s), the unit files related
    to the changed files (`vitest related <changed files>`, or the project's equivalent) and the
-   light checks above, never the whole gate, and rewrites the record at the new head.
+   light checks above, never the whole gate. It rewrites `WORKDIR/02-build.md` at the new head
+   only when it ran the end-to-end run and so rebuilt `.output-e2e`; a fix pass that built nothing
+   deletes the record, and the next review builds once at the new head.
 2. Read the whole diff: `git diff origin/BASE...<branch>`. Then grep the added lines for
    `.skip(`, `.only(`, `xit(`, `xdescribe(`, `test.todo`, `@ts-ignore`, `@ts-expect-error`,
    `eslint-disable`, `oxlint-ignore`, `NODE_ENV`, `process.env.CI`, `vi.mock(`, `jest.mock(`,
@@ -413,18 +415,22 @@ Implementation and its steps (`set_task_done`).
    like a gate failure. When it passes, comment on the PR `CI run locally: green on <sha>` with
    that head SHA (`gh pr comment`): that ticks CI. After each later push, run it again and comment
    again.
-5. The preview, from the one build this head gets. When `WORKDIR/02-build.md` names the final
-   head, start the preview from that `.output-e2e` instead of building it again: the build was
-   made with `BOARD_BUILD_DIR=.output-e2e`, which only sets the build's output directory and does
-   nothing at run time, so run the server from the worktree as
-   `node .output-e2e/server/index.mjs` (or the project's own start command against that
-   directory, with no build step), then `set_preview` with the URL it answers on. Else
-   `start_preview` on the workspace for a repo the board builds (wait until
-   `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
-   project's way and `set_preview`. A managed preview run that must build its own counts as this
-   head's one build, and so does a build you run at a final head whose artifact is older. Say in
-   the summary which of them happened. When the change cannot be tried (docs, a script), say why in
-   the summary instead.
+5. The preview, from the one build this head gets. Prefer the board's own preview run:
+   `start_run` the repo's preview (or `start_preview` on the workspace), wait until it is
+   `running` (on `failed`, read its log tail and fix), and treat its build as this head's one
+   build. When you start it by hand from the gate's artifact instead — `WORKDIR/02-build.md`
+   names the final head, and the build was made with `BOARD_BUILD_DIR=.output-e2e`, which only
+   sets the build's output directory and does nothing at run time — run
+   `node .output-e2e/server/index.mjs` from the worktree with the repo's preview environment,
+   never the defaults: a free loopback port from `PORTS` as `PORT` and `NITRO_PORT`,
+   `HOST=127.0.0.1`, `DATA_DIR` a copy of the data (never the live one),
+   `BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`, and
+   `BOARD_URL=http://127.0.0.1:<port>`. Then `set_preview` with the URL it answers on, keep it
+   running while the ticket is in review, and once it is merged or dropped stop the process and
+   clear the link (`set_preview` with `""`). A managed preview run that must build its own counts
+   as this head's one build, and so does a hand build at a final head whose artifact is older.
+   Say in the summary which of them happened. When the change cannot be tried (docs, a script),
+   say why in the summary instead.
    A preview build you start here is a heavy run, in a test slot like any other (holder
    `#<TICKET> preview <ISO time>`): take the first free one before the start and release it once
    the preview runs or has failed.

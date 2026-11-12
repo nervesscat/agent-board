@@ -20,8 +20,11 @@ from it.
 
 Everything you execute runs from the worktree using the interpreter, test command, and
 base URLs in `00-env.md`. Run only targeted tests: the focus file's tests, or a probe for one
-candidate; never the full suite (CI runs it). Those targeted runs are light and take no test
-slot: never wait on one. Never start a server or container, and never
+candidate; never the full suite (CI runs it). Targeted unit tests and probe tests are light and
+take no test slot: never wait on one. A targeted end-to-end spec is heavy like any end-to-end run
+and takes a test slot (from the `SLOTS` folder your prompt or `00-env.md`'s **Test slots** line
+gives), released right after it; a full suite follows the `-full` rule. Never start a server or
+container, and never
 call a port that `00-env.md` does not list. Use the browser only when the flag is `yes`. Data
 you create through the app carries your prefix in its name.
 
