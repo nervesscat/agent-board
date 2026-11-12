@@ -41,8 +41,9 @@ export function age(ticketId: number, minutes: number) {
 
 /**
  * A ticket in progress with a lane: a 20-minute wait on the test lock with nothing else going on, then
- * a hand-off to a sub-agent and a build span by the agent, and then 40 minutes of silence, so it reads
- * as stalled. The lane has nothing.
+ * a hand-off to a sub-agent and a build span by the agent, and 40 minutes of silence after the span
+ * started. The span is still open, so its lease has expired and it reads as Lost contact, not Stalled.
+ * The lane has nothing.
  */
 export async function workedTicket(human: APIRequestContext, agent: APIRequestContext, project: Project) {
   const t = await create(human, project, { title: 'Ship the importer', status: 'in_progress' })
@@ -85,7 +86,9 @@ export async function stalledTicket(human: APIRequestContext, agent: APIRequestC
 
 export type Playwright = {
   request: { newContext: (o: object) => Promise<APIRequestContext> }
-} /** REST as whoever `actor` names in test mode (orchestrator:<name>, agent:<name>), with any other headers. */
+}
+
+/** REST as whoever `actor` names in test mode (orchestrator:<name>, agent:<name>), with any other headers. */
 export const as = (playwright: Playwright, baseURL: string | undefined, actor: string, headers = {}) =>
   playwright.request.newContext({ baseURL, extraHTTPHeaders: { 'X-Test-Actor': actor, ...headers } })
 

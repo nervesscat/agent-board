@@ -569,7 +569,7 @@ describe('liveness: the lease, the open spans and waiting on the human', () => {
       waiting: opts.waiting,
     })
 
-  it('the #861 case: a long review round kept alive by its posts reads working, not stalled', () => {
+  it('a long review round kept alive by its posts reads working, not stalled', () => {
     // A review round-4 span opened at 17:15; the agent posted at 17:33, 17:41 and 17:58; read at 18:04
     // with stallMinutes 30. The span is much older than the threshold, the posts are the lease.
     const t = buildLiveness(

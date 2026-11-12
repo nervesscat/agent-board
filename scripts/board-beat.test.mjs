@@ -124,13 +124,13 @@ describe('the beater', () => {
       token: 'secret',
       agentName: 'orch/builder-1',
       project: 1,
-      ticket: 874,
+      ticket: 7,
       at: new Date(T0).toISOString(),
     })
     expect(seen).toHaveLength(1)
     expect(seen[0]).toMatchObject({
       method: 'POST',
-      url: '/api/projects/1/tickets/874/events',
+      url: '/api/projects/1/tickets/7/events',
       token: 'Bearer secret',
       agent: 'orch/builder-1',
       body: { kind: 'heartbeat' },
@@ -141,7 +141,7 @@ describe('the beater', () => {
     status = 401
     answer = { error: 'the agent token is wrong' }
     await expect(
-      beatBoard({ url, token: 'secret', project: 1, ticket: 874, at: new Date(T0).toISOString() }),
+      beatBoard({ url, token: 'secret', project: 1, ticket: 7, at: new Date(T0).toISOString() }),
     ).rejects.toThrow('the board answered 401: the agent token is wrong')
     status = 201
     answer = { at: '2026-11-12T17:15:00.000Z', lastSignalAt: '2026-11-12T17:15:00.000Z' }
