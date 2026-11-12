@@ -1,0 +1,177 @@
+{
+  "direction": "retro-riso",
+  "generator": "scripts/release-art/retro-riso.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "hexes": [
+      "#F4EFE6",
+      "#1F2A44",
+      "#FF5A3C",
+      "#DCD3C4"
+    ],
+    "light": {
+      "ground": "#F4EFE6",
+      "line": "#1F2A44",
+      "spot": "#FF5A3C",
+      "shadow": "#DCD3C4"
+    },
+    "dark": {
+      "ground": "#1F2A44",
+      "line": "#F4EFE6",
+      "spot": "#FF5A3C",
+      "shadow": "#DCD3C4"
+    }
+  },
+  "print": {
+    "halftone": {
+      "pitch": 9,
+      "radius": 2.4,
+      "screenAngle": 15
+    },
+    "inkWeights": {
+      "heavy": 3,
+      "medium": 2.1,
+      "light": 1.4
+    },
+    "spotWeight": 2.8,
+    "sheet": {
+      "width": 1600,
+      "height": 900,
+      "thirdScale": {
+        "width": 533.3333333333334,
+        "height": 300
+      }
+    }
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 1855431052,
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "themes": {
+        "density": 0.958,
+        "hands": 0.894,
+        "precision": 0.365,
+        "wayfinding": 0.387
+      },
+      "field": {
+        "summits": 15,
+        "levels": 17,
+        "wobble": 1.608,
+        "ridge": false,
+        "corridor": false
+      },
+      "print": {
+        "registration": {
+          "x": 1.959,
+          "y": -1.457
+        },
+        "spotStride": 3,
+        "spotPhase": 0,
+        "halftone": {
+          "pitch": 9,
+          "radius": 2.4,
+          "screenAngle": 15
+        },
+        "drumMottle": {
+          "frequency": [
+            0.004,
+            0.012
+          ],
+          "strength": 0.334
+        }
+      },
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 1872208671,
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "themes": {
+        "density": 0.534,
+        "hands": 0.393,
+        "precision": 0.556,
+        "wayfinding": 0
+      },
+      "field": {
+        "summits": 9,
+        "levels": 17,
+        "wobble": 1.455,
+        "ridge": true,
+        "corridor": false
+      },
+      "print": {
+        "registration": {
+          "x": 1.334,
+          "y": -1.035
+        },
+        "spotStride": 3,
+        "spotPhase": 1,
+        "halftone": {
+          "pitch": 9,
+          "radius": 2.4,
+          "screenAngle": 15
+        },
+        "drumMottle": {
+          "frequency": [
+            0.003,
+            0.009
+          ],
+          "strength": 0.275
+        }
+      },
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 1821875814,
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "themes": {
+        "density": 0.511,
+        "hands": 0.445,
+        "precision": 0,
+        "wayfinding": 0.473
+      },
+      "field": {
+        "summits": 12,
+        "levels": 11,
+        "wobble": 1.9,
+        "ridge": false,
+        "corridor": true
+      },
+      "print": {
+        "registration": {
+          "x": 1.479,
+          "y": -1.036
+        },
+        "spotStride": 3,
+        "spotPhase": 2,
+        "halftone": {
+          "pitch": 9,
+          "radius": 2.4,
+          "screenAngle": 15
+        },
+        "drumMottle": {
+          "frequency": [
+            0.004,
+            0.011
+          ],
+          "strength": 0.271
+        }
+      },
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      }
+    }
+  ]
+}
