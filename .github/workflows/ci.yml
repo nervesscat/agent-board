@@ -18,7 +18,13 @@ jobs:
     # A pull request from a fork carries code nobody here wrote, so it runs on GitHub's runner instead
     # and that server never executes it.
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","vps"]') }}
-    timeout-minutes: 20
+    # The e2e suite is the long part of this job: about 8 minutes of install, typecheck, lint,
+    # migrations, unit tests and build come first, then the suite's 497 tests. Measured on the
+    # self-hosted runner: 126–200 tests in ~12 minutes at 2 workers, and a run still going at 20
+    # minutes was cancelled by the old timeout. 4 workers (playwright.config.ts), 45 minutes for the
+    # e2e step and 60 here leave better than 20% margin, with the box also carrying other agents'
+    # suites. One self-hosted runner, so no matrix: shards would only queue behind each other.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -100,7 +106,10 @@ jobs:
       - name: Install Playwright's Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      # Its own timeout, so a suite that hangs fails this step and the Playwright report still
+      # uploads below (`if: failure()`) instead of the job's timeout cancelling it all.
       - name: End-to-end tests
+        timeout-minutes: 45
         run: pnpm test:e2e
         env:
           E2E_SKIP_BUILD: '1'

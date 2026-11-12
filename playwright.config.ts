@@ -1,3 +1,4 @@
+import os from 'node:os'
 import path from 'node:path'
 
 import { defineConfig, devices } from '@playwright/test'
@@ -44,7 +45,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  workers: process.env.CI ? 2 : 4,
+  // The suite's 497 tests no longer fit the job at 2 workers on the shared self-hosted 12-core runner;
+  // capped at 4, so a 2-core hosted runner stays at 2.
+  workers: process.env.CI ? Math.min(4, Math.max(2, os.cpus().length)) : 4,
   timeout: 30_000,
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
