@@ -27,6 +27,7 @@ export const LAYOUT_ELEMENTS = [
   { id: 'nav.previews', label: 'Previews', area: 'nav' },
   { id: 'nav.gallery', label: 'Gallery', area: 'nav' },
   { id: 'nav.agents', label: 'Team', area: 'nav' },
+  { id: 'nav.runReports', label: 'Run reports', area: 'nav' },
   { id: 'nav.daily', label: 'Daily', area: 'nav' },
   { id: 'nav.cleanup', label: 'Cleanup', area: 'nav' },
   { id: 'nav.repositories', label: 'Repositories', area: 'nav' },

@@ -99,6 +99,7 @@ export type {
   WorkspacePreview,
 }
 export type { ActorRole, ActorRow, AgentTokenRow, ProjectInstructionChange }
+export type { RunReport, RunReportRow } from './runReports'
 export type {
   PushedToday,
   ReportDue,

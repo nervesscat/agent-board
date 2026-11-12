@@ -5,6 +5,7 @@ import { logActivity } from './activity'
 import { listActors } from './actors'
 import { HttpError, notFound } from './http'
 import { getProject } from './projects'
+import commonReportTemplate from './skill/review/run-reports/common.md?raw'
 import { attachmentUrl, getAttachment } from './uploads'
 
 /**
@@ -18,7 +19,18 @@ export type ProjectAgent = ReturnType<typeof view>
 /** Letters, digits, `-` and `_`, so `@name` in a thread can be told apart from the text around it. */
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/
 
-const view = (a: schema.Agent) => ({ ...a, avatarUrl: a.avatarId ? attachmentUrl({ id: a.avatarId }) : null })
+/**
+ * The run report template every agent starts with: the common part every template carries (shipped
+ * with the review bundle beside the agents' own templates). An agent gets one of its own on the Team page.
+ */
+export const commonRunReportTemplate = commonReportTemplate.replace(/\r\n/g, '\n')
+
+const view = (a: schema.Agent) => ({
+  ...a,
+  avatarUrl: a.avatarId ? attachmentUrl({ id: a.avatarId }) : null,
+  // An agent added before templates were stored reads back as the common part.
+  reportTemplate: a.reportTemplate || commonRunReportTemplate,
+})
 
 export function listAgents(projectId: number) {
   return db
@@ -76,7 +88,13 @@ function checkAvatar(avatarId: number | null | undefined) {
 
 export function createAgent(
   projectId: number,
-  input: { name: string; instructions?: string; delegation?: string; avatarId?: number | null },
+  input: {
+    name: string
+    instructions?: string
+    delegation?: string
+    reportTemplate?: string
+    avatarId?: number | null
+  },
   actor: string,
 ) {
   getProject(projectId)
@@ -90,6 +108,7 @@ export function createAgent(
       name,
       instructions: input.instructions ?? '',
       delegation: input.delegation ?? '',
+      reportTemplate: input.reportTemplate ?? commonRunReportTemplate,
       avatarId: input.avatarId ?? null,
       createdBy: actor,
     })
@@ -109,7 +128,13 @@ export function createAgent(
 /** A rename carries the tickets reserved for the agent along; past updates keep the name they were posted under. */
 export function updateAgent(
   id: number,
-  patch: { name?: string; instructions?: string; delegation?: string; avatarId?: number | null },
+  patch: {
+    name?: string
+    instructions?: string
+    delegation?: string
+    reportTemplate?: string
+    avatarId?: number | null
+  },
   actor: string,
 ) {
   const before = getAgent(id)

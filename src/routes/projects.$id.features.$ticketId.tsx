@@ -59,6 +59,7 @@ import { Tag, compareTags } from '#/components/Tag'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
+import { RunReportsPanel } from '#/components/RunReport'
 import { ActionButton, EditBox, Edited, PostActions } from '#/components/PostTools'
 import { Thread } from '#/components/Thread'
 import { type Verdict, VerdictButtons, verdictOf } from '#/components/Verdict'
@@ -1901,6 +1902,8 @@ function Activity({
           </label>
         )}
       </div>
+      {/* The agents' side also carries what each subagent run reported about itself: one report per run. */}
+      {tab === 'agents' && <RunReportsPanel reports={t.runReports} />}
       <form
         {...drop.props}
         className={cn('mb-4 space-y-2 rounded-lg border p-3', drop.className)}

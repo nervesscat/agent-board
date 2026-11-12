@@ -23,6 +23,7 @@ const MODULES = {
   'nav.previews': '/projects/$id/previews',
   'nav.gallery': '/projects/$id/gallery',
   'nav.agents': '/projects/$id/agents',
+  'nav.runReports': '/projects/$id/run-reports',
   'nav.daily': '/projects/$id/daily',
   'nav.cleanup': '/projects/$id/cleanup',
   'nav.repositories': '/projects/$id/repositories',

@@ -67,3 +67,14 @@ NOTES: <one line: environment problems with the port and the process holding it 
 
 For `STATUS: error`, `VERDICT`, `CHECKS`, `COUNTS`, and `SUMMARY` are `n/a`, and `NOTES`
 carries the one-line reason.
+
+## Run report
+
+One report per subagent run, written before the hand-off: it is part of finishing, not a step
+after it. The orchestrator writes none. Its template is
+`run-reports/runner.md` in the review bundle, beside `agents/` where this file is installed: it carries
+the common part (identity, time, brief, what you read and ran, steps, ratings, problems, gaps,
+suggestions) and what this agent adds. Fill it in with `write_run_report` (`agent: "runner"`, the
+ticket, the round, times, steps, counts and sections) before you return; a run that hands back
+without one has not finished, and the orchestrator checks for it as it checks your result. The
+ticket's Agents side shows it, and `list_run_reports` reads this agent's across tickets.

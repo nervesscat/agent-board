@@ -121,7 +121,9 @@ export function agentSetup(projectDirs: string[] = []) {
 
 // --- the review skills: feature-review, review-queue, todo-review and their agents, installed as one tar ---
 
-const reviewFiles = import.meta.glob<string>('./skill/review/{skills,agents}/**/*', {
+// The skills, the agents' instructions, and the run report templates each agent fills in after a run
+// (run-reports/*.md): one bundle, installed together.
+const reviewFiles = import.meta.glob<string>('./skill/review/{skills,agents,run-reports}/**/*', {
   query: '?raw',
   import: 'default',
   eager: true,

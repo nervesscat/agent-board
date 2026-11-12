@@ -423,6 +423,21 @@ githubRepo, baseBranch?, as?}`, agents only) posts one decision card, "Add repo 
     asked for that change in this conversation: each such change is kept with the old version and
     stays flagged for the human until they accept or revert it. (`post_daily_summary` is an old name
     for `post_report` on the current period.)
+11. **Run reports**: one report per subagent run, written before the hand-off: it is part of
+    finishing, not a step after it, and the orchestrator writes none (nor a ticket agent that only
+    drives rounds). The subagents are the project's `spec`, `builder` and `runner`,
+    and the review's `env`, `verify`, `hunt`, `refute` and `merge`; a ticket with three review rounds
+    has three `hunt` reports, one per round. Each template ships with the review bundle as
+    `run-reports/<agent>.md` (`spec`, `builder`, `runner`, `env`, `verify`, `hunt`, `refute`,
+    `merge`), carries the common part (identity, time, brief, what it read and ran, steps against
+    its instructions, ratings, problems, gaps, suggestions) and adds what that agent does; a
+    project agent's own template is on the Team page (`get_project` → `agents[].reportTemplate`).
+    The run writes it with `write_run_report` (structured fields: times, duration, ratings, steps,
+    counts; prose in named sections) before it hands back, and the board reads it back with
+    `get_run_report`. Both the ticket's Agents side and `list_run_reports` (one kind of agent across
+    tickets) show them. `update_ticket` → `review` answers with `missingRunReports` for each
+    subagent run the work timeline records with no report: that is a flag, not a refusal — get them
+    written before the hand-off. Put the rule in every subagent's brief.
 
 ## The project's agents
 

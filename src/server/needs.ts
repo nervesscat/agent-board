@@ -11,6 +11,7 @@ import { type OpenTask, openTasks } from './openTasks'
 import { HttpError } from './http'
 import { getProject } from './projects'
 import { listRepos } from './repos'
+import { missingReports, ticketReports } from './runReports'
 import {
   deleteStage,
   firstOfKind,
@@ -237,14 +238,17 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
       return t ? [{ id: t.id, title: t.title, branch: t.branch, prNumber: t.prNumber, status: t.status }] : []
     })
   // A PR's own ticket has no hand-off: its PR is reviewed on the queue, not handed off.
-  const open: OpenTask[] | null =
-    kindOf(ctx.stages, full.status) === 'review' && !full.prId ? openTasks(full.id) : null
+  const inReview = kindOf(ctx.stages, full.status) === 'review'
+  const open: OpenTask[] | null = inReview && !full.prId ? openTasks(full.id) : null
   const { timeline } = timelinesFor([full]).get(full.id)!
   return {
     ...full,
     needs,
     neededBy,
     open,
+    // The reports of each subagent run, newest first; in review, the runs the timeline records with none.
+    runReports: ticketReports(full.id),
+    missingRunReports: inReview && !full.prId ? missingReports(full.id) : [],
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
     work: workOf(timeline),
@@ -451,12 +455,13 @@ export async function changeTicket(
     { behavior: 'immediate' },
   )
   logOverride(row, unmet, actor)
-  // Into review: the phases the board ticks are read first, so what is still open is up to date.
+  // Into review: the phases the board ticks are read first, so what is still open is up to date. The
+  // subagent runs the timeline records with no run report are flagged here, never refused.
   if (patch.status && !row.prId && kindOf(listStages(row.projectId), row.status) === 'review') {
     await features.getTicketWithPush(id)
-    return { ...row, open: openTasks(id) }
+    return { ...row, open: openTasks(id), missingRunReports: missingReports(id) }
   }
-  return row
+  return { ...row, missingRunReports: [] }
 }
 
 /**
