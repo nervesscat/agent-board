@@ -7,11 +7,12 @@ import { config } from './config'
 /**
  * The tools on this machine the board runs: `git` (ticket branch and commit status, merged checks,
  * cleanup), `gh` signed in (the PR queue, CI, PR tickets), `claude` (`CLAUDE_BIN` with `CLAUDE_ARGS`:
- * generated reports, agents) and `node` with `pnpm` (managed previews). Each is looked up on the PATH
- * the server was started with (with PATHEXT on Windows), never through a login shell, so the answer is
- * the same whether the board was started from a checkout or by another program with its own PATH.
- * Checked once as the server starts (`plugins/hostTools.ts`) and again on demand; the last result is
- * kept, and the features that need a tool say what is missing from it (`toolProblem`).
+ * the board's own report generation, Reports → Generate) and `node` with `pnpm` (managed previews).
+ * Each is looked up on the PATH the server was started with (with PATHEXT on Windows), never through a
+ * login shell, so the answer is the same whether the board was started from a checkout or by another
+ * program with its own PATH. Checked once as the server starts (`plugins/hostTools.ts`) and again on
+ * demand; the last result is kept, and the features that need a tool say what is missing from it
+ * (`toolProblem`).
  */
 
 export const TOOL_NAMES = ['git', 'gh', 'claude', 'node', 'pnpm'] as const
@@ -27,12 +28,19 @@ export interface HostTool {
   version: string | null
   /**
    * gh only: whether `gh auth status` succeeded for the active github.com account (`GH_AUTH_STATUS`);
-   * null when not found, when it did not answer in time, or when it could not reach GitHub to tell
-   * (`ghSignedIn`).
+   * null when not found, when it did not answer in time, when it could not reach GitHub to tell
+   * (`ghSignedIn`), and when the check says nothing about the account at all (gh too old for its
+   * `--active`, or a gh the environment gives no config to read: `ghAuthState`).
    */
   signedIn?: boolean | null
   /** Neither missing nor (gh) signed out. */
   ok: boolean
+  /**
+   * Whether the board can do without it: claude only writes the board's own reports, which the human
+   * may never ask for, so the missing-tools banner leaves its absence to the feature that needs it
+   * (the Reports page's Generate action) instead of saying something they are looking at is broken.
+   */
+  optional: boolean
   /** What does not work without it. */
   breaks: string
   /** What is wrong, when not ok. */
@@ -52,7 +60,7 @@ export const PROBE_TIMEOUT_MS = 8_000
 const BREAKS: Record<ToolName, string> = {
   git: 'ticket branch and commit status, merged checks and cleanup',
   gh: 'the PR queue, CI status and PR tickets',
-  claude: 'generated reports and agents',
+  claude: "the board's own report generation (Reports → Generate)",
   node: 'managed previews',
   pnpm: 'managed previews',
 }
@@ -68,17 +76,50 @@ const INSTALL: Record<ToolName, string> = {
   pnpm: `run corepack enable pnpm (or install it: https://pnpm.io/installation), ${THEN}`,
 }
 
+/** The upgrade, when gh is too old for the sign-in check it is given. */
+const GH_UPGRADE =
+  'upgrade the GitHub CLI (https://cli.github.com; on Debian or Ubuntu: sudo apt install ' +
+  '--only-upgrade gh, on macOS: brew upgrade gh)'
+
+/**
+ * What a gh too old for `--active` breaks: the sign-in check alone. The PR queue, CI status and PR
+ * tickets call `gh api` and `gh pr view`, which gh 2.45 has; `BREAKS.gh` would be a false alarm.
+ */
+const GH_TOO_OLD_BREAKS = "the board's check that gh is signed in"
+
 /** What a probe found of one tool, before it is judged. */
 export interface Probe {
   path: string | null
   version?: string | null
   signedIn?: boolean | null
+  /** gh only: what `gh auth status` printed (both streams), for telling its failures apart. */
+  authOutput?: string
+}
+
+/** What `toolEntry` needs beyond the probe: the server's env and platform, and where claude should be. */
+export interface EntryOptions extends Lookup {
+  claudeBin?: string
 }
 
 /** The entry of a tool from what its probe found: what it breaks, and what is wrong and the fix. */
-export function toolEntry(name: ToolName, probe: Probe, claudeBin: string = config.claudeBin): HostTool {
+export function toolEntry(
+  name: ToolName,
+  probe: Probe,
+  { claudeBin = config.claudeBin, env = process.env, platform = process.platform }: EntryOptions = {},
+): HostTool {
   const found = probe.path !== null
-  const signedIn = name === 'gh' ? (found ? (probe.signedIn ?? null) : null) : undefined
+  const auth = name === 'gh' ? ghAuthState(probe, { env, platform }) : null
+  // A gh too old for the check, or one with no config to read, is not gh signed out: unknown, not false.
+  const signedIn =
+    name === 'gh'
+      ? !found
+        ? null
+        : auth === 'signed-in'
+          ? true
+          : auth === 'signed-out'
+            ? false
+            : null
+      : undefined
   let problem: string | null = null
   let fix: string | null = null
   if (!found) {
@@ -87,7 +128,18 @@ export function toolEntry(name: ToolName, probe: Probe, claudeBin: string = conf
         ? `claude was not found: CLAUDE_BIN is ${claudeBin}`
         : `${name} was not found on the board's PATH`
     fix = INSTALL[name]
-  } else if (signedIn === false) {
+  } else if (auth === 'too-old') {
+    problem = `${probe.version ? `gh ${probe.version}` : 'gh'} is too old for this check: it does not know --active`
+    fix = `${GH_UPGRADE}, then Check again`
+  } else if (auth === 'no-config') {
+    const where = ghConfigMissing(env, platform)
+    problem = where
+      ? `gh cannot find its config: no ${where.needs}, so it looked for ${where.file}`
+      : 'gh cannot find its config: no HOME or GH_CONFIG_DIR'
+    fix =
+      'start the board with HOME set to the home gh was signed in from (or GH_CONFIG_DIR to the ' +
+      'folder holding hosts.yml), then Check again'
+  } else if (auth === 'signed-out') {
     problem = 'gh is not signed in'
     fix = 'run gh auth login on this machine, then Check again'
   }
@@ -98,7 +150,8 @@ export function toolEntry(name: ToolName, probe: Probe, claudeBin: string = conf
     version: found ? (probe.version ?? null) : null,
     ...(name === 'gh' && { signedIn }),
     ok: problem === null,
-    breaks: BREAKS[name],
+    optional: name === 'claude',
+    breaks: auth === 'too-old' ? GH_TOO_OLD_BREAKS : BREAKS[name],
     problem,
     fix,
   }
@@ -125,6 +178,15 @@ function isRunnable(file: string, win: boolean): boolean {
     if (!fs.statSync(file).isFile()) return false
     if (!win) fs.accessSync(file, fs.constants.X_OK)
     return true
+  } catch {
+    return false
+  }
+}
+
+/** Whether a folder is there: gh reads its config from one the environment names. */
+function isDir(dir: string): boolean {
+  try {
+    return fs.statSync(dir).isDirectory()
   } catch {
     return false
   }
@@ -256,7 +318,9 @@ const UNREACHABLE =
  * accounts on github.com", or of older gh "... any GitHub hosts") or when GitHub answered its check
  * (a token it rejects gets an HTTP 401). When GitHub could not be reached (offline, a proxy or DNS
  * failure) gh says the same "Failed to log in ... The token is invalid" as for a rejected token, but
- * nothing is known of the token: null, as for no answer in time.
+ * nothing is known of the token: null, as for no answer in time. A gh too old to know `--active`, or
+ * one the environment gives no config to read, fails too: `ghAuthState` tells those apart by what it
+ * printed and the env.
  */
 export function ghSignedIn(code: number | null, output: string): boolean | null {
   if (code === null) return null
@@ -274,6 +338,56 @@ export function ghSignedIn(code: number | null, output: string): boolean | null 
  */
 export const GH_AUTH_STATUS = ['auth', 'status', '--active', '--hostname', 'github.com']
 
+/** Why a failed `gh auth status` failed: a real sign-out, a gh too old for the flag, or no config. */
+export type GhAuthState = 'signed-in' | 'signed-out' | 'too-old' | 'no-config' | 'unknown'
+
+/** The config file gh went looking for, and the variable that would have told it where. */
+interface GhConfig {
+  file: string
+  needs: string
+}
+
+/**
+ * The config gh could not find, when the environment gives it no folder to read: `GH_CONFIG_DIR`,
+ * `XDG_CONFIG_HOME/gh` (Windows `%AppData%\GitHub CLI`) or `HOME/.config/gh`, each a folder that must
+ * be there. Null when it has one. gh says "not logged into any GitHub hosts" in both cases, so only
+ * the environment tells them apart.
+ */
+function ghConfigMissing(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): GhConfig | null {
+  const value = (key: string) => envValue(env, key)?.trim() || undefined
+  if (value('GH_CONFIG_DIR')) return null
+  if (platform === 'win32') {
+    const appData = value('APPDATA')
+    if (appData && isDir(appData)) return null
+    return {
+      file: path.win32.join(appData ?? '%AppData%', 'GitHub CLI', 'hosts.yml'),
+      needs: 'APPDATA',
+    }
+  }
+  const xdg = value('XDG_CONFIG_HOME')
+  if (xdg)
+    return isDir(xdg) ? null : { file: path.posix.join(xdg, 'gh', 'hosts.yml'), needs: 'XDG_CONFIG_HOME' }
+  const home = value('HOME')
+  if (!home) return { file: '$HOME/.config/gh/hosts.yml', needs: 'HOME' }
+  return isDir(home) ? null : { file: path.posix.join(home, '.config', 'gh', 'hosts.yml'), needs: 'HOME' }
+}
+
+/**
+ * What `gh auth status` (`GH_AUTH_STATUS`) says about the active github.com account, beyond signed in
+ * or out: gh too old to know `--active`, or an environment that gives it no config to read. A check
+ * that failed with neither sign, or one that never reached GitHub, is unknown (null), as for no
+ * answer in time.
+ */
+export function ghAuthState(
+  probe: Probe,
+  { env = process.env, platform = process.platform }: Lookup = {},
+): GhAuthState {
+  if (probe.signedIn === true) return 'signed-in'
+  if (probe.signedIn !== false) return 'unknown'
+  if (/unknown flag/i.test(probe.authOutput ?? '')) return 'too-old'
+  return ghConfigMissing(env, platform) ? 'no-config' : 'signed-out'
+}
+
 export interface CheckOptions extends Lookup {
   claudeBin?: string
   claudeArgs?: string[]
@@ -290,20 +404,22 @@ export async function probeHostTools(opts: CheckOptions = {}): Promise<HostTools
   const tools = await Promise.all(
     TOOL_NAMES.map(async (name): Promise<HostTool> => {
       const file = resolveTool(name === 'claude' ? claudeBin : name, { env, platform })
-      if (!file) return toolEntry(name, { path: null }, claudeBin)
+      if (!file) return toolEntry(name, { path: null }, { claudeBin, env, platform })
       const args = name === 'claude' ? [...claudeArgs, '--version'] : ['--version']
       const [version, auth] = await Promise.all([
         runProbe(file, args, run),
         name === 'gh' ? runProbe(file, GH_AUTH_STATUS, { ...run, env: { ...env, GH_DEBUG: 'api' } }) : null,
       ])
+      const authOutput = auth ? auth.stdout + auth.stderr : undefined
       return toolEntry(
         name,
         {
           path: file,
           version: version.code === 0 ? parseVersion(version.stdout) : null,
           signedIn: auth ? ghSignedIn(auth.code, auth.stdout + auth.stderr) : undefined,
+          authOutput,
         },
-        claudeBin,
+        { claudeBin, env, platform },
       )
     }),
   )
@@ -403,6 +519,7 @@ export function hostToolsForAgents() {
       version: t.version,
       ...(t.name === 'gh' && { signedIn: t.signedIn ?? null }),
       ok: t.ok,
+      optional: t.optional,
       ...(!t.ok && { breaks: t.breaks, problem: t.problem, fix: t.fix }),
     })),
   }
