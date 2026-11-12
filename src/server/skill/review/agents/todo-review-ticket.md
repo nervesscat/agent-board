@@ -414,9 +414,11 @@ Implementation and its steps (`set_task_done`).
    that head SHA (`gh pr comment`): that ticks CI. After each later push, run it again and comment
    again.
 5. The preview, from the one build this head gets. When `WORKDIR/02-build.md` names the final
-   head, start the preview from that `.output-e2e` instead of building it again: the project's
-   own start command with `BOARD_BUILD_DIR=.output-e2e` (for the board,
-   `node .output-e2e/server/index.mjs`), then `set_preview` with the URL it answers on. Else
+   head, start the preview from that `.output-e2e` instead of building it again: the build was
+   made with `BOARD_BUILD_DIR=.output-e2e`, which only sets the build's output directory and does
+   nothing at run time, so run the server from the worktree as
+   `node .output-e2e/server/index.mjs` (or the project's own start command against that
+   directory, with no build step), then `set_preview` with the URL it answers on. Else
    `start_preview` on the workspace for a repo the board builds (wait until
    `managedPreview.status` is `running`; on `failed`, read its log tail and fix), else start it the
    project's way and `set_preview`. A managed preview run that must build its own counts as this

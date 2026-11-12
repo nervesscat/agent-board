@@ -48,7 +48,7 @@ result, and the orchestrator asks the human.
    `00-env.md` says no CI runs the full suite (`CI: none`) and your prompt does not say `scoped`,
    run the full suite once with the test command instead. Take a test slot only for a heavy
    run: with the `SLOTS` folder, the end-to-end run and the full suite take the first free slot
-   (`mkdir tests-<repo id>-<n>`, never `mkdir -p`; `holder.txt` with `#<ticket> merge <ISO
+   (`mkdir tests-<repo id>-<n>`, never `mkdir -p`; `holder.txt` with `#<TICKET> merge <ISO
    time>`) and release it right after, and a full suite takes `tests-<repo id>-full` first and
    then waits until every slot is free. The typecheck, lint and scoped unit runs take none. With
    `E2E_SKIP_BUILD=1` in `00-env.md`, run the end-to-end command with it: the artifact is the

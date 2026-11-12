@@ -42,7 +42,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 |---|---|---|
 | `project=<id>` | the board project | the project of the repo in the current directory (`find_project` with its origin, folder and path) |
 | a number | work only these ticket ids, in this order | every eligible To do ticket |
-| `parallel=N` | maximum tickets in flight, 1 to 3 (one more than the repo's test slots, since a ticket waiting for a slot still does its light work), tickets of the same repo included | 2 |
+| `parallel=N` | maximum tickets in flight, 1 to N+1 (so 1 to 3 with N = 2; the cap is one more than the repo's test slots, since a ticket waiting for one still does its light work), tickets of the same repo included | 2 |
 | `depth=auto\|light\|standard\|deep` | the review depth: `auto` lets each ticket agent pick it from the size of its change (`todo-review-ticket`, "Review depth"); any other value is used for every ticket and every round | `auto` |
 | `model=<name>` | model for the ticket agents, which their own agents inherit | the session model |
 | `dry` | inventory and schedule only: write the plan, start nothing | off |
@@ -107,16 +107,17 @@ Rules:
    them: a ticket waiting for a test slot still does its typecheck, lint and scoped unit tests, so
    N tickets may be running heavy checks while another one does its light work. With N = 2 that
    is 3 in flight.
-5. Fill test slots by priority: the ticket closest to hand-off — a fix pass after a review, one
-   whose PR, CI or preview is pending, one whose open tasks are nearly done — takes the next free
-   slot before a ticket still in its first build. A ticket takes a slot only for the run that
-   needs it and never waits on one it does not need.
+5. The order the ticket agents take their test slots in: they take their own with a plain
+   `mkdir`, and a heavy run's slot goes to the ticket closest to hand-off — a fix pass after a
+   review, one whose PR, CI or preview is pending, one whose open tasks are nearly done — before a
+   ticket still in its first build. A ticket takes a slot only for the run that needs it and never
+   waits on one it does not need.
 
 ## Step 3: Run
 
 Loop until nothing is pending or running:
-- Fill every free slot with the pending ticket closest to hand-off whose lanes are free (Step 2
-  rule 5). Spawn one
+- Fill every free ticket slot with the pending ticket closest to hand-off whose lanes are free
+  (Step 2 rule 5). Spawn one
   `todo-review-ticket` agent per ticket, all in one message when several start together, with:
   `PROJECT=<id>`, `TICKET=<id>`, `REPO=<checkout path>`, `REPO_ID=<id>`, `BASE=<base branch>`,
   `PORTS=<slot range>`, `BROWSER=<yes|no>`, `COMPLEXITY=<low, mid or high>`,

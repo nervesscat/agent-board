@@ -545,7 +545,9 @@ describe('the review texts the board ships', () => {
     expect(flat(ticketAgent)).toContain('has N = 2 of them, and a light run holds none')
     const review = flat(todoReview)
     expect(review).toContain('`QUEUE/locks/tests-<repo id>-1` … `-N` (N = 2, the measured count)')
-    expect(review).toContain("maximum tickets in flight, 1 to 3 (one more than the repo's test slots")
+    expect(review).toContain(
+      'maximum tickets in flight, 1 to N+1 (so 1 to 3 with N = 2; the cap is one more than the repo',
+    )
     expect(review).toContain('With N = 2 that is 3 in flight.')
     // The measured number is named once; no other slot count or cap appears in the served bundle.
     for (const text of [flat(ticketAgent), review]) {
@@ -664,7 +666,7 @@ describe('the review texts the board ships', () => {
     const review = flat(todoReview)
     expect(review).toContain('the ticket closest to hand-off')
     expect(review).toContain('never waits on one it does not need')
-    expect(review).toContain('Fill every free slot with the pending ticket closest to hand-off')
+    expect(review).toContain('Fill every free ticket slot with the pending ticket closest to hand-off')
   })
 
   it('takes a slot only around a heavy run in each phase: verify and merge yes, hunt and refute never', () => {
