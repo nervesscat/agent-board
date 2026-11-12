@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ImagePlus, Lock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { ImagePlus, Lock, Pencil, Plus, Sparkles, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
+import { TrashIcon } from '#/components/TrashIcon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -183,7 +184,7 @@ function AgentCard({
             <AlertDialogTrigger
               render={<Button variant="ghost" size="icon-sm" aria-label={`Remove ${agent.name}`} />}
             >
-              <Trash2 className="text-destructive" />
+              <TrashIcon />
             </AlertDialogTrigger>
           </Tip>
           <AlertDialogContent>
