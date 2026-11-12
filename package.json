@@ -39,6 +39,8 @@
     "desktop:package": "node desktop/package.mjs",
     "desktop:smoke": "node desktop/smoke.mjs",
     "release": "node scripts/release.mjs",
+    "art:release": "node scripts/release-art/generate.mjs --all",
+    "art:release:check": "node scripts/release-art/generate.mjs --all --check",
     "generate-routes": "tsr generate",
     "typecheck": "tsc --noEmit && tsc -p desktop",
     "lint": "oxlint src desktop",
