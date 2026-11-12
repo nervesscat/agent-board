@@ -593,6 +593,30 @@ describe('silence is reported as silence', () => {
     expect(JSON.stringify(payload)).not.toMatch(/idle|nothing is happening|nobody is working/i)
   })
 
+  it('reports a stalled ticket with its span still open as silence, naming who was on it', () => {
+    const pid = project('silence open span')
+    const t = ticket(pid, 'Open span, gone quiet', { status: 'in_progress' })
+    // The agent started a span two hundred minutes ago and nothing was heard from it since.
+    event(pid, t.id, {
+      kind: 'span_start',
+      phase: 'build',
+      round: 2,
+      agent: 'opencode/ticket-846',
+      at: iso(ago(200)),
+    })
+
+    const payload = read(pid)
+    expect(payload.liveNow.map((x) => x.ticketId)).not.toContain(t.id)
+    expect(payload.recentlyActive.find((x) => x.ticketId === t.id)).toMatchObject({
+      stalled: true,
+      lastHeardAt: iso(ago(200)),
+      silentMinutes: 200,
+      agents: ['opencode/ticket-846'],
+      phase: 'build',
+      round: 2,
+    })
+  })
+
   it("says in the tool's own description that a quiet ticket is not proof nobody is working", () => {
     const source = fs.readFileSync(path.join(import.meta.dirname, 'mcp.ts'), 'utf8')
     const start = source.indexOf("'get_live_work'")

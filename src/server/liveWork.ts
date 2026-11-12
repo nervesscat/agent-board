@@ -59,7 +59,7 @@ export interface LiveNowEntry {
   silentMinutes: number
   /** The open wait it is on, the earliest started; null when it runs without one. */
   waitingFor: { reason: string; note: string; agent: string; on: string | null; since: string } | null
-  /** The work timeline's rule: active, not waiting on the human, and quiet for longer than the project allows. */
+  /** Always false here: a stalled ticket is reported under recentlyActive instead, with the same shape. */
   stalled: boolean
 }
 
@@ -70,6 +70,11 @@ export interface RecentlyActiveEntry {
   status: string
   stage: StageView
   parent: { id: number; title: string } | null
+  /** Who holds it, from the same read as `LiveNowEntry.agents`: a quiet ticket still names who was on it. */
+  agents: string[]
+  /** The phase and round of the open span that started last, null when nothing is open. */
+  phase: string | null
+  round: number | null
   /** The latest of its work-timeline events, its start and its creation: any signal, the board's own too. */
   lastSignalAt: string
   lastHeardAt: string
@@ -167,20 +172,15 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
     (kindOf(t.status) === 'done' ||
       kindOf(t.status) === 'cancelled' ||
       closed(t.parentId ? byId.get(t.parentId) : undefined))
-
-  // --- live now: an open span or wait, or an agent event (a heartbeat too) inside the window ---
-  const liveNow: LiveNowEntry[] = []
-  for (const t of tickets) {
-    const { timeline } = timelines.get(t.id)!
+  /**
+   * Who holds a ticket and what its open span is on, from its timeline: the open spans and waits, the
+   * span that started last, the wait it has been on longest, the agents (a delegated wait's `on` and the
+   * last event's agent too; the assignee only when nothing names one) and that span's phase and round.
+   * Both lists use it, so a stalled ticket still names who was on it and what it was doing.
+   */
+  const holding = (t: Row, timeline: ReturnType<typeof timelineOf>) => {
     const spans = timeline.spans.filter((s) => s.open)
     const waits = timeline.waits.filter((w) => w.open)
-    const heard = timeline.lastHeard
-    const live =
-      spans.length > 0 ||
-      waits.length > 0 ||
-      (heard !== null && Date.parse(heard.at) >= windowStart && !timeline.stalled)
-    if (!live) continue
-    // What it is doing: the open span that started last, and the wait it has been on longest.
     const span = [...spans].sort((a, b) => Date.parse(b.start) - Date.parse(a.start))[0]
     const wait = [...waits].sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0]
     const agents = new Set<string>()
@@ -190,8 +190,29 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
       if (w.on) agents.add(w.on)
     }
     // The agent the last event names is on it too; only when nothing names one is the assignee all the board has.
-    if (heard?.agent) agents.add(heard.agent)
+    if (timeline.lastHeard?.agent) agents.add(timeline.lastHeard.agent)
     if (!agents.size && t.assignee) agents.add(t.assignee)
+    return {
+      spans,
+      waits,
+      wait,
+      agents: [...agents],
+      phase: span?.phase ?? null,
+      round: span?.round ?? null,
+    }
+  }
+
+  // --- live now: an open span or wait, or an agent event (a heartbeat too) inside the window ---
+  // A stalled ticket is silence, not work in flight: it goes to recentlyActive whatever is still open.
+  const liveNow: LiveNowEntry[] = []
+  for (const t of tickets) {
+    const timeline = timelineOf(t)
+    const { spans, waits, wait, agents, phase, round } = holding(t, timeline)
+    const heard = timeline.lastHeard
+    const live =
+      !timeline.stalled &&
+      (spans.length > 0 || waits.length > 0 || (heard !== null && Date.parse(heard.at) >= windowStart))
+    if (!live) continue
     const heardFrom = heardAt(t)
     liveNow.push({
       ticketId: t.id,
@@ -199,16 +220,17 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
       status: t.status,
       stage: stageView(t.status),
       parent: parentOf(t),
-      agents: [...agents],
-      phase: span?.phase ?? null,
-      round: span?.round ?? null,
+      agents,
+      phase,
+      round,
       lastHeardAt: heardFrom.at,
       lastHeardBy: heardFrom.by,
       silentMinutes: silent(heardFrom.at),
       waitingFor: wait
         ? { reason: wait.reason, note: wait.note, agent: wait.agent, on: wait.on, since: wait.start }
         : null,
-      stalled: !!timeline.stalled,
+      // Never true here: a stalled ticket is listed as recently active, not as live (the live test above).
+      stalled: false,
     })
   }
   liveNow.sort((a, b) => Date.parse(b.lastHeardAt) - Date.parse(a.lastHeardAt))
@@ -222,17 +244,22 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
     .filter((t) => !liveIds.has(t.id) && !closed(t))
     .map((t) => {
       const heardFrom = heardAt(t)
+      const timeline = timelineOf(t)
+      const { agents, phase, round } = holding(t, timeline)
       return {
         ticketId: t.id,
         title: t.title,
         status: t.status,
         stage: stageView(t.status),
         parent: parentOf(t),
-        lastSignalAt: timelineOf(t).lastSignalAt,
+        agents,
+        phase,
+        round,
+        lastSignalAt: timeline.lastSignalAt,
         lastHeardAt: heardFrom.at,
         lastHeardBy: heardFrom.by,
         silentMinutes: silent(heardFrom.at),
-        stalled: !!timelineOf(t).stalled,
+        stalled: !!timeline.stalled,
         state: states.get(t.id) ?? '',
       }
     })
