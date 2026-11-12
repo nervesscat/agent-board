@@ -33,8 +33,11 @@ export type RunReportTime = {
 }
 export const RUN_REPORT_TIME_KEYS = ['readingMs', 'runningMs', 'waitingMs', 'writingMs', 'otherMs'] as const
 
-/** How a run's duration was obtained: measured on the work timeline, or the agent's own estimate. */
-export type RunReportDurationSource = 'measured' | 'self'
+/**
+ * How a run's duration was obtained: measured on the work timeline, the agent's own estimate, or
+ * neither (a report with no timing says nothing about how long the run took).
+ */
+export type RunReportDurationSource = 'measured' | 'self' | 'unknown'
 
 /** What every template's report carries as prose, whatever the agent. */
 export const RUN_REPORT_SECTIONS = [

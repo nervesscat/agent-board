@@ -97,6 +97,9 @@ const reportCount = () => dbm.db.select({ n: count() }).from(dbm.schema.runRepor
 
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * MIN).toISOString()
 
+/** An event time `seconds` ago, as the timeline reads it. */
+const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString()
+
 /** A closed span of about `seconds` for `agent` in `round`: the start moved back, then the span ended. */
 function closedSpan(
   projectId: number,
@@ -108,10 +111,34 @@ function closedSpan(
   const started = work.startSpan(projectId, ticketId, { phase: 'review', round, agent }, AGENT)
   dbm.db
     .update(dbm.schema.ticketEvents)
-    .set({ at: new Date(Date.now() - seconds * 1000).toISOString() })
+    .set({ at: ago(seconds) })
     .where(eq(dbm.schema.ticketEvents.id, started.spanId))
     .run()
   return work.endSpan(projectId, ticketId, { spanId: started.spanId, agent }, AGENT)
+}
+
+/** A closed span that ran from `startAgo` to `endAgo` seconds back: two runs of one agent, at their own times. */
+function timedSpan(
+  projectId: number,
+  ticketId: number,
+  agent: string,
+  round: number | null,
+  startAgo: number,
+  endAgo: number,
+) {
+  const started = work.startSpan(projectId, ticketId, { phase: 'review', round, agent }, AGENT)
+  dbm.db
+    .update(dbm.schema.ticketEvents)
+    .set({ at: ago(startAgo) })
+    .where(eq(dbm.schema.ticketEvents.id, started.spanId))
+    .run()
+  const ended = work.endSpan(projectId, ticketId, { spanId: started.spanId, agent }, AGENT)
+  dbm.db
+    .update(dbm.schema.ticketEvents)
+    .set({ at: ago(endAgo) })
+    .where(eq(dbm.schema.ticketEvents.id, ended.event.id))
+    .run()
+  return started.spanId
 }
 
 describe('storing a run report', () => {
@@ -246,6 +273,33 @@ describe('storing a run report', () => {
   })
 })
 
+describe('an agent filter', () => {
+  it('finds a report stored under a sub-identity as that agent’s, and not another agent’s', async () => {
+    const pid = newProject()
+    const t = newTicket(pid)
+    const sub = await tool('write_run_report', {
+      projectId: pid,
+      ticketId: t.id,
+      agent: 'orch/hunt-1',
+      round: 2,
+    })
+    const plain = await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt', round: 3 })
+    const verify = await tool('write_run_report', {
+      projectId: pid,
+      ticketId: t.id,
+      agent: 'verify',
+      round: 2,
+    })
+    const hunt = await tool('list_run_reports', { projectId: pid, agent: 'hunt' })
+    expect(hunt.map((r: { id: number }) => r.id).sort()).toEqual([sub.id, plain.id].sort())
+    const onlyVerify = await tool('list_run_reports', { projectId: pid, agent: 'verify' })
+    expect(onlyVerify.map((r: { id: number }) => r.id)).toEqual([verify.id])
+    // The limit counts the filtered rows: verify is newest, and a limit of one must not hide hunt's.
+    const one = await tool('list_run_reports', { projectId: pid, agent: 'hunt', limit: 1 })
+    expect(one.map((r: { id: number }) => r.id)).toEqual([plain.id])
+  })
+})
+
 describe('how a run duration is read back', () => {
   it('uses the measured span and keeps the agent’s own estimate beside it', async () => {
     const pid = newProject()
@@ -277,6 +331,47 @@ describe('how a run duration is read back', () => {
     expect(own.durationMs).toBe(40 * MIN)
     expect(own.reportedDurationMs).toBe(40 * MIN)
   })
+
+  it('matches each report to the span its own times overlap, not both to the latest', async () => {
+    const pid = newProject()
+    const t = newTicket(pid)
+    timedSpan(pid, t.id, 'hunt', 2, 500, 410) // 90 s
+    timedSpan(pid, t.id, 'hunt', 2, 1000, 600) // 400 s
+    const shorter = await tool('write_run_report', {
+      projectId: pid,
+      ticketId: t.id,
+      agent: 'hunt',
+      round: 2,
+      startedAt: ago(500),
+      endedAt: ago(410),
+    })
+    const longer = await tool('write_run_report', {
+      projectId: pid,
+      ticketId: t.id,
+      agent: 'hunt',
+      round: 2,
+      startedAt: ago(1000),
+      endedAt: ago(600),
+    })
+    expect(shorter.durationSource).toBe('measured')
+    expect(longer.durationSource).toBe('measured')
+    expect(Math.abs(shorter.durationMs - 90_000)).toBeLessThan(2_000)
+    expect(Math.abs(longer.durationMs - 400_000)).toBeLessThan(2_000)
+    // And each kept its own run's times, not the other run's.
+    expect(Math.abs(Date.parse(shorter.startedAt) - Date.parse(ago(500)))).toBeLessThan(2_000)
+    expect(Math.abs(Date.parse(longer.startedAt) - Date.parse(ago(1000)))).toBeLessThan(2_000)
+  })
+
+  it('says the duration is unknown, not a self-reported zero, when a report gives no timing', async () => {
+    const pid = newProject()
+    const t = newTicket(pid)
+    const untimed = await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt' })
+    expect(untimed.durationSource).toBe('unknown')
+    expect(untimed.durationMs).toBe(0)
+    expect(untimed.reportedDurationMs).toBeNull()
+    expect(untimed.startedAt).toBeNull()
+    expect(untimed.endedAt).toBeNull()
+  })
 })
 
 describe('the hand-off flag', () => {
@@ -302,6 +397,37 @@ describe('the hand-off flag', () => {
       agent: false,
     })
     expect(driven.missingRunReports).toEqual([])
+  })
+
+  it('flags a round with more recorded runs than reports', async () => {
+    const pid = newProject()
+    const t = newTicket(pid)
+    closedSpan(pid, t.id, 'hunt', 2, 90)
+    closedSpan(pid, t.id, 'hunt', 2, 400)
+    await tool('write_run_report', { projectId: pid, ticketId: t.id, agent: 'hunt', round: 2 })
+    const moved = await needs.changeTicket(t.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(moved.missingRunReports).toEqual([
+      expect.objectContaining({ agent: 'hunt', round: 2, runs: 2, spans: 2, reports: 1 }),
+    ])
+  })
+
+  it('counts a hand-off as a recorded run: flagged alone, one run beside its span', async () => {
+    const pid = newProject()
+    const onlyHandoff = newTicket(pid, 'briefed, no span')
+    work.handoff(pid, onlyHandoff.id, { to: 'hunt' }, AGENT)
+    const flagged = await needs.changeTicket(onlyHandoff.id, { status: 'review' }, HUMAN, {
+      agent: false,
+    })
+    expect(flagged.missingRunReports).toEqual([
+      expect.objectContaining({ agent: 'hunt', round: null, runs: 1, spans: 0, reports: 0 }),
+    ])
+    // A normal run has the span and the hand-off that briefed it: one run, one report, nothing flagged.
+    const normal = newTicket(pid, 'briefed and worked')
+    work.handoff(pid, normal.id, { to: 'hunt' }, AGENT)
+    closedSpan(pid, normal.id, 'hunt', 1, 60)
+    await tool('write_run_report', { projectId: pid, ticketId: normal.id, agent: 'hunt', round: 1 })
+    const clean = await needs.changeTicket(normal.id, { status: 'review' }, HUMAN, { agent: false })
+    expect(clean.missingRunReports).toEqual([])
   })
 })
 

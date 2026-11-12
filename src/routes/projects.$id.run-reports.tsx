@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { z } from 'zod'
 
 import { Empty } from '#/components/Empty'
-import { RunReportDialog } from '#/components/RunReport'
+import { RunReportDialog, runReportDuration } from '#/components/RunReport'
 import { Badge } from '#/components/ui/badge'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
@@ -14,7 +14,6 @@ import { Skeleton } from '#/components/ui/skeleton'
 import { errorMessage, get, type RunReportRow } from '#/lib/api'
 import { ago } from '#/lib/format'
 import { RUN_REPORT_AGENTS, type RunReport } from '#/lib/runReports'
-import { formatDuration } from '#/lib/workTimeline'
 
 // ?agent= and ?ticket= narrow the list: one kind of run across tickets, and further to one ticket. A
 // value the board does not know is dropped, and the list shows unfiltered on that count.
@@ -129,7 +128,7 @@ function RunReportsPage() {
                   <span className="min-w-0 truncate text-xs text-muted-foreground">
                     #{r.ticketId} {r.ticketTitle}
                   </span>
-                  <span className="text-xs text-muted-foreground">{formatDuration(r.durationMs)}</span>
+                  <span className="text-xs text-muted-foreground">{runReportDuration(r)}</span>
                   {r.difficulty !== null && (
                     <span className="text-xs text-muted-foreground">difficulty {r.difficulty}/5</span>
                   )}

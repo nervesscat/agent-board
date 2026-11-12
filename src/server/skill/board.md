@@ -338,8 +338,8 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   One report per run: a ticket with three review rounds has three `hunt` reports, each with its
   round. The ticket's Agents side shows them and `list_run_reports` reads one kind across tickets.
   Put this in every brief. `update_ticket` → `review` answers with `missingRunReports` for each run
-  the work timeline records with no report: flagged, not refused; get them written before the
-  hand-off.
+  the work timeline records with no report — a span, a hand-off, or a second run of one agent and
+  round that only one report covers: flagged, not refused; get them written before the hand-off.
 
 ### Watch for feedback
 

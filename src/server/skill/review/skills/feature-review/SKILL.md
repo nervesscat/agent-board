@@ -376,7 +376,9 @@ plan first, then the result with its proofs.
    hunt notes; the refute phase's verdict table is the findings' record. These posts go to the
    ticket's Agents tab, the agents' working record, out of the human's way: a phase never writes
    to Main (no summary, no new top-level post for the human), and the ticket's summary is the
-   job of whoever hands the ticket off.
+   job of whoever hands the ticket off. Every phase agent also fills in its run report with
+   `write_run_report` before it hands back: one report per run, from its own template,
+   `run-reports/<agent>.md` in this skill's bundle. Put that in its brief.
 3. **Decisive open questions** from the spec go to the human with `ask_decision` on the ticket (the
    interpretations as options, the spec's assumption marked recommended). If Phase 1 already asked
    the human this question in the chat, step 3 never asks it again, whatever the human did. If they

@@ -19,9 +19,10 @@ import { ticketTimeline } from './workTimeline'
  * ship under src/server/skill/review/run-reports). One row per run, so a ticket with three rounds has
  * three hunt reports, each with its round.
  *
- * The duration is the work timeline's measured span when one covers the run (agent and round), and the
- * agent's own estimate kept beside it; without a span the estimate stands and says so. Writes are
- * quiet: no activity row, as for the timeline itself.
+ * The duration is the work timeline's measured span when one covers the run (agent and round, matched
+ * by the report's own times when it gives them), and the agent's own estimate kept beside it; without a
+ * span the estimate stands and says so, and a report that gives no time at all says the duration is
+ * unknown rather than claiming zero. Writes are quiet: no activity row, as for the timeline itself.
  */
 
 const clean = (s: string | undefined) => s?.trim() ?? ''
@@ -53,21 +54,44 @@ function knownKinds(projectId: number) {
   return new Set<string>([...RUN_REPORT_AGENTS, ...listAgents(projectId).map((a) => a.name.toLowerCase())])
 }
 
-/** The closed span that measured a run of `agent` in `round`, if the work timeline has one. */
-function measuredRun(ticketId: number, agent: string, round: number | null) {
+/**
+ * The closed span that measured a run of `agent` in `round`, if the work timeline has one: the one the
+ * report's own times overlap most (two runs of one agent in one round each find their own), else the
+ * latest. With no times from the report, the latest is all there is.
+ */
+function measuredRun(
+  ticketId: number,
+  agent: string,
+  round: number | null,
+  own: { start: number | null; end: number | null } = { start: null, end: null },
+) {
   const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
   if (!t) return null
   const known = knownKinds(t.projectId)
   const kind = runKindOf(agent, known) ?? segment(agent)
-  const spans = ticketTimeline(ticketId).timeline.spans.filter(
-    (s) => !s.open && (s.round ?? null) === round && runKindOf(s.agent, known) === kind,
-  )
-  const latest = spans.sort((a, b) => a.start.localeCompare(b.start) || a.id - b.id).at(-1)
-  if (!latest) return null
+  const spans = ticketTimeline(ticketId)
+    .timeline.spans.filter(
+      (s) => !s.open && (s.round ?? null) === round && runKindOf(s.agent, known) === kind,
+    )
+    .sort((a, b) => a.start.localeCompare(b.start) || a.id - b.id)
+  if (!spans.length) return null
+  let chosen = spans.at(-1)!
+  if (own.start !== null || own.end !== null) {
+    const from = own.start ?? own.end!
+    const to = own.end ?? own.start!
+    let bestOverlap = 0
+    for (const span of spans) {
+      const overlap = Math.min(to, Date.parse(span.end)) - Math.max(from, Date.parse(span.start))
+      if (overlap > 0 && overlap >= bestOverlap) {
+        bestOverlap = overlap
+        chosen = span
+      }
+    }
+  }
   return {
-    start: latest.start,
-    end: latest.end,
-    durationMs: Math.max(0, Date.parse(latest.end) - Date.parse(latest.start)),
+    start: chosen.start,
+    end: chosen.end,
+    durationMs: Math.max(0, Date.parse(chosen.end) - Date.parse(chosen.start)),
   }
 }
 
@@ -170,12 +194,11 @@ export function writeReport(
   const t = scopedTicket(projectId, input.ticketId)
   const agent = clean(input.agent)
   const round = input.round ?? null
-  const measured = measuredRun(t.id, agent, round)
+  const ownStart = input.startedAt ? Date.parse(input.startedAt) : null
+  const ownEnd = input.endedAt ? Date.parse(input.endedAt) : null
+  const measured = measuredRun(t.id, agent, round, { start: ownStart, end: ownEnd })
   const own =
-    input.durationMs ??
-    (input.startedAt && input.endedAt
-      ? Math.max(0, Date.parse(input.endedAt) - Date.parse(input.startedAt))
-      : null)
+    input.durationMs ?? (ownStart !== null && ownEnd !== null ? Math.max(0, ownEnd - ownStart) : null)
   const row = db
     .insert(schema.runReports)
     .values({
@@ -188,10 +211,10 @@ export function writeReport(
       model: clean(input.model),
       effort: clean(input.effort),
       briefedBy: clean(input.briefedBy),
-      startedAt: measured?.start ?? (input.startedAt ? new Date(input.startedAt).toISOString() : null),
-      endedAt: measured?.end ?? (input.endedAt ? new Date(input.endedAt).toISOString() : null),
+      startedAt: measured?.start ?? (ownStart !== null ? new Date(ownStart).toISOString() : null),
+      endedAt: measured?.end ?? (ownEnd !== null ? new Date(ownEnd).toISOString() : null),
       durationMs: measured?.durationMs ?? own ?? 0,
-      durationSource: measured ? 'measured' : 'self',
+      durationSource: measured ? 'measured' : own !== null ? 'self' : 'unknown',
       reportedDurationMs: own,
       time: fullTime(input.time),
       difficulty: input.difficulty ?? null,
@@ -216,10 +239,15 @@ export function getReport(projectId: number, reportId: number): RunReport {
 export type RunReportFilter = { agent?: string; ticketId?: number; round?: number }
 
 /**
- * A project's reports, newest first, each with its ticket's title. `agent` matches any casing; a report
- * written as `hunt` and one as `orch/hunt` are both `hunt`'s.
+ * A project's reports, newest first, each with its ticket's title. `agent` matches any casing and by
+ * kind: a report written as `hunt`, `orch/hunt` or `opencode/hunt-1` is `hunt`'s. The limit applies to
+ * those rows, so a kind's reports are not cut short by another kind's.
  */
 export function listReports(projectId: number, limit = 60, filter: RunReportFilter = {}): RunReportRow[] {
+  const known = knownKinds(projectId)
+  const wanted = filter.agent ? runKindOf(filter.agent, known) : null
+  // A name no agent kind covers is still found as it was stored, whatever its casing.
+  const exact = filter.agent && !wanted ? filter.agent.trim().toLowerCase() : null
   const rows = db
     .select({ report: schema.runReports, ticketTitle: schema.tickets.title })
     .from(schema.runReports)
@@ -229,15 +257,15 @@ export function listReports(projectId: number, limit = 60, filter: RunReportFilt
         eq(schema.runReports.projectId, projectId),
         filter.ticketId === undefined ? undefined : eq(schema.runReports.ticketId, filter.ticketId),
         filter.round === undefined ? undefined : eq(schema.runReports.round, filter.round),
-        filter.agent
-          ? sql`lower(${schema.runReports.agent}) = ${filter.agent.trim().toLowerCase()}`
-          : undefined,
+        exact ? sql`lower(${schema.runReports.agent}) = ${exact}` : undefined,
       ),
     )
     .orderBy(desc(schema.runReports.createdAt), desc(schema.runReports.id))
-    .limit(limit)
     .all()
-  return rows.map(({ report, ticketTitle }) => ({ ...report, ticketTitle }))
+  return rows
+    .filter(({ report }) => !wanted || runKindOf(report.agent, known) === wanted)
+    .slice(0, limit)
+    .map(({ report, ticketTitle }) => ({ ...report, ticketTitle }))
 }
 
 /** One ticket's reports, newest first (the ticket page's Agents side). */
@@ -254,24 +282,34 @@ export function ticketReports(ticketId: number): RunReport[] {
 export interface MissingRunReport {
   agent: string
   round: number | null
-  /** How many spans the timeline recorded for it. */
+  /** How many runs it recorded: its spans, or its hand-offs when there are more (a run has both). */
+  runs: number
+  /** How many spans of them. */
   spans: number
+  /** How many reports of that agent and round the ticket has: fewer than `runs` is what flags it. */
+  reports: number
   /** The earliest of them. */
   since: string
 }
 
 /**
  * The subagent runs of a ticket's work timeline that no report covers, by agent and round: spans whose
- * agent is one of the default subagents or the project's own (a numbered worker counts as its agent).
- * The orchestrator's own spans name no such agent, so a ticket worked only by the orchestrator has an
- * empty list. Enforcement is a flag: a move to review goes through and answers with this.
+ * agent is one of the default subagents or the project's own (a numbered worker counts as its agent),
+ * and hand-offs to one of them, which record a run that left no span. A run has both a span and the
+ * hand-off that briefed it, so a group's runs are the larger of its two counts, not their sum, and it
+ * is flagged when it has fewer reports than runs. The orchestrator's own spans name no such agent, so a
+ * ticket worked only by the orchestrator has an empty list. Enforcement is a flag: a move to review
+ * goes through and answers with this.
  */
 export function missingReports(ticketId: number): MissingRunReport[] {
   const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, ticketId)).get()
   if (!t) return []
   const known = knownKinds(t.projectId)
-  const groups = new Map<string, MissingRunReport>()
-  for (const span of ticketTimeline(ticketId).timeline.spans) {
+  type Group = { agent: string; round: number | null; spans: number; handoffs: number; since: string }
+  const groups = new Map<string, Group>()
+  const spansByKind = new Map<string, { round: number | null; start: string; end: string }[]>()
+  const { timeline } = ticketTimeline(ticketId)
+  for (const span of timeline.spans) {
     const kind = runKindOf(span.agent, known)
     if (!kind) continue
     const key = `${kind}|${span.round ?? ''}`
@@ -280,20 +318,54 @@ export function missingReports(ticketId: number): MissingRunReport[] {
       found.spans += 1
       if (span.start < found.since) found.since = span.start
     } else {
-      groups.set(key, { agent: kind, round: span.round ?? null, spans: 1, since: span.start })
+      groups.set(key, { agent: kind, round: span.round ?? null, spans: 1, handoffs: 0, since: span.start })
+    }
+    spansByKind.set(kind, [...(spansByKind.get(kind) ?? []), span])
+  }
+  // A hand-off briefs a run; an agent that recorded no span is recorded by it alone. It joins the span
+  // of its kind it sits nearest, so a normal run (span and hand-off) is one run, not two.
+  for (const handoff of timeline.handoffs) {
+    const kind = runKindOf(handoff.to, known)
+    if (!kind) continue
+    let round: number | null = null
+    let nearest = Number.POSITIVE_INFINITY
+    for (const span of spansByKind.get(kind) ?? []) {
+      const at = Date.parse(handoff.at)
+      const gap = Math.max(0, Date.parse(span.start) - at, at - Date.parse(span.end))
+      if (gap < nearest) {
+        nearest = gap
+        round = span.round ?? null
+      }
+    }
+    const key = `${kind}|${round ?? ''}`
+    const found = groups.get(key)
+    if (found) {
+      found.handoffs += 1
+      if (handoff.at < found.since) found.since = handoff.at
+    } else {
+      groups.set(key, { agent: kind, round, spans: 0, handoffs: 1, since: handoff.at })
     }
   }
   if (!groups.size) return []
-  const have = new Set(
-    db
-      .select({ agent: schema.runReports.agent, round: schema.runReports.round })
-      .from(schema.runReports)
-      .where(eq(schema.runReports.ticketId, ticketId))
-      .all()
-      .map((r) => `${runKindOf(r.agent, known) ?? segment(r.agent)}|${r.round ?? ''}`),
-  )
+  const reported = new Map<string, number>()
+  for (const r of db
+    .select({ agent: schema.runReports.agent, round: schema.runReports.round })
+    .from(schema.runReports)
+    .where(eq(schema.runReports.ticketId, ticketId))
+    .all()) {
+    const key = `${runKindOf(r.agent, known) ?? segment(r.agent)}|${r.round ?? ''}`
+    reported.set(key, (reported.get(key) ?? 0) + 1)
+  }
   return [...groups.entries()]
-    .filter(([key]) => !have.has(key))
-    .map(([, v]) => v)
+    .map(([key, g]) => ({ ...g, reports: reported.get(key) ?? 0 }))
+    .filter((g) => g.reports < Math.max(g.spans, g.handoffs))
+    .map(({ agent, round, spans, handoffs, reports, since }) => ({
+      agent,
+      round,
+      runs: Math.max(spans, handoffs),
+      spans,
+      reports,
+      since,
+    }))
     .sort((a, b) => a.since.localeCompare(b.since) || a.agent.localeCompare(b.agent))
 }

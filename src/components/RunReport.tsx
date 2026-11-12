@@ -28,6 +28,10 @@ const TIME_LABEL: Record<(typeof RUN_REPORT_TIME_KEYS)[number], string> = {
 export const runReportLabel = (r: Pick<RunReport, 'agent' | 'round'>) =>
   r.round === null ? r.agent : `${r.agent} round ${r.round}`
 
+/** Its duration: `not reported` when neither a span measured it nor the agent gave a time. */
+export const runReportDuration = (r: Pick<RunReport, 'durationMs' | 'durationSource'>) =>
+  r.durationSource === 'unknown' ? 'not reported' : formatDuration(r.durationMs)
+
 /** The report's sections in the template's order, then any the agent added of its own. */
 function sectionEntries(r: RunReport) {
   const named = new Set<string>(RUN_REPORT_SECTIONS)
@@ -67,9 +71,14 @@ export function RunReportView({ r }: { r: RunReport }) {
       <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
         <div>
           <dt className="text-xs text-muted-foreground">
-            Duration ({r.durationSource === 'measured' ? 'measured' : 'self-reported'})
+            Duration
+            {r.durationSource === 'measured'
+              ? ' (measured)'
+              : r.durationSource === 'self'
+                ? ' (self-reported)'
+                : ''}
           </dt>
-          <dd className="font-medium">{formatDuration(r.durationMs)}</dd>
+          <dd className="font-medium">{runReportDuration(r)}</dd>
         </div>
         {r.reportedDurationMs !== null && r.durationSource === 'measured' && (
           <div>
@@ -184,7 +193,7 @@ export function RunReportRowButton({ r, onOpen }: { r: RunReport; onOpen: () => 
         <ClipboardList className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="font-medium">{r.agent}</span>
         {r.round !== null && <Badge variant="outline">round {r.round}</Badge>}
-        <span className="text-xs text-muted-foreground">{formatDuration(r.durationMs)}</span>
+        <span className="text-xs text-muted-foreground">{runReportDuration(r)}</span>
         {r.difficulty !== null && (
           <span className="text-xs text-muted-foreground">difficulty {r.difficulty}/5</span>
         )}

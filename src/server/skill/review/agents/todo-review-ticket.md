@@ -391,9 +391,12 @@ Implementation and its steps (`set_task_done`).
    When a summary is already there (an earlier round, a rework), rewrite it to the state now, with
    `change` saying in one line what changed; the board keeps the earlier versions. Then the result
    reply under each of the human's posts you answered with a plan (step 2), with its proofs.
-7. `update_ticket` to `review`, and read `open` in its answer: fix every task it lists and check
-   again (Summary open: no summary written since the last commit). An open Preview may stay only
-   when the summary says why.
+7. `update_ticket` to `review`, and read its answer: `missingRunReports` names each subagent run the
+   timeline recorded without its report — a span, a hand-off, or one run too many for the reports of
+   that agent and round — so get those reports written before the hand-off stands. The phase agents
+   write theirs; you write none of your own. Then `open`: fix every task it lists and check again
+   (Summary open: no summary written since the last commit). An open Preview may stay only when the
+   summary says why.
 
 ## Review depth
 
