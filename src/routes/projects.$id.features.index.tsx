@@ -8,7 +8,6 @@ import { z } from 'zod'
 
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
-import { useProjectPush } from '#/components/PushDot'
 import { tagTextClass } from '#/components/Tag'
 import { ArchivedList, type Placement, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
@@ -162,8 +161,6 @@ function Features() {
   })
   const search = (next: string) =>
     navigate({ search: (s) => ({ ...s, q: next || undefined }), replace: true })
-  const { data: pushData } = useProjectPush(id)
-  const push = useMemo(() => new Map(pushData?.tickets.map((t) => [t.id, t.push])), [pushData])
   // The tag picked narrows the Board and the List, searched or not; the archive shows them all.
   const tagged = (t: TicketRow) =>
     !tag || view === 'archived' || t.tags.some((x) => x.toLowerCase() === tag.toLowerCase())
@@ -236,7 +233,7 @@ function Features() {
                 restoring={restore.isPending ? restore.variables : undefined}
               />
             ) : (
-              <TicketList projectId={id} items={listed} push={push} />
+              <TicketList projectId={id} items={listed} />
             )}
           </div>
         )
@@ -254,12 +251,11 @@ function Features() {
       ) : isLoading ? (
         <Skeleton className="h-64" />
       ) : view === 'list' ? (
-        <TicketList projectId={id} items={shown} push={push} />
+        <TicketList projectId={id} items={shown} />
       ) : (
         <TicketBoard
           projectId={id}
           items={shown}
-          push={push}
           onMove={(ticketId, status) => move.mutate({ ticketId, status })}
           onPlace={placeBy}
           onArchiveAll={(status) => archiveAll.mutate(status)}

@@ -706,7 +706,7 @@ test('nested tooltips: the innermost shows, the outer one on its own part, never
   await expect(tooltip(page)).toHaveCount(1)
 })
 
-test("nested tooltips on a board card: a badge's or a name's own, the card's title around them", async ({
+test("nested tooltips on a board card: the needs badge's own, the card's title around it", async ({
   page,
   api,
   human,
@@ -721,8 +721,6 @@ test("nested tooltips on a board card: a badge's or a name's own, the card's tit
   const card = (await board(page, project.id))('in_progress', /On the card/)
   const needs = card.locator('span[data-slot="tooltip-trigger"]').filter({ hasText: `needs #${base.id}` })
   const needsTip = `Merge first:\n#${base.id} Underneath: not done, no branch`
-  const actor = card.locator('span[data-slot="tooltip-trigger"]').filter({ hasText: name })
-  const actorTip = `${name} (one of the project's agents)`
   await expectTooltip(needs, needsTip)
   await expect(tooltip(page)).toHaveCount(1)
   // From the badge onto the card's own padding, and back: one bubble each time, the one under the pointer.
@@ -732,13 +730,8 @@ test("nested tooltips on a board card: a badge's or a name's own, the card's tit
   await needs.hover()
   await expect(tooltip(page)).toHaveText(needsTip)
   await expect(tooltip(page)).toHaveCount(1)
-  // The assignee's name, and from it onto the card.
-  await actor.hover()
-  await expect(tooltip(page)).toHaveText(actorTip)
-  await expect(tooltip(page)).toHaveCount(1)
-  await card.hover({ position: { x: 4, y: 4 } })
-  await expect(tooltip(page)).toHaveText('On the card')
-  await expect(tooltip(page)).toHaveCount(1)
+  // The card leaves who holds the ticket to the ticket page: its assignee is not on it.
+  await expect(card.getByText(name)).toHaveCount(0)
 
   // On the ticket, the reserved chip inside the Assignee label; the label itself says nothing.
   await page.goto(`/projects/${project.id}/features/${t.id}`)
