@@ -672,7 +672,7 @@ describe('the review texts the board ships', () => {
   it('takes a slot only around a heavy run in each phase: verify and merge yes, hunt and refute never', () => {
     const phase = (file: string) => flat(read(path.join(skills, 'agents', file)))
     expect(phase('feature-review-verify.md')).toContain(
-      "Only the heavy runs take a test slot, from the `SLOTS` folder your prompt or `00-env.md`'s **Test slots** line gives",
+      'Only the heavy runs take a test slot, from the exact `Test slots:` folders in `00-env.md` (or the `SLOTS` folder and repo id the prompt gives)',
     )
     expect(phase('feature-review-merge.md')).toContain('Take a test slot only for a heavy run')
     for (const file of ['feature-review-hunt.md', 'feature-review-refute.md']) {
@@ -681,7 +681,9 @@ describe('the review texts the board ships', () => {
       )
     }
     const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
-    expect(review).toContain('Only the heavy runs take a test slot, from `slots=` when it was given')
+    expect(review).toContain(
+      'Only the heavy runs take a test slot, from the exact `Test slots:` folders in `00-env.md`',
+    )
     expect(review).toContain('Its heavy part')
     expect(review).toContain('and neither do the hunt')
   })
@@ -691,10 +693,12 @@ describe('the review texts the board ships', () => {
     expect(merge).toContain(
       "Do not reuse the caller's build here, even when `00-env.md` records `E2E_SKIP_BUILD=1`",
     )
-    expect(merge).toContain('Build once on the merged tree in a test slot')
+    expect(merge).toContain('Build the merged tree once in a test slot')
     expect(merge).toContain('`BOARD_BUILD_DIR=.output-e2e pnpm build`')
-    expect(merge).toContain('run that same command with the flag removed')
-    expect(merge).toContain('never with `E2E_SKIP_BUILD=1`')
+    expect(merge).toContain('running the recorded end-to-end command with `E2E_SKIP_BUILD=1` removed')
+    expect(merge).toContain(
+      'Never run it with the flag on the merged tree, and never build the merged tree twice',
+    )
     expect(merge).toContain('releases its slot and waits for the full suite, as the gate does')
     expect(merge).toContain(
       'The recorded build is reused only when the base was already an ancestor (step 2)',
@@ -703,8 +707,8 @@ describe('the review texts the board ships', () => {
     expect(review).toContain(
       "Because it merged the base, it never reuses the caller's build record, `E2E_SKIP_BUILD=1` or not",
     )
-    expect(review).toContain("It builds with the test build's own output directory")
-    expect(review).toContain('never with the flag, or the run serves the head')
+    expect(review).toContain('It builds the merged tree once')
+    expect(review).toContain('Never with the flag on the merged tree, and never two builds')
     expect(review).toContain('releases its slot and waits for the full suite, as the gate does')
     const text = flat(ticketAgent)
     expect(text).toContain(
@@ -746,22 +750,30 @@ describe('the review texts the board ships', () => {
     )
     for (const file of ['feature-review-verify.md', 'feature-review-merge.md']) {
       expect(flat(read(path.join(skills, 'agents', file))), file).toContain(
-        "`SLOTS` folder your prompt or `00-env.md`'s **Test slots** line gives",
+        'exact `Test slots:` folders in `00-env.md` (or the `SLOTS` folder and repo id',
       )
     }
+    expect(review).toContain('| `repoId=<id>` |')
+    expect(flat(ticketAgent)).toContain('repoId=<REPO_ID>')
+    expect(flat(read(path.join(skills, 'agents', 'feature-review-env.md')))).toContain(
+      '`REPO_ID` (only when the caller gave `repoId=`)',
+    )
+    expect(flat(read(path.join(skills, 'agents', 'feature-review-env.md')))).toContain(
+      'the exact folders with the repo id filled in',
+    )
   })
 
   it("starts a hand preview with the repo's environment on a free loopback port, and stops it with the ticket", () => {
     const text = flat(ticketAgent)
     expect(text).toContain('The preview, from at most one build of this head')
-    expect(text).toContain(
-      "The board rebuilds on every start, so its build is the preview's one build for this head",
-    )
-    expect(text).toContain('A preview started by hand lives in your session: it stops when the session ends')
+    expect(text).toContain("Use the board's own preview run: it lives on after your session")
+    expect(text).toContain("so its build is this head's one preview build")
+    expect(text).toContain('put back the run')
+    expect(text).toContain('`test -d .output-e2e`')
     expect(text).toContain('`BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`')
     expect(text).toContain('`HOST=127.0.0.1`')
     expect(text).toContain('`DATA_DIR` a copy of the data (never the live one)')
-    expect(text).toContain('a board-run preview outlives your session')
+    expect(text).toContain('that preview lives in your session, so it stops when the session ends')
     expect(text).toContain('Keep the preview running while the ticket is in review')
     expect(text).toContain('clear the link (`set_preview` with `""`)')
     expect(text).toContain('how many times this head was built')

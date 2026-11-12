@@ -12,8 +12,8 @@ agent does that.
 ## Input
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
-`WORKDIR`, a temp-file prefix, the review contract, a browser flag, the `SLOTS` folder your
-prompt or `00-env.md`'s **Test slots** line gives, and paths to
+`WORKDIR`, a temp-file prefix, the review contract, a browser flag, the exact `Test slots:`
+folders in `00-env.md` (or the `SLOTS` folder and repo id the prompt gives), and paths to
 `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, and your output
 file. Start from `00-focus.md`; read outside it only to follow a reference from it.
 
@@ -43,11 +43,11 @@ result, and the orchestrator asks the human.
   the result: the typecheck, lint and format on the changed files, the migration check when it
   applies, the unit tests related to them, and the end-to-end specs covering the changed pages or
   routes (none when the diff touches neither). It is the review's only run at head. Only the heavy
-  runs take a test slot, from the `SLOTS` folder your prompt or `00-env.md`'s **Test slots** line
-  gives: take the first free
-  one (`mkdir tests-<repo id>-<n>`, never `mkdir -p`; write `holder.txt` with
+  runs take a test slot, from the exact `Test slots:` folders in `00-env.md` (or the `SLOTS`
+  folder and repo id the prompt gives): take the first free
+  one (`mkdir` its exact path, never `mkdir -p`; write `holder.txt` with
   `#<TICKET> verify <ISO time>`) right before the end-to-end run and before the full suite, and
-  `rm -r` it right after each. A full suite takes `tests-<repo id>-full` first and then waits
+  `rm -r` it right after each. A full suite takes the `-full` folder first and then waits
   until every slot is free; a scoped run that finds `-full` releases its slot and waits for it.
   The typecheck, lint, format, migration check and scoped unit run take none, and neither does a
   probe test. When neither the prompt nor `00-env.md` names a `SLOTS` folder, run every check

@@ -341,7 +341,7 @@ or is the base its merge check used; and `RETRY` does not name that review, its 
 findings. Then go on to step 6 with that review.
 
 Otherwise run `/feature-review` through the Skill tool, unattended:
-`repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, `slots=<SLOTS> build=<WORKDIR/02-build.md>`, then `scoped`, plus `light` when the depth
+`repo=<REPO> <branch> ticket=<TICKET> ports=<PORTS> browser=<BROWSER> effort=<the effort>`, `slots=<SLOTS> build=<WORKDIR/02-build.md> repoId=<REPO_ID>`, then `scoped`, plus `light` when the depth
 is `light` and `deep` when it is `deep` (nothing more for `standard`). With `scoped`, its phases
 run only the scoped checks, since CI runs the full suites on the PR. With `slots=`, its verify
 phase takes a test slot around the end-to-end run and the full suite and its merge check around
@@ -416,27 +416,27 @@ Implementation and its steps (`set_task_done`).
    like a gate failure. When it passes, comment on the PR `CI run locally: green on <sha>` with
    that head SHA (`gh pr comment`): that ticks CI. After each later push, run it again and comment
    again.
-5. The preview, from at most one build of this head: either the gate's artifact, or the
-   preview's own build, never both. When the repo lets you start from the artifact —
-   `WORKDIR/02-build.md` names the final head, and the build was made with
-   `BOARD_BUILD_DIR=.output-e2e`, which only sets the build's output directory and does nothing
-   at run time — do that: run `node .output-e2e/server/index.mjs` from the worktree with the
-   repo's preview environment, never the defaults: a free loopback port from `PORTS` as `PORT`
-   and `NITRO_PORT`, `HOST=127.0.0.1`, `DATA_DIR` a copy of the data (never the live one),
-   `BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`, and
-   `BOARD_URL=http://127.0.0.1:<port>`, then `set_preview` with the URL it answers on. An
-   artifact at an older head is rebuilt once at the final head, with the same
-   `BOARD_BUILD_DIR=.output-e2e`, then started the same way. A preview started by hand lives in
-   your session: it stops when the session ends, and the human can stop it meanwhile from the
-   project's Previews page. Otherwise use the board's own preview run: `start_run` the repo's
-   preview (or `start_preview` on the workspace), wait until it is `running` (on `failed`, read
-   its log tail and fix). The board rebuilds on every start, so its build is the preview's one
-   build for this head — the reason a hand start comes first where the repo allows it — and a
-   board-run preview outlives your session. Keep the preview running while the ticket is in
-   review; once it is merged or dropped, stop a hand-started process and clear the link
-   (`set_preview` with `""`), and the board stops its own. In the summary say which of the two
-   ran and how many times this head was built. When the change cannot be tried (docs, a script),
-   say why in the summary instead.
+5. The preview, from at most one build of this head. Use the board's own preview run: it lives on
+   after your session, and the board stops it when the PR is merged. When `WORKDIR/02-build.md`
+   names the final head, make that run serve the gate's artifact instead of building again:
+   `update_run` the run's build command for this start to one that only checks the artifact
+   (`test -d .output-e2e`, or `true`) and its start command to
+   `node .output-e2e/server/index.mjs` with the repo's preview environment (a free loopback port
+   from `PORTS` as `PORT` and `NITRO_PORT`, `HOST=127.0.0.1`, `DATA_DIR` a copy of the data
+   (never the live one), `BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`,
+   `BOARD_URL=http://127.0.0.1:<port>`), then `start_run` it and wait for `running`; once it runs,
+   put back the run's original build and start commands — the running process keeps serving the
+   artifact. An artifact at an older head is not reused: leave the run's own build and start
+   commands in place, so its build is this head's one preview build. Never the gate's build and a
+   preview build both.
+   When the repo has no run the board can start, start it by hand from the artifact in the
+   worktree with the same environment (`node .output-e2e/server/index.mjs`) and `set_preview`
+   with the URL it answers on: that preview lives in your session, so it stops when the session
+   ends, and the human can stop it meanwhile from the project's Previews page — say that in the
+   summary. Keep the preview running while the ticket is in review; once it is merged or dropped,
+   stop a hand-started process and clear the link (`set_preview` with `""`), and the board stops
+   its own. In the summary say which of the two ran and how many times this head was built. When
+   the change cannot be tried (docs, a script), say why in the summary instead.
    A preview build you start here is a heavy run, in a test slot like any other (holder
    `#<TICKET> preview <ISO time>`): take the first free one before the start and release it once
    the preview runs or has failed.

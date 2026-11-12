@@ -27,7 +27,10 @@ precisely; never fall back to a server or environment you did not start.
 - `BUILD` (only when the caller gave `build=`): the build record its gate wrote: the head SHA,
   the `.output-e2e` path and the ISO time. Compare its SHA with the commit under review.
 - `SLOTS` (only when the caller gave `slots=`): the folder holding the repo's heavy-run test
-  slots, `tests-<repo id>-1` … `tests-<repo id>-N` (N = 2) and `tests-<repo id>-full`.
+  slots.
+- `REPO_ID` (only when the caller gave `repoId=`): the repo id the slot folders are named with
+  (`tests-<REPO_ID>-1` … `-N`, `tests-<REPO_ID>-full`). Fill it in and write the exact folders
+  into `00-env.md`, so every phase takes the same ones.
 - `NOTES`: the per-repo notes file path. Read it first if it exists; it records what
   earlier reviews learned about this machine (installed tools, taken ports, runbook
   corrections) and saves you from rediscovering it. Before you finish, append one dated
@@ -116,9 +119,10 @@ result, and the orchestrator asks the human.
    `.github/workflows/`): it is where the full suite is proven. When no CI does, write
    `none`: the review then runs the full suite locally.
    Mark each command **heavy** or **light**: the end-to-end run, the full suite and any build
-   are heavy and take one of the `SLOTS` folders (the full suite `tests-<repo id>-full` first);
+   are heavy and take one of the `SLOTS` folders (the `-full` one first for the full suite);
    the typecheck, lint, formatter, migration check and scoped unit run are light and take none.
-   Write the slot folders and N into `00-env.md` so the phase agents take the same ones.
+   Write the exact slot folder paths (repo id filled in: `tests-<REPO_ID>-1` … `-N` and the
+   `-full` one) and N into `00-env.md`, so every phase agent takes the same folders.
 6. **Seed.** If the app is up and the project has a seed script or fixture loader, run it
    against the review's data service so the UI and the API have accounts and data.
    Record the accounts and passwords it creates in `00-env.md`.
@@ -143,7 +147,7 @@ result, and the orchestrator asks the human.
 - Commit: <sha>
 - Interpreter / runtime: <absolute path>, reused from MAIN | fresh install (reason)
 - Import proof: <command> printed <path>
-- Test slots: <SLOTS>/tests-<repo id>-1 … -<N> (N = 2): a heavy run holds one, a light one none; `tests-<repo id>-full` first for a full suite
+- Test slots: `<SLOTS>/tests-<REPO_ID>-1`, `<SLOTS>/tests-<REPO_ID>-2` … and `<SLOTS>/tests-<REPO_ID>-full` (N = 2), the exact folders with the repo id filled in: a heavy run holds one, a light one none; the `-full` one first for a full suite
 - Build: reused <build record path> at <sha>, `E2E_SKIP_BUILD=1` | built here (no record, or the record was at another head)
 
 ## Services

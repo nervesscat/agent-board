@@ -2,7 +2,7 @@
 name: feature-review
 description: "Reviews one feature or change for correctness, reliability and security using a spec -> env -> verify -> hunt -> refute protocol built to produce zero false positives. The code under review runs from its own worktree at the exact commit, on servers the review starts itself; every finding needs a concrete failure scenario and must survive an adversarial refutation pass; an empty result is valid and comes with proof of what was checked."
 user-invocable: true
-argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [scoped] [post] [slots=<dir>] [build=<path>]"
+argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [scoped] [post] [slots=<dir>] [build=<path>] [repoId=<id>]"
 ---
 
 # Feature Review
@@ -88,6 +88,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `scoped` | run only the scoped checks even where no CI runs the full suite (`CI: none`): the caller runs the full suite once at the final head | off |
 | `slots=<dir>` | the directory holding the repo's heavy-run test slots (`tests-<repo id>-1` … `-N`, and `tests-<repo id>-full`): a heavy run takes the first free one and releases it right after, a light run takes none | none: each heavy run starts without a slot |
 | `build=<path>` | a build record the caller's gate wrote after its end-to-end build: the head SHA, the `.output-e2e` path and the time. The env phase reuses that artifact when the SHA is the commit under review, and builds once when it is not | none |
+| `repoId=<id>` | the repo id the test slot folders are named with (`tests-<id>-1` … `-N`, `tests-<id>-full`), passed to every phase; the env phase writes the exact folders into `00-env.md` | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
 | `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high) | the session's |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
@@ -178,7 +179,8 @@ Parse `$ARGUMENTS` as space-separated tokens:
 Every agent prompt from here on includes: `MAIN`, `WORKTREE`, `WORKDIR`, `SLUG`, the
 absolute paths of the files it reads and writes, `00-context.md` as the context pack (every
 phase reads it: spec, env, verify, hunt, refute and merge), the `SLOTS` directory when `slots=`
-was given (its record is the `Test slots:` line in `00-env.md`), the ticket id (`TICKET`) when
+was given (its record is the `Test slots:` line in `00-env.md`), the repo id (`repoId`) the slot
+folders are named with, the ticket id (`TICKET`) when
 the review is on a ticket — every phase that takes a test slot writes it in its `holder.txt` —
 the full text of the contract,
 and the path of
@@ -220,7 +222,8 @@ Every hunt also applies Diff guard analysis and the Project overlay.
 
 Spawn `feature-review-env` with `01-spec.md`, `00-context.md`, `00-focus.md`, `NOTES`, the port
 range, the browser flag, `FRONTEND` if given, the build record's path when `build=` was given,
-the `slots=` directory when it was given, the services the strategy table allows, and the output path
+the `slots=` directory when it was given, the repo id (`repoId`) the slot folders are named with,
+the services the strategy table allows, and the output path
 `00-env.md`, with this rule: start only what the criteria's methods need: no app server when no
 criterion uses `run+http` or `browser`, no frontend when none uses `browser`. Wait for it. It
 installs or reuses dependencies inside the worktree (a prepared `node_modules` copied by hardlink
@@ -249,6 +252,7 @@ Spawn in a single message:
 
 Each prompt includes paths to `01-spec.md`, `00-env.md`, `00-diff.patch`, `00-context.md`,
 `00-focus.md`, `checklists.md`, its output paths, the `SLOTS` directory when `slots=` was given,
+the repo id (`repoId`) the slot folders are named with,
 and the browser flag; the hunt's also names its
 checklist sections from the strategy table. Agents use the test command, interpreter, and base
 URLs from `00-env.md` and start no servers of their own. Verify runs the scoped checks from
@@ -258,9 +262,10 @@ end-to-end specs covering the changed pages or routes. The full suite runs in CI
 request; where no CI runs it (`CI: none` in `00-env.md`), verify runs the full suite locally
 instead, unless `scoped` was given (the caller then runs it once at the final head). The hunt runs only targeted tests (the focus file's tests, or a probe for
 one candidate), never the full suite.
-Only the heavy runs take a test slot, from `slots=` when it was given: verify takes the first
+Only the heavy runs take a test slot, from the exact `Test slots:` folders in `00-env.md` (or
+the `SLOTS` folder and repo id the prompt gives): verify takes the first
 free one right before the end-to-end run and before the full suite, and releases it right after
-each; a full suite takes `tests-<repo id>-full` first and waits until every slot is free. Its
+each; a full suite takes the `-full` folder first and waits until every slot is free. Its
 typecheck, lint, format, migration check and scoped unit run take none, and neither do the hunt's
 and refute's targeted unit tests and probes; a targeted end-to-end spec is heavy like any
 end-to-end run, so it takes a slot the same way, released right after it. With `E2E_SKIP_BUILD=1`
@@ -303,23 +308,24 @@ heavy like any end-to-end run and takes one. Wait for it.
 
 Runs after every other agent has finished, because it temporarily changes the worktree.
 Spawn `feature-review-merge` with `HEAD_SHA`, the base branch name, the `SLOTS` directory when
-`slots=` was given, and paths to
+`slots=` was given, the repo id (`repoId`) the slot folders are named with, and paths to
 `00-env.md`, `00-context.md`, `00-focus.md`, `02-verification.md`, and the output path
 `05-merge.md`. It runs the
 scoped checks once, on the merged tree, over the files both the branch and the base changed since
 the merge base plus the branch's own: that scoped run is the merge check, and CI on the merged PR
 covers the rest (the full suite instead, where no CI runs it and `scoped` was not given). Its
 heavy part — the build, the end-to-end run, and the full suite where no CI runs it — takes the
-repo's first free test slot from `slots=` (the full-suite folder first for a full suite); its
+repo's first free test slot from `slots=` (the `-full` folder first for a full suite); its
 typecheck, lint
 and scoped unit runs take none. Because it merged the base, it never reuses the caller's build
 record, `E2E_SKIP_BUILD=1` or not: it builds once on the merged tree in a slot and runs the
 end-to-end tests against that build, since the head's artifact never shows what the merge broke.
-It builds with the test build's own output directory (`BOARD_BUILD_DIR=.output-e2e pnpm build`,
-or the project's equivalent), or, when the recorded end-to-end command carries
-`E2E_SKIP_BUILD=1` inline, with that flag removed so the command's own build step builds the
-merged tree; never with the flag, or the run serves the head's artifact again. A scoped run that
-finds `tests-<repo>-full` releases its slot and waits for the full suite, as the gate does.
+It builds the merged tree once: it runs the recorded end-to-end command with its inline
+`E2E_SKIP_BUILD=1` removed, so the command's own build step builds the merged tree into
+`.output-e2e`; when the recorded command has no build step, it builds once with
+`BOARD_BUILD_DIR=.output-e2e pnpm build` (or the project's equivalent) and runs it with the flag.
+Never with the flag on the merged tree, and never two builds. A scoped run that
+finds the `-full` folder releases its slot and waits for the full suite, as the gate does.
 Wait for
 it. Read its `Result` line and its `Worktree restored` line; if the worktree was not restored,
 run `git -C WORKTREE reset --hard <commit>` yourself before continuing. For `diff`,

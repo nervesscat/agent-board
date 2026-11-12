@@ -22,12 +22,12 @@ Everything you execute runs from the worktree using the interpreter, test comman
 base URLs in `00-env.md`. Run only targeted tests: the focus file's tests, or a probe for one
 candidate; never the full suite (CI runs it). Targeted unit tests and probe tests are light and
 take no test slot: never wait on one. A
-targeted end-to-end spec is heavy like any end-to-end run and takes a test slot (from the
-`SLOTS` folder your prompt or `00-env.md`'s **Test slots** line gives): take the first free one
-with a plain `mkdir tests-<repo id>-<n>` (never `mkdir -p`), write `holder.txt` with
-`#<TICKET> hunt <ISO time>`, and release it with `rm -r` right after the run. A scoped run that
-finds `tests-<repo>-full` releases its slot and waits for the full suite, as the gate does; never
-delete a folder whose `holder.txt` names someone else. Never start a server or
+targeted end-to-end spec is heavy like any end-to-end run and takes a test slot (the exact
+`Test slots:` folders in `00-env.md`, or the `SLOTS` folder and repo id the prompt gives): take
+the first free one with a plain `mkdir` of its exact path (never `mkdir -p`), write `holder.txt`
+with `#<TICKET> hunt <ISO time>`, and release it with `rm -r` right after the run. A scoped run
+that finds the `-full` folder releases its slot and waits for the full suite, as the gate does;
+never delete a folder whose `holder.txt` names someone else. Never start a server or
 container, and never
 call a port that `00-env.md` does not list. Use the browser only when the flag is `yes`. Data
 you create through the app carries your prefix in its name.
