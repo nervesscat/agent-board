@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b236849a-a510-4766-b40e-cd31da2a2d75",
-  "prevId": "44adbe73-3660-4eee-ab32-97ed004b4168",
+  "id": "c9397463-83e9-41d6-aeea-a0eca565c7bf",
+  "prevId": "4cec2ee0-fe68-40c8-b8fe-0f573900646e",
   "tables": {
     "account": {
       "name": "account",
@@ -1207,6 +1207,14 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'none'"
+        },
+        "requested": {
+          "name": "requested",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
         },
         "waiting_on": {
           "name": "waiting_on",

@@ -33,6 +33,7 @@ import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
 import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { HostTool, HostTools } from '#/server/hostTools'
+import type { JobState } from '#/server/jobs'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { OpencodeConfig } from '#/server/opencodeConfig'
 import type { RunState } from '#/server/runs'
@@ -78,6 +79,7 @@ export type {
   GalleryFile,
   HostTool,
   HostTools,
+  JobState,
   ManagedPreview,
   OpencodeConfig,
   PreviewState,

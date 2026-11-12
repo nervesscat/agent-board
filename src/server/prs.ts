@@ -617,6 +617,7 @@ async function refreshRepoPrs(repo: schema.Repo): Promise<RowChange[]> {
       isDraft: pr.isDraft,
       reviewDecision: pr.reviewDecision || null,
       myReview: mine ? mine.state.toLowerCase() : 'none',
+      requested: pr.requested,
       waitingOn: prWaitingOn(pr, me),
       reviewStage: reviewStage(pr, me),
       mergeable: pr.mergeable,

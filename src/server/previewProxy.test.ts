@@ -341,6 +341,35 @@ const TOKEN = {
 }
 const SESSION = { local: 'session-on-localhost', public: 'session-on-the-tailnet' }
 
+let skillCredential: string | null = null
+
+/**
+ * A live skill download credential whose own row has `TOKEN.builder`'s agent token id: the two tables
+ * number their rows separately, so a shared number must never make it the builder's principal. Made once.
+ */
+function skillCredentialWithBuilderId(): string {
+  if (skillCredential !== null) return skillCredential
+  const builderId = db
+    .select({ id: schema.agentTokens.id })
+    .from(schema.agentTokens)
+    .where(eq(schema.agentTokens.tokenHash, hashSecret(TOKEN.builder)))
+    .get()!.id
+  for (let n = 0; n <= 100; n++) {
+    // A live row past every check: only its scope can keep it out.
+    const secret = `skill-token-of-builder-${n}`
+    db.insert(schema.skillTokens)
+      .values({ tokenHash: hashSecret(secret), expiresAt: FUTURE })
+      .run()
+    const row = db
+      .select({ id: schema.skillTokens.id })
+      .from(schema.skillTokens)
+      .where(eq(schema.skillTokens.tokenHash, hashSecret(secret)))
+      .get()
+    if (row?.id === builderId) return (skillCredential = secret)
+  }
+  throw new Error(`no skill token row reached agent token ${builderId}`)
+}
+
 let wsA = 0
 let wsB = 0
 const projectOfWs = new Map<number, number>()
@@ -487,6 +516,23 @@ describe('who may reach the preview', () => {
     const res = await serve(request(previewPath(wsA, RUN, 'api/hello'), { headers: bearer(TOKEN.builder) }))
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ ok: true })
+    expect(upstreamCount()).toBe(1)
+  })
+
+  it("refuses a skill download credential as it refuses no credential, even when its row shares an agent token's id", async () => {
+    const skill = skillCredentialWithBuilderId()
+    const refused = await serve(request(previewPath(wsA, RUN, 'api/hello'), { headers: bearer(skill) }))
+    expect(refused.status).toBe(401)
+    expect(await errorOf(refused)).toContain('sign in')
+    // Not a principal a link could be minted for either.
+    const link = new Request(`http://${LOCAL}/x`, { headers: { host: LOCAL, ...bearer(skill) } })
+    expect(() => proxy.linkFor(link, wsA, deps())).toThrow(/sign in/)
+    expect(upstreamCount()).toBe(0)
+    // A full-scope token of the same project still reaches the preview.
+    const builder = await serve(
+      request(previewPath(wsA, RUN, 'api/hello'), { headers: bearer(TOKEN.builder) }),
+    )
+    expect(builder.status).toBe(200)
     expect(upstreamCount()).toBe(1)
   })
 
@@ -1086,6 +1132,14 @@ describe('a WebSocket upgrade to a preview', () => {
 
   it('answers 401 JSON with no credential, before the handshake, and reaches no preview', async () => {
     const res = await upgrade(previewPath(wsA, RUN, 'live'))
+    expect(res.status).toBe(401)
+    expect(JSON.parse(res.body).error).toContain('sign in')
+    expect(res.socket).toBeUndefined()
+    expect(upgrades.length).toBe(0)
+  })
+
+  it('answers 401 to a skill download credential, as it does to none, before the handshake', async () => {
+    const res = await upgrade(previewPath(wsA, RUN, 'live'), bearer(skillCredentialWithBuilderId()))
     expect(res.status).toBe(401)
     expect(JSON.parse(res.body).error).toContain('sign in')
     expect(res.socket).toBeUndefined()

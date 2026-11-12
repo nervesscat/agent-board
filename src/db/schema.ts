@@ -176,6 +176,9 @@ export const prs = sqliteTable(
     reviewDecision: text('review_decision'),
     // The human's standing review verdict (approved / changes_requested / commented), or `none`.
     myReview: text('my_review').notNull().default('none'),
+    // GitHub still asks me for a review (its `review-requested:@me` search found it): what the To
+    // review switch's Just me as reviewer narrows to. GitHub drops the request once the review is given.
+    requested: integer({ mode: 'boolean' }).notNull().default(false),
     // `me`: someone else's PR, for the human to review. `others`: the human authored it.
     waitingOn: text('waiting_on').$type<'me' | 'others'>().notNull().default('me'),
     // Where its reviews stand on GitHub as of the last refresh; a hold or a merge overrides it.
@@ -717,6 +720,16 @@ export const enrolCodes = sqliteTable('enrol_codes', {
   createdAt: now(),
   expiresAt: text('expires_at').notNull(),
   usedAt: text('used_at'),
+})
+
+// The short-lived credentials an install line carries (skillTokens.ts): only the hash is kept, and they
+// reach the two skill downloads and nothing else (credentials.ts, auth.ts `admit`). Expired rows are
+// deleted when the next one is made.
+export const skillTokens = sqliteTable('skill_tokens', {
+  id: id(),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: now(),
+  expiresAt: text('expires_at').notNull(),
 })
 
 // The tokens agents sign in with (`Authorization: Bearer <token>`): only the hash is kept, and the

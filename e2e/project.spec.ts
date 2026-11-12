@@ -20,9 +20,17 @@ test('the PR queue renders with its filter (no GitHub: empty)', async ({ page, p
   await expect(filters).toHaveCount(2)
   await expect(filters.nth(0)).toHaveText(/^To review\s*0$/)
   await expect(filters.nth(1)).toHaveText(/^Waiting on others\s*0$/)
-  await expect(page.getByRole('tab', { name: /^All/ })).toHaveCount(0)
   await expect(filter('To review')).toHaveAttribute('aria-selected', 'true')
   await expect(filter('Waiting on others')).toHaveAttribute('aria-selected', 'false')
+  // The To review switch, its own tab row beside the filters: All PRs, or the PRs GitHub still asks me
+  // to review. All PRs until another is picked.
+  const reviewSwitch = page.getByRole('tablist').filter({ has: page.getByRole('tab', { name: 'All PRs' }) })
+  await expect(reviewSwitch.getByRole('tab')).toHaveText(['All PRs', 'Just me as reviewer'])
+  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'Just me as reviewer' })).toHaveAttribute(
+    'aria-selected',
+    'false',
+  )
   await expect(page.getByText('Nothing pending to review.')).toBeVisible()
   await expect(page.getByText('Nothing pending.', { exact: true })).toHaveCount(0)
   await expectTooltip(
@@ -37,12 +45,18 @@ test('the PR queue renders with its filter (no GitHub: empty)', async ({ page, p
   await filter('Waiting on others').click()
   await expect(filter('Waiting on others')).toHaveAttribute('aria-selected', 'true')
   await expect(filter('To review')).toHaveAttribute('aria-selected', 'false')
+  // The switch belongs to To review: Waiting on others has none.
+  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Just me as reviewer' })).toHaveCount(0)
   await expect(page.getByText('Nothing pending waiting on others.')).toBeVisible()
   await page.getByRole('tab', { name: /^On hold/ }).click()
   await expect(page.getByText('Nothing on hold waiting on others.')).toBeVisible()
   await page.getByRole('tab', { name: /^Done/ }).click()
   await expect(page.getByText('Nothing done waiting on others.')).toBeVisible()
   await filter('To review').click()
+  // Back on To review: the switch returns with the choice it had.
+  await expect(reviewSwitch.getByRole('tab')).toHaveText(['All PRs', 'Just me as reviewer'])
+  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByText('Nothing done to review.')).toBeVisible()
   await page.getByRole('tab', { name: /^Reviewed/ }).click()
   await expect(page.getByText('Nothing reviewed to review.')).toBeVisible()
@@ -83,6 +97,60 @@ test('the PR queue filter survives a reload, kept in the URL and remembered', as
   expect(hydration).toEqual([])
 })
 
+test('the To review switch survives a reload, kept in the URL and remembered', async ({ page, project }) => {
+  const filter = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
+  const reviewSwitch = (name: string) => page.getByRole('tab', { name })
+  const hydration: string[] = []
+  page.on('console', (m) => /hydrat/i.test(m.text()) && hydration.push(m.text()))
+  await page.goto(`/projects/${project.id}/prs`)
+  await expect(reviewSwitch('All PRs')).toHaveAttribute('aria-selected', 'true')
+
+  // Picked: in the URL (the filter with it) and in this browser.
+  await reviewSwitch('Just me as reviewer').click()
+  await expect(reviewSwitch('Just me as reviewer')).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(/[?&]filter=me(&.*)?/)
+  await expect(page).toHaveURL(/[?&]reviewer=mine(&|$)/)
+  expect(await page.evaluate(() => localStorage.getItem('prs.reviewer'))).toBe('mine')
+
+  // A full load renders the switch in the URL, on the server and in the browser alike.
+  await page.reload()
+  await expect(reviewSwitch('Just me as reviewer')).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(/[?&]reviewer=mine(&|$)/)
+
+  // Without one in the URL, the choice this browser remembers comes back, and the URL says so.
+  await page.goto(`/projects/${project.id}/prs`)
+  await expect(page).toHaveURL(/[?&]reviewer=mine(&|$)/)
+  await expect(reviewSwitch('Just me as reviewer')).toHaveAttribute('aria-selected', 'true')
+
+  // A link that names one wins over what is remembered.
+  await page.goto(`/projects/${project.id}/prs?reviewer=all`)
+  await expect(reviewSwitch('All PRs')).toHaveAttribute('aria-selected', 'true')
+  await page.reload()
+  await expect(reviewSwitch('All PRs')).toHaveAttribute('aria-selected', 'true')
+
+  // Waiting on others has no switch, and keeps the choice in the URL for the return to To review.
+  await page.goto(`/projects/${project.id}/prs?filter=others`)
+  await expect(filter('Waiting on others')).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveCount(0)
+  await expect(page.getByRole('tab', { name: 'Just me as reviewer' })).toHaveCount(0)
+  await expect(page).toHaveURL(/[?&]reviewer=mine(&|$)/)
+  await filter('To review').click()
+  await expect(reviewSwitch('Just me as reviewer')).toHaveAttribute('aria-selected', 'true')
+
+  // Both remembered, a visit that names neither: both are put back in the URL, together.
+  await page.evaluate(() => {
+    localStorage.setItem('prs.filter', 'others')
+    localStorage.setItem('prs.reviewer', 'mine')
+  })
+  await page.goto(`/projects/${project.id}/prs`)
+  await expect(filter('Waiting on others')).toHaveAttribute('aria-selected', 'true')
+  await expect(page).toHaveURL(/[?&]filter=others(&|$)/)
+  await expect(page).toHaveURL(/[?&]reviewer=mine(&|$)/)
+  await filter('To review').click()
+  await expect(reviewSwitch('Just me as reviewer')).toHaveAttribute('aria-selected', 'true')
+  expect(hydration).toEqual([])
+})
+
 test('an old link or a remembered All filter lands on To review, with no error', async ({
   page,
   project,
@@ -95,7 +163,11 @@ test('an old link or a remembered All filter lands on To review, with no error',
     await expect(page.getByRole('heading', { name: 'PR queue' })).toBeVisible()
     await expect(filter('To review')).toHaveAttribute('aria-selected', 'true')
     await expect(filter('Waiting on others')).toHaveAttribute('aria-selected', 'false')
-    await expect(page.getByRole('tab', { name: /^All/ })).toHaveCount(0)
+    // `all` is no filter any more: the filter row holds its two sides, and To review's switch is
+    // All PRs.
+    const filterRow = page.getByRole('tablist').filter({ has: filter('To review') })
+    await expect(filterRow.getByRole('tab')).toHaveCount(2)
+    await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveAttribute('aria-selected', 'true')
     await expect(page.getByText('Nothing pending to review.')).toBeVisible()
   }
 
@@ -126,7 +198,13 @@ test('an old link or a remembered All filter lands on To review, with no error',
  * A row of the PR queue as the API answers it. e2e has no GitHub, so the queue is empty unless a test
  * answers `GET /api/projects/:id/prs` itself.
  */
-function prRow(projectId: number, n: number, waitingOn: PrRow['waitingOn'], status: PrRow['status']): PrRow {
+function prRow(
+  projectId: number,
+  n: number,
+  waitingOn: PrRow['waitingOn'],
+  status: PrRow['status'],
+  requested = false,
+): PrRow {
   const at = '2026-01-01T00:00:00.000Z'
   return {
     id: n,
@@ -144,6 +222,7 @@ function prRow(projectId: number, n: number, waitingOn: PrRow['waitingOn'], stat
     isDraft: false,
     reviewDecision: null,
     myReview: 'none',
+    requested,
     waitingOn,
     reviewStage: status === 'reviewed' ? 'reviewed' : 'pending',
     mergeable: 'MERGEABLE',
@@ -176,31 +255,28 @@ async function stubQueue(page: Page, projectId: number, rows: PrRow[]) {
   )
 }
 
-test('the PR queue counts and lists the PRs of the filter picked, stage by stage', async ({
+test('the PR queue counts what still waits, stage by stage, and narrows To review to my requested reviews', async ({
   page,
   project,
 }) => {
+  // To review: pending ×2 (one requested of me), on hold ×1 (requested), reviewed ×1, done ×1
+  // (requested). Waiting on others: pending ×1, on hold ×1, reviewed ×1, done ×1.
   await stubQueue(page, project.id, [
-    prRow(project.id, 1, 'me', 'pending'),
+    prRow(project.id, 1, 'me', 'pending', true),
     prRow(project.id, 2, 'me', 'pending'),
-    prRow(project.id, 3, 'me', 'done'),
-    prRow(project.id, 4, 'others', 'reviewed'),
-    prRow(project.id, 5, 'others', 'on_hold'),
+    prRow(project.id, 3, 'me', 'on_hold', true),
+    prRow(project.id, 4, 'me', 'reviewed'),
+    prRow(project.id, 5, 'me', 'done', true),
+    prRow(project.id, 6, 'others', 'pending'),
+    prRow(project.id, 7, 'others', 'on_hold'),
+    prRow(project.id, 8, 'others', 'reviewed'),
+    prRow(project.id, 9, 'others', 'done'),
   ])
   const tab = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
   const count = (name: string) => tab(name).locator('span')
   const listed = page.getByRole('tabpanel').getByRole('link', { name: /^#\d+ PR / })
-
-  await page.goto(`/projects/${project.id}/prs`)
-  await expect(count('To review')).toHaveText('3')
-  await expect(count('Waiting on others')).toHaveText('2')
-  for (const [filter, stages] of [
-    ['To review', { Pending: [1, 2], Reviewed: [], 'On hold': [], Done: [3] }],
-    ['Waiting on others', { Pending: [], Reviewed: [4], 'On hold': [5], Done: [] }],
-  ] as const) {
-    await tab(filter).click()
-    await expect(tab(filter)).toHaveAttribute('aria-selected', 'true')
-    for (const [stage, numbers] of Object.entries(stages) as [string, readonly number[]][]) {
+  const stages = async (filter: string, expected: Record<string, readonly number[]>) => {
+    for (const [stage, numbers] of Object.entries(expected)) {
       const at = `${filter} ${stage}`
       await expect(count(stage), at).toHaveText(String(numbers.length))
       await tab(stage).click()
@@ -212,6 +288,55 @@ test('the PR queue counts and lists the PRs of the filter picked, stage by stage
         ).toBeVisible()
     }
   }
+
+  await page.goto(`/projects/${project.id}/prs`)
+  // Each counter is its tab's Pending + On hold rows: Reviewed and Done are listed but not counted.
+  await expect(count('To review')).toHaveText('3')
+  await expect(count('Waiting on others')).toHaveText('2')
+  await stages('To review', { Pending: [1, 2], Reviewed: [4], 'On hold': [3], Done: [5] })
+
+  // Waiting on others has no switch: its counter and every chip count the whole side.
+  await tab('Waiting on others').click()
+  await expect(count('Waiting on others')).toHaveText('2')
+  await expect(page.getByRole('tab', { name: 'All PRs' })).toHaveCount(0)
+  await stages('Waiting on others', { Pending: [6], Reviewed: [8], 'On hold': [7], Done: [9] })
+
+  // Just me as reviewer: the list, every chip and the counter narrow together, in one move.
+  await tab('To review').click()
+  await tab('Just me as reviewer').click()
+  await expect(tab('Just me as reviewer')).toHaveAttribute('aria-selected', 'true')
+  await expect(count('To review')).toHaveText('2')
+  await stages('To review', { Pending: [1], Reviewed: [], 'On hold': [3], Done: [5] })
+
+  // All PRs again: back to the whole side.
+  await tab('All PRs').click()
+  await expect(count('To review')).toHaveText('3')
+  await stages('To review', { Pending: [1, 2], Reviewed: [4], 'On hold': [3], Done: [5] })
+})
+
+test('Just me as reviewer with no review requested shows Nothing pending to review', async ({
+  page,
+  project,
+}) => {
+  await stubQueue(page, project.id, [
+    prRow(project.id, 1, 'me', 'pending'),
+    prRow(project.id, 2, 'me', 'on_hold'),
+    prRow(project.id, 3, 'others', 'pending'),
+  ])
+  const tab = (name: string) => page.getByRole('tab', { name: new RegExp(`^${name}`) })
+  const count = (name: string) => tab(name).locator('span')
+
+  await page.goto(`/projects/${project.id}/prs?filter=me&reviewer=mine`)
+  await expect(tab('Just me as reviewer')).toHaveAttribute('aria-selected', 'true')
+  // The narrowed side has nothing left: every chip and the counter say so, and the list its text.
+  await expect(count('To review')).toHaveText('0')
+  for (const stage of ['Pending', 'Reviewed', 'On hold', 'Done']) {
+    await tab(stage).click()
+    await expect(count(stage), stage).toHaveText('0')
+    await expect(page.getByText(`Nothing ${stage.toLowerCase()} to review.`), stage).toBeVisible()
+  }
+  await tab('Pending').click()
+  await expect(page.getByText('Nothing pending to review.')).toBeVisible()
 })
 
 test('the PR queue stage tabs and filter fit every width from 375 to 1440px without scrolling', async ({
@@ -226,10 +351,14 @@ test('the PR queue stage tabs and filter fit every width from 375 to 1440px with
     ),
   )
   await stubQueue(page, project.id, rows)
-  const tabs = [
+  // Each row group as its tab row draws it, with the count each tab reads (none on the switch).
+  const tabs: { names: string[]; count?: string }[] = [
     { names: ['Pending', 'Reviewed', 'On hold', 'Done'], count: '12' },
-    { names: ['To review', 'Waiting on others'], count: '48' },
-  ].map((t) => ({
+    // Pending + On hold: what each counter counts.
+    { names: ['To review', 'Waiting on others'], count: '24' },
+    { names: ['All PRs', 'Just me as reviewer'] },
+  ]
+  const tabRows = tabs.map((t) => ({
     ...t,
     list: page
       .getByRole('tablist')
@@ -239,7 +368,7 @@ test('the PR queue stage tabs and filter fit every width from 375 to 1440px with
   await page.goto(`/projects/${project.id}/prs`)
   for (const width of [375, 390, 440, 640, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 900 })
-    for (const { names, count, list } of tabs) {
+    for (const { names, count, list } of tabRows) {
       const at = `${width}px ${names[0]}`
       // The list and each box around it up to the page's main: nothing overflows the list, nothing
       // around it is pushed sideways, and none of them scrolls.
@@ -264,7 +393,9 @@ test('the PR queue stage tabs and filter fit every width from 375 to 1440px with
       }
       for (const name of names) {
         const tab = list.getByRole('tab', { name: new RegExp(`^${name}`) })
-        await expect(tab, `${at} ${name}`).toHaveText(new RegExp(`^${name}\\s*${count}$`))
+        await expect(tab, `${at} ${name}`).toHaveText(
+          count === undefined ? new RegExp(`^${name}$`) : new RegExp(`^${name}\\s*${count}$`),
+        )
         await expect(tab, `${at} ${name}`).toBeInViewport({ ratio: 1 })
         expect(await tab.evaluate((e) => e.scrollWidth <= e.clientWidth), `${at} ${name}`).toBe(true)
       }

@@ -164,13 +164,17 @@ function standingOf(principal: Principal, workspaceId: number, now: Date, deps: 
   return agentMayView(token.name, deps.projectOf(workspaceId)) ? 'ok' : 'other-project'
 }
 
-/** The principal a request's board credential is, checked as the board checks it; null when none is good. */
+/**
+ * The principal a request's board credential is, checked as the board checks it; null when none is good.
+ * A token of the whole board only: a skill download credential is no preview principal, whatever its row's
+ * id, the same way `signedIn` makes it no sign-in.
+ */
 function credentialOf(request: Request, site: SignInSite | null, now: Date): Principal | null {
   const authorization = request.headers.get('authorization')
   if (isBearer(authorization)) {
     const token = bearerToken(authorization)
     const hit = token ? agentTokenOf(db.$client, token, now) : null
-    return hit ? `t${hit.id}` : null
+    return hit?.scope === 'full' ? `t${hit.id}` : null
   }
   const cookie = readCookie(request.headers.get('cookie'), sessionCookieName(config.port))
   if (!site || !cookie) return null
