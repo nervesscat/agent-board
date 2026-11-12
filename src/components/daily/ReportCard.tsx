@@ -17,7 +17,7 @@ import {
   errorMessage,
   get,
   post,
-  upload,
+  uploadAll,
   type ReportList,
   type ReportPeriod,
   type ReportSettingsView,
@@ -189,7 +189,7 @@ function PostReport({
   const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
   const send = useMutation({
     mutationFn: async () => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
+      const attachmentIds = await uploadAll(files)
       return post(`/api/projects/${projectId}/reports`, { period: period.period, body, attachmentIds })
     },
     onSuccess: onPosted,

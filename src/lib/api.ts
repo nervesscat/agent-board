@@ -17,6 +17,8 @@ import type {
   Workspace,
   Activity,
 } from '#/db/schema'
+import type { AnnotationDoc } from '#/lib/annotations'
+import { annotationsOf } from '#/lib/annotations'
 import type { ReportStatus } from '#/lib/reports'
 import type { PushedToday } from '#/server/pushedToday'
 import type { ReportDue } from '#/server/reportDue'
@@ -31,6 +33,7 @@ import type { BranchInfo, Reach, Worktree } from '#/server/git'
 import type { DirListing } from '#/server/fs'
 import type { Gallery, GalleryFile } from '#/server/gallery'
 import type { HostTool, HostTools } from '#/server/hostTools'
+import type { JobState } from '#/server/jobs'
 import type { ManagedPreview } from '#/server/managedPreview'
 import type { OpencodeConfig } from '#/server/opencodeConfig'
 import type { RunState } from '#/server/runs'
@@ -76,6 +79,7 @@ export type {
   GalleryFile,
   HostTool,
   HostTools,
+  JobState,
   ManagedPreview,
   OpencodeConfig,
   PreviewState,
@@ -188,10 +192,29 @@ export const patch = <T>(url: string, body?: unknown) => request<T>(url, jsonIni
 export const put = <T>(url: string, body?: unknown) => request<T>(url, jsonInit('PUT', body))
 export const del = <T>(url: string) => request<T>(url, jsonInit('DELETE'))
 
-export function upload(file: File): Promise<Attachment & { url: string }> {
+/**
+ * Sends a file; with `annotations`, the document the canvas drew on it, so the attachment keeps both
+ * the flattened picture and the notes that explain it.
+ */
+export function upload(
+  file: File,
+  annotations?: AnnotationDoc | null,
+): Promise<Attachment & { url: string }> {
   const form = new FormData()
   form.append('file', file)
+  if (annotations) form.append('annotations', JSON.stringify(annotations))
   return request('/api/uploads', { method: 'POST', body: form })
+}
+
+/**
+ * Uploads a batch one file after another, so the board numbers its rows in the order the files were
+ * picked: the attachments of a ticket, a post or a reply are listed by when they arrived, and uploads
+ * sent at once would arrive in whichever order they finished.
+ */
+export async function uploadAll(files: File[]): Promise<number[]> {
+  const ids: number[] = []
+  for (const file of files) ids.push((await upload(file, annotationsOf(file))).id)
+  return ids
 }
 
 export function errorMessage(err: unknown, fallback = 'something went wrong'): string {

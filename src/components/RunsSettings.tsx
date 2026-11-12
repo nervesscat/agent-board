@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, FolderGit2, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, FolderGit2, Pencil, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { TrashIcon } from '#/components/TrashIcon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -175,7 +176,7 @@ function RepoRuns({ repo }: { repo: Repo }) {
                   <AlertDialogTrigger
                     render={<Button variant="ghost" size="icon-sm" aria-label={`Delete ${r.name}`} />}
                   >
-                    <Trash2 />
+                    <TrashIcon />
                   </AlertDialogTrigger>
                 </Tip>
                 <AlertDialogContent>

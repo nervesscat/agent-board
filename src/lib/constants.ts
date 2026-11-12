@@ -11,9 +11,11 @@ export type StageKind = (typeof STAGE_KINDS)[number]
 
 /**
  * How much review a ticket gets: `low` none (the builder verifies itself), `mid` one review round,
- * `high` three. Chosen by the human when the ticket is created, and changeable after.
+ * `high` three, `max` up to ten for work built from scratch (a whole site or app, a new product or
+ * service; a feature in an existing codebase is never `max`). Chosen when the ticket is created, and
+ * changeable after.
  */
-export const COMPLEXITIES = ['low', 'mid', 'high'] as const
+export const COMPLEXITIES = ['low', 'mid', 'high', 'max'] as const
 export type Complexity = (typeof COMPLEXITIES)[number]
 /** The level of a ticket created without one, and of every ticket stored before levels existed. */
 export const DEFAULT_COMPLEXITY: Complexity = 'mid'
@@ -21,10 +23,12 @@ export const DEFAULT_COMPLEXITY: Complexity = 'mid'
  * The thinking effort of every agent the review cycle starts for a ticket (the ticket agent, the spec
  * agent, the builder, the review's phase agents): the orchestrator passes it as the Agent tool's `effort`.
  */
-export const COMPLEXITY_EFFORT = { low: 'low', mid: 'medium', high: 'medium' } as const satisfies Record<
-  Complexity,
-  'low' | 'medium' | 'high'
->
+export const COMPLEXITY_EFFORT = {
+  low: 'low',
+  mid: 'medium',
+  high: 'medium',
+  max: 'high',
+} as const satisfies Record<Complexity, 'low' | 'medium' | 'high'>
 
 export const STAGE_COLORS = [
   'gray',
@@ -73,7 +77,7 @@ export const AGENT_CLIENTS = ['claude', 'codex', 'opencode'] as const
 export type AgentClient = (typeof AGENT_CLIENTS)[number]
 
 /**
- * Which copy of the review skills the Connect an agent and Team pages track: the user-wide `~/.claude` on the board's
+ * Which copy of the review skills the Connect an agent page tracks: the user-wide `~/.claude` on the board's
  * machine (the first, the default until one is picked), or each repo's own `.claude`.
  */
 export const SKILLS_TRACKING = ['global', 'repo'] as const

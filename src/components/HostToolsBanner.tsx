@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, type HostTools, post } from '#/lib/api'
+import { useHydrated } from '#/lib/useHydrated'
 
 /**
  * On every page, while a tool the board runs is missing on its machine (or gh is signed out): each one,
@@ -27,12 +28,14 @@ export function HostToolsBanner() {
   })
   const [dismissed, setDismissed] = useState<Dismissed>({})
   useEffect(() => setDismissed(readDismissed()), [])
+  // Read after mount: the check can answer before React has hydrated the page.
+  const hydrated = useHydrated()
 
   // Not what the human is looking at: an optional tool's absence is told where that tool is used.
   const shown = (data?.tools ?? []).filter(
     (t) => !t.ok && !t.optional && dismissed[t.name] !== data!.checkedAt,
   )
-  if (!data || !shown.length) return null
+  if (!hydrated || !data || !shown.length) return null
   const dismiss = (name: string) => {
     const next = { ...dismissed, [name]: data.checkedAt }
     setDismissed(next)

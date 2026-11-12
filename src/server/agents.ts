@@ -18,11 +18,19 @@ import { readyOpencodeConfig } from './opencodeConfig'
 import { getProject, listProjects } from './projects'
 import { getRepo } from './repos'
 import rawTemplate from './skill/board.md?raw'
+import rawSessionSkill from './skill/session.md?raw'
 import boardMcpScript from '../../scripts/board-mcp.mjs?raw'
 import { restSection } from './skill/rest'
 
 // Agents get the skill with LF line endings, also from a Windows checkout where the file has CRLF.
 const template = rawTemplate.replace(/\r\n/g, '\n')
+const sessionTemplate = rawSessionSkill.replace(/\r\n/g, '\n')
+
+/**
+ * The session skill (`/session`): the protocol for the agent in the human's conversation. One text for
+ * every client, with no tokens to fill in, so it is served as it is.
+ */
+export const sessionSkill = () => sessionTemplate
 
 // --- settings (board-wide preferences) ---
 
@@ -31,7 +39,7 @@ export interface Settings {
   defaultAgent: AgentClient
   /** How many previews the board builds or runs at once, board-wide (`PREVIEW_LIMIT`). */
   previewLimit: number
-  /** The copy of the review skills the Connect an agent and Team pages show: `~/.claude` (global) or each repo's own. */
+  /** The copy of the review skills the Connect an agent page shows: `~/.claude` (global) or each repo's own. */
   skillsTracking: SkillsTracking
 }
 
@@ -367,4 +375,96 @@ export async function reviewSkillDiff(file: string, repoId?: number): Promise<Sk
         ? diffLines('text' in installed ? lf(installed.text) : '', lf(want))
         : [],
   }
+}
+
+// --- installing them on this machine: the board skill under the home it runs as, the bundle in CLAUDE_HOME ---
+
+/** What an install did to one file: made it, wrote it over, or found it as served already. */
+export type InstallAction = 'created' | 'updated' | 'unchanged'
+
+export interface InstalledFile {
+  /** Where the file is: absolute, under the home the board runs as or CLAUDE_HOME. */
+  path: string
+  action: InstallAction
+}
+
+/** What one install wrote: when it ran, and every file with what it did. */
+export interface InstallResult {
+  at: string
+  files: InstalledFile[]
+}
+
+/** Where each CLI keeps its user-wide skills, under its home. */
+const SKILL_FOLDERS: Record<AgentClient, string[]> = {
+  claude: ['.claude', 'skills', 'board'],
+  codex: ['.agents', 'skills', 'board'],
+  opencode: ['.config', 'opencode', 'skills', 'board'],
+}
+
+/** A Windows home (drive letter or UNC share), whose folders keep their backslashes. */
+const windowsHome = /^[A-Za-z]:[\\/]|^\\\\/
+
+/**
+ * The folder a CLI's SKILL.md goes in on this machine, from its home (`os.homedir`, never the `~` the
+ * page shows): `/home/me/.claude/skills/board`, or `C:\Users\me\.claude\skills\board` for a Windows home.
+ */
+export function skillDir(client: AgentClient, home = os.homedir()): string {
+  const folders = SKILL_FOLDERS[client]
+  if (!windowsHome.test(home)) return path.join(home, ...folders)
+  const sep = home.includes('\\') ? '\\' : '/'
+  return `${home.replace(/[\\/]+$/, '')}${sep}${folders.join(sep)}`
+}
+
+let tempFiles = 0
+/** A name beside `target` for the text on its way to it, so it is renamed over whole, never half written. */
+const tempName = (target: string) =>
+  path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${++tempFiles}.tmp`)
+
+/**
+ * Writes one file as the board serves it: its folder made when it is missing, the text to a temporary name
+ * beside it and renamed over the target (a reader never sees half a file), and no shell anywhere. A file
+ * already holding that text (line endings aside) is left as it is. A folder that cannot be made or written
+ * is a 500 naming the file it was writing, and leaves the earlier copy as it was.
+ */
+async function installFile(target: string, text: string): Promise<InstallAction> {
+  let installed: string | null = null
+  try {
+    installed = await fs.readFile(target, 'utf8')
+  } catch {
+    // Not a file that can be read (missing, a folder in its place, no permission): write it, and let the
+    // write below say why if it cannot.
+  }
+  if (installed !== null && lf(installed) === lf(text)) return 'unchanged'
+  const temp = tempName(target)
+  try {
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    await fs.writeFile(temp, text, 'utf8')
+    await fs.rename(temp, target)
+  } catch (err) {
+    await fs.rm(temp, { force: true }).catch(() => {})
+    const code = (err as NodeJS.ErrnoException).code
+    throw new HttpError(500, `could not install ${target}: ${code ?? (err as Error).message}`)
+  }
+  return installed === null ? 'created' : 'updated'
+}
+
+/** Writes the board skill for `client` into its own folder under `home` on this machine, as served. */
+export async function installSkill(client: AgentClient, home = os.homedir()): Promise<InstallResult> {
+  const at = new Date().toISOString()
+  const file = path.join(skillDir(client, home), 'SKILL.md')
+  return { at, files: [{ path: file, action: await installFile(file, renderSkill(client)) }] }
+}
+
+/**
+ * Writes the review bundle into `config.claudeHome` (`CLAUDE_HOME`, `~/.claude` unless it names another
+ * folder), every path of `reviewBundlePaths()` with the bytes the tar holds, replacing files of the same name.
+ */
+export async function installReviewSkills(): Promise<InstallResult> {
+  const at = new Date().toISOString()
+  const files: InstalledFile[] = []
+  for (const p of reviewBundlePaths()) {
+    const file = path.join(config.claudeHome, ...p.split('/'))
+    files.push({ path: file, action: await installFile(file, served(p)) })
+  }
+  return { at, files }
 }

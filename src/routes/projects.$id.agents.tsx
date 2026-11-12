@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, createFileRoute } from '@tanstack/react-router'
-import { ImagePlus, Lock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { ImagePlus, Lock, Pencil, Plus, Sparkles, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { z } from 'zod'
 
 import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
 import { Markdown } from '#/components/Markdown'
+import { TrashIcon } from '#/components/TrashIcon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,20 +23,14 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Tip } from '#/components/ui/tooltip'
-import { GenerateCommands } from '#/components/AgentTokens'
-import { ReviewSkills, useShell } from '#/components/ReviewSkills'
 import { RichEditor } from '#/components/RichEditor'
-import { SHELLS } from '#/lib/agents'
-import { del, errorMessage, get, patch, post, type ProjectAgent, type TicketRow, upload } from '#/lib/api'
+import { del, errorMessage, patch, post, type ProjectAgent, type TicketRow, upload } from '#/lib/api'
 import { DEFAULT_AGENT_NAMES } from '#/lib/constants'
 import { useProject } from '#/lib/project'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
-import type { NewAgentToken } from '#/server/tokens'
 
-// ?shell= is the shell the review skills' install line is for (see useShell).
 export const Route = createFileRoute('/projects/$id/agents')({
   component: Agents,
-  validateSearch: z.object({ shell: z.enum(SHELLS).optional().catch(undefined) }),
 })
 
 function Agents() {
@@ -78,16 +72,9 @@ function Agents() {
   )
 }
 
-/** The build and review cycle as agents, one click away, and the skills that run it. */
+/** The build and review cycle as agents, one click away, and where the skills that run it install. */
 function DefaultAgents({ projectId, agents }: { projectId: string; agents: ProjectAgent[] }) {
   const qc = useQueryClient()
-  const { data: setup } = useQuery({
-    queryKey: ['agent-setup'],
-    queryFn: () => get<{ boardUrl: string }>('/api/agent-setup'),
-  })
-  const [shell, pickShell] = useShell()
-  // The token "Generate commands" made for the install lines: shown once, never stored here.
-  const [made, setMade] = useState<NewAgentToken | null>(null)
   const have = new Set(agents.map((a) => a.name.toLowerCase()))
   const missing = DEFAULT_AGENT_NAMES.filter((n) => !have.has(n))
   const add = useMutation({
@@ -129,16 +116,13 @@ function DefaultAgents({ projectId, agents }: { projectId: string; agents: Proje
           <span className="shrink-0 text-xs text-muted-foreground">All added</span>
         )}
       </div>
-      {setup && <GenerateCommands defaultName="claude" token={made} onToken={setMade} />}
-      {setup && (
-        <ReviewSkills
-          boardUrl={setup.boardUrl}
-          token={made?.token}
-          shell={shell}
-          onShellChange={pickShell}
-          projectId={projectId}
-        />
-      )}
+      <p className="border-t pt-3 text-xs text-muted-foreground">
+        The skills that run this cycle, and the agent&apos;s MCP connection, install on{' '}
+        <Link to="/agents" className="underline hover:text-foreground">
+          Connect an agent
+        </Link>
+        .
+      </p>
     </section>
   )
 }
@@ -200,7 +184,7 @@ function AgentCard({
             <AlertDialogTrigger
               render={<Button variant="ghost" size="icon-sm" aria-label={`Remove ${agent.name}`} />}
             >
-              <Trash2 className="text-destructive" />
+              <TrashIcon />
             </AlertDialogTrigger>
           </Tip>
           <AlertDialogContent>

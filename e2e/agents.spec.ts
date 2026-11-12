@@ -1,19 +1,26 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 
-import { AGENTS, mcpSetup, repoClaudeDir, reviewSkillsInstall, skillInstall } from '#/lib/agents'
+import {
+  AGENTS,
+  TOKEN_PLACEHOLDER,
+  mcpSetup,
+  repoClaudeDir,
+  reviewSkillsInstall,
+  sessionSkillInstall,
+  skillInstall,
+} from '#/lib/agents'
 import { AGENT_CLIENTS } from '#/lib/constants'
-import type { Project } from '#/lib/api'
 import { inDatabase } from './db'
 import { e2eEnv } from './env'
-import { expect, ok, seededProject, test } from './fixtures'
+import { expect, ok, test } from './fixtures'
 
 test('the shell picked for the install lines is kept in the URL, remembered, and shared by the page', async ({
   page,
-  project,
 }) => {
   const hydration: string[] = []
   page.on('console', (m) => /hydrat/i.test(m.text()) && hydration.push(m.text()))
@@ -34,23 +41,18 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   await expect(page).toHaveURL(/[?&]shell=powershell(&|$)/)
   // One choice for the page: the review skills' line follows.
   for (const tab of await tabs('PowerShell').all()) await expect(tab).toHaveAttribute('aria-selected', 'true')
-  await expect(page.getByText(/^New-Item -ItemType Directory/)).toBeVisible()
+  await expect(page.getByText(/^New-Item -ItemType Directory .*\\skills\\board"/)).toBeVisible()
   await expect(reviewLine).toBeVisible()
 
   await page.reload()
   for (const tab of await tabs('PowerShell').all()) await expect(tab).toHaveAttribute('aria-selected', 'true')
   await expect(reviewLine).toBeVisible()
 
-  // Without one in the URL, the shell this browser remembers comes back, and the URL says so: here and
-  // on a project's Team page.
+  // Without one in the URL, the shell this browser remembers comes back, and the URL says so.
   await page.goto('/agents')
   await expect(page).toHaveURL(/[?&]shell=powershell(&|$)/)
   await expect(page.getByText(/^New-Item -ItemType Directory/)).toBeVisible()
-  await page.goto(`/projects/${project.id}/agents`)
-  await expect(page).toHaveURL(/[?&]shell=powershell(&|$)/)
-  await expect(tabs('PowerShell')).toHaveAttribute('aria-selected', 'true')
-  await expect(reviewLine).toBeVisible()
-  await tabs(bash).click()
+  await tabs(bash).first().click()
   await expect(page).toHaveURL(/[?&]shell=bash(&|$)/)
   await expect(page.getByText(/^\$t = Join-Path/)).toHaveCount(0)
 
@@ -63,10 +65,9 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   expect(hydration).toEqual([])
 })
 
-test('Generate commands makes a token per agent, fills it into every command, lists it and revokes it', async ({
+test('Generate commands makes a token per agent, fills it into the MCP setup line, lists it and revokes it', async ({
   page,
   human,
-  project,
 }) => {
   const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
   const mints: string[] = []
@@ -99,12 +100,17 @@ test('Generate commands makes a token per agent, fills it into every command, li
       'orchestrator',
     )
     await expect(shown(mcpSetup(client, boardUrl, made.token).text)).toBeVisible()
-    await expect(shown(skillInstall(client, 'bash', boardUrl, made.token))).toBeVisible()
-    await expect(shown(reviewSkillsInstall('bash', boardUrl, made.token))).toBeVisible()
-    await page.getByRole('tab', { name: 'PowerShell' }).first().click()
-    await expect(shown(skillInstall(client, 'powershell', boardUrl, made.token))).toBeVisible()
-    await expect(shown(reviewSkillsInstall('powershell', boardUrl, made.token))).toBeVisible()
-    await page.getByRole('tab', { name: 'bash / zsh' }).first().click()
+    // The install lines are not the MCP token's: they wait for a copy, which mints their own.
+    for (const line of [
+      skillInstall(client, 'bash', boardUrl, ''),
+      reviewSkillsInstall('bash', boardUrl, ''),
+    ])
+      await expect(shown(line)).toBeVisible()
+    for (const line of [
+      skillInstall(client, 'bash', boardUrl, made.token),
+      reviewSkillsInstall('bash', boardUrl, made.token),
+    ])
+      await expect(shown(line)).toHaveCount(0)
     const listed = tokens.getByRole('listitem').filter({ hasText: client }).first()
     await expect(listed).toContainText('never used')
     await expect(listed.getByText('Orchestrator', { exact: true })).toBeVisible()
@@ -135,14 +141,53 @@ test('Generate commands makes a token per agent, fills it into every command, li
   await expect(page.getByText(/Bearer <token>/).first()).toBeVisible()
   await expect(page.getByText(renamed.token)).toHaveCount(0)
   expect(mints).toHaveLength(AGENT_CLIENTS.length + 1)
+})
 
-  // A project's Team page makes one for the review skills' lines.
-  await page.goto(`/projects/${project.id}/agents?shell=bash`)
-  await expect(page.getByLabel('Agent name')).toHaveValue('claude')
-  await expect(shown(reviewSkillsInstall('bash', boardUrl, ''))).toBeVisible()
-  const forReviews = await generateCommands(page)
-  await expect(shown(reviewSkillsInstall('bash', boardUrl, forReviews.token))).toBeVisible()
-  await expect(page.locator('main')).not.toContainText(/gate_|gate token|passkey gate/i)
+test('the session skill installs from its own line in section 2, which keeps one pair of shell tabs', async ({
+  page,
+  human,
+  agent,
+}) => {
+  const servedResponse = await human.get('/api/agent-setup/session-skill')
+  expect(servedResponse.ok()).toBe(true)
+  const served = await servedResponse.text()
+  expect(served).toContain('name: session')
+  // An agent gets the same bytes.
+  expect(await (await agent.get('/api/agent-setup/session-skill')).text()).toBe(served)
+  const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+
+  await page.goto('/agents?shell=bash')
+  const install = page
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: '2. Install the skill' }) })
+  // One shell picker for the section, as before, and the session skill's line beside the board skill's.
+  await expect(install.getByRole('tab')).toHaveCount(2)
+  await expect(install.getByText('/session', { exact: true })).toBeVisible()
+  const blocks = install.locator(':scope > div.space-y-1').filter({ has: page.locator('pre') })
+  await expect(blocks).toHaveCount(2)
+  const lines = blocks.locator('pre')
+  await expect(lines.nth(0)).toHaveText(skillInstall('claude', 'bash', boardUrl, ''))
+  await expect(lines.nth(1)).toHaveText(sessionSkillInstall('claude', 'bash', boardUrl, ''))
+
+  // The section's picker switches both lines, and neither carries a credential before one is copied.
+  await install.getByRole('tab', { name: 'PowerShell' }).click()
+  await expect(lines.nth(0)).toHaveText(skillInstall('claude', 'powershell', boardUrl, ''))
+  await expect(lines.nth(1)).toHaveText(sessionSkillInstall('claude', 'powershell', boardUrl, ''))
+  await install.getByRole('tab', { name: 'bash / zsh' }).click()
+  await expect(lines.nth(1)).toHaveText(sessionSkillInstall('claude', 'bash', boardUrl, ''))
+  // Copying the session skill's own line mints the short-lived credential, which both lines then carry.
+  const { token } = await copyInstallLine(page, blocks.nth(1))
+  await expect(lines.nth(0)).toHaveText(skillInstall('claude', 'bash', boardUrl, token))
+  await expect(lines.nth(1)).toHaveText(sessionSkillInstall('claude', 'bash', boardUrl, token))
+
+  // Run as shown, into a home of its own: the served bytes, at <skills>/session/SKILL.md.
+  // PowerShell's line writes to $HOME, which this run cannot redirect; its shape is checked above.
+  if (process.platform !== 'win32') {
+    const scratch = await runShownLine(page, blocks.nth(1))
+    expect(fs.readFileSync(path.join(scratch, '.claude', 'skills', 'session', 'SKILL.md'), 'utf8')).toBe(
+      served,
+    )
+  }
 })
 
 test("a token that answers after the page moved to another CLI never fills that CLI's commands", async ({
@@ -257,24 +302,21 @@ async function generateCommands(
 }
 
 /**
- * Runs the install line `entry` shows, with a token in it: the PowerShell one on Windows (with Windows'
- * own tar first, as a PowerShell terminal finds it), the bash one elsewhere. Run only once the entry shows
- * the line `line` builds for the folder checked, and with a home and a temp folder of its own, so that a
- * line for any other folder never reaches the real ones.
+ * Copies the install line `entry` shows and runs it: the PowerShell one on Windows (with Windows' own tar
+ * first, as a PowerShell terminal finds it), the bash one elsewhere. The copy mints the line's download
+ * credential when the page has none yet, so it never carries the placeholder; a home and a temp folder of
+ * its own keep a line for any other folder from reaching the real ones.
  */
-async function runShownLine(
-  page: Page,
-  entry: Locator,
-  line: (shell: 'bash' | 'powershell', token?: string) => Locator,
-) {
+async function runShownLine(page: Page, entry: Locator) {
   const shell = process.platform === 'win32' ? 'powershell' : 'bash'
   await page
     .getByRole('tab', { name: shell === 'bash' ? 'bash / zsh' : 'PowerShell' })
     .first()
     .click()
-  const { token } = await generateCommands(page)
-  await expect(line(shell, token)).toBeVisible()
-  const text = (await entry.locator('pre').textContent())!
+  await entry.getByRole('button', { name: 'Copy', exact: true }).first().click()
+  const line = entry.locator('pre').first()
+  await expect(line).not.toContainText(TOKEN_PLACEHOLDER)
+  const text = (await line.textContent())!
   const scratch = fs.mkdtempSync(path.join(e2eEnv().root, 'shell '))
   if (shell === 'bash') {
     execFileSync('bash', ['-c', text], { cwd: scratch, env: { ...process.env, HOME: scratch } })
@@ -285,6 +327,21 @@ async function runShownLine(
       env: { ...process.env, TEMP: scratch, PATH: `${system32};${process.env.PATH}` },
     })
   }
+  return scratch
+}
+
+/**
+ * Copies an install line inside `scope` (the review skills' own line by default) and returns the short-lived
+ * download credential that copy minted: every install line on the page carries it from then on.
+ */
+async function copyInstallLine(page: Page, scope: Locator = page.locator('section#review-skills')) {
+  const minted = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/api/agent-setup/skill-token' && r.request().method() === 'POST',
+  )
+  await scope.getByRole('button', { name: 'Copy', exact: true }).first().click()
+  const res = await minted
+  expect(res.status()).toBe(201)
+  return (await res.json()) as { token: string; expiresAt: string }
 }
 
 /** The bundle as served, file by file: the tar extracted into a folder of its own. */
@@ -325,16 +382,26 @@ type Tracking = 'global' | 'repo'
 const track = (human: APIRequestContext, skillsTracking: Tracking) =>
   ok<{ skillsTracking: Tracking }>(human.patch('/api/settings', { data: { skillsTracking } }))
 
-// Which copy the Connect an agent and Team pages track is one setting for the whole board, and the user-wide .claude is one
+test('an agent can neither mint the download credential nor install the skills', async ({ agent }) => {
+  const mint = await agent.post('/api/agent-setup/skill-token', { data: {} })
+  expect(mint.status()).toBe(403)
+  expect((await mint.json()).error).toMatch(/only the human/)
+  for (const data of [{ client: 'claude', kind: 'skill' }, { kind: 'review-skills' }]) {
+    const install = await agent.post('/api/agent-setup/skill/install', { data })
+    expect(install.status()).toBe(403)
+    expect((await install.json()).error).toMatch(/only the human/)
+  }
+})
+
+// Which copy the Connect an agent page tracks is one setting for the whole board, and the user-wide .claude is one
 // folder: the tests that set either run one after another.
-test.describe('the copy of the review skills the Connect an agent and Team pages track', () => {
+test.describe('the review skills on the Connect an agent page: the copy it tracks, and installing them', () => {
   test.describe.configure({ mode: 'serial' })
 
-  test('Global until another is picked, kept across reloads, and the same on both the Connect an agent and Team pages', async ({
+  test('Global until another is picked, and kept across reloads and pages', async ({
     page,
     human,
     agent,
-    project,
   }) => {
     inDatabase((db) => db.prepare("delete from settings where key = 'skillsTracking'").run())
     expect((await ok<{ skillsTracking: Tracking }>(human.get('/api/settings'))).skillsTracking).toBe('global')
@@ -381,22 +448,20 @@ test.describe('the copy of the review skills the Connect an agent and Team pages
     await page.reload()
     await shows('global')
 
-    // Connect an agent and Team both show the one choice, also when moving between them without a reload.
-    await page.goto(`/projects/${project.id}/agents`)
-    await shows('global')
-    await page.evaluate(() => Object.assign(window, { stillHere: true }))
+    // The one choice comes back from another page without a reload.
     await tab('By repo').click()
     await saved('repo')
-    await page.getByRole('banner').getByRole('link', { name: 'Connect', exact: true }).click()
+    await page.evaluate(() => Object.assign(window, { stillHere: true }))
+    await page.getByRole('banner').getByRole('link', { name: 'Settings', exact: true }).click()
+    await expect(page).toHaveURL(/\/settings(\?|$)/)
+    await page.goBack()
     await expect(page).toHaveURL(/^http:\/\/[^/]+\/agents(\?|$)/)
     await expect(page.getByRole('heading', { name: 'Connect an agent' })).toBeVisible()
     await shows('repo')
+    expect(await page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere)).toBe(true)
     await tab('Global').click()
     await saved('global')
-    await page.goBack()
-    await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/agents`))
     await shows('global')
-    expect(await page.evaluate(() => (window as unknown as { stillHere?: boolean }).stillHere)).toBe(true)
 
     // Agents read the choice; only the human changes it.
     expect((await ok<{ skillsTracking: Tracking }>(agent.get('/api/settings'))).skillsTracking).toBe('global')
@@ -447,12 +512,13 @@ test.describe('the copy of the review skills the Connect an agent and Team pages
     await expect(entry.getByRole('button', { name: 'Copy' })).toBeVisible()
     await page.getByRole('tab', { name: 'PowerShell' }).first().click()
     await expect(line('powershell')).toBeVisible()
-    const { token } = await generateCommands(page)
+    // Copying it mints the short-lived credential it then carries.
+    const { token } = await copyInstallLine(page, entry)
     await expect(line('powershell', token)).toBeVisible()
 
     // What the line does, run as shown: the bundle extracted into the folder checked. Checked again, it
     // is up to date and its own skill is still there.
-    await runShownLine(page, entry, line)
+    await runShownLine(page, entry)
     await here.getByRole('button', { name: 'Check again' }).click()
     await expect(entry.getByText('Up to date', { exact: true })).toBeVisible()
     await expect(entry.getByRole('button')).toHaveCount(0)
@@ -468,20 +534,10 @@ test.describe('the copy of the review skills the Connect an agent and Team pages
     await expect(entry.getByText('None of these files are there yet: this line installs them.')).toBeVisible()
     await expect(entry.getByRole('button')).toHaveCount(1)
     expect(fs.existsSync(claude)).toBe(false)
-    await runShownLine(page, entry, line)
+    await runShownLine(page, entry)
     await here.getByRole('button', { name: 'Check again' }).click()
     await expect(entry.getByText('Up to date', { exact: true })).toBeVisible()
     emptyHome()
-
-    // A project's Team page shows the same copy.
-    await drifted(human, claude)
-    await page.goto(`/projects/${seededProject().id}/agents`)
-    await expect(
-      page
-        .getByRole('region', { name: 'On this machine' })
-        .getByRole('listitem', { name: '~/.claude on this machine' })
-        .getByText('Outdated', { exact: true }),
-    ).toBeVisible()
   })
 
   test("each repo's own copy of the review skills: outdated, opened to its files and line, and up to date once installed", async ({
@@ -524,7 +580,7 @@ test.describe('the copy of the review skills the Connect an agent and Team pages
     await page.getByRole('tab', { name: 'PowerShell' }).first().click()
     await expect(line('powershell')).toBeVisible()
     await expect(page.getByRole('tab', { name: 'PowerShell' })).toHaveCount(2)
-    const { token } = await generateCommands(page)
+    const { token } = await copyInstallLine(page, drifted)
     await expect(line('powershell', token)).toBeVisible()
     await expect(
       page.getByText(/replacing files of the same name and keeping the rest/),
@@ -540,12 +596,10 @@ test.describe('the copy of the review skills the Connect an agent and Team pages
     await expect(repos.getByText(/^\$t = Join-Path|^mkdir -p/)).toHaveCount(0)
     expect(fs.readFileSync(path.join(claude, 'skills', 'x', 'SKILL.md'), 'utf8')).toBe('Not the bundle.\n')
 
-    // A project's Team page lists its repos only.
-    await page.goto(`/projects/${project.id}/agents`)
-    const own = page.getByRole('region', { name: 'In your repos' }).getByRole('listitem')
-    await expect(own).toHaveCount(2)
-    await expect(own.filter({ hasText: 'drifted' })).toContainText('Up to date')
-    await expect(own.filter({ hasText: 'Not installed in the repo' })).toHaveCount(1)
+    // Every repo row names its project, the board-wide list On Connect.
+    await page.reload()
+    await expect(drifted).toContainText(project.name)
+    await expect(plain).toBeVisible()
   })
 
   test('a stale file in the global copy opens to what the line would change in it, read anew each time', async ({
@@ -656,7 +710,7 @@ test.describe('the copy of the review skills the Connect an agent and Team pages
     await ok(human.post('/api/repos', { data: { projectId: project.id, repoPath: dir, name: 'drifted' } }))
     const served = await servedBundle(human)
 
-    await page.goto(`/projects/${project.id}/agents?shell=bash`)
+    await page.goto('/agents?shell=bash')
     const entry = page
       .getByRole('region', { name: 'In your repos' })
       .getByRole('listitem', { name: `drifted in ${project.name}` })
@@ -784,15 +838,264 @@ test.describe('the copy of the review skills the Connect an agent and Team pages
     expect(looks.dark!.context.color).not.toBe(looks.light!.context.color)
   })
 
-  test('a project with no repos says so on its Team page', async ({ page, human }) => {
+  test('copying an install line mints one download credential, and every install line then carries it', async ({
+    page,
+    human,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: e2eEnv().baseURL })
+    const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+    const claude = emptyHome()
+    await track(human, 'global')
+    const mints: string[] = []
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname === '/api/agent-setup/skill-token' && r.method() === 'POST')
+        mints.push(r.url())
+    })
+    const copy = async (scope: Locator) => {
+      const answered = page.waitForResponse(
+        (r) =>
+          new URL(r.url()).pathname === '/api/agent-setup/skill-token' && r.request().method() === 'POST',
+      )
+      await scope.getByRole('button', { name: 'Copy', exact: true }).click()
+      return (await (await answered).json()) as { token: string; expiresAt: string }
+    }
+
+    await page.goto('/agents?shell=bash')
+    await expect(page.getByRole('heading', { name: 'Connect an agent' })).toBeVisible()
+    await page.getByRole('tab', { name: AGENTS.claude.label }).click()
+    // Nothing is minted on load: the lines say <token>.
+    await expect(page.getByText(skillInstall('claude', 'bash', boardUrl, ''), { exact: true })).toBeVisible()
+    await expect(page.getByText(reviewSkillsInstall('bash', boardUrl, ''), { exact: true })).toBeVisible()
+    expect(mints).toHaveLength(0)
+
+    // The first copy mints one, and the clipboard carries it.
+    const step2 = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: '2. Install the skill' }) })
+    const { token, expiresAt } = await copy(step2)
+    expect(mints).toHaveLength(1)
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(skillInstall('claude', 'bash', boardUrl, token))
+    // Every install line on the page carries it, with when it expires.
+    await expect(
+      page.getByText(skillInstall('claude', 'bash', boardUrl, token), { exact: true }),
+    ).toBeVisible()
+    await expect(page.getByText(reviewSkillsInstall('bash', boardUrl, token), { exact: true })).toBeVisible()
+    await expect(
+      page.getByText(reviewSkillsInstall('bash', boardUrl, token, claude), { exact: true }),
+    ).toBeVisible()
+    const note = page.getByRole('status').filter({ hasText: 'about ten minutes' })
+    await expect(note).toBeVisible()
+    await expect(note.locator('time')).toHaveAttribute('datetime', expiresAt)
+    // Another line's copy reuses it: one mint for the visit.
+    const step3 = page.locator('section#review-skills')
+    await step3.getByRole('button', { name: 'Copy', exact: true }).first().click()
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(reviewSkillsInstall('bash', boardUrl, token))
+    expect(mints).toHaveLength(1)
+    // It is kept as its hash only.
+    const row = inDatabase(
+      (db) =>
+        db.prepare('select token_hash from skill_tokens order by id desc limit 1').get() as {
+          token_hash: string
+        },
+    )
+    expect(row.token_hash).toBe(createHash('sha256').update(token).digest('hex'))
+
+    // Ten minutes on the page's clock, that credential has expired: the next copy makes a new one instead
+    // of copying the dead one, and every line on the page carries the new one.
+    await page.clock.install()
+    await page.clock.fastForward(Date.parse(expiresAt) - Date.now() + 2_000)
+    const fresh = await copy(step2)
+    expect(mints).toHaveLength(2)
+    expect(fresh.token).not.toBe(token)
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(skillInstall('claude', 'bash', boardUrl, fresh.token))
+    await expect(
+      page.getByText(skillInstall('claude', 'bash', boardUrl, token), { exact: true }),
+    ).toHaveCount(0)
+    await expect(
+      page.getByText(skillInstall('claude', 'bash', boardUrl, fresh.token), { exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByText(reviewSkillsInstall('bash', boardUrl, fresh.token), { exact: true }),
+    ).toBeVisible()
+    await expect(note.locator('time')).toHaveAttribute('datetime', fresh.expiresAt)
+  })
+
+  test("a repo's own install line mints the page's credential too", async ({
+    page,
+    human,
+    project,
+    context,
+  }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: e2eEnv().baseURL })
+    const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+    const { dir } = await driftedCheckout(human)
+    await ok(human.post('/api/repos', { data: { projectId: project.id, repoPath: dir, name: 'mint line' } }))
     await track(human, 'repo')
-    const empty = await ok<Project>(human.post('/api/projects', { data: { name: 'No repos here' } }))
+    await page.goto('/agents?shell=bash')
+    const entry = page
+      .getByRole('region', { name: 'In your repos' })
+      .getByRole('listitem', { name: `mint line in ${project.name}` })
+    await entry.getByRole('button', { name: /files differ or are missing$/ }).click()
+    const line = entry.getByText(reviewSkillsInstall('bash', boardUrl, '', repoClaudeDir(dir)), {
+      exact: true,
+    })
+    await expect(line).toBeVisible()
+    const mints: string[] = []
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname === '/api/agent-setup/skill-token' && r.method() === 'POST')
+        mints.push(r.url())
+    })
+    const answered = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/api/agent-setup/skill-token' && r.request().method() === 'POST',
+    )
+    await entry.getByRole('button', { name: 'Copy', exact: true }).click()
+    const { token } = (await (await answered).json()) as { token: string }
+    expect(mints).toHaveLength(1)
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe(reviewSkillsInstall('bash', boardUrl, token, repoClaudeDir(dir)))
+    // The page's other lines carry the same one.
+    await expect(page.getByText(reviewSkillsInstall('bash', boardUrl, token), { exact: true })).toBeVisible()
+    await expect(
+      page.getByText(skillInstall('claude', 'bash', boardUrl, token), { exact: true }),
+    ).toBeVisible()
+  })
+
+  test('the board skill button installs it under the home the board runs as, saying where, when and what', async ({
+    page,
+    human,
+  }) => {
+    const { home } = e2eEnv()
+    fs.rmSync(path.join(home, '.claude'), { recursive: true, force: true })
+    const { boardUrl } = await ok<{ boardUrl: string }>(human.get('/api/agent-setup'))
+    const tokensBefore = (await ok<unknown[]>(human.get('/api/agent-tokens'))).length
+    const served = await (await human.get('/api/agent-setup/skill?client=claude')).text()
+
+    await page.goto('/agents?shell=bash')
+    await page.getByRole('tab', { name: AGENTS.claude.label }).click()
+    const step2 = page
+      .locator('section')
+      .filter({ has: page.getByRole('heading', { name: '2. Install the skill' }) })
+    const answered = page.waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname === '/api/agent-setup/skill/install' && r.request().method() === 'POST',
+    )
+    await step2.getByRole('button', { name: 'Install skill' }).click()
+    const made = (await (await answered).json()) as { at: string; files: { path: string; action: string }[] }
+    const file = path.join(home, '.claude', 'skills', 'board', 'SKILL.md')
+    expect(made.files).toEqual([{ path: file, action: 'created' }])
+    const card = step2.getByRole('status', { name: 'Installed the board skill' })
+    await expect(card).toContainText(file)
+    await expect(card).toContainText('created')
+    await expect(card.locator('time')).toHaveAttribute('datetime', made.at)
+    expect(fs.readFileSync(file, 'utf8')).toBe(served)
+    // The copy line stays beside it, for another machine, and the button reads Update skill now.
+    await expect(page.getByText(skillInstall('claude', 'bash', boardUrl, ''), { exact: true })).toBeVisible()
+    await expect(step2.getByRole('button', { name: 'Update skill' })).toBeVisible()
+    // Neither press needs a token: the agent tokens are as they were.
+    expect((await ok<unknown[]>(human.get('/api/agent-tokens'))).length).toBe(tokensBefore)
+  })
+
+  test('the review skills button installs the bundle, then reads Update skill, and adds no agent token', async ({
+    page,
+    human,
+  }) => {
+    const { claudeHome } = e2eEnv()
+    emptyHome()
+    const tokensBefore = (await ok<unknown[]>(human.get('/api/agent-tokens'))).length
+    const served = await servedBundle(human)
+    const paths = Object.keys(served)
+
+    await page.goto('/agents?shell=bash')
+    const step3 = page.locator('section#review-skills')
+    const button = step3.getByRole('button', { name: 'Install skill' })
+    await expect(button).toBeVisible()
+    const answered = page.waitForResponse(
+      (r) =>
+        new URL(r.url()).pathname === '/api/agent-setup/skill/install' && r.request().method() === 'POST',
+    )
+    await button.click()
+    const made = (await (await answered).json()) as { at: string; files: { path: string; action: string }[] }
+    expect(made.files.map((f) => f.path)).toEqual(paths.map((p) => path.join(claudeHome, ...p.split('/'))))
+    const card = step3.getByRole('status', { name: 'Installed the review skills' })
+    await expect(card.getByRole('listitem')).toHaveCount(paths.length)
+    await expect(card.locator('time')).toHaveAttribute('datetime', made.at)
+    for (const p of paths)
+      expect(fs.readFileSync(path.join(claudeHome, ...p.split('/')), 'utf8'), p).toBe(served[p])
+    // The status read again after the install turns the button into Update skill.
+    await expect(step3.getByRole('button', { name: 'Update skill' })).toBeVisible()
+    // Nothing was added to the agent tokens, and no token was needed.
+    expect((await ok<unknown[]>(human.get('/api/agent-tokens'))).length).toBe(tokensBefore)
+  })
+
+  test('a forced failure names the path and the status, says what to check and offers Retry; the line stays', async ({
+    page,
+    human,
+  }) => {
+    const { claudeHome } = e2eEnv()
+    const dir = path.dirname(claudeHome)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(claudeHome, 'not a folder\n')
+    // The first file the bundle writes, as the tar lays it out.
+    const paths = await ok<string[]>(human.get('/api/agent-setup/review-skills?list'))
+    const target = path.join(claudeHome, ...paths[0]!.split('/'))
+    const posts: string[] = []
+    page.on('request', (r) => {
+      if (new URL(r.url()).pathname === '/api/agent-setup/skill/install' && r.method() === 'POST')
+        posts.push(r.url())
+    })
+    try {
+      await page.goto('/agents?shell=bash')
+      const step3 = page.locator('section#review-skills')
+      await step3.getByRole('button', { name: 'Install skill' }).click()
+      const card = step3.getByRole('alert', { name: 'Could not install the review skills' })
+      await expect(card).toContainText('HTTP 500')
+      await expect(card).toContainText(target)
+      await expect(card).toContainText('belongs to the user the board runs as')
+      await expect(card.getByRole('button', { name: 'Retry' })).toBeVisible()
+      // The copy line is still on the page, for another machine.
+      await expect(step3.getByText(/api\/agent-setup\/review-skills/).first()).toBeVisible()
+      const again = page.waitForResponse(
+        (r) =>
+          new URL(r.url()).pathname === '/api/agent-setup/skill/install' && r.request().method() === 'POST',
+      )
+      await card.getByRole('button', { name: 'Retry' }).click()
+      expect((await again).status()).toBe(500)
+      expect(posts).toHaveLength(2)
+      await expect(card).toBeVisible()
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("a project's Team page keeps the cycle and the default agents, and sends to Connect for the skills", async ({
+    page,
+    project,
+  }) => {
     const errors: string[] = []
     page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
-    await page.goto(`/projects/${empty.id}/agents`)
-    const repos = page.getByRole('region', { name: 'In your repos' })
-    await expect(repos.getByText('No repos in this project yet.')).toBeVisible()
-    await expect(repos.getByRole('listitem')).toHaveCount(0)
+    await page.goto(`/projects/${project.id}/agents`)
+    await expect(page.getByRole('heading', { name: 'Team' })).toBeVisible()
+    const cycle = page.getByRole('region', { name: 'Default agents' })
+    await expect(cycle).toContainText('The build and review cycle:')
+    // No install surface of its own: no name field, no token, no install line, no Track toggle.
+    await expect(page.getByLabel('Agent name')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Generate commands' })).toHaveCount(0)
+    await expect(page.getByRole('tablist', { name: 'Track' })).toHaveCount(0)
+    await expect(page.getByText(/mkdir -p|Join-Path/)).toHaveCount(0)
+    await expect(cycle.getByRole('link', { name: 'Connect an agent' })).toHaveAttribute('href', '/agents')
+    // The cycle's agents still add from here.
+    await cycle.getByRole('button', { name: 'Add the default agents' }).click()
+    await expect(cycle.getByText('All added')).toBeVisible()
+    await expect(page.getByText('@spec')).toBeVisible()
     expect(errors).toEqual([])
   })
 
@@ -811,7 +1114,8 @@ test.describe('the copy of the review skills the Connect an agent and Team pages
         page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)
       for (const tracking of ['global', 'repo'] as const) {
         await track(human, tracking)
-        for (const at of ['/agents?shell=powershell', `/projects/${project.id}/agents?shell=powershell`]) {
+        {
+          const at = '/agents?shell=powershell'
           await page.goto(at)
           await expect(page.getByRole('tablist', { name: 'Track' })).toBeVisible()
           const copy =
