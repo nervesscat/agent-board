@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
+import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
 import { columnOrder, placeInColumn, stageColumn } from '#/lib/stages'
@@ -71,10 +72,37 @@ export type LaneCounts = {
 }
 
 /**
+ * The ticket's tasks as one flat list in tree order: each top-level task, then its subtasks, by
+ * ascending position (id breaks a tie) — the order `getTicketFull` hands them out in.
+ */
+function treeTasks<T extends Pick<schema.Task, 'id' | 'parentId' | 'position'>>(tasks: T[]): T[] {
+  const rank = (a: T, b: T) => a.position - b.position || a.id - b.id
+  return tasks
+    .filter((task) => task.parentId === null)
+    .sort(rank)
+    .flatMap((task) => [task, ...tasks.filter((sub) => sub.parentId === task.id).sort(rank)])
+}
+
+/**
+ * The task a ticket works next: the first open one in tree order that is no container. An open parent
+ * with open subtasks is skipped in favour of its subtasks (its last one ticked settles it done), so a
+ * blocked parent surfaces only once it is its own first open task. Null when every task is done.
+ */
+export function nextTask<T extends Pick<schema.Task, 'id' | 'parentId' | 'position' | 'done'>>(
+  tasks: T[],
+): T | null {
+  const openParents = new Set(
+    tasks.flatMap((task) => (!task.done && task.parentId !== null ? [task.parentId] : [])),
+  )
+  return treeTasks(tasks).find((task) => !task.done && !openParents.has(task.id)) ?? null
+}
+
+/**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
- * theirs), how many of those tasks are blocked on the human, and how many lanes it has in each stage.
- * One pass over the project keeps this cheap. A PR's own ticket is left out unless `prTickets` (a
- * ticket's own page reads it that way): it lives in the PR queue, not on the features board.
+ * theirs), how many of those tasks are blocked on the human and whether one of them is the step the
+ * ticket (or a lane of it) works next, and how many lanes it has in each stage. One pass over the
+ * project keeps this cheap. A PR's own ticket is left out unless `prTickets` (a ticket's own page
+ * reads it that way): it lives in the PR queue, not on the features board.
  */
 function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
   const stages = listStages(projectId)
@@ -91,6 +119,8 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
     ? db.select().from(schema.tasks).where(inArray(schema.tasks.ticketId, ids)).all()
     : []
   const own = new Map<number, Progress>(rows.map((t) => [t.id, { done: 0, total: 0 }]))
+  const ownTasks = new Map<number, schema.Task[]>()
+  for (const task of allTasks) ownTasks.set(task.ticketId, [...(ownTasks.get(task.ticketId) ?? []), task])
   const ownBlocked = new Map<number, number>()
   for (const task of allTasks) {
     const p = own.get(task.ticketId)!
@@ -130,6 +160,11 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
   // Its open tasks and subtasks tagged blocked, its lanes' with them: the same scope as the rollup.
   const blockedTasks = (id: number): number =>
     workingLanes(id).reduce((n, lane) => n + blockedTasks(lane.id), ownBlocked.get(id) ?? 0)
+  // Whether a blocked step is the one the ticket (or a lane of it) works next, which is what makes it
+  // something the human is actually stopped by. The count above stays every blocked step.
+  const nextBlocked = new Map(rows.map((t) => [t.id, nextTask(ownTasks.get(t.id) ?? [])?.blocked === true]))
+  const blockedNext = (id: number): boolean =>
+    workingLanes(id).some((lane) => blockedNext(lane.id)) || nextBlocked.get(id) === true
   return rows.map((t) => {
     const lanes: LaneCounts = { total: 0, approved: 0, disapproved: 0, byStage: {} }
     for (const lane of children.get(t.id) ?? []) {
@@ -146,6 +181,7 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
       reserved,
       decisions,
       blockedTasks: blockedTasks(t.id),
+      blockedNext: blockedNext(t.id),
       progress: own.get(t.id)!,
       rollup: rollup(t.id),
       lanes,
@@ -355,10 +391,7 @@ export function getTicketFull(id: number, opts: { laneUpdates?: boolean } = {}) 
     .all()
   // One flat list in tree order: each top-level task, then its subtasks. `auto`: a phase the board
   // ticks itself (#/lib/autoPhases), which nobody ticks by hand.
-  const tasks = taskRows
-    .filter((task) => !task.parentId)
-    .flatMap((task) => [task, ...taskRows.filter((sub) => sub.parentId === task.id)])
-    .map((task) => ({ ...task, auto: autoPhaseOf(task) !== null }))
+  const tasks = treeTasks(taskRows).map((task) => ({ ...task, auto: autoPhaseOf(task) !== null }))
   const workspaces = db.select().from(schema.workspaces).where(eq(schema.workspaces.ticketId, id)).all()
   const updates = db
     .select()
@@ -610,48 +643,60 @@ export function createTicket(
       ? resolveStage(stages, input.status, projectWorkStage(projectId, stages))
       : startStage(stages)
   ).key
-  const row = db
-    .insert(schema.tickets)
-    .values({
-      projectId,
-      repoId: repo.id,
-      parentId: parent?.id ?? null,
-      title: input.title,
-      body: input.body ?? '',
-      status,
-      ...startedPatch(stages, null, status),
-      // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
-      complexity: input.complexity ?? parent?.complexity ?? DEFAULT_COMPLEXITY,
-      assignee: input.assignee ?? '',
-      branch: input.branch ?? '',
-      baseBranch,
-      tags: cleanTags(input.tags ?? []),
-      prNumber: input.prNumber ?? null,
-      createdBy: actor,
-      // Seeded with the phases in effect now: Merged is not added to it later.
-      mergedPhaseChecked: true,
-    })
-    .returning()
-    .get()
-  syncPrimaryRow(row)
-  if (input.repos) writeOtherRepos(row.id, resolveTicketRepos(row, input.repos))
-  noteStageMove(row.id, null, row.status)
-  if (row.prNumber) noteBoardEvent(row.id, 'pr', { note: `PR #${row.prNumber}` })
-  if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
-  if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
-  if (parent) touch(parent.id)
-  logActivity({
-    projectId,
-    actor,
-    kind: 'ticket',
-    text: parent
-      ? `opened lane #${row.id} ${row.title} under #${parent.id} ${parent.title}`
-      : `created ticket #${row.id} ${row.title}`,
-    refType: 'ticket',
-    refId: row.id,
-  })
-  if (row.prNumber || row.branch) takeOverPrTickets(row, actor)
-  return row
+  // The ticket and everything a create writes with it land together, and a create that lost the
+  // database's write lock to another connection tries again rather than answering a 500: neither a
+  // burst of creates nor a failed one leaves a ticket without its rows or its rows without a ticket.
+  // `IMMEDIATE` takes the lock before the first read, so a competing writer is waited out instead of
+  // making the transaction's snapshot stale.
+  return retryWhileLocked(() =>
+    db.transaction(
+      () => {
+        const row = db
+          .insert(schema.tickets)
+          .values({
+            projectId,
+            repoId: repo.id,
+            parentId: parent?.id ?? null,
+            title: input.title,
+            body: input.body ?? '',
+            status,
+            ...startedPatch(stages, null, status),
+            // A lane copies its parent's level as it is now; a later change to the parent does not reach it.
+            complexity: input.complexity ?? parent?.complexity ?? DEFAULT_COMPLEXITY,
+            assignee: input.assignee ?? '',
+            branch: input.branch ?? '',
+            baseBranch,
+            tags: cleanTags(input.tags ?? []),
+            prNumber: input.prNumber ?? null,
+            createdBy: actor,
+            // Seeded with the phases in effect now: Merged is not added to it later.
+            mergedPhaseChecked: true,
+          })
+          .returning()
+          .get()
+        syncPrimaryRow(row)
+        if (input.repos) writeOtherRepos(row.id, resolveTicketRepos(row, input.repos))
+        noteStageMove(row.id, null, row.status)
+        if (row.prNumber) noteBoardEvent(row.id, 'pr', { note: `PR #${row.prNumber}` })
+        if (input.tasks?.length) addTasks(row.id, input.tasks, actor, { quiet: true })
+        if (attachmentIds.length) attachTo(attachmentIds, { ticketId: row.id })
+        if (parent) touch(parent.id)
+        logActivity({
+          projectId,
+          actor,
+          kind: 'ticket',
+          text: parent
+            ? `opened lane #${row.id} ${row.title} under #${parent.id} ${parent.title}`
+            : `created ticket #${row.id} ${row.title}`,
+          refType: 'ticket',
+          refId: row.id,
+        })
+        if (row.prNumber || row.branch) takeOverPrTickets(row, actor)
+        return row
+      },
+      { behavior: 'immediate' },
+    ),
+  )
 }
 
 /**

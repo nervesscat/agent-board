@@ -38,18 +38,38 @@ export async function copyText(text: string, what = 'Copied') {
 }
 
 /** A command or config snippet with a copy button. */
-export function CopyBlock({ text, label = 'Copy' }: { text: string; label?: string }) {
+export function CopyBlock({
+  text,
+  label = 'Copy',
+  onCopy,
+}: {
+  text: string
+  label?: string
+  /** What to copy instead of `text`, when it is not there yet (a line that carries a token minted on the
+   *  first copy): the text, or null when it could not be had and nothing is copied. */
+  onCopy?: () => Promise<string | null>
+}) {
   const [done, setDone] = useState(false)
+  const [busy, setBusy] = useState(false)
   return (
     <div className="space-y-1">
       <div className="flex justify-end">
         <Button
           variant="outline"
           size="sm"
+          disabled={busy}
           onClick={async () => {
-            if (await copyText(text)) {
-              setDone(true)
-              setTimeout(() => setDone(false), 1500)
+            if (busy) return
+            setBusy(true)
+            try {
+              const toCopy = onCopy ? await onCopy() : text
+              if (toCopy === null) return
+              if (await copyText(toCopy)) {
+                setDone(true)
+                setTimeout(() => setDone(false), 1500)
+              }
+            } finally {
+              setBusy(false)
             }
           }}
         >

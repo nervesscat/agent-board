@@ -18,6 +18,7 @@ import {
   type UpdatesState,
   updateOffered,
 } from '#/lib/updates'
+import { useHydrated } from '#/lib/useHydrated'
 
 /** How often the page reads the state again while nothing is under way: a check of the app's own shows. */
 const IDLE_REFRESH_MS = 5 * 60_000
@@ -42,7 +43,9 @@ export function useUpdates() {
 /** The top bar's word that a newer version of the app is there, to its Updates section. */
 export function UpdateBadge() {
   const { data } = useUpdates()
-  if (!updateOffered(data)) return null
+  // Read after mount: the update can be found before React has hydrated the top bar.
+  const hydrated = useHydrated()
+  if (!hydrated || !updateOffered(data)) return null
   return (
     <Tip content={`CrossBoard ${data.newest.version} is available (${data.installed} installed)`}>
       <Link to="/settings" hash="updates" className="shrink-0" aria-label="Update available">
