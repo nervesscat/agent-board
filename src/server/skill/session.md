@@ -27,6 +27,9 @@ then read `get_summary` with its `projectId`, and answer in a handful of lines:
   matter most named;
 - **what is next** to work on today.
 
+`get_project` carries the project's `notes`: read them before the brief, and name the ones that matter.
+Add a note for a command, path, rule or reminder a future session must not rediscover; never a document.
+
 The brief has no ticket bodies and no explanations of the work. A handful of lines is the whole
 answer; the human asks for more on whatever they want. Follow the message shape below.
 
