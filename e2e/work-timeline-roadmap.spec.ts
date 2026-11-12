@@ -67,6 +67,33 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   expect(errors).toEqual([])
 })
 
+test('a lost run reads Lost contact on the Roadmap, and a working one does not', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const lost = await workedTicket(human, agent, project)
+  // A run still going: its span is open and its lease is fresh.
+  const live = await create(human, project, { title: 'Live import', status: 'in_progress' })
+  await record(agent, project, live.id, { kind: 'span_start', phase: 'build' })
+
+  await page.goto(`/projects/${project.id}/roadmap`)
+  const roadmap = page.getByTestId('roadmap')
+  // Its lease ran out with the span still open: the row says the agent is gone, not that it is building.
+  const lostRow = roadmap.getByRole('region', { name: `#${lost.t.id} Ship the importer` })
+  await expect(lostRow.getByTestId('lost-contact').first()).toBeVisible()
+  await expect(lostRow.getByTestId('lost-contact').first()).toContainText('Lost contact')
+  await expect(lostRow.getByTestId('now-line')).toHaveCount(0)
+  await expect(lostRow).not.toContainText('Building')
+
+  // The fresh one is building, with no lost contact.
+  const liveRow = roadmap.getByRole('region', { name: `#${live.id} Live import` })
+  await expect(liveRow.getByTestId('now-line').first()).toBeVisible()
+  await expect(liveRow.getByTestId('now-line').first()).toContainText('Building')
+  await expect(liveRow.getByTestId('lost-contact')).toHaveCount(0)
+})
+
 test('changing the Roadmap time axis keeps a live track at now', async ({ page, project, human, agent }) => {
   await workedTicket(human, agent, project)
   await page.goto(`/projects/${project.id}/roadmap`)

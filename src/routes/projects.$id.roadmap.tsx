@@ -9,7 +9,7 @@ import { ChipTabs } from '#/components/Chips'
 import { Empty } from '#/components/Empty'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
-import { NowLine, StallNotice, WorkSummary } from '#/components/WorkStatus'
+import { LostContactNotice, StallNotice, WorkNow, WorkSummary } from '#/components/WorkStatus'
 import { WorkTimelineBar, hasWork } from '#/components/WorkTimeline'
 import { errorMessage, get, type ProjectWork, type RoadmapTicket } from '#/lib/api'
 import { type Step, type StepGroup, type StepState, stepCounts, timeline } from '#/lib/roadmap'
@@ -286,7 +286,8 @@ function Row({
           <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${stageBadge(stage)}`}>
             {stage.name}
           </span>
-          <NowLine timeline={row.work} />
+          <WorkNow timeline={row.work} />
+          <LostContactNotice timeline={row.work} focusable={false} />
           <StallNotice timeline={row.work} stage={item.stall} />
           {children}
           {total > 0 && (
