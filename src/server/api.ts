@@ -233,6 +233,12 @@ api.get('/api/agent-setup/skill', ({ request, url }) => {
     headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
   })
 })
+// The session skill (`/session`): the same text for every client, served as it is, no parameters.
+api.get('/api/agent-setup/session-skill', () => {
+  return new Response(agents.sessionSkill(), {
+    headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
 // The stdio MCP bridge (scripts/board-mcp.mjs) a cloud session saves as board-mcp.mjs and runs with node.
 api.get('/api/agent-setup/board-mcp', () => {
   return new Response(agents.boardMcpBridge(), {
