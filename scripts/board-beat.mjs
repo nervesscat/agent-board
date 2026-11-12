@@ -59,7 +59,8 @@ export function parseArgs(argv) {
   const whole = (n) => Number.isInteger(n) && n > 0
   if (!whole(out.project) || !whole(out.ticket))
     return {
-      problem: 'usage: board-beat.mjs --project <id> --ticket <id> [--interval <ms>, default BOARD_BEAT_MS or 120000] [--once] [-- <command>]',
+      problem:
+        'usage: board-beat.mjs --project <id> --ticket <id> [--interval <ms>, default BOARD_BEAT_MS or 120000] [--once] [-- <command>]',
     }
   if (!whole(out.intervalMs))
     return { problem: '--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds' }

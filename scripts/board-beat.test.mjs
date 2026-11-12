@@ -41,6 +41,8 @@ const T0 = Date.parse('2026-11-12T17:15:00.000Z')
 function fakeBeater(intervalMs = 2 * MIN) {
   let clock = T0
   let tick = null
+  // When the fake timer is due next: its setInterval fires then and every interval after, never before.
+  let due = null
   const posts = []
   const beater = createBeater({
     post: async (at, why) => posts.push({ at, why }),
@@ -48,10 +50,12 @@ function fakeBeater(intervalMs = 2 * MIN) {
     intervalMs,
     setTimer: (fn) => {
       tick = fn
+      due = clock + intervalMs
       return { unref() {} }
     },
     clearTimer: () => {
       tick = null
+      due = null
     },
     log: () => {},
   })
@@ -63,7 +67,10 @@ function fakeBeater(intervalMs = 2 * MIN) {
     },
     async advance(ms) {
       clock += ms
-      tick?.()
+      if (tick && due !== null && clock >= due) {
+        due += intervalMs
+        tick()
+      }
       await beater.idle()
     },
     hasTimer: () => tick !== null,
@@ -203,11 +210,11 @@ describe('the interval', () => {
     const restore = withEnv({ BOARD_TOKEN: 'secret', BOARD_BEAT_MS: 'soon' })
     try {
       expect(parseArgs(args)).toEqual({
-        problem: expect.stringContaining('BOARD_BEAT_MS must be a whole number of milliseconds'),
+        problem: expect.stringContaining('--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds'),
       })
       process.env.BOARD_BEAT_MS = '0'
       expect(parseArgs(args)).toEqual({
-        problem: expect.stringContaining('BOARD_BEAT_MS must be a whole number of milliseconds'),
+        problem: expect.stringContaining('--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds'),
       })
     } finally {
       restore()

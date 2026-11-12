@@ -171,25 +171,19 @@ describe('LivenessLines on the server clock', () => {
     // The browser reads 12:20 while the server stamped 12:30: 43 minutes, not the browser's 33.
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(Date.parse(at('12:20')))
-    expect(line('working', at('12:30'))).toBe(
-      'Building · claude · 43 min · last word 20 min ago',
-    )
+    expect(line('working', at('12:30'))).toBe('Building · claude · 43 min · last word 20 min ago')
   })
 
   it('counts the same on the server clock when the browser clock runs ahead of it', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(Date.parse(at('12:40')))
-    expect(line('working', at('12:30'))).toBe(
-      'Building · claude · 43 min · last word 20 min ago',
-    )
+    expect(line('working', at('12:30'))).toBe('Building · claude · 43 min · last word 20 min ago')
   })
 
   it('corrects a lost contact line too, not only the working one', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(Date.parse(at('12:20')))
-    expect(line('lost', at('12:30'))).toBe(
-      'Lost contact · claude · build · 43 min · last word 20 min ago',
-    )
+    expect(line('lost', at('12:30'))).toBe('Lost contact · claude · build · 43 min · last word 20 min ago')
   })
 })
 
