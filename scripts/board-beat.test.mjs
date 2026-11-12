@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { buildTimeline } from '#/lib/workTimeline'
 
-import { beatBoard, createBeater, DEFAULT_INTERVAL_MS } from './board-beat.mjs'
+import { beatBoard, createBeater, DEFAULT_INTERVAL_MS, parseArgs } from './board-beat.mjs'
 
 // The board's events route as a stand-in: it records each heartbeat and answers as the case says.
 const seen = []
@@ -145,6 +145,73 @@ describe('the beater', () => {
     ).rejects.toThrow('the board answered 401: the agent token is wrong')
     status = 201
     answer = { at: '2026-11-12T17:15:00.000Z', lastSignalAt: '2026-11-12T17:15:00.000Z' }
+  })
+})
+
+describe('the interval', () => {
+  /** Sets env values for one test and gives back what restores them, deleting the ones that were unset. */
+  const withEnv = (values) => {
+    const before = Object.fromEntries(Object.keys(values).map((k) => [k, process.env[k]]))
+    for (const [k, v] of Object.entries(values)) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+    return () => {
+      for (const [k, v] of Object.entries(before)) {
+        if (v === undefined) delete process.env[k]
+        else process.env[k] = v
+      }
+    }
+  }
+  const args = ['--project', '1', '--ticket', '7']
+
+  it('defaults from BOARD_BEAT_MS, and --interval wins over it', async () => {
+    const restore = withEnv({ BOARD_TOKEN: 'secret', BOARD_BEAT_MS: '45000', BOARD_URL: undefined })
+    try {
+      expect(parseArgs(args).intervalMs).toBe(45_000)
+      expect(parseArgs([...args, '--interval', '60000']).intervalMs).toBe(60_000)
+
+      // The environment's cadence drives the beats: one at 45 seconds, not at the old two minutes.
+      const fromEnv = fakeBeater(parseArgs(args).intervalMs)
+      await fromEnv.beater.start()
+      await fromEnv.advance(44_999)
+      expect(fromEnv.posts).toHaveLength(1)
+      await fromEnv.advance(1)
+      expect(fromEnv.posts.map((p) => p.at)).toEqual([
+        new Date(T0).toISOString(),
+        new Date(T0 + 45_000).toISOString(),
+      ])
+      await fromEnv.beater.stop()
+
+      // --interval replaces it: 45 seconds is not a beat now, a minute is.
+      const overridden = fakeBeater(parseArgs([...args, '--interval', '60000']).intervalMs)
+      await overridden.beater.start()
+      await overridden.advance(45_000)
+      expect(overridden.posts).toHaveLength(1)
+      await overridden.advance(15_000)
+      expect(overridden.posts.map((p) => p.at)).toEqual([
+        new Date(T0).toISOString(),
+        new Date(T0 + 60_000).toISOString(),
+      ])
+      await overridden.beater.stop()
+    } finally {
+      restore()
+    }
+  })
+
+  it('reports an invalid BOARD_BEAT_MS as the usage problem, not silently ignored', () => {
+    const restore = withEnv({ BOARD_TOKEN: 'secret', BOARD_BEAT_MS: 'soon' })
+    try {
+      expect(parseArgs(args)).toEqual({
+        problem: expect.stringContaining('BOARD_BEAT_MS must be a whole number of milliseconds'),
+      })
+      process.env.BOARD_BEAT_MS = '0'
+      expect(parseArgs(args)).toEqual({
+        problem: expect.stringContaining('BOARD_BEAT_MS must be a whole number of milliseconds'),
+      })
+    } finally {
+      restore()
+    }
   })
 })
 

@@ -13,7 +13,8 @@
 //   BOARD_URL         the board as http(s)://host[:port] (PORT, or BOARD_PORT on this machine)
 //   BOARD_TOKEN       the agent token (Authorization: Bearer); read from the environment, never printed
 //   BOARD_AGENT_NAME  optional sub-identity, as the board calls it
-//   BOARD_BEAT_MS     optional beat interval in milliseconds (default 120000: two minutes)
+//   BOARD_BEAT_MS     default beat interval in milliseconds when --interval is not given
+//                     (default 120000: two minutes)
 //
 // stdout carries the command's output only; the beater's own notes go to stderr.
 
@@ -36,7 +37,11 @@ const defaultUrl = (env) => {
  * command it wraps (`--` and everything after it).
  */
 export function parseArgs(argv) {
-  const out = { project: null, ticket: null, intervalMs: DEFAULT_INTERVAL_MS, once: false, command: [] }
+  // BOARD_BEAT_MS is the default interval; --interval wins over it, and either must be a whole, positive
+  // number of milliseconds.
+  const envBeatMs = (process.env.BOARD_BEAT_MS ?? '').trim()
+  const defaultIntervalMs = envBeatMs === '' ? DEFAULT_INTERVAL_MS : Number(envBeatMs)
+  const out = { project: null, ticket: null, intervalMs: defaultIntervalMs, once: false, command: [] }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--') {
@@ -54,9 +59,10 @@ export function parseArgs(argv) {
   const whole = (n) => Number.isInteger(n) && n > 0
   if (!whole(out.project) || !whole(out.ticket))
     return {
-      problem: 'usage: board-beat.mjs --project <id> --ticket <id> [--interval <ms>] [--once] [-- <command>]',
+      problem: 'usage: board-beat.mjs --project <id> --ticket <id> [--interval <ms>, default BOARD_BEAT_MS or 120000] [--once] [-- <command>]',
     }
-  if (!whole(out.intervalMs)) return { problem: '--interval must be a whole number of milliseconds' }
+  if (!whole(out.intervalMs))
+    return { problem: '--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds' }
   const url = (process.env.BOARD_URL ?? defaultUrl(process.env)).trim().replace(/\/+$/, '')
   let target
   try {

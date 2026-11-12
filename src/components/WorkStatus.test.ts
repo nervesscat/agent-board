@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { timelineFromActivity } from '#/lib/activityTimeline'
 import { clock } from '#/lib/format'
 import type { WorkTimelineLike } from '#/lib/workStatus'
-import type { WorkTotals } from '#/lib/workTimeline'
+import type { Liveness, WorkTotals } from '#/lib/workTimeline'
 
-import { LastHeard, NowLine, StallNotice, WorkSummary } from './WorkStatus'
+import { LastHeard, LivenessLines, NowLine, StallNotice, WorkSummary } from './WorkStatus'
 
 const at = (hhmm: string) => `2026-10-20T${hhmm}:00.000Z`
 const NOW = Date.parse(at('12:30'))
@@ -137,6 +137,59 @@ describe('LastHeard', () => {
 
   it('says nobody was heard from when there is no agent event', () => {
     expect(text(html(createElement(LastHeard, { timeline: timeline() })))).toBe('Nobody heard from yet')
+  })
+})
+
+describe('LivenessLines on the server clock', () => {
+  afterEach(() => vi.useRealTimers())
+
+  // The span began at 11:47 and the agent last spoke at 12:10: 43 and 20 minutes from the server's 12:30.
+  const liveness: Liveness = {
+    state: 'working',
+    agent: 'claude',
+    phase: 'build',
+    since: at('11:47'),
+    lastSignalAt: at('12:10'),
+    lastWordAt: at('12:10'),
+    silentMinutes: 20,
+    spans: [
+      {
+        phase: 'build',
+        agent: 'claude',
+        since: at('11:47'),
+        lastWordAt: at('12:10'),
+        silentMinutes: 20,
+      },
+    ],
+  }
+  const line = (state: 'working' | 'lost', serverNow: string) => {
+    const t = timeline({ now: serverNow, liveness: { ...liveness, state } })
+    return text(html(createElement(LivenessLines, { timeline: t })))
+  }
+
+  it('counts the span on the server clock when the browser clock runs behind it', () => {
+    // The browser reads 12:20 while the server stamped 12:30: 43 minutes, not the browser's 33.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.parse(at('12:20')))
+    expect(line('working', at('12:30'))).toBe(
+      'Building · claude · 43 min · last word 20 min ago',
+    )
+  })
+
+  it('counts the same on the server clock when the browser clock runs ahead of it', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.parse(at('12:40')))
+    expect(line('working', at('12:30'))).toBe(
+      'Building · claude · 43 min · last word 20 min ago',
+    )
+  })
+
+  it('corrects a lost contact line too, not only the working one', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.parse(at('12:20')))
+    expect(line('lost', at('12:30'))).toBe(
+      'Lost contact · claude · build · 43 min · last word 20 min ago',
+    )
   })
 })
 

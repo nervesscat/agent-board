@@ -103,13 +103,17 @@ export function LivenessLines({
   now?: Date | number
   className?: string
 }) {
+  const tick = useNow(60_000)
+  // As the Now line: the browser's clock may differ from the server's, so the minutes are counted on the server's.
+  const offset = useServerOffset(timeline.now)
+  const at = onServerClock(+(now ?? tick), offset)
   const l = livenessOf(timeline)
   if (!l || !l.spans.length || (l.state !== 'working' && l.state !== 'lost')) return null
   const base = `${className} text-sm tabular-nums`
   const lost = l.state === 'lost'
   return (
     <>
-      {livenessLines(l, now ?? Date.now()).map((line) => (
+      {livenessLines(l, at).map((line) => (
         <p
           key={line}
           data-testid={lost ? 'lost-contact' : 'now-line'}
@@ -148,9 +152,12 @@ export function LostContactNotice({
   focusable?: boolean
   className?: string
 }) {
+  const tick = useNow(60_000)
+  // The same server-clock correction as the Now and per-span lines: the browser's clock may be off.
+  const offset = useServerOffset(timeline.now)
+  const at = onServerClock(+(now ?? tick), offset)
   const l = livenessOf(timeline)
   if (l?.state !== 'lost') return null
-  const at = now ?? Date.now()
   const since = minutesBetween(l.since, at)
   const word = l.lastWordAt ? `last word ${l.silentMinutes} min ago` : 'no word yet'
   const why = `${l.agent} has a ${l.phase || 'span'} open, ${word}`
