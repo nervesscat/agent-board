@@ -32,8 +32,9 @@
 //     app is a window on a board at that address and starts none of its own: a stand-in board on
 //     loopback is reached instead of a local server, nothing answers on the local PORT and no data
 //     folder is made, the local PORT being taken is no error, an address nothing answers shows the
-//     address in the window and the board is loaded by itself once it answers, and a restart from
-//     `config.env` opens it again.
+//     address in the window and the board is loaded by itself once it answers, a board that goes away
+//     while its page is shown is named in the window again and loaded again by itself once it
+//     answers, and a restart from `config.env` opens it again.
 //
 // On Linux the dialogs are checked through stderr and the app is then killed (no window is closed
 // through the window system), and the missing-drive case is Windows only.
@@ -578,6 +579,23 @@ try {
   check((await health(port)) !== 200, `nothing answers on the app's own PORT :${port}`)
   check(!fs.existsSync(remoteData), `no local data folder is made (${remoteData})`)
   check(!said.includes(`Port ${port} is already in use`), 'the local port is never checked')
+  // The board goes away while its page is shown: the app's own page names the address again, a slow
+  // check having found it (an interval at most, with a health check's timeout), then the retries.
+  await new Promise((resolve) => standInServer?.close(() => resolve(null)))
+  standInServer = null
+  check(
+    await waitForText(connectWin, remoteOrigin, 45_000),
+    'a board that goes away once it is shown is named in the window again',
+  )
+  // It comes back, on the address it was: the app's retry loads the board by itself.
+  standInServer = standIn()
+  await new Promise((resolve) => standInServer?.listen(remotePort, '127.0.0.1', () => resolve(null)))
+  check(
+    await waitForUrl(connectWin, `${remoteOrigin}/`, 60_000),
+    `the board is loaded again once it answers (${connectWin.url()})`,
+  )
+  await connectWin.waitForLoadState('networkidle')
+  check((await connectWin.title()) === 'Stand-in board', `the board's own page is back (${connectWin.url()})`)
   check(!/Object has been destroyed|Uncaught Exception/.test(said), 'nothing escapes from the app')
   check(await quit(connectApp), 'Quit ends the app')
   check(boardServer() === 0 && (await health(port)) !== 200, 'nothing of a local board is left running')
