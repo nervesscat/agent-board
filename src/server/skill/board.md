@@ -152,8 +152,12 @@ Lanes of a ticket you are working are yours to create (next section).
 - A step that needs the human (a credential, a manual action, a call only they can make): tag
   that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
   they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
-  rest. It shows on the task, on the ticket's card (`blockedTasks`) and in the human's Needs you
-  (`get_summary` → `needsYou.blockedTasks`). It still counts as open and does not move the ticket.
+  rest. It shows on the task and the ticket page; the ticket's card and the human's Needs you
+  (`get_summary` → `needsYou.blockedTasks`) show it only while it is the ticket's next step to work
+  (the first open task with no open subtask; a lane's own next step counts for its parent too) —
+  `blockedNext` on the ticket says whether one of them is, while `blockedTasks` stays the full count
+  of blocked steps. It still counts as open and does not move the ticket. A blocked step further
+  down the order surfaces once the steps before it are done.
   Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole
   ticket to `blocked` (or `ask_decision`) only when nothing else can go on.
 - Parallel work goes in lanes. When parts of the ticket run at once (subagents, worktrees, another

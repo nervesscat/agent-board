@@ -11,6 +11,13 @@
 // On Linux it runs natively on Wayland in a Wayland session and on X11 otherwise: Electron's default
 // since 38 (--ozone-platform=auto), so no switch is set here. Its Wayland app_id and X11 WM_CLASS come
 // from desktopName in package.json, which the packages' desktop entry names too (desktop/package.mjs).
+//
+// A REMOTE_BOARD_URL in its settings makes it a window onto a board on another machine instead
+// (startConnect): no server, no data folder, no port of its own, and no updater, which is driven over
+// the local server's IPC channel. A board that cannot be reached is shown in the window with its
+// address and retried by the app (showUnreachable), never in a dialog: the app stays until Quit. One
+// that answered and then goes away is found by a slow check made while its page is shown
+// (liveness.mjs), so it is reported the same way.
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -42,6 +49,7 @@ import {
   trayHostPresent,
   withLoginPath,
 } from './settings.mjs'
+import { watchLiveness } from './liveness.mjs'
 import { exitLine, exitSentence, logServer, spawnFailedLine, startLine } from './serverLog.mjs'
 import {
   BRIDGE,
@@ -63,6 +71,9 @@ const boardDir = app.isPackaged
   ? path.join(process.resourcesPath, 'board')
   : path.resolve(here, '..', '.stage', 'board')
 const READY_MS = 60_000
+/** Remote mode: how long a health check may take, and the waits between them (the last one repeated). */
+const HEALTH_TIMEOUT_MS = 4000
+const RETRY_WAITS_MS = [2000, 5000, 10_000]
 const OPEN_SETTINGS = 'Open the settings file'
 const OPEN_LOGS = 'Open the logs folder'
 const OPEN_HOME = 'Open the app folder'
@@ -109,6 +120,16 @@ let restarts = { exits: 0, healthySince: /** @type {number | null} */ (null) }
 let restartTimer = null
 // The window's page failed to load while the board was down: it is loaded again once it answers.
 let pageFailed = false
+// Remote mode: the window is showing the page that says the board cannot be reached, the retry in
+// flight, and how many waits it has gone through (scheduleRetry).
+let boardUnreachable = false
+let retryStep = 0
+/** @type {ReturnType<typeof setTimeout> | null} */
+let retryTimer = null
+// Remote mode: the slow check that the board the window shows is still there (liveness.mjs), kept
+// while its page is loaded.
+/** @type {import('./liveness.mjs').Liveness | null} */
+let liveness = null
 /** @type {import('./updates.mjs').Updates | null} */
 let updates = null
 
@@ -136,6 +157,8 @@ if (homeError) {
     updates?.stop()
     if (restartTimer) clearTimeout(restartTimer)
     restartTimer = null
+    clearRetry()
+    stopLiveness()
     if (!server) return
     event.preventDefault()
     void stopServer().then(() => app.quit())
@@ -169,6 +192,7 @@ async function start() {
       OPEN_HOME,
     )
   }
+  if (settings.mode === 'remote') return startConnect()
   // Linux: the login shell's PATH for the server, looked up while the port is checked.
   const [free, serverEnv] = await Promise.all([
     isPortFree(settings.port),
@@ -206,6 +230,21 @@ async function start() {
   createWindow()
   // The check at start, once the board is up, then every few hours (updates.mjs).
   updates.start()
+}
+
+/**
+ * Remote mode: the board runs on another machine, so there is nothing to start here. No port check, no
+ * login shell's PATH, no data folder, no server and no updater: the updater is driven over the local
+ * server's IPC channel, and a remote board keeps its own (its Settings page is the host's). What the app
+ * still is: a window on the board, its tray, notifications and Start at login, and a retry while the
+ * address does not answer.
+ */
+async function startConnect() {
+  console.log(`agent-board desktop: the board runs elsewhere; the window opens ${settings.url}`)
+  if (LINUX) trayShown = await trayHostPresent()
+  createTray()
+  if (LINUX) Menu.setApplicationMenu(linuxMenu())
+  createWindow()
 }
 
 /**
@@ -571,6 +610,7 @@ function createWindow() {
   // Closed for good (once the app is failing or quitting): nothing may show it again.
   win.on('closed', () => {
     win = null
+    stopLiveness()
   })
   win.on('close', (event) => {
     if (quitting) return
@@ -578,21 +618,185 @@ function createWindow() {
     if (process.platform === 'win32') win?.hide()
     else void closeWindow()
   })
-  // A page that could not load (the board down for a restart) is loaded again by restartServer; an
-  // aborted load (a navigation that replaced it) is no failure.
+  // A page that could not load (the board down for a restart) is loaded again by restartServer; a remote
+  // board's absence shows the page that says so (showUnreachable). An aborted load (a navigation that
+  // replaced it) is no failure.
   win.webContents.on('did-fail-load', (_event, code, _description, _url, mainFrame) => {
-    if (mainFrame && code !== -3) pageFailed = true
+    if (!mainFrame || code === -3) return
+    pageFailed = true
+    if (settings.mode === 'remote') showUnreachable()
   })
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
   win.webContents.on('will-navigate', (event, url) => {
-    if (ownOrigin(url)) return
+    if (ownOrigin(url)) {
+      // Remote mode: from the page that says the board cannot be reached, the retry only goes to the
+      // board once it answers (retryNow); a try that fails keeps that page rather than a browser error.
+      if (settings.mode === 'remote' && boardUnreachable) {
+        event.preventDefault()
+        retryNow()
+      }
+      return
+    }
     event.preventDefault()
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
   })
-  void win.loadURL(`${settings.url}/`)
+  // Remote mode asks the board first, so the window shows its address at once when it is away.
+  if (settings.mode === 'remote') void openBoard()
+  else void win.loadURL(`${settings.url}/`)
+}
+
+/**
+ * Whether the board at the address answers at all. Any HTTP answer counts: a board on a tailnet asks
+ * for sign-in at /api/health (401) and one with no account yet answers 409, where only a connection
+ * that cannot be made (or no answer in time) says the address is not there.
+ */
+async function boardAnswers() {
+  try {
+    const res = await fetch(`${settings.url}/api/health`, {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+    })
+    await res.body?.cancel()
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Remote mode's first load: the board's page when it answers, else the page that says it does not. */
+async function openBoard() {
+  if (await boardAnswers()) loadBoard()
+  else showUnreachable()
+}
+
+/** Loads the board's page in the window, and has the tray and the window's menu drop their Retry. */
+function loadBoard() {
+  clearRetry()
+  retryStep = 0
+  pageFailed = false
+  if (boardUnreachable) {
+    boardUnreachable = false
+    refreshMenus()
+  }
+  if (!win || win.isDestroyed()) return
+  startLiveness()
+  // A load that fails anyway is did-fail-load's, which shows the page that says so.
+  void win.loadURL(`${settings.url}/`).catch(() => {})
+}
+
+/**
+ * Remote mode: has the board the window shows checked every so often, and takes the first check that
+ * fails as the board going away (showUnreachable), which retries until it answers again (loadBoard).
+ */
+function startLiveness() {
+  if (settings.mode !== 'remote' || quitting) return
+  stopLiveness()
+  liveness = watchLiveness({
+    check: boardAnswers,
+    onLost: () => {
+      liveness = null
+      showUnreachable()
+    },
+  })
+  liveness.start()
+}
+
+/** Stops the checks: the board's page is not in the window, or the app is going. */
+function stopLiveness() {
+  liveness?.stop()
+  liveness = null
+}
+
+/**
+ * The board at the address does not answer (offline, the tailnet down, the server restarting): the
+ * window shows a page of the app's own that names the address and has a Retry now, and the app checks
+ * by itself on a growing wait (scheduleRetry), so the board's return needs no restart and no dialog.
+ */
+function showUnreachable() {
+  stopLiveness()
+  if (!win || win.isDestroyed()) return
+  if (!boardUnreachable) {
+    boardUnreachable = true
+    retryStep = 0
+    refreshMenus()
+    void win.loadURL(unreachablePage(settings.url)).catch(() => {})
+  }
+  scheduleRetry()
+}
+
+/** Waits before the next health check: 2 s, 5 s, then every 10 s while the board stays away. */
+function scheduleRetry() {
+  if (quitting || retryTimer || !boardUnreachable) return
+  const wait = RETRY_WAITS_MS[Math.min(retryStep, RETRY_WAITS_MS.length - 1)]
+  retryStep++
+  retryTimer = setTimeout(() => {
+    retryTimer = null
+    void retryBoard()
+  }, wait)
+}
+
+/** Checks once whether the board answers and loads it when it does, else waits and checks again. */
+async function retryBoard() {
+  if (quitting) return
+  if (await boardAnswers()) loadBoard()
+  else scheduleRetry()
+}
+
+/** Tries the board at once, as the page's link and the tray's Retry now do, whatever wait was left. */
+function retryNow() {
+  clearRetry()
+  retryStep = 0
+  void retryBoard()
+}
+
+function clearRetry() {
+  if (retryTimer) clearTimeout(retryTimer)
+  retryTimer = null
+}
+
+/** The tray and the window's own menu offer Retry now only while the board cannot be reached. */
+function refreshMenus() {
+  if (tray && !tray.isDestroyed()) tray.setContextMenu(trayMenu())
+  if (LINUX) Menu.setApplicationMenu(linuxMenu())
+}
+
+/**
+ * The page the window shows while the board does not answer: the app's own (a data: URL), naming the
+ * address and what to check. Its link is the board's address, which will-navigate turns into a check
+ * (retryNow) rather than a navigation, so a try that fails leaves this page up.
+ * @param {string} address
+ */
+function unreachablePage(address) {
+  const where = address.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${app.getName()}</title>
+<style>
+  :root { color-scheme: light dark }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+    font: 16px/1.5 system-ui, sans-serif; background: Canvas; color: CanvasText }
+  main { max-width: 34rem; padding: 2rem }
+  h1 { font-size: 1.3rem; margin: 0 0 0.75rem }
+  p { margin: 0 0 1rem }
+  code { overflow-wrap: anywhere }
+  a { display: inline-block; padding: 0.5rem 1rem; border-radius: 0.5rem;
+    background: #2563eb; color: #fff; text-decoration: none }
+</style>
+</head>
+<body>
+<main>
+<h1>The board at <code>${where}</code> cannot be reached.</h1>
+<p>The board runs on another machine: check that this one is online and that the board is running there.
+The app tries again by itself, and <a href="${where}/">Retry now</a> tries at once.</p>
+</main>
+</body>
+</html>`
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 }
 
 /**
@@ -624,10 +828,18 @@ function createTray() {
   tray.on('click', showWindow)
 }
 
+/**
+ * Remote mode, only while the board cannot be reached: try the address again now, beside the app's own
+ * retries (the window's page has the same link).
+ * @returns {Electron.MenuItemConstructorOptions}
+ */
+const retryItem = () => ({ label: 'Retry now', click: retryNow })
+
 function trayMenu() {
   return Menu.buildFromTemplate([
     { label: 'Open', click: showWindow },
     { label: 'Open in browser', click: openInBrowser },
+    ...(settings.mode === 'remote' && boardUnreachable ? [retryItem()] : []),
     ...(LINUX ? [startAtLoginItem()] : []),
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
@@ -644,6 +856,7 @@ function linuxMenu() {
       label: app.getName(),
       submenu: [
         { label: 'Open in browser', click: openInBrowser },
+        ...(settings.mode === 'remote' && boardUnreachable ? [retryItem()] : []),
         startAtLoginItem(),
         { type: 'separator' },
         { label: 'Quit', accelerator: 'CmdOrCtrl+Q', click: () => app.quit() },
