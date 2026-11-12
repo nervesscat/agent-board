@@ -394,7 +394,7 @@ function TicketPage() {
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {t.archivedAt && (
             <Tip
               content={`Archived by ${t.archivedBy || 'someone'} ${ago(t.archivedAt)}${t.parentId ? ', with the ticket it is a lane of' : ''}`}
@@ -430,7 +430,14 @@ function TicketPage() {
           {(t.parentId || verdictOf(t)) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
-          <StatusSelect stages={stages} value={t.status} onChange={(status) => update.mutate({ status })} />
+          <StatusSelect
+            stages={stages}
+            value={t.status}
+            onChange={(status) => update.mutate({ status })}
+            // At a phone's width a stage name at the character limit is wider than the row: the picker
+            // gives way with the rest of the header rather than widening the page.
+            className="min-w-0"
+          />
           <div className="flex items-center gap-1.5">
             <Label htmlFor="complexity" className="text-xs font-normal text-muted-foreground">
               Complexity
@@ -487,12 +494,12 @@ function TicketPage() {
               page can scroll past the breadcrumb, but its sections and going to the previous or next
               ticket stay one click away. The row keeps its height while the board or the parent ticket
               loads, so the header does not grow under a heading the page has already scrolled to. The
-              steps shrink with the row, their label wrapping, and never take it past the page's edge,
-              however long the stage's name is. */}
+              steps shrink with the row, their label wrapping even inside a long word, and never take it
+              past the page's edge, however long the stage's name is and whatever it breaks on. */}
         {(main.length > 0 || !t.prId) && (
           <div className="-mt-1 flex min-h-7 w-full items-center gap-2 text-xs">
             {tabs.length > 0 && <TicketSectionNav key={t.id} items={tabs} />}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex min-w-0 items-center gap-2">
               {!t.prId && parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
               {!t.prId && !t.parentId && board && (
                 <StageNav
@@ -1566,10 +1573,10 @@ function StepNav({
     )
   }
   return (
-    <span className="ml-auto inline-flex items-center gap-2 text-xs">
+    <span className="ml-auto inline-flex min-w-0 items-center gap-2 text-xs">
       {step(prev, 'prev')}
       <Tip content="[ and ] step back and forward">
-        <span className="tabular-nums">{children}</span>
+        <span className="min-w-0 tabular-nums wrap-anywhere">{children}</span>
       </Tip>
       {step(next, 'next')}
     </span>
@@ -1998,8 +2005,9 @@ const SPY_SETTLE_MS = 1200
 /**
  * The ticket's sections, one tap away on a phone instead of a long scroll. It rides in the ticket
  * header's step row: at a narrow width the strip scrolls within itself instead of wrapping onto a
- * second line, which would make the stuck header taller. It takes its tabs' width as its share of the
- * row, so the steps beside it keep their own, and the two shrink together when the row is too narrow.
+ * second line, which would make the stuck header taller. It asks for a share of the row and grows into
+ * the spare, so the steps beside it keep enough to wrap a stage name at the character limit in a couple
+ * of lines, and both fit at a phone's width.
  *
  * The selected tab also follows the page: scrolling a section's top under the stuck header selects
  * that section's tab, back up too, and the page's end selects its last section. So the strip says
@@ -2096,7 +2104,7 @@ function TicketSectionNav({ items }: { items: readonly { key: string; label: str
   // A tab the layout no longer draws must not leave the strip with none selected.
   const current = items.some((i) => i.key === active) ? active : (items[0]?.key ?? '')
   return (
-    <div ref={root} className="-my-1 flex min-w-0 flex-auto overflow-x-auto py-1">
+    <div ref={root} className="-my-1 flex min-w-0 grow basis-40 overflow-x-auto py-1">
       <Tabs value={current} onValueChange={(v) => go(String(v))}>
         <TabsList aria-label="Ticket sections" className="w-max">
           {items.map((s) => (

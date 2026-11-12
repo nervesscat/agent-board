@@ -18,6 +18,14 @@ const selectedTab = (page: Page) => sections(page).locator('[role="tab"][aria-se
 const headerBox = (page: Page) => box(ticketHeader(page))
 const nextTicket = (page: Page) => ticketHeader(page).getByRole('link', { name: /^Next ticket in / })
 
+/** How many lines the element's own text is drawn on: one per top its text nodes sit at. */
+const textLines = (l: Locator) =>
+  l.evaluate((el) => {
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size
+  })
+
 /**
  * How far below the stuck header's bottom a section counts as the one being read: a tab's jump leaves
  * its section 1rem (16px) down, so the selector's line reaches a little further.
@@ -71,6 +79,9 @@ const tabAtTheHeader = (page: Page) =>
 
 /** A stage name at the length a project takes it (40 characters), in capitals: the widest it gets. */
 const LONG_STAGE = "WAITING FOR THE CLIENT'S FINAL APPROVAL"
+
+/** A stage name at that same limit with nothing in it to break on: one unbreakable word. */
+const UNBROKEN_STAGE = 'WAITING_FOR_CLIENT_APPROVAL_BEFORE_MERGE'
 
 /** Points over the target's top strip: what a jump brings just under the header. */
 const coveredAtTop = (l: Locator, height = 24) =>
@@ -132,6 +143,8 @@ test('the section selector shares the header row with the stage steps, before th
   // The selector is left of the steps, and the steps still close the row on the right.
   expect(tabsBox.x + tabsBox.width).toBeLessThanOrEqual(nextBox.x)
   expect(nextBox.x + nextBox.width / 2).toBeGreaterThan(header.x + header.width / 2)
+  // A short label stays on one line: wrapping only when it has to does not break the row at a desk.
+  expect(await textLines(ticketHeader(page).getByText(/\d+ of \d+ in /))).toBe(1)
 })
 
 test('the selector stays in the stuck header at the bottom, and its tabs land below it', async ({
@@ -404,6 +417,65 @@ test.describe('on a phone', () => {
     // The strip is still usable: it scrolls to a tab, which lands on its section.
     const tasks = sectionTab(page, 'Tasks')
     await tasks.scrollIntoViewIfNeeded()
+    await tasks.click()
+    await expect(tasks).toHaveAttribute('aria-selected', 'true')
+    await expectLanded(page, page.locator('#tasks'))
+  })
+
+  test('a stage name with nothing to break on still leaves the sections usable', async ({
+    page,
+    api,
+    human,
+    project,
+  }) => {
+    await api.ticket({ title: 'An earlier ticket in the same stage', status: 'in_progress' })
+    const t = await longTicket(api, human, 'Sections beside an unbroken stage name')
+    await api.ticket({ title: 'A later ticket in the same stage', status: 'in_progress' })
+    // Forty characters of capitals with no space in them: the step label cannot break, and the strip
+    // beside it can shrink to nothing unless the label gives way inside the word.
+    const stage = project.stages.find((s) => s.kind === 'active')!
+    await ok(
+      human.patch(`/api/projects/${t.projectId}/stages/${stage.id}`, { data: { name: UNBROKEN_STAGE } }),
+    )
+
+    await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
+    const label = ticketHeader(page).getByText(new RegExp(`of \\d+ in ${UNBROKEN_STAGE}`))
+    const tabs = sections(page)
+    const next = nextTicket(page)
+    await expect(label).toBeVisible()
+    await expect(tabs).toBeVisible()
+    await expect(next).toBeInViewport()
+
+    // The label takes more than one line: it wrapped inside the word rather than keeping its width.
+    expect(await textLines(label)).toBeGreaterThan(1)
+
+    // The strip keeps a real share of the row, and the steps still close the row on the right.
+    const strip = await tabs.evaluate((list) => {
+      let el: HTMLElement | null = list.parentElement
+      while (el && getComputedStyle(el).overflowX !== 'auto') el = el.parentElement
+      const r = el?.getBoundingClientRect()
+      return { width: el?.clientWidth ?? 0, left: r?.left ?? 0, right: r?.right ?? 0 }
+    })
+    expect(strip.width).toBeGreaterThan(0)
+    expect(strip.right).toBeLessThanOrEqual((await box(next)).x + 0.5)
+
+    // Nothing widens the page, the buttons keep a full tap target, and the header stays short.
+    const widths = await page.evaluate(() => ({
+      client: document.documentElement.clientWidth,
+      scroll: document.documentElement.scrollWidth,
+    }))
+    expect(widths.scroll).toBe(widths.client)
+    const nextBox = await box(next)
+    expect(nextBox.width).toBeGreaterThanOrEqual(24)
+    expect(nextBox.height).toBeGreaterThanOrEqual(24)
+    expect((await headerBox(page)).height).toBeLessThan(page.viewportSize()!.height / 3)
+
+    // And a tab, brought into the strip, is whole inside it and still jumps to its section.
+    const tasks = sectionTab(page, 'Tasks')
+    await tasks.scrollIntoViewIfNeeded()
+    const taskBox = await box(tasks)
+    expect(taskBox.x).toBeGreaterThanOrEqual(strip.left - 0.5)
+    expect(taskBox.x + taskBox.width).toBeLessThanOrEqual(strip.right + 0.5)
     await tasks.click()
     await expect(tasks).toHaveAttribute('aria-selected', 'true')
     await expectLanded(page, page.locator('#tasks'))
