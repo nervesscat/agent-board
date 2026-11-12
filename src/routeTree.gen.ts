@@ -27,6 +27,7 @@ import { Route as ProjectsIdPrsRouteImport } from './routes/projects.$id.prs'
 import { Route as ProjectsIdRepositoriesRouteImport } from './routes/projects.$id.repositories'
 import { Route as ProjectsIdReviewsRouteImport } from './routes/projects.$id.reviews'
 import { Route as ProjectsIdRoadmapRouteImport } from './routes/projects.$id.roadmap'
+import { Route as ProjectsIdRunReportsRouteImport } from './routes/projects.$id.run-reports'
 import { Route as ProjectsIdSettingsRouteImport } from './routes/projects.$id.settings'
 import { Route as ProjectsIdFeaturesIndexRouteImport } from './routes/projects.$id.features.index'
 import { Route as ProjectsIdFeaturesTicketIdRouteImport } from './routes/projects.$id.features.$ticketId'
@@ -121,6 +122,11 @@ const ProjectsIdRoadmapRoute = ProjectsIdRoadmapRouteImport.update({
   path: '/roadmap',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
+const ProjectsIdRunReportsRoute = ProjectsIdRunReportsRouteImport.update({
+  id: '/run-reports',
+  path: '/run-reports',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 const ProjectsIdSettingsRoute = ProjectsIdSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -131,12 +137,11 @@ const ProjectsIdFeaturesIndexRoute = ProjectsIdFeaturesIndexRouteImport.update({
   path: '/features/',
   getParentRoute: () => ProjectsIdRoute,
 } as any)
-const ProjectsIdFeaturesTicketIdRoute =
-  ProjectsIdFeaturesTicketIdRouteImport.update({
-    id: '/features/$ticketId',
-    path: '/features/$ticketId',
-    getParentRoute: () => ProjectsIdRoute,
-  } as any)
+const ProjectsIdFeaturesTicketIdRoute = ProjectsIdFeaturesTicketIdRouteImport.update({
+  id: '/features/$ticketId',
+  path: '/features/$ticketId',
+  getParentRoute: () => ProjectsIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -156,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
+  '/projects/$id/run-reports': typeof ProjectsIdRunReportsRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id/': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -178,6 +184,7 @@ export interface FileRoutesByTo {
   '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
+  '/projects/$id/run-reports': typeof ProjectsIdRunReportsRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -202,6 +209,7 @@ export interface FileRoutesById {
   '/projects/$id/repositories': typeof ProjectsIdRepositoriesRoute
   '/projects/$id/reviews': typeof ProjectsIdReviewsRoute
   '/projects/$id/roadmap': typeof ProjectsIdRoadmapRoute
+  '/projects/$id/run-reports': typeof ProjectsIdRunReportsRoute
   '/projects/$id/settings': typeof ProjectsIdSettingsRoute
   '/projects/$id/': typeof ProjectsIdIndexRoute
   '/projects/$id/features/$ticketId': typeof ProjectsIdFeaturesTicketIdRoute
@@ -227,6 +235,7 @@ export interface FileRouteTypes {
     | '/projects/$id/repositories'
     | '/projects/$id/reviews'
     | '/projects/$id/roadmap'
+    | '/projects/$id/run-reports'
     | '/projects/$id/settings'
     | '/projects/$id/'
     | '/projects/$id/features/$ticketId'
@@ -249,6 +258,7 @@ export interface FileRouteTypes {
     | '/projects/$id/repositories'
     | '/projects/$id/reviews'
     | '/projects/$id/roadmap'
+    | '/projects/$id/run-reports'
     | '/projects/$id/settings'
     | '/projects/$id'
     | '/projects/$id/features/$ticketId'
@@ -272,6 +282,7 @@ export interface FileRouteTypes {
     | '/projects/$id/repositories'
     | '/projects/$id/reviews'
     | '/projects/$id/roadmap'
+    | '/projects/$id/run-reports'
     | '/projects/$id/settings'
     | '/projects/$id/'
     | '/projects/$id/features/$ticketId'
@@ -416,6 +427,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdRoadmapRouteImport
       parentRoute: typeof ProjectsIdRoute
     }
+    '/projects/$id/run-reports': {
+      id: '/projects/$id/run-reports'
+      path: '/run-reports'
+      fullPath: '/projects/$id/run-reports'
+      preLoaderRoute: typeof ProjectsIdRunReportsRouteImport
+      parentRoute: typeof ProjectsIdRoute
+    }
     '/projects/$id/settings': {
       id: '/projects/$id/settings'
       path: '/settings'
@@ -451,6 +469,7 @@ interface ProjectsIdRouteChildren {
   ProjectsIdRepositoriesRoute: typeof ProjectsIdRepositoriesRoute
   ProjectsIdReviewsRoute: typeof ProjectsIdReviewsRoute
   ProjectsIdRoadmapRoute: typeof ProjectsIdRoadmapRoute
+  ProjectsIdRunReportsRoute: typeof ProjectsIdRunReportsRoute
   ProjectsIdSettingsRoute: typeof ProjectsIdSettingsRoute
   ProjectsIdIndexRoute: typeof ProjectsIdIndexRoute
   ProjectsIdFeaturesTicketIdRoute: typeof ProjectsIdFeaturesTicketIdRoute
@@ -468,15 +487,14 @@ const ProjectsIdRouteChildren: ProjectsIdRouteChildren = {
   ProjectsIdRepositoriesRoute: ProjectsIdRepositoriesRoute,
   ProjectsIdReviewsRoute: ProjectsIdReviewsRoute,
   ProjectsIdRoadmapRoute: ProjectsIdRoadmapRoute,
+  ProjectsIdRunReportsRoute: ProjectsIdRunReportsRoute,
   ProjectsIdSettingsRoute: ProjectsIdSettingsRoute,
   ProjectsIdIndexRoute: ProjectsIdIndexRoute,
   ProjectsIdFeaturesTicketIdRoute: ProjectsIdFeaturesTicketIdRoute,
   ProjectsIdFeaturesIndexRoute: ProjectsIdFeaturesIndexRoute,
 }
 
-const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(
-  ProjectsIdRouteChildren,
-)
+const ProjectsIdRouteWithChildren = ProjectsIdRoute._addFileChildren(ProjectsIdRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -487,16 +505,4 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSplatRoute: ApiSplatRoute,
   ProjectsIdRoute: ProjectsIdRouteWithChildren,
 }
-export const routeTree = rootRouteImport
-  ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
+export const routeTree = rootRouteImport._addFileChildren(rootRouteChildren)._addFileTypes<FileRouteTypes>()

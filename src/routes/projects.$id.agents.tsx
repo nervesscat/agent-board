@@ -22,6 +22,7 @@ import {
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { Textarea } from '#/components/ui/textarea'
 import { Tip } from '#/components/ui/tooltip'
 import { GenerateCommands } from '#/components/AgentTokens'
 import { ReviewSkills, useShell } from '#/components/ReviewSkills'
@@ -227,6 +228,11 @@ function AgentCard({
         text={agent.delegation}
         empty="No delegation notes yet: the orchestrator will not know when to call it."
       />
+      <AgentText
+        title="Run report"
+        hint="the template each run fills in before it hands back"
+        text={agent.reportTemplate}
+      />
     </li>
   )
 }
@@ -280,6 +286,7 @@ function AgentForm({
   const [name, setName] = useState(agent?.name ?? '')
   const [instructions, setInstructions] = useState(agent?.instructions ?? '')
   const [delegation, setDelegation] = useState(agent?.delegation ?? '')
+  const [reportTemplate, setReportTemplate] = useState(agent?.reportTemplate ?? '')
   const [avatar, setAvatar] = useState<{ id: number; url: string } | null>(
     agent?.avatarId ? { id: agent.avatarId, url: agent.avatarUrl! } : null,
   )
@@ -291,7 +298,13 @@ function AgentForm({
   })
   const save = useMutation({
     mutationFn: () => {
-      const body = { name, instructions, delegation, avatarId: avatar?.id ?? null }
+      const body = {
+        name,
+        instructions,
+        delegation,
+        reportTemplate,
+        avatarId: avatar?.id ?? null,
+      }
       return agent ? patch(`/api/agents/${agent.id}`, body) : post(`/api/projects/${projectId}/agents`, body)
     },
     onSuccess: () => {
@@ -395,6 +408,21 @@ function AgentForm({
           minHeight="min-h-28"
           label="When to delegate"
           placeholder="After the Builder finishes a step, with the preview link and the acceptance criteria. Returns PASS / FAIL per criterion. All pass: the Breaker next; a failure: back to the Builder."
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="agent-report-template">Run report template</Label>
+        <p className="text-xs text-muted-foreground">
+          What a run of this agent fills in before it hands back, one report per run. It starts with the
+          common part every report carries (identity, time, brief, steps, ratings, problems, gaps); add what
+          this agent does. The board keeps it with the agent.
+        </p>
+        <Textarea
+          id="agent-report-template"
+          value={reportTemplate}
+          onChange={(e) => setReportTemplate(e.target.value)}
+          className="min-h-40 font-mono text-xs"
+          placeholder="## The rule …"
         />
       </div>
       <div className="flex justify-end gap-2">
