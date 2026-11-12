@@ -258,6 +258,30 @@ tooltip say it restarted, and `board.err.log` notes each exit. After five restar
 minutes of the board answering in between, it gives up and says the board stopped, with the end of
 its error output. A server that fails before it first answers is reported at once.
 
+**A board hosted on another machine.** If the board runs elsewhere, give the app its address in
+`config.env`:
+
+```
+REMOTE_BOARD_URL=https://pc.tail1.ts.net
+```
+
+That is an address you could open in a browser: `http` or `https`, with a host and no path after it
+(Tailscale's name for the machine, say, or an SSH forward's `http://localhost:47100`). The app is then
+a window onto that board: it starts no server of its own, binds no port and makes no `data\` folder,
+and it does not look for `git`, `gh` or `claude` or check them. Those, the board's data and the
+board's own updates belong to the machine that runs it, where its Settings page is. The window, the
+tray's Open in browser and Start at login work as before, and you sign in with the board's own
+passkeys, as in a browser. When the address does not answer (the machine is off, the tailnet is down,
+the board is restarting), the window says so, names the address and tries again by itself every few
+seconds; **Retry now** in the window and in the tray tries at once, and the app keeps trying while it
+runs, so the board coming back needs no restart. A board that answered and then goes away is found
+while its page is shown (the app checks it every 15 seconds or so) and reported the same way, so the
+window names the address rather than keeping a page that no longer loads. The app does not update
+itself in this mode, since that goes through the local board: install a newer build over it as usual.
+
+Switching back: clear the value (or delete the line), start the app again, and it runs the board on
+this machine as before.
+
 **Prerequisites.** `git`, `gh` (signed in) and `claude` on `PATH`, as for a checkout: the board runs
 them just the same. Managed previews of a board worktree also need `pnpm` and `node`.
 
@@ -267,11 +291,12 @@ them just the same. Managed previews of a board worktree also need `pnpm` and `n
   `desktop.log`), what `data/` is in a checkout.
 - `config.env`: the settings, `KEY=value` as in `.env`, read at each start. The first start writes it
   with every key commented out: `PORT` (47100 by default), `DATA_DIR` (the data folder, anywhere you
-  like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, and `PUBLIC_ORIGIN`, the
-  tailnet entrance (Using it from other devices, below). Set the entrance in Settings, Other devices
-  (tailnet), which needs no file: keep `PUBLIC_ORIGIN` here only to override Settings. Any other key of
-  `.env` works too. A variable set in the environment wins over the file. `BOARD_ENV` and `HOST` are not
-  settings: the app always runs production on `127.0.0.1`.
+  like; a relative path is under `%LOCALAPPDATA%\agent-board`), `CLAUDE_BIN`, `PUBLIC_ORIGIN`, the
+  tailnet entrance (Using it from other devices, below), and `REMOTE_BOARD_URL`, the address of a board
+  on another machine (above). Set the entrance in Settings, Other devices (tailnet), which needs no
+  file: keep `PUBLIC_ORIGIN` here only to override Settings. Any other key of `.env` works too. A
+  variable set in the environment wins over the file. `BOARD_ENV` and `HOST` are not settings: the app
+  always runs production on `127.0.0.1`.
 - `electron\`: the window's browser profile (its sign-in, its cache).
 
 `AGENT_BOARD_HOME` in the environment moves all three elsewhere (the smoke test runs its copy that way).
@@ -367,7 +392,9 @@ are set to absolute paths):
 `AGENT_BOARD_HOME` puts all three in one folder, as on Windows.
 
 **Prerequisites** are those of Windows: `git`, `gh` (signed in) and `claude`, and `pnpm` and `node`
-for managed previews. An app started from the applications menu, a launcher or autostart gets no
+for managed previews. An app with `REMOTE_BOARD_URL` set (above) needs none of them on this machine:
+the tools, the login shell's `PATH` and the data folder are the host's, and the app only shows its
+window. An app started from the applications menu, a launcher or autostart gets no
 shell's `PATH`, so at each start the app asks your login shell for it (`$SHELL -ilc`, `/bin/sh` without
 `SHELL`; so what `~/.profile`, `~/.bash_profile`, `~/.bashrc` or `~/.zshrc` add, mise, nvm or pnpm's
 setup included, counts as in a terminal), puts it in front of the `PATH` it was started with, adds
@@ -1198,7 +1225,11 @@ for `git fetch --prune origin`, which only refreshes the checkout's copy of orig
   and a `DATA_DIR` or `AGENT_BOARD_HOME` that cannot be made or written are reported in a dialog
   that ends the app, that a server killed while the app runs is started again on the same port with
   no dialog, and one that then fails on every start ends in the stopped board's dialog after the
-  restarts' cap, and that a second launch after a failure is harmless. On Linux (under a
+  restarts' cap, and that a second launch after a failure is harmless; with `REMOTE_BOARD_URL` set, that
+  the window shows a stand-in board on loopback while no local server is started, nothing answers on the
+  local `PORT`, no `DATA_DIR` is made and a taken local `PORT` is no error, that an address nothing
+  answers is named in the window and reached by itself once it answers, and that `config.env` keeps the
+  address across a restart. On Linux (under a
   display: `xvfb-run -a`) it also checks that nothing of the app runs after Quit, that the server
   gets the login shell's PATH (a `.bashrc` in a stand-in home), that Start at login writes and removes
   the autostart entry, and that closing the window with no tray host ends the app and its server; its

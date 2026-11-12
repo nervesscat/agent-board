@@ -29,6 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover
 import { Tip } from '#/components/ui/tooltip'
 import { del, errorMessage, patch, post, type Project, type ProjectRow } from '#/lib/api'
 import { useProjects } from '#/lib/project'
+import { useHydrated } from '#/lib/useHydrated'
 
 // The project's Overview is its own address (no module segment); the rest keep their segment.
 const MODULES = ['overview', 'prs', 'features', 'daily', 'settings'] as const
@@ -44,7 +45,10 @@ export function ProjectSwitcher() {
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [managing, setManaging] = useState(false)
-  const current = projects?.find((p) => String(p.id) === id)
+  // Read after mount: /api/projects can answer before React has hydrated this page, and a name drawn
+  // from it would not match the server's "Select a project".
+  const hydrated = useHydrated()
+  const current = hydrated ? projects?.find((p) => String(p.id) === id) : undefined
   const module = MODULES.find((m) => (pathname.split('/')[3] || 'overview') === m) ?? 'overview'
   const go = (projectId: number | string) =>
     navigate({

@@ -14,7 +14,10 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # The job runs on the self-hosted runner (`self-hosted`, `vps`): the owner's own server, as root.
+    # A pull request from a fork carries code nobody here wrote, so it runs on GitHub's runner instead
+    # and that server never executes it.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","vps"]') }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -79,7 +82,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm check:migrations
-      - run: pnpm test
+
+      # Vitest starts a worker per core, and the git-backed tests spawn dozens of real git
+      # processes each: on a machine with many cores the whole suite can crowd the machine enough
+      # that a single one of those tests outlives vitest's 5 second default. What they assert is
+      # the git calls made, not how long they take, so the default buys nothing here and the
+      # release tests already ask for 30 seconds in code for the same reason.
+      - name: Unit tests
+        run: pnpm test --testTimeout=30000
 
       # One build, into the folder the e2e suite starts the board from (it then skips its own build).
       - name: Build

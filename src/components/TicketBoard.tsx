@@ -218,7 +218,7 @@ export function TicketBoard({
                   // The now shows on a card with no other badge: a busy card is capped in height, and its time must not clip.
                   const badged =
                     t.decisions > 0 ||
-                    t.blockedTasks > 0 ||
+                    t.blockedNext ||
                     !!t.stalled ||
                     t.needs.some((n) => !n.merged) ||
                     after?.has(t.id)
@@ -250,7 +250,7 @@ export function TicketBoard({
                             </div>
                           </div>
                           {(t.decisions > 0 ||
-                            t.blockedTasks > 0 ||
+                            t.blockedNext ||
                             t.stalled ||
                             brief ||
                             t.needs.some((n) => !n.merged) ||
@@ -259,7 +259,7 @@ export function TicketBoard({
                               {brief && <NowBadge brief={brief} words={words} />}
                               {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                               {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
-                              {t.blockedTasks > 0 && <BlockedTasksBadge n={t.blockedTasks} />}
+                              {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} />}
                               <StallNotice
                                 timeline={work}
                                 stage={stallStage(stages, t.status)}
@@ -723,9 +723,7 @@ export function TicketList({
                     {t.title}
                   </span>
                   {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
-                  {t.blockedTasks > 0 && (
-                    <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />
-                  )}
+                  {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />}
                   <StallNotice
                     timeline={work}
                     stage={stallStage(stages, t.status)}

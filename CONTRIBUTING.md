@@ -48,6 +48,11 @@ pnpm dev
 off, every request as the human (README: "Test mode"). `pnpm dev` refuses to run in the main checkout.
 Remove the worktree (`git worktree remove`) once the branch is merged or dropped.
 
+`src/routeTree.gen.ts` is generated: after adding or removing a route file, run `pnpm generate-routes`
+and commit only what it writes. `pnpm dev` and `pnpm build` rewrite that file with the router plugin's
+`declare module '@tanstack/react-start'` block at its end, which stays out of a commit (the tests check
+the committed file), so a build's copy in a commit hides what the next regeneration really changes.
+
 `CLAUDE.md` has the project's working rules (storage, authentication files, benchmarks) and `README.md`
 the reference for every feature and the REST API.
 
