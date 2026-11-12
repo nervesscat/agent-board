@@ -3,22 +3,28 @@ import { Tip } from '#/components/ui/tooltip'
 import { COMPLEXITIES, type Complexity } from '#/lib/constants'
 
 /** How each level is written: the select's options, and the chip on a card. */
-const COMPLEXITY_LABEL: Record<Complexity, string> = { low: 'Low', mid: 'Mid', high: 'High' }
+const COMPLEXITY_LABEL: Record<Complexity, string> = { low: 'Low', mid: 'Mid', high: 'High', max: 'Max' }
 
-/** The hover hint of the select: what each level does to the review. */
-const SELECT_HINT = 'Low: no review. Mid: one review round. High: up to three.'
+/**
+ * The hover hint of the select: what each level does to the review, and where max stops being the
+ * answer (a feature in an existing codebase is at most high).
+ */
+const SELECT_HINT =
+  'Low: no review. Mid: one review round. High: up to three. Max: up to ten rounds, for work built from scratch; a feature in an existing codebase is never max, however difficult.'
 
 /** The hover hint of a level's chip: what that level does to the review. */
 const LEVEL_HINT: Record<Complexity, string> = {
   low: 'Low: no review. The builder verifies it itself.',
   mid: 'Mid: one review round.',
   high: 'High: up to three review rounds.',
+  max: 'Max: up to ten review rounds, for a whole site or app built from scratch, a new product or a standalone service, and it stops at the first round that survives. A feature in an existing codebase is at most high, however difficult.',
 }
 
 const CHIP_COLOR: Record<Complexity, string> = {
   low: 'bg-muted text-muted-foreground',
   mid: 'bg-sky-500/10 text-sky-700 dark:text-sky-400',
   high: 'bg-violet-500/10 text-violet-700 dark:text-violet-400',
+  max: 'bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-400',
 }
 
 /**

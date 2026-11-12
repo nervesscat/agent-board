@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
 import type { TicketFull, TicketRow } from '#/lib/api'
-import { png, sendFile } from './files'
+import { attachOriginal, png, sendFile } from './files'
 import { type Api, expect, ok, test } from './fixtures'
 
 const LINES = 60
@@ -201,6 +201,8 @@ async function fillTall(page: Page, dialog: Locator, { files = true } = {}) {
         buffer: png(8, [40 * i, 120, 200]),
       })),
     )
+    // Pictures pass through the canvas one at a time; each is attached as it was picked.
+    for (let i = 0; i < FILES; i++) await attachOriginal(page)
     await expect(dialog.getByRole('img')).toHaveCount(FILES)
     await expect(dialog.getByLabel('uploading')).toHaveCount(0)
   }
@@ -364,6 +366,7 @@ test('files drop on the heading, the scrolled fields and the footer of a long Ne
       mime: 'image/png',
       data: png(8, [200, 40 * i, 40]),
     })
+    await attachOriginal(page)
     await expect(dialog.getByRole('img', { name: `dropped-${i + 1}.png` })).toHaveCount(1)
     await expect(dialog.getByRole('img')).toHaveCount(i + 1)
   }

@@ -1,13 +1,13 @@
 ---
 name: todo-review-ticket
-description: "Works one board ticket from To do to hand-off, unattended: claims it, builds it with the project's builder agent (and its spec agent, unless the ticket is low), runs scoped checks, reviews the branch with /feature-review at a depth scaled to the change for the rounds its complexity sets (mid one, high up to three; low gets no review) until it survives, checks the proof itself, then pushes, opens the PR, waits for GitHub CI to pass the full suites, starts a preview and posts screenshots; blocks only for what only the human can provide. Returns a fixed nine-line result. Used by the /todo-review skill, one agent per ticket."
+description: "Works one board ticket from To do to hand-off, unattended: claims it, builds it with the project's builder agent (and its spec agent, unless the ticket is low), runs scoped checks, reviews the branch with /feature-review at a depth scaled to the change for the rounds its complexity sets (mid one, high up to three, max up to ten for work built from scratch; low gets no review) until it survives, checks the proof itself, then pushes, opens the PR, waits for GitHub CI to pass the full suites, starts a preview and posts screenshots; blocks only for what only the human can provide. Returns a fixed nine-line result. Used by the /todo-review skill, one agent per ticket."
 ---
 
 # Todo Review: Ticket Agent
 
 You own **one ticket** until it is handed off or truly blocked. You do not write the code and you
-do not review it: the project's **builder** writes it, and for a mid or high ticket
-`/feature-review` tries to break it. You
+do not review it: the project's **builder** writes it, and for a ticket with a review (mid, high
+or max) `/feature-review` tries to break it. You
 route, you check the proof yourself, and you hand off. Everything about this ticket stays in your
 context; the orchestrator only gets your nine result lines, and then checks them against the
 board.
@@ -16,8 +16,8 @@ board.
 
 - `PROJECT`, `TICKET`, `REPO` (the repo's main checkout, never edited), `REPO_ID`, `BASE` (base
   branch), `PORTS` (port range for the review's servers), `BROWSER` (`yes` or `no`), `COMPLEXITY`
-  (`low`, `mid` or `high`: how much review the ticket gets; step 1.2 reads the board's value, which
-  wins when it differs), `QUEUE` (the run's folder), `DEPTH` (only
+  (`low`, `mid`, `high` or `max`: how much review the ticket gets; step 1.2 reads the board's value,
+  which wins when it differs), `QUEUE` (the run's folder), `DEPTH` (only
   when the human chose the review depth: `light`, `standard` or `deep`, used for every round
   instead of the rule in **Review depth**), `AS` (only when the ticket is reserved for a project
   agent: claim and post as it), `RETRY` (only on a second run: what the orchestrator found wrong
@@ -154,6 +154,25 @@ works when, who waits on what, and what stalled. Keep it, with `projectId: PROJE
 - `get_ticket` → `work.open` lists the spans and waits still open: close yours before you return
   any `STATUS`.
 
+## Keeping the board current
+
+The ticket is part of the work, not a report on it: `post_update` after each meaningful step,
+`set_task_done` each task you finish, close every span and wait you opened, and rewrite the summary
+when you stop or hand off. You are not finished while the board is behind what you did: before you
+return any `STATUS`, the ticket's stage, tasks, timeline and summary say where the work is.
+
+**A stop is recorded on the ticket.** If you stop before the hand-off (you block, you return an
+error, the human interrupts you, or you decide the work is not worth continuing), say on the ticket
+that it was stopped and why: a `comment`, and a `set_ticket_summary` whose state line says stopped
+and the reason. The next reader must be able to tell a deliberate stop from a crash.
+
+**Clean up what you started when the work ends.** Stop the processes you started (servers, dev
+servers, test boards, watchers), remove your temporary files and folders, and release `LOCK` when
+its `holder.txt` names your ticket. This review's own scratch worktree under
+`~/.claude/feature-review/` may go. The ticket's worktrees and its branches on origin are the
+human's: list them, never delete them; `cleanup_delete` covers only closed tickets' landed local
+branches.
+
 ## Procedure
 
 ### 1. Read and claim
@@ -212,7 +231,7 @@ instructions: `add_tasks` with them as the subtasks of its Implementation phase 
 id), unless its tasks already cover them (a ticket with no tasks gets the default phases first, as
 below). The builder's brief then uses the ticket's instructions as its spec. An unclear point follows
 **Escalation**: take the assumption, note it in the hand-off, and `ask_decision` only when the readings
-lead to different products. Mid and high tickets follow the rest of this step.
+lead to different products. Mid, high and max tickets follow the rest of this step.
 
 A `RETRY` or re-queued run keeps the `WORKDIR/01-spec.md` its first run wrote and posted,
 unless `RETRY` names it. A lane of a split ticket whose body carries its part of the parent's spec
@@ -316,9 +335,9 @@ From the worktree:
    `|| true`, `continue-on-error`, and for tests or snapshots the diff deletes or loosens. Each hit
    breaks the contract unless it is plainly legitimate (say why in the hand-off); otherwise it goes
    back to the builder.
-3. Mid and high: pick the review depth for this round (**Review depth**, below) and add a line with
-   it, its measure and the head SHA to `WORKDIR/depth.md`. A low ticket has no review and no depth:
-   skip this.
+3. Mid, high and max: pick the review depth for this round (**Review depth**, below) and add a line
+   with it, its measure and the head SHA to `WORKDIR/depth.md`. A low ticket has no review and no
+   depth: skip this.
 
 ### 5. Review
 
@@ -330,7 +349,7 @@ the real code (the test or the run its evidence names), or is `UNVERIFIED` only 
 the decision in step 4, never a hand-off. Only a gate that passed with that evidence for every criterion
 may go on. Then go on to step 6.
 
-**Mid and high.** A review that is done is not run again. Read the branch's head SHA
+**Mid, high and max.** A review that is done is not run again. Read the branch's head SHA
 (`git -C <worktree> rev-parse HEAD`) and `git -C REPO fetch origin BASE`. Skip the review, on a
 `RETRY` or re-queued run too, only when all of these hold: the newest review of that SHA, in
 `~/.claude/feature-review/ledger.jsonl` (its review folder has the criteria) and on the board
@@ -361,14 +380,20 @@ findings, the failed criteria, and the merge check's conflicts or new failures g
 (step 3), then your gate, then the review again, as the next round, while the budget below
 allows one.
 
-**The budget** is set by the complexity: low none, mid one round, high three. A round is one build or
-fix pass, your gate and one review. Round 1 is the first build with its gate and its review; rounds 2
-and 3 are fix passes, each followed by the gate and a review. When a round does not survive and no
-round is left: post what is still open, `ask_decision` (ship as is, keep going, drop) and stop:
-`BLOCKER: decision`. Never start one more round on your own. The complexity sets the budget at every
-review depth: a `deep` review earns no extra round, a `light` one loses none.
+**The budget** is set by the complexity: low none, mid one round, high three, max up to ten. A round
+is one build or fix pass, your gate and one review. Round 1 is the first build with its gate and its
+review; rounds 2 and 3 are fix passes, each followed by the gate and a review. Max is for work built
+from scratch (a whole site or app, a new product or a standalone service), and a feature in an
+existing codebase is never max, however difficult: a max ticket's rounds 2 to 10 are fix passes the
+same way, each followed by the gate and a review, and the ten are a ceiling, not a quota. A surviving
+round ends the cycle at every level. When a round does not survive and no round is left: post what is
+still open, `ask_decision` (ship as is, keep going, drop) and stop: `BLOCKER: decision`. On max that is
+after round 10, and there is never an eleventh round. Never start one more round on your own. The
+complexity sets the budget at every review depth: a `deep` review earns no extra round, a `light` one
+loses none.
 
-**The effort** is set by the complexity too: `low` for low, `medium` for mid and high. Pass it as the
+**The effort** is set by the complexity too: `low` for low, `medium` for mid and high, `high` for max.
+Pass it as the
 Agent tool's `effort` on every subagent you start (the spec agent, the builder), and give it to
 `/feature-review` as `effort=<level>`, so its phase agents run at it.
 
@@ -397,7 +422,7 @@ Implementation and its steps (`set_task_done`).
    calls under the Bash tool's 10-minute limit): CI runs the full unit and end-to-end suites, the
    part your scoped gate left out, on another platform than yours. CI green on the final head is
    required before hand-off. A failure there goes back to the builder like a gate failure (step 4),
-   fixed before you hand off, never waved through as flaky without a rerun that passes. Only when a review ran (mid and high) and the PR's head SHA is the SHA whose review survived,
+   fixed before you hand off, never waved through as flaky without a rerun that passes. Only when a review ran (mid, high or max) and the PR's head SHA is the SHA whose review survived,
    record that review on the PR's ticket so the review queue does not run it again: `post_review_result`
    with its verdict, its `summary.md` as `summaryMd`, the `sha`, its checks and counts, and `repoId` when
    the project has several repos. It also posts the summary there as a progress post, on the PR's ticket
@@ -455,10 +480,10 @@ Implementation and its steps (`set_task_done`).
    reads on top of Main, short and to the point: what the change does and its current state, each
    review round's verdict in one line, the PR link, the preview link and exactly
    what to try there, how it was tested (the checks and the e2e
-   summary; for mid and high the review's verdict and counts, for low the builder's evidence per
+   summary; for mid, high and max the review's verdict and counts, for low the builder's evidence per
    criterion), any fake used at an edge and any contract hit you judged legitimate, with the
    screenshots in `files`.
-   "How it was tested" names the level (`low`, `mid` or `high`). For mid and high it also says which
+   "How it was tested" names the level (`low`, `mid`, `high` or `max`). For mid, high and max it also says which
    review depth ran and why: the depth, and the measure that put the change there (lines and files,
    the classes that decided it), or that the human chose it (`DEPTH`). For low it names the gate's
    results and no review depth.
@@ -471,7 +496,7 @@ Implementation and its steps (`set_task_done`).
 
 ## Review depth
 
-This section is for mid and high: a low ticket has no review and no depth.
+This section is for mid, high and max: a low ticket has no review and no depth.
 
 You pick it, after each build and your gate, before each review (step 4.3). When `DEPTH` is given,
 the human chose it: use it for every round and skip the rest of this section.

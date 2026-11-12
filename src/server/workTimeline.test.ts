@@ -759,4 +759,41 @@ describe('the docs and prompts', () => {
       for (const word of ['heartbeat', 'start_span', 'start_wait', 'handoff'])
         expect(text.includes(word), `${name} names ${word}`).toBe(true)
   })
+
+  it('tell every agent that the board is part of the work, a stop is recorded and work is cleaned up', () => {
+    const read = (f: string) => fs.readFileSync(path.join(root, f), 'utf8')
+    const prompts = [
+      'src/server/skill/board.md',
+      'AGENTS.md',
+      'src/server/skill/review/skills/todo-review/SKILL.md',
+      'src/server/skill/review/agents/todo-review-ticket.md',
+      ...['spec', 'env', 'verify', 'hunt', 'refute', 'merge', 'runner'].map(
+        (phase) => `src/server/skill/review/agents/feature-review-${phase}.md`,
+      ),
+      'src/server/defaultAgents.ts',
+    ]
+    for (const file of prompts) {
+      const text = read(file)
+      for (const rule of ['board is behind what you did', 'stopped and why', 'what you started'])
+        expect(text, `${file} says "${rule}"`).toContain(rule)
+    }
+    // The seven review agents and the builder carry one identical paragraph.
+    const paragraph = (text: string) => {
+      const at = text.indexOf('board is behind what you did')
+      expect(at).toBeGreaterThanOrEqual(0)
+      const start = text.lastIndexOf('\n\n', at) + 2
+      const end = text.indexOf('\n\n', at)
+      return text
+        .slice(start, end === -1 ? undefined : end)
+        .replace(/`$/, '')
+        .trimEnd()
+    }
+    const same = [
+      ...['spec', 'env', 'verify', 'hunt', 'refute', 'merge', 'runner'].map((phase) =>
+        read(`src/server/skill/review/agents/feature-review-${phase}.md`),
+      ),
+      read('src/server/defaultAgents.ts'),
+    ].map(paragraph)
+    for (const p of same) expect(p).toBe(same[0])
+  })
 })

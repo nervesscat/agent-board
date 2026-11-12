@@ -90,7 +90,7 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `build=<path>` | a build record the caller's gate wrote after its end-to-end build: the head SHA, the `.output-e2e` path and the time. The env phase reuses that artifact when the SHA is the commit under review, and builds once when it is not | none |
 | `repoId=<id>` | the repo id the test slot folders are named with (`tests-<id>-1` … `-N`, `tests-<id>-full`), passed to every phase; the env phase writes the exact folders into `00-env.md` | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
-| `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high) | the session's |
+| `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high, `high` for max) | the session's |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
 
 ## Setup
