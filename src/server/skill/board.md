@@ -133,12 +133,25 @@ Lanes of a ticket you are working are yours to create (next section).
   steps). When the plan changes, `update_task` rewords a task and `remove_task` drops one
   that no longer applies (a phase goes with its steps), so the progress bar stays honest.
 - Record your work on the ticket's timeline (the Roadmap and the ticket page draw it; the human
-  sees from it who worked when, who waited on what, and what stalled). Each call takes `projectId`
-  and `ticketId`, and only a ticket of that project:
+  sees from it who worked when, who waited on what, and what is going on now). Each call takes
+  `projectId` and `ticketId`, and only a ticket of that project:
   - `heartbeat` every few minutes while you work the ticket: in Claude Code under `/loop` (the same
-    loop as [Watch for feedback](#watch-for-feedback)), elsewhere between steps. An active ticket
-    with no event for longer than the project's `stallMinutes` (30 by default) reads as stalled in
-    the human's Needs you.
+    loop as [Watch for feedback](#watch-for-feedback)), elsewhere between steps. A heartbeat, a
+    post, a span, a hand-off — or the board's own push, PR or preview event — refreshes the ticket's
+    lease, and the lease lasts ten minutes. Within it the ticket reads **Working**. Needs you is the
+    human's turn: an open span never puts a ticket there.
+  - The four states: **Waiting on you** (a `human` wait, an undecided decision card or a blocked
+    task), **Working** (a live lease, or a span younger than the lease), **Lost contact** (the lease
+    ran out with a span still open: the agent is gone, which is not Waiting on you and not Stalled)
+    and **Stalled** (nothing open, silence past the project's `stallMinutes`, 30 by default). An
+    open span alone never keeps a dead run reading as Working: Lost contact shows within the lease.
+  - **Beat during long calls without remembering.** Save the beater from
+    `{{BOARD_URL}}/api/agent-setup/board-beat` as `board-beat.mjs` and run it around the heavy
+    commands, or wire it as an OpenCode plugin's tool-start/tool-end hook:
+    `node board-beat.mjs --project <id> --ticket <id> -- pnpm exec playwright test …` beats when the
+    tool starts, every two minutes while it runs and once when it ends (`BOARD_URL` and
+    `BOARD_TOKEN` are its environment; `--once` posts a single beat for a hook). Reliance on a
+    heartbeat you must remember fails exactly when a phase runs long, so let the runtime beat.
   - `start_span` when a phase starts (`spec`, `build`, `review` with its `round`, `verify`, `pr`,
     `preview`, `merge`) and `end_span` when it is done.
   - `start_wait` with the reason when you cannot go on (`lock`, `builder`, `mcp`, `human`, `other`

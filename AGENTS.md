@@ -262,13 +262,22 @@ http_headers = { Authorization = "Bearer <token>" }
    keep the cursor. `list_my_threads` takes the same `since` and returns `{ cursor, threads }`; the
    cursor is yours to hold, the board stores nothing per agent.
    **Record your work on the ticket's timeline** as you go: the Roadmap and the ticket page draw it,
-   so the human sees who worked when, who waited on what, and what stalled. Each call takes
+   so the human sees who worked when, who waited on what, and what is going on now. Each call takes
    `projectId` and `ticketId`, and only a ticket of that project (another project's is a 403 and
    writes nothing); `agent` names who did the work (a sub-agent's name too; you by default).
    - `heartbeat` every few minutes while you work a ticket (in Claude Code under `/loop`, or between
-     steps). A ticket in an active stage with no event of any kind for longer than its project's
-     `stallMinutes` (30 by default, set by the human) reads as **stalled**: on its card, in
-     `list_tickets` and `get_ticket`, and in the human's Needs you.
+     steps). A heartbeat, a post, a span, a hand-off or the board's own push/PR/preview event refreshes
+     the ticket's lease, which lasts ten minutes. The ticket reads **Working** while the lease is live
+     or a span is younger than it, **Waiting on you** for a `human` wait, an undecided decision card or
+     a blocked task, **Lost contact** when the lease ran out with a span still open (the agent is
+     gone), and **Stalled** when nothing is open and the silence is past the project's `stallMinutes`
+     (30 by default, set by the human). An open span never puts a ticket in Needs you: that is the
+     human's turn.
+   - **Beat during long calls without remembering**: save `board-beat.mjs` from the board's
+     `/api/agent-setup/board-beat` and run it around the heavy commands
+     (`node board-beat.mjs --project <id> --ticket <id> -- pnpm build`), or wire it as an OpenCode
+     plugin's tool-start/tool-end hook. It beats on start, every two minutes while the tool runs and
+     when it ends, so a phase longer than the lease stays Working.
    - `start_span` when you start a phase (`spec`, `build`, `review` with its `round`, `verify`, `pr`,
      `preview`, `merge`, or your own words) and `end_span` when it is done (by `spanId`, or your
      latest open span).

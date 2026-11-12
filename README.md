@@ -1021,11 +1021,25 @@ a Timeline card with the same bar and the list of events.
   builder's `build` span is working time, and the bar hatches only the human's time over the spans. An
   open span or wait runs to now while the ticket is in an active, blocked or review stage and not
   archived, and to its last event otherwise.
-- **Stalled**: a ticket (or lane) in an active stage, not archived nor a PR ticket, with no open
-  `human` wait, whose last event of any kind (or its start, or its creation) is more than the
-  project's `stallMinutes` ago (30 by default; Settings → Stalled tickets) reads as stalled. It shows
-  on its card, on the Roadmap, in the ticket lists and in Needs you. Agents keep it off by sending a
-  `heartbeat` every few minutes while they work.
+- **Liveness**: a ticket (or lane) in an active stage, not archived nor a PR ticket, reads one of
+  four states, worked out when it is read (nothing is stored or swept):
+  - **Waiting on you**: it has an open `human` wait, an undecided decision card or an open blocked
+    task. This is the only state that belongs in Needs you.
+  - **Working**: its lease is live, or it has a span younger than the lease. The lease is refreshed
+    by a heartbeat, an agent's post, a span, a hand-off or the board's own push/PR/preview event,
+    and lasts ten minutes (`LEASE_TTL_MINUTES`).
+  - **Lost contact**: the lease ran out while a span was still open — the agent is gone. It shows in
+    its own block on the Overview, on the board card and on the ticket card, never as Stalled and
+    never in Needs you; a run killed mid-phase surfaces within the lease.
+  - **Stalled**: nothing is open and the last signal is more than the project's `stallMinutes` ago
+    (30 by default; Settings → Stalled tickets). The gap between the lease and `stallMinutes` is
+    neutral ("Nothing open"), outside Needs you.
+    An open span never puts a ticket in Needs you: that is the human's turn.
+- **Beating a long call**: an agent that only sends heartbeats between steps goes dark inside a
+  50-minute tool call. `scripts/board-beat.mjs` (served at `/api/agent-setup/board-beat`) is wired
+  around the heavy commands or as an editor hook: it posts a heartbeat on tool start, every two
+  minutes while the command runs, and on tool end, so the phase stays Working without the agent
+  remembering. `scripts/board-beat.test.mjs` covers it with a fake clock and a stub board.
 
 ## REST API
 
