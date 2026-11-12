@@ -13,8 +13,11 @@ branch in the developer's checkout beyond fetching.
 ## Input
 
 `WORKTREE` (detached at the commit under review, clean), `MAIN` (the developer's
-checkout, fetch only), `WORKDIR`, `HEAD_SHA`, `BASE` (the base branch name), and paths to
-`00-env.md` (scoped checks, test command and interpreter), `00-focus.md` (start from it; read outside it only
+checkout, fetch only), `WORKDIR`, `HEAD_SHA`, `BASE` (the base branch name), the exact
+`Test slots:` folders in `00-env.md` (or the `SLOTS` folder and repo id your prompt gives), and
+paths to
+`00-env.md` (scoped checks, test command and interpreter), `00-context.md` (the context pack:
+read it first), `00-focus.md` (start from it; read outside it only
 to follow a reference from it), `02-verification.md` (test results at head, for comparison), and
 your output file `05-merge.md`. Optionally the word `scoped`.
 
@@ -44,7 +47,27 @@ result, and the orchestrator asks the human.
    (step 3), plus the branch's own (`git diff --name-only <merge-base> HEAD_SHA`). That scoped
    run on the merged tree is the merge check; CI on the merged PR covers the rest. When
    `00-env.md` says no CI runs the full suite (`CI: none`) and your prompt does not say `scoped`,
-   run the full suite once with the test command instead. Compare failures with
+   run the full suite once with the test command instead. Take a test slot only for a heavy
+   run: with the exact `Test slots:` folders in `00-env.md` (or the `SLOTS` folder and repo id
+   your prompt gives), the
+   end-to-end run and the full suite take the first free one, never `mkdir -p`, with `holder.txt`
+   holding `#<TICKET> merge <ISO time>`, and release it right after; a full suite takes the
+   `-full` folder first and then waits until every slot is free. The typecheck, lint and scoped
+   unit runs take none. Do
+   not reuse the caller's build here, even when `00-env.md` records `E2E_SKIP_BUILD=1`: step 4
+   merged the base, so that artifact and the app it starts are at `HEAD_SHA`, never the merged
+   tree, and an end-to-end run against it cannot see what the merge broke (or fails on the base's
+   own specs against the old app). Build the merged tree once in a test slot — a build is
+   heavy like the run — by running the recorded end-to-end command with `E2E_SKIP_BUILD=1`
+   removed, so its own build step builds the merged tree into `.output-e2e` (a plain build
+   writes `.output`, which the end-to-end webServer never serves). When the recorded command has
+   no build step of its own, build once with `BOARD_BUILD_DIR=.output-e2e pnpm build` (or the
+   project's equivalent) and run the recorded command with `E2E_SKIP_BUILD=1`. Never run it with
+   the flag on the merged tree, and never build the merged tree twice. The recorded build is
+   reused only when the base was already an ancestor (step 2), and then this step never runs.
+   A scoped run that finds the `-full` folder releases its slot and waits for the full suite, as
+   the gate does. Never delete a slot folder whose `holder.txt` names someone
+   else. Compare failures with
    the head run in `02-verification.md`. Failures that were not present at head are
    **new**. Result `TESTS FAIL AFTER MERGE` with the new failures, or `NO ISSUE`. If the
    test command is unavailable, result `UNVERIFIED (tests could not run)` with the merge

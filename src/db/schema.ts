@@ -26,6 +26,7 @@ import {
   type StageKind,
   type FeedTab,
 } from '#/lib/constants'
+import type { AnnotationDoc } from '#/lib/annotations'
 import type { SavedLayout } from '#/lib/layout'
 import type { RunType } from '#/lib/runs'
 
@@ -175,6 +176,9 @@ export const prs = sqliteTable(
     reviewDecision: text('review_decision'),
     // The human's standing review verdict (approved / changes_requested / commented), or `none`.
     myReview: text('my_review').notNull().default('none'),
+    // GitHub still asks me for a review (its `review-requested:@me` search found it): what the To
+    // review switch's Just me as reviewer narrows to. GitHub drops the request once the review is given.
+    requested: integer({ mode: 'boolean' }).notNull().default(false),
     // `me`: someone else's PR, for the human to review. `others`: the human authored it.
     waitingOn: text('waiting_on').$type<'me' | 'others'>().notNull().default('me'),
     // Where its reviews stand on GitHub as of the last refresh; a hold or a merge overrides it.
@@ -227,7 +231,8 @@ export const tickets = sqliteTable(
     // Where it was placed in its stage's column (its siblings in that stage): placed tickets come first,
     // lowest rank first, then the rest last updated first. Null until placed; any change of stage clears it.
     rank: integer(),
-    // How much review the ticket gets: low none, mid one round, high three (COMPLEXITIES).
+    // How much review the ticket gets: low none, mid one round, high three, max up to ten
+    // (COMPLEXITIES).
     complexity: text().$type<Complexity>().notNull().default(DEFAULT_COMPLEXITY),
     assignee: text().notNull().default(''),
     branch: text().notNull().default(''),
@@ -264,7 +269,7 @@ export const tickets = sqliteTable(
   },
   (t) => [
     index('tickets_parent').on(t.parentId),
-    check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high')`),
+    check('tickets_complexity', sql`${t.complexity} IN ('low', 'mid', 'high', 'max')`),
   ],
 )
 
@@ -463,6 +468,9 @@ export const attachments = sqliteTable('attachments', {
   storedAs: text('stored_as').notNull(),
   uploadedBy: text('uploaded_by').notNull(),
   createdAt: now(),
+  // What was drawn on the picture before it was attached: the shapes and their notes, the file itself
+  // being the flattened picture. Null when nothing was drawn on it (an agent's upload included).
+  annotations: text({ mode: 'json' }).$type<AnnotationDoc>(),
 })
 
 export const reviewResults = sqliteTable(
@@ -713,6 +721,16 @@ export const enrolCodes = sqliteTable('enrol_codes', {
   createdAt: now(),
   expiresAt: text('expires_at').notNull(),
   usedAt: text('used_at'),
+})
+
+// The short-lived credentials an install line carries (skillTokens.ts): only the hash is kept, and they
+// reach the two skill downloads and nothing else (credentials.ts, auth.ts `admit`). Expired rows are
+// deleted when the next one is made.
+export const skillTokens = sqliteTable('skill_tokens', {
+  id: id(),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAt: now(),
+  expiresAt: text('expires_at').notNull(),
 })
 
 // The tokens agents sign in with (`Authorization: Bearer <token>`): only the hash is kept, and the

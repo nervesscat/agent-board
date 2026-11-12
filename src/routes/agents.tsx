@@ -7,12 +7,14 @@ import { z } from 'zod'
 
 import { AgentPicker, CopyBlock, copyText } from '#/components/AgentPicker'
 import { AgentTokenList, GenerateCommands } from '#/components/AgentTokens'
+import { SkillInstallButton, useSkillToken } from '#/components/SkillInstall'
 import { Button } from '#/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
-import { ReviewSkills, useShell } from '#/components/ReviewSkills'
+import { ReviewSkills, useShell, useSkillsStatus } from '#/components/ReviewSkills'
 import { AGENTS, SHELLS, type Shell, mcpSetup, sessionSkillInstall, skillInstall } from '#/lib/agents'
 import { errorMessage, get, post } from '#/lib/api'
 import type { AgentClient } from '#/lib/constants'
+import { stamp } from '#/lib/format'
 import { useAnchor, useReveal } from '#/lib/reveal'
 import type { Settings } from '#/server/agents'
 import type { OpencodeConfig } from '#/server/opencodeConfig'
@@ -33,9 +35,15 @@ function ConnectAgents() {
   })
   const [client, setClient] = useState<AgentClient | null>(null)
   const [shell, pickShell] = useShell()
-  // The token "Generate commands" made: shown once, in the commands on this page, never stored here.
+  // The token "Generate commands" made: shown once, in the MCP setup line on this page, never stored here.
   const [made, setMade] = useState<NewAgentToken | null>(null)
   const token = made?.token ?? ''
+  // The install lines' own credential: short-lived, minted by the first copy, carried by every line after.
+  const { made: skillToken, copyLine } = useSkillToken()
+  const skillTokenValue = skillToken?.token ?? ''
+  const reviewStatus = useSkillsStatus()
+  const reviewInstalled =
+    reviewStatus.data?.global.status === 'current' || reviewStatus.data?.global.status === 'outdated'
   useEffect(() => {
     if (setup && !client) setClient(setup.settings.defaultAgent)
   }, [setup, client])
@@ -58,7 +66,8 @@ function ConnectAgents() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Connect an agent</h1>
         <p className="text-sm text-muted-foreground">
-          Connect a CLI, then install the skill. Generate commands first. The default CLI is set in{' '}
+          Connect a CLI: <strong>Generate commands</strong> makes its MCP token, and the skill installs on
+          this machine with a button (or with the line, on another machine). The default CLI is set in{' '}
           <Link to="/settings" className="underline hover:text-foreground">
             Settings
           </Link>
@@ -115,8 +124,19 @@ function ConnectAgents() {
           {client === 'opencode' &&
             ' OpenCode also reads ~/.claude/skills: skip this if Claude Code has it already.'}
         </p>
-        <CopyBlock text={skillInstall(client, shell, setup.boardUrl, token)} />
-        <div className="flex items-center gap-2">
+        <CopyBlock
+          text={skillInstall(client, shell, setup.boardUrl, skillTokenValue)}
+          onCopy={() => copyLine((t) => skillInstall(client, shell, setup.boardUrl, t))}
+        />
+        {skillToken && (
+          <p role="status" className="text-xs text-muted-foreground">
+            The install lines carry a download token that expires{' '}
+            <time dateTime={skillToken.expiresAt}>{stamp(skillToken.expiresAt)}</time>: about ten minutes.
+            Copy a line again after that for a new one.
+          </p>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <SkillInstallButton kind="skill" client={client} />
           <Button
             variant="outline"
             size="sm"
@@ -142,12 +162,24 @@ function ConnectAgents() {
           session with the board: it gives you a short brief, delegates every ticket you name, and keeps one
           message shape with what needs you.
         </p>
-        <CopyBlock text={sessionSkillInstall(client, shell, setup.boardUrl, token)} />
+        <CopyBlock
+          text={sessionSkillInstall(client, shell, setup.boardUrl, skillTokenValue)}
+          onCopy={() => copyLine((t) => sessionSkillInstall(client, shell, setup.boardUrl, t))}
+        />
       </section>
 
       <section id="review-skills" className="scroll-mt-16 space-y-2">
-        <h2 className="text-sm font-medium">3. Install the review skills (Claude Code)</h2>
-        <ReviewSkills boardUrl={setup.boardUrl} token={token} shell={shell} onShellChange={pickShell} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-medium">3. Install the review skills (Claude Code)</h2>
+          <SkillInstallButton kind="review-skills" installed={reviewInstalled} />
+        </div>
+        <ReviewSkills
+          boardUrl={setup.boardUrl}
+          token={skillTokenValue}
+          copyLine={copyLine}
+          shell={shell}
+          onShellChange={pickShell}
+        />
       </section>
 
       <AgentTokenList />

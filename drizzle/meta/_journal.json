@@ -330,6 +330,34 @@
       "when": 1794293024618,
       "tag": "0046_drop_resume_note",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1794388532126,
+      "tag": "0047_skill_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1794391912097,
+      "tag": "0048_pr_review_requested",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1794516308269,
+      "tag": "0049_annotated_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1794517950709,
+      "tag": "0050_widen_ticket_complexity",
+      "breakpoints": true
     }
   ]
 }

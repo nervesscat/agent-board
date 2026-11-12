@@ -25,22 +25,30 @@ import { Textarea } from '#/components/ui/textarea'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, patch, type PrRow } from '#/lib/api'
 import { ago, shortSha } from '#/lib/format'
+import {
+  inQueue,
+  PR_FILTERS,
+  PR_REVIEWERS,
+  stageCount,
+  waitingCount,
+  type PrFilter,
+  type PrReviewer,
+} from '#/lib/prQueue'
 import { repoLabel, useProject } from '#/lib/project'
 import { recall, remember, useRestoreRemembered, whenArrived } from '#/lib/remembered'
 import { anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 
-const FILTER_KEYS = ['me', 'others'] as const
-type Filter = (typeof FILTER_KEYS)[number]
-
 // ?result=<id> opens that review result over the queue (a verdict on a card links there); ?filter= is
 // the filter picked (none, or one no longer offered such as an old `all`: the one this browser
-// remembers, else To review). A link lands on a PR's card as #pr-<id>, on a reply to the review result
-// as #reply-<id> (src/lib/reveal.ts).
+// remembers, else To review); ?reviewer= is the To review switch picked (All PRs, or Just me as
+// reviewer: none, or a value no longer offered: the one this browser remembers, else All PRs). A link
+// lands on a PR's card as #pr-<id>, on a reply to the review result as #reply-<id> (src/lib/reveal.ts).
 export const Route = createFileRoute('/projects/$id/prs')({
   component: PrQueue,
   validateSearch: z.object({
     result: z.number().int().positive().optional().catch(undefined),
-    filter: z.enum(FILTER_KEYS).optional().catch(undefined),
+    filter: z.enum(PR_FILTERS).optional().catch(undefined),
+    reviewer: z.enum(PR_REVIEWERS).optional().catch(undefined),
   }),
 })
 
@@ -51,7 +59,7 @@ const TABS = [
   { key: 'done', label: 'Done' },
 ] as const
 
-const FILTERS: { key: Filter; label: string; title: string }[] = [
+const FILTERS: { key: PrFilter; label: string; title: string }[] = [
   {
     key: 'me',
     label: 'To review',
@@ -64,32 +72,53 @@ const FILTERS: { key: Filter; label: string; title: string }[] = [
       "Your PRs (agents' too): pending approvals, approved by every reviewer, or on hold on their comments",
   },
 ]
+// The To review switch, in the same tab row as the filters: the whole side, or the PRs whose review
+// GitHub still asks of me (`requested`). Shown only while To review is picked.
+const REVIEWERS: { key: PrReviewer; label: string }[] = [
+  { key: 'all', label: 'All PRs' },
+  { key: 'mine', label: 'Just me as reviewer' },
+]
 // A tab's underline, drawn by the line style only (these are the default style), hangs 5px below it:
 // without it, nothing of a tab reaches outside its list, so the list has nothing to scroll.
 const NO_UNDERLINE = 'after:hidden'
 // The last filter picked is remembered in this browser, for a visit whose URL names none.
 const FILTER_KEY = 'prs.filter'
+// The last To review switch picked, the same way. It is kept while Waiting on others is shown, so
+// going back to To review finds it again.
+const REVIEWER_KEY = 'prs.reviewer'
 
 function PrQueue() {
   const { id } = Route.useParams()
-  const { result, filter: picked } = Route.useSearch()
+  const { result, filter: picked, reviewer: pickedReviewer } = Route.useSearch()
   const navigate = Route.useNavigate()
   const qc = useQueryClient()
   const key = ['prs', id]
   const { data: project } = useProject(id)
   // The tab and the list both follow the URL, so the server's render and the browser's agree.
   const filter = picked ?? 'me'
+  // The switch is To review's alone (Waiting on others has no narrowing): All PRs elsewhere.
+  const reviewer = pickedReviewer ?? 'all'
   // Whether the stage or the filter shown is one the reader picked, since a link last set the stage.
   const picks = useRef(false)
   // Put in the URL for the reader (the remembered one, or the one that shows a linked PR): the link's
   // anchor stays. A filter the reader picks ends what the link had to show.
-  const showFilter = (f: Filter) =>
+  const showFilter = (f: PrFilter) =>
     navigate({ search: (s) => ({ ...s, filter: f }), hash: true, replace: true })
-  useRestoreRemembered(FILTER_KEY, picked, FILTER_KEYS, showFilter)
-  const pickFilter = (f: Filter) => {
+  useRestoreRemembered(FILTER_KEY, picked, PR_FILTERS, showFilter)
+  // The switch's choice is kept the same way: in the URL (so a reload and a link keep it) and in this
+  // browser for a visit without one.
+  const showReviewer = (r: PrReviewer) =>
+    navigate({ search: (s) => ({ ...s, reviewer: r }), hash: true, replace: true })
+  useRestoreRemembered(REVIEWER_KEY, pickedReviewer, PR_REVIEWERS, showReviewer)
+  const pickFilter = (f: PrFilter) => {
     picks.current = true
     navigate({ search: (s) => ({ ...s, filter: f }), replace: true })
     remember(FILTER_KEY, f)
+  }
+  const pickReviewer = (r: PrReviewer) => {
+    // The switch is To review's, so its side goes in the URL with the choice: the link says both.
+    navigate({ search: (s) => ({ ...s, filter: 'me', reviewer: r }), replace: true })
+    remember(REVIEWER_KEY, r)
   }
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: key,
@@ -101,25 +130,35 @@ function PrQueue() {
     onSuccess: (rows) => qc.setQueryData(key, rows),
     onError: (err) => toast.error(errorMessage(err)),
   })
-  const inFilter = (p: PrRow, f: Filter) => p.waitingOn === f
-  const shown = data?.filter((p) => inFilter(p, filter)) ?? []
+  // One predicate for the list, the chips and the counters, so they cannot disagree (src/lib/prQueue.ts).
+  const shown = data?.filter((p) => inQueue(p, filter, reviewer)) ?? []
 
   const anchor = useAnchor()
-  // The PR a link lands on: its stage's tab, once per link, and the filter that shows it (the side it
-  // waits on) if the filter in the URL (once it is there, remembered or not) hides it.
+  // The PR a link lands on: its stage's tab, once per link, and the filter and the switch that show it
+  // (the side it waits on, and All PRs if Just me as reviewer hides it) when what is in the URL (once
+  // it is there, remembered or not) hides it.
   const linkedId = anchorId(anchor?.holder ?? anchor?.target, 'pr')
   const linked = data?.find((p) => p.id === linkedId)
-  // The filter this browser remembers, read after mount: undefined for none, null until read.
-  const [remembered, setRemembered] = useState<Filter | undefined | null>(null)
-  useEffect(() => setRemembered(recall(FILTER_KEY, FILTER_KEYS)), [])
-  // The filter the list stays on: the one in the URL, else To review once nothing remembered is to be
-  // put there; null while that is not known yet.
+  // The filter and the switch this browser remembers, read after mount: undefined for none, null
+  // until read.
+  const [remembered, setRemembered] = useState<PrFilter | undefined | null>(null)
+  const [rememberedReviewer, setRememberedReviewer] = useState<PrReviewer | undefined | null>(null)
+  useEffect(() => {
+    setRemembered(recall(FILTER_KEY, PR_FILTERS))
+    setRememberedReviewer(recall(REVIEWER_KEY, PR_REVIEWERS))
+  }, [])
+  // What the list stays on: the filter and the switch in the URL, else To review and All PRs once
+  // nothing remembered is to be put there; null while that is not known yet.
   const staying = picked ?? (remembered === undefined ? 'me' : null)
-  // The anchor is brought into view once the list it is in has settled: the remembered filter put in
-  // the URL, then switched to the one that shows the linked PR if that hides it. Each switch redraws
-  // the list, and an anchor revealed before them would be lost under them.
+  const stayingReviewer = pickedReviewer ?? (rememberedReviewer === undefined ? 'all' : null)
+  // The anchor is brought into view once the list it is in has settled: the remembered filter and
+  // switch put in the URL, then switched to what shows the linked PR if that hides it. Each switch
+  // redraws the list, and an anchor revealed before them would be lost under them.
   const settled =
-    staying !== null && (!linked || inFilter(linked, staying)) && (linkedId === null || data !== undefined)
+    staying !== null &&
+    stayingReviewer !== null &&
+    (!linked || inQueue(linked, staying, stayingReviewer)) &&
+    (linkedId === null || data !== undefined)
   useReveal(anchor, { ready: settled })
   const [tab, setTab] = useState<(typeof TABS)[number]['key']>('pending')
   const pickTab = (t: (typeof TABS)[number]['key']) => {
@@ -150,45 +189,65 @@ function PrQueue() {
       picks.current = false
       setTab(linked.status)
     }
-    if (staying !== null && switchedFor.current !== anchor.hash) {
+    if (staying !== null && stayingReviewer !== null && switchedFor.current !== anchor.hash) {
       const hash = anchor.hash
-      if (inFilter(linked, staying)) {
+      if (inQueue(linked, staying, stayingReviewer)) {
         switchedFor.current = hash
         return
       }
       // Once the move to the page has finished, as the remembered filter (`whenArrived`): the PRs may
       // be drawn from the cache as it mounts. A render before then that changes what this reads waits
-      // again.
+      // again. Both changes go in one move: the PR's side, and All PRs if that side is To review and
+      // the switch would hide it. Neither is remembered: they are for this visit, as the filter is.
       return whenArrived(router, () => {
         switchedFor.current = hash
-        showFilter(linked.waitingOn)
+        const narrows = stayingReviewer === 'mine' && !linked.requested
+        if (linked.waitingOn !== 'me' || !narrows) return showFilter(linked.waitingOn)
+        navigate({
+          search: (s) => ({ ...s, filter: linked.waitingOn, reviewer: 'all' }),
+          hash: true,
+          replace: true,
+        })
       })
     }
-  }, [anchor, linked, staying, back])
+  }, [anchor, linked, staying, stayingReviewer, back])
   const suffix = FILTERS.find((f) => f.key === filter)!.label.toLowerCase()
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">PR queue</h1>
           <p className="text-sm text-muted-foreground">PRs to review and your own, by review state.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-          <Tabs value={filter} onValueChange={(v) => pickFilter(v as Filter)}>
+        {/* The filter row, the switch and Refresh wrap among themselves and, when they cannot sit
+            beside the title, onto a line of their own: a phone shows no sideways scroll. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Tabs value={filter} onValueChange={(v) => pickFilter(v as PrFilter)}>
             <TabsList>
               {FILTERS.map((f) => (
                 <Tip key={f.key} content={f.title}>
                   <TabsTrigger value={f.key} className={NO_UNDERLINE}>
                     {f.label}
                     <span className="ml-1 rounded-full bg-background px-1.5 text-xs tabular-nums">
-                      {data?.filter((p) => inFilter(p, f.key)).length ?? 0}
+                      {waitingCount(data ?? [], f.key, reviewer)}
                     </span>
                   </TabsTrigger>
                 </Tip>
               ))}
             </TabsList>
           </Tabs>
+          {filter === 'me' && (
+            <Tabs value={reviewer} onValueChange={(v) => pickReviewer(v as PrReviewer)}>
+              <TabsList>
+                {REVIEWERS.map((r) => (
+                  <TabsTrigger key={r.key} value={r.key} className={NO_UNDERLINE}>
+                    {r.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -204,7 +263,10 @@ function PrQueue() {
         <Skeleton className="h-40" />
       ) : (
         <ChipTabs
-          chips={TABS.map((t) => ({ ...t, count: shown.filter((p) => p.status === t.key).length }))}
+          chips={TABS.map((t) => ({
+            ...t,
+            count: stageCount(data ?? [], filter, reviewer, t.key),
+          }))}
           value={tab}
           onChange={pickTab}
           // Four stages do not fit one row on a phone: there they take two rows of two, so every stage

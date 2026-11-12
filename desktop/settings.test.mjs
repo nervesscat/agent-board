@@ -11,6 +11,7 @@ import {
   autostartEntry,
   autostartExec,
   autostartFile,
+  boardAddress,
   closeAction,
   CONFIG_FILE,
   CONFIG_TEMPLATE,
@@ -120,6 +121,13 @@ describe('configTemplate', () => {
     expect(text).toContain('but for PATH')
     expect(parseConfig(text)).toEqual({})
   })
+
+  it('names the remote board address in a comment, so a new file sets neither mode nor port', () => {
+    for (const text of [configTemplate('win32', 'C:\\data'), configTemplate('linux', '/share/agent-board')]) {
+      expect(text.split('\n')).toEqual(expect.arrayContaining(['# REMOTE_BOARD_URL=']))
+      expect(parseConfig(text)).toEqual({})
+    }
+  })
 })
 
 describe('parseConfig', () => {
@@ -152,6 +160,34 @@ describe('parseConfig', () => {
 
   it('reads the template as no settings at all', () => {
     expect(parseConfig(CONFIG_TEMPLATE)).toEqual({})
+  })
+})
+
+describe('boardAddress', () => {
+  it('takes an http or https address with a host, as its origin', () => {
+    expect(boardAddress('https://pc.tail1.ts.net')).toBe('https://pc.tail1.ts.net')
+    expect(boardAddress('https://pc.tail1.ts.net/')).toBe('https://pc.tail1.ts.net')
+    // A port (a board behind an SSH forward) and a loopback host are fine too.
+    expect(boardAddress('http://127.0.0.1:47100')).toBe('http://127.0.0.1:47100')
+    expect(boardAddress('https://box.tail1.ts.net:8443/')).toBe('https://box.tail1.ts.net:8443')
+  })
+
+  it('trims around the value and lowercases the host, as the address means it', () => {
+    expect(boardAddress('  https://PC.Tail1.ts.net/  ')).toBe('https://pc.tail1.ts.net')
+  })
+
+  it.each([
+    ['a bare name', 'pc.tail1.ts.net'],
+    ['a host and a port with no scheme', 'localhost:47100'],
+    ['no host', 'https://'],
+    ['a scheme it does not take', 'ftp://pc.tail1.ts.net'],
+    ['a path', 'https://pc.tail1.ts.net/board'],
+    ['a query', 'https://pc.tail1.ts.net/?x=1'],
+    ['a fragment', 'https://pc.tail1.ts.net/#top'],
+    ['a user and password', 'https://me:secret@pc.tail1.ts.net'],
+  ])('refuses %s, naming the value', (_what, value) => {
+    expect(() => boardAddress(value)).toThrow(SettingsError)
+    expect(() => boardAddress(value)).toThrow(value.trim())
   })
 })
 
@@ -251,6 +287,71 @@ describe('resolveSettings', () => {
 
   it.each(['0', '65536', 'abc', '80.5', '-1'])('refuses PORT=%s', (port) => {
     expect(() => resolveSettings({ env: {}, file: { PORT: port }, home })).toThrow(SettingsError)
+  })
+
+  it('is local mode with no remote address, or a blank one, and opens the board here as today', () => {
+    for (const file of /** @type {Record<string, string>[]} */ ([
+      {},
+      { REMOTE_BOARD_URL: '' },
+      { REMOTE_BOARD_URL: '  ' },
+    ])) {
+      const s = resolveSettings({ env: {}, file, home })
+      expect(s.mode).toBe('local')
+      expect(s.url).toBe('http://localhost:47100')
+      expect(s.dataDir).toBe(path.join(home, 'data'))
+    }
+    const s = resolveSettings({ env: {}, file: { PORT: '8250', REMOTE_BOARD_URL: '' }, home })
+    expect(s.mode).toBe('local')
+    expect(s.url).toBe('http://localhost:8250')
+  })
+
+  it('is remote mode with a remote address, which the window opens instead', () => {
+    for (const file of /** @type {Record<string, string>[]} */ ([
+      { REMOTE_BOARD_URL: 'https://pc.tail1.ts.net' },
+      { REMOTE_BOARD_URL: ' https://pc.tail1.ts.net/ ' },
+      { PORT: '8250', REMOTE_BOARD_URL: 'https://pc.tail1.ts.net' },
+    ])) {
+      const s = resolveSettings({ env: {}, file, home })
+      expect(s.mode).toBe('remote')
+      expect(s.url).toBe('https://pc.tail1.ts.net')
+    }
+  })
+
+  it('lets the environment win over the file for the address, a blank one counting as unset', () => {
+    expect(
+      resolveSettings({
+        env: { REMOTE_BOARD_URL: 'https://env.tail1.ts.net' },
+        file: { REMOTE_BOARD_URL: 'https://file.tail1.ts.net' },
+        home,
+      }).url,
+    ).toBe('https://env.tail1.ts.net')
+    expect(
+      resolveSettings({
+        env: { REMOTE_BOARD_URL: '  ' },
+        file: { REMOTE_BOARD_URL: 'https://file.tail1.ts.net' },
+        home,
+      }).url,
+    ).toBe('https://file.tail1.ts.net')
+  })
+
+  it('refuses an address it cannot use, as a settings error naming it', () => {
+    for (const REMOTE_BOARD_URL of ['pc.tail1.ts.net', 'ftp://pc.tail1.ts.net', 'https://pc.tail1.ts.net/x'])
+      expect(() => resolveSettings({ env: {}, file: { REMOTE_BOARD_URL }, home })).toThrow(SettingsError)
+  })
+
+  it('does not check the local port in remote mode, which never binds it', () => {
+    // The port a local board would refuse, and a data folder that is never made: neither matters here.
+    const s = resolveSettings({
+      env: {},
+      file: {
+        PORT: '0',
+        DATA_DIR: path.resolve(os.tmpdir(), 'remote-data'),
+        REMOTE_BOARD_URL: 'https://pc.ts.net',
+      },
+      home,
+    })
+    expect(s.mode).toBe('remote')
+    expect(s.url).toBe('https://pc.ts.net')
   })
 })
 

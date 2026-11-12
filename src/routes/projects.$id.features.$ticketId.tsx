@@ -22,7 +22,6 @@ import {
   RefreshCw,
   Scale,
   ScrollText,
-  Trash2,
   TriangleAlert,
   X,
 } from 'lucide-react'
@@ -39,6 +38,7 @@ import {
 import { toast } from 'sonner'
 
 import { Actor, useActorKinds } from '#/components/Actor'
+import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
 import { ComplexitySelect } from '#/components/Complexity'
 import { RichEditor } from '#/components/RichEditor'
 import { AssigneeSelect } from '#/components/AssigneeSelect'
@@ -56,6 +56,7 @@ import { PrState } from '#/components/PrState'
 import type { FeedTab } from '#/lib/constants'
 import { PushBadge, PushDot, RefreshPush } from '#/components/PushDot'
 import { Tag, compareTags } from '#/components/Tag'
+import { TrashIcon } from '#/components/TrashIcon'
 import { TagsInput, useTagChoices } from '#/components/TagsInput'
 import { ReachBadge } from '#/components/ReachBadge'
 import { ReviewResultButton } from '#/components/ReviewResult'
@@ -91,7 +92,7 @@ import {
   patch,
   post,
   put,
-  upload,
+  uploadAll,
   type TicketFull,
   type TicketGit,
   type SummaryHistory,
@@ -118,7 +119,7 @@ import {
   verdictOk,
   validateLaneSearch,
 } from '#/lib/lanes'
-import { type AreaId, type Layout, defaultLayout, shownIn } from '#/lib/layout'
+import { type AreaId, type Layout, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
 import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
@@ -344,6 +345,13 @@ function TicketPage() {
   }
   const main = layout ? shownIn(layout, 'ticket.main').filter((s) => sections[s] != null) : []
   const side = layout ? shownIn(layout, 'ticket.side').filter((s) => sections[s] != null) : []
+  // The selector's tabs, in the order the page draws its sections rather than in a list of their own:
+  // the summary rides on top of the main column when the ticket has one, and Instructions has no tab
+  // (it is the ticket's own text, at the top, not something to jump to).
+  const tabs: { key: string; label: string }[] = [
+    ...(t.summary ? [{ key: 'summary', label: 'Summary' }] : []),
+    ...main.filter(hasTab).map(tabOf),
+  ]
 
   return (
     <div className="flex flex-col gap-6">
@@ -387,7 +395,7 @@ function TicketPage() {
             <InlineTags key={t.id} t={t} projectId={id} onSave={(tags) => update.mutate({ tags })} />
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {t.archivedAt && (
             <Tip
               content={`Archived by ${t.archivedBy || 'someone'} ${ago(t.archivedAt)}${t.parentId ? ', with the ticket it is a lane of' : ''}`}
@@ -423,7 +431,14 @@ function TicketPage() {
           {(t.parentId || verdictOf(t)) && (
             <VerdictButtons t={t} disabled={judge.isPending} onSet={(verdict) => decide(t, verdict)} />
           )}
-          <StatusSelect stages={stages} value={t.status} onChange={(status) => update.mutate({ status })} />
+          <StatusSelect
+            stages={stages}
+            value={t.status}
+            onChange={(status) => update.mutate({ status })}
+            // At a phone's width a stage name at the character limit is wider than the row: the picker
+            // gives way with the rest of the header rather than widening the page.
+            className="min-w-0"
+          />
           <div className="flex items-center gap-1.5">
             <Label htmlFor="complexity" className="text-xs font-normal text-muted-foreground">
               Complexity
@@ -450,7 +465,7 @@ function TicketPage() {
           {!t.prId && (
             <AlertDialog>
               <AlertDialogTrigger render={<Button variant="ghost" size="icon-sm" />}>
-                <Trash2 />
+                <TrashIcon />
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
@@ -476,16 +491,27 @@ function TicketPage() {
             </AlertDialog>
           )}
         </div>
-        {/* The step controls ride in the sticky header, in their own row: the page can scroll past
-              the breadcrumb, but going to the previous or next ticket stays one click away. The row
-              keeps its height while the board or the parent ticket loads, so the header does not grow
-              under a heading the page has already scrolled to. */}
-        {!t.prId && (
+        {/* The section selector and the step controls share this row, riding in the sticky header: the
+              page can scroll past the breadcrumb, but its sections and going to the previous or next
+              ticket stay one click away. The row keeps its height while the board or the parent ticket
+              loads, so the header does not grow under a heading the page has already scrolled to. The
+              steps shrink with the row, their label wrapping even inside a long word, and never take it
+              past the page's edge, however long the stage's name is and whatever it breaks on. */}
+        {(main.length > 0 || !t.prId) && (
           <div className="-mt-1 flex min-h-7 w-full items-center gap-2 text-xs">
-            {parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
-            {!t.parentId && board && (
-              <StageNav key={t.id} projectId={id} tickets={board} t={t} pageIsNewer={readAt >= boardReadAt} />
-            )}
+            {tabs.length > 0 && <TicketSectionNav key={t.id} items={tabs} />}
+            <div className="ml-auto flex min-w-0 items-center gap-2">
+              {!t.prId && parent && <LaneNav projectId={id} lanes={parent.lanes} id={t.id} filter={filter} />}
+              {!t.prId && !t.parentId && board && (
+                <StageNav
+                  key={t.id}
+                  projectId={id}
+                  tickets={board}
+                  t={t}
+                  pageIsNewer={readAt >= boardReadAt}
+                />
+              )}
+            </div>
           </div>
         )}
       </header>
@@ -501,7 +527,6 @@ function TicketPage() {
               widen the page */}
         {main.length > 0 && (
           <div data-ticket-column="main" className="min-w-0 space-y-6">
-            <TicketSectionNav hasSummary={Boolean(t.summary)} />
             {t.summary && (
               <div id="summary" className="scroll-mt-[calc(var(--ticket-header,4rem)+1rem)]">
                 <ShownAnchor value={drawn ? anchor : null}>
@@ -690,22 +715,39 @@ function Instructions({
   const [editing, setEditing] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [body, setBody] = useState(t.body)
+  // The batches on their way, queued or in flight: the attach button reads "attaching…" until the
+  // last one has landed.
+  const [attaching, setAttaching] = useState(0)
   const fileInput = useRef<HTMLInputElement>(null)
+  // One batch after another. A picture and the files picked after it are accepted as separate
+  // batches in the same task, so two uploads would otherwise run at once and the board would number
+  // them in whichever order they finished rather than the order they were picked. A batch that fails
+  // is toasted and the queue moves on.
+  const sending = useRef<Promise<unknown>>(Promise.resolve())
   const onError = (err: unknown) => toast.error(errorMessage(err))
-  const attach = useMutation({
-    mutationFn: async (files: File[]) => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
-      return post(`/api/tickets/${t.id}/attachments`, { attachmentIds })
-    },
-    onSuccess: onChange,
-    onError,
-  })
+  const accept = (files: File[]) => {
+    if (!files.length) return
+    setAttaching((n) => n + 1)
+    sending.current = sending.current.then(async () => {
+      try {
+        const attachmentIds = await uploadAll(files)
+        await post(`/api/tickets/${t.id}/attachments`, { attachmentIds })
+        onChange()
+      } catch (err) {
+        onError(err)
+      } finally {
+        setAttaching((n) => n - 1)
+      }
+    })
+  }
   const detach = useMutation({
     mutationFn: (attachmentId: number) => del(`/api/tickets/${t.id}/attachments/${attachmentId}`),
     onSuccess: onChange,
     onError,
   })
-  const drop = useFileDrop((files) => attach.mutate(files))
+  // A picture opens the canvas before it is attached; the rest go straight on.
+  const annotate = useAnnotations(accept)
+  const drop = useFileDrop(annotate.add)
   const open = () => {
     setBody(t.body)
     setEditing(true)
@@ -730,14 +772,14 @@ function Instructions({
             hidden
             onChange={(e) => {
               const files = Array.from(e.target.files ?? [])
-              if (files.length) attach.mutate(files)
+              if (files.length) annotate.add(files)
               e.target.value = ''
             }}
           />
           {!editing && (
             <>
               <Button type="button" variant="ghost" size="xs" onClick={() => fileInput.current?.click()}>
-                <Paperclip data-icon="inline-start" /> {attach.isPending ? 'attaching…' : 'attach'}
+                <Paperclip data-icon="inline-start" /> {attaching > 0 ? 'attaching…' : 'attach'}
               </Button>
               <Button type="button" variant="ghost" size="xs" onClick={open}>
                 <Pencil data-icon="inline-start" /> edit
@@ -751,9 +793,9 @@ function Instructions({
           <RichEditor
             value={body}
             onChange={setBody}
-            onFiles={(files) => attach.mutate(files)}
+            onFiles={(files) => annotate.add(files)}
             onAttach={() => fileInput.current?.click()}
-            attaching={attach.isPending}
+            attaching={attaching > 0}
             onSubmit={save}
             onCancel={() => setEditing(false)}
             autoFocus
@@ -829,6 +871,13 @@ function Instructions({
           </ul>
         </div>
       )}
+      <AnnotateImage
+        file={annotate.current}
+        onAttach={annotate.attach}
+        onAttachOriginal={annotate.attachOriginal}
+        onCancel={annotate.cancel}
+        finalFocus={annotate.finalFocus}
+      />
     </section>
   )
 }
@@ -1535,7 +1584,7 @@ function StepNav({
           params={{ id: projectId, ticketId: String(to.id) }}
           search={search}
           state={state}
-          className="inline-flex size-7 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border hover:bg-muted hover:text-foreground"
           aria-label={`${dir === 'prev' ? 'Previous' : 'Next'} ${noun}`}
           aria-keyshortcuts={dir === 'prev' ? '[' : ']'}
         >
@@ -1543,16 +1592,16 @@ function StepNav({
         </Link>
       </Tip>
     ) : (
-      <span className="inline-flex size-7 items-center justify-center rounded-md border opacity-40">
+      <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md border opacity-40">
         {icon}
       </span>
     )
   }
   return (
-    <span className="ml-auto inline-flex items-center gap-2 text-xs">
+    <span className="ml-auto inline-flex min-w-0 items-center gap-2 text-xs">
       {step(prev, 'prev')}
       <Tip content="[ and ] step back and forward">
-        <span className="tabular-nums">{children}</span>
+        <span className="min-w-0 tabular-nums wrap-anywhere">{children}</span>
       </Tip>
       {step(next, 'next')}
     </span>
@@ -1825,7 +1874,9 @@ function Activity({
   const [files, setFiles] = useState<File[]>([])
   const [tab, setTab] = useState<FeedTab>('main')
   const fileInput = useRef<HTMLInputElement>(null)
-  const drop = useFileDrop((added) => setFiles((prev) => [...prev, ...added]))
+  // A picture opens the canvas before it joins the post's files; the rest go straight in.
+  const annotate = useAnnotations((added) => setFiles((prev) => [...prev, ...added]))
+  const drop = useFileDrop(annotate.add)
 
   // A link to a post (or to a reply under one) in the other tab opens that tab, once per link.
   const anchor = useContext(ShownAnchor)
@@ -1840,7 +1891,7 @@ function Activity({
 
   const send = useMutation({
     mutationFn: async () => {
-      const attachmentIds = await Promise.all(files.map((f) => upload(f).then((a) => a.id)))
+      const attachmentIds = await uploadAll(files)
       // Said outright: the API makes a post progress unless told otherwise, as agents post.
       return post(`/api/tickets/${t.id}/updates`, { body, attachmentIds, progress: false, tab })
     },
@@ -1912,7 +1963,7 @@ function Activity({
         <RichEditor
           value={body}
           onChange={setBody}
-          onFiles={(added) => setFiles((prev) => [...prev, ...added])}
+          onFiles={annotate.add}
           onAttach={() => fileInput.current?.click()}
           onSubmit={submit}
           label="New post"
@@ -1929,7 +1980,8 @@ function Activity({
             multiple
             hidden
             onChange={(e) => {
-              setFiles([...files, ...Array.from(e.target.files ?? [])])
+              const picked = Array.from(e.target.files ?? [])
+              if (picked.length) annotate.add(picked)
               // Clear it, so picking a file that was just removed registers again.
               e.target.value = ''
             }}
@@ -1940,6 +1992,13 @@ function Activity({
           </Button>
         </div>
       </form>
+      <AnnotateImage
+        file={annotate.current}
+        onAttach={annotate.attach}
+        onAttachOriginal={annotate.attachOriginal}
+        onCancel={annotate.cancel}
+        finalFocus={annotate.finalFocus}
+      />
       {feed.length === 0 ? (
         <Empty>
           {t.updates.length === 0
@@ -1961,27 +2020,141 @@ function Activity({
   )
 }
 
-const SECTION_ITEMS = [
-  { key: 'summary', label: 'Summary' },
-  { key: 'tasks', label: 'Tasks' },
-  { key: 'timeline', label: 'Timeline' },
-  { key: 'activity', label: 'Activity' },
-  { key: 'lanes', label: 'Lanes' },
-] as const
+/** The main column's sections that get a tab, with the anchor id the tab jumps to (its area without
+ *  the "ticket." prefix). The order is the page's own (`main`), so the strip cannot disagree with it. */
+const TAB_AREAS = ['ticket.tasks', 'ticket.timeline', 'ticket.lanes', 'ticket.activity'] as const
+type TabArea = (typeof TAB_AREAS)[number]
+const hasTab = (id: AreaId<'ticket.main'>): id is TabArea => (TAB_AREAS as readonly string[]).includes(id)
+const tabOf = (area: TabArea) => ({ key: area.slice('ticket.'.length), label: layoutElement(area).label })
 
-/** The ticket's sections, one tap away on a phone instead of a long scroll. */
-function TicketSectionNav({ hasSummary }: { hasSummary: boolean }) {
-  const [active, setActive] = useState('summary')
-  const go = (id: string) => {
-    setActive(id)
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+/**
+ * How far below the stuck header's bottom a section's top counts as the one being read: a tab's jump
+ * leaves its section 1rem down (its scroll-mt), so the line has to reach that far to agree with the
+ * click that brought the page there.
+ */
+const SPY_LINE = 24
+
+/** How long a click's smooth scroll may take before the spy takes over regardless. */
+const SPY_SETTLE_MS = 1200
+
+/**
+ * The ticket's sections, one tap away on a phone instead of a long scroll. It rides in the ticket
+ * header's step row: at a narrow width the strip scrolls within itself instead of wrapping onto a
+ * second line, which would make the stuck header taller. It asks for a share of the row and grows into
+ * the spare, so the steps beside it keep enough to wrap a stage name at the character limit in a couple
+ * of lines, and both fit at a phone's width.
+ *
+ * The selected tab also follows the page: scrolling a section's top under the stuck header selects
+ * that section's tab, back up too, and the page's end selects its last section. So the strip says
+ * where the page is, not only where it was last tapped.
+ */
+function TicketSectionNav({ items }: { items: readonly { key: string; label: string }[] }) {
+  const [active, setActive] = useState(items[0]?.key ?? '')
+  const root = useRef<HTMLDivElement | null>(null)
+  // The tab a click asked for, while the scroll it started runs: no section passing the header on the
+  // way there is what the human asked for, so the spy stands aside until that scroll has settled.
+  const clicked = useRef<string | null>(null)
+  // Starts the wait for that scroll to settle; the spy's effect owns it and its cleanup.
+  const settleWhenScrolled = useRef<() => void>(() => {})
+  // One key per tab in order: the spy restarts only when that order changes, not on every render.
+  const order = items.map((i) => i.key).join(' ')
+
+  useEffect(() => {
+    const el = root.current
+    if (!el) return
+    const keys = order.split(' ').filter(Boolean)
+    let frame = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+
+    // The section under the header: the last tab whose section starts above the header's bottom, or
+    // the last tab at the page's end, where the last section may be too short to reach the line.
+    // Read once per frame at most, and never written to the DOM.
+    const read = () => {
+      frame = 0
+      if (keys.length === 0) return
+      const line = (el.closest('header')?.getBoundingClientRect().bottom ?? 0) + SPY_LINE
+      let at = keys[0]!
+      for (const key of keys) {
+        const section = document.getElementById(key)
+        if (section && section.getBoundingClientRect().top <= line) at = key
+      }
+      const page = document.documentElement
+      if (
+        page.scrollHeight > window.innerHeight + 2 &&
+        window.scrollY + window.innerHeight >= page.scrollHeight - 2
+      )
+        at = keys[keys.length - 1]!
+      setActive(at)
+    }
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(read)
+    }
+
+    const settled = () => {
+      window.removeEventListener('scrollend', settled)
+      if (timer !== undefined) clearTimeout(timer)
+      timer = undefined
+      if (clicked.current === null) return
+      clicked.current = null
+      schedule()
+    }
+    settleWhenScrolled.current = () => {
+      window.addEventListener('scrollend', settled, { once: true })
+      if (timer !== undefined) clearTimeout(timer)
+      timer = setTimeout(settled, SPY_SETTLE_MS)
+    }
+
+    // A scroll anywhere counts, a scrolling ancestor's too; each is one read at most.
+    const onScroll = () => {
+      if (clicked.current === null) schedule()
+    }
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true })
+    window.addEventListener('resize', schedule)
+    // Sections grow as their cards load (a feed, a lane list), which moves the ones after them with no
+    // scroll at all.
+    const resized = new ResizeObserver(schedule)
+    for (const key of keys) {
+      const section = document.getElementById(key)
+      if (section) resized.observe(section)
+    }
+    read()
+
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      if (timer !== undefined) clearTimeout(timer)
+      window.removeEventListener('scroll', onScroll, { capture: true })
+      window.removeEventListener('resize', schedule)
+      window.removeEventListener('scrollend', settled)
+      resized.disconnect()
+      settleWhenScrolled.current = () => {}
+      // A new effect reads for a new set of sections, and the click that held this one may have been
+      // the one that changed them: its hold ends with the effect that took it, or the spy it gates
+      // would never read again.
+      clicked.current = null
+    }
+  }, [order])
+
+  const go = (key: string) => {
+    setActive(key)
+    clicked.current = key
+    settleWhenScrolled.current()
+    document.getElementById(key)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+  // A tab the layout no longer draws must not leave the strip with none selected.
+  const current = items.some((i) => i.key === active) ? active : (items[0]?.key ?? '')
   return (
-    <div className="-mx-1 overflow-x-auto px-1 py-2">
-      <Tabs value={active} onValueChange={(v) => go(String(v))}>
+    <div ref={root} className="-my-1 flex min-w-0 grow basis-40 overflow-x-auto py-1">
+      <Tabs value={current} onValueChange={(v) => go(String(v))}>
         <TabsList aria-label="Ticket sections" className="w-max">
-          {SECTION_ITEMS.filter((s) => s.key !== 'summary' || hasSummary).map((s) => (
-            <TabsTrigger key={s.key} value={s.key} className="after:hidden">
+          {items.map((s) => (
+            <TabsTrigger
+              key={s.key}
+              value={s.key}
+              className="after:hidden"
+              // A tab clicked again is already the selected one, so its value does not change: it
+              // still jumps to its section rather than doing nothing.
+              onClick={s.key === current ? () => go(s.key) : undefined}
+            >
               {s.label}
             </TabsTrigger>
           ))}

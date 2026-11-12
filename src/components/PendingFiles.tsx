@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { galleryItem } from '#/components/Gallery'
 import { Tip } from '#/components/ui/tooltip'
+import { annotationsOf, keepAnnotations } from '#/lib/annotations'
 import { errorMessage, upload } from '#/lib/api'
 import { fileSize } from '#/lib/format'
 import { cn } from '#/lib/utils'
@@ -176,22 +177,27 @@ export function useFileDrop(add: (files: File[]) => void) {
  * Files uploaded as soon as they are added, for a form whose owner does not exist yet (a new
  * ticket): `ids` are the uploads to send along with it, `uploading` is true until every one has
  * arrived. A file that fails to upload is dropped with a toast. Uploads that are removed or never
- * sent stay on the server unattached.
+ * sent stay on the server unattached. A picture the canvas flattened goes with the notes drawn on it.
  */
 export function useUploads() {
   // Kept apart, so the list (and its thumbnails) changes only when files are added or removed.
   const [files, setFiles] = useState<File[]>([])
   const [ids, setIds] = useState<ReadonlyMap<File, number>>(new Map())
+  // One upload after another, so the board numbers a batch's rows in the order the files were picked
+  // (it lists the ticket's attachments by when they arrived).
+  const sending = useRef<Promise<unknown>>(Promise.resolve())
   const add = (added: File[]) => {
     const picked = added.map(named)
     setFiles((prev) => [...prev, ...picked])
     for (const file of picked)
-      upload(file).then(
-        (a) => setIds((prev) => new Map(prev).set(file, a.id)),
-        (err) => {
-          toast.error(`${file.name}: ${errorMessage(err)}`)
-          setFiles((prev) => prev.filter((f) => f !== file))
-        },
+      sending.current = sending.current.then(() =>
+        upload(file, annotationsOf(file)).then(
+          (a) => setIds((prev) => new Map(prev).set(file, a.id)),
+          (err) => {
+            toast.error(`${file.name}: ${errorMessage(err)}`)
+            setFiles((prev) => prev.filter((f) => f !== file))
+          },
+        ),
       )
   }
   return {
@@ -213,8 +219,13 @@ export function useUploads() {
 function named(f: File) {
   if (!/^image\.\w+$/.test(f.name)) return f
   const stamp = new Date().toISOString().slice(0, 19).replace('T', '-').replaceAll(':', '')
-  return new File([f], `pasted-${stamp}.${f.name.split('.').pop()}`, {
+  const renamed = new File([f], `pasted-${stamp}.${f.name.split('.').pop()}`, {
     type: f.type,
     lastModified: f.lastModified,
   })
+  // A renamed File is a different object: the document the canvas drew on the one it replaces goes
+  // with it, since the upload looks the document up on the file it is handed.
+  const doc = annotationsOf(f)
+  if (doc) keepAnnotations(renamed, doc)
+  return renamed
 }

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -842,5 +843,118 @@ describe('one review skills file as installed, against the copy served', () => {
     homeWith()
     for (const p of agents.reviewBundlePaths()) await agents.reviewSkillDiff(p)
     expect(fs.existsSync(claude)).toBe(false)
+  })
+})
+
+describe('installing the skills on this machine', () => {
+  const claude = process.env.CLAUDE_HOME!
+
+  it('resolves each CLI folder from the home, never from the ~ the page shows', () => {
+    const homes: [string, Record<string, string>][] = [
+      [
+        '/home/me',
+        {
+          claude: '/home/me/.claude/skills/board',
+          codex: '/home/me/.agents/skills/board',
+          opencode: '/home/me/.config/opencode/skills/board',
+        },
+      ],
+      [
+        'C:\\Users\\me',
+        {
+          claude: 'C:\\Users\\me\\.claude\\skills\\board',
+          codex: 'C:\\Users\\me\\.agents\\skills\\board',
+          opencode: 'C:\\Users\\me\\.config\\opencode\\skills\\board',
+        },
+      ],
+    ]
+    const homedir = vi.spyOn(os, 'homedir')
+    try {
+      for (const [inHome, expected] of homes) {
+        homedir.mockReturnValue(inHome)
+        for (const client of AGENT_CLIENTS) {
+          expect(agents.skillDir(client), `${inHome} ${client}`).toBe(expected[client])
+          expect(agents.skillDir(client), client).not.toMatch(/~|\$HOME/)
+        }
+      }
+    } finally {
+      homedir.mockRestore()
+    }
+  })
+
+  it('writes the board skill under the home: created, unchanged, then updated for that file', async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-install-'))
+    const homedir = vi.spyOn(os, 'homedir').mockReturnValue(home)
+    try {
+      const file = path.join(home, '.claude', 'skills', 'board', 'SKILL.md')
+      const first = await agents.installSkill('claude')
+      expect(Date.parse(first.at)).not.toBeNaN()
+      expect(first.files).toEqual([{ path: file, action: 'created' }])
+      expect(fs.readFileSync(file, 'utf8')).toBe(agents.renderSkill('claude'))
+      expect((await agents.installSkill('claude')).files).toEqual([{ path: file, action: 'unchanged' }])
+      fs.writeFileSync(file, 'An older line.\n')
+      expect((await agents.installSkill('claude')).files).toEqual([{ path: file, action: 'updated' }])
+      expect(fs.readFileSync(file, 'utf8')).toBe(agents.renderSkill('claude'))
+      // Written beside and renamed over: no temporary file stays in the folder.
+      expect(fs.readdirSync(path.dirname(file))).toEqual(['SKILL.md'])
+    } finally {
+      homedir.mockRestore()
+      fs.rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('writes every review bundle file into CLAUDE_HOME as the tar holds it, and only edits as updated', async () => {
+    homeWith()
+    const first = await agents.installReviewSkills()
+    const paths = agents.reviewBundlePaths()
+    expect(first.files.map((f) => f.path)).toEqual(paths.map((p) => path.join(claude, ...p.split('/'))))
+    expect(first.files.every((f) => f.action === 'created')).toBe(true)
+    // The tar's own bytes, extracted beside it.
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-board-served-'))
+    fs.writeFileSync(path.join(out, 'b.tar'), agents.reviewBundle())
+    execFileSync('tar', ['-xf', 'b.tar'], { cwd: out })
+    for (const p of paths)
+      expect(
+        fs.readFileSync(path.join(claude, ...p.split('/'))).equals(fs.readFileSync(path.join(out, p))),
+        p,
+      ).toBe(true)
+    expect((await agents.reviewSkillsStatus()).global.status).toBe('current')
+    // A second run finds every file as served; one edit brings only that file back.
+    expect((await agents.installReviewSkills()).files.every((f) => f.action === 'unchanged')).toBe(true)
+    fs.appendFileSync(path.join(claude, 'skills', 'feature-review', 'SKILL.md'), '\nAn older line.\n')
+    const again = await agents.installReviewSkills()
+    expect(again.files.filter((f) => f.action !== 'unchanged')).toEqual([
+      { path: path.join(claude, 'skills', 'feature-review', 'SKILL.md'), action: 'updated' },
+    ])
+    expect((await agents.reviewSkillsStatus()).global.status).toBe('current')
+    expect(fs.readdirSync(path.join(claude, 'skills', 'feature-review')).sort()).toEqual([
+      'SKILL.md',
+      'checklists.md',
+      'report-template.md',
+      'summary-template.md',
+    ])
+  })
+
+  it('names the file it could not write, and leaves the copy there as it was', async () => {
+    homeWith()
+    await agents.installReviewSkills()
+    const target = path.join(claude, 'skills', 'todo-review', 'SKILL.md')
+    const kept = path.join(claude, 'skills', 'feature-review', 'SKILL.md')
+    const bytes = fs.readFileSync(kept)
+    fs.rmSync(target)
+    fs.mkdirSync(target)
+    await expect(agents.installReviewSkills()).rejects.toMatchObject({
+      status: 500,
+      message: expect.stringContaining(target),
+    })
+    expect(fs.readFileSync(kept).equals(bytes)).toBe(true)
+    expect(fs.statSync(target).isDirectory()).toBe(true)
+    // Nothing half written is left behind.
+    expect(fs.readdirSync(path.dirname(target)).filter((f) => f.endsWith('.tmp'))).toEqual([])
+  })
+
+  it('spawns no shell or child process on the way', () => {
+    const source = fs.readFileSync(path.join(import.meta.dirname, 'agents.ts'), 'utf8')
+    expect(source).not.toMatch(/child_process|execFile|execSync|spawn/)
   })
 })

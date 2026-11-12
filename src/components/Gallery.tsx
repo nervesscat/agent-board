@@ -25,6 +25,8 @@ export interface GalleryItem {
   src: string
   name: string
   mime: string
+  /** The notes an annotated picture carries, in the order its marks are numbered. */
+  notes?: string[]
 }
 
 /** Props that make an element open the gallery. */
@@ -34,6 +36,7 @@ export function galleryItem(item: GalleryItem, group?: string) {
     'data-gallery-name': item.name,
     'data-gallery-mime': item.mime,
     'data-gallery-group': group,
+    ...(item.notes?.length ? { 'data-gallery-notes': JSON.stringify(item.notes) } : {}),
   }
 }
 
@@ -45,7 +48,12 @@ function collect(group: string): GalleryItem[] {
     const src = el.dataset.gallerySrc!
     if (seen.has(src)) continue
     seen.add(src)
-    items.push({ src, name: el.dataset.galleryName || src, mime: el.dataset.galleryMime || 'image/*' })
+    items.push({
+      src,
+      name: el.dataset.galleryName || src,
+      mime: el.dataset.galleryMime || 'image/*',
+      ...(el.dataset.galleryNotes ? { notes: JSON.parse(el.dataset.galleryNotes) as string[] } : {}),
+    })
   }
   return items
 }
@@ -164,6 +172,17 @@ export function Gallery() {
                 }}
               >
                 <Viewer key={item.src} item={item} zoomKeys={zoomKeys} />
+                {item.notes && item.notes.length > 0 && (
+                  <div className="absolute top-4 left-4 max-h-[50%] w-64 overflow-auto rounded-md bg-black/60 p-3 text-xs text-white/90 ring-1 ring-white/15">
+                    <ol aria-label="Notes on the picture" className="space-y-0.5">
+                      {item.notes.map((note, i) => (
+                        <li key={i}>
+                          <span className="tabular-nums">{i + 1}.</span> {note}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
                 {many && (
                   <>
                     <button
