@@ -106,6 +106,28 @@ export const agents = sqliteTable(
   (t) => [uniqueIndex('agents_project_name').on(t.projectId, t.name)],
 )
 
+// A project's notes: the short facts the human and every agent must not rediscover (a command, a path,
+// a rule, a reminder). One fact each; position orders them, a negative one pinning a note above the rest.
+export const projectNotes = sqliteTable(
+  'project_notes',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    // A few words saying why the note is there, at most 60 characters.
+    label: text().notNull(),
+    // The fact itself, plain text, at most 500 characters.
+    body: text().notNull(),
+    createdBy: text('created_by').notNull(),
+    createdAt: now(),
+    updatedAt: now(),
+    // Ascending order, ties by id; a new note goes last, a pinned one before every unpinned note.
+    position: integer().notNull().default(0),
+  },
+  (t) => [index('project_notes_project').on(t.projectId, t.position)],
+)
+
 export const repos = sqliteTable('repos', {
   id: id(),
   projectId: integer('project_id')
@@ -745,6 +767,7 @@ export const agentTokens = sqliteTable('agent_tokens', {
 export type Activity = typeof activity.$inferSelect
 export type Project = typeof projects.$inferSelect
 export type Agent = typeof agents.$inferSelect
+export type ProjectNote = typeof projectNotes.$inferSelect
 export type Stage = typeof stages.$inferSelect
 export type Repo = typeof repos.$inferSelect
 export type RunConfig = typeof runConfigs.$inferSelect

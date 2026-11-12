@@ -57,6 +57,7 @@ import { handleMcp } from './mcp'
 import { linkFor } from './previewProxy'
 import * as needs from './needs'
 import { checkOpencodeConfig } from './opencodeConfig'
+import * as notes from './notes'
 import * as projectAgents from './projectAgents'
 import * as prs from './prs'
 import { projectPush, refreshProjectPush } from './push'
@@ -498,6 +499,34 @@ api.patch('/api/agents/:id', async ({ request, params, actor }) => {
 api.delete('/api/agents/:id', ({ request, params, actor }) => {
   humanAgents(request)
   projectAgents.deleteAgent(id(params), actor)
+  return json({ ok: true })
+})
+
+// --- the project's notes: short facts the human and its agents must not rediscover ---
+// The human and any agent add one; a note's author, an orchestrator or the human changes or removes it.
+const NoteBody = z.object({ label: z.string(), body: z.string() })
+const NotePatch = z.object({
+  label: z.string().optional(),
+  body: z.string().optional(),
+  // Above the unpinned notes (true) or back after them (false); the board keeps the position.
+  pinned: z.boolean().optional(),
+})
+api.get('/api/projects/:id/notes', ({ params }) => json(notes.listNotes(id(params))))
+api.post('/api/projects/:id/notes', async ({ request, params }) =>
+  json(notes.createNote(id(params), await readJson(request, NoteBody), callerInfo(request)), 201),
+)
+api.patch('/api/projects/:id/notes/:noteId', async ({ request, params }) =>
+  json(
+    notes.updateNote(
+      id(params),
+      id(params, 'noteId'),
+      await readJson(request, NotePatch),
+      callerInfo(request),
+    ),
+  ),
+)
+api.delete('/api/projects/:id/notes/:noteId', ({ request, params }) => {
+  notes.deleteNote(id(params), id(params, 'noteId'), callerInfo(request))
   return json({ ok: true })
 })
 

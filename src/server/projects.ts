@@ -10,6 +10,7 @@ import { logActivity } from './activity'
 import { hostToolsForAgents } from './hostTools'
 import { assertMayChangeInstructions, type Changer, setInstructions } from './instructionsHistory'
 import { HttpError, notFound } from './http'
+import { listNotes } from './notes'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
 import { listStages } from './stages'
@@ -85,6 +86,7 @@ export function getProjectFull(id: number) {
     repos: listRepos(id),
     stages: listStages(id),
     agents: listAgents(id),
+    notes: listNotes(id),
     hostTools: hostToolsForAgents(),
   }
 }
