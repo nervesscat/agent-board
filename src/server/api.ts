@@ -1157,7 +1157,19 @@ api.post('/api/uploads', async ({ request, actor }) => {
     const form = await request.formData()
     const file = form.get('file')
     if (!(file instanceof File)) throw new HttpError(400, 'multipart field "file" is required')
-    const a = await uploads.saveUpload(file, actor)
+    // Beside the file: what the canvas drew on it, as JSON. Absent for a file that was not drawn on.
+    const annotations = form.get('annotations')
+    if (annotations !== null && typeof annotations !== 'string')
+      throw new HttpError(400, 'multipart field "annotations" must be JSON text')
+    let document: unknown
+    if (typeof annotations === 'string') {
+      try {
+        document = JSON.parse(annotations)
+      } catch {
+        throw new HttpError(400, 'multipart field "annotations" is not JSON')
+      }
+    }
+    const a = await uploads.saveUpload(file, actor, document)
     return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
   }
   const body = await readJson(
