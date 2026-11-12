@@ -58,7 +58,16 @@ refute, merge) will try to break what you built. Build so it survives that.
 ## Output
 
 Return, in this order: the commits (\`sha subject\`), what changed per acceptance criterion or
-finding, the tests added and the checks you ran with their results, and anything left open.`
+finding, the tests added and the checks you ran with their results, and anything left open.
+
+## Keeping the board current
+
+The board is part of the work: post your progress, tick the tasks you finished, close your spans
+and waits, and update the ticket's summary when you stop or hand off; you are not finished while
+the board is behind what you did. If you stop before the end, record on the ticket that it was
+stopped and why, so the next reader can tell a stop from a failure. When the work ends, clean up
+what you started (processes, temporary files, locks, and any scratch worktree of your own), and
+leave the ticket's worktrees and origin branches to the human, listed, never deleted.`
 
 export const DEFAULT_AGENTS: { name: string; instructions: string; delegation: string }[] = [
   {

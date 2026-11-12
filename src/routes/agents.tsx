@@ -11,7 +11,7 @@ import { SkillInstallButton, useSkillToken } from '#/components/SkillInstall'
 import { Button } from '#/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { ReviewSkills, useShell, useSkillsStatus } from '#/components/ReviewSkills'
-import { AGENTS, SHELLS, type Shell, mcpSetup, skillInstall } from '#/lib/agents'
+import { AGENTS, SHELLS, type Shell, mcpSetup, sessionSkillInstall, skillInstall } from '#/lib/agents'
 import { errorMessage, get, post } from '#/lib/api'
 import type { AgentClient } from '#/lib/constants'
 import { stamp } from '#/lib/format'
@@ -157,6 +157,15 @@ function ConnectAgents() {
             </pre>
           </details>
         )}
+        <p className="text-xs text-muted-foreground">
+          Also installs <code className="rounded bg-muted px-1">/session</code>, the skill that opens a
+          session with the board: it gives you a short brief, delegates every ticket you name, and keeps one
+          message shape with what needs you.
+        </p>
+        <CopyBlock
+          text={sessionSkillInstall(client, shell, setup.boardUrl, skillTokenValue)}
+          onCopy={() => copyLine((t) => sessionSkillInstall(client, shell, setup.boardUrl, t))}
+        />
       </section>
 
       <section id="review-skills" className="scroll-mt-16 space-y-2">
