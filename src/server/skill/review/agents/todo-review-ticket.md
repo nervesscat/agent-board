@@ -416,27 +416,27 @@ Implementation and its steps (`set_task_done`).
    like a gate failure. When it passes, comment on the PR `CI run locally: green on <sha>` with
    that head SHA (`gh pr comment`): that ticks CI. After each later push, run it again and comment
    again.
-5. The preview, from at most one build of this head. Use the board's own preview run: it lives on
-   after your session, and the board stops it when the PR is merged. When `WORKDIR/02-build.md`
-   names the final head, make that run serve the gate's artifact instead of building again:
-   `update_run` the run's build command for this start to one that only checks the artifact
-   (`test -d .output-e2e`, or `true`) and its start command to
-   `node .output-e2e/server/index.mjs` with the repo's preview environment (a free loopback port
-   from `PORTS` as `PORT` and `NITRO_PORT`, `HOST=127.0.0.1`, `DATA_DIR` a copy of the data
-   (never the live one), `BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`,
-   `BOARD_URL=http://127.0.0.1:<port>`), then `start_run` it and wait for `running`; once it runs,
-   put back the run's original build and start commands — the running process keeps serving the
-   artifact. An artifact at an older head is not reused: leave the run's own build and start
-   commands in place, so its build is this head's one preview build. Never the gate's build and a
-   preview build both.
-   When the repo has no run the board can start, start it by hand from the artifact in the
-   worktree with the same environment (`node .output-e2e/server/index.mjs`) and `set_preview`
-   with the URL it answers on: that preview lives in your session, so it stops when the session
+5. The preview, from at most one build of this head for the preview. Use the board's own preview
+   run as configured: `start_run` it (or `start_preview` on the workspace), wait for `running`
+   (on `failed`, read its log tail and fix). Its build is the preview's one build for this head,
+   it carries the preview base the board serves under, it lives on after your session, and the
+   board stops it when the PR is merged. Do not point it at the gate's `.output-e2e`: that
+   artifact is built for `/`, while the board's preview base differs, so the link would serve a
+   document whose assets and client routes do not match. Never build the head twice for the
+   preview; the gate's artifact is the review's build, not the preview's, so a commit is built
+   twice overall where the preview must build — it used to be three times (gate, review worktree,
+   preview).
+   A repo with no preview run the board can start: start it from the artifact by hand in the
+   worktree with the repo's preview environment (a free loopback port from `PORTS` as `PORT` and
+   `NITRO_PORT`, `HOST=127.0.0.1`, `DATA_DIR` a copy of the data (never the live one),
+   `BOARD_ENV=development`, `AUTH=off`, `STORAGE=local`,
+   `BOARD_URL=http://127.0.0.1:<port>`), `node .output-e2e/server/index.mjs`, and `set_preview`
+   with the URL it answers on. That preview lives in your session, so it stops when the session
    ends, and the human can stop it meanwhile from the project's Previews page — say that in the
-   summary. Keep the preview running while the ticket is in review; once it is merged or dropped,
-   stop a hand-started process and clear the link (`set_preview` with `""`), and the board stops
-   its own. In the summary say which of the two ran and how many times this head was built. When
-   the change cannot be tried (docs, a script), say why in the summary instead.
+   summary. In the summary say which of the two ran. Keep the preview running while the ticket is
+   in review; once it is merged or dropped, stop a hand-started process and clear the link
+   (`set_preview` with `""`), and the board stops its own. When the change cannot be tried (docs, a
+   script), say why in the summary instead.
    A preview build you start here is a heavy run, in a test slot like any other (holder
    `#<TICKET> preview <ISO time>`): take the first free one before the start and release it once
    the preview runs or has failed.
