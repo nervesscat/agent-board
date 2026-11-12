@@ -668,6 +668,36 @@ describe('the stalled flag', () => {
     expect(summary.lostContact).toEqual([])
   })
 
+  it('waits on a blocked step of its own, never on its parent’s, and says so on both reads', async () => {
+    const pid = newProject()
+    const parent = activeTicket(pid, 'parent')
+    const lane = features.createTicket(pid, { title: 'lane', status: 'in_progress', parentId: parent.id }, HUMAN)
+    const [keys] = features.addTasks(parent.id, ['keys'], AGENT)
+    features.updateTask(keys!.id, { blocked: true, blockedReason: 'the human gets the key' }, AGENT)
+    const [draft] = features.addTasks(lane.id, ['draft the docs'], AGENT)
+    // Fresh on both, so the state is about the blocked step and nothing else.
+    await tool('heartbeat', { projectId: pid, ticketId: lane.id })
+
+    const reads = async (id: number) => {
+      const row = ((await tool('list_tickets', { projectId: pid })) as { id: number; liveness: { state: string } | null }[]).find(
+        (r) => r.id === id,
+      )!
+      const full = await tool('get_ticket', { ticketId: id })
+      return { list: row.liveness?.state, get: full.work.liveness?.state }
+    }
+
+    // The parent works a blocked step next: it waits on the human.
+    expect(await reads(parent.id)).toMatchObject({ list: 'waiting', get: 'waiting' })
+    // Its lane's own next step is open: the lane is working, not waiting on a task that is not its own.
+    // The list row and the ticket's own page agree on it.
+    expect(await reads(lane.id)).toMatchObject({ list: 'working', get: 'working' })
+
+    // A blocked step of its own: now the lane waits, and both reads say so.
+    features.updateTask(draft!.id, { blocked: true, blockedReason: 'the human reviews the draft' }, AGENT)
+    expect(await reads(lane.id)).toMatchObject({ list: 'waiting', get: 'waiting' })
+    expect(await reads(parent.id)).toMatchObject({ list: 'waiting', get: 'waiting' })
+  })
+
   it('is not raised in a blocked or review stage, nor while waiting on the human', async () => {
     const pid = newProject()
     const blocked = features.createTicket(pid, { title: 'blocked', status: 'blocked' }, HUMAN)

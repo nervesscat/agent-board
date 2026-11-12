@@ -10,6 +10,7 @@ import {
   WAIT_REASONS,
   type WaitReason,
 } from '#/lib/constants'
+import { nextTask } from '#/lib/tasks'
 import {
   buildTimeline,
   sumTotals,
@@ -20,7 +21,7 @@ import {
 } from '#/lib/workTimeline'
 import { listActors } from './actors'
 import { HttpError, notFound } from './http'
-import { listStages, type Stage } from './stages'
+import { kindOf, listStages, type Stage } from './stages'
 
 /**
  * A ticket's work timeline: what its agents record as they work it (a span of a phase, a hand-off to
@@ -299,10 +300,10 @@ type TimelineTicket = Pick<
 const asTimelineEvent = ({ ticketId: _t, projectId: _p, ...e }: TicketEvent): TimelineEvent => e
 
 /**
- * Each ticket's timeline, from one read of their events, posts, decisions and blocked tasks; the
- * tickets may be of several projects. An agent's post refreshes the lease a heartbeat does; a human's
- * does not. A pending decision card or an open blocked task (on a ticket or one of its lanes) makes it
- * wait on the human.
+ * Each ticket's timeline, from one read of their events, posts, decisions and tasks; the tickets may be
+ * of several projects. An agent's post refreshes the lease a heartbeat does; a human's does not. A
+ * pending decision card, or a blocked task that is the step the ticket (or one of its lanes) works next,
+ * makes it wait on the human.
  */
 export function timelinesFor(
   tickets: TimelineTicket[],
@@ -349,30 +350,6 @@ export function timelinesFor(
           .map((r) => r.ticketId)
       : [],
   )
-  const blocked = new Set(
-    ids.length
-      ? db
-          .select({ ticketId: schema.tasks.ticketId })
-          .from(schema.tasks)
-          .where(
-            and(
-              inArray(schema.tasks.ticketId, ids),
-              eq(schema.tasks.blocked, true),
-              eq(schema.tasks.done, false),
-            ),
-          )
-          .all()
-          .map((r) => r.ticketId)
-      : [],
-  )
-  const byId = new Map(tickets.map((t) => [t.id, t]))
-  const blockedOn = (id: number): boolean => {
-    for (let at: number | null = id; at !== null; ) {
-      if (blocked.has(at)) return true
-      at = byId.get(at)?.parentId ?? null
-    }
-    return false
-  }
   const projects = new Map<number, { stages: Stage[]; stallMinutes: number }>()
   const projectOf = (id: number) => {
     let p = projects.get(id)
@@ -387,6 +364,47 @@ export function timelinesFor(
     }
     return p
   }
+  // Whether the step a ticket works next is blocked on the human: its own next step's, and a lane's own
+  // next step rolled up into its parent, as the card's badge and Needs you count them. A lane reads its
+  // own tree alone: its parent's blocked step is not the lane's, so a lane's row and its page agree.
+  const lanes = new Map<number, { id: number; status: string; projectId: number }[]>()
+  const family = new Set(ids)
+  for (let level = ids; level.length; ) {
+    const children = db
+      .select({
+        id: schema.tickets.id,
+        parentId: schema.tickets.parentId,
+        status: schema.tickets.status,
+        projectId: schema.tickets.projectId,
+      })
+      .from(schema.tickets)
+      .where(inArray(schema.tickets.parentId, level))
+      .all()
+      .filter((lane) => !family.has(lane.id))
+    for (const lane of children) {
+      family.add(lane.id)
+      lanes.set(lane.parentId!, [...(lanes.get(lane.parentId!) ?? []), lane])
+    }
+    level = children.map((lane) => lane.id)
+  }
+  const ownTasks = new Map<number, (typeof schema.tasks.$inferSelect)[]>()
+  if (family.size)
+    for (const task of db
+      .select()
+      .from(schema.tasks)
+      .where(inArray(schema.tasks.ticketId, [...family]))
+      .all())
+      ownTasks.set(task.ticketId, [...(ownTasks.get(task.ticketId) ?? []), task])
+  const nextBlocked = new Map(
+    [...family].map((id) => [id, nextTask(ownTasks.get(id) ?? [])?.blocked === true]),
+  )
+  // A cancelled lane's tasks are out of the work, as they are out of the rolled-up progress.
+  const blockedNext = (id: number): boolean =>
+    nextBlocked.get(id) === true ||
+    (lanes.get(id) ?? []).some(
+      (lane) =>
+        kindOf(projectOf(lane.projectId).stages, lane.status) !== 'cancelled' && blockedNext(lane.id),
+    )
   return new Map(
     tickets.map((t) => {
       const events = byTicket.get(t.id) ?? []
@@ -397,7 +415,7 @@ export function timelinesFor(
         ticket: t,
         stallMinutes,
         posts: posts.get(t.id) ?? [],
-        waiting: { decision: deciding.has(t.id), blockedTask: blockedOn(t.id) },
+        waiting: { decision: deciding.has(t.id), blockedTask: blockedNext(t.id) },
       })
       return [t.id, { events, timeline }] as const
     }),
