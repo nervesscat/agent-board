@@ -2,7 +2,7 @@
 name: feature-review
 description: "Reviews one feature or change for correctness, reliability and security using a spec -> env -> verify -> hunt -> refute protocol built to produce zero false positives. The code under review runs from its own worktree at the exact commit, on servers the review starts itself; every finding needs a concrete failure scenario and must survive an adversarial refutation pass; an empty result is valid and comes with proof of what was checked."
 user-invocable: true
-argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [scoped] [post]"
+argument-hint: "[repo=<path>] [<PR number> | <branch> | diff | staged | <path>] [ticket=<id>] [deep] [light] [keep] [ports=<from>-<to>] [browser=yes|no] [scoped] [post] [slots=<dir>] [build=<path>]"
 ---
 
 # Feature Review
@@ -86,6 +86,8 @@ Parse `$ARGUMENTS` as space-separated tokens:
 | `browser=yes\|no` | whether browser automation may be used | `yes` |
 | `frontend=<path>` | main checkout of the UI repo that talks to this backend; the env agent starts its dev server against the review backend and the verify agent drives it | none |
 | `scoped` | run only the scoped checks even where no CI runs the full suite (`CI: none`): the caller runs the full suite once at the final head | off |
+| `slots=<dir>` | the directory holding the repo's heavy-run test slots (`tests-<repo id>-1` … `-N`, and `tests-<repo id>-full`): a heavy run takes the first free one and releases it right after, a light run takes none | none: each heavy run starts without a slot |
+| `build=<path>` | a build record the caller's gate wrote after its end-to-end build: the head SHA, the `.output-e2e` path and the time. The env phase reuses that artifact when the SHA is the commit under review, and builds once when it is not | none |
 | `post` | post the report as a PR comment when the target is a PR | off |
 | `effort=<low\|medium\|high>` | the thinking effort of every phase agent, passed as the Agent tool's `effort`; a board cycle sets it from the ticket's complexity (`low` for low, `medium` for mid and high) | the session's |
 | `ticket=<id>` | the board ticket this change belongs to: turns on **On the board** below | found from the PR's `ticket` in `list_prs` when the board is connected |
@@ -145,6 +147,9 @@ Parse `$ARGUMENTS` as space-separated tokens:
    - `00-context.md`: PR title, body and URL, commit messages since the merge base, any
      ticket text the user pasted, and the full contents of the project's rule files if
      present in the worktree (`CLAUDE.md`, `.claude/rules/*`, `CONTRIBUTING.md`, `AGENTS.md`).
+     It is the review's **context pack**, the one context file every phase reads; the spec
+     phase extends it with the changed files, their tests, their direct callers, the decisions
+     and their answers, and the runbook.
    - When the review is on a board ticket (`ticket=<id>`): `get_ticket` and append its context
      above: its instructions, the human's posts and replies (each thread with `list_comments`),
      the decisions and their answers, and its attachments (their local `path`s). Every phase
@@ -157,22 +162,31 @@ Parse `$ARGUMENTS` as space-separated tokens:
      `git ls-files`); their direct callers (`git grep -l` for each changed module's import path,
      or for a text file its file name, run once per file, not recursively; cap it near 30 and
      say when capped).
-5. The skill's own files are in `${CLAUDE_SKILL_DIR}`. Agents receive absolute paths to
+5. With `build=`, read the caller's **build record** and pass its path to the env agent: the
+   caller built this change once at a head and wrote the SHA, the `.output-e2e` path and the
+   ISO time. The env agent compares its SHA with the commit under review; at the same SHA it
+   copies the artifact into the review worktree with `cp -al` and records `E2E_SKIP_BUILD=1`,
+   so verify's end-to-end run reuses that one build. A different SHA is stale: the record is
+   ignored and the env agent builds once at this commit. Nothing is reused across heads.
+6. The skill's own files are in `${CLAUDE_SKILL_DIR}`. Agents receive absolute paths to
    `${CLAUDE_SKILL_DIR}/checklists.md` and `${CLAUDE_SKILL_DIR}/report-template.md`.
-6. `NOTES` = `~/.claude/feature-review/notes/<repo-dir-name>.md`, the per-repo memory of
+7. `NOTES` = `~/.claude/feature-review/notes/<repo-dir-name>.md`, the per-repo memory of
    environment facts earlier reviews learned on this machine (what is installed, which
    ports are taken, runbook corrections). Pass its path to the spec and env agents whether
    or not it exists yet; the env agent appends to it.
 
 Every agent prompt from here on includes: `MAIN`, `WORKTREE`, `WORKDIR`, `SLUG`, the
-absolute paths of the files it reads and writes, the full text of the contract, and the path of
+absolute paths of the files it reads and writes, `00-context.md` as the context pack (every
+phase reads it: spec, env, verify, hunt, refute and merge), the full text of the contract, and the path of
 `00-focus.md` with this rule: start from it; read outside it only to follow a reference from it.
 With `scoped`, it also includes the word `scoped`. Agents treat `WORKTREE` as the repo root.
 
 ## Phase 1: Spec (1 agent)
 
 Spawn `feature-review-spec` with paths to `00-diff.patch`, `00-context.md`, `00-focus.md`, and
-the output path `01-spec.md`. Wait for it.
+the output path `01-spec.md`. It writes what it establishes — the changed files, their tests,
+their direct callers, the decisions and their answers, and the runbook — back into
+`00-context.md`, so it is the pack the later phases read. Wait for it.
 
 Read `01-spec.md`. If its **Open questions** section contains a question whose answer
 changes what counts as *correct* (not merely nice to know), that question is decisive. In an
@@ -200,14 +214,20 @@ Every hunt also applies Diff guard analysis and the Project overlay.
 
 ## Phase 1b: Environment (1 agent)
 
-Spawn `feature-review-env` with `01-spec.md`, `00-focus.md`, `NOTES`, the port range, the
-browser flag, `FRONTEND` if given, the services the strategy table allows, and the output path
+Spawn `feature-review-env` with `01-spec.md`, `00-context.md`, `00-focus.md`, `NOTES`, the port
+range, the browser flag, `FRONTEND` if given, the build record's path when `build=` was given,
+the `slots=` directory when it was given, the services the strategy table allows, and the output path
 `00-env.md`, with this rule: start only what the criteria's methods need: no app server when no
 criterion uses `run+http` or `browser`, no frontend when none uses `browser`. Wait for it. It
-installs or reuses dependencies inside the worktree, proves imports resolve to the worktree,
+installs or reuses dependencies inside the worktree (a prepared `node_modules` copied by hardlink
+with `cp -al` into a real directory, never a symlink or a junction), proves imports resolve to
+the worktree,
 allocates free ports, starts those services in the background (review-owned instances on remapped
 ports when the developer's are in the way) and the seed, records PIDs and logs under `WORKDIR`,
-and lists what is unavailable and why.
+and lists what is unavailable and why. When the build record's SHA is the commit under review it
+copies that `.output-e2e` into the worktree and records `E2E_SKIP_BUILD=1`; a different SHA is
+ignored and it builds once. It records the repo's test slot folders and N in `00-env.md` too, and
+marks which of its scoped commands are heavy.
 
 Read `00-env.md`. If nothing could be started, continue: the verify agent will record
 runtime criteria as `UNVERIFIED` and the hunt still runs on the code. Do not start
@@ -233,6 +253,12 @@ end-to-end specs covering the changed pages or routes. The full suite runs in CI
 request; where no CI runs it (`CI: none` in `00-env.md`), verify runs the full suite locally
 instead, unless `scoped` was given (the caller then runs it once at the final head). The hunt runs only targeted tests (the focus file's tests, or a probe for
 one candidate), never the full suite.
+Only the heavy runs take a test slot, from `slots=` when it was given: verify takes the first
+free one right before the end-to-end run and before the full suite, and releases it right after
+each; a full suite takes `tests-<repo id>-full` first and waits until every slot is free. Its
+typecheck, lint, format, migration check and scoped unit run take none, and neither do the hunt's
+and refute's targeted tests. With `E2E_SKIP_BUILD=1` in `00-env.md`, verify's end-to-end command
+reuses the caller's build instead of building again.
 
 Wait for all. Then build the refutation input, `03-all-candidates.md`:
 - every candidate from `03-candidates.md` (and `03-candidates-b.md` in deep mode,
@@ -261,18 +287,23 @@ says that two hunts ran: it says one hunt ran, in light mode (Phase 4).
 ## Phase 3: Refute (1 agent)
 
 Spawn `feature-review-refute` with temp-file prefix `_frr_` and paths to `01-spec.md`,
-`00-env.md`, `00-diff.patch`, `00-focus.md`, `02-verification.md`, `03-all-candidates.md`, and
+`00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, `02-verification.md`,
+`03-all-candidates.md`, and
 the output path `04-verdicts.md`. Like the hunt, it runs only targeted tests, never the full
-suite. Wait for it.
+suite, and those targeted runs take no test slot. Wait for it.
 
 ## Phase 3b: Merge check (1 agent)
 
 Runs after every other agent has finished, because it temporarily changes the worktree.
 Spawn `feature-review-merge` with `HEAD_SHA`, the base branch name, and paths to
-`00-env.md`, `00-focus.md`, `02-verification.md`, and the output path `05-merge.md`. It runs the
+`00-env.md`, `00-context.md`, `00-focus.md`, `02-verification.md`, and the output path
+`05-merge.md`. It runs the
 scoped checks once, on the merged tree, over the files both the branch and the base changed since
 the merge base plus the branch's own: that scoped run is the merge check, and CI on the merged PR
-covers the rest (the full suite instead, where no CI runs it and `scoped` was not given). Wait for
+covers the rest (the full suite instead, where no CI runs it and `scoped` was not given). Its
+heavy part — the end-to-end run, and the full suite where no CI runs it — takes the repo's first
+free test slot from `slots=` (the full-suite folder first for a full suite); its typecheck, lint
+and scoped unit runs take none. Wait for
 it. Read its `Result` line and its `Worktree restored` line; if the worktree was not restored,
 run `git -C WORKTREE reset --hard <commit>` yourself before continuing. For `diff`,
 `staged`, and path targets the base is `HEAD`, so the result is `NO ISSUE (up to date)`
@@ -285,7 +316,8 @@ without spawning the agent.
    with `STALE (PR moved to <sha>)` and do not post.
 2. Assemble `review.md` in `WORKDIR` following `report-template.md`:
    - The **Freshness** block: commit reviewed, PR head at start and at end, worktree
-     path, environment summary from `00-env.md` (reused or fresh dependencies, services
+     path, environment summary from `00-env.md` (reused or fresh dependencies, the caller's
+     build reused at this head with `E2E_SKIP_BUILD=1` or a build here, services
      up, services unavailable).
    - In light mode the Freshness block's `Hunts` line says `one (light mode: no second hunt)`.
    - Findings are the candidates with verdict `CONFIRMED` or `PLAUSIBLE` in

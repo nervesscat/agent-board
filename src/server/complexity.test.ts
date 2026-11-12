@@ -523,4 +523,162 @@ describe('the review texts the board ships', () => {
       'runs at the effort its complexity sets: low for low, medium for mid and high',
     )
   })
+
+  it('splits heavy runs from light ones: only a build, e2e or the full unit suite takes a test slot', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      "**Heavy**: a build (your gate's end-to-end build, a preview build), the end-to-end tests, scoped or full, and the full unit suite.",
+    )
+    expect(text).toContain(
+      '**Not heavy**: the typecheck, lint, the formatter (`prettier`), the migration check (`check:migrations`), the unit tests scoped to the changed files, and a targeted probe test.',
+    )
+    expect(text).toContain('The light ones take no slot, and nothing waits on one for them.')
+    expect(text).not.toContain("Heavy runs are the project's checks")
+    const review = flat(todoReview)
+    expect(review).toContain('a heavy run holds one slot, a light one none')
+    expect(review).toContain(
+      'the typecheck, lint, formatter, migration check, scoped unit tests and probe tests take none',
+    )
+  })
+
+  it('uses N = 2 slots, and caps parallel one above the slot count with that same number', () => {
+    expect(flat(ticketAgent)).toContain('has N = 2 of them, and a light run holds none')
+    const review = flat(todoReview)
+    expect(review).toContain('`QUEUE/locks/tests-<repo id>-1` … `-N` (N = 2, the measured count)')
+    expect(review).toContain("maximum tickets in flight, 1 to 3 (one more than the repo's test slots")
+    expect(review).toContain('With N = 2 that is 3 in flight.')
+    // The measured number is named once; no other slot count or cap appears in the served bundle.
+    for (const text of [flat(ticketAgent), review]) {
+      expect(text).not.toContain('tests-<repo id>-3')
+      expect(text).not.toContain('tests-<REPO_ID>-3')
+    }
+  })
+
+  it('takes a slot with a plain mkdir and a holder line, releases it with rm -r, and never deletes another holder', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      '`mkdir SLOTS/tests-<REPO_ID>-<n>` for n from 1 to N (a plain `mkdir`, never `mkdir -p`: the create must fail when the folder exists)',
+    )
+    expect(text).toContain('`SLOTS/tests-<REPO_ID>-<n>/holder.txt` with `#<TICKET> <step> <ISO time>`')
+    expect(text).toContain('**Release it** with `rm -r` on that folder as soon as the heavy command ends')
+    expect(text).toContain('Never keep a slot from one check through the next')
+    expect(text).toContain('Never delete a folder whose `holder.txt` names another ticket.')
+    expect(text).toContain('only its holder removes it, and the orchestrator once that holder')
+    expect(flat(todoReview)).toContain(
+      "You are the only one besides the holder who clears a dead run's slot, and only when its `holder.txt` names that ticket.",
+    )
+  })
+
+  it('runs a full suite alone: it takes tests-<repo id>-full first, and a scoped run that sees it gives its slot back', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      'take `mkdir SLOTS/tests-<REPO_ID>-full` first (a plain `mkdir`; when it fails, a full run is in flight: wait and try again), then wait until every `tests-<REPO_ID>-<n>` slot is free',
+    )
+    expect(text).toContain(
+      'then checks for `tests-<REPO_ID>-full`: when that folder appeared, release its slot and wait for the full run to end before taking a slot again.',
+    )
+    expect(flat(todoReview)).toContain('`QUEUE/locks/tests-<repo id>-full` for a full suite')
+  })
+
+  it('writes one build record for the head and reuses it in the review only at that same SHA', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('write `WORKDIR/02-build.md` with the head SHA')
+    expect(text).toContain('the artifact path (`<worktree>/.output-e2e`) and the ISO time')
+    expect(text).toContain('build=<WORKDIR/02-build.md>')
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain('| `build=<path>` |')
+    expect(review).toContain('| `slots=<dir>` |')
+    expect(review).toContain('records `E2E_SKIP_BUILD=1`')
+    expect(review).toContain(
+      'A different SHA is stale: the record is ignored and the env agent builds once at this commit.',
+    )
+    expect(review).toContain('Nothing is reused across heads.')
+    const env = flat(read(path.join(skills, 'agents', 'feature-review-env.md')))
+    expect(env).toContain('record `E2E_SKIP_BUILD=1` in `00-env.md`')
+    expect(env).toContain('a different SHA is stale, so ignore the record, build once here and record that')
+    const verify = flat(read(path.join(skills, 'agents', 'feature-review-verify.md')))
+    expect(verify).toContain('records a reused build (`E2E_SKIP_BUILD=1`), run the end-to-end command')
+  })
+
+  it('warms node_modules by hardlink copy, never a symlink or junction, and installs offline only on a lockfile difference', () => {
+    const env = flat(read(path.join(skills, 'agents', 'feature-review-env.md')))
+    expect(env).toContain('`cp -al MAIN/node_modules WORKTREE/node_modules`')
+    expect(env).toContain('never a symlink or a junction')
+    expect(env).toContain("breaks the board's preview install, which cannot purge through one")
+    expect(env).toContain('only when a lockfile differs from the prepared copy')
+    expect(env).toContain('Copy its `node_modules` with `cp -al` into a real directory')
+    const text = flat(ticketAgent)
+    expect(text).toContain('`cp -al <prepared>/node_modules <path>/node_modules`')
+    expect(text).toContain('never a symlink or a junction')
+    // Nothing served still offers the symlink it replaced.
+    const reviewFiles = fs
+      .readdirSync(skills, { recursive: true, encoding: 'utf8' })
+      .filter((f) => f.endsWith('.md'))
+    for (const file of reviewFiles) {
+      expect(read(path.join(skills, file)), file).not.toContain('junction or symlink')
+    }
+  })
+
+  it('reruns only what a fix pass touches, and leaves the full suites to CI', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain(
+      'A fix pass reruns only what its findings touch: the failed end-to-end spec file(s) and the unit files related to the changed files (`vitest related <changed files>`, or the project',
+    )
+    expect(text).toContain('never the whole gate')
+    expect(text).toContain('the full unit and end-to-end suites stay in CI')
+    expect(text).toContain(
+      'A fix pass reruns the failed end-to-end spec file(s), the unit files related to the changed files (`vitest related <changed files>`, or the project',
+    )
+  })
+
+  it('hands the context pack, 00-context.md, to every phase', () => {
+    for (const file of [
+      'feature-review-spec.md',
+      'feature-review-env.md',
+      'feature-review-verify.md',
+      'feature-review-hunt.md',
+      'feature-review-refute.md',
+      'feature-review-merge.md',
+    ]) {
+      expect(flat(read(path.join(skills, 'agents', file))), file).toContain('00-context.md')
+    }
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain(
+      '`00-context.md` as the context pack (every phase reads it: spec, env, verify, hunt, refute and merge)',
+    )
+    expect(review).toContain(
+      'the spec phase extends it with the changed files, their tests, their direct callers, the decisions and their answers, and the runbook',
+    )
+    const spec = flat(read(path.join(skills, 'agents', 'feature-review-spec.md')))
+    expect(spec).toContain(
+      'the changed files and their tests and callers, the decisions and their answers, and the runbook',
+    )
+    expect(spec).toContain('write into `00-context.md` what you established')
+  })
+
+  it('gives the next free slot to the ticket closest to hand-off, and never waits on a slot nothing needs', () => {
+    const text = flat(ticketAgent)
+    expect(text).toContain('The next free slot goes to the ticket closest to hand-off')
+    expect(text).toContain('a ticket still in its first build')
+    expect(text).toContain('never wait on one you do not need')
+    const review = flat(todoReview)
+    expect(review).toContain('the ticket closest to hand-off')
+    expect(review).toContain('never waits on one it does not need')
+    expect(review).toContain('Fill every free slot with the pending ticket closest to hand-off')
+  })
+
+  it('takes a slot only around a heavy run in each phase: verify and merge yes, hunt and refute never', () => {
+    const phase = (file: string) => flat(read(path.join(skills, 'agents', file)))
+    expect(phase('feature-review-verify.md')).toContain(
+      'Only the heavy runs take a test slot, from the `SLOTS` folder when your prompt gives one',
+    )
+    expect(phase('feature-review-merge.md')).toContain('Take a test slot only for a heavy run')
+    for (const file of ['feature-review-hunt.md', 'feature-review-refute.md']) {
+      expect(phase(file), file).toContain('Those targeted runs are light and take no test slot')
+    }
+    const review = flat(read(path.join(skills, 'skills', 'feature-review', 'SKILL.md')))
+    expect(review).toContain('Only the heavy runs take a test slot, from `slots=` when it was given')
+    expect(review).toContain('Its heavy part')
+    expect(review).toContain('and neither do the hunt')
+  })
 })

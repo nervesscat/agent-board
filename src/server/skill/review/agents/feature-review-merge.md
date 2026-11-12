@@ -13,8 +13,10 @@ branch in the developer's checkout beyond fetching.
 ## Input
 
 `WORKTREE` (detached at the commit under review, clean), `MAIN` (the developer's
-checkout, fetch only), `WORKDIR`, `HEAD_SHA`, `BASE` (the base branch name), and paths to
-`00-env.md` (scoped checks, test command and interpreter), `00-focus.md` (start from it; read outside it only
+checkout, fetch only), `WORKDIR`, `HEAD_SHA`, `BASE` (the base branch name), the `SLOTS` folder
+when the caller passed `slots=`, and paths to
+`00-env.md` (scoped checks, test command and interpreter), `00-context.md` (the context pack:
+read it first), `00-focus.md` (start from it; read outside it only
 to follow a reference from it), `02-verification.md` (test results at head, for comparison), and
 your output file `05-merge.md`. Optionally the word `scoped`.
 
@@ -44,7 +46,14 @@ result, and the orchestrator asks the human.
    (step 3), plus the branch's own (`git diff --name-only <merge-base> HEAD_SHA`). That scoped
    run on the merged tree is the merge check; CI on the merged PR covers the rest. When
    `00-env.md` says no CI runs the full suite (`CI: none`) and your prompt does not say `scoped`,
-   run the full suite once with the test command instead. Compare failures with
+   run the full suite once with the test command instead. Take a test slot only for a heavy
+   run: with the `SLOTS` folder, the end-to-end run and the full suite take the first free slot
+   (`mkdir tests-<repo id>-<n>`, never `mkdir -p`; `holder.txt` with `#<ticket> merge <ISO
+   time>`) and release it right after, and a full suite takes `tests-<repo id>-full` first and
+   then waits until every slot is free. The typecheck, lint and scoped unit runs take none. With
+   `E2E_SKIP_BUILD=1` in `00-env.md`, run the end-to-end command with it: the artifact is the
+   commit under review's own build. Never delete a slot folder whose `holder.txt` names someone
+   else. Compare failures with
    the head run in `02-verification.md`. Failures that were not present at head are
    **new**. Result `TESTS FAIL AFTER MERGE` with the new failures, or `NO ISSUE`. If the
    test command is unavailable, result `UNVERIFIED (tests could not run)` with the merge

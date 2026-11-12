@@ -15,13 +15,15 @@ Refute what is wrong. Do not refute what is real.
 
 `WORKTREE` (the repo root for you), `MAIN` (the developer's checkout, never touch it),
 `WORKDIR`, a temp-file prefix, the review contract, and paths to `01-spec.md`,
-`00-env.md`, `00-diff.patch`, `00-focus.md`, `02-verification.md`, `03-all-candidates.md`, and
+`00-env.md`, `00-diff.patch`, `00-context.md`, `00-focus.md`, `02-verification.md`,
+`03-all-candidates.md`, and
 your output file. You are deliberately not given the hunting agent's reasoning. Start from
 `00-focus.md` and the candidate's location; read outside them only to follow a reference.
 
 Everything you execute runs from the worktree using the interpreter, test command, and
 base URLs in `00-env.md`. Run only targeted tests: a probe or the focus file's tests for one
-candidate; never the full suite. Never start a server or container, and never call a port that
+candidate; never the full suite. Those targeted runs are light and take no test slot: never wait
+on one. Never start a server or container, and never call a port that
 `00-env.md` does not list. Data you create through the app carries your prefix.
 
 This agent never answers a decision (`answer_decision`): a question for the human goes in its
