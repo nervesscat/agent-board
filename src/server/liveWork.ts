@@ -204,8 +204,11 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
 
   // --- live now: an open span or wait, or an agent event (a heartbeat too) inside the window ---
   // A stalled ticket is silence, not work in flight: it goes to recentlyActive whatever is still open.
+  // Finished work is out too: a span an agent left open on a done or cancelled ticket is not work in
+  // flight, and without this it would read as live forever.
   const liveNow: LiveNowEntry[] = []
   for (const t of tickets) {
+    if (closed(t)) continue
     const timeline = timelineOf(t)
     const { spans, waits, wait, agents, phase, round } = holding(t, timeline)
     const heard = timeline.lastHeard

@@ -248,6 +248,33 @@ describe('live now', () => {
     expect(waited.agents).toEqual(['codex'])
     expect(waited.waitingFor).toMatchObject({ reason: 'lock', agent: '' })
   })
+
+  it('leaves a finished ticket out even when a span was never closed', () => {
+    const pid = project('live-finished')
+    // An agent crashed, or forgot the end: the span stays open on a ticket that is done.
+    const dead = ticket(pid, 'Closed with a span open', { status: 'done' })
+    event(pid, dead.id, {
+      kind: 'span_start',
+      phase: 'build',
+      agent: 'opencode/ticket-900',
+      at: iso(ago(5)),
+    })
+    const live = ticket(pid, 'Still being worked', { status: 'in_progress' })
+    event(pid, live.id, {
+      kind: 'span_start',
+      phase: 'build',
+      agent: 'opencode/ticket-901',
+      at: iso(ago(5)),
+    })
+
+    const payload = read(pid)
+    expect(payload.liveNow.map((x) => x.ticketId)).toEqual([live.id])
+    expect(payload.liveNow.map((x) => x.ticketId)).not.toContain(dead.id)
+    // Finished work is in neither list, and the live ticket is not quiet either.
+    const recentIds = payload.recentlyActive.map((x) => x.ticketId)
+    expect(recentIds).not.toContain(dead.id)
+    expect(recentIds).not.toContain(live.id)
+  })
 })
 
 describe('recently active, nothing running', () => {
