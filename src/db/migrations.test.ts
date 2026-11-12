@@ -1300,3 +1300,136 @@ describe('0046_drop_resume_note', () => {
     sqlite.close()
   })
 })
+
+describe('0047_widen_ticket_complexity', () => {
+  it('keeps every ticket at its level and every row that refers to it, and accepts max afterwards', () => {
+    const sqlite = databaseAt('0046_drop_resume_note')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('levels').lastInsertRowid,
+    )
+    const repo = Number(
+      sqlite
+        .prepare("INSERT INTO repos (project_id, name, repo_path) VALUES (?, 'api', '/code/api')")
+        .run(project).lastInsertRowid,
+    )
+    const insert = sqlite.prepare(
+      `INSERT INTO tickets (project_id, repo_id, parent_id, title, created_by, status, complexity, rank)
+       VALUES (@project, @repo, @parent, @title, 'claude', @status, @level, @rank)`,
+    )
+    const add = (title: string, level: string, extra: Record<string, unknown> = {}) =>
+      Number(
+        insert.run({
+          project,
+          repo: null,
+          parent: null,
+          title,
+          status: 'todo',
+          level,
+          rank: null,
+          ...extra,
+        }).lastInsertRowid,
+      )
+    const low = add('low', 'low')
+    const mid = add('mid', 'mid')
+    const high = add('high', 'high', { status: 'review', rank: 2 })
+    const lane = add('lane of high', 'high', { parent: high, repo })
+    // Written without a level, as the board writes one it was not given.
+    const plain = Number(
+      sqlite
+        .prepare("INSERT INTO tickets (project_id, title, created_by) VALUES (?, 'no level', 'claude')")
+        .run(project).lastInsertRowid,
+    )
+
+    // The rows that refer to a ticket, a table rebuild's cascade would take with it.
+    const impl = Number(
+      sqlite
+        .prepare('INSERT INTO tasks (ticket_id, text, position) VALUES (?, ?, ?)')
+        .run(high, 'Implementation', 0).lastInsertRowid,
+    )
+    sqlite
+      .prepare('INSERT INTO tasks (ticket_id, parent_id, text, position, done) VALUES (?, ?, ?, ?, ?)')
+      .run(high, impl, 'Write it', 0, 1)
+    const post = Number(
+      sqlite
+        .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+        .run(high, 'claude', 'Started.').lastInsertRowid,
+    )
+    sqlite
+      .prepare(
+        "INSERT INTO attachments (update_id, name, mime, size, stored_as, uploaded_by) VALUES (?, 'a.png', 'image/png', 1, 'x', 'claude')",
+      )
+      .run(post)
+    sqlite
+      .prepare(
+        "INSERT INTO comments (parent_type, parent_id, author, body) VALUES ('ticket', ?, 'enrique', 'Go on')",
+      )
+      .run(high)
+    const repos = sqlite.prepare(
+      'INSERT INTO ticket_repos (ticket_id, repo_id, branch, base_branch, pr_number, position) VALUES (?, ?, ?, ?, ?, ?)',
+    )
+    repos.run(high, repo, 'feat/high', 'dev', 12, 0)
+    repos.run(lane, repo, 'feat/lane', 'feat/high', null, 0)
+    sqlite
+      .prepare(
+        "INSERT INTO workspaces (ticket_id, repo_id, name, path) VALUES (?, ?, 'wt', '/code/api-feat')",
+      )
+      .run(high, repo)
+    sqlite
+      .prepare('INSERT INTO ticket_events (ticket_id, project_id, kind, agent, "by") VALUES (?, ?, ?, ?, ?)')
+      .run(high, project, 'heartbeat', 'claude', 'claude')
+    sqlite.prepare('INSERT INTO ticket_needs (ticket_id, needs_id) VALUES (?, ?)').run(high, low)
+
+    const rows = () => ({
+      tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all(),
+      tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
+      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
+      attachments: sqlite.prepare('SELECT * FROM attachments ORDER BY id').all(),
+      comments: sqlite.prepare('SELECT * FROM comments ORDER BY id').all(),
+      ticket_repos: sqlite.prepare('SELECT * FROM ticket_repos ORDER BY ticket_id, position').all(),
+      workspaces: sqlite.prepare('SELECT * FROM workspaces ORDER BY id').all(),
+      ticket_events: sqlite.prepare('SELECT * FROM ticket_events ORDER BY id').all(),
+      ticket_needs: sqlite.prepare('SELECT * FROM ticket_needs ORDER BY ticket_id').all(),
+    })
+    const before = rows()
+    expect(before.tickets).toHaveLength(5)
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    // Every ticket kept its id, its level and the rest of its columns, and so did each row that refers to one.
+    const after = rows()
+    expect(after).toEqual(before)
+    expect(
+      Object.fromEntries(
+        (after.tickets as { id: number; complexity: string }[]).map((t) => [t.id, t.complexity]),
+      ),
+    ).toEqual({ [low]: 'low', [mid]: 'mid', [high]: 'high', [lane]: 'high', [plain]: 'mid' })
+
+    // The widened check takes max, and still refuses anything outside the four, case included.
+    for (const level of ['low', 'mid', 'high', 'max']) {
+      sqlite.prepare('UPDATE tickets SET complexity = ? WHERE id = ?').run(level, mid)
+      expect(sqlite.prepare('SELECT complexity FROM tickets WHERE id = ?').get(mid)).toEqual({
+        complexity: level,
+      })
+    }
+    const setLevel = sqlite.prepare('UPDATE tickets SET complexity = ? WHERE id = ?')
+    for (const level of ['Max', 'maximum', 'extreme', ''])
+      expect(() => setLevel.run(level, mid)).toThrow(/CHECK constraint/)
+    expect(() =>
+      sqlite
+        .prepare(
+          "INSERT INTO tickets (project_id, title, created_by, complexity) VALUES (?, 'x', 'claude', 'max')",
+        )
+        .run(project),
+    ).not.toThrow()
+    expect(sqlite.prepare('SELECT complexity FROM tickets ORDER BY id DESC LIMIT 1').get()).toEqual({
+      complexity: 'max',
+    })
+    // Foreign keys are on again afterwards: the rebuilt table's rows are the parent its children point at.
+    expect(sqlite.pragma('foreign_keys', { simple: true })).toBe(1)
+    expect(() => sqlite.prepare("INSERT INTO tasks (ticket_id, text) VALUES (999999, 'x')").run()).toThrow(
+      /FOREIGN KEY/,
+    )
+    expect(sqlite.pragma('foreign_key_check')).toEqual([])
+    sqlite.close()
+  })
+})
