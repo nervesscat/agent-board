@@ -343,6 +343,81 @@ test('a clicked tab stays selected once its smooth scroll settles', async ({ pag
   await expectLanded(page, page.locator('#lanes'))
 })
 
+test('a tab order that changes during a click leaves the spy reading the page again', async ({
+  page,
+  api,
+  human,
+  agent,
+}) => {
+  const t = await longTicket(api, human, 'Sections whose order changes under a click')
+  await openLong(page, `/projects/${t.projectId}/features/${t.id}`)
+  const tabs = sections(page).getByRole('tab')
+  await expect(tabs).toHaveCount(4)
+  await expect(selectedTab(page)).toHaveText('Tasks')
+
+  // The page reads the ticket again on its own: on focus once its 5 s freshness is up, and every 10 s
+  // regardless. Hold those reads, and a summary written meanwhile adds the Summary tab when one lands.
+  let handed: () => void = () => {}
+  const release = new Promise<void>((resolve) => (handed = resolve))
+  let asked = false
+  await page.route(`**/api/tickets/${t.id}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    asked = true
+    await release
+    return route.continue()
+  })
+  // Five seconds since the page read the ticket make the next read on focus go out.
+  await page.waitForTimeout(5_200)
+  await ok(agent.put(`/api/tickets/${t.id}/summary`, { data: { body: 'What it does.' } }))
+  await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')))
+  await expect.poll(() => asked, { timeout: 15_000 }).toBe(true)
+
+  // Watch when the order changes and when the click's scroll ends, to know the change landed inside
+  // the hold the click takes while its smooth scroll runs.
+  const during = page.evaluate(
+    () =>
+      new Promise<{ order: number; end: number }>((resolve) => {
+        const list = document.querySelector('[aria-label="Ticket sections"]')!
+        let order: number | null = null
+        let end: number | null = null
+        const settle = () => {
+          if (order !== null && end !== null) resolve({ order, end })
+        }
+        const grown = new MutationObserver(() => {
+          if (list.querySelectorAll('[role="tab"]').length !== 5) return
+          order = performance.now()
+          grown.disconnect()
+          settle()
+        })
+        grown.observe(list, { childList: true, subtree: true })
+        window.addEventListener(
+          'scrollend',
+          () => {
+            end = performance.now()
+            settle()
+          },
+          { once: true },
+        )
+        // Never wait on the page forever if either never comes.
+        setTimeout(() => resolve({ order: order ?? -1, end: end ?? -1 }), 8_000)
+      }),
+  )
+  await sectionTab(page, 'Lanes').click()
+  handed()
+  await expect(tabs).toHaveCount(5)
+  const seen = await during
+  expect(seen.order, 'the order changed before the click scroll ended').toBeGreaterThan(0)
+  expect(seen.end, 'the click still scrolled the page').toBeGreaterThan(0)
+  expect(seen.order).toBeLessThan(seen.end)
+
+  // The click's scroll is over. From here the page alone moves: no click, and the spy reads again.
+  await page.waitForTimeout(500)
+  await scrollTo(page, 0)
+  await expect(selectedTab(page)).toHaveText('Summary')
+  await scrollSection(page, 'timeline', 6)
+  await expect(selectedTab(page)).toHaveText('Timeline')
+})
+
 test.describe('on a phone', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
 

@@ -2092,6 +2092,10 @@ function TicketSectionNav({ items }: { items: readonly { key: string; label: str
       window.removeEventListener('scrollend', settled)
       resized.disconnect()
       settleWhenScrolled.current = () => {}
+      // A new effect reads for a new set of sections, and the click that held this one may have been
+      // the one that changed them: its hold ends with the effect that took it, or the spy it gates
+      // would never read again.
+      clicked.current = null
     }
   }, [order])
 
