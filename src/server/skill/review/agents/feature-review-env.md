@@ -19,8 +19,18 @@ precisely; never fall back to a server or environment you did not start.
   temp dirs, database names).
 - `01-spec.md`: its **Runbook** section is your starting point; its criteria's methods say
   what to start.
+- `00-context.md`: the context pack, mandatory: the PR, the commits, the project's rule files,
+  the ticket's context, the changed files and their tests and callers, the decisions and their
+  answers, and the runbook. Read it first, with the spec.
 - `00-focus.md`: the changed files, their tests, their direct callers. Start from it; read
   outside it only to follow a reference from it.
+- `BUILD` (only when the caller gave `build=`): the build record its gate wrote: the head SHA,
+  the `.output-e2e` path and the ISO time. Compare its SHA with the commit under review.
+- `SLOTS` (only when the caller gave `slots=`): the folder holding the repo's heavy-run test
+  slots.
+- `REPO_ID` (only when the caller gave `repoId=`): the repo id the slot folders are named with
+  (`tests-<REPO_ID>-1` … `-N`, `tests-<REPO_ID>-full`). Fill it in and write the exact folders
+  into `00-env.md`, so every phase takes the same ones.
 - `NOTES`: the per-repo notes file path. Read it first if it exists; it records what
   earlier reviews learned about this machine (installed tools, taken ports, runbook
   corrections) and saves you from rediscovering it. Before you finish, append one dated
@@ -39,10 +49,15 @@ result, and the orchestrator asks the human.
    project uses (`requirements*.txt`, `pyproject.toml`, `poetry.lock`, `uv.lock`,
    `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `go.sum`, `Cargo.lock`, others),
    compare the file in `WORKTREE` with the same file in `MAIN`. If every manifest is
-   identical, reuse `MAIN`'s installed environment by absolute path (`MAIN/venv`,
-   `MAIN/.venv`, `MAIN/node_modules` via a junction or symlink into `WORKTREE`). If any
-   differs, install fresh inside `WORKTREE` (`python -m venv .venv` and install,
-   `npm ci`, or the project's own install command). Never install into `MAIN`.
+   identical, reuse `MAIN`'s installed environment: `MAIN/venv` and `MAIN/.venv` by absolute
+   path, and `MAIN/node_modules` as a hardlink copy into a **real directory**
+   (`cp -al MAIN/node_modules WORKTREE/node_modules`), never a symlink or a junction: a link
+   breaks the board's preview install, which cannot purge through one. Then
+   `pnpm install --offline` (or `--frozen-lockfile --offline`, or the project's offline
+   install) only when a lockfile differs from the prepared copy, never on every review. If any
+   manifest differs, install fresh inside `WORKTREE` (`python -m venv .venv` and install,
+   `npm ci`, or the project's own install command), or copy a prepared `node_modules` with
+   `cp -al` and install offline. Never install into `MAIN`.
 2. **Imports resolve to the worktree.** For Python, run from `WORKTREE`:
    `python -c "import <top package>; print(<top package>.__file__)"` with the chosen
    interpreter and confirm the path is inside `WORKTREE`. An editable install in a
@@ -80,9 +95,14 @@ result, and the orchestrator asks the human.
    when no criterion uses `run+http` or `browser`, no frontend when none uses `browser`, and
    only the data services the app or the tests need. Say in `00-env.md` what you left out.
 2. Establish the dependency environment (invariant 1) and the import proof (2).
-3. Allocate ports (3). Start supporting services (4), then the app (5). Reuse nothing
+3. **The build, once for this commit.** With `BUILD` given, read its head SHA: when it is the
+   commit under review, copy its `.output-e2e` in with `cp -al` and record `E2E_SKIP_BUILD=1` in
+   `00-env.md`, so the end-to-end run reuses it instead of building again; a different SHA is
+   stale, so ignore the record, build once here and record that. With no record, build once if a
+   criterion or the end-to-end run needs a built app. Nothing is reused across heads.
+4. Allocate ports (3). Start supporting services (4), then the app (5). Reuse nothing
    that was already running.
-4. Determine the exact test command that runs from `WORKTREE` with the chosen
+5. Determine the exact test command that runs from `WORKTREE` with the chosen
    interpreter, for example `cd WORKTREE && MAIN/venv/Scripts/python -m pytest tests/unit`.
    Run the fastest smoke test the runbook offers to confirm the command works.
    Then write the **scoped checks**: the commands that run only what the change touches,
@@ -98,18 +118,24 @@ result, and the orchestrator asks the human.
    CI runs the full suite on pull requests (the project's CI config, such as
    `.github/workflows/`): it is where the full suite is proven. When no CI does, write
    `none`: the review then runs the full suite locally.
-5. **Seed.** If the app is up and the project has a seed script or fixture loader, run it
+   Mark each command **heavy** or **light**: the end-to-end run, the full suite and any build
+   are heavy and take one of the `SLOTS` folders (the `-full` one first for the full suite);
+   the typecheck, lint, formatter, migration check and scoped unit run are light and take none.
+   Write the exact slot folder paths (repo id filled in: `tests-<REPO_ID>-1` … `-N` and the
+   `-full` one) and N into `00-env.md`, so every phase agent takes the same folders.
+6. **Seed.** If the app is up and the project has a seed script or fixture loader, run it
    against the review's data service so the UI and the API have accounts and data.
    Record the accounts and passwords it creates in `00-env.md`.
-6. **Frontend** (only when `FRONTEND` is given). If the UI repo has a branch named like
+7. **Frontend** (only when `FRONTEND` is given). If the UI repo has a branch named like
    the PR's head branch, create a worktree of it under `WORKDIR/fe`; otherwise use the
-   checkout as it is, read-only. Reuse its `node_modules` by junction or symlink when the
-   lockfile is identical, else install into the worktree. Start the dev server on a free
+   checkout as it is, read-only. Copy its `node_modules` with `cp -al` into a real directory
+   when the lockfile is identical (never a symlink or a junction), else install into the
+   worktree. Start the dev server on a free
    port from `PORT_RANGE` with its API base URL and auth-emulator URL pointing at the
    review backend and the review's emulator, passed as environment on the command line,
    never by editing the repo's env files. Poll the URL until it answers. Record the URL,
    the login recipe, and the PID.
-7. Write `00-env.md` and stop. Leave the servers running. Do not run the review's
+8. Write `00-env.md` and stop. Leave the servers running. Do not run the review's
    tests yourself beyond the smoke check.
 
 ## Output: `00-env.md`
@@ -121,6 +147,8 @@ result, and the orchestrator asks the human.
 - Commit: <sha>
 - Interpreter / runtime: <absolute path>, reused from MAIN | fresh install (reason)
 - Import proof: <command> printed <path>
+- Test slots: `<SLOTS>/tests-<REPO_ID>-1`, `<SLOTS>/tests-<REPO_ID>-2` … and `<SLOTS>/tests-<REPO_ID>-full` (N = 2), the exact folders with the repo id filled in: a heavy run holds one, a light one none; the `-full` one first for a full suite
+- Build: reused <build record path> at <sha>, `E2E_SKIP_BUILD=1` | built here (no record, or the record was at another head)
 
 ## Services
 | Service | Status | URL or port | Started by | Log |
@@ -137,12 +165,12 @@ result, and the orchestrator asks the human.
 - Smoke result: <one line>
 
 ## Scoped checks (run from the worktree)
-- Typecheck: <command, whole project>
-- Lint and format: <command on the changed files>
-- Migrations: <command> | none: no schema or migration changed
-- Unit tests: <command on the tests related to the changed files> | none related
-- End-to-end: <command on the spec files covering the changed pages or routes> | none: the diff touches no page or route
-- CI: <workflow> runs the full suite on pull requests | none: run the full suite locally
+- Typecheck: <command, whole project> (light: no slot)
+- Lint and format: <command on the changed files> (light: no slot)
+- Migrations: <command> | none: no schema or migration changed (light: no slot)
+- Unit tests: <command on the tests related to the changed files> | none related (light: no slot)
+- End-to-end: <command on the spec files covering the changed pages or routes> | none: the diff touches no page or route. Heavy: one test slot; with `E2E_SKIP_BUILD=1` it reuses the copied build
+- CI: <workflow> runs the full suite on pull requests | none: run the full suite locally (heavy: `tests-<repo id>-full` first)
 
 ## Unavailable
 - <service or capability>: <reason>. Criteria that need it must be recorded UNVERIFIED.
