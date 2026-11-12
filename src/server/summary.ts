@@ -8,7 +8,7 @@ import { activityOf } from '#/lib/workTimeline'
 import { dayBounds } from './activity'
 import { listActors } from './actors'
 import { today } from './daily'
-import { gist, listHumanThreads, listTickets } from './features'
+import { gist, listHumanThreads, listTickets, nextTask } from './features'
 import { pendingInstructionChanges } from './instructionsHistory'
 import { getProject } from './projects'
 import { refreshPrsInBackground } from './prs'
@@ -202,9 +202,14 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         .all()
     : []
   const taskText = new Map(taskRows.map((task) => [task.id, task.text]))
+  // Only the step a ticket (or lane) works next — its first open task with no open subtask — is one
+  // a blocked tag really stops. A blocked step further down stays counted on the ticket, not surfaced.
+  const ownTasks = new Map<number, typeof taskRows>()
+  for (const task of taskRows) ownTasks.set(task.ticketId, [...(ownTasks.get(task.ticketId) ?? []), task])
+  const nextId = new Map([...ownTasks].map(([id, own]) => [id, nextTask(own)?.id ?? null]))
   const order = new Map(live.map((id, i) => [id, i]))
   const blockedTasks = taskRows
-    .filter((task) => task.blocked && !task.done)
+    .filter((task) => task.blocked && !task.done && nextId.get(task.ticketId) === task.id)
     .sort((a, b) => order.get(a.ticketId)! - order.get(b.ticketId)!)
     .map((task) => {
       const t = byId.get(task.ticketId)!
@@ -331,6 +336,7 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         reserved: t.reserved,
         decisions: t.decisions,
         blockedTasks: t.blockedTasks,
+        blockedNext: t.blockedNext,
         rollup: t.rollup,
         lanes: t.lanes.total,
         lastPost: post,
