@@ -68,7 +68,14 @@ Then:
    `active` (`in_progress`) the stage work starts in (the project's `workStage`, else the first
    active stage), for any other kind the first stage of that kind. Below, `todo`, `in_progress`,
    `blocked`, `review`, `done` and `cancelled` mean exactly that. Its `agents` are the project's own agents (see
-   [The project's agents](#the-projects-agents)).
+   [The project's agents](#the-projects-agents)). Its `notes` are the project's short shared facts
+   (a `label` and a `body`, one fact each): **read them before starting**, so you do not rediscover
+   what someone already learned. When you learn something a future session must not rediscover — a
+   command, a path, a rule, a reminder — add it from your own learning with `add_note`, not only when
+   the human asks. Keep each note to one short fact (a label of a few words and a body of a few lines,
+   at most 500 characters), never a document: if it needs paragraphs it is a doc, not a note. The
+   other notes tools are `list_notes`, `update_note` and `delete_note`; a note's author, an
+   orchestrator or the human changes or removes it.
 3. `get_summary` with your `projectId`: where the project stands in one read (what waits on the
    human, in progress and since when, done today, next, and what carries over from before today).
 
