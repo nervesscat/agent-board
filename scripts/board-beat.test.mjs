@@ -210,11 +210,15 @@ describe('the interval', () => {
     const restore = withEnv({ BOARD_TOKEN: 'secret', BOARD_BEAT_MS: 'soon' })
     try {
       expect(parseArgs(args)).toEqual({
-        problem: expect.stringContaining('--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds'),
+        problem: expect.stringContaining(
+          '--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds',
+        ),
       })
       process.env.BOARD_BEAT_MS = '0'
       expect(parseArgs(args)).toEqual({
-        problem: expect.stringContaining('--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds'),
+        problem: expect.stringContaining(
+          '--interval (or BOARD_BEAT_MS) must be a whole number of milliseconds',
+        ),
       })
     } finally {
       restore()
