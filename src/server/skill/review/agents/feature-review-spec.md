@@ -14,8 +14,10 @@ intent is unclear you record a question instead of guessing.
 ## Input
 
 1. Repo root.
-2. Working dir containing `00-diff.patch` (the change) and `00-context.md` (PR body,
-   commit messages, ticket text, project rule files).
+2. Working dir containing `00-diff.patch` (the change) and `00-context.md`, the context pack:
+   PR title, body and URL, the commits, the project rule files, the ticket's context, the changed
+   files and their tests and callers, the decisions and their answers, and the runbook. Read it
+   first, and extend it as you work: every later phase reads that one file.
 3. `00-focus.md`: the changed files, their tests, their direct callers. Start from it; read
    outside it only to follow a reference from it.
 4. Output path.
@@ -85,3 +87,8 @@ Write to the output path, starting directly with the heading:
 ## Open questions
 - Q: ... Assume: ...
 ```
+
+Before you finish, write into `00-context.md` what you established and the later phases need: the
+changed files, their tests, their direct callers, each decision and its answer, and the runbook,
+each under its own heading. It is the pack the review started in Setup and the one every phase
+reads; never write a second context file.

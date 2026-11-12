@@ -8,7 +8,6 @@ import { z } from 'zod'
 
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
-import { useProjectPush } from '#/components/PushDot'
 import { tagTextClass } from '#/components/Tag'
 import { ArchivedList, type Placement, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
@@ -162,8 +161,6 @@ function Features() {
   })
   const search = (next: string) =>
     navigate({ search: (s) => ({ ...s, q: next || undefined }), replace: true })
-  const { data: pushData } = useProjectPush(id)
-  const push = useMemo(() => new Map(pushData?.tickets.map((t) => [t.id, t.push])), [pushData])
   // The tag picked narrows the Board and the List, searched or not; the archive shows them all.
   const tagged = (t: TicketRow) =>
     !tag || view === 'archived' || t.tags.some((x) => x.toLowerCase() === tag.toLowerCase())
@@ -174,12 +171,21 @@ function Features() {
   const listed = searching ? (found.data ?? []).filter(tagged) : shown
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div className="sm:min-w-32 sm:flex-1">
           <h1 className="text-xl font-semibold tracking-tight">Ongoing features</h1>
           <p className="text-sm text-muted-foreground">Tickets in flight, by stage.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:shrink-0">
+          {view !== 'archived' && (
+            <TagFilter
+              projectId={id}
+              // The rows on screen: those the search found, else the board's or the list's.
+              count={searching ? (found.data === undefined ? undefined : listed.length) : shown.length}
+              value={tag}
+              onChange={filterTag}
+            />
+          )}
           <Tabs value={view} onValueChange={(v) => pickView(v as View)}>
             <TabsList>
               <TabsTrigger value="board" aria-label="Board">
@@ -199,20 +205,8 @@ function Features() {
           <NewTicket projectId={id} />
         </div>
       </div>
-      {view !== 'archived' ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {view === 'list' && <TicketSearch q={q} onSearch={search} />}
-          <TagFilter
-            projectId={id}
-            // The rows on screen: those the search found, else the board's or the list's.
-            count={searching ? (found.data === undefined ? undefined : listed.length) : shown.length}
-            value={tag}
-            onChange={filterTag}
-          />
-        </div>
-      ) : (
-        <TicketSearch q={q} onSearch={search} />
-      )}
+      {/* The search of the List and the Archived tickets keeps its own row under the header. */}
+      {view !== 'board' && <TicketSearch q={q} onSearch={search} />}
       {searching ? (
         // A search not answered yet says nothing about its query: the rows kept from the last one
         // show, dimmed, or none at all: the skeleton.
@@ -239,7 +233,7 @@ function Features() {
                 restoring={restore.isPending ? restore.variables : undefined}
               />
             ) : (
-              <TicketList projectId={id} items={listed} push={push} />
+              <TicketList projectId={id} items={listed} />
             )}
           </div>
         )
@@ -257,12 +251,11 @@ function Features() {
       ) : isLoading ? (
         <Skeleton className="h-64" />
       ) : view === 'list' ? (
-        <TicketList projectId={id} items={shown} push={push} />
+        <TicketList projectId={id} items={shown} />
       ) : (
         <TicketBoard
           projectId={id}
           items={shown}
-          push={push}
           onMove={(ticketId, status) => move.mutate({ ticketId, status })}
           onPlace={placeBy}
           onArchiveAll={(status) => archiveAll.mutate(status)}

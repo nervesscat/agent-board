@@ -697,7 +697,8 @@ describe('0036_pr_left_as', () => {
 
     const prs = sqlite.prepare('SELECT * FROM prs').all() as Record<string, unknown>[]
     expect(prs.map((p) => p.left_as)).toEqual([null, null, null])
-    expect(prs.map(({ left_as: _l, ...rest }) => rest)).toEqual(before)
+    // A later migration adds the review request column.
+    expect(prs.map(({ left_as: _l, requested: _r, ...rest }) => rest)).toEqual(before)
     sqlite.close()
   })
 })
@@ -1301,9 +1302,9 @@ describe('0046_drop_resume_note', () => {
   })
 })
 
-describe('0047_widen_ticket_complexity', () => {
+describe('0050_widen_ticket_complexity', () => {
   it('keeps every ticket at its level and every row that refers to it, and accepts max afterwards', () => {
-    const sqlite = databaseAt('0046_drop_resume_note')
+    const sqlite = databaseAt('0049_annotated_attachments')
     const project = Number(
       sqlite.prepare('INSERT INTO projects (name) VALUES (?)').run('levels').lastInsertRowid,
     )

@@ -242,7 +242,9 @@ test("a post's actions are icons in a row under its text and files, shown on hov
   await expect(page.locator('html')).toHaveClass(/\bdark\b/)
   await remove.hover()
   const destructive = await themeColor(page, '--destructive')
-  await expect.poll(() => remove.evaluate((el) => getComputedStyle(el).color)).toBe(destructive)
+  await expect
+    .poll(() => remove.locator('svg.trash-icon').evaluate((el) => getComputedStyle(el).color))
+    .toBe(destructive)
   await edit.hover()
   const foreground = await themeColor(page, '--foreground')
   await expect.poll(() => edit.evaluate((el) => getComputedStyle(el).color)).toBe(foreground)

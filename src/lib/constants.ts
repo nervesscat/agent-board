@@ -77,7 +77,7 @@ export const AGENT_CLIENTS = ['claude', 'codex', 'opencode'] as const
 export type AgentClient = (typeof AGENT_CLIENTS)[number]
 
 /**
- * Which copy of the review skills the Connect an agent and Team pages track: the user-wide `~/.claude` on the board's
+ * Which copy of the review skills the Connect an agent page tracks: the user-wide `~/.claude` on the board's
  * machine (the first, the default until one is picked), or each repo's own `.claude`.
  */
 export const SKILLS_TRACKING = ['global', 'repo'] as const

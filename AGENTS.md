@@ -133,12 +133,14 @@ http_headers = { Authorization = "Bearer <token>" }
    that task or subtask blocked, `update_task` with `blocked: true` and `blockedReason` saying what
    they must do (or `{text, blocked, blockedReason}` items on `add_tasks`), and keep working on the
    rest. Every task carries `blocked` and `blockedReason` (`''` when none); a ticket's
-   `blockedTasks` counts its blocked tasks, its lanes' included, and its card shows them; the
-   summary lists each one under Needs you (`needsYou.blockedTasks`). A blocked task still counts as
-   open and does not move the ticket. Ticking it done clears the tag (on the subtasks a tick
-   reaches and on a parent its last subtask ticks, too); `blocked: false` clears it once resolved.
-   Tagging a done task reopens it. Move the whole ticket to `blocked` only when nothing else can go
-   on (step 6).
+   `blockedTasks` counts its blocked tasks, its lanes' included, and `blockedNext` says whether one
+   of them is the step to work next (the first open task with no open subtask, its lanes' own next
+   steps counting too). Only that next step shows on its card and in the summary's Needs you
+   (`needsYou.blockedTasks`); one further down the order surfaces once the steps before it are done.
+   A blocked task still counts as open and does not move the ticket. Ticking it done clears the tag
+   (on the subtasks a tick reaches and on a parent its last subtask ticks, too); `blocked: false`
+   clears it once resolved. Tagging a done task reopens it. Move the whole ticket to `blocked` only
+   when nothing else can go on (step 6).
 
 4. **Parallel work goes in lanes**: when parts of a ticket run at once (subagents, worktrees, other
    agents), `create_ticket` with `parentId` = the ticket for each part, with its own `branch` and

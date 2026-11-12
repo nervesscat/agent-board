@@ -97,6 +97,10 @@ export function parseConfig(text) {
 export const CONFIG_TEMPLATE = `# The board's settings, read each time the app starts (KEY=value, as in the repo's .env).
 # A variable set in the environment wins over this file.
 
+# The address of a board that runs on another machine, e.g. https://pc.tail1.ts.net: set, the app starts no
+# board of its own, writes nothing here and opens that one. Blank: the board runs on this machine.
+# REMOTE_BOARD_URL=
+
 # Where the board listens, on 127.0.0.1 only. The window opens http://localhost:<PORT>/.
 # PORT=47100
 
@@ -184,18 +188,58 @@ export function readConfigFile(home, template = CONFIG_TEMPLATE) {
 
 /**
  * @typedef {object} Settings
- * @property {number} port
- * @property {string} dataDir
- * @property {string} url The board as the window opens it.
- * @property {Env} serverEnv The environment the built server starts in.
+ * @property {'local' | 'remote'} mode `'remote'` when REMOTE_BOARD_URL is set: the app shows that board
+ *   and starts nothing on this machine (no server, no port, no data folder). `'local'` otherwise.
+ * @property {number} port The board's port on this machine: local mode only, and not checked in remote
+ *   mode, which never binds it.
+ * @property {string} dataDir The board's data folder: local mode only, and never made in remote mode.
+ * @property {string} url The board as the window opens it: the remote address, or `http://localhost:<port>`.
+ * @property {Env} serverEnv The environment the built server starts in: unused in remote mode.
  * @property {string} configPath The config file's PATH ('' when it sets none): on Linux its folders go
  *   first in the server's PATH, whatever the environment's is (withLoginPath).
  */
 
 /**
+ * The board's address, as REMOTE_BOARD_URL gives it: an absolute http(s) URL with a host and nothing
+ * after it, normalised to its origin (`https://pc.tail1.ts.net/` is `https://pc.tail1.ts.net`). A port
+ * and a loopback host are fine (a board reached through an SSH forward), and so is any path-free
+ * address the board accepts as its entrance. Anything else is a setting the app cannot use, refused
+ * like a bad PORT so the settings dialog names it.
+ * @param {string} value
+ */
+export function boardAddress(value) {
+  const given = value.trim()
+  const invalid = () =>
+    new SettingsError(
+      `REMOTE_BOARD_URL must be an http or https address with a host and no path, ` +
+        `like https://pc.tail1.ts.net, got "${given}"`,
+    )
+  /** @type {URL} */
+  let url
+  try {
+    url = new URL(given)
+  } catch {
+    throw invalid()
+  }
+  if (
+    (url.protocol !== 'http:' && url.protocol !== 'https:') ||
+    !url.hostname ||
+    url.pathname !== '/' ||
+    url.search ||
+    url.hash ||
+    url.username ||
+    url.password
+  )
+    throw invalid()
+  return url.origin
+}
+
+/**
  * The port, the data folder and the server's environment: the environment wins over the config file,
  * which wins over the defaults (port 47100, `<dataHome>/data`). The board always runs as production on
  * 127.0.0.1, whatever either says: it always signs in with a passkey, and AUTH=off is refused as it starts.
+ * A REMOTE_BOARD_URL makes it a board on another machine instead: the settings still read the port and
+ * the data folder, but the app uses neither (main.mjs).
  * @param {{ env: Env, file: Record<string, string>, home: string, dataHome?: string }} input `dataHome`
  *   is appFolders' data folder, where the data folder and a relative DATA_DIR are (`home` when left out).
  * @returns {Settings}
@@ -203,13 +247,16 @@ export function readConfigFile(home, template = CONFIG_TEMPLATE) {
 export function resolveSettings({ env, file, home, dataHome = home }) {
   /** @param {string} key */
   const pick = (key) => env[key]?.trim() || file[key]?.trim() || ''
+  const remote = pick('REMOTE_BOARD_URL')
   const rawPort = pick('PORT')
   const port = rawPort ? Number(rawPort) : DEFAULT_PORT
-  if (!Number.isInteger(port) || port < 1 || port > 65535)
+  // A local board needs its port; a remote one never binds it, so a PORT in the file is no reason for
+  // the app to refuse to open the remote board.
+  if (!remote && (!Number.isInteger(port) || port < 1 || port > 65535))
     throw new SettingsError(`PORT must be a whole number from 1 to 65535, got "${rawPort}"`)
   const rawData = pick('DATA_DIR')
   const dataDir = rawData ? expandPath(rawData, dataHome) : path.join(dataHome, 'data')
-  const url = `http://localhost:${port}`
+  const url = remote ? boardAddress(remote) : `http://localhost:${port}`
   /** @type {Env} */
   const serverEnv = {
     ...file,
@@ -224,7 +271,14 @@ export function resolveSettings({ env, file, home, dataHome = home }) {
     BOARD_URL: pick('BOARD_URL') || url,
   }
   for (const key of ['DEV_HUMAN', 'TEST_HUMAN', 'BOARD_DATA_COPY']) delete serverEnv[key]
-  return { port, dataDir, url, serverEnv, configPath: file.PATH?.trim() ?? '' }
+  return {
+    mode: remote ? 'remote' : 'local',
+    port,
+    dataDir,
+    url,
+    serverEnv,
+    configPath: file.PATH?.trim() ?? '',
+  }
 }
 
 /**

@@ -26,6 +26,9 @@ const boardEnv = (port: number, baseURL: string, dataDir: string) => ({
   NITRO_PORT: String(port),
   BOARD_URL: baseURL,
   DATA_DIR: dataDir,
+  // The board's own home, so the board skill's install lands in the run's folder, never the real home.
+  HOME: env.home,
+  USERPROFILE: env.home,
   CLAUDE_HOME: env.claudeHome,
   // OpenCode's config sources this run controls: its global folder, and no $OPENCODE_CONFIG of the shell.
   XDG_CONFIG_HOME: env.opencodeConfigHome,
