@@ -70,6 +70,7 @@ import * as settingsHistory from './reportSettingsHistory'
 import { reportsOverview } from './reportsOverview'
 import * as repos from './repos'
 import * as reviews from './reviews'
+import * as runReports from './runReports'
 import { ApiRouter } from './router'
 import * as stages from './stages'
 import { fileStore, parseRange } from './storage'
@@ -444,6 +445,8 @@ const AgentBody = z.object({
   instructions: Instructions.optional(),
   // For the orchestrator: when to delegate to this agent, what to give it, what comes back.
   delegation: Instructions.optional(),
+  // How a run of it reports back: the template it fills in after each run (the common part when left out).
+  reportTemplate: Instructions.optional(),
   // An upload from POST /api/uploads, shown as the agent's picture.
   avatarId: z.number().int().nullable().optional(),
 })
@@ -1190,6 +1193,28 @@ api.post('/api/projects/:id/reviews/results', async ({ request, params, actor })
   return json(reviews.postResult(id(params), body, actor), 201)
 })
 api.get('/api/reviews/results/:id', ({ params }) => json(reviews.getResult(id(params))))
+
+// --- run reports: how each subagent run went, written before it hands back (runReports.ts) ---
+// ?agent=&ticketId=&round=&limit= narrow the project's list (newest first, each with its ticket's title).
+api.get('/api/projects/:id/run-reports', ({ params, url }) => {
+  const q = url.searchParams
+  const num = (k: string) => (q.get(k) ? intParam(q.get(k)!, k) : undefined)
+  return json(
+    runReports.listReports(id(params), Math.min(num('limit') ?? 60, 200), {
+      agent: q.get('agent') || undefined,
+      ticketId: num('ticketId'),
+      round: num('round'),
+    }),
+  )
+})
+api.post('/api/projects/:id/run-reports', async ({ request, params, actor }) => {
+  const body = await readJson(request, runReports.RunReportBody)
+  return json(runReports.writeReport(id(params), body, actor), 201)
+})
+// One report in full, scoped to its project: another project's is a 404.
+api.get('/api/projects/:id/run-reports/:reportId', ({ params }) =>
+  json(runReports.getReport(id(params), id(params, 'reportId'))),
+)
 
 // --- summary: what waits on the human, in progress, done today, next, carrying over ---
 // ?projectId= for one project; every project otherwise, one block each. `actor` names who asked, for the
