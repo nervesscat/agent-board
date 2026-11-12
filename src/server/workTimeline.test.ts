@@ -298,7 +298,11 @@ describe('the agent tools', () => {
     const beat = await tool('heartbeat', { projectId: pid, ticketId: t.id })
     const row = agentEvents(t.id)[0]!
     expect(row.kind).toBe('heartbeat')
-    expect(beat).toEqual({ at: row.at, lastSignalAt: row.at })
+    expect(beat).toEqual({
+      at: row.at,
+      lastSignalAt: row.at,
+      leaseUntil: new Date(Date.parse(row.at) + 10 * MIN).toISOString(),
+    })
   })
 })
 
@@ -370,6 +374,24 @@ describe('delegated waits, lastHeard and activity', () => {
       },
       lastClosedSpan: null,
       now: expect.any(String),
+      liveness: {
+        state: 'working',
+        agent: AGENT,
+        phase: 'build',
+        since: started.at,
+        lastSignalAt: expect.any(String),
+        lastWordAt: expect.any(String),
+        silentMinutes: 0,
+        spans: [
+          {
+            phase: 'build',
+            agent: AGENT,
+            since: started.at,
+            lastWordAt: expect.any(String),
+            silentMinutes: 0,
+          },
+        ],
+      },
     })
     expect(span.spanId).toBe(started.id)
     const overview = (await tool('get_summary', { projectId: pid })).projects[0]
@@ -525,7 +547,7 @@ describe('the stalled flag', () => {
     expect((await row()).stalled).toBeNull()
   })
 
-  it('shows on list_tickets and get_ticket, which also carries the work and the open spans', async () => {
+  it('a run killed mid-span reads lost on list_tickets and get_ticket, and in lostContact not stalled', async () => {
     const pid = newProject()
     const t = activeTicket(pid)
     const span = await tool('start_span', { projectId: pid, ticketId: t.id, phase: 'build' })
@@ -533,18 +555,117 @@ describe('the stalled flag', () => {
     const [row] = (await tool('list_tickets', { projectId: pid })).filter(
       (r: { id: number }) => r.id === t.id,
     )
-    expect(row.stalled).toMatchObject({ minutes: 31, since: row.lastSignalAt })
+    // The lease ran out with the span still open: the agent is gone, which is not a stall.
+    expect(row.stalled).toBeNull()
+    expect(row.liveness).toMatchObject({
+      state: 'lost',
+      agent: AGENT,
+      phase: 'build',
+      lastSignalAt: row.lastSignalAt,
+      lastWordAt: expect.any(String),
+      silentMinutes: 31,
+      spans: [{ phase: 'build', agent: AGENT }],
+    })
 
     const full = await tool('get_ticket', { ticketId: t.id })
-    expect(full.stalled).toEqual(row.stalled)
+    expect(full.stalled).toBeNull()
     expect(full.work).toMatchObject({
-      stalled: row.stalled,
+      liveness: {
+        state: 'lost',
+        agent: AGENT,
+        phase: 'build',
+        lastSignalAt: row.lastSignalAt,
+        silentMinutes: 31,
+      },
       lastSignalAt: row.lastSignalAt,
+      lastWordAt: expect.any(String),
       open: { spans: [expect.objectContaining({ id: span.spanId, phase: 'build' })], waits: [] },
     })
     expect(full.work.totals.workingMs).toBeGreaterThanOrEqual(31 * MIN - 1000)
     const rest = await call('GET', `/api/tickets/${t.id}`)
     expect(rest.body.work.open.spans).toHaveLength(1)
+
+    // Needs you is the human's turn: the lost run has its own block, outside it and its total.
+    const summary = (await tool('get_summary', { projectId: pid })).projects[0]
+    expect(summary.needsYou.stalled).toEqual([])
+    expect(summary.lostContact).toMatchObject([
+      {
+        ticketId: t.id,
+        agent: AGENT,
+        phase: 'build',
+        lastSignalAt: row.lastSignalAt,
+        lastWordAt: expect.any(String),
+        spans: [{ phase: 'build', agent: AGENT }],
+      },
+    ])
+    expect(summary.needsYou.total).toBe(0)
+  })
+
+  it("an agent post refreshes the lease; a person's post does not prove the run is alive", async () => {
+    const pid = newProject()
+    const { db, schema } = dbm
+    const posted = activeTicket(pid, 'posted')
+    await tool('start_span', { projectId: pid, ticketId: posted.id, phase: 'review' })
+    age(posted.id, 49)
+    // The post comes now, well after the span opened: it is the lease.
+    db.insert(schema.updates)
+      .values({ ticketId: posted.id, author: AGENT, body: 'verify: 25/25 pass', progress: true })
+      .run()
+    const rows = async (id: number) =>
+      (await tool('list_tickets', { projectId: pid })).find((r: { id: number }) => r.id === id)
+
+    const live = await rows(posted.id)
+    expect(live.liveness).toMatchObject({ state: 'working', agent: AGENT, phase: 'review' })
+    expect(live.stalled).toBeNull()
+
+    const quiet = activeTicket(pid, 'quiet')
+    await tool('start_span', { projectId: pid, ticketId: quiet.id, phase: 'review' })
+    age(quiet.id, 49)
+    db.insert(schema.updates)
+      .values({ ticketId: quiet.id, author: HUMAN, body: 'any news?', progress: false })
+      .run()
+    const lost = await rows(quiet.id)
+    expect(lost.liveness).toMatchObject({ state: 'lost', silentMinutes: 49 })
+    expect(lost.stalled).toBeNull()
+  })
+
+  it('waits on the human from each fact: a human wait, a pending decision and an open blocked task', async () => {
+    const pid = newProject()
+    const { db, schema } = dbm
+    const byWait = activeTicket(pid, 'wait')
+    await tool('start_wait', { projectId: pid, ticketId: byWait.id, reason: 'human' })
+    const byDecision = activeTicket(pid, 'decision')
+    db.insert(schema.updates)
+      .values({
+        ticketId: byDecision.id,
+        author: AGENT,
+        body: 'Which cache?',
+        decision: [{ label: 'Redis' }, { label: 'Memory' }],
+      })
+      .run()
+    const byTask = activeTicket(pid, 'task')
+    const [task] = features.addTasks(byTask.id, ['Get the API key'], AGENT)
+    features.updateTask(task!.id, { blocked: true, blockedReason: 'the human gets the key' }, AGENT)
+    for (const t of [byWait, byDecision, byTask]) age(t.id, 60)
+    // Their events and posts are old too: only the human facts keep them from reading lost or stalled.
+    db.update(schema.updates)
+      .set({ createdAt: new Date(Date.now() - 60 * MIN).toISOString() })
+      .where(eq(schema.updates.ticketId, byDecision.id))
+      .run()
+
+    const rows = (await tool('list_tickets', { projectId: pid })) as {
+      id: number
+      liveness: { state: string } | null
+      stalled: unknown
+    }[]
+    for (const t of [byWait, byDecision, byTask]) {
+      const row = rows.find((r) => r.id === t.id)!
+      expect(row.liveness?.state, `#${t.id}`).toBe('waiting')
+      expect(row.stalled).toBeNull()
+    }
+    const summary = (await tool('get_summary', { projectId: pid })).projects[0]
+    expect(summary.needsYou.stalled).toEqual([])
+    expect(summary.lostContact).toEqual([])
   })
 
   it('is not raised in a blocked or review stage, nor while waiting on the human', async () => {
@@ -758,5 +879,60 @@ describe('the docs and prompts', () => {
     ] as const)
       for (const word of ['heartbeat', 'start_span', 'start_wait', 'handoff'])
         expect(text.includes(word), `${name} names ${word}`).toBe(true)
+  })
+
+  it('tell agents the lease, the four states and the runtime beat', () => {
+    const mcp = fs.readFileSync(path.join(root, 'src/server/mcp.ts'), 'utf8')
+    const instructions = mcp.slice(mcp.indexOf('const INSTRUCTIONS'), mcp.indexOf('const STATUS'))
+    // The model's words are the board's own docs and served skill; the review skills' texts are out of
+    // this change, and still carry their heartbeat lines (the test above).
+    for (const f of ['AGENTS.md', 'README.md', 'src/server/skill/board.md']) {
+      const text = fs.readFileSync(path.join(root, f), 'utf8')
+      for (const word of ['Lost contact', 'Stalled', 'Working', 'Waiting on you'])
+        expect(text.includes(word), `${f} names ${word}`).toBe(true)
+      expect(/lease/i.test(text), `${f} says the lease`).toBe(true)
+    }
+    for (const word of ['Lost contact', 'Stalled', 'Working', 'Waiting on you'])
+      expect(instructions.includes(word), `INSTRUCTIONS names ${word}`).toBe(true)
+    expect(/lease/i.test(instructions), 'INSTRUCTIONS says the lease').toBe(true)
+    // The served skill and the repo docs name the beater the runtime runs.
+    for (const f of ['src/server/skill/board.md', 'AGENTS.md', 'README.md'])
+      expect(fs.readFileSync(path.join(root, f), 'utf8'), `${f} names the beater`).toContain('board-beat')
+    // The MCP tool texts say an open span with an expired lease is Lost contact, never stalled.
+    for (const name of ['heartbeat', 'get_summary', 'get_ticket', 'list_tickets']) {
+      const start = mcp.indexOf(`'${name}'`)
+      expect(start, `the ${name} tool`).toBeGreaterThan(-1)
+      const text = mcp.slice(start, start + 4000)
+      expect(text, `the ${name} tool describes liveness`).toMatch(/Lost contact|liveness/)
+    }
+    expect(mcp).toContain('an open span whose lease expired reads Lost contact')
+  })
+
+  it('serve the new model in the skill over both transports, and the beater at its route', async () => {
+    for (const transport of ['mcp', 'rest']) {
+      const res = await handle(
+        new Request(`http://localhost/api/agent-setup/skill?client=claude&transport=${transport}`, {
+          headers: { authorization: 'Bearer gate_test' },
+        }),
+      )
+      expect(res.status).toBe(200)
+      const text = await res.text()
+      for (const word of ['Lost contact', 'Stalled', 'Working', 'Waiting on you'])
+        expect(text.includes(word), `${transport} skill names ${word}`).toBe(true)
+      expect(text).toMatch(/lease/i)
+      expect(text).toContain('board-beat')
+      expect(text).toMatch(/every two minutes/)
+    }
+    const res = await handle(
+      new Request('http://localhost/api/agent-setup/board-beat', {
+        headers: { authorization: 'Bearer gate_test' },
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-disposition')).toContain('board-beat.mjs')
+    const script = await res.text()
+    expect(script).toContain('--project')
+    expect(script).toContain('--ticket')
+    expect(script).toContain('/events')
   })
 })

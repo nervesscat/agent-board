@@ -225,8 +225,9 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
   const timelines = timelinesFor(tickets, now)
   const stalled = tickets
     .flatMap((t) => {
+      const state = timelines.get(t.id)!.timeline.liveness?.state
       const s = timelines.get(t.id)!.timeline.stalled
-      return s
+      return state === 'stalled' && s
         ? [
             {
               ticketId: t.id,
@@ -243,6 +244,31 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
             },
           ]
         : []
+    })
+    .sort((a, b) => Date.parse(a.lastSignalAt) - Date.parse(b.lastSignalAt))
+  // A run whose lease expired with its span still open: the agent is gone, which is not the human's turn.
+  // It has its own block, outside Needs you, and is not counted in `needsYou.total`.
+  const lostContact = tickets
+    .flatMap((t) => {
+      const l = timelines.get(t.id)!.timeline.liveness
+      if (l?.state !== 'lost') return []
+      return [
+        {
+          ticketId: t.id,
+          title: t.title,
+          status: t.status,
+          assignee: t.assignee,
+          parent: parentOf(t),
+          agent: l.agent,
+          phase: l.phase,
+          since: l.since,
+          lastSignalAt: l.lastSignalAt,
+          lastWordAt: l.lastWordAt,
+          silentMinutes: l.silentMinutes,
+          spans: l.spans,
+          activity: activityOf(timelines.get(t.id)!.timeline),
+        },
+      ]
     })
     .sort((a, b) => Date.parse(a.lastSignalAt) - Date.parse(b.lastSignalAt))
   const reviews = tickets
@@ -341,6 +367,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         // Handed off for review, it waits on the human rather than on its own posts.
         // Active and silent past the project's threshold (the work timeline's rule).
         stalled: !!timelines.get(t.id)!.timeline.stalled,
+        // What the ticket is doing now, with the per-agent facts behind it.
+        liveness: timelines.get(t.id)!.timeline.liveness,
         // The open spans and waits, and who was last heard from (the same read as `stalled`).
         activity: activityOf(timelines.get(t.id)!.timeline),
         stale:
@@ -465,6 +493,8 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         stalled.length,
     },
     inProgress: progress.filter((t) => t.kind !== 'review'),
+    // Lost contact: outside Needs you and its count (the facts are per agent, not per ticket).
+    lostContact,
     doneToday: { tickets: doneTickets, prs: closedPrs, activity },
     next: {
       stage: nextStage ? { key: nextStage.key, name: nextStage.name } : null,
