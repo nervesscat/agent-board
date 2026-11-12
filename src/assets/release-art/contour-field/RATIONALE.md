@@ -25,7 +25,8 @@ seed, then set the terrain:
 | the version                                                                | seed         | peak positions, aspect, rotation, warp phases, the grain's turbulence seed                                            |
 
 Nothing else is random at render time. The seed is the FNV-1a hash of `contour-field/<version>`, so
-the same version and notes write the same bytes on every machine and every run.
+the same version and notes write the same bytes on every run; the test regenerates the committed
+pieces and compares them byte for byte.
 
 ## The three pieces
 

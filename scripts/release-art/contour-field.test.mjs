@@ -1,16 +1,29 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const ROOT = new URL('../../', import.meta.url).pathname
+import { planPiece, readThemes } from './contour-field.mjs'
+
+const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const SCRIPT = join(ROOT, 'scripts/release-art/contour-field.mjs')
 const COMMITTED = join(ROOT, 'src/assets/release-art/contour-field')
 const BUDGET = 150 * 1024
+const TIMEOUT = 60_000
 
 function generate(out, extra = []) {
-  execFileSync(process.execPath, [SCRIPT, '--out', out, ...extra], { cwd: ROOT })
+  return execFileSync(process.execPath, [SCRIPT, '--out', out, ...extra], { cwd: ROOT, encoding: 'utf8' })
+}
+
+function failure(args) {
+  try {
+    execFileSync(process.execPath, [SCRIPT, ...args], { cwd: ROOT, encoding: 'utf8', stdio: 'pipe' })
+  } catch (error) {
+    return String(error.stderr)
+  }
+  return ''
 }
 
 function pieceFiles(dir) {
@@ -19,8 +32,14 @@ function pieceFiles(dir) {
     .sort()
 }
 
+function planFor(notes) {
+  const version = 'v9.9.9'
+  const seed = 123456789
+  return planPiece(version, readThemes(notes), seed)
+}
+
 describe('release artwork: contour field', () => {
-  it('writes the same bytes on every run', { timeout: 60_000 }, () => {
+  it('writes the same bytes on every run', { timeout: TIMEOUT }, () => {
     const first = mkdtempSync(join(tmpdir(), 'contour-field-a-'))
     const second = mkdtempSync(join(tmpdir(), 'contour-field-b-'))
     generate(first)
@@ -36,7 +55,7 @@ describe('release artwork: contour field', () => {
     ).toBe(true)
   })
 
-  it('matches the pieces committed beside the app', { timeout: 60_000 }, () => {
+  it('matches the pieces committed beside the app', { timeout: TIMEOUT }, () => {
     const fresh = mkdtempSync(join(tmpdir(), 'contour-field-committed-'))
     generate(fresh)
 
@@ -49,12 +68,18 @@ describe('release artwork: contour field', () => {
     ).toBe(true)
   })
 
-  it('keeps every piece 16:9, in two variants under the size budget', () => {
+  it('keeps every piece 16:9, self-contained and under the size budget', () => {
     for (const file of pieceFiles(COMMITTED)) {
       const svg = readFileSync(join(COMMITTED, file), 'utf8')
       expect(svg).toMatch(/viewBox="0 0 1600 900"/)
       expect(svg).toMatch(/width="1600" height="900"/)
+      expect(svg).toMatch(/role="img"/)
+      expect(svg).toContain('<title')
+      expect(svg).toContain('<desc')
       expect(Buffer.byteLength(svg)).toBeLessThan(BUDGET)
+      // Nothing that loads, runs, or needs a network, and no text drawn inside the artwork.
+      expect(svg).not.toMatch(/<script|<image|<use|<foreignObject|<text|xlink|href=/)
+      expect(svg.match(/https?:\/\/[^"' ]+/g)).toEqual(['http://www.w3.org/2000/svg'])
     }
     for (const version of ['v0.2.2', 'v0.2.3', 'v0.2.4']) {
       expect(pieceFiles(COMMITTED)).toContain(`${version}-dark.svg`)
@@ -62,7 +87,18 @@ describe('release artwork: contour field', () => {
     }
   })
 
-  it('makes a piece for a release it has never seen', { timeout: 60_000 }, () => {
+  it('reads a release as its themes', () => {
+    const wayfinding = readThemes('* Move the palette\n* Remove the menu\n* Split the settings\n')
+    const precision = readThemes('* Focus rings\n* Cache the proxy\n* Keep the clock exact\n')
+
+    expect(wayfinding.wayfinding).toBeGreaterThan(wayfinding.precision)
+    expect(precision.precision).toBeGreaterThan(precision.wayfinding)
+    expect(planFor('* Move the palette\n* Remove the menu\n* Split the settings\n').corridor).toBe(true)
+    expect(planFor('* Focus rings\n* Cache the proxy\n* Keep the clock exact\n').ridge).toBe(true)
+    expect(planFor('* Focus rings\n* Cache the proxy\n* Keep the clock exact\n').corridor).toBe(false)
+  })
+
+  it('makes a piece for a release it has never seen, without a manifest', { timeout: TIMEOUT }, () => {
     const dir = mkdtempSync(join(tmpdir(), 'contour-field-new-'))
     const notes = join(dir, 'v9.9.9.md')
     writeFileSync(
@@ -80,14 +116,20 @@ describe('release artwork: contour field', () => {
     generate(dir, ['--version', 'v9.9.9', '--notes', notes])
 
     expect(pieceFiles(dir)).toEqual(['v9.9.9-dark.svg', 'v9.9.9-light.svg'])
-    const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
-    expect(manifest.releases).toHaveLength(1)
-    // Wayfinding notes clear a corridor through the field; the next release is made, not drawn.
-    expect(manifest.releases[0].field.corridor).toBe(true)
-    expect(manifest.releases[0].files).toEqual({
-      light: 'v9.9.9-light.svg',
-      dark: 'v9.9.9-dark.svg',
-    })
+    expect(existsSync(join(dir, 'manifest.json'))).toBe(false)
+  })
+
+  it('refuses flags with no value instead of writing into the series', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'contour-field-flags-'))
+
+    expect(failure(['--out'])).toContain('--out needs a value')
+    expect(failure(['--out', '', '--version', 'v1.0.0', '--notes', join(dir, 'notes.md')])).toContain(
+      '--out needs a value',
+    )
+    expect(failure(['--version', 'v1.0.0', '--notes'])).toContain('--notes needs a value')
+    expect(failure(['--version', 'v1.0.0'])).toContain('--version and --notes go together')
+    expect(failure(['--notes', join(dir, 'notes.md')])).toContain('--version and --notes go together')
+    expect(failure(['--bogus'])).toContain('Unknown argument: --bogus')
   })
 
   it('gives different releases visibly different fields', () => {

@@ -15,11 +15,12 @@
 //     --notes scripts/release-art/notes/v0.3.0.md --out /tmp/art
 //
 // A new release needs nothing but its notes: drop `gh release view vX.Y.Z --json body --jq .body`
-// into scripts/release-art/notes/vX.Y.Z.md and run the first command again.
+// into scripts/release-art/notes/vX.Y.Z.md and run the first command again. `--version` renders one
+// release for a look; only the full run writes the series manifest.
 
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const NOTES_DIR = join(ROOT, 'scripts/release-art/notes')
@@ -196,7 +197,7 @@ function countStems(body, stems) {
   return total
 }
 
-function readThemes(notes) {
+export function readThemes(notes) {
   const body = notes.toLowerCase()
   const bullets = (body.match(/^\s*[*+-]\s/gm) || []).length || 1
   const scale = Math.sqrt(bullets)
@@ -216,7 +217,7 @@ function clamp(value, low, high) {
   return Math.min(high, Math.max(low, value))
 }
 
-function planPiece(version, themes, seed) {
+export function planPiece(version, themes, seed) {
   const random = mulberry32(seed)
   const jitter = (amount) => (random() - 0.5) * amount
 
@@ -353,8 +354,8 @@ function makeTerrain(plan, seed) {
 }
 
 function fieldGrid(sample) {
-  const nx = Math.floor(WIDTH / CELL) + 1
-  const ny = Math.floor(HEIGHT / CELL) + 1
+  const nx = Math.ceil(WIDTH / CELL) + 1
+  const ny = Math.ceil(HEIGHT / CELL) + 1
   const values = new Float64Array(nx * ny)
 
   let low = Infinity
@@ -798,11 +799,17 @@ function variantsFor(plan) {
 
 function parseArgs(argv) {
   const args = { out: null, version: null, notes: null }
+  const valueOf = (flag, index) => {
+    const value = argv[index]
+    if (value === undefined || value === '') throw new Error(`${flag} needs a value`)
+    return value
+  }
+
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]
-    if (flag === '--out') args.out = argv[++i]
-    else if (flag === '--version') args.version = argv[++i]
-    else if (flag === '--notes') args.notes = argv[++i]
+    if (flag === '--out') args.out = valueOf(flag, ++i)
+    else if (flag === '--version') args.version = valueOf(flag, ++i)
+    else if (flag === '--notes') args.notes = valueOf(flag, ++i)
     else if (flag === '--help' || flag === '-h') {
       console.log(
         'Usage: node scripts/release-art/contour-field.mjs [--version vX.Y.Z --notes FILE] [--out DIR]',
@@ -870,6 +877,13 @@ function main() {
     })
   }
 
+  if (args.version) {
+    // One release at a time is for trying a piece out: it writes the two variants and leaves the
+    // series manifest, which describes every release in the notes directory, untouched.
+    console.log(`Wrote ${releases.length * 2} pieces to ${outDir} (manifest.json left as it was)`)
+    return
+  }
+
   const manifest = {
     direction: 'contour-field',
     generator: 'scripts/release-art/contour-field.mjs',
@@ -885,4 +899,11 @@ function round(value) {
   return Math.round(value * 1000) / 1000
 }
 
-main()
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    main()
+  } catch (error) {
+    console.error(`contour-field: ${error.message}`)
+    process.exitCode = 1
+  }
+}

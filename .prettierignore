@@ -9,3 +9,7 @@ src/routeTree.gen.ts
 # regenerates it and compares. A reformat would break that, as the route tree's would.
 src/assets/release-art/**/*.svg
 src/assets/release-art/**/manifest.json
+
+# Release notes kept exactly as GitHub published them: they are the input the artwork is read from,
+# so reformatting them would quietly change the record the generator derives a release's field from.
+scripts/release-art/notes/
