@@ -216,6 +216,164 @@ export function notesText(notes) {
 }
 
 /**
+ * The release notes as markdown, from the same HTML `notesText` flattens (or a feed's list per version):
+ * what Settings shows as plain text, the update card renders as the release's own story. Headings, lists,
+ * emphasis, inline code, links and code blocks keep their markdown; script and style go with their
+ * contents; entities are decoded. Nothing here makes HTML: the page renders the markdown with its own
+ * renderer, which escapes raw HTML.
+ * @param {unknown} notes
+ * @returns {string}
+ */
+export function notesMarkdown(notes) {
+  // A feed's notes come per version: each entry under its own version heading, like notesText's lines.
+  if (Array.isArray(notes))
+    return notes
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return ''
+        const version = typeof entry.version === 'string' ? entry.version.trim() : ''
+        const body = notesMarkdown(entry.note).trim()
+        return [version && `## ${version}`, body].filter(Boolean).join('\n\n')
+      })
+      .filter(Boolean)
+      .join('\n\n')
+  if (typeof notes !== 'string') return ''
+  return htmlToMarkdown(notes)
+}
+
+/** The entities GitHub's release bodies carry, decoded as the page would show them. */
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#39': "'", '#x27': "'" }
+
+/**
+ * Decodes the common entities in one pass, so `&amp;lt;` reads as `&lt;` rather than as a tag, and
+ * leaves anything it does not know as it is.
+ * @param {string} text
+ */
+function decodeEntities(text) {
+  return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, name) => {
+    const decoded = ENTITIES[/** @type {keyof typeof ENTITIES} */ (name.toLowerCase())]
+    return decoded ?? whole
+  })
+}
+
+/** @param {string} html */
+const stripTags = (html) => html.replace(/<[^>]*>/g, '')
+
+/**
+ * The attributes of one tag: an anchor's href is the only one read, and it must be the author's own.
+ * @param {string} source
+ */
+function attributes(source) {
+  /** @type {Record<string, string>} */
+  const found = {}
+  for (const m of source.matchAll(/([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/g))
+    found[m[1].toLowerCase()] = m[3] ?? m[4] ?? m[5] ?? ''
+  return found
+}
+
+/** Marks where a lifted-out code block goes: a private-use character no release body carries. */
+const FENCE_MARK = '\uF8FF'
+
+/**
+ * The HTML of one release body as markdown. Code blocks are lifted out first (their contents are text,
+ * not markup), then each tag is replaced by its markdown and the text between them is decoded.
+ * @param {string} html
+ */
+function htmlToMarkdown(html) {
+  /** @type {string[]} */
+  const fences = []
+  let text = html
+    // Scripts, styles and comments are not notes: they go with their contents.
+    .replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<pre\b[^>]*>([\s\S]*?)<\/pre\s*>/gi, (_whole, body) => {
+      const code = decodeEntities(stripTags(body)).replace(/^\n+|\s+$/g, '')
+      fences.push(`\n\n\`\`\`\n${code}\n\`\`\`\n\n`)
+      return `${FENCE_MARK}${fences.length - 1}${FENCE_MARK}`
+    })
+  text = tagsToMarkdown(text).replace(/\uF8FF(\d+)\uF8FF/g, (_whole, i) => fences[Number(i)] ?? '')
+  return text
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/**
+ * Replaces the tags release notes carry with their markdown, keeping the text between them (decoded).
+ * Unknown tags are dropped; their text stays.
+ * @param {string} html
+ */
+function tagsToMarkdown(html) {
+  /** @type {{ ordered: boolean, count: number }[]} */
+  const lists = []
+  /** @type {string | null} */
+  let href = null
+  let out = ''
+  let last = 0
+  for (const m of html.matchAll(/<\/?([a-zA-Z][\w-]*)((?:\s[^>]*?)?)\/?>/g)) {
+    out += decodeEntities(html.slice(last, m.index))
+    last = m.index + m[0].length
+    const name = m[1].toLowerCase()
+    const closing = m[0].startsWith('</')
+    if (name === 'br') {
+      out += '\n'
+      continue
+    }
+    if (/^h[1-6]$/.test(name)) {
+      out += closing ? '\n\n' : `\n\n${'#'.repeat(Number(name[1]))} `
+      continue
+    }
+    if (name === 'ul' || name === 'ol') {
+      if (closing) lists.pop()
+      else lists.push({ ordered: name === 'ol', count: 0 })
+      out += '\n\n'
+      continue
+    }
+    if (name === 'li') {
+      if (closing) out += '\n'
+      else {
+        const list = lists[lists.length - 1]
+        if (list?.ordered) {
+          list.count += 1
+          out += `${list.count}. `
+        } else out += '- '
+      }
+      continue
+    }
+    if (name === 'strong' || name === 'b') {
+      out += '**'
+      continue
+    }
+    if (name === 'em' || name === 'i') {
+      out += '*'
+      continue
+    }
+    if (name === 'code') {
+      out += '`'
+      continue
+    }
+    if (name === 'a') {
+      if (closing) {
+        if (href !== null) out += `](${href})`
+        href = null
+      } else {
+        const url = decodeEntities(attributes(m[2] ?? '').href ?? '').trim()
+        href = url ? url : null
+        if (href !== null) out += '['
+      }
+      continue
+    }
+    if (name === 'hr') {
+      out += '\n\n---\n\n'
+      continue
+    }
+    // Paragraphs and divisions end a block; every other tag only wraps its text.
+    if (closing && (name === 'p' || name === 'div' || name === 'blockquote')) out += '\n\n'
+  }
+  return out + decodeEntities(html.slice(last))
+}
+
+/**
  * An error as the Updates section shows it, on one line. A download that did not match the release's sha512 says
  * so in words, with electron-updater's own message after.
  * @param {unknown} err
@@ -232,7 +390,7 @@ export function updateError(err) {
 /**
  * @typedef {'unsupported' | 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'installing'
  *   | 'manual' | 'error'} UpdateStatus
- * @typedef {{ version: string, notes: string, date: string | null }} Offer
+ * @typedef {{ version: string, notes: string, notesMarkdown: string, date: string | null }} Offer
  * @typedef {{ percent: number, transferred: number, total: number }} Progress
  * @typedef {{ mode: 'desktop', installed: string, packageType: PackageType | null, status: UpdateStatus,
  *   newest: Offer | null, progress: Progress | null, error: string | null,
@@ -358,7 +516,12 @@ export function createUpdates({
         set({
           status: offered ? 'available' : 'none',
           newest: offered
-            ? { version: info.version, notes: notesText(info.releaseNotes), date: info.releaseDate ?? null }
+            ? {
+                version: info.version,
+                notes: notesText(info.releaseNotes),
+                notesMarkdown: notesMarkdown(info.releaseNotes),
+                date: info.releaseDate ?? null,
+              }
             : null,
           manual: null,
           progress: null,

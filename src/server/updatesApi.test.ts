@@ -51,7 +51,7 @@ const desktopState = (over: Partial<DesktopUpdates> = {}): DesktopUpdates => ({
   installed: '0.2.0',
   packageType: 'deb',
   status: 'available',
-  newest: { version: '0.3.0', notes: 'Fixes', date: null },
+  newest: { version: '0.3.0', notes: 'Fixes', notesMarkdown: 'Fixes', date: null },
   progress: null,
   error: null,
   manual: null,

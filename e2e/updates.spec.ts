@@ -49,7 +49,12 @@ const desktop = (over: Partial<DesktopUpdates> = {}): DesktopUpdates => ({
   settings: { autoCheck: true, prereleases: false },
   ...over,
 })
-const offer = { version: '0.3.0', notes: "What's new\n\n- Updates from the app", date: null }
+const offer = {
+  version: '0.3.0',
+  notes: "What's new\n\n- Updates from the app",
+  notesMarkdown: "## What's new\n\n- Updates from the app",
+  date: null,
+}
 
 /** Answers the page's update routes as the desktop app would: GET with `current`, each action with its own. */
 async function answer(

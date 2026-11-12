@@ -18,6 +18,7 @@ import {
   handleBridgeMessage,
   isPrerelease,
   manualCommand,
+  notesMarkdown,
   notesText,
   packageManager,
   packageType,
@@ -379,6 +380,61 @@ describe('notes and versions', () => {
   })
 })
 
+describe('notesMarkdown', () => {
+  it('turns headings, lists, emphasis, code and links into markdown', () => {
+    expect(
+      notesMarkdown(
+        '<h2>What&#39;s new</h2><ul><li>one</li><li>two</li></ul><ol><li>first</li><li>second</li></ol>' +
+          '<p><strong>bold</strong> and <b>also</b>, <em>italic</em>, <code>npm i</code></p>' +
+          '<p><a href="https://example.com/a?b=1&amp;c=2">Details</a></p>' +
+          '<p>one<br>two</p>',
+      ),
+    ).toBe(
+      "## What's new\n\n- one\n- two\n\n1. first\n2. second\n\n" +
+        '**bold** and **also**, *italic*, `npm i`\n\n' +
+        '[Details](https://example.com/a?b=1&c=2)\n\none\ntwo',
+    )
+  })
+
+  it('decodes the common entities', () => {
+    expect(notesMarkdown('<p>&amp; &lt; &gt; &quot; &#39; &nbsp; end</p>')).toBe('& < > " \' end')
+  })
+
+  it('fences a code block as it is, without its tags', () => {
+    expect(notesMarkdown('<p>Run</p><pre><code>npm i &amp;&amp; pnpm build\n</code></pre>')).toBe(
+      'Run\n\n```\nnpm i && pnpm build\n```',
+    )
+  })
+
+  it('drops script and style with their contents, and every tag of the body', () => {
+    const markdown = notesMarkdown(
+      '<div><span>a</span></div><script>document.title = "pwned"</script>' +
+        '<style>p { color: red }</style><p>b &lt;b&gt;</p>',
+    )
+    expect(markdown).toBe('a\n\nb <b>')
+    expect(markdown).not.toMatch(/<(div|span|script|style|p)\b/)
+  })
+
+  it('mirrors a feed’s per-version notes as a heading per entry', () => {
+    expect(
+      notesMarkdown([
+        { version: '0.3.0', note: '<p>x</p>' },
+        { version: '0.4.0', note: '<ul><li>y</li></ul>' },
+      ]),
+    ).toBe('## 0.3.0\n\nx\n\n## 0.4.0\n\n- y')
+    // A version alone yields its heading.
+    expect(notesMarkdown([{ version: '0.5.0' }])).toBe('## 0.5.0')
+    expect(notesMarkdown([null, 'x'])).toBe('')
+  })
+
+  it('is empty for anything that is not notes', () => {
+    expect(notesMarkdown(null)).toBe('')
+    expect(notesMarkdown(undefined)).toBe('')
+    expect(notesMarkdown(42)).toBe('')
+    expect(notesMarkdown('')).toBe('')
+  })
+})
+
 describe('checking against a feed', () => {
   it('Check now finds the feed’s newer version and its notes, and downloads nothing', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
@@ -393,7 +449,12 @@ describe('checking against a feed', () => {
       mode: 'desktop',
       installed: '0.2.0',
       status: 'available',
-      newest: { version: '0.3.0', notes: 'Fixes & more', date: '2026-11-01T10:00:00.000Z' },
+      newest: {
+        version: '0.3.0',
+        notes: 'Fixes & more',
+        notesMarkdown: 'Fixes & **more**',
+        date: '2026-11-01T10:00:00.000Z',
+      },
       error: null,
     })
     expect(updates.state().checkedAt).not.toBeNull()
