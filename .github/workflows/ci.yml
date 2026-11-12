@@ -14,7 +14,10 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # The job runs on the self-hosted runner (`self-hosted`, `vps`): the owner's own server, as root.
+    # A pull request from a fork carries code nobody here wrote, so it runs on GitHub's runner instead
+    # and that server never executes it.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","vps"]') }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
