@@ -27,6 +27,7 @@ import { Tip, TooltipProvider } from '#/components/ui/tooltip'
 import { get, type Me } from '#/lib/api'
 import { KEY_ENTRIES } from '#/lib/reveal'
 import { followTheme } from '#/lib/theme'
+import { useHydrated } from '#/lib/useHydrated'
 import appCss from '#/styles.css?url'
 
 interface RouterContext {
@@ -105,11 +106,16 @@ function App() {
       {/* Opaque and padded for the phone's safe area: this bar is what paints the strip behind the status
           bar (viewport-fit=cover above), so a translucent bar would let the page's canvas show through. */}
       <header className="sticky top-0 z-20 border-b bg-background pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
-        <nav className="mx-auto flex h-12 max-w-7xl items-center gap-3 px-4 text-sm sm:gap-5">
+        {/* gap-2 under sm: at 360 px the lockup, the test mode badge, the switcher, the search button
+            and the Pages menu fit only with the tighter gap. */}
+        <nav className="mx-auto flex h-12 max-w-7xl items-center gap-2 px-4 text-sm sm:gap-5">
           <Tip content="Home">
             <Link to="/" className="flex shrink-0 items-center gap-2">
               <CrossBoardMark className="size-[22px] shrink-0" />
-              <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap">
+              {/* Below 360 px the wordmark leaves the row (the mark alone links home, its name kept
+                  for screen readers): with the test mode badge, the switcher, the search button and
+                  the Pages menu, the row would otherwise push the page wider than the screen. */}
+              <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap max-[359px]:sr-only">
                 CrossBoard
               </span>
             </Link>
@@ -150,7 +156,9 @@ function App() {
 /** Outside production sign-in can be off: say so, so no screenshot is ever taken for the live board. */
 function AuthOffBadge() {
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/api/me'), staleTime: Infinity })
-  if (!me?.authOff) return null
+  // Read after mount: /api/me can answer before React has hydrated the top bar.
+  const hydrated = useHydrated()
+  if (!hydrated || !me?.authOff) return null
   return (
     <Tip content={`BOARD_ENV=${me.boardEnv}, sign-in off: signed in as ${me.actor}. Not the live board.`}>
       <Badge variant="destructive" className="shrink-0 uppercase">

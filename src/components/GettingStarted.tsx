@@ -21,6 +21,7 @@ import {
   steps as stepsOf,
 } from '#/lib/onboarding'
 import { useProjects } from '#/lib/project'
+import { useHydrated } from '#/lib/useHydrated'
 import { cn } from 'cn'
 
 /**
@@ -131,7 +132,10 @@ export function GettingStartedEntry() {
   const o = useOnboarding()
   const [open, setOpen] = useState(false)
   const create = useCreateProject(() => setOpen(false))
-  if (!entryShown(o)) return create.dialog
+  // Read after mount: the steps' queries can answer before React has hydrated the top bar, and the
+  // entry drawn from them would not match the server's HTML (which had none).
+  const hydrated = useHydrated()
+  if (!hydrated || !entryShown(o)) return create.dialog
   return (
     <>
       <Popover open={open} onOpenChange={setOpen}>
