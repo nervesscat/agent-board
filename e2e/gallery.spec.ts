@@ -144,6 +144,51 @@ test('the Gallery module lists the files with their size, uploader, time and tic
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/gallery$`))
 })
 
+test('an annotated picture lists its notes in the gallery lightbox', async ({
+  page,
+  project,
+  api,
+  human,
+}) => {
+  const t = await api.ticket({ title: 'An annotated screenshot' })
+  // What the canvas stores beside the flattened picture: each mark, and what it means.
+  const annotations = {
+    version: 1,
+    width: 64,
+    height: 64,
+    items: [
+      {
+        id: 'mark-1',
+        kind: 'rect',
+        color: '#e11d48',
+        width: 4,
+        rect: { x: 4, y: 4, w: 40, h: 40 },
+        note: 'the header is missing',
+      },
+    ],
+  }
+  const image = await ok<Upload>(
+    human.post('/api/uploads', {
+      multipart: {
+        file: { name: 'shot.png', mimeType: 'image/png', buffer: png(64) },
+        annotations: JSON.stringify(annotations),
+      },
+    }),
+  )
+  await postWith(human, t.id, [image.id])
+
+  await gallery(page, project.id)
+  await thumb(tile(page, 'shot.png')).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.locator(`img[src="${image.url}"]`)).toBeVisible()
+  // The notes ride with the picture into the lightbox, numbered as the picture numbers them.
+  await expect(dialog.locator('[aria-label="Notes on the picture"]')).toContainText(
+    '1. the header is missing',
+  )
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+})
+
 test('an image tile copies the image to the clipboard from its own button, and no other file has one', async ({
   page,
   context,
