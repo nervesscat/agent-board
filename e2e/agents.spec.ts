@@ -51,7 +51,8 @@ test('the shell picked for the install lines is kept in the URL, remembered, and
   // Without one in the URL, the shell this browser remembers comes back, and the URL says so.
   await page.goto('/agents')
   await expect(page).toHaveURL(/[?&]shell=powershell(&|$)/)
-  await expect(page.getByText(/^New-Item -ItemType Directory/)).toBeVisible()
+  // The session skill's line is a New-Item too: match the board skill's own line.
+  await expect(page.getByText(/^New-Item -ItemType Directory .*\\skills\\board"/)).toBeVisible()
   await tabs(bash).first().click()
   await expect(page).toHaveURL(/[?&]shell=bash(&|$)/)
   await expect(page.getByText(/^\$t = Join-Path/)).toHaveCount(0)
@@ -870,9 +871,13 @@ test.describe('the review skills on the Connect an agent page: the copy it track
     expect(mints).toHaveLength(0)
 
     // The first copy mints one, and the clipboard carries it.
+    // Section 2 holds the board skill's line and the session skill's: the copy is the board skill's, its first block.
     const step2 = page
       .locator('section')
       .filter({ has: page.getByRole('heading', { name: '2. Install the skill' }) })
+      .locator(':scope > div.space-y-1')
+      .filter({ has: page.locator('pre') })
+      .first()
     const { token, expiresAt } = await copy(step2)
     expect(mints).toHaveLength(1)
     await expect
