@@ -64,6 +64,12 @@ http_headers = { Authorization = "Bearer <token>" }
                       "headers": { "Authorization": "Bearer <token>" } } } }
 ```
 
+To open a session, install the session skill beside the board skill and type `/session` alone: it
+briefs you on the board, delegates every ticket you name to the project's protocol, and keeps one
+short message shape with the numbered list of what needs the human. Its line is
+`mkdir -p ~/.claude/skills/session && curl -fsS -H "Authorization: Bearer <token>" "http://localhost:47100/api/agent-setup/session-skill" -o ~/.claude/skills/session/SKILL.md`
+(the Connect an agent page shows it for each CLI and shell).
+
 ## The rhythm
 
 1. **Before touching a project**: `get_project` — its `instructions` are the rules for its repos
@@ -294,6 +300,13 @@ http_headers = { Authorization = "Bearer <token>" }
      `get_ticket` → `work.open` lists your open spans and waits to close. The board adds its own
      events (pushes, the PR, the preview, the merge, stage moves); nothing of this goes to the feed
      or the Daily view.
+     **The board is part of the work**, not a report on it: post as you go, tick each task you finish,
+     close your spans and waits, and rewrite the summary when you stop or hand off; you are not
+     finished while the board is behind what you did. If you stop work on a ticket before the end, at
+     the human's word or your own, record on the ticket that it was stopped and why (a comment and a
+     line in the summary), so the next reader can tell a stop from a failure. When the work ends,
+     clean up what you started (processes, temporary files, locks, and any scratch worktree of your
+     own), and leave the ticket's worktrees and origin branches to the human, listed, never deleted.
 7. **Hand off**: before `update_ticket` → `review`, every item, in order (the board ticks Pushed,
    PR, CI, Preview, Summary and Merged as their facts hold; Implementation and its steps are ticked
    by hand):
@@ -465,12 +478,14 @@ that agent; the notes pick the next agent. Before moving the ticket to
 the review phases env, verify, hunt, refute, merge): spec → build → a review that tries to break it
 → (a fix pass by the builder on the confirmed findings, each with the project's checks and a new
 review, for as many review rounds as the ticket's complexity allows: none for low, one for mid, three
-for high; round 1 is the first build and its review, so a mid ticket stops after its review, and a
-review that does not survive after the last round goes to a human decision; a high ticket gets two fix
-passes; a low ticket has no review, and its checks return the build at most twice; after the second return,
+for high, up to ten for max (for work built from scratch, a whole site or app or a new product; a
+feature in an existing codebase is at most high, however difficult); round 1 is the first build and
+its review, so a mid ticket stops after its review, and a review that does not survive after the last
+round goes to a human decision; a high ticket gets two fix passes and a max ticket nine; a low ticket
+has no review, and its checks return the build at most twice; after the second return,
 when the checks still fail or a criterion still has no evidence, the human decides (keep going or drop), and
 the build goes to hand-off only with evidence for every criterion) → hand off. The agents' thinking effort follows the complexity too: `low` for a low ticket, `medium` for mid and
-high; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
+high, `high` for max; the orchestrator passes it as the Agent tool's `effort` on every agent it starts for the ticket
 (the ticket agent, the spec agent, the builder and the review's phase agents). The `/review-queue`
 skill is that orchestrator and `/feature-review` its review; the same page installs both. Ask with
 `ask_decision` instead of guessing; never two builders on one branch. The board skill has the full

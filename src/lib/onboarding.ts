@@ -7,8 +7,11 @@ import type { AgentTokenRow, HostTools, ProjectRow } from '#/lib/api'
  */
 export type StepId = 'tools' | 'project' | 'agent' | 'ticket'
 
-/** The tools an agent's work needs on the board's machine; node and pnpm are for previews only. */
-export const NEEDED_TOOLS = ['git', 'gh', 'claude'] as const
+/**
+ * The tools an agent's work needs on the board's machine: git and gh (signed in). claude is optional,
+ * only for the board's own reports, and node and pnpm are for previews.
+ */
+export const NEEDED_TOOLS = ['git', 'gh'] as const
 
 /**
  * What the board answered, per source: undefined while it has not answered, null when it could not
