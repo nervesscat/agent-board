@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Pencil, Pin, PinOff, Plus, StickyNote, Trash2, X } from 'lucide-react'
+import { Check, Pencil, Pin, PinOff, Plus, StickyNote, X } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { TrashIcon } from '#/components/TrashIcon'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '#/components/ui/dialog'
@@ -239,7 +240,7 @@ function NoteRow({
             disabled={saving}
             onClick={onDelete}
           >
-            <Trash2 />
+            <TrashIcon />
           </Button>
         </Tip>
       </div>
