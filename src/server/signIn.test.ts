@@ -1142,7 +1142,7 @@ describe('the skill download credential', () => {
     expect(skillRows()).toHaveLength(before + 5)
   })
 
-  it('downloads both skills, and is refused on every other route', async () => {
+  it('downloads the skills, and is refused on every other route', async () => {
     const { token } = await json(mint())
     const human = (target: string) => send('GET', target, { cookie: hostSession })
     for (const target of [
@@ -1150,6 +1150,7 @@ describe('the skill download credential', () => {
       '/api/agent-setup/skill?client=codex',
       '/api/agent-setup/skill?client=opencode',
       '/api/agent-setup/skill?client=claude&transport=rest',
+      '/api/agent-setup/session-skill',
       '/api/agent-setup/review-skills',
       '/api/agent-setup/review-skills?list',
     ]) {

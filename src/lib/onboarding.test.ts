@@ -42,9 +42,14 @@ describe('steps', () => {
     ])
   })
 
-  it('needs only git, gh and claude: node and pnpm are for previews', () => {
-    expect(steps({ tools: tools('node', 'pnpm'), projects: [], tokens: [] })[0]!.done).toBe(true)
-    expect(missingTools(tools('claude', 'pnpm')).map((t) => t.name)).toEqual(['claude'])
+  it('needs only git and gh: claude is optional, node and pnpm are for previews', () => {
+    const toolsDone = (bad: string[]) => steps({ tools: tools(...bad), projects: [], tokens: [] })[0]!.done
+    // claude missing (with the previews-only tools) leaves the step done: only reports need it.
+    expect(toolsDone(['claude', 'node', 'pnpm'])).toBe(true)
+    // gh missing or signed out does not.
+    expect(toolsDone(['gh'])).toBe(false)
+    expect(missingTools(tools('claude', 'pnpm'))).toEqual([])
+    expect(missingTools(tools('gh', 'pnpm')).map((t) => t.name)).toEqual(['gh'])
   })
 
   it('shows a step whose source is loading as pending, and one that failed as failed and not done', () => {

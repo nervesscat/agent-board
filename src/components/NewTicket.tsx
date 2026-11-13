@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { AssigneeSelect } from '#/components/AssigneeSelect'
+import { AnnotateImage, useAnnotations } from '#/components/AnnotateImage'
 import { ComplexitySelect } from '#/components/Complexity'
 import { PendingFiles, useFileDrop, useUploads } from '#/components/PendingFiles'
 import { RichEditor } from '#/components/RichEditor'
@@ -85,8 +86,10 @@ export function NewTicket({
   const tagsOver = over.tooMany || over.tooLong
   const tagChoices = useTagChoices(projectId, tags)
   const files = useUploads()
+  // A picture opens the canvas before it joins the list; the rest go straight in.
+  const annotate = useAnnotations(files.add)
   const fileInput = useRef<HTMLInputElement>(null)
-  const drop = useFileDrop(files.add)
+  const drop = useFileDrop(annotate.add)
   // The heading's height: a new lane's names its parent, whose title can wrap over many lines.
   const [headHeight, setHeadHeight] = useState(0)
   const measureHead = useCallback((el: HTMLDivElement | null) => {
@@ -200,7 +203,7 @@ export function NewTicket({
               hidden
               onChange={(e) => {
                 const picked = Array.from(e.target.files ?? [])
-                if (picked.length) files.add(picked)
+                if (picked.length) annotate.add(picked)
                 // Clear it, so picking a file that was just removed registers again.
                 e.target.value = ''
               }}
@@ -208,7 +211,7 @@ export function NewTicket({
             <RichEditor
               value={body}
               onChange={setBody}
-              onFiles={files.add}
+              onFiles={annotate.add}
               onAttach={() => fileInput.current?.click()}
               minHeight="min-h-32"
               caretRoom={caretRoom}
@@ -326,6 +329,13 @@ export function NewTicket({
             </Button>
           </DialogFooter>
         </form>
+        <AnnotateImage
+          file={annotate.current}
+          onAttach={annotate.attach}
+          onAttachOriginal={annotate.attachOriginal}
+          onCancel={annotate.cancel}
+          finalFocus={annotate.finalFocus}
+        />
       </DialogContent>
     </Dialog>
   )
