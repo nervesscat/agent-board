@@ -1434,3 +1434,183 @@ describe('0050_widen_ticket_complexity', () => {
     sqlite.close()
   })
 })
+
+describe('0051_agent_cards', () => {
+  it('adds the agent cards table without touching the rows a board on 0050 already has', () => {
+    const sqlite = databaseAt('0050_widen_ticket_complexity')
+    const project = Number(
+      sqlite.prepare('INSERT INTO projects (name, instructions) VALUES (?, ?)').run('cards', 'Tests.')
+        .lastInsertRowid,
+    )
+    const ticket = Number(
+      sqlite
+        .prepare('INSERT INTO tickets (project_id, title, created_by, branch) VALUES (?, ?, ?, ?)')
+        .run(project, 'Kept', 'claude', 'feat/kept').lastInsertRowid,
+    )
+    sqlite.prepare('INSERT INTO tasks (ticket_id, text, position) VALUES (?, ?, ?)').run(ticket, 'step', 0)
+    sqlite
+      .prepare('INSERT INTO updates (ticket_id, author, body) VALUES (?, ?, ?)')
+      .run(ticket, 'claude', 'Started.')
+    const before = {
+      projects: sqlite.prepare('SELECT * FROM projects ORDER BY id').all(),
+      tickets: sqlite.prepare('SELECT * FROM tickets ORDER BY id').all(),
+      tasks: sqlite.prepare('SELECT * FROM tasks ORDER BY id').all(),
+      updates: sqlite.prepare('SELECT * FROM updates ORDER BY id').all(),
+    }
+
+    migrate(drizzle(sqlite), { migrationsFolder: folder })
+
+    // The existing tables are exactly what they were.
+    expect(sqlite.prepare('SELECT * FROM projects ORDER BY id').all()).toEqual(before.projects)
+    expect(sqlite.prepare('SELECT * FROM tickets ORDER BY id').all()).toEqual(before.tickets)
+    expect(sqlite.prepare('SELECT * FROM tasks ORDER BY id').all()).toEqual(before.tasks)
+    expect(sqlite.prepare('SELECT * FROM updates ORDER BY id').all()).toEqual(before.updates)
+
+    expect(columns(sqlite, 'agent_cards')).toEqual([
+      'id',
+      'project_id',
+      'kind',
+      'actor',
+      'title',
+      'request',
+      'body',
+      'reason',
+      'total',
+      'done',
+      'state',
+      'step',
+      'result',
+      'href',
+      'startedAt',
+      'updatedAt',
+      'finishedAt',
+    ])
+
+    const insert = sqlite.prepare(
+      `INSERT INTO agent_cards (project_id, kind, actor, title, request, body, reason, total, done, state, step, result, href, startedAt, updatedAt, finishedAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    const tracked = Number(
+      insert.run(
+        project,
+        'tracked',
+        'claude',
+        'The release build',
+        'let me know when the release is built',
+        '',
+        '',
+        4,
+        1,
+        'running',
+        'bundling',
+        null,
+        `/projects/${project}`,
+        '2026-11-01T09:00:00.000Z',
+        '2026-11-01T09:05:00.000Z',
+        null,
+      ).lastInsertRowid,
+    )
+    const notice = Number(
+      insert.run(
+        project,
+        'notice',
+        'claude',
+        'Host broken',
+        '',
+        'The build host is out of disk.',
+        'nothing can build until it is fixed',
+        0,
+        0,
+        'notice',
+        null,
+        null,
+        null,
+        '2026-11-01T10:00:00.000Z',
+        '2026-11-01T10:00:00.000Z',
+        null,
+      ).lastInsertRowid,
+    )
+    expect(
+      sqlite
+        .prepare(
+          'SELECT kind, actor, title, request, body, reason, total, done, state, step, href, finishedAt FROM agent_cards ORDER BY id',
+        )
+        .all(),
+    ).toEqual([
+      {
+        kind: 'tracked',
+        actor: 'claude',
+        title: 'The release build',
+        request: 'let me know when the release is built',
+        body: '',
+        reason: '',
+        total: 4,
+        done: 1,
+        state: 'running',
+        step: 'bundling',
+        href: `/projects/${project}`,
+        finishedAt: null,
+      },
+      {
+        kind: 'notice',
+        actor: 'claude',
+        title: 'Host broken',
+        request: '',
+        body: 'The build host is out of disk.',
+        reason: 'nothing can build until it is fixed',
+        total: 0,
+        done: 0,
+        state: 'notice',
+        step: null,
+        href: null,
+        finishedAt: null,
+      },
+    ])
+
+    // Only the two kinds and the four states are taken, and a project's cards go with it.
+    expect(() =>
+      insert.run(
+        project,
+        'other',
+        'claude',
+        'x',
+        '',
+        '',
+        '',
+        0,
+        0,
+        'running',
+        null,
+        null,
+        null,
+        '2026-11-01T11:00:00.000Z',
+        '2026-11-01T11:00:00.000Z',
+        null,
+      ),
+    ).toThrow(/CHECK constraint/)
+    expect(() =>
+      insert.run(
+        project,
+        'tracked',
+        'claude',
+        'x',
+        '',
+        '',
+        '',
+        0,
+        0,
+        'done',
+        null,
+        null,
+        null,
+        '2026-11-01T11:00:00.000Z',
+        '2026-11-01T11:00:00.000Z',
+        null,
+      ),
+    ).toThrow(/CHECK constraint/)
+    sqlite.prepare('DELETE FROM projects WHERE id = ?').run(project)
+    expect(sqlite.prepare('SELECT count(*) AS n FROM agent_cards').get()).toEqual({ n: 0 })
+    expect([tracked, notice].every((id) => Number.isInteger(id))).toBe(true)
+    sqlite.close()
+  })
+})
