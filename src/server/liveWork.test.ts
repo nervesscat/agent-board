@@ -479,6 +479,78 @@ describe('in review', () => {
     })
     expect(read(pid).totals.inReview).toBe(3)
   })
+
+  it("never takes another repo's PR or verdict: the same number or branch in two repos stays apart", () => {
+    const pid = project('two repos')
+    const web = db()
+      .insert(dbm.schema.repos)
+      .values({ projectId: pid, name: 'web', repoPath: '/r/two-repos-web' })
+      .returning()
+      .get()
+    const apiRepo = db()
+      .select()
+      .from(dbm.schema.repos)
+      .all()
+      .find((r) => r.projectId === pid && r.name === 'api')!
+    const pr = (repoId: number, number: number, headRef: string, url: string) =>
+      db()
+        .insert(dbm.schema.prs)
+        .values({
+          projectId: pid,
+          repoId,
+          number,
+          title: `PR ${number}`,
+          url,
+          author: 'enrique',
+          headRef,
+          baseRef: 'dev',
+          headSha: 'aaa1111',
+          reviewStage: 'pending',
+          updatedAt: iso(ago(60)),
+          fetchedAt: iso(ago(60)),
+        })
+        .run()
+    const verdict = (repoId: number, number: number, text: string, minutesAgo: number) =>
+      db()
+        .insert(dbm.schema.reviewResults)
+        .values({
+          projectId: pid,
+          repoId,
+          prNumber: number,
+          sha: 'aaa1111',
+          verdict: text,
+          author: 'claude',
+          createdAt: iso(ago(minutesAgo)),
+        })
+        .run()
+
+    // The web ticket's own PR #6 lives in web; api has a PR #6 too, with a newer, different verdict.
+    pr(web.id, 6, 'feat/web', 'https://github.com/acme/web/pull/6')
+    pr(apiRepo.id, 6, 'feat/api', 'https://github.com/acme/api/pull/6')
+    verdict(web.id, 6, 'SHIP from web', 50)
+    verdict(apiRepo.id, 6, 'FIX FIRST from api', 10)
+    const webTicket = ticket(pid, 'Web change', { status: 'review', prNumber: 6, repoId: web.id })
+    // A web ticket on a branch api also has an open PR for: web has none, so it is not handed off.
+    pr(apiRepo.id, 40, 'feat/shared', 'https://github.com/acme/api/pull/40')
+    ticket(pid, 'Branch shared with api', { status: 'review', branch: 'feat/shared', repoId: web.id })
+    // An api ticket with no number: it takes the api PR on its branch, not web's.
+    pr(web.id, 41, 'feat/api-only', 'https://github.com/acme/web/pull/41')
+    const apiTicket = ticket(pid, 'Api change', {
+      status: 'review',
+      branch: 'feat/api-only',
+      repoId: apiRepo.id,
+    })
+
+    const entries = read(pid).inReview
+    expect(entries.find((x) => x.ticketId === webTicket.id)).toMatchObject({
+      prNumber: 6,
+      prUrl: 'https://github.com/acme/web/pull/6',
+      verdict: 'SHIP from web',
+    })
+    // Web's PR on the same branch is not api's: the api ticket has no PR of its own, so it is not handed off.
+    expect(entries.find((x) => x.ticketId === apiTicket.id)).toBeUndefined()
+    expect(entries.find((x) => x.title === 'Branch shared with api')).toBeUndefined()
+  })
 })
 
 describe('recent posts', () => {

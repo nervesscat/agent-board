@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
 import { gist, listTickets, nextTask } from './features'
+import { listRepos } from './repos'
 import { getProject } from './projects'
 import { listStages, type Stage } from './stages'
 import { lastProgressPosts, previewsOf } from './summary'
@@ -376,12 +377,17 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
         .where(and(eq(schema.prs.projectId, projectId), or(...match)))
         .all()
     : []
+  // A ticket's repo is its own, else the project's first one (as `ticketRepo` takes it). A PR is the ticket's
+  // only in that repo: another repo's PR can carry the same number or the same branch name.
+  const primaryRepoId = listRepos(projectId)[0]?.id ?? null
+  const repoOf = (t: Row) => t.repoId ?? primaryRepoId
   // The ticket's own PR number in its own repo first, else a row on its branch; an open one over a closed.
   const prOf = (t: Row) => {
-    const own = prRows.filter((p) =>
-      t.prNumber !== null
-        ? p.number === t.prNumber && (p.repoId === null || t.repoId === null || p.repoId === t.repoId)
-        : !!t.branch && p.headRef === t.branch,
+    const repo = repoOf(t)
+    const own = prRows.filter(
+      (p) =>
+        (p.repoId === null || (repo !== null && p.repoId === repo)) &&
+        (t.prNumber !== null ? p.number === t.prNumber : !!t.branch && p.headRef === t.branch),
     )
     return (
       own.sort((a, b) => Number(b.open) - Number(a.open) || b.updatedAt.localeCompare(a.updatedAt))[0] ?? null
@@ -431,7 +437,7 @@ export function getLiveWork(projectId: number, opts: LiveWorkOptions = {}) {
     prNumber: number,
     prUrl: pr?.url ?? null,
     reviewStage: pr?.reviewStage ?? null,
-    verdict: verdictOf(number, pr?.repoId ?? null) ?? pr?.reviewStage ?? null,
+    verdict: verdictOf(number, repoOf(t)) ?? pr?.reviewStage ?? null,
     preview: previewOf(t.id),
   }))
 
