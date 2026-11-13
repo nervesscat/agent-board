@@ -1,0 +1,102 @@
+{
+  "direction": "retro-thermal",
+  "generator": "scripts/release-art/retro-thermal.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "char": "#201A17",
+    "bone": "#D8C7A6",
+    "rust": "#A34A2A",
+    "shadow": "#120E0C",
+    "highlight": "#FFFFFF",
+    "black": "#000000"
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 2450458048,
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "themes": {
+        "density": 0.958,
+        "hands": 0.894,
+        "precision": 0.365,
+        "wayfinding": 0.387
+      },
+      "field": {
+        "summits": 16,
+        "levels": 20,
+        "interval": 0.047,
+        "wobble": 1.608,
+        "ridge": false,
+        "interruption": "crease"
+      },
+      "treatment": {
+        "weight": 0.958,
+        "bloom": 0.981,
+        "stain": 0.979
+      },
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 2467235667,
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "themes": {
+        "density": 0.534,
+        "hands": 0.393,
+        "precision": 0.556,
+        "wayfinding": 0
+      },
+      "field": {
+        "summits": 8,
+        "levels": 18,
+        "interval": 0.053,
+        "wobble": 1.455,
+        "ridge": true,
+        "interruption": "crease"
+      },
+      "treatment": {
+        "weight": 0.534,
+        "bloom": 0.79,
+        "stain": 0.767
+      },
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 2551123762,
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "themes": {
+        "density": 0.511,
+        "hands": 0.445,
+        "precision": 0,
+        "wayfinding": 0.473
+      },
+      "field": {
+        "summits": 10,
+        "levels": 12,
+        "interval": 0.082,
+        "wobble": 1.9,
+        "ridge": false,
+        "interruption": "corridor"
+      },
+      "treatment": {
+        "weight": 0.511,
+        "bloom": 0.78,
+        "stain": 0.755
+      },
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      }
+    }
+  ]
+}
