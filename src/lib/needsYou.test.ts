@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProjectSummary } from '#/lib/api'
-import { needKeys, recallDismissed, rememberDismissed, undismissed, type NeedsYou } from './needsYou'
+import type { StageKind } from './constants'
+import {
+  askingHuman,
+  asksHuman,
+  needKeys,
+  recallDismissed,
+  rememberDismissed,
+  undismissed,
+  type NeedsYou,
+} from './needsYou'
 
 type Decision = NeedsYou['decisions'][number]
 type PrToReview = NeedsYou['prs'][number]
@@ -50,6 +59,35 @@ const stored = () => {
 }
 
 afterEach(() => vi.unstubAllGlobals())
+
+describe('the entries that ask the human', () => {
+  const kindOf = (kinds: Record<number, StageKind | undefined>) => (ticketId: number) => kinds[ticketId]
+  const entry = (ticketId: number | null) => ({ ticketId })
+
+  it('keeps the active, review and blocked tickets’ entries, and drops open, done, cancelled and unknown ones', () => {
+    const entries = [1, 2, 3, 4, 5, 6, 7].map(entry)
+    const lookup = kindOf({
+      1: 'active',
+      2: 'review',
+      3: 'blocked',
+      4: 'open',
+      5: 'done',
+      6: 'cancelled',
+    })
+    expect(askingHuman(entries, lookup).map((e) => e.ticketId)).toEqual([1, 2, 3])
+    for (const kind of ['active', 'review', 'blocked'] as const) expect(asksHuman(kind)).toBe(true)
+    for (const kind of ['open', 'done', 'cancelled'] as const) expect(asksHuman(kind)).toBe(false)
+    expect(asksHuman(undefined)).toBe(false)
+  })
+
+  it('keeps an entry bound to no ticket, and one `keep` names whatever its ticket’s stage', () => {
+    const archived = { ticketId: 9, archive: true }
+    const entries = [entry(null), entry(9), archived]
+    const lookup = kindOf({ 9: 'done' })
+    expect(askingHuman(entries, lookup).map((e) => e.ticketId)).toEqual([null])
+    expect(askingHuman(entries, lookup, (e) => 'archive' in e).map((e) => e.ticketId)).toEqual([null, 9])
+  })
+})
 
 describe('the key of each Needs you entry', () => {
   it('names the entry, never its place in the list', () => {
