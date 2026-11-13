@@ -304,6 +304,32 @@ describe("a project's notes", () => {
     expect(unpinned.body.position).toBeGreaterThanOrEqual(0)
   })
 
+  it('create a note that is not pinned even when every remaining note is pinned', async () => {
+    const p = newProject('create-all-pinned')
+    const first = await create(p, 'First', 'one')
+    const second = await create(p, 'Second', 'two')
+    const third = await create(p, 'Third', 'three')
+    // Pin every note, then remove the one at -1, so the highest remaining position is -2.
+    for (const n of [first, second, third]) {
+      const pinned = await call('PATCH', `/api/projects/${p}/notes/${n.body.id}`, { pinned: true })
+      expect(pinned.status).toBe(200)
+      expect(pinned.body.position).toBeLessThan(0)
+    }
+    expect((await call('DELETE', `/api/projects/${p}/notes/${first.body.id}`)).status).toBe(200)
+    const before = (await call('GET', `/api/projects/${p}/notes`)).body
+    expect(before.map((n: { label: string }) => n.label)).toEqual(['Third', 'Second'])
+    expect(before.every((n: { position: number }) => n.position < 0)).toBe(true)
+    expect(before[1].position).toBeLessThan(-1)
+
+    // A new note after all-pinned notes must not read as pinned.
+    const added = await create(p, 'Added', 'four')
+    expect(added.status).toBe(201)
+    expect(added.body.position).toBeGreaterThanOrEqual(0)
+    const listed = (await call('GET', `/api/projects/${p}/notes`)).body
+    expect(listed.map((n: { label: string }) => n.label)).toEqual(['Third', 'Second', 'Added'])
+    expect(listed[2].position).toBeGreaterThanOrEqual(0)
+  })
+
   it('unpin the last pinned note in one call, even when it sits deeper than -1', async () => {
     const p = newProject('unpin-last')
     const only = await create(p, 'Only', 'one')

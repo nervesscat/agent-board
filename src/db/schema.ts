@@ -629,6 +629,47 @@ export const reports = sqliteTable(
   (t) => [index('reports_project_period').on(t.projectId, t.period)],
 )
 
+// A card an agent opened for the human's notification center (src/server/agentCards.ts): a tracked
+// request the human asked to watch, or an important notice. It is not a board job: it survives a
+// restart and stays until the human dismisses it.
+export const agentCards = sqliteTable(
+  'agent_cards',
+  {
+    id: id(),
+    projectId: integer('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    kind: text().$type<'tracked' | 'notice'>().notNull(),
+    // Who opened it: the agent's name, a sub-identity's included.
+    actor: text().notNull(),
+    title: text().notNull(),
+    // The human's own request, on a tracked card ('' on a notice).
+    request: text().notNull().default(''),
+    // A notice's body: what happened and what the human should do ('' on a tracked card).
+    body: text().notNull().default(''),
+    // A notice's reason it cannot wait, or a tracked card's failure reason ('' until one is given).
+    reason: text().notNull().default(''),
+    total: integer().notNull().default(0),
+    done: integer().notNull().default(0),
+    // A tracked card's state; a notice has no progress, so it reads notice.
+    state: text().$type<'running' | 'succeeded' | 'failed' | 'notice'>().notNull().default('running'),
+    // The item being worked on now, on a running tracked card.
+    step: text(),
+    // A tracked card's one-line success result.
+    result: text(),
+    // Where the result lives: a board path or an absolute http(s) URL.
+    href: text(),
+    startedAt: now(),
+    updatedAt: now(),
+    finishedAt: text(),
+  },
+  (t) => [
+    index('agent_cards_project').on(t.projectId),
+    check('agent_cards_kind', sql`${t.kind} IN ('tracked', 'notice')`),
+    check('agent_cards_state', sql`${t.state} IN ('running', 'succeeded', 'failed', 'notice')`),
+  ],
+)
+
 // Origin's branches of a repo as the board last saw them, and each move it saw since (a branch that
 // appeared, moved or went away): what reached origin on a given day.
 export const originRefs = sqliteTable(
@@ -788,6 +829,7 @@ export type Comment = typeof comments.$inferSelect
 export type ReviewResult = typeof reviewResults.$inferSelect
 export type ReportSettings = typeof reportSettings.$inferSelect
 export type Report = typeof reports.$inferSelect
+export type AgentCardRow = typeof agentCards.$inferSelect
 export type ReportSettingsChange = typeof reportSettingsChanges.$inferSelect
 export type ProjectInstructionChange = typeof projectInstructionChanges.$inferSelect
 export type OriginRef = typeof originRefs.$inferSelect

@@ -14,6 +14,7 @@ import {
 } from '#/lib/constants'
 import { AGENT_TOKEN_NAME } from '#/lib/agents'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
+import * as agentCards from './agentCards'
 import * as agents from './agents'
 import { roadmap } from './roadmap'
 import * as runConfig from './runConfig'
@@ -889,6 +890,79 @@ api.post('/api/test/jobs', async ({ request, actor }) => {
   timer = setTimeout(tick, body.ms)
   timer.unref()
   return json(job, 202)
+})
+
+// --- agent cards: tracked requests and important notices an agent opens for the human (agentCards.ts) ---
+// The project's cards the caller may see, newest first: the human every one, an agent only its own and
+// its sub-identities'. Not the board's in-memory jobs (above); the top bar merges both.
+api.get('/api/projects/:id/agent-cards', ({ request, params, actor }) =>
+  json(agentCards.listCards(id(params), { agent: isAgent(request) ? actor : null })),
+)
+// Opens a tracked card: the human's request (request) is the guard, and an agent opens it only. 403 for
+// the human, 400 without the request.
+api.post('/api/projects/:id/agent-cards', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      title: z.string().max(200).optional(),
+      request: z.string().max(500).optional(),
+      total: z.number().int().min(0).max(1_000_000).optional(),
+      href: z.string().max(2_000).optional(),
+    }),
+  )
+  return json(agentCards.startTracked({ name: actor, agent: isAgent(request) }, id(params), body), 201)
+})
+// Posts one notice: its reason it cannot wait is the guard.
+api.post('/api/projects/:id/agent-cards/notices', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      title: z.string().max(200).optional(),
+      body: z.string().max(2_000).optional(),
+      reason: z.string().max(500).optional(),
+      href: z.string().max(2_000).optional(),
+    }),
+  )
+  return json(agentCards.postNotice({ name: actor, agent: isAgent(request) }, id(params), body), 201)
+})
+// Moves a running tracked card; 404 for another agent's or another project's, 409 once it ended.
+api.post('/api/projects/:id/agent-cards/:cardId/progress', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({ done: z.number().int().optional(), step: z.string().max(500).nullable().optional() }),
+  )
+  return json(
+    agentCards.progressTracked(
+      { name: actor, agent: isAgent(request) },
+      id(params),
+      id(params, 'cardId'),
+      body,
+    ),
+  )
+})
+// Ends a running tracked card succeeded with a result or failed with a reason.
+api.post('/api/projects/:id/agent-cards/:cardId/finish', async ({ request, params, actor }) => {
+  const body = await readJson(
+    request,
+    z.object({
+      state: z.enum(['succeeded', 'failed']),
+      result: z.string().max(500).optional(),
+      reason: z.string().max(500).optional(),
+    }),
+  )
+  return json(
+    agentCards.finishTracked(
+      { name: actor, agent: isAgent(request) },
+      id(params),
+      id(params, 'cardId'),
+      body,
+    ),
+  )
+})
+// Dismisses a card for everybody; the human only (an agent gets 403).
+api.delete('/api/projects/:id/agent-cards/:cardId', ({ request, params, actor }) => {
+  agentCards.dismissCard({ name: actor, agent: isAgent(request) }, id(params), id(params, 'cardId'))
+  return json({ ok: true })
 })
 
 // Every preview of the project's tickets, running or not, running first, and the board-wide use of the

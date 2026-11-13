@@ -87,7 +87,13 @@ export function createNote(
   const body = text(input.body ?? '', 'body', NOTE_BODY_MAX)
   const row = db
     .insert(schema.projectNotes)
-    .values({ projectId, label, body, createdBy: caller.name, position: lastPosition(projectId) })
+    .values({
+      projectId,
+      label,
+      body,
+      createdBy: caller.name,
+      position: Math.max(lastPosition(projectId), 0),
+    })
     .returning()
     .get()
   return row

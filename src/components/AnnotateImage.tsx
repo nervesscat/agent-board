@@ -1,7 +1,8 @@
-import { Circle, MessageSquarePlus, MoveUpRight, Pencil, Square, Trash2, Type, Undo2 } from 'lucide-react'
+import { Circle, MessageSquarePlus, MoveUpRight, Pencil, Square, Type, Undo2 } from 'lucide-react'
 import { type PointerEvent, type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { TrashIcon } from '#/components/TrashIcon'
 import { Button } from '#/components/ui/button'
 import {
   Dialog,
@@ -467,7 +468,7 @@ export function AnnotateImage({
               }}
               disabled={!items.length || busy}
             >
-              <Trash2 data-icon="inline-start" /> Clear
+              <TrashIcon data-icon="inline-start" /> Clear
             </Button>
           </div>
           <div className="flex items-center gap-2">

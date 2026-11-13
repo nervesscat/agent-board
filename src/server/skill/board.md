@@ -637,6 +637,28 @@ review to GitHub.
 worker) and `parent` (the name a sub-identity works under); the project's agents are in
 `get_project`. Use those exact names for `assignee`.
 
+## Notifications: tracked requests and important notices
+
+The top bar's notification center is **not** a place to report your work: the work timeline,
+heartbeats, spans, progress posts and the ticket summary already cover that.
+
+- **A tracked card only when the human explicitly asked** to see the progress of, or to be told
+  about the completion of, one named thing: "show me progress", "let me know when", "notify me
+  when", "tell me once it is ready". One request, one card, about the thing they named.
+  `start_tracked_request` takes the human's request itself (`request`, required: a call without it
+  is refused), `tracked_request_progress` moves it, and `finish_tracked_request` ends it succeeded
+  with a one-line result or failed with the reason.
+- **A notice only for something very important the human must know** and would otherwise miss:
+  data lost or at risk, production or the host broken, a secret exposed, the wrong thing done and
+  needing undo, a deadline missed. `post_notice` takes the reason it cannot wait (`reason`,
+  required: a notice without it is refused). It has no progress and no state to update afterwards.
+- **Never** for routine work: never to start a ticket, never to run tests in normal work, never for
+  an unasked long build, never for a finished ticket. A question for the human is a decision or a
+  wait, not a notice; when in doubt, post on the ticket.
+- Cards and notices stay until the human dismisses them (`dismiss_notification`, the human's only).
+  An agent sees and moves its own and its sub-identities' (`<its name>/…`), never another agent's,
+  and nothing crosses projects.
+
 ## Style
 
 Plain words, short. Titles under 80 characters. Screenshots beat paragraphs.
