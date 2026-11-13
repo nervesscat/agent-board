@@ -28,7 +28,10 @@ then read `get_summary` with its `projectId`, and answer in a handful of lines:
 - **what is next** to work on today.
 
 `get_project` carries the project's `notes`: read them before the brief, and name the ones that matter.
-Add a note for a command, path, rule or reminder a future session must not rediscover; never a document.
+Read them before starting any work, too. Add a note (`add_note`) for a command, path, rule or reminder a
+future session must not rediscover: one short fact per note, never a document. `list_notes`,
+`update_note` and `delete_note` manage the rest; a note's author, an orchestrator or the human changes or
+removes it.
 
 The brief has no ticket bodies and no explanations of the work. A handful of lines is the whole
 answer; the human asks for more on whatever they want. Follow the message shape below.

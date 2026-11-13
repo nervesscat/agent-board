@@ -390,4 +390,16 @@ describe('the board skill', () => {
     expect(skill).toContain('list_notes')
     expect(skill).toContain('add_note')
   })
+
+  it('tells the session skill the same: read the notes first, one short fact each, and the note tools by name', async () => {
+    const { sessionSkill } = await import('./agents')
+    const skill = sessionSkill()
+    expect(skill).toMatch(/notes/i)
+    expect(skill).toMatch(/read them before starting/i)
+    expect(skill).toMatch(/must not rediscover/i)
+    expect(skill).toMatch(/one short fact/i)
+    expect(skill).toMatch(/never a document/i)
+    expect(skill).toContain('list_notes')
+    expect(skill).toContain('add_note')
+  })
 })
