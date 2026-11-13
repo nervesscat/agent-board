@@ -382,8 +382,10 @@ test('the bulk delete is a job: determinate progress, and the report refreshed b
       }),
     )
 
-  // Enough branches that the run outlasts a poll of its job: the bar is seen on the way, with its item.
-  const names = Array.from({ length: 8 }, (_, i) => `bulk-${i}`)
+  // Enough branches that the run outlasts the page's 500 ms poll of its job, so the bar is seen on the
+  // way with its item: 8 finished inside one poll on a warm git listing, and the item never rendered.
+  const BULK = 24
+  const names = Array.from({ length: BULK }, (_, i) => `bulk-${i}`)
   for (const name of names) {
     landed(name)
     await done(name, name)
@@ -398,17 +400,19 @@ test('the bulk delete is a job: determinate progress, and the report refreshed b
 
   await page.goto(`/projects/${id}/cleanup`)
   const row = (branch: string) => page.locator(`tr[data-branch="${branch}"]`)
-  const bulk = page.getByRole('button', { name: /^Delete every eligible local branch \(8\)/ })
+  const bulk = page.getByRole('button', {
+    name: new RegExp(`^Delete every eligible local branch \\(${BULK}\\)`),
+  })
   await expect(bulk).toBeVisible()
   await bulk.click()
   const dialog = page.getByRole('alertdialog')
-  await dialog.getByRole('button', { name: 'Delete 8 local branches' }).click()
+  await dialog.getByRole('button', { name: `Delete ${BULK} local branches` }).click()
 
   // Determinate progress, with the item being handled, in the page's own bulk area.
   const progress = page.getByRole('region', { name: 'Delete progress' })
   const bar = progress.getByRole('progressbar')
-  await expect(bar).toHaveAttribute('aria-valuemax', '8')
-  await expect(progress).toContainText(/\d+ of 8/)
+  await expect(bar).toHaveAttribute('aria-valuemax', String(BULK))
+  await expect(progress).toContainText(new RegExp(`\\d+ of ${BULK}`))
   await expect(progress).toContainText(/#\d+ \S+: (deleted|refused|failed|gone)/)
   // Only the job's own items are off meanwhile: another kind's removal and Refresh stay usable.
   await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled()
@@ -416,14 +420,14 @@ test('the bulk delete is a job: determinate progress, and the report refreshed b
 
   // It ends on its own, and what it did is read in counts rather than raw items.
   const status = progress.getByRole('status')
-  await expect(status).toContainText('8 of 8', { timeout: 60_000 })
+  await expect(status).toContainText(`${BULK} of ${BULK}`, { timeout: 60_000 })
   await expect(status).toContainText('Succeeded')
-  await expect(status).toContainText('8 deleted')
+  await expect(status).toContainText(`${BULK} deleted`)
   await expect(status).not.toContainText('kept')
   // The running indicator is gone, and the outcomes read as they did before.
   await expect(progress.getByRole('progressbar')).toHaveCount(0)
   const results = page.getByRole('region', { name: 'Deletion results' })
-  await expect(results.locator('[data-outcome="deleted"]')).toHaveCount(8)
+  await expect(results.locator('[data-outcome="deleted"]')).toHaveCount(BULK)
   await expect(results.getByRole('button', { name: /^Copy: git branch / }).first()).toBeVisible()
 
   // No Refresh pressed: the deleted ones are gone from the report by itself…
