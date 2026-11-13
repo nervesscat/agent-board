@@ -179,7 +179,10 @@ Lanes of a ticket you are working are yours to create (next section).
   (`get_summary` → `needsYou.blockedTasks`) show it only while it is the ticket's next step to work
   (the first open task with no open subtask; a lane's own next step counts for its parent too) —
   `blockedNext` on the ticket says whether one of them is, while `blockedTasks` stays the full count
-  of blocked steps. It still counts as open and does not move the ticket. A blocked step further
+  of blocked steps, its lanes' in work (a done or cancelled lane's are out of it and out of the
+  rolled-up progress). It shows in Needs you only while the ticket it is on is being worked: a
+  lined-up, done or cancelled ticket asks nothing. It still counts as open and does not move the
+  ticket. A blocked step further
   down the order surfaces once the steps before it are done.
   Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole
   ticket to `blocked` (or `ask_decision`) only when nothing else can go on.
@@ -445,8 +448,8 @@ After that:
 2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
    board flags a ticket that is further along than its lanes. Say in the summary which lanes it
    covers.
-3. Dropping work: `status: cancelled`, with a comment saying why. Cancelled lanes' tasks leave the
-   parent's progress.
+3. Dropping work: `status: cancelled`, with a comment saying why. A cancelled or done lane's tasks
+   leave the parent's progress.
 4. Clean up your lane before it goes to `done` (or when the human moves it there): see
    [Clean up](#6-clean-up) for the rule. A ticket in `review` keeps its branch and worktree.
 
