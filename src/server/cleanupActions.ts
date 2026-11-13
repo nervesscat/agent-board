@@ -5,6 +5,7 @@ import { eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
+import { CLEANUP_DELETE_JOB } from '#/lib/cleanupResults'
 import { logActivity } from './activity'
 import {
   cleanupReport,
@@ -27,6 +28,7 @@ import {
   worktreeChanges,
 } from './git'
 import { HttpError } from './http'
+import { runAsJob, type JobWork } from './jobWork'
 import { stopLinkPreview } from './linkPreview'
 import { activePreviews, holdPreviews, type ManagedPreview, previewsSettled } from './managedPreview'
 import { stopRun } from './runs'
@@ -156,17 +158,18 @@ const result = (
 
 const short = (sha: string) => sha.slice(0, 7)
 
+/** One item landed: how many of the request's are done, and which one it was (`#12 lane/47: deleted`). */
+export interface DeleteProgress {
+  done: number
+  step: string
+}
+
 /**
- * Deletes what the caller confirmed, item by item: one refused or failing does not stop the rest.
- * Answers each item's outcome, in the order asked. An agent's request with anything but a local branch
- * in it, a worktree or a branch on origin, is refused whole (403), before anything is looked at.
+ * What a request may not ask for, before anything is looked at: an agent's worktree or branch on
+ * origin (403, the human's alone), and a project that does not exist (404). Kept apart so a job is
+ * never started for a request that is refused whole.
  */
-export async function deleteLeftovers(
-  projectId: number,
-  items: DeleteItem[],
-  actor: string,
-  opts: { agent?: boolean } = {},
-): Promise<DeleteResult[]> {
+function checkRequest(projectId: number, items: DeleteItem[], opts: { agent?: boolean }) {
   if (opts.agent) {
     const refused = new Set(items.map((item) => item.kind).filter((kind) => !agentMay.has(kind)))
     if (refused.size)
@@ -177,15 +180,42 @@ export async function deleteLeftovers(
       )
   }
   getProject(projectId)
+}
+
+/**
+ * Deletes what the caller confirmed, item by item: one refused or failing does not stop the rest.
+ * Answers each item's outcome, in the order asked. An agent's request with anything but a local branch
+ * in it, a worktree or a branch on origin, is refused whole (403), before anything is looked at.
+ *
+ * `onProgress` hears each item as it lands, whichever repository it is in (`done` counts them as they
+ * land; one item is reported once, with the outcome it got).
+ */
+export async function deleteLeftovers(
+  projectId: number,
+  items: DeleteItem[],
+  actor: string,
+  opts: { agent?: boolean; onProgress?: (progress: DeleteProgress) => void } = {},
+): Promise<DeleteResult[]> {
+  checkRequest(projectId, items, opts)
   const repos = listRepos(projectId)
   const results: DeleteResult[] = []
+  let landed = 0
+  const landedNow = (i: number) => {
+    const r = results[i]!
+    opts.onProgress?.({ done: ++landed, step: `#${r.ticketId} ${r.branch}: ${r.outcome}` })
+  }
   const byRepo = new Map<string, { repoPath: string; at: number[] }>()
   items.forEach((item, i) => {
     const t = db.select().from(schema.tickets).where(eq(schema.tickets.id, item.ticketId)).get()
-    if (!t || t.projectId !== projectId)
-      return (results[i] = result(item, 'refused', `#${item.ticketId} is no ticket of this project`))
+    if (!t || t.projectId !== projectId) {
+      results[i] = result(item, 'refused', `#${item.ticketId} is no ticket of this project`)
+      return landedNow(i)
+    }
     const repo = (t.repoId ? repos.find((r) => r.id === t.repoId) : repos[0]) ?? null
-    if (!repo) return (results[i] = result(item, 'refused', 'the ticket has no repo'))
+    if (!repo) {
+      results[i] = result(item, 'refused', 'the ticket has no repo')
+      return landedNow(i)
+    }
     const key = pathKey(repo.repoPath)
     if (!byRepo.has(key)) byRepo.set(key, { repoPath: repo.repoPath, at: [] })
     byRepo.get(key)!.at.push(i)
@@ -205,12 +235,43 @@ export async function deleteLeftovers(
           } finally {
             // The ticket's git panel and the push dots read the checkout afresh.
             dropListings(repoPath)
+            landedNow(i)
           }
         }
       }),
     ),
   )
   return results
+}
+
+/**
+ * The same deletion as a job: the request is checked first (403 for an agent's worktree or branch on
+ * origin, 404 for an unknown project, nothing started), then the work runs behind a job of the
+ * registry that reports each item as it lands and ends with the results themselves. The route answers
+ * the job at once; a caller that waits (`results`, the MCP tool) gets the array or the throw.
+ */
+export function startCleanupDelete(
+  projectId: number,
+  items: DeleteItem[],
+  actor: string,
+  opts: { agent?: boolean } = {},
+): JobWork<DeleteResult[]> {
+  checkRequest(projectId, items, opts)
+  return runAsJob(
+    {
+      kind: CLEANUP_DELETE_JOB,
+      title: items.length === 1 ? 'Delete 1 branch' : `Delete ${items.length} branches`,
+      projectId,
+      actor,
+      total: items.length,
+      href: `/projects/${projectId}/cleanup`,
+    },
+    (report) =>
+      deleteLeftovers(projectId, items, actor, {
+        ...opts,
+        onProgress: ({ done, step }) => report(done, step),
+      }),
+  )
 }
 
 async function deleteOne(
