@@ -9,9 +9,12 @@ import { z } from 'zod'
 import { NewTicket } from '#/components/NewTicket'
 import { toastRefusal } from '#/components/Needs'
 import { tagTextClass } from '#/components/Tag'
+import { WORK_STATE_ICON } from '#/components/WorkStatus'
 import { ArchivedList, type Placement, TicketBoard, TicketList } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
+import { Checkbox } from '#/components/ui/checkbox'
 import { Input } from '#/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '#/components/ui/popover'
 import {
   Combobox,
   ComboboxContent,
@@ -26,24 +29,28 @@ import { Tabs, TabsList, TabsTrigger } from '#/components/ui/tabs'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { errorMessage, get, patch, post, type TicketRow } from '#/lib/api'
-import { useProject } from '#/lib/project'
+import { rowWorkLine } from '#/lib/activityTimeline'
+import { useProject, useStages } from '#/lib/project'
 import { remember, useRestoreRemembered } from '#/lib/remembered'
 import { positionBy, stageColumn, withPlacement } from '#/lib/stages'
 import { MAX_TAG_LENGTH, matchTags, tagChoices } from '#/lib/tags'
 import { type TicketsScope, keepSearchRows, ticketsKey, ticketsQuery } from '#/lib/tickets'
+import { WORK_LINE_STATES, type WorkLineState, parseWorkStates, stateMatches } from '#/lib/workStatus'
 
 const VIEWS = ['board', 'list', 'archived'] as const
 type View = (typeof VIEWS)[number]
 
 // ?view= is the view picked (none: the one this browser remembers, else board). ?q= searches the List
 // and the Archived tickets; the Board shows them all. A query that reads as a number (`?q=84`) comes in
-// as one. ?tag= keeps the Board and the List to the tickets carrying that tag, in any casing.
+// as one. ?tag= keeps the Board and the List to the tickets carrying that tag, in any casing. ?state= keeps
+// them to the tickets whose work-state line is one of the states listed (comma-separated); none, every one.
 export const Route = createFileRoute('/projects/$id/features/')({
   component: Features,
   validateSearch: z.object({
     view: z.enum(VIEWS).optional().catch(undefined),
     q: z.union([z.string(), z.number()]).transform(String).optional().catch(undefined),
     tag: z.union([z.string(), z.number()]).transform(String).optional().catch(undefined),
+    state: z.string().optional().catch(undefined),
   }),
 })
 
@@ -54,7 +61,7 @@ const REMEMBERED_VIEWS = ['board', 'list'] as const
 
 function Features() {
   const { id } = Route.useParams()
-  const { view: picked, q = '', tag = '' } = Route.useSearch()
+  const { view: picked, q = '', tag = '', state = '' } = Route.useSearch()
   const navigate = Route.useNavigate()
   const qc = useQueryClient()
   // The tabs and the page both follow the URL, so the server's render and the browser's agree.
@@ -164,11 +171,24 @@ function Features() {
   // The tag picked narrows the Board and the List, searched or not; the archive shows them all.
   const tagged = (t: TicketRow) =>
     !tag || view === 'archived' || t.tags.some((x) => x.toLowerCase() === tag.toLowerCase())
-  const shown = (data ?? []).filter(tagged)
   const filterTag = (next: string) =>
     navigate({ search: (s) => ({ ...s, tag: next || undefined }), replace: true })
+  // The State filter keeps the rows whose work-state line is one of the chosen states, with the Tags filter.
+  const stages = useStages(id)
+  const chosen = parseWorkStates(state)
+  const stateOf = (t: TicketRow) => rowWorkLine(t, stages)?.state ?? null
+  const stated = (t: TicketRow) => view === 'archived' || stateMatches(stateOf(t), chosen)
+  const filterStates = (next: WorkLineState[]) =>
+    navigate({ search: (s) => ({ ...s, state: next.length ? next.join(',') : undefined }), replace: true })
+  // How many of the rows the Tags filter leaves are in each state, so the State filter can say.
+  const inTag = (searching ? (found.data ?? []) : (data ?? [])).filter(tagged)
+  const counts = Object.fromEntries(
+    WORK_LINE_STATES.map((s) => [s, inTag.filter((t) => stateOf(t) === s).length]),
+  ) as Record<WorkLineState, number>
   // The search narrows the List and the Archived tickets: the archive shows every ticket it finds.
-  const listed = searching ? (found.data ?? []).filter(tagged) : shown
+  const kept = (t: TicketRow) => tagged(t) && stated(t)
+  const shown = (data ?? []).filter(kept)
+  const listed = searching ? (found.data ?? []).filter(kept) : shown
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -186,6 +206,7 @@ function Features() {
               onChange={filterTag}
             />
           )}
+          {view !== 'archived' && <StateFilter value={chosen} counts={counts} onChange={filterStates} />}
           <Tabs value={view} onValueChange={(v) => pickView(v as View)}>
             <TabsList>
               <TabsTrigger value="board" aria-label="Board">
@@ -260,6 +281,64 @@ function Features() {
           onPlace={placeBy}
           onArchiveAll={(status) => archiveAll.mutate(status)}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * The work states the Board and the List are narrowed to (`?state=`): each state with its icon, its name
+ * and how many of the tickets the Tags filter leaves are in it. Several can be checked; none checked keeps
+ * every ticket.
+ */
+function StateFilter({
+  value,
+  counts,
+  onChange,
+}: {
+  value: WorkLineState[]
+  counts: Record<WorkLineState, number>
+  onChange: (states: WorkLineState[]) => void
+}) {
+  const toggle = (s: WorkLineState, on: boolean) =>
+    onChange(WORK_LINE_STATES.filter((x) => (x === s ? on : value.includes(x))))
+  return (
+    <div className="flex items-center gap-1">
+      <Popover>
+        <PopoverTrigger render={<Button variant="outline" size="sm" />}>
+          State
+          {value.length > 0 && <span className="tabular-nums text-muted-foreground">{value.length}</span>}
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-56 gap-0.5 p-1">
+          {WORK_LINE_STATES.map((s) => {
+            const { Icon, tone, name } = WORK_STATE_ICON[s]
+            return (
+              <label
+                key={s}
+                className="flex min-h-7 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm hover:bg-muted"
+              >
+                <Checkbox
+                  aria-label={name}
+                  checked={value.includes(s)}
+                  onCheckedChange={(on) => toggle(s, on)}
+                />
+                <Icon aria-hidden className={`size-4 shrink-0 ${tone}`} />
+                <span className="min-w-0 flex-1">{name}</span>
+                <span className="tabular-nums text-muted-foreground">{counts[s]}</span>
+              </label>
+            )
+          })}
+        </PopoverContent>
+      </Popover>
+      {value.length > 0 && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => onChange([])}
+          aria-label="Clear the state filter"
+        >
+          <X />
+        </Button>
       )}
     </div>
   )
