@@ -1,0 +1,108 @@
+{
+  "direction": "retro-blueprint",
+  "generator": "scripts/release-art/retro-blueprint.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "ground": "#0E2438",
+    "exposed": "#EAF3F8",
+    "wash": "#7FB6D9",
+    "shadow": "#081826"
+  },
+  "weights": {
+    "light": 1.15,
+    "medium": 2.05,
+    "heavy": 3.3
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 3068563348,
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "themes": {
+        "density": 0.958,
+        "hands": 0.897,
+        "precision": 0.365,
+        "wayfinding": 0.443
+      },
+      "exposure": {
+        "summits": 16,
+        "levels": 20,
+        "wobble": 1.705,
+        "patches": 9,
+        "fades": 26,
+        "bloom": 0.407,
+        "ridge": false,
+        "corridor": false
+      },
+      "bytes": {
+        "light": 57010,
+        "dark": 57006
+      },
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 3085340967,
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "themes": {
+        "density": 0.534,
+        "hands": 0.393,
+        "precision": 0.583,
+        "wayfinding": 0
+      },
+      "exposure": {
+        "summits": 9,
+        "levels": 19,
+        "wobble": 1.442,
+        "patches": 6,
+        "fades": 15,
+        "bloom": 0.309,
+        "ridge": true,
+        "corridor": false
+      },
+      "bytes": {
+        "light": 42254,
+        "dark": 42249
+      },
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 3035008110,
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "themes": {
+        "density": 0.511,
+        "hands": 0.445,
+        "precision": 0,
+        "wayfinding": 0.473
+      },
+      "exposure": {
+        "summits": 11,
+        "levels": 14,
+        "wobble": 1.968,
+        "patches": 6,
+        "fades": 18,
+        "bloom": 0.308,
+        "ridge": false,
+        "corridor": true
+      },
+      "bytes": {
+        "light": 35854,
+        "dark": 35847
+      },
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      }
+    }
+  ]
+}
