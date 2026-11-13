@@ -342,8 +342,11 @@ test('a removal that fails part-way keeps the worktree it removed and its restor
   fs.writeFileSync(path.join(locked, 'file'), 'x\n')
   try {
     lockFolder(locked)
-  } catch {
-    // A filesystem without immutable folders (tmpfs, Windows, macOS) cannot stage this failure as root.
+  } catch (error) {
+    // Only a filesystem that has no immutable folders (tmpfs, Windows, macOS) may skip this test. Any other
+    // failure (no chattr on PATH, a refused +i) is a broken runner and must fail the test, not hide it.
+    const message = error instanceof Error ? error.message : String(error)
+    if (!/Inappropriate ioctl|Operation not supported/i.test(message)) throw error
     test.skip(true, 'this filesystem has no immutable folders: the part-way removal cannot be staged as root')
   }
 

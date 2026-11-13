@@ -21,10 +21,11 @@ jobs:
     # The e2e suite is the long part of this job: about 8 minutes of install, typecheck, lint,
     # migrations, unit tests and build come first, then the suite's 497 tests. Measured on the
     # self-hosted runner: 126–200 tests in ~12 minutes at 2 workers, and a run still going at 20
-    # minutes was cancelled by the old timeout. 4 workers (playwright.config.ts), 45 minutes for the
-    # e2e step and 60 here leave better than 20% margin, with the box also carrying other agents'
-    # suites. One self-hosted runner, so no matrix: shards would only queue behind each other.
-    timeout-minutes: 60
+    # minutes was cancelled by the old timeout. 4 workers (playwright.config.ts). The e2e step measured
+    # 31 minutes with another suite on the same box, so 70 here is more than twice that, with the
+    # box also carrying other agents' suites. One self-hosted runner, so no matrix: shards would only
+    # queue behind each other.
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
