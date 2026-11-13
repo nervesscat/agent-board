@@ -273,6 +273,12 @@ function attributes(source) {
 /** Marks where a lifted-out code block goes: a private-use character no release body carries. */
 const FENCE_MARK = '\uF8FF'
 
+/** Marks one column of a list's indentation: the converter writes these, and they become spaces at the end. */
+const INDENT_MARK = '\uF8FD'
+
+/** @param {number} columns */
+const indentation = (columns) => INDENT_MARK.repeat(columns)
+
 /**
  * The HTML of one release body as markdown. Code blocks are lifted out first (their contents are text,
  * not markup), then each tag is replaced by its markdown and the text between them is decoded.
@@ -296,11 +302,15 @@ function htmlToMarkdown(html) {
     })
   // The collapse runs on the text alone: the code blocks go back in after it, with their spaces and blank lines.
   text = tagsToMarkdown(text)
-    .replace(/[ \t]+\n/g, '\n')
-    // Runs of spaces inside a line become one; a line's indentation (a nested list's column) stays.
-    .replace(/(?<=\S)[ \t]{2,}/g, ' ')
+    .replace(/[ \t\uF8FD]+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
-    .replace(/[ \t\n]*\uF8FF(\d+)\uF8FF[ \t\n]*/g, (_whole, i) => `\n\n${fences[Number(i)] ?? ''}\n\n`)
+    .replace(
+      /[ \t\n\uF8FD]*\uF8FF(\d+)\uF8FF[ \t\n\uF8FD]*/g,
+      (_whole, i) => `\n\n${fences[Number(i)] ?? ''}\n\n`,
+    )
+    // The list indentation the converter marked goes back in as spaces, after the collapse above.
+    .replace(/\uF8FD/g, ' ')
   return text.trim()
 }
 
@@ -315,7 +325,7 @@ const escapeMarkdown = (text) => text.replace(/[\\`*_~[\]]/g, '\\$&')
 const ENTITY_START = /&(?=#?\w+;)/g
 
 /** The output is at the start of a line (after its indentation). */
-const LINE_START = /(^|\n)[ \t]*$/
+const LINE_START = /(^|\n)[ \t\uF8FD]*$/
 
 /** A block marker at the start of a line of text: a heading, quote, bullet, or ordered-list number. */
 const BLOCK_MARKER = /^([ \t]*)(?:([#>+-])|(\d+)([.)]))/
@@ -327,7 +337,7 @@ const escapeBlockMarker = (line) =>
   )
 
 /** The output ends with a list item's marker (`- `, `1. `): what follows it starts the item's text. */
-const ITEM_START = /(^|\n)[ \t]*(?:\d+\.|-)[ \t]+$/
+const ITEM_START = /(^|\n)[ \t\uF8FD]*(?:\d+\.|-)[ \t]+$/
 
 /** The block tags: whitespace between them, or before their closers, is layout. */
 const BLOCK_TAGS = /^(p|div|h[1-6]|ul|ol|li|table|tr|blockquote|hr)$/
@@ -382,6 +392,8 @@ function tagsToMarkdown(html) {
   const emphasis = []
   /** @type {string | null} */
   let href = null
+  /** A heading outside a list: one line of markdown, so a break in it is a space. */
+  let blockHeading = false
   let out = ''
   let last = 0
 
@@ -397,7 +409,7 @@ function tagsToMarkdown(html) {
     if (table && !inCell && /^\s*$/.test(raw)) return ''
     if (/^\s*$/.test(raw)) {
       if (isLayout(before, after)) return ''
-      return out === '' || /\s$/.test(out) ? '' : ' '
+      return out === '' || /[\s\uF8FD]$/.test(out) ? '' : ' '
     }
     let chunk = raw
     if (after?.closing && after.name === 'li') chunk = chunk.replace(/\s+$/, '')
@@ -406,7 +418,7 @@ function tagsToMarkdown(html) {
     let lineStart = ''
     if (before?.name === 'br' && out.endsWith('\\\n')) {
       chunk = chunk.replace(/^\s+/, '')
-      lineStart = ' '.repeat(contentColumn())
+      lineStart = indentation(contentColumn())
     }
     let decoded = decodeEntities(chunk)
     if (codes.length === 0) {
@@ -455,7 +467,8 @@ function tagsToMarkdown(html) {
       return
     }
     const [{ start }] = emphasis.splice(index, 1)
-    const inner = out.slice(start + marker.length)
+    // A break at the very end of the emphasis has no text after it to break: it goes, or its marker would close after a backslash.
+    const inner = out.slice(start + marker.length).replace(/\\\n$/, '')
     const body = inner.trim()
     if (body === '') {
       out = out.slice(0, start) + inner
@@ -479,7 +492,8 @@ function tagsToMarkdown(html) {
     previous = { name, closing }
     last = m.index + m[0].length
     if (name === 'br') {
-      out += '\\\n'
+      // A hard break needs a line of its own: in a table cell, a heading or a code span it is a space.
+      out += table || codes.length > 0 || blockHeading ? ' ' : '\\\n'
       continue
     }
     if (/^h[1-6]$/.test(name)) {
@@ -492,6 +506,7 @@ function tagsToMarkdown(html) {
         } else openEmphasis('**')
         continue
       }
+      blockHeading = !closing
       out += closing ? '\n\n' : `\n\n${'#'.repeat(Number(name[1]))} `
       continue
     }
@@ -551,7 +566,7 @@ function tagsToMarkdown(html) {
       } else if (list) {
         const marker = list.ordered ? `${(list.count += 1)}. ` : '- '
         // A new line starts at the list's column; the first item of a list after text is on a line of its own.
-        const lead = out === '' || out.endsWith('\n') ? ' '.repeat(list.base) : ''
+        const lead = out === '' || out.endsWith('\n') ? indentation(list.base) : ''
         out += `${lead}${marker}`
         list.content = list.base + marker.length
       } else out += '- '
@@ -596,9 +611,10 @@ function tagsToMarkdown(html) {
     // A loose item's paragraph (`<li><p>…</p></li>`) stays on the bullet's line: a break here would leave the bullet empty.
     if (name === 'p' && lists.length > 0) {
       if (closing) out += ' '
-      // A second paragraph of the item starts a new paragraph on the item's column, not on the same line.
-      else if (out.endsWith(' ') && !ITEM_START.test(out)) {
-        out = `${out.slice(0, -1)}\n\n${' '.repeat(contentColumn())}`
+      // A further paragraph of the item (after its text, or after a nested list) starts a new paragraph on the
+      // item's column, not on the same line and not inside the nested item.
+      else if (!ITEM_START.test(out) && /[ \t\n]$/.test(out)) {
+        out = `${out.replace(/[ \t\n]+$/, '')}\n\n${indentation(contentColumn())}`
       }
       continue
     }

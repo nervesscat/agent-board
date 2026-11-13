@@ -555,6 +555,28 @@ describe('notesMarkdown', () => {
     expect(notesMarkdown('<p>Foo\n---</p>')).toBe('Foo\n\\---')
   })
 
+  it('keeps a break in a table cell, a heading or a code span a space, not a backslash', () => {
+    expect(notesMarkdown('<table><tr><th>A</th></tr><tr><td>a<br>b</td></tr></table>')).toBe(
+      '| A |\n| --- |\n| a b |',
+    )
+    expect(notesMarkdown('<h2>Release<br>notes</h2>')).toBe('## Release notes')
+    expect(notesMarkdown('<p><code>a<br>b</code></p>')).toBe('`a b`')
+  })
+
+  it('drops a break at the end of emphasis, so its markers still close', () => {
+    expect(notesMarkdown('<p><strong>Changes:<br></strong>x</p>')).toBe('**Changes:**x')
+  })
+
+  it('keeps a paragraph after a nested list in the item that holds the list', () => {
+    expect(notesMarkdown('<ul><li><p>A</p><ul><li>x</li></ul><p>B</p></li></ul>')).toBe('- A\n  - x\n\n  B')
+  })
+
+  it('keeps the indentation of raw text as text, not as a code block', () => {
+    expect(notesMarkdown('<div align="center">\n    <h2>Release 2.0</h2>\n    Some text here\n</div>')).toBe(
+      '## Release 2.0\n\n Some text here',
+    )
+  })
+
   it('is empty for anything that is not notes', () => {
     expect(notesMarkdown(null)).toBe('')
     expect(notesMarkdown(undefined)).toBe('')
