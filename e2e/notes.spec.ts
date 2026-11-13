@@ -101,6 +101,18 @@ test('the manage dialog lists every note and edits and deletes there; a pinned n
   await expect.poll(async () => (await list(human, project.id)).at(-1)!.label).toBe('N4')
 })
 
+test('a first load that fails says so on the card instead of the empty state', async ({ page, project }) => {
+  await page.route(`**/api/projects/${project.id}/notes`, (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ status: 500, json: { error: 'the notes could not be read' } })
+      : route.continue(),
+  )
+  await page.goto(`/projects/${project.id}`)
+  const card = notes(page)
+  await expect(card).toContainText('the notes could not be read')
+  await expect(card).not.toContainText('A note is one short fact the next session must not rediscover')
+})
+
 test('Notes is an Overview card the layout hides and moves like the others', async ({
   page,
   project,

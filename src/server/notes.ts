@@ -119,9 +119,11 @@ export function updateNote(
       .from(schema.projectNotes)
       .where(eq(schema.projectNotes.projectId, projectId))
       .get()
-    position = (row?.first ?? 0) - 1
+    // Always below zero, even when the lowest note is already above it: a pin must read as a pin.
+    position = Math.min(row?.first ?? 0, 0) - 1
   } else if (pinned === false && position < 0) {
-    position = lastPosition(projectId)
+    // Back among the unpinned notes: never below zero, even when the pinned ones sit deeper.
+    position = Math.max(lastPosition(projectId), 0)
   }
   const row = db
     .update(schema.projectNotes)

@@ -281,6 +281,46 @@ describe("a project's notes", () => {
     expect(await labels()).toEqual(['First', 'Third', 'Second'])
   })
 
+  it('pin with a negative position even when the lowest note is already above zero', async () => {
+    const p = newProject('pin-positive')
+    const gone = await create(p, 'Gone', 'removed first')
+    const second = await create(p, 'Second', 'two')
+    await create(p, 'Third', 'three')
+    expect((await call('DELETE', `/api/projects/${p}/notes/${gone.body.id}`)).status).toBe(200)
+    // The lowest remaining note is at 1, so a pin from there must still land below zero.
+    expect((await call('GET', `/api/projects/${p}/notes`)).body[0].position).toBe(1)
+
+    const pinned = await call('PATCH', `/api/projects/${p}/notes/${second.body.id}`, { pinned: true })
+    expect(pinned.status).toBe(200)
+    expect(pinned.body.position).toBeLessThan(0)
+    const listed = (await call('GET', `/api/projects/${p}/notes`)).body
+    expect(listed.map((n: { label: string }) => n.label)).toEqual(['Second', 'Third'])
+    expect(listed[0].position).toBeLessThan(0)
+
+    // It reads as pinned, so a second pin is a pin too, and the unpin of the first one works.
+    const again = await call('PATCH', `/api/projects/${p}/notes/${listed[1].id}`, { pinned: true })
+    expect(again.body.position).toBeLessThan(listed[0].position)
+    const unpinned = await call('PATCH', `/api/projects/${p}/notes/${second.body.id}`, { pinned: false })
+    expect(unpinned.body.position).toBeGreaterThanOrEqual(0)
+  })
+
+  it('unpin the last pinned note in one call, even when it sits deeper than -1', async () => {
+    const p = newProject('unpin-last')
+    const only = await create(p, 'Only', 'one')
+    const other = await create(p, 'Other', 'two')
+    // Pin the other note, then this one: this one is at -2, the lowest of the pins.
+    await call('PATCH', `/api/projects/${p}/notes/${other.body.id}`, { pinned: true })
+    await call('PATCH', `/api/projects/${p}/notes/${only.body.id}`, { pinned: true })
+    // The other note goes away, so the one left pinned is the last pinned note in the project.
+    expect((await call('DELETE', `/api/projects/${p}/notes/${other.body.id}`)).status).toBe(200)
+    expect((await call('GET', `/api/projects/${p}/notes`)).body[0].position).toBeLessThan(-1)
+
+    const unpinned = await call('PATCH', `/api/projects/${p}/notes/${only.body.id}`, { pinned: false })
+    expect(unpinned.status).toBe(200)
+    expect(unpinned.body.position).toBeGreaterThanOrEqual(0)
+    expect((await call('GET', `/api/projects/${p}/notes`)).body[0].position).toBeGreaterThanOrEqual(0)
+  })
+
   it('are the MCP tools list_notes, add_note, update_note and delete_note, and an added note shows in get_project', async () => {
     const p = newProject('mcp')
     const tools = ((await rpc('tools/list')).tools as { name: string }[]).map((t) => t.name)

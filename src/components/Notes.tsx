@@ -35,11 +35,12 @@ export function Notes({ p }: { p: ProjectSummary }) {
   const qc = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [managing, setManaging] = useState(false)
-  const { data: notes = [], isLoading } = useQuery({
+  const { data, error, isLoading } = useQuery({
     queryKey: key,
     queryFn: () => get<ProjectNote[]>(`/api/projects/${projectId}/notes`),
     refetchInterval: 30_000,
   })
+  const notes = data ?? []
   const changed = () => void qc.invalidateQueries({ queryKey: key })
   const add = useMutation({
     mutationFn: (input: { label: string; body: string }) =>
@@ -99,6 +100,9 @@ export function Notes({ p }: { p: ProjectSummary }) {
       <CardContent className="space-y-3">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading notes…</p>
+        ) : error && !data ? (
+          // A first load that failed says so; a later failed refetch keeps the notes already shown.
+          <p className="text-sm text-destructive">{errorMessage(error)}</p>
         ) : !notes.length && !adding ? (
           <EmptyNotes />
         ) : (
