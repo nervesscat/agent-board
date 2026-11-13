@@ -240,13 +240,13 @@ function CardTitle({ card }: { card: AgentCard }) {
   )
 }
 
-function Dismiss({ title, onDismiss }: { title: string; onDismiss: () => void }) {
+function Dismiss({ label, onDismiss }: { label: string; onDismiss: () => void }) {
   return (
     <Button
       variant="ghost"
       size="icon"
       className="-my-1 size-6 shrink-0"
-      aria-label={`Dismiss ${title}`}
+      aria-label={`Dismiss ${label}`}
       onClick={onDismiss}
     >
       <X className="size-3.5" />
@@ -268,7 +268,7 @@ function JobCard({ job, onDismiss }: { job: JobState; onDismiss: () => void }) {
         ) : (
           <span className="min-w-0 flex-1 truncate text-sm font-medium">{job.title}</span>
         )}
-        <Dismiss title={job.title} onDismiss={onDismiss} />
+        <Dismiss label={job.title} onDismiss={onDismiss} />
       </div>
       <Progress
         value={job.done}
@@ -314,7 +314,7 @@ function TrackedCardView({
     <li className="flex flex-col gap-1.5 p-3">
       <div className="flex items-start gap-1">
         <CardTitle card={card} />
-        <Dismiss title={card.title} onDismiss={onDismiss} />
+        <Dismiss label={card.title} onDismiss={onDismiss} />
       </div>
       <p className="text-xs text-muted-foreground">
         {card.actor} · You asked: {card.request}
@@ -369,7 +369,7 @@ function NoticeCardView({ card, onDismiss }: { card: NoticeCard; onDismiss: () =
           Notice
         </span>
         <CardTitle card={card} />
-        <Dismiss title={card.title} onDismiss={onDismiss} />
+        <Dismiss label={card.title} onDismiss={onDismiss} />
       </div>
       <p className="text-xs text-muted-foreground">
         {card.actor} · {card.body}
