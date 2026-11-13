@@ -432,9 +432,9 @@ test.describe('on a phone', () => {
 
       await page.goto(`/projects/${project.id}`)
       const needsYou = section(page, 'Needs you')
-      const stalled = needsYou
-        .getByRole('listitem')
-        .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Narrow names` }) })
+      const stalled = needsYou.getByRole('listitem').filter({
+        has: page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Narrow names`) }),
+      })
       const working = section(page, 'In progress')
         .getByRole('listitem')
         .filter({ has: page.getByRole('link', { name: /Narrow names/ }) })

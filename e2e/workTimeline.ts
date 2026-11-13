@@ -84,6 +84,26 @@ export async function stalledTicket(human: APIRequestContext, agent: APIRequestC
   return { t, lane }
 }
 
+/** A ticket in progress with a lane, whose agent is alive but has not posted in over a day: a fresh
+ * heartbeat keeps the lease, the progress posts are 25 hours old. A lane's later post makes the parent's
+ * progress recent, which a test uses to prove a lane keeps its parent out of `Quiet`. */
+export async function quietTicket(human: APIRequestContext, agent: APIRequestContext, project: Project) {
+  const t = await create(human, project, { title: 'Quiet importer', status: 'in_progress' })
+  const lane = await create(human, project, { title: 'Quiet docs', status: 'in_progress', parentId: t.id })
+  await ok(agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'hunt: looking', progress: true } }))
+  await ok(agent.post(`/api/tickets/${t.id}/updates`, { data: { body: 'verify: 3/3 pass', progress: true } }))
+  age(t.id, 25 * 60)
+  await record(agent, project, t.id, { kind: 'heartbeat' })
+  return { t, lane }
+}
+
+/** A ticket created in review and aged two days: `Your turn · waiting 2d`, whatever its start or edits. */
+export async function reviewTicket(human: APIRequestContext, project: Project, title = 'Waiting for a look') {
+  const t = await create(human, project, { title, status: 'review' })
+  age(t.id, 48 * 60)
+  return { t }
+}
+
 export type Playwright = {
   request: { newContext: (o: object) => Promise<APIRequestContext> }
 }
