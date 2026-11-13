@@ -287,15 +287,19 @@ function htmlToMarkdown(html) {
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<pre\b[^>]*>([\s\S]*?)<\/pre\s*>/gi, (_whole, body) => {
       const code = decodeEntities(stripTags(body)).replace(/^\n+|\s+$/g, '')
-      fences.push(`\n\n\`\`\`\n${code}\n\`\`\`\n\n`)
+      // A fence longer than any run of backticks in the code, so a code line never closes it.
+      const runs = [...code.matchAll(/`+/g)].map((m) => m[0].length + 1)
+      const fence = '`'.repeat(Math.max(3, ...runs))
+      fences.push(`${fence}\n${code}\n${fence}`)
       return `${FENCE_MARK}${fences.length - 1}${FENCE_MARK}`
     })
-  text = tagsToMarkdown(text).replace(/\uF8FF(\d+)\uF8FF/g, (_whole, i) => fences[Number(i)] ?? '')
-  return text
+  // The collapse runs on the text alone: the code blocks go back in after it, with their spaces and blank lines.
+  text = tagsToMarkdown(text)
     .replace(/[ \t]+\n/g, '\n')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
-    .trim()
+    .replace(/[ \t\n]*\uF8FF(\d+)\uF8FF[ \t\n]*/g, (_whole, i) => `\n\n${fences[Number(i)] ?? ''}\n\n`)
+  return text.trim()
 }
 
 /**
@@ -365,6 +369,11 @@ function tagsToMarkdown(html) {
     }
     if (name === 'hr') {
       out += '\n\n---\n\n'
+      continue
+    }
+    // A loose item's paragraph (`<li><p>…</p></li>`) stays on the bullet's line: a break here would leave the bullet empty.
+    if (name === 'p' && lists.length > 0) {
+      if (closing) out += ' '
       continue
     }
     // Paragraphs and divisions end a block; every other tag only wraps its text.

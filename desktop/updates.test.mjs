@@ -406,6 +406,22 @@ describe('notesMarkdown', () => {
     )
   })
 
+  it('keeps the indentation and the blank lines of a code block', () => {
+    expect(notesMarkdown('<pre><code>def f():\n    return 1\n\n    # end\n</code></pre>')).toBe(
+      '```\ndef f():\n    return 1\n\n    # end\n```',
+    )
+  })
+
+  it('fences a code block with a longer fence when its code has backticks', () => {
+    expect(notesMarkdown('<pre><code>```js\nx\n```\n</code></pre>')).toBe('````\n```js\nx\n```\n````')
+  })
+
+  it('keeps the text of a loose list item on its bullet', () => {
+    expect(
+      notesMarkdown('<ul><li><p>One</p></li><li><p>Two <a href="https://x.y">link</a></p></li></ul>'),
+    ).toBe('- One\n- Two [link](https://x.y)')
+  })
+
   it('drops script and style with their contents, and every tag of the body', () => {
     const markdown = notesMarkdown(
       '<div><span>a</span></div><script>document.title = "pwned"</script>' +
