@@ -44,15 +44,15 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
   // Silent for 40 minutes in progress: No word. Its totals and the project's show as text.
   const line = ticket.getByTestId('work-line').first()
   await expect(line).toHaveAttribute('data-state', 'no-word')
-  await expect(line).toContainText(/No word \d+m/)
+  await expect(line).toHaveAccessibleName(/No word \d+m/)
   await expect(ticket.getByTestId('work-summary').first()).toContainText(
     /Worked 40 min\s*·\s*Waited 20 min\s*·\s*On you 0/,
   )
   await expect(page.getByText('Project work, every ticket and lane:')).toBeVisible()
   await expect(page.getByText(/^1 no word$/)).toBeVisible()
   // The lane has no events but a fresh creation: it waits on nothing and is not No word.
-  await expect(ticket.getByTestId('work-line').nth(1)).toContainText('Working now · last word 0m')
-  await expect(ticket.getByTestId('work-line').filter({ hasText: 'No word' })).toHaveCount(1)
+  await expect(ticket.getByTestId('work-line').nth(1)).toHaveAccessibleName(/Working now · last word 0m/)
+  await expect(ticket.getByRole('img', { name: /No word/ })).toHaveCount(1)
   void lane
 
   // From the keyboard: Tab reaches the span, which has its story as its name and shows its tooltip.
@@ -96,7 +96,7 @@ test('a lost run reads Lost contact on the Roadmap, and a working one does not',
   const lostRow = roadmap.getByRole('region', { name: `#${lost.t.id} Ship the importer` })
   const lostLine = lostRow.getByTestId('work-line').first()
   await expect(lostLine).toHaveAttribute('data-state', 'lost')
-  await expect(lostLine).toContainText('Lost contact')
+  await expect(lostLine).toHaveAccessibleName(/Lost contact/)
   // Its own row reads Lost contact, never Building (the lane under it has nothing open).
   await expect(lostRow).not.toContainText('Building')
 
@@ -104,15 +104,15 @@ test('a lost run reads Lost contact on the Roadmap, and a working one does not',
   const liveRow = roadmap.getByRole('region', { name: `#${live.id} Live import` })
   const liveLine = liveRow.getByTestId('work-line').first()
   await expect(liveLine).toHaveAttribute('data-state', 'working')
-  await expect(liveLine).toContainText('Working now')
+  await expect(liveLine).toHaveAccessibleName(/Working now/)
   await expect(liveRow.locator('[data-state="lost"]')).toHaveCount(0)
   // A day-long silence reads Quiet, and a review ticket reads Your turn.
   const quietRow = roadmap.getByRole('region', { name: `#${quiet.t.id} Quiet importer` })
   await expect(quietRow.getByTestId('work-line').first()).toHaveAttribute('data-state', 'quiet')
-  await expect(quietRow.getByTestId('work-line').first()).toContainText('Quiet 1d')
+  await expect(quietRow.getByTestId('work-line').first()).toHaveAccessibleName(/Quiet 1d/)
   const turnRow = roadmap.getByRole('region', { name: `#${turn.t.id} Waiting for a look` })
   await expect(turnRow.getByTestId('work-line').first()).toHaveAttribute('data-state', 'your-turn')
-  await expect(turnRow.getByTestId('work-line').first()).toContainText('Your turn · waiting 2d')
+  await expect(turnRow.getByTestId('work-line').first()).toHaveAccessibleName(/Your turn · waiting 2d/)
 })
 
 test('changing the Roadmap time axis keeps a live track at now', async ({ page, project, human, agent }) => {
@@ -146,5 +146,5 @@ test('a stalled ticket in another active stage names that stage in its why on th
   await page.goto(`/projects/${project.id}/roadmap`)
   const ticket = page.getByTestId('roadmap').getByRole('region', { name: `#${t.id} Crash on import` })
   // The line's tooltip names the stage.
-  await expectTooltip(ticket.getByTestId('work-line').first(), /^in Bug Found, no agent heard from since /)
+  await expectTooltip(ticket.getByTestId('work-line').first(), /in Bug Found, no agent heard from since /)
 })

@@ -143,7 +143,7 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
   })
   const rowLine = row.getByTestId('work-line')
   await expect(rowLine).toHaveAttribute('data-state', 'no-word')
-  await expect(rowLine).toContainText(/No word \d+m/)
+  await expect(rowLine).toHaveAccessibleName(/No word \d+m/)
   await expectTooltip(rowLine, /nothing open since the build ended at \d{1,2}:\d{2}\s*[AP]M/)
   await expect(row).toContainText(/last\s*claude/)
   await expect(row).not.toContainText('silent')
@@ -152,26 +152,26 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
     .getByRole('listitem')
     .filter({ has: page.getByRole('link', { name: new RegExp(`#${turn.t.id} Waiting for a look`) }) })
   await expect(turnRow.getByTestId('work-line')).toHaveAttribute('data-state', 'your-turn')
-  await expect(turnRow.getByTestId('work-line')).toContainText('Your turn · waiting 2d')
+  await expect(turnRow.getByTestId('work-line')).toHaveAccessibleName(/Your turn · waiting 2d/)
   // In progress: the one line, a line on when an agent was last heard, and the per-agent detail.
   const progress = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${t.id} Ship the importer` })
   await expect(progress.getByTestId('work-line')).toHaveAttribute('data-state', 'no-word')
-  await expect(progress.getByTestId('work-line')).toContainText(/No word \d+m/)
+  await expect(progress.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
   await expect(progress.getByTestId('last-heard')).toContainText(/Last heard \d+ min ago/)
   // A live agent with no progress post in over a day reads Quiet, and a lane's post lifts it out.
   const quietRow = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${quiet.t.id} Quiet importer` })
   await expect(quietRow.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
-  await expect(quietRow.getByTestId('work-line')).toContainText('Quiet 1d')
+  await expect(quietRow.getByTestId('work-line')).toHaveAccessibleName(/Quiet 1d/)
   // It started yesterday, so Carrying over draws the same line for it.
   const carried = section(page, 'Carrying over')
     .getByRole('listitem')
     .filter({ hasText: `#${quiet.t.id} Quiet importer` })
   await expect(carried.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
-  await expect(carried.getByTestId('work-line')).toContainText('Quiet 1d')
+  await expect(carried.getByTestId('work-line')).toHaveAccessibleName(/Quiet 1d/)
   await ok(
     agent.post(`/api/tickets/${quiet.lane.id}/updates`, {
       data: { body: 'lane: tests pass', progress: true },
@@ -181,17 +181,17 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
   const quietAgain = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${quiet.t.id} Quiet importer` })
-  await expect(quietAgain.getByTestId('work-line')).not.toContainText('Quiet')
+  await expect(quietAgain.getByTestId('work-line')).not.toHaveAccessibleName(/Quiet/)
 
   // The board card and the list row: the same one line, no second badged one.
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.getByRole('link', { name: title })
   await expect(card.getByTestId('work-line')).toHaveAttribute('data-state', 'no-word')
-  await expect(card.getByTestId('work-line')).toContainText(/No word \d+m/)
+  await expect(card.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
   await expect(card.getByTestId('work-line')).toHaveCount(1)
   await page.getByRole('tab', { name: 'List' }).click()
   const listRow = page.getByRole('link', { name: title })
-  await expect(listRow.getByTestId('work-line')).toContainText(/No word \d+m/)
+  await expect(listRow.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
   await expect(listRow.getByTestId('work-line')).toHaveCount(1)
 })
 
@@ -210,7 +210,7 @@ test('In progress says what a ticket waits on and since when, when a person has 
     .getByRole('listitem')
     .filter({ hasText: `#${t.id} Approve the copy` })
   await expect(row.getByTestId('work-line')).toHaveAttribute('data-state', 'waiting')
-  await expect(row.getByTestId('work-line')).toContainText('Waiting on you')
+  await expect(row.getByTestId('work-line')).toHaveAccessibleName(/Waiting on you/)
   await expect(row.getByText(/^since \d{1,2}:\d{2}\s*[AP]M$/).first()).toBeVisible()
 })
 
@@ -287,7 +287,7 @@ test('a busy card with no other badge shows what it is doing now, as icon and ti
   const card = page.getByRole('link', { name: new RegExp(`#${t.id} Building right now`) })
   const line = card.getByTestId('work-line')
   await expect(line).toHaveAttribute('data-state', 'working')
-  await expect(line).toContainText(/Working now · last word \d+m/)
+  await expect(line).toHaveAccessibleName(/Working now · last word \d+m/)
   await expect(card.getByTestId('work-line')).toHaveCount(1)
 })
 
