@@ -752,7 +752,7 @@ describe('the stalled flag', () => {
     ])
   })
 
-  it('leaves a done lane’s stale blocked task out of the roll-up, as the summary does', async () => {
+  it('leaves a done lane’s stale blocked task out of the line, the card’s counts and the roll-up', async () => {
     const pid = newProject()
     const { db, schema } = dbm
     const parent = activeTicket(pid, 'parent')
@@ -771,13 +771,29 @@ describe('the stalled flag', () => {
       (await tool('list_tickets', { projectId: pid })) as {
         id: number
         liveness: { state: string } | null
+        blockedTasks: number
+        blockedNext: boolean
+        progress: { done: number; total: number }
+        rollup: { done: number; total: number }
       }[]
     ).find((r) => r.id === parent.id)!
     expect(listRow.liveness?.state).toBe('working')
+    // The card's badge, its count and its progress agree with that line: the done lane's step is out of
+    // the work, as it is out of the roll-up, so nothing says "1 task blocked" beside "Working now".
+    expect(listRow.blockedTasks).toBe(0)
+    expect(listRow.blockedNext).toBe(false)
+    expect(listRow.progress).toEqual({ done: 0, total: 1 })
+    expect(listRow.rollup).toEqual({ done: 0, total: 1 })
     const full = await tool('get_ticket', { ticketId: parent.id })
     expect(full.work.liveness?.state).toBe('working')
+    expect(full.blockedTasks).toBe(0)
+    expect(full.rollup).toEqual({ done: 0, total: 1 })
     const s = (await tool('get_summary', { projectId: pid })).projects[0]
-    expect(s.inProgress.find((x: { id: number }) => x.id === parent.id).liveness.state).toBe('working')
+    const row = s.inProgress.find((x: { id: number }) => x.id === parent.id)
+    expect(row.liveness.state).toBe('working')
+    expect(row.blockedTasks).toBe(0)
+    expect(row.blockedNext).toBe(false)
+    expect(row.rollup).toEqual({ done: 0, total: 1 })
     expect(s.needsYou.blockedTasks).toEqual([])
   })
 

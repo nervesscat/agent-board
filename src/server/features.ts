@@ -4,7 +4,7 @@ import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
-import { columnOrder, placeInColumn, stageColumn } from '#/lib/stages'
+import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
 import { nextTask, treeTasks } from '#/lib/tasks'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
@@ -121,9 +121,11 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
       openDecisions.set(u.ticketId, (openDecisions.get(u.ticketId) ?? 0) + 1)
   const children = new Map<number, schema.Ticket[]>()
   for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
-  // A cancelled lane's tasks are no longer part of the work.
+  // A lane that finished or was dropped is no longer part of the work: the same scope the liveness
+  // roll-up (a closed lane's blocked step is not the step it works next) and the summary's blocked
+  // tasks use, so a card's badge, its count and its progress cannot say what the one line does not.
   const workingLanes = (id: number) =>
-    (children.get(id) ?? []).filter((lane) => kindOf(stages, lane.status) !== 'cancelled')
+    (children.get(id) ?? []).filter((lane) => !isClosed(kindOf(stages, lane.status)))
   const rollup = (id: number): Progress =>
     workingLanes(id).reduce(
       (acc, lane) => {
