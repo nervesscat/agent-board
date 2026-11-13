@@ -27,6 +27,8 @@ export function runAsJob<T>(
       return answer
     } catch (err) {
       fail(job.id, err instanceof Error ? err.message : String(err))
+      // The route answered 202 before the work ran, so nothing else logs this throw.
+      console.error(`job ${job.kind} #${job.id} failed:`, err)
       throw err
     }
   })()

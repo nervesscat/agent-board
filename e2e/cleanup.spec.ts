@@ -362,6 +362,8 @@ test('the bulk delete is a job: determinate progress, and the report refreshed b
   page,
   human,
 }) => {
+  // The wait for the job to finish is 60 s on its own, so this test's budget covers it.
+  test.setTimeout(90_000)
   // A project on a repository of its own, with its branches' work landed in bases of their own.
   const { id } = await ok<{ id: number }>(
     human.post('/api/projects', { data: { name: 'A delete with progress' } }),
