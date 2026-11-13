@@ -247,8 +247,33 @@ export function stallWhy(r: StallReason): string {
   return `nothing open since the ${r.phase || 'work'} ended at ${clock(r.endedAt)}${r.quote ? ` ('${r.quote}')` : ''}`
 }
 
-/** The seven words a live ticket's one work-state line can say. */
-export type WorkLineState = 'working' | 'no-word' | 'quiet' | 'your-turn' | 'waiting' | 'lost' | 'nothing'
+/** The seven states a live ticket's one work-state line can say, in the order the State filter lists them. */
+export const WORK_LINE_STATES = [
+  'waiting',
+  'your-turn',
+  'lost',
+  'no-word',
+  'quiet',
+  'working',
+  'nothing',
+] as const
+export type WorkLineState = (typeof WORK_LINE_STATES)[number]
+
+/**
+ * The states a State filter keeps, from its URL value (`lost,waiting`): the known ones, once each, in
+ * list order. Anything else in the value is dropped.
+ */
+export const parseWorkStates = (raw: string | undefined): WorkLineState[] => {
+  const asked = new Set((raw ?? '').split(','))
+  return WORK_LINE_STATES.filter((s) => asked.has(s))
+}
+
+/**
+ * Whether a row with this line's state is kept by the chosen states. An empty choice keeps every row; a
+ * row with no line (`null`: open, done, cancelled, archived) keeps none once a state is chosen.
+ */
+export const stateMatches = (state: WorkLineState | null, chosen: readonly WorkLineState[]): boolean =>
+  chosen.length === 0 || (state !== null && chosen.includes(state))
 
 /** The one answer a live row words itself by: its state, the line, the per-agent detail and the why. */
 export type WorkLineAnswer = {
