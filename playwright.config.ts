@@ -45,8 +45,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  // The suite's 497 tests no longer fit the job at 2 workers on the shared self-hosted 12-core runner;
-  // capped at 4, so a 2-core hosted runner stays at 2.
+  // The suite's 497 tests need more than 2 workers to fit the job's timeout on CI (ci.yml). On CI, one
+  // worker per core, from 2 up to 4: GitHub's hosted runner has 2 to 4 cores, so this stays within them.
   workers: process.env.CI ? Math.min(4, Math.max(2, os.cpus().length)) : 4,
   timeout: 30_000,
   expect: { timeout: 10_000 },
