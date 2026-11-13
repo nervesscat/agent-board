@@ -181,7 +181,7 @@ Lanes of a ticket you are working are yours to create (next section).
   `blockedNext` on the ticket says whether one of them is, while `blockedTasks` stays the full count
   of blocked steps, its lanes' in work (a done or cancelled lane's are out of it and out of the
   rolled-up progress). It shows in Needs you only while the ticket it is on is being worked: a
-  lined-up, done or cancelled ticket asks nothing. It still counts as open and does not move the
+  lined-up, done or cancelled ticket, nor one under such a ticket, asks nothing. It still counts as open and does not move the
   ticket. A blocked step further
   down the order surfaces once the steps before it are done.
   Ticking the task done clears the tag; `blocked: false` clears it once resolved. Move the whole

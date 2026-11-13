@@ -144,8 +144,8 @@ short message shape with the numbered list of what needs the human. Its line is
    of them is the step to work next (the first open task with no open subtask, its lanes' own next
    steps counting too). Only that next step shows on its card and in the summary's Needs you
    (`needsYou.blockedTasks`), and there only while the ticket it is on is being worked: a lined-up,
-   done or cancelled ticket asks nothing; one further down the order surfaces once the steps before
-   it are done.
+   done or cancelled ticket, nor one under such a ticket, asks nothing; one further down the order
+   surfaces once the steps before it are done.
    A blocked task still counts as open and does not move the ticket. Ticking it done clears the tag
    (on the subtasks a tick reaches and on a parent its last subtask ticks, too); `blocked: false`
    clears it once resolved. Tagging a done task reopens it. Move the whole ticket to `blocked` only
