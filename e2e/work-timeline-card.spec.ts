@@ -25,6 +25,8 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   agent,
 }) => {
   const errors = errorsOn(page)
+  // The browser clock runs ten minutes behind the server's: the one line still counts on the server's, once.
+  await page.clock.setFixedTime(new Date(Date.now() - 10 * 60_000))
   const { t } = await workedTicket(human, agent, project)
   await record(agent, project, t.id, { kind: 'heartbeat', note: 'reading the importer' })
   await record(agent, project, t.id, { kind: 'heartbeat', note: 'writing the parser' })
@@ -41,7 +43,7 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   // not No word, and the story is folded away until it is asked for.
   const line = card.getByTestId('work-line')
   await expect(line).toHaveAttribute('data-state', 'working')
-  await expect(line).toContainText('Working now')
+  await expect(line).toContainText(/Working now · last word [01]m/)
   await expect(card.getByText(/^claude · build · \d+ min · last word \d+ min ago$/)).toBeVisible()
   await expect(card.getByTestId('work-summary')).toContainText('Waited 20 min')
   // The legend is gone: no key in the card, and no toggle for one.
