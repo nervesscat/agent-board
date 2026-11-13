@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 
 import type { WorkTimelineLike } from '#/lib/workStatus'
-import { WORK_LINE_STATES, workLine } from '#/lib/workStatus'
+import { WORK_LINE_STATES, WORK_STATE_NAME, workLine } from '#/lib/workStatus'
 import type { Liveness, WorkTotals } from '#/lib/workTimeline'
 
 import { WORK_STATE_ICON, WorkLine } from './WorkStatus'
@@ -82,7 +82,7 @@ describe('the state-to-icon mapping', () => {
     for (const s of WORK_LINE_STATES) {
       const line = workLine(FIXTURES[s], NOW)
       expect(line?.state).toBe(s)
-      expect(line?.text.startsWith(WORK_STATE_ICON[s].name)).toBe(true)
+      expect(line?.text.startsWith(WORK_STATE_NAME[s])).toBe(true)
     }
   })
 })
@@ -98,7 +98,7 @@ describe('WorkLine as an icon', () => {
       expect(out).toContain(`aria-label="${line.text}"`)
       // The words of the line are its accessible name only; the text nodes hold at most its duration.
       const textNodes = out.replace(/<[^>]+>/g, '').replace(/aria-label="[^"]*"/g, '')
-      expect(textNodes).not.toContain(WORK_STATE_ICON[s].name)
+      expect(textNodes).not.toContain(WORK_STATE_NAME[s])
     },
   )
 

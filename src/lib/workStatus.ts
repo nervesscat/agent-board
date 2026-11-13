@@ -259,6 +259,17 @@ export const WORK_LINE_STATES = [
 ] as const
 export type WorkLineState = (typeof WORK_LINE_STATES)[number]
 
+/** Each state's name: the words its line starts with, and what the State filter calls it. */
+export const WORK_STATE_NAME: Record<WorkLineState, string> = {
+  waiting: 'Waiting on you',
+  'your-turn': 'Your turn',
+  lost: 'Lost contact',
+  'no-word': 'No word',
+  quiet: 'Quiet',
+  working: 'Working now',
+  nothing: 'Nothing open',
+}
+
 /**
  * The states a State filter keeps, from its URL value (`lost,waiting`): the known ones, once each, in
  * list order. Anything else in the value is dropped.

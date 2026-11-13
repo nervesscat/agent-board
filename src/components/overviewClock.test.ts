@@ -102,9 +102,13 @@ describe('the server clock correction', () => {
     const now = onServerClock(BROWSER_NOW, Date.parse(SERVER_NOW) - BROWSER_NOW)
     expect(now).toBe(Date.parse(SERVER_NOW))
 
-    const overview = render(createElement(InProgress, { p: summary(), now }))
-    // 12:30 on the server is 43 minutes after 11:47: never 53, which is the ten minutes put back twice.
-    expect(overview).toContain('Lost contact · 43m')
+    const element = createElement(InProgress, { p: summary(), now })
+    const overview = render(element)
+    // The state's icon is named by its line: 12:30 on the server is 43 minutes after 11:47, never 53.
+    expect(renderToStaticMarkup(createElement(QueryClientProvider, { client }, element))).toContain(
+      'aria-label="Lost contact · 43m"',
+    )
+    expect(overview).toContain('43m')
     expect(overview).toContain('claude · build · 43 min · last word 43 min ago')
     expect(overview).not.toContain('53')
   })

@@ -31,18 +31,17 @@ import type { WorkTotals as Totals } from '#/lib/workTimeline'
 const dur = (ms: number) => (ms > 0 ? spokenDuration(ms) : '0')
 
 /**
- * Each state's icon, its colour and its name (the words its line starts with, and what the State filter
- * calls it). The shape carries the state; the colour only agrees with it, so no state is told by colour
+ * Each state's icon and its colour. The shape carries the state; the colour only agrees with it, so no state is told by colour
  * alone. `lost` (an unplugged cable) and `no-word` (a clock with an alert) are told apart by shape too.
  */
-export const WORK_STATE_ICON: Record<WorkLineState, { Icon: LucideIcon; tone: string; name: string }> = {
-  waiting: { Icon: Hand, tone: 'text-amber-700 dark:text-amber-400', name: 'Waiting on you' },
-  'your-turn': { Icon: Eye, tone: 'text-violet-700 dark:text-violet-400', name: 'Your turn' },
-  lost: { Icon: Unplug, tone: 'text-rose-700 dark:text-rose-400', name: 'Lost contact' },
-  'no-word': { Icon: ClockAlert, tone: 'text-orange-700 dark:text-orange-400', name: 'No word' },
-  quiet: { Icon: Moon, tone: 'text-muted-foreground', name: 'Quiet' },
-  working: { Icon: Activity, tone: 'text-emerald-700 dark:text-emerald-400', name: 'Working now' },
-  nothing: { Icon: CircleDashed, tone: 'text-muted-foreground', name: 'Nothing open' },
+export const WORK_STATE_ICON: Record<WorkLineState, { Icon: LucideIcon; tone: string }> = {
+  waiting: { Icon: Hand, tone: 'text-amber-700 dark:text-amber-400' },
+  'your-turn': { Icon: Eye, tone: 'text-violet-700 dark:text-violet-400' },
+  lost: { Icon: Unplug, tone: 'text-rose-700 dark:text-rose-400' },
+  'no-word': { Icon: ClockAlert, tone: 'text-orange-700 dark:text-orange-400' },
+  quiet: { Icon: Moon, tone: 'text-muted-foreground' },
+  working: { Icon: Activity, tone: 'text-emerald-700 dark:text-emerald-400' },
+  nothing: { Icon: CircleDashed, tone: 'text-muted-foreground' },
 }
 
 /** The duration a line ends with (`40m`, `2d`), which a surface with room keeps beside the icon. */

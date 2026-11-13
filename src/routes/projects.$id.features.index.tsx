@@ -35,7 +35,13 @@ import { remember, useRestoreRemembered } from '#/lib/remembered'
 import { positionBy, stageColumn, withPlacement } from '#/lib/stages'
 import { MAX_TAG_LENGTH, matchTags, tagChoices } from '#/lib/tags'
 import { type TicketsScope, keepSearchRows, ticketsKey, ticketsQuery } from '#/lib/tickets'
-import { WORK_LINE_STATES, type WorkLineState, parseWorkStates, stateMatches } from '#/lib/workStatus'
+import {
+  WORK_LINE_STATES,
+  WORK_STATE_NAME,
+  type WorkLineState,
+  parseWorkStates,
+  stateMatches,
+} from '#/lib/workStatus'
 
 const VIEWS = ['board', 'list', 'archived'] as const
 type View = (typeof VIEWS)[number]
@@ -311,19 +317,19 @@ function StateFilter({
         </PopoverTrigger>
         <PopoverContent align="end" className="w-56 gap-0.5 p-1">
           {WORK_LINE_STATES.map((s) => {
-            const { Icon, tone, name } = WORK_STATE_ICON[s]
+            const { Icon, tone } = WORK_STATE_ICON[s]
             return (
               <label
                 key={s}
                 className="flex min-h-7 cursor-pointer items-center gap-2 rounded-sm px-2 text-sm hover:bg-muted"
               >
                 <Checkbox
-                  aria-label={name}
+                  aria-label={WORK_STATE_NAME[s]}
                   checked={value.includes(s)}
                   onCheckedChange={(on) => toggle(s, on)}
                 />
                 <Icon aria-hidden className={`size-4 shrink-0 ${tone}`} />
-                <span className="min-w-0 flex-1">{name}</span>
+                <span className="min-w-0 flex-1">{WORK_STATE_NAME[s]}</span>
                 <span className="tabular-nums text-muted-foreground">{counts[s]}</span>
               </label>
             )
