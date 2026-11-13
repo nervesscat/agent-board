@@ -32,7 +32,7 @@ import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { stallFor } from '#/components/StallLine'
-import { LostContactNotice, StallNotice, WorkNow } from '#/components/WorkStatus'
+import { WorkLine } from '#/components/WorkStatus'
 import { timelineFromActivity, stallStage } from '#/lib/activityTimeline'
 import { threadAnchor } from '#/lib/anchors'
 import type { AreaId } from '#/lib/layout'
@@ -358,16 +358,6 @@ function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
   )
 }
 
-function Stale() {
-  return (
-    <Tip content="No progress post in over 24 hours">
-      <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400">
-        <Hourglass className="size-3" /> stale
-      </span>
-    </Tip>
-  )
-}
-
 // --- the sections ---
 
 function NeedsYou({ p, now, dismiss }: CardProps) {
@@ -613,19 +603,21 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                     className="hover:underline"
                     onClick={() => dismiss(needKeys.stalled(s))}
                   >
-                    Stalled: #{s.ticketId} {s.title}
+                    <WorkLine
+                      timeline={timeline}
+                      now={now}
+                      stage={stallStage(p.stages, s.status)}
+                      variant="inline"
+                      focusable={false}
+                      className="inline"
+                    />
+                    {`: #${s.ticketId} ${s.title}`}
                   </Link>
                 }
                 meta={
                   <>
                     <StageBadge p={p} status={s.status} />
                     {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
-                    <StallNotice
-                      timeline={timeline}
-                      stage={stallStage(p.stages, s.status)}
-                      variant="inline"
-                      className="w-full"
-                    />
                     {s.lastAgent && (
                       <span className="min-w-0 wrap-anywhere">
                         last{' '}
@@ -663,7 +655,16 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                   {t.parent && <span className="truncate">lane of #{t.parent.id}</span>}
                   {t.assignee && <Who p={p} name={t.assignee} />}
                   {t.prNumber && <span>PR #{t.prNumber}</span>}
-                  <span>{ago(t.updatedAt)}</span>
+                  <WorkLine
+                    timeline={{
+                      ...timelineFromActivity(null, null),
+                      stage: t.stage,
+                      waitingOnHuman: t.waitingOnHuman,
+                    }}
+                    now={now}
+                    variant="inline"
+                    focusable={false}
+                  />
                 </>
               }
             />
@@ -733,19 +734,10 @@ export function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
               <Row
                 key={t.id}
                 title={<TicketLink p={p} id={t.id} title={t.title} />}
-                side={
-                  <>
-                    {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
-                    {timeline.stalled && (
-                      <StallNotice timeline={timeline} stage={stallStage(p.stages, t.status)} />
-                    )}
-                    <LostContactNotice timeline={timeline} />
-                    {t.stale && <Stale />}
-                  </>
-                }
+                side={<>{t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}</>}
                 meta={
                   <div className="w-full min-w-0">
-                    <WorkNow timeline={timeline} />
+                    <WorkLine timeline={timeline} now={now} stage={stallStage(p.stages, t.status)} detail />
                     <HeardLine timeline={timeline} />
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <Who p={p} name={t.assignee} />
@@ -904,7 +896,7 @@ function Next({ p }: { p: ProjectSummary }) {
   )
 }
 
-function CarryingOver({ p }: { p: ProjectSummary }) {
+function CarryingOver({ p, now }: CardProps) {
   const items = p.carryingOver
   return (
     <Section
@@ -918,29 +910,28 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
         <Quiet>Nothing carried over from before today.</Quiet>
       ) : (
         <Rows>
-          {items.map((t) => (
-            <Row
-              key={t.id}
-              title={<TicketLink p={p} id={t.id} title={t.title} />}
-              side={
-                <>
-                  <StageBadge p={p} status={t.status} />
-                  {t.stale && <Stale />}
-                </>
-              }
-              meta={
-                <div className="w-full min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <Who p={p} name={t.assignee} />
-                    <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
-                      <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
-                    </Tip>
+          {items.map((t) => {
+            const timeline = timelineFromActivity(t.activity, t.stalled ? stalledOf(p, t.id, now) : null)
+            return (
+              <Row
+                key={t.id}
+                title={<TicketLink p={p} id={t.id} title={t.title} />}
+                side={<StageBadge p={p} status={t.status} />}
+                meta={
+                  <div className="w-full min-w-0">
+                    <WorkLine timeline={timeline} now={now} stage={stallStage(p.stages, t.status)} detail />
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <Who p={p} name={t.assignee} />
+                      <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
+                        <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
+                      </Tip>
+                    </div>
+                    <LastPost post={t.lastPost} />
                   </div>
-                  <LastPost post={t.lastPost} />
-                </div>
-              }
-            />
-          ))}
+                }
+              />
+            )
+          })}
         </Rows>
       )}
     </Section>

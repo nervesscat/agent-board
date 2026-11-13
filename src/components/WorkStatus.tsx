@@ -1,65 +1,93 @@
-import { AlertTriangle, Hammer, Hourglass, UserRound } from 'lucide-react'
+import { Hammer, Hourglass, UserRound } from 'lucide-react'
 
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
 import { clock } from '#/lib/format'
 import { useNow, useServerOffset } from '#/lib/useNow'
 import {
-  currentActivity,
   lastHeard,
-  livenessLines,
-  livenessOf,
-  minutesBetween,
   onServerClock,
-  stallReason,
+  workLine,
   workShares,
-  type StallReason,
+  type WorkLineState,
   type WorkTimelineLike,
 } from '#/lib/workStatus'
 import type { WorkTotals as Totals } from '#/lib/workTimeline'
 
-/** A duration in words for the status lines: `43 min`, `1 h 5 min`; `0` for none. */
+/** A duration in words for the summary: `43 min`, `1 h 5 min`; `0` for none. */
 const dur = (ms: number) => (ms > 0 ? spokenDuration(ms) : '0')
 
-/** What is going on now, as one line, from the open spans and waits. `now` defaults to a live clock. */
-export function NowLine({
+/** The colour and weight of a state's one line: the words carry the state, the tone agrees with it. */
+const STATE_TONE: Record<WorkLineState, string> = {
+  working: 'text-foreground',
+  'no-word': 'text-amber-800 dark:text-amber-300',
+  quiet: 'text-amber-800 dark:text-amber-300',
+  'your-turn': 'text-amber-800 dark:text-amber-300',
+  waiting: 'text-amber-800 dark:text-amber-300',
+  lost: 'text-rose-800 dark:text-rose-300',
+  nothing: 'text-muted-foreground',
+}
+
+/**
+ * One ticket's work-state line: the one answer to what it is doing now, in the human's words. One element
+ * per ticket row (`data-testid="work-line"`, `data-state` one of the seven), its tooltip the why, and the
+ * per-agent detail under it where the surface has room. The clock correction to the server's happens once,
+ * inside: a caller passes the server's own time or nothing, never a time already put on it.
+ */
+export function WorkLine({
   timeline,
   now,
+  stage = null,
+  variant = 'inline',
+  detail = false,
+  tooltip = true,
+  focusable = true,
   className = '',
 }: {
   timeline: WorkTimelineLike
+  /** The server's clock, when the caller already put `now` on it; omitted, the browser's, corrected once. */
   now?: Date | number
+  /** The active stage's name when it is not the project's default one: the why then names it. */
+  stage?: string | null
+  /** `badge` for a card or a list row, `inline` for a line. */
+  variant?: 'inline' | 'badge'
+  /** Draw the per-agent lines under the word: the ticket page, In progress and the Roadmap have room. */
+  detail?: boolean
+  tooltip?: boolean
+  focusable?: boolean
   className?: string
 }) {
   const tick = useNow(60_000)
-  // The browser's clock may run behind or ahead of the server's that stamped the spans: the times are read on the server's.
   const offset = useServerOffset(timeline.now)
-  const a = currentActivity(timeline, onServerClock(+(now ?? tick), offset))
-  const base = `${className} text-sm tabular-nums`
-  if (a.kind === 'building')
-    return (
-      <p data-testid="now-line" className={`${base} text-foreground`}>
-        <span className="font-medium">{a.verb}</span> · {a.agent} · {dur(a.ms)}
-      </p>
-    )
-  if (a.kind === 'waiting-agent')
-    return (
-      <p data-testid="now-line" className={`${base} text-foreground`}>
-        <Hourglass className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />
-        <span className="font-medium">Waiting on {a.agent}</span> · {dur(a.ms)}
-      </p>
-    )
-  if (a.kind === 'waiting-human')
-    return (
-      <p data-testid="now-line" className={`${base} font-medium text-amber-800 dark:text-amber-300`}>
-        <UserRound className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />
-        Waiting on you for {dur(a.ms)} since {clock(a.since)}
-      </p>
-    )
+  const at = now === undefined ? onServerClock(tick, offset) : +now
+  const line = workLine(timeline, at, stage)
+  if (!line) return null
+  const why = [line.why, ...line.detail].filter(Boolean).join('\n')
+  const base =
+    variant === 'badge'
+      ? 'inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] leading-none font-medium tabular-nums'
+      : 'text-sm font-medium tabular-nums'
+  const word = (
+    <span
+      data-testid="work-line"
+      data-state={line.state}
+      tabIndex={tooltip && focusable ? 0 : undefined}
+      className={`${base} ${STATE_TONE[line.state]} ${variant === 'badge' ? 'outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring' : ''}`}
+    >
+      {line.text}
+    </span>
+  )
+  const shown = tooltip && why ? <Tip content={why}>{word}</Tip> : word
+  if (!detail || !line.detail.length) return <span className={className}>{shown}</span>
   return (
-    <p data-testid="now-line" className={`${base} text-muted-foreground`}>
-      Nothing open
-    </p>
+    <div className={`${className} grid gap-0.5`}>
+      <div>{shown}</div>
+      {line.detail.map((d) => (
+        <p key={d} className="text-xs text-muted-foreground tabular-nums">
+          {d}
+        </p>
+      ))}
+    </div>
   )
 }
 
@@ -78,167 +106,6 @@ export function LastHeard({ timeline, className = '' }: { timeline: WorkTimeline
       Last heard {clock(h.at)}
       {who}
     </p>
-  )
-}
-
-/** The why of a stall, in words. The stage, when given, replaces the detail. */
-function stallWhy(r: StallReason): string {
-  if (r.stage) return `in ${r.stage}, no agent heard from since ${clock(r.since)}`
-  if (r.kind === 'waiting') return `waiting on ${r.on}, nobody heard from since ${clock(r.since)}`
-  if (!r.endedAt) return `nothing open since ${clock(r.since)}`
-  return `nothing open since the ${r.phase || 'work'} ended at ${clock(r.endedAt)}${r.quote ? ` ('${r.quote}')` : ''}`
-}
-
-/**
- * One line per open span, with its state word: a working span keeps today's `Building · claude · 43 min`
- * and adds the agent's last word; a lost one reads `Lost contact · claude · build · 46 min · last word
- * 26 min ago`. Null when the read has no per-agent state or nothing is open.
- */
-export function LivenessLines({
-  timeline,
-  now,
-  className = '',
-}: {
-  timeline: WorkTimelineLike
-  now?: Date | number
-  className?: string
-}) {
-  const tick = useNow(60_000)
-  // As the Now line: the browser's clock may differ from the server's, so the minutes are counted on the server's.
-  const offset = useServerOffset(timeline.now)
-  const at = onServerClock(+(now ?? tick), offset)
-  const l = livenessOf(timeline)
-  if (!l || !l.spans.length || (l.state !== 'working' && l.state !== 'lost')) return null
-  const base = `${className} text-sm tabular-nums`
-  const lost = l.state === 'lost'
-  return (
-    <>
-      {livenessLines(l, at).map((line) => (
-        <p
-          key={line}
-          data-testid={lost ? 'lost-contact' : 'now-line'}
-          className={`${base} ${lost ? 'text-rose-800 dark:text-rose-300' : 'text-foreground'}`}
-        >
-          {lost && <AlertTriangle className="mr-1 inline size-3.5 align-[-2px]" aria-hidden />}
-          {line}
-        </p>
-      ))}
-    </>
-  )
-}
-
-/**
- * What the ticket is doing now: the per-agent lines when the read carries them, else the old Now line.
- * The clock correction to the server's is made once, inside these components (and the ticket page's
- * card): a caller passes the browser's own tick or nothing, never a time already put on the server's.
- */
-export function WorkNow(props: { timeline: WorkTimelineLike; now?: Date | number; className?: string }) {
-  const l = livenessOf(props.timeline)
-  if (l && l.spans.length && (l.state === 'working' || l.state === 'lost'))
-    return <LivenessLines {...props} />
-  return <NowLine {...props} />
-}
-
-/**
- * A lost-contact ticket's notice: the agent is gone while its span is still open. Its own badge (never
- * Stalled) on cards and lists, or an `inline` sentence for a page.
- */
-export function LostContactNotice({
-  timeline,
-  now,
-  variant = 'badge',
-  focusable = true,
-  className = '',
-}: {
-  timeline: WorkTimelineLike
-  now?: Date | number
-  variant?: 'badge' | 'inline'
-  focusable?: boolean
-  className?: string
-}) {
-  const tick = useNow(60_000)
-  // The same server-clock correction as the Now and per-span lines: the browser's clock may be off.
-  const offset = useServerOffset(timeline.now)
-  const at = onServerClock(+(now ?? tick), offset)
-  const l = livenessOf(timeline)
-  if (l?.state !== 'lost') return null
-  const since = minutesBetween(l.since, at)
-  const word = l.lastWordAt ? `last word ${l.silentMinutes} min ago` : 'no word yet'
-  const why = `${l.agent} has a ${l.phase || 'span'} open, ${word}`
-  const line = `Lost contact · ${l.agent} · ${l.phase} · ${since} min · ${word}`
-  if (variant === 'inline')
-    return (
-      <p
-        data-testid="lost-contact"
-        className={`${className} flex items-start gap-1.5 text-sm font-medium text-rose-800 dark:text-rose-300`}
-      >
-        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        <span className="min-w-0">{line}</span>
-      </p>
-    )
-  return (
-    <Tip content={line}>
-      <span
-        tabIndex={focusable ? 0 : undefined}
-        data-testid="lost-contact"
-        title={why}
-        className={`${className} inline-flex shrink-0 items-center gap-1 rounded bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-medium text-rose-800 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring dark:bg-rose-400/15 dark:text-rose-300`}
-      >
-        <AlertTriangle className="size-3" aria-hidden />
-        Lost contact
-      </span>
-    </Tip>
-  )
-}
-
-/**
- * A stalled ticket's notice, the same words everywhere: `Stalled 33 min`, and why and since when. As a
- * `badge` for cards and lists (the why in its tooltip), or as an `inline` sentence for a page. `stage`
- * is the active stage's name when it is not the project's default stage; the why then says it.
- */
-export function StallNotice({
-  timeline,
-  stage = null,
-  nowLine = null,
-  variant = 'badge',
-  focusable = true,
-  className = '',
-}: {
-  timeline: WorkTimelineLike
-  stage?: string | null
-  /** The ticket's Now line in words, for a badge's tooltip above the why (a board card's). */
-  nowLine?: string | null
-  variant?: 'badge' | 'inline'
-  focusable?: boolean
-  className?: string
-}) {
-  const r = stallReason(timeline, stage)
-  if (!timeline.stalled || !r) return null
-  const head = `Stalled ${spokenDuration(timeline.stalled.minutes * 60_000)}`
-  const why = stallWhy(r)
-  if (variant === 'inline')
-    return (
-      <p
-        data-testid="stall-notice"
-        className={`${className} flex items-start gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-300`}
-      >
-        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-        <span className="min-w-0">
-          {head}: {why}
-        </span>
-      </p>
-    )
-  return (
-    <Tip content={nowLine ? `${nowLine}\n${why}` : why}>
-      <span
-        tabIndex={focusable ? 0 : undefined}
-        data-testid="stall-notice"
-        className={`${className} inline-flex shrink-0 items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring dark:bg-amber-400/15 dark:text-amber-300`}
-      >
-        <AlertTriangle className="size-3" aria-hidden />
-        {head}
-      </span>
-    </Tip>
   )
 }
 

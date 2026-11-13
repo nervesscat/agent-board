@@ -5,12 +5,9 @@ import {
   ArrowDownUp,
   ChevronLeft,
   ChevronRight,
-  Hammer,
   Hand,
-  Hourglass,
   Layers,
   Scale,
-  UserRound,
 } from 'lucide-react'
 import { type DragEvent, type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
@@ -32,9 +29,9 @@ import {
 import { Button } from '#/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
 import { Tip } from '#/components/ui/tooltip'
-import { LostContactNotice, StallNotice, WorkNow } from '#/components/WorkStatus'
+import { WorkLine } from '#/components/WorkStatus'
 import type { TicketRow } from '#/lib/api'
-import { hasWork, nowBrief, nowWords, stallStage, timelineFromActivity } from '#/lib/activityTimeline'
+import { hasWork, stallStage, timelineFromActivity } from '#/lib/activityTimeline'
 import { ago } from '#/lib/format'
 import { useProject } from '#/lib/project'
 import {
@@ -47,8 +44,6 @@ import {
   stageOf,
 } from '#/lib/stages'
 import { nameFirst } from '#/lib/tickets'
-import { useNow, useServerOffset } from '#/lib/useNow'
-import { onServerClock } from '#/lib/workStatus'
 
 /** Where a card goes in its own column: right above or below another card of it. */
 export type Placement = { anchor: number; side: 'above' | 'below' }
@@ -76,9 +71,6 @@ export function TicketBoard({
 }) {
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
-  const tick = useNow(60_000)
-  // The rows of one read share the server's time: the board's now is read on that clock, not the browser's.
-  const now = onServerClock(tick, useServerOffset(items[0]?.activity.now))
   const [dragging, setDragging] = useState<number | null>(null)
   const [over, setOver] = useState<string | null>(null)
   // Dragging within its own column: the gap it would land in, 0 above the first card.
@@ -208,18 +200,8 @@ export function TicketBoard({
               </div>
               <div data-column={status} className="min-h-12 flex-1 space-y-2 md:overflow-y-auto">
                 {column.map((t, i) => {
-                  // The card's work, from what its row carries: the now, and the stall (as the list and the ticket page word them).
+                  // The card's work, from what its row carries: the one line words its stage and facts.
                   const work = timelineFromActivity(t.activity, t.stalled, hasWork(kind))
-                  // The now shows on a card with no other badge: a busy card is capped in height, and its time must not clip.
-                  const badged =
-                    t.decisions > 0 ||
-                    t.blockedNext ||
-                    !!t.stalled ||
-                    work.liveness?.state === 'lost' ||
-                    t.needs.some((n) => !n.merged) ||
-                    after?.has(t.id)
-                  const words = nowWords(work, now)
-                  const brief = badged ? null : nowBrief(work, now)
                   return (
                     <div key={t.id} data-card={t.id} className="relative">
                       {line === i && <DropLine at={i === 0 ? 'top-0' : '-top-[5px]'} />}
@@ -245,25 +227,21 @@ export function TicketBoard({
                               <span className="text-muted-foreground">#{t.id}</span> {t.title}
                             </div>
                           </div>
-                          {(t.decisions > 0 ||
+                          {(hasWork(kind) ||
+                            t.decisions > 0 ||
                             t.blockedNext ||
-                            t.stalled ||
-                            work.liveness?.state === 'lost' ||
-                            brief ||
                             t.needs.some((n) => !n.merged) ||
                             after?.has(t.id)) && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                              {brief && <NowBadge brief={brief} words={words} />}
+                              <WorkLine
+                                timeline={work}
+                                stage={stallStage(stages, t.status)}
+                                variant="badge"
+                                focusable={false}
+                              />
                               {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                               {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
                               {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} />}
-                              <LostContactNotice timeline={work} focusable={false} />
-                              <StallNotice
-                                timeline={work}
-                                stage={stallStage(stages, t.status)}
-                                nowLine={words}
-                                focusable={false}
-                              />
                               <NeedsBadge needs={t.needs} />
                             </div>
                           )}
@@ -395,23 +373,6 @@ export function BlockedTasksBadge({ n, className = '' }: { n: number; className?
     >
       <Hand className="size-3" /> {n === 1 ? '1 task blocked' : `${n} tasks blocked`}
     </span>
-  )
-}
-
-/** The card's now in little: an icon and how long, with the whole line (what, who, since when) in its tooltip. */
-function NowBadge({ brief, words }: { brief: { kind: string; text: string }; words: string }) {
-  const Icon =
-    brief.kind === 'waiting-human' ? UserRound : brief.kind === 'waiting-agent' ? Hourglass : Hammer
-  return (
-    <Tip content={words}>
-      <span
-        data-testid="card-now"
-        className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground/80 tabular-nums"
-      >
-        <Icon className="size-3" aria-hidden />
-        {brief.text}
-      </span>
-    </Tip>
   )
 }
 
@@ -654,7 +615,6 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
   useRememberedPageScroll(`features.list.${projectId}`)
   const { data: project } = useProject(projectId)
   const stages = project?.stages ?? []
-  const tick = useNow(60_000)
   const stageIndex = (key: string) => {
     const i = stages.findIndex((s) => s.key === key)
     return i < 0 ? stages.length : i
@@ -690,15 +650,10 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                   </span>
                   {t.decisions > 0 && <DecisionBadge n={t.decisions} className="ml-2 align-[1px]" />}
                   {t.blockedNext && <BlockedTasksBadge n={t.blockedTasks} className="ml-2 align-[1px]" />}
-                  <StallNotice
+                  <WorkLine
                     timeline={work}
                     stage={stallStage(stages, t.status)}
-                    focusable={false}
-                    className="ml-2 align-[1px]"
-                  />
-                  <LostContactNotice
-                    timeline={work}
-                    now={tick}
+                    variant="badge"
                     focusable={false}
                     className="ml-2 align-[1px]"
                   />
@@ -711,7 +666,6 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                     </span>
                   )}
                 </div>
-                {hasWork(stage.kind) && <WorkNow timeline={work} now={tick} className="mt-0.5" />}
                 {t.lanes.total > 0 && (
                   <div
                     data-testid="row-meta"

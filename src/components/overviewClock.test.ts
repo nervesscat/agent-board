@@ -104,7 +104,8 @@ describe('the server clock correction', () => {
 
     const overview = render(createElement(InProgress, { p: summary(), now }))
     // 12:30 on the server is 43 minutes after 11:47: never 53, which is the ten minutes put back twice.
-    expect(overview).toContain('Lost contact · claude · build · 43 min · last word 43 min ago')
-    expect(overview).not.toContain('53 min')
+    expect(overview).toContain('Lost contact · 43m')
+    expect(overview).toContain('claude · build · 43 min · last word 43 min ago')
+    expect(overview).not.toContain('53')
   })
 })
