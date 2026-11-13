@@ -2,7 +2,7 @@ import type { APIRequestContext, Page } from '@playwright/test'
 
 import type { Project } from '#/lib/api'
 import { expect, test, tooltip } from './fixtures'
-import { age, create, workedTicket } from './workTimeline'
+import { age, create, stalledTicket, workedTicket } from './workTimeline'
 
 /**
  * The work-state line as an icon, and the State filter on Ongoing features: the icon's name and tooltip
@@ -122,5 +122,62 @@ test.describe('on a touch screen', () => {
     await line.tap()
     await expect(tooltip(page)).toBeVisible()
     await expect(tooltip(page)).toContainText(/Lost contact · \d+m/)
+  })
+
+  test('a tap on a Board card icon opens its tooltip and does not follow the card', async ({
+    page,
+    project,
+    human,
+    agent,
+  }) => {
+    const { t } = await workedTicket(human, agent, project)
+    await page.goto(`/projects/${project.id}/features?view=board`)
+    const url = page.url()
+    await card(page, t.id, 'Ship the importer').getByTestId('work-line').tap()
+    await expect(tooltip(page)).toBeVisible()
+    await expect(tooltip(page)).toContainText(/Lost contact · \d+m/)
+    expect(page.url()).toBe(url)
+  })
+
+  test('a tap on a List row icon opens its tooltip and does not follow the row', async ({
+    page,
+    project,
+    human,
+    agent,
+  }) => {
+    const { t } = await workedTicket(human, agent, project)
+    await page.goto(`/projects/${project.id}/features?view=list`)
+    const url = page.url()
+    await card(page, t.id, 'Ship the importer').getByTestId('work-line').tap()
+    await expect(tooltip(page)).toBeVisible()
+    await expect(tooltip(page)).toContainText(/Lost contact · \d+m/)
+    expect(page.url()).toBe(url)
+  })
+
+  test('a tap on a Needs you row icon opens its tooltip, and the row stays', async ({
+    page,
+    project,
+    human,
+    agent,
+  }) => {
+    const { t } = await stalledTicket(human, agent, project)
+    await page.goto(`/projects/${project.id}`)
+    const url = page.url()
+    const row = page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Ship the importer`) })
+    await row.getByTestId('work-line').tap()
+    await expect(tooltip(page)).toBeVisible()
+    await expect(tooltip(page)).toContainText(/No word \d+m/)
+    expect(page.url()).toBe(url)
+    await expect(row).toBeVisible()
+  })
+
+  test('a wheel scroll closes a tooltip a tap opened', async ({ page, project, human, agent }) => {
+    const { t } = await workedTicket(human, agent, project)
+    await page.goto(`/projects/${project.id}/features/${t.id}`)
+    await page.getByRole('region', { name: 'Timeline' }).getByTestId('work-line').tap()
+    await expect(tooltip(page)).toBeVisible()
+    await page.mouse.move(640, 360)
+    await page.mouse.wheel(0, 400)
+    await expect(tooltip(page)).toHaveCount(0)
   })
 })

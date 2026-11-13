@@ -11,7 +11,7 @@ import {
   Unplug,
   UserRound,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
@@ -82,16 +82,29 @@ export function WorkLine({
   // A tip a tap opened stays while the pointer or the focus moves on (base-ui closes a tip on those): a tap
   // elsewhere, Escape or a scroll closes it instead.
   const [byTap, setByTap] = useState(false)
+  // The click a tap sends after opening the tip: it is the icon's own, not the enclosing link's.
+  const tapClick = useRef(false)
   useEffect(() => {
     if (!byTap) return
-    const outside = (e: PointerEvent) => {
-      const target = e.target instanceof Element ? e.target : null
-      if (target?.closest('[data-tip], [data-slot="tooltip-content"]')) return
+    const close = () => {
       setOpen(false)
       setByTap(false)
     }
+    const outside = (e: PointerEvent) => {
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('[data-tip], [data-slot="tooltip-content"]')) return
+      close()
+    }
     document.addEventListener('pointerdown', outside)
-    return () => document.removeEventListener('pointerdown', outside)
+    // From the next frame on, as the tooltip's own scroll close: a scroll that comes with the tap is not one to close for.
+    const frame = requestAnimationFrame(() =>
+      window.addEventListener('scroll', close, { capture: true, passive: true }),
+    )
+    return () => {
+      cancelAnimationFrame(frame)
+      document.removeEventListener('pointerdown', outside)
+      window.removeEventListener('scroll', close, { capture: true })
+    }
   }, [byTap])
   const onOpenChange = (next: boolean, details: { reason: string }) => {
     if (!next && byTap && ['trigger-hover', 'trigger-focus', 'trigger-press'].includes(details.reason)) return
@@ -117,11 +130,22 @@ export function WorkLine({
       // Every state's icon is a keyboard stop: focus opens its tooltip, the full line and what it adds.
       tabIndex={tipped ? 0 : undefined}
       // Hover does not exist on a touch screen: a tap opens the tooltip there.
+      onPointerDown={() => {
+        tapClick.current = false
+      }}
       onPointerUp={(e) => {
         if (tipped && e.pointerType === 'touch') {
+          tapClick.current = true
           setOpen(true)
           setByTap(true)
         }
+      }}
+      // A tap on the icon opens its tooltip and goes no further: an enclosing link (a card, a row) keeps it.
+      onClick={(e) => {
+        if (!tapClick.current) return
+        tapClick.current = false
+        e.preventDefault()
+        e.stopPropagation()
       }}
       className={`rounded-sm text-sm font-medium tabular-nums outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${tone}`}
     >
