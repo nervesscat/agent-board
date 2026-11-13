@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { COMMENT_PARENTS, COMPLEXITIES, FEED_TABS, STALL_MINUTES } from '#/lib/constants'
 import type { RunConfigInput } from '#/lib/runs'
 import { listActors, noteActor } from './actors'
+import * as agentCards from './agentCards'
 import { asSubIdentity, type Caller, callerInfo } from './auth'
 import { previewBranch } from './branchPreview'
 import { linkFor } from './previewProxy'
@@ -72,6 +73,8 @@ The rhythm:
 8. Clean up after yourself: once a lane's work is in its parent's branch (or a ticket's in its base), and before moving it to done, delete its local branch once no worktree holds it, and post_update the deleted branch names with their commit hashes (e.g. lane/47 @ 9ec12e8b) so any of them can be restored. Leave its worktrees, and the workspaces registered at them, to the human, who removes them from the Cleanup page. get_ticket_git says whether each branch's work arrived (reach); cleanup_report lists every leftover in the project, and cleanup_delete deletes closed tickets' landed local branches, the board checking each one again as for the human and answering how to restore it: post those branch @ sha lines on the ticket too. Never delete a branch whose reach is unique without the human's go-ahead, nor one cleanup_report marks protected, and never delete branches on origin nor remove worktrees: list them for the human, who does that from the Cleanup page.
 9. Record your work on the ticket's work timeline as you go (the Roadmap and the ticket page draw it; the human sees from it who worked when, who waited on what, and what stalled): heartbeat every few minutes while you work a ticket (in Claude Code under /loop, or between steps), since a ticket in an active stage with no event for longer than its project's stallMinutes (30 by default) reads as stalled in the human's Needs you; start_span when you start a phase (spec, build, review with its round, verify, pr, preview, merge) and end_span when it is done; handoff when you brief a sub-agent (to: its name, the full agentName it passes such as orch/builder-1, and record its own spans with agent: its name) and when it hands back; start_wait with the reason (lock, builder, mcp, human, other) when you cannot go on, with on: the agent you handed the work to when you wait on one you briefed, and end_wait as soon as you can. Each takes projectId and ticketId, and only a ticket of that project. get_ticket's work lists your open spans and waits to close.
 10. End of session: for every ticket you leave in progress, blocked or review, its summary up to date (set_ticket_summary): where it stands, what is next, and how to resume (branch, worktree, commands, preview, gotchas), concretely enough that another agent can continue without asking. Then the project's report, if it keeps one (get_report_settings: cadence daily or weekly): one report per period, due at the end of the project's shift. list_reports shows which periods are done, missing, upcoming or off; write the current or a missing one as the prompt says, in the shape of the template (its headings, in order), from daily_report for the days it covers, and post_report it (files as absolute paths). reportDue on get_summary and check_inbox says when the human expects it (due soon, or missing): write it then, with the human's go-ahead.
+
+Notifications: the notification center is not a place to report your work. Open a tracked card (start_tracked_request, tracked_request_progress, finish_tracked_request) only when the human explicitly asked to see the progress of, or to be told about the completion of, one named thing ("show me progress", "let me know when", "notify me when", "tell me once it is ready"): one request, one card, and never for starting a ticket, running tests in normal work, a long build nobody asked about or a finished ticket. Use post_notice only for something very important the human must know and would otherwise miss (data lost or at risk, production or the host broken, a secret exposed, the wrong thing done and needing undo, a deadline missed), never for routine work: when in doubt, post on the ticket.
 
 Who is who: every caller has a name, a role and maybe a parent (whoami). The human is the human. An agent token made by Connect is an orchestrator by default; the human can make it a worker. A subagent you delegate to that shares your connection is your worker: brief it to pass agentName: "<your whoami name>/<its name>" (e.g. orch/builder-1) on every board call, so its posts, claims and comments show under its own name with you as its parent; a worker session configured on its own sends the header X-Agent-Name: <token name>/<its name> instead (or gets its own worker token, the hard boundary). A sub-identity is always a worker. Only the human and an orchestrator change a project's instructions (set_project_instructions), create a project with instructions or move a repo to another project; a worker asks its orchestrator, and every change shows in the human's Needs you until they review it.
 
@@ -243,6 +246,100 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
         ),
     },
     ({ projectId, windowMinutes }) => getLiveWork(projectId, { windowMinutes }),
+  )
+
+  // notifications: tracked requests and important notices an agent opens for the human
+  tool(
+    'list_notifications',
+    "The project's agent cards: tracked requests (kind tracked: the human's request, progress, state and result) and important notices (kind notice: body and the reason it cannot wait), newest first. The human sees every card of the project, an agent only the ones it opened and its sub-identities' (<its name>/…). It does not list the board's own jobs; the notification center shows both.",
+    { projectId: z.number().int() },
+    ({ projectId }) => agentCards.listCards(projectId, { agent: caller.kind === 'human' ? null : actor }),
+  )
+  tool(
+    'start_tracked_request',
+    `Open the one notification card for a thing the human asked to watch. ${agentCards.TRACKED_ONLY} request is the human's own words, quoted or closely paraphrased: a call without it is refused. total makes a determinate bar ("3 of 12"); without one the card sits running (indeterminate) until you finish it. href is where the result will live: a board path such as /projects/12 or an absolute http(s) URL.`,
+    {
+      projectId: z.number().int(),
+      title: z.string().max(200).optional().describe('what the human asked to be told about, in their terms'),
+      request: z
+        .string()
+        .max(500)
+        .optional()
+        .describe(
+          "the human's request itself, quoted or closely paraphrased: what they asked to be shown or told. Required: a start without it is refused",
+        ),
+      total: z
+        .number()
+        .int()
+        .min(0)
+        .max(1_000_000)
+        .optional()
+        .describe('how many countable steps the work has, when the human asked to see progress'),
+      href: z
+        .string()
+        .max(2_000)
+        .optional()
+        .describe('where the result will live: a board path (/projects/12) or an absolute http(s) URL'),
+    },
+    ({ projectId, ...input }) => agentCards.startTracked({ name: actor, agent }, projectId, input),
+  )
+  tool(
+    'tracked_request_progress',
+    `Move a running tracked card. ${agentCards.TRACKED_ONLY} done is clamped into the card's total, step is the item being worked on now (left out keeps the last one). A card that already ended, another agent's card or a notice is refused.`,
+    {
+      projectId: z.number().int(),
+      cardId: z.number().int(),
+      done: z.number().int().optional().describe("how many steps are done; clamped into the card's total"),
+      step: z.string().max(500).nullable().optional().describe('the item being worked on now'),
+    },
+    ({ projectId, cardId, ...update }) =>
+      agentCards.progressTracked({ name: actor, agent }, projectId, cardId, update),
+  )
+  tool(
+    'finish_tracked_request',
+    `End a running tracked card. ${agentCards.TRACKED_ONLY} state succeeded needs the one-line result, state failed needs the reason; the card flips to done (or failed) and the notification center raises its toast when the panel is closed. A card that already ended, another agent's card or a notice is refused.`,
+    {
+      projectId: z.number().int(),
+      cardId: z.number().int(),
+      state: z.enum(['succeeded', 'failed']),
+      result: z.string().max(500).optional().describe('the one-line result, required when it succeeded'),
+      reason: z.string().max(500).optional().describe('why it failed, required when it failed'),
+    },
+    ({ projectId, cardId, ...outcome }) =>
+      agentCards.finishTracked({ name: actor, agent }, projectId, cardId, outcome),
+  )
+  tool(
+    'post_notice',
+    `Post one important notice for the human. ${agentCards.NOTICE_ONLY} title, body (what happened and what the human should do) and reason (why it cannot wait) are required: a notice without its reason is refused. href is where to look: a board path or an absolute http(s) URL. It is delivered once and has no progress to update.`,
+    {
+      projectId: z.number().int(),
+      title: z.string().max(200).optional(),
+      body: z
+        .string()
+        .max(2_000)
+        .optional()
+        .describe('what happened and what the human should do, a sentence or two'),
+      reason: z
+        .string()
+        .max(500)
+        .optional()
+        .describe('why it cannot wait: required, a notice without it is refused'),
+      href: z
+        .string()
+        .max(2_000)
+        .optional()
+        .describe('where to look: a board path (/projects/12) or an absolute http(s) URL'),
+    },
+    ({ projectId, ...input }) => agentCards.postNotice({ name: actor, agent }, projectId, input),
+  )
+  tool(
+    'dismiss_notification',
+    'Dismiss one tracked card or notice for everybody: the human only, the read receipt that removes it from the panel and the badge. An agent is refused; one it opened by mistake finishes it as failed with the reason instead. Returns { ok: true }; an unknown card, one of another project or one already dismissed is a 404.',
+    { projectId: z.number().int(), cardId: z.number().int() },
+    ({ projectId, cardId }) => {
+      agentCards.dismissCard({ name: actor, agent }, projectId, cardId)
+      return { ok: true }
+    },
   )
 
   // PR queue

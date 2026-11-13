@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, max, ne
 import { db, schema } from '#/db'
 import type { StageKind } from '#/lib/constants'
 import { mergeLayout, shownIn } from '#/lib/layout'
+import { askingHuman } from '#/lib/needsYou'
 import { stageColumn } from '#/lib/stages'
 import { activityOf } from '#/lib/workTimeline'
 import { dayBounds } from './activity'
@@ -118,37 +119,47 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
     )
     .all()
   const prTicketById = new Map(prTicketRows.map((t) => [t.id, t]))
+  /** A ticket's stage kind, a PR's own ticket included: what decides whether its entries ask the human. */
+  const kindOfTicket = (ticketId: number): StageKind | undefined => {
+    const t = byId.get(ticketId) ?? prTicketById.get(ticketId)
+    return t ? kind(t.status) : undefined
+  }
   const deciding = [...ids, ...prTicketRows.map((t) => t.id)]
   const decisions = deciding.length
-    ? db
-        .select({
-          id: schema.updates.id,
-          ticketId: schema.updates.ticketId,
-          author: schema.updates.author,
-          body: schema.updates.body,
-          decision: schema.updates.decision,
-          createdAt: schema.updates.createdAt,
-        })
-        .from(schema.updates)
-        .where(
-          and(
-            inArray(schema.updates.ticketId, deciding),
-            isNotNull(schema.updates.decision),
-            isNull(schema.updates.decidedAt),
-          ),
-        )
-        .orderBy(desc(schema.updates.createdAt))
-        .all()
-        .map((d) => ({
-          postId: d.id,
-          ticketId: d.ticketId,
-          ticketTitle: (byId.get(d.ticketId) ?? prTicketById.get(d.ticketId))?.title ?? '',
-          prTicket: prTicketById.has(d.ticketId),
-          question: gist(d.body),
-          options: d.decision?.length ?? 0,
-          author: d.author,
-          createdAt: d.createdAt,
-        }))
+    ? askingHuman(
+        db
+          .select({
+            id: schema.updates.id,
+            ticketId: schema.updates.ticketId,
+            author: schema.updates.author,
+            body: schema.updates.body,
+            decision: schema.updates.decision,
+            archiveTickets: schema.updates.archiveTickets,
+            createdAt: schema.updates.createdAt,
+          })
+          .from(schema.updates)
+          .where(
+            and(
+              inArray(schema.updates.ticketId, deciding),
+              isNotNull(schema.updates.decision),
+              isNull(schema.updates.decidedAt),
+            ),
+          )
+          .orderBy(desc(schema.updates.createdAt))
+          .all(),
+        kindOfTicket,
+        // An archive request is only ever asked on a finished ticket: it must stay answerable.
+        (d) => !!d.archiveTickets,
+      ).map((d) => ({
+        postId: d.id,
+        ticketId: d.ticketId,
+        ticketTitle: (byId.get(d.ticketId) ?? prTicketById.get(d.ticketId))?.title ?? '',
+        prTicket: prTicketById.has(d.ticketId),
+        question: gist(d.body),
+        options: d.decision?.length ?? 0,
+        author: d.author,
+        createdAt: d.createdAt,
+      }))
     : []
   const repos = listRepos(project.id)
   const repoName = (id: number | null) => repos.find((r) => r.id === id)?.name ?? null
@@ -178,12 +189,15 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       updatedAt: p.updatedAt,
     }))
   const threads = humans.length
-    ? listHumanThreads(project.id, humans)
-        .filter((th) => th.ticketId === null || byId.has(th.ticketId) || prTicketById.has(th.ticketId))
-        .map(({ as: _as, ...th }) => ({
-          ...th,
-          prTicket: th.ticketId !== null && prTicketById.has(th.ticketId),
-        }))
+    ? askingHuman(
+        listHumanThreads(project.id, humans).filter(
+          (th) => th.ticketId === null || byId.has(th.ticketId) || prTicketById.has(th.ticketId),
+        ),
+        kindOfTicket,
+      ).map(({ as: _as, ...th }) => ({
+        ...th,
+        prTicket: th.ticketId !== null && prTicketById.has(th.ticketId),
+      }))
     : []
   // Tasks and subtasks tagged blocked on the human, on work still going: not on a done or cancelled
   // ticket, nor under one (a cancelled lane's tasks are out of the work, as in the rollup).
@@ -208,24 +222,27 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
   for (const task of taskRows) ownTasks.set(task.ticketId, [...(ownTasks.get(task.ticketId) ?? []), task])
   const nextId = new Map([...ownTasks].map(([id, own]) => [id, nextTask(own)?.id ?? null]))
   const order = new Map(live.map((id, i) => [id, i]))
-  const blockedTasks = taskRows
-    .filter((task) => task.blocked && !task.done && nextId.get(task.ticketId) === task.id)
-    .sort((a, b) => order.get(a.ticketId)! - order.get(b.ticketId)!)
-    .map((task) => {
-      const t = byId.get(task.ticketId)!
-      return {
-        taskId: task.id,
-        text: task.text,
-        reason: task.blockedReason,
-        // The task it is a step of, when it is a subtask.
-        parentTask: task.parentId ? (taskText.get(task.parentId) ?? null) : null,
-        ticketId: t.id,
-        ticketTitle: t.title,
-        status: t.status,
-        // The ticket it is a lane of.
-        parent: parentOf(t),
-      }
-    })
+  const blockedTasks = askingHuman(
+    taskRows
+      .filter((task) => task.blocked && !task.done && nextId.get(task.ticketId) === task.id)
+      .sort((a, b) => order.get(a.ticketId)! - order.get(b.ticketId)!)
+      .map((task) => {
+        const t = byId.get(task.ticketId)!
+        return {
+          taskId: task.id,
+          text: task.text,
+          reason: task.blockedReason,
+          // The task it is a step of, when it is a subtask.
+          parentTask: task.parentId ? (taskText.get(task.parentId) ?? null) : null,
+          ticketId: t.id,
+          ticketTitle: t.title,
+          status: t.status,
+          // The ticket it is a lane of.
+          parent: parentOf(t),
+        }
+      }),
+    kindOfTicket,
+  )
   // Active tickets and lanes nobody was heard from on for longer than the project allows (the work timeline).
   const timelines = timelinesFor(tickets, now)
   const stalled = tickets
