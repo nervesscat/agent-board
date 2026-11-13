@@ -248,6 +248,9 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
     liveness: timeline.liveness,
+    stage: timeline.stage,
+    progressAt: timeline.progressAt,
+    waitingOnHuman: timeline.waitingOnHuman,
     work: workOf(timeline),
   }
 }
@@ -269,6 +272,9 @@ export async function ticketRows(projectId: number, filter: features.TicketFilte
       stalled: timeline.stalled,
       lastSignalAt: timeline.lastSignalAt,
       liveness: timeline.liveness,
+      stage: timeline.stage,
+      progressAt: timeline.progressAt,
+      waitingOnHuman: timeline.waitingOnHuman,
       activity: activityOf(timeline),
     }
   })

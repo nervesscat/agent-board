@@ -393,6 +393,9 @@ describe('activityOf', () => {
           },
         ],
       },
+      stage: { key: 'in_progress', kind: 'active', since: at('09:00') },
+      progressAt: at('10:00'),
+      waitingOnHuman: false,
     })
   })
 
@@ -426,6 +429,9 @@ describe('activityOf', () => {
         silentMinutes: 60,
         spans: [],
       },
+      stage: { key: 'in_progress', kind: 'active', since: at('09:00') },
+      progressAt: at('09:00'),
+      waitingOnHuman: false,
     })
   })
 })
@@ -696,6 +702,8 @@ describe('liveness: the lease, the open spans and waiting on the human', () => {
       ['claude', at('10:30'), 1],
     ])
     expect(t.liveness?.lastWordAt).toBe(at('10:30'))
+    // The state names the latest open span's agent; its word is that agent's own.
+    expect(t.liveness?.agent).toBe('claude')
   })
 
   it('gives no state to tickets outside an active stage, archived ones or a PR ticket', () => {
@@ -707,6 +715,73 @@ describe('liveness: the lease, the open spans and waiting on the human', () => {
       { prId: 3 },
     ])
       expect(buildLiveness([spanStart('10:00')], '11:00', {}, t).liveness).toBeNull()
+  })
+
+  it('keeps the lost agent’s own last word, not another agent’s later post', () => {
+    // claude's build span opens at 10:00 and says nothing after; the orchestrator posts at 10:40. Read
+    // at 11:46 the lease has expired with the span open, so the state is lost and its last word is the
+    // lost agent's own (10:00), while the ticket-wide last word stays the latest post (10:40).
+    const t = buildLiveness(
+      [spanStart('10:00', { agent: 'claude', phase: 'build' })],
+      '11:46',
+      { posts: [post('10:40', 'orch')] },
+      { createdAt: at('09:00') },
+    )
+    expect(t.liveness).toMatchObject({
+      state: 'lost',
+      agent: 'claude',
+      phase: 'build',
+      lastWordAt: at('10:00'),
+      silentMinutes: 106,
+      spans: [{ agent: 'claude', lastWordAt: at('10:00'), silentMinutes: 106 }],
+    })
+    expect(t.lastWordAt).toBe(at('10:40'))
+    // The feed's Last heard is still the latest agent event: posts are not events.
+    expect(t.lastHeard).toMatchObject({ at: at('10:00'), agent: 'claude' })
+  })
+
+  it('carries the stage entered, the family progress post and the human-turn fact on the read', () => {
+    // Created in review two days before the read; a fresh post and a fresh edit do not move the wait.
+    const createdAt = '2026-10-18T09:00:00.000Z'
+    const t = buildTimeline(
+      [
+        event('stage', '09:00', { at: createdAt, toStage: 'review' }),
+        event('heartbeat', '12:20', { agent: 'claude' }),
+      ],
+      {
+        now: ms('12:30'),
+        stages,
+        ticket: ticket({ status: 'review', createdAt, startedAt: '2026-10-15T09:00:00.000Z' }),
+        stallMinutes: 30,
+        progressAt: at('12:20'),
+        waiting: { decision: false, blockedTask: false },
+      },
+    )
+    expect(t.stage).toEqual({ key: 'review', kind: 'review', since: createdAt })
+    expect(t.progressAt).toBe(at('12:20'))
+    expect(t.waitingOnHuman).toBe(false)
+    // Moving out and back reads from the second move into review.
+    const moved = buildTimeline(
+      [
+        event('stage', '09:00', { at: createdAt, toStage: 'review' }),
+        event('stage', '09:00', { at: '2026-10-19T09:00:00.000Z', toStage: 'in_progress' }),
+        event('stage', '09:00', { at: '2026-10-20T09:00:00.000Z', toStage: 'review' }),
+      ],
+      {
+        now: ms('12:30'),
+        stages,
+        ticket: ticket({ status: 'review', createdAt }),
+        stallMinutes: 30,
+      },
+    )
+    expect(moved.stage.since).toBe('2026-10-20T09:00:00.000Z')
+    // With no progress posts the latest stage move is the first event, so the work's start.
+    expect(moved.progressAt).toBe('2026-10-18T09:00:00.000Z')
+    // The human-turn facts are exposed so a review or blocked row can word them without a state.
+    const waiting = buildLiveness([event('heartbeat', '10:00')], '10:01', {
+      waiting: { decision: true },
+    })
+    expect(waiting.waitingOnHuman).toBe(true)
   })
 })
 

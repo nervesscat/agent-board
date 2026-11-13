@@ -392,6 +392,9 @@ describe('delegated waits, lastHeard and activity', () => {
           },
         ],
       },
+      stage: { key: 'in_progress', kind: 'active', since: expect.any(String) },
+      progressAt: expect.any(String),
+      waitingOnHuman: false,
     })
     expect(span.spanId).toBe(started.id)
     const overview = (await tool('get_summary', { projectId: pid })).projects[0]
@@ -703,6 +706,146 @@ describe('the stalled flag', () => {
     features.updateTask(draft!.id, { blocked: true, blockedReason: 'the human reviews the draft' }, AGENT)
     expect(await reads(lane.id)).toMatchObject({ list: 'waiting', get: 'waiting' })
     expect(await reads(parent.id)).toMatchObject({ list: 'waiting', get: 'waiting' })
+  })
+
+  it('rolls a lane’s blocked next step up into its parent on list and summary reads too', async () => {
+    const pid = newProject()
+    const parent = activeTicket(pid, 'parent')
+    const lane = features.createTicket(
+      pid,
+      { title: 'lane', status: 'in_progress', parentId: parent.id },
+      HUMAN,
+    )
+    // The parent's own next step is open and not blocked: only the lane's next step waits on the human.
+    features.addTasks(parent.id, ['wire the importer'], AGENT)
+    const [draft] = features.addTasks(lane.id, ['draft the docs'], AGENT)
+    features.updateTask(draft!.id, { blocked: true, blockedReason: 'the human reviews the draft' }, AGENT)
+
+    const listRows = (await tool('list_tickets', { projectId: pid })) as {
+      id: number
+      liveness: { state: string } | null
+      stage: { key: string; kind: string; since: string }
+    }[]
+    const listState = (id: number) => listRows.find((r) => r.id === id)!.liveness?.state
+    const summaryRows = (await tool('get_summary', { projectId: pid })).projects[0].inProgress as {
+      id: number
+      liveness: { state: string } | null
+    }[]
+    const summaryState = (id: number) => summaryRows.find((r) => r.id === id)!.liveness?.state
+    const getState = async (id: number) =>
+      (await tool('get_ticket', { ticketId: id })).work.liveness?.state as string | undefined
+
+    // The same reads agree: the project-wide ones no longer miss the lane's step (R1).
+    expect({
+      list: listState(parent.id),
+      get: await getState(parent.id),
+      summary: summaryState(parent.id),
+    }).toEqual({ list: 'waiting', get: 'waiting', summary: 'waiting' })
+    // The lane is not a top-level row of the Overview, but its list row and page agree on its own step.
+    expect({ list: listState(lane.id), get: await getState(lane.id) }).toEqual({
+      list: 'waiting',
+      get: 'waiting',
+    })
+    // The lane's task is the human's to do, and the parent's card counts it.
+    expect((await tool('get_summary', { projectId: pid })).projects[0].needsYou.blockedTasks).toMatchObject([
+      { ticketId: lane.id, text: 'draft the docs' },
+    ])
+  })
+
+  it('leaves a done lane’s stale blocked task out of the roll-up, as the summary does', async () => {
+    const pid = newProject()
+    const { db, schema } = dbm
+    const parent = activeTicket(pid, 'parent')
+    const lane = features.createTicket(
+      pid,
+      { title: 'lane', status: 'in_progress', parentId: parent.id },
+      HUMAN,
+    )
+    features.addTasks(parent.id, ['wire the importer'], AGENT)
+    const [draft] = features.addTasks(lane.id, ['draft the docs'], AGENT)
+    features.updateTask(draft!.id, { blocked: true, blockedReason: 'the human reviews the draft' }, AGENT)
+    // The lane is finished with its blocked task still open on it: out of the work, like a cancelled lane.
+    db.update(schema.tickets).set({ status: 'done' }).where(eq(schema.tickets.id, lane.id)).run()
+
+    const listRow = (
+      (await tool('list_tickets', { projectId: pid })) as {
+        id: number
+        liveness: { state: string } | null
+      }[]
+    ).find((r) => r.id === parent.id)!
+    expect(listRow.liveness?.state).toBe('working')
+    const full = await tool('get_ticket', { ticketId: parent.id })
+    expect(full.work.liveness?.state).toBe('working')
+    const s = (await tool('get_summary', { projectId: pid })).projects[0]
+    expect(s.inProgress.find((x: { id: number }) => x.id === parent.id).liveness.state).toBe('working')
+    expect(s.needsYou.blockedTasks).toEqual([])
+  })
+
+  it('carries the stage entered, the family progress post and the human-turn fact on every read', async () => {
+    const pid = newProject()
+    const { db, schema } = dbm
+    const review = features.createTicket(pid, { title: 'Waiting for a look', status: 'review' }, HUMAN)
+    // Created two days ago; a fresh post and a fresh edit do not move the wait. `startedAt` is older still.
+    age(review.id, 2 * 24 * 60)
+    db.update(schema.tickets)
+      .set({ startedAt: ago(5 * 24 * 60) })
+      .where(eq(schema.tickets.id, review.id))
+      .run()
+    db.insert(schema.updates)
+      .values({ ticketId: review.id, author: AGENT, body: 'still here', progress: true })
+      .run()
+    features.updateTicket(review.id, { title: 'Waiting for a look, edited' }, HUMAN)
+
+    const stageSince = events(review.id).find((e) => e.kind === 'stage' && e.toStage === 'review')!.at
+    const listRow = (
+      (await tool('list_tickets', { projectId: pid })) as {
+        id: number
+        stage: { key: string; kind: string; since: string }
+        progressAt: string | null
+        waitingOnHuman: boolean
+      }[]
+    ).find((r) => r.id === review.id)!
+    expect(listRow.stage).toEqual({ key: 'review', kind: 'review', since: stageSince })
+    expect(listRow.progressAt).toEqual(expect.any(String))
+    expect(listRow.waitingOnHuman).toBe(false)
+    const full = await tool('get_ticket', { ticketId: review.id })
+    expect(full.work.stage).toEqual(listRow.stage)
+    expect(full.work.progressAt).toBe(listRow.progressAt)
+    const rest = await call('GET', `/api/tickets/${review.id}`)
+    expect(rest.body.work.stage).toEqual(listRow.stage)
+    expect(rest.body.work.progressAt).toBe(listRow.progressAt)
+    const s = (await tool('get_summary', { projectId: pid })).projects[0]
+    const row = s.needsYou.reviews.find((r: { id: number }) => r.id === review.id)
+    expect(row.stage).toEqual(listRow.stage)
+    expect(row.waitingOnHuman).toBe(false)
+    // A lane's progress post is the parent's progressAt: a parent with one is not quiet.
+    const parent = activeTicket(pid, 'parent')
+    const lane = features.createTicket(
+      pid,
+      { title: 'lane', status: 'in_progress', parentId: parent.id },
+      HUMAN,
+    )
+    db.insert(schema.updates)
+      .values({
+        ticketId: parent.id,
+        author: AGENT,
+        body: 'old word',
+        progress: true,
+        createdAt: ago(25 * 60),
+      })
+      .run()
+    db.insert(schema.updates)
+      .values({ ticketId: lane.id, author: AGENT, body: 'lane word', progress: true })
+      .run()
+    const lanePost = db.select().from(schema.updates).where(eq(schema.updates.ticketId, lane.id)).get()!
+      .createdAt
+    const parentRow = (
+      (await tool('list_tickets', { projectId: pid })) as {
+        id: number
+        progressAt: string | null
+      }[]
+    ).find((r) => r.id === parent.id)!
+    expect(parentRow.progressAt).toBe(lanePost)
   })
 
   it('is not raised in a blocked or review stage, nor while waiting on the human', async () => {

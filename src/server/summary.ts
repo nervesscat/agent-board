@@ -5,7 +5,7 @@ import type { StageKind } from '#/lib/constants'
 import { mergeLayout, shownIn } from '#/lib/layout'
 import { stageColumn } from '#/lib/stages'
 import { nextTask } from '#/lib/tasks'
-import { activityOf } from '#/lib/workTimeline'
+import { activityOf, STALE_MS } from '#/lib/workTimeline'
 import { dayBounds } from './activity'
 import { listActors } from './actors'
 import { today } from './daily'
@@ -26,8 +26,6 @@ import { timelinesFor } from './workTimeline'
  */
 
 const DAY_MS = 86_400_000
-/** In progress with no progress post for this long reads as stalled. */
-const STALE_MS = DAY_MS
 
 /** Worked on, waiting on the human, or handed off: a ticket in any of these is in progress. */
 const IN_PROGRESS: StageKind[] = ['active', 'blocked', 'review']
@@ -287,6 +285,9 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
       assignee: t.assignee,
       prNumber: t.prNumber,
       updatedAt: t.updatedAt,
+      // The stage entered, so the row counts its wait from it and not from `updatedAt`.
+      stage: timelines.get(t.id)!.timeline.stage,
+      waitingOnHuman: timelines.get(t.id)!.timeline.waitingOnHuman,
     }))
   // Open waits on the human on work still going. A ticket already asking with an open decision card
   // is listed once, as that card.
@@ -376,6 +377,11 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         stalled: !!timelines.get(t.id)!.timeline.stalled,
         // What the ticket is doing now, with the per-agent facts behind it.
         liveness: timelines.get(t.id)!.timeline.liveness,
+        // The facts the one work-state line reads: its stage and when it entered it, the last progress
+        // post on it or a lane, and whether the human's turn is a fact the board already counts.
+        stage: timelines.get(t.id)!.timeline.stage,
+        progressAt: timelines.get(t.id)!.timeline.progressAt,
+        waitingOnHuman: timelines.get(t.id)!.timeline.waitingOnHuman,
         // The open spans and waits, and who was last heard from (the same read as `stalled`).
         activity: activityOf(timelines.get(t.id)!.timeline),
         stale:

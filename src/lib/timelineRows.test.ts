@@ -79,6 +79,9 @@ const timeline = (more: Partial<WorkTimeline> = {}): WorkTimeline => ({
   liveness: null,
   lastHeard: null,
   stalled: null,
+  stage: { key: 'in_progress', kind: 'active', since: iso('10:00') },
+  progressAt: iso('10:00'),
+  waitingOnHuman: false,
   ...more,
 })
 

@@ -64,6 +64,8 @@ export type LastHeard = {
 }
 /** A span that has ended: its phase, who worked it, and when it started and ended. */
 export type ClosedSpan = { phase: string; agent: string; start: string; end: string }
+/** The stage a ticket is in: its key, its kind and when it entered it. */
+export type TimelineStage = { key: string; kind: StageKind; since: string }
 /**
  * What a ticket is doing now, for a list row or the Overview: its open spans (phase, agent, since), its
  * open waits (reason, agent, `on`, since) and who was last heard from. `lastClosedSpan` is the span that
@@ -78,6 +80,12 @@ export type Activity = {
   now?: string
   /** The ticket's state and per-agent facts, when it has one (see Liveness). */
   liveness?: Liveness | null
+  /** The stage it is in, and when it entered it: what `Your turn` counts from. */
+  stage?: TimelineStage
+  /** The last progress post on the ticket or a lane, else the work's start: what `Quiet` counts from. */
+  progressAt?: string | null
+  /** Whether the human's turn is a fact the board already counts (a human wait, a card, a blocked next step). */
+  waitingOnHuman?: boolean
 }
 /**
  * Since when an active ticket has been silent, for how many whole minutes, and who was heard from last:
@@ -148,7 +156,16 @@ export type WorkTimeline = {
   liveness: Liveness | null
   stalled: Stalled | null
   lastHeard: LastHeard | null
+  /** The stage it is in, and when it entered it: a review row counts its wait from it. */
+  stage: TimelineStage
+  /** The last progress post on the ticket or a lane, else the work's start: the day-long quiet counts from it. */
+  progressAt: string | null
+  /** Whether the human's turn is a fact the board already counts: a human wait, a card, a blocked next step. */
+  waitingOnHuman: boolean
 }
+
+/** In progress with no progress post for this long reads as quiet (`Quiet 1d`). */
+export const STALE_MS = 86_400_000
 
 /** A post on the ticket as the lease reads it: when it was written, by whom, and whether a human wrote it. */
 export type TimelinePost = { at: string; agent: string; human: boolean }
@@ -175,6 +192,8 @@ export type TimelineOptions = {
   posts?: TimelinePost[]
   /** Why it waits on the human outside its events: an undecided decision card, or a blocked next step. */
   waiting?: { decision?: boolean; blockedTask?: boolean }
+  /** The last progress post on the ticket or its lanes, when the caller already read them for the family. */
+  progressAt?: string | null
 }
 
 /** The kinds of stage a ticket is live in: its open spans and waits run to now there. */
@@ -326,6 +345,16 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
     return b > Date.parse(e.at) ? [{ start: e.at, end: iso(b) }] : []
   })
 
+  // The stage the ticket is in now and when it entered it: the latest move into its status (the creation
+  // recorded one too), else its creation. A review row counts its wait from this, never from updatedAt.
+  const stage: TimelineStage = {
+    key: o.ticket.status,
+    kind: ticketKind,
+    since: stageMoves.filter((e) => e.toStage === o.ticket.status).at(-1)?.at ?? o.ticket.createdAt,
+  }
+  // The last progress post on the ticket or its lanes, else the work's start: what `Quiet` counts from.
+  const progressAt = o.progressAt ?? o.ticket.startedAt ?? first?.at ?? o.ticket.createdAt
+
   const interval = (s: { start: string; end: string }) => clip(Date.parse(s.start), Date.parse(s.end))
   // A delegated wait (`on` named) is work handed to another agent: it counts as working, like a span.
   const delegated = waits.filter((w) => w.on).map(interval)
@@ -394,18 +423,22 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
     if (!ownEvent && !ownPost) return lastWordAt
     return latest(ownEvent?.at, ownPost?.at)
   }
+  // The state names one agent: the latest open span's, else who was heard from last. Its last word is that
+  // agent's own (another agent's later post stays the ticket-wide last word, and the feed's Last heard).
+  const livenessAgent = latestSpan?.agent ?? lastAgent
+  const livenessWord = wordOf(livenessAgent)
   const liveness: Liveness | null = stateful
     ? {
         state,
-        agent: latestSpan?.agent ?? lastAgent,
+        agent: livenessAgent,
         phase: latestSpan?.phase ?? lastEvent?.phase ?? '',
         since:
           state === 'waiting'
             ? (waits.find((w) => w.open && w.reason === 'human')?.start ?? lastSignalAt)
             : (latestSpan?.start ?? lastSignalAt),
         lastSignalAt,
-        lastWordAt,
-        silentMinutes: silence(lastWordAt ?? lastSignalAt),
+        lastWordAt: livenessWord,
+        silentMinutes: silence(livenessWord ?? lastSignalAt),
         spans: openSpans.map((s) => {
           const word = wordOf(s.agent)
           return {
@@ -443,6 +476,9 @@ export function buildTimeline(events: TimelineEvent[], o: TimelineOptions): Work
         }
       : null,
     lastHeard,
+    stage,
+    progressAt,
+    waitingOnHuman: waitingByFacts,
   }
 }
 
@@ -464,6 +500,9 @@ export function activityOf(timeline: WorkTimeline): Activity {
       : null,
     now: timeline.now,
     liveness: timeline.liveness,
+    stage: timeline.stage,
+    progressAt: timeline.progressAt,
+    waitingOnHuman: timeline.waitingOnHuman,
   }
 }
 

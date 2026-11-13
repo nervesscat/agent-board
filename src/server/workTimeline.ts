@@ -369,7 +369,16 @@ export function timelinesFor(
   // own tree alone: its parent's blocked step is not the lane's, so a lane's row and its page agree.
   const lanes = new Map<number, { id: number; status: string; projectId: number }[]>()
   const family = new Set(ids)
-  for (let level = ids; level.length; ) {
+  // Every child is registered in its parent's `lanes` once, whether or not the read already loaded it as
+  // a row: a lane that is itself a row still rolls its next step up into its parent. The sets only decide
+  // what to expand next, never what to register.
+  const registered = new Set<number>()
+  const expanded = new Set<number>()
+  let level = [...ids]
+  while (level.length) {
+    const parents = level.filter((id) => !expanded.has(id))
+    if (!parents.length) break
+    for (const id of parents) expanded.add(id)
     const children = db
       .select({
         id: schema.tickets.id,
@@ -378,14 +387,17 @@ export function timelinesFor(
         projectId: schema.tickets.projectId,
       })
       .from(schema.tickets)
-      .where(inArray(schema.tickets.parentId, level))
+      .where(inArray(schema.tickets.parentId, parents))
       .all()
-      .filter((lane) => !family.has(lane.id))
+    level = []
     for (const lane of children) {
       family.add(lane.id)
-      lanes.set(lane.parentId!, [...(lanes.get(lane.parentId!) ?? []), lane])
+      if (!registered.has(lane.id)) {
+        registered.add(lane.id)
+        lanes.set(lane.parentId!, [...(lanes.get(lane.parentId!) ?? []), lane])
+      }
+      if (!expanded.has(lane.id)) level.push(lane.id)
     }
-    level = children.map((lane) => lane.id)
   }
   const ownTasks = new Map<number, (typeof schema.tasks.$inferSelect)[]>()
   if (family.size)
@@ -398,12 +410,38 @@ export function timelinesFor(
   const nextBlocked = new Map(
     [...family].map((id) => [id, nextTask(ownTasks.get(id) ?? [])?.blocked === true]),
   )
-  // A cancelled lane's tasks are out of the work, as they are out of the rolled-up progress.
+  // A cancelled or done lane's tasks are out of the work, as they are out of the rolled-up progress.
+  const closedLane = (lane: { status: string; projectId: number }) => {
+    const kind = kindOf(projectOf(lane.projectId).stages, lane.status)
+    return kind === 'cancelled' || kind === 'done'
+  }
   const blockedNext = (id: number): boolean =>
     nextBlocked.get(id) === true ||
-    (lanes.get(id) ?? []).some(
-      (lane) => kindOf(projectOf(lane.projectId).stages, lane.status) !== 'cancelled' && blockedNext(lane.id),
-    )
+    (lanes.get(id) ?? []).some((lane) => !closedLane(lane) && blockedNext(lane.id))
+  // The latest progress post on a ticket or any of its lanes: what a parent's day-long quiet counts from.
+  const progressPosts = family.size
+    ? db
+        .select({ ticketId: schema.updates.ticketId, createdAt: schema.updates.createdAt })
+        .from(schema.updates)
+        .where(and(inArray(schema.updates.ticketId, [...family]), eq(schema.updates.progress, true)))
+        .all()
+    : []
+  const progressOf = new Map<number, string>()
+  for (const p of progressPosts) {
+    const seen = progressOf.get(p.ticketId)
+    if (!seen || Date.parse(p.createdAt) > Date.parse(seen)) progressOf.set(p.ticketId, p.createdAt)
+  }
+  const familyProgress = new Map<number, string | null>()
+  const progressAt = (id: number): string | null => {
+    if (familyProgress.has(id)) return familyProgress.get(id)!
+    let at = progressOf.get(id) ?? null
+    for (const lane of lanes.get(id) ?? []) {
+      const child = progressAt(lane.id)
+      if (child && (!at || Date.parse(child) > Date.parse(at))) at = child
+    }
+    familyProgress.set(id, at)
+    return at
+  }
   return new Map(
     tickets.map((t) => {
       const events = byTicket.get(t.id) ?? []
@@ -415,6 +453,7 @@ export function timelinesFor(
         stallMinutes,
         posts: posts.get(t.id) ?? [],
         waiting: { decision: deciding.has(t.id), blockedTask: blockedNext(t.id) },
+        progressAt: progressAt(t.id),
       })
       return [t.id, { events, timeline }] as const
     }),
@@ -439,6 +478,9 @@ export function workOf(timeline: WorkTimeline) {
     lastSignalAt: timeline.lastSignalAt,
     lastWordAt: timeline.lastWordAt,
     lastHeard: timeline.lastHeard,
+    stage: timeline.stage,
+    progressAt: timeline.progressAt,
+    waitingOnHuman: timeline.waitingOnHuman,
     open: {
       spans: timeline.spans.filter((s) => s.open),
       waits: timeline.waits.filter((w) => w.open),
@@ -456,6 +498,9 @@ export type ProjectWork = {
     totals: WorkTotals
     liveness: WorkTimeline['liveness']
     stalled: WorkTimeline['stalled']
+    stage: WorkTimeline['stage']
+    progressAt: WorkTimeline['progressAt']
+    waitingOnHuman: WorkTimeline['waitingOnHuman']
   }[]
 }
 
@@ -485,6 +530,9 @@ export function projectWork(projectId: number, now: Date = new Date()): ProjectW
       totals: timeline.totals,
       liveness: timeline.liveness,
       stalled: timeline.stalled,
+      stage: timeline.stage,
+      progressAt: timeline.progressAt,
+      waitingOnHuman: timeline.waitingOnHuman,
     }
   })
   return {
