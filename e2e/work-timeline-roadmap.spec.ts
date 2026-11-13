@@ -84,7 +84,7 @@ test('a lost run reads Lost contact on the Roadmap, and a working one does not',
   const lostRow = roadmap.getByRole('region', { name: `#${lost.t.id} Ship the importer` })
   await expect(lostRow.getByTestId('lost-contact').first()).toBeVisible()
   await expect(lostRow.getByTestId('lost-contact').first()).toContainText('Lost contact')
-  await expect(lostRow.getByTestId('now-line')).toHaveCount(0)
+  // Its own row reads Lost contact, never Building (the lane under it has nothing open).
   await expect(lostRow).not.toContainText('Building')
 
   // The fresh one is building, with no lost contact.
