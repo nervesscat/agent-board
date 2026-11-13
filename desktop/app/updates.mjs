@@ -286,7 +286,8 @@ function htmlToMarkdown(html) {
     .replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<pre\b[^>]*>([\s\S]*?)<\/pre\s*>/gi, (_whole, body) => {
-      const code = decodeEntities(stripTags(body)).replace(/^\n+|\s+$/g, '')
+      // A line break in the code is a `<br>`, which the tag strip would otherwise drop.
+      const code = decodeEntities(stripTags(body.replace(/<br\s*\/?>/gi, '\n'))).replace(/^\n+|\s+$/g, '')
       // A fence longer than any run of backticks in the code, so a code line never closes it.
       const runs = [...code.matchAll(/`+/g)].map((m) => m[0].length + 1)
       const fence = '`'.repeat(Math.max(3, ...runs))
@@ -303,10 +304,35 @@ function htmlToMarkdown(html) {
 }
 
 /**
- * Escapes what release text would otherwise read as markdown: emphasis, code, links and the escape itself.
+ * Escapes what release text would otherwise read as markdown: emphasis, code, strikethrough, links and the
+ * escape itself.
  * @param {string} text
  */
-const escapeMarkdown = (text) => text.replace(/[\\`*_[\]]/g, '\\$&')
+const escapeMarkdown = (text) => text.replace(/[\\`*_~[\]]/g, '\\$&')
+
+/** An ampersand that starts something the markdown pass would read as an entity (`&lt;`, `&#39;`). */
+const ENTITY_START = /&(?=#?\w+;)/g
+
+/** The output is at the start of a line (after its indentation). */
+const LINE_START = /(^|\n)[ \t]*$/
+
+/** The output ends with a list item's marker (`- `, `1. `): what follows it starts the item's text. */
+const ITEM_START = /(^|\n)[ \t]*(?:\d+\.|-)[ \t]+$/
+
+/** The block tags: whitespace between them, or before their closers, is layout. */
+const BLOCK_TAGS = /^(p|div|h[1-6]|ul|ol|li|table|tr|blockquote|hr)$/
+
+/**
+ * Whether whitespace between two tags is layout (the source's line breaks and indentation) rather than the
+ * space between two inline elements.
+ * @param {{ name: string, closing: boolean } | null} before the tag before the whitespace
+ * @param {{ name: string, closing: boolean } | null} after the tag after it
+ */
+function isLayout(before, after) {
+  if (before && !before.closing && before.name === 'li') return true
+  if (after && after.closing && BLOCK_TAGS.test(after.name)) return true
+  return Boolean(before && after && BLOCK_TAGS.test(before.name) && BLOCK_TAGS.test(after.name))
+}
 
 /**
  * A code span for `content`: its fence is one backtick longer than the longest run in it, and it is padded
@@ -336,21 +362,41 @@ function tagsToMarkdown(html) {
   let inCell = false
   /** The output position of each open code element's backtick. @type {number[]} */
   const codes = []
+  /** The open emphasis elements: their marker and the output position of the opening one. @type {{ marker: string, start: number }[]} */
+  const emphasis = []
   /** @type {string | null} */
   let href = null
   let out = ''
   let last = 0
 
   /**
-   * The text between two tags: decoded, escaped outside code, and kept on one line in a table. The whitespace
-   * between list items and table rows is layout, and goes: it would leave a bullet or a row empty.
+   * The text between two tags: decoded, escaped outside code, and kept on one line in a table. Whitespace
+   * between tags is layout where isLayout says so, and goes; elsewhere it is one space. Inside a list item the
+   * text's leading and trailing whitespace goes too, so a bullet is never left empty.
    * @param {string} raw
+   * @param {{ name: string, closing: boolean } | null} before the tag before the text
+   * @param {{ name: string, closing: boolean } | null} after the tag after the text
    */
-  const text = (raw) => {
-    const blank = /^\s*$/.test(raw)
-    if (blank && ((table && !inCell) || (lists.length > 0 && raw.includes('\n')))) return ''
-    let decoded = decodeEntities(raw)
-    if (codes.length === 0) decoded = escapeMarkdown(decoded)
+  const text = (raw, before, after) => {
+    if (table && !inCell && /^\s*$/.test(raw)) return ''
+    if (/^\s*$/.test(raw)) {
+      if (isLayout(before, after)) return ''
+      return out === '' || /\s$/.test(out) ? '' : ' '
+    }
+    let chunk = raw
+    if (after?.closing && after.name === 'li') chunk = chunk.replace(/\s+$/, '')
+    if (ITEM_START.test(out)) chunk = chunk.replace(/^\s+/, '')
+    let decoded = decodeEntities(chunk)
+    if (codes.length === 0) {
+      decoded = escapeMarkdown(decoded).replace(ENTITY_START, '\\&')
+      // A block marker at the start of a line would make a list, heading or quote: escape it.
+      if (LINE_START.test(out) || ITEM_START.test(out))
+        decoded = decoded.replace(
+          /^([ \t]*)(?:([#>+-])|(\d+)([.)]))/,
+          (_whole, space, sign, digits, delimiter) =>
+            sign ? `${space}\\${sign}` : `${space}${digits}\\${delimiter}`,
+        )
+    }
     // A pipe would end its table cell, even inside code.
     return table ? decoded.replace(/\|/g, '\\|') : decoded
   }
@@ -361,16 +407,55 @@ function tagsToMarkdown(html) {
     if (start !== undefined) out = out.slice(0, start) + codeSpan(out.slice(start + 1))
   }
 
+  /** @param {string} marker */
+  const openEmphasis = (marker) => {
+    emphasis.push({ marker, start: out.length })
+    out += marker
+  }
+
+  /**
+   * Closes the innermost emphasis with this marker. Whitespace at the edges of its text moves outside the
+   * markers: `**Fixed **` would show its asterisks.
+   * @param {string} marker
+   */
+  const closeEmphasis = (marker) => {
+    const index = emphasis.map((e) => e.marker).lastIndexOf(marker)
+    if (index < 0) {
+      out += marker
+      return
+    }
+    const [{ start }] = emphasis.splice(index, 1)
+    const inner = out.slice(start + marker.length)
+    const body = inner.trim()
+    if (body === '') {
+      out = out.slice(0, start) + inner
+      return
+    }
+    const lead = inner.slice(0, inner.indexOf(body))
+    const trail = inner.slice(lead.length + body.length)
+    out = `${out.slice(0, start)}${lead}${marker}${body}${marker}${trail}`
+  }
+
+  /** @type {{ name: string, closing: boolean } | null} */
+  let previous = null
+
   for (const m of html.matchAll(/<\/?([a-zA-Z][\w-]*)((?:\s[^>]*?)?)\/?>/g)) {
-    out += text(html.slice(last, m.index))
-    last = m.index + m[0].length
     const name = m[1].toLowerCase()
     const closing = m[0].startsWith('</')
+    out += text(html.slice(last, m.index), previous, { name, closing })
+    previous = { name, closing }
+    last = m.index + m[0].length
     if (name === 'br') {
       out += '\n'
       continue
     }
     if (/^h[1-6]$/.test(name)) {
+      // In a list item a heading is bold text on the bullet's line: a block break would end the item.
+      if (lists.length > 0) {
+        if (closing) closeEmphasis('**')
+        else openEmphasis('**')
+        continue
+      }
       out += closing ? '\n\n' : `\n\n${'#'.repeat(Number(name[1]))} `
       continue
     }
@@ -428,12 +513,10 @@ function tagsToMarkdown(html) {
       }
       continue
     }
-    if (name === 'strong' || name === 'b') {
-      out += '**'
-      continue
-    }
-    if (name === 'em' || name === 'i') {
-      out += '*'
+    if (name === 'strong' || name === 'b' || name === 'em' || name === 'i') {
+      const marker = name === 'strong' || name === 'b' ? '**' : '*'
+      if (closing) closeEmphasis(marker)
+      else openEmphasis(marker)
       continue
     }
     if (name === 'code') {
@@ -467,7 +550,7 @@ function tagsToMarkdown(html) {
     // Paragraphs and divisions end a block; every other tag only wraps its text.
     if (closing && (name === 'p' || name === 'div' || name === 'blockquote')) out += '\n\n'
   }
-  out += text(html.slice(last))
+  out += text(html.slice(last), previous, null)
   while (codes.length > 0) closeCode()
   return out
 }

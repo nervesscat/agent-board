@@ -468,6 +468,53 @@ describe('notesMarkdown', () => {
     expect(notesMarkdown('<p>Use <code>a`b</code> here</p>')).toBe('Use ``a`b`` here')
   })
 
+  it('keeps a space between two links split only by a newline in a list item', () => {
+    expect(
+      notesMarkdown('<ul><li><a href="https://x.y/1">One</a>\n<a href="https://x.y/2">Two</a></li></ul>'),
+    ).toBe('- [One](https://x.y/1) [Two](https://x.y/2)')
+  })
+
+  it('keeps a space between two code spans split only by a newline in a list item', () => {
+    expect(notesMarkdown('<ul><li><code>a</code>\n<code>b</code></li></ul>')).toBe('- `a` `b`')
+  })
+
+  it('escapes a block marker that starts a line of text', () => {
+    expect(notesMarkdown('<p>- not a list</p>')).toBe('\\- not a list')
+    expect(notesMarkdown('<p># not a heading</p>')).toBe('\\# not a heading')
+    expect(notesMarkdown('<p>&gt; not a quote</p>')).toBe('\\> not a quote')
+    expect(notesMarkdown('<p>+ not a list</p>')).toBe('\\+ not a list')
+    expect(notesMarkdown('<p>2024. was a year</p>')).toBe('2024\\. was a year')
+    expect(notesMarkdown('<p>3) not a list</p>')).toBe('3\\) not a list')
+    // Not at the start of a line: unchanged.
+    expect(notesMarkdown('<p>a - b</p>')).toBe('a - b')
+  })
+
+  it('escapes a tilde so it does not make strikethrough', () => {
+    expect(notesMarkdown('<p>~2x faster~</p>')).toBe('\\~2x faster\\~')
+  })
+
+  it('does not decode an entity that its text already spells out', () => {
+    expect(notesMarkdown('<p>&amp;lt; and &amp;copy;</p>')).toBe('\\&lt; and \\&copy;')
+    expect(notesMarkdown('<p>Tom &amp; Jerry</p>')).toBe('Tom & Jerry')
+  })
+
+  it('shows a heading inside a list item as bold text on the bullet', () => {
+    expect(notesMarkdown('<ul><li><h3>Title</h3></li><li>Two</li></ul>')).toBe('- **Title**\n- Two')
+  })
+
+  it('moves the edge spaces of emphasis outside its markers', () => {
+    expect(notesMarkdown('<p><b>Fixed </b>now</p>')).toBe('**Fixed** now')
+    expect(notesMarkdown('<p>was<em> fast</em>.</p>')).toBe('was *fast*.')
+  })
+
+  it('drops the newlines at the start and end of a list item', () => {
+    expect(notesMarkdown('<ul><li>\nOne\n</li><li>Two</li></ul>')).toBe('- One\n- Two')
+  })
+
+  it('keeps the line breaks of a code block that has a br', () => {
+    expect(notesMarkdown('<pre><code>line1<br>line2\n</code></pre>')).toBe('```\nline1\nline2\n```')
+  })
+
   it('is empty for anything that is not notes', () => {
     expect(notesMarkdown(null)).toBe('')
     expect(notesMarkdown(undefined)).toBe('')
