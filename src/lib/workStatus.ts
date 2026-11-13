@@ -179,7 +179,7 @@ export function livenessLines(l: Liveness | null | undefined, now: Date | number
   })
 }
 
-/** A lost-contact ticket as the notice reads it: the agent, its phase, since when and its last word. */
+/** A lost ticket as the state reads it: the agent, its phase, since when and its last word. */
 export type LostContactWhy = {
   agent: string
   phase: string
