@@ -399,6 +399,93 @@ describe('needs you', () => {
   })
 })
 
+describe('needs you by stage kind', () => {
+  /** A decision, a thread waiting on the human and a blocked step on the ticket. */
+  function ask(ticketId: number) {
+    post(ticketId, 'Which one?', at(7, 7), {
+      progress: false,
+      decision: [{ label: 'A' }, { label: 'B' }],
+    })
+    post(ticketId, 'What now?', at(7, 8), { progress: false, author: HUMAN })
+    post(ticketId, 'On it.', at(7, 8, 30), { progress: false })
+    features.addTasks(
+      ticketId,
+      [{ text: `step ${ticketId}`, blocked: true, blockedReason: 'go on' }],
+      'claude',
+      { quiet: true },
+    )
+  }
+
+  it('leaves the entries of done, cancelled, backlog and todo tickets out of every list and the total', () => {
+    const pid = project('needs by kind')
+    for (const status of ['done', 'cancelled', 'backlog', 'todo']) ask(ticket(pid, status, { status }).id)
+    const empty = take(pid).needsYou
+    expect(empty.decisions).toEqual([])
+    expect(empty.threads).toEqual([])
+    expect(empty.blockedTasks).toEqual([])
+    expect(empty.total).toBe(0)
+
+    // The same entries on work going on, handed off or stopped: they ask the human.
+    const kept = ['in_progress', 'review', 'blocked'].map((status) => ticket(pid, status, { status }))
+    for (const t of kept) ask(t.id)
+    const s = take(pid).needsYou
+    const ids = kept.map((t) => t.id).sort()
+    expect(s.decisions.map((d) => d.ticketId).sort()).toEqual(ids)
+    expect(
+      s.threads
+        .filter((th) => th.parentType === 'ticket')
+        .map((th) => th.ticketId)
+        .sort(),
+    ).toEqual(ids)
+    expect(s.blockedTasks.map((task) => task.ticketId).sort()).toEqual(ids)
+    expect(s.decisions.length + s.threads.length + s.blockedTasks.length).toBe(9)
+    // The total is what the lists show, and nothing else.
+    expect(s.total).toBe(
+      s.decisions.length +
+        s.humanWaits.length +
+        s.prs.length +
+        s.threads.length +
+        s.reviews.length +
+        s.blockedTasks.length +
+        s.instructionChanges.length +
+        s.stalled.length,
+    )
+  })
+
+  it('goes by the stage’s kind, whatever the stage is called', () => {
+    const pid = project('needs by kind name')
+    const { db, schema } = dbm
+    db.insert(schema.stages)
+      .values({ projectId: pid, key: 'bug_found', name: 'Bug Found', kind: 'active', position: 20 })
+      .run()
+    db.insert(schema.stages)
+      .values({ projectId: pid, key: 'shipped', name: 'Done', kind: 'done', position: 21 })
+      .run()
+    const kept = ticket(pid, 'A bug', { status: 'bug_found' })
+    const dropped = ticket(pid, 'A shipment', { status: 'shipped' })
+    ask(kept.id)
+    ask(dropped.id)
+
+    const s = take(pid).needsYou
+    expect(s.decisions.map((d) => d.ticketId)).toEqual([kept.id])
+    expect(s.threads.map((th) => th.ticketId)).toEqual([kept.id])
+    expect(s.blockedTasks.map((task) => task.ticketId)).toEqual([kept.id])
+  })
+
+  it('does not break for a project with no stage of an asking kind', () => {
+    const pid = project('needs no asking stages')
+    const { db, schema } = dbm
+    db.update(schema.stages).set({ kind: 'open' }).where(eq(schema.stages.projectId, pid)).run()
+    const t = ticket(pid, 'Lined up', { status: 'todo' })
+    ask(t.id)
+
+    expect(() => take(pid)).not.toThrow()
+    const s = take(pid).needsYou
+    expect([...s.decisions, ...s.threads, ...s.blockedTasks]).toEqual([])
+    expect(s.total).toBe(0)
+  })
+})
+
 describe('waits on the human', () => {
   const wait = (projectId: number, ticketId: number, when: Date, note: string, agent = 'claude') => {
     const { db, schema } = dbm

@@ -111,6 +111,7 @@ test('blocked tasks show on the board card, the list, and the summary', async ({
       data: {
         title: 'Waits on keys: docs',
         parentId: waiting.id,
+        status: 'in_progress',
         tasks: [{ text: 'Proofread', blocked: true }],
       },
     }),
