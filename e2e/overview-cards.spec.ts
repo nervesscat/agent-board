@@ -207,6 +207,41 @@ test('Needs you lists a ticket whose agent is waiting on the human, and links to
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}`))
 })
 
+test('Needs you keeps threads only on tickets being worked, not on done or lined-up ones', async ({
+  page,
+  project,
+  api,
+  human,
+  agent,
+}) => {
+  /** The human's question and an agent's answer under it: a thread waiting on the human. */
+  const waitingThread = async (ticketId: number, words: string) => {
+    const post = await ok<{ id: number }>(
+      human.post(`/api/tickets/${ticketId}/updates`, { data: { body: `${words}?`, progress: false } }),
+    )
+    await ok(
+      agent.post('/api/comments', {
+        data: { parentType: 'update', parentId: post.id, body: `${words}: done` },
+      }),
+    )
+  }
+  const done = await api.ticket({ title: 'Shipped and quiet', status: 'done' })
+  const todo = await api.ticket({ title: 'Lined up and quiet', status: 'todo' })
+  const working = await api.ticket({ title: 'Being worked', status: 'in_progress' })
+  await waitingThread(done.id, 'Closed question')
+  await waitingThread(todo.id, 'Lined up question')
+  await waitingThread(working.id, 'Open question')
+
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  await expect(needsYou.locator('li').filter({ hasText: 'Open question' })).toBeVisible()
+  await expect(needsYou).not.toContainText('Closed question')
+  await expect(needsYou).not.toContainText('Lined up question')
+  // The header count is the entries shown: the one thread, and nothing else.
+  await expect(needsYou.locator('[data-slot="card-title"] span')).toHaveText('1')
+  await expect(needsYou.locator('li')).toHaveCount(1)
+})
+
 test('a busy card with no other badge shows what it is doing now, as icon and time', async ({
   page,
   project,
