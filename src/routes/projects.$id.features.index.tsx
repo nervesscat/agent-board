@@ -203,6 +203,7 @@ function Features() {
           <p className="text-sm text-muted-foreground">Tickets in flight, by stage.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto sm:shrink-0">
+          {view !== 'archived' && <StateFilter value={chosen} counts={counts} onChange={filterStates} />}
           {view !== 'archived' && (
             <TagFilter
               projectId={id}
@@ -212,7 +213,6 @@ function Features() {
               onChange={filterTag}
             />
           )}
-          {view !== 'archived' && <StateFilter value={chosen} counts={counts} onChange={filterStates} />}
           <Tabs value={view} onValueChange={(v) => pickView(v as View)}>
             <TabsList>
               <TabsTrigger value="board" aria-label="Board">
