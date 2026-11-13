@@ -62,7 +62,11 @@ export function WorkLine({
   const at = now === undefined ? onServerClock(tick, offset) : +now
   const line = workLine(timeline, at, stage)
   if (!line) return null
-  const why = [line.why, ...line.detail].filter(Boolean).join('\n')
+  // The line's why already carries the per-agent detail where it has nothing else to say (a working or
+  // a lost run); a state whose why says something else (a stall, a quiet day) keeps the detail beside
+  // it. Either way the detail is in the tooltip once, and on screen once where the surface has room.
+  const why = [line.why, ...line.detail.filter((d) => !line.why.includes(d))].filter(Boolean).join('\n')
+  const tipped = tooltip && why !== ''
   const base =
     variant === 'badge'
       ? 'inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] leading-none font-medium tabular-nums'
@@ -71,13 +75,14 @@ export function WorkLine({
     <span
       data-testid="work-line"
       data-state={line.state}
-      tabIndex={tooltip && focusable ? 0 : undefined}
+      // A keyboard stop only where a tooltip really opens: a line with nothing to add is just words.
+      tabIndex={tipped && focusable ? 0 : undefined}
       className={`${base} ${STATE_TONE[line.state]} ${variant === 'badge' ? 'outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring' : ''}`}
     >
       {line.text}
     </span>
   )
-  const shown = tooltip && why ? <Tip content={why}>{word}</Tip> : word
+  const shown = tipped ? <Tip content={why}>{word}</Tip> : word
   if (!detail || !line.detail.length) return <span className={className}>{shown}</span>
   return (
     <div className={`${className} grid gap-0.5`}>
