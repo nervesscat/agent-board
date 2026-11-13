@@ -443,6 +443,31 @@ describe('notesMarkdown', () => {
     expect(notesMarkdown([null, 'x'])).toBe('')
   })
 
+  it('numbers an ordered list from its start attribute', () => {
+    expect(notesMarkdown('<ol start="3"><li>a</li><li>b</li></ol>')).toBe('3. a\n4. b')
+  })
+
+  it('puts a table on lines of its own, with the separator under the first row', () => {
+    expect(
+      notesMarkdown('<table><tr><th>Name</th><th>Size</th></tr><tr><td>a</td><td>1</td></tr></table>'),
+    ).toBe('| Name | Size |\n| --- | --- |\n| a | 1 |')
+  })
+
+  it('keeps the bullet of a newline-formatted loose list item', () => {
+    expect(notesMarkdown('<ul>\n<li>\n<p>One</p>\n</li>\n<li>\n<p>Two</p>\n</li>\n</ul>')).toBe(
+      '- One\n- Two',
+    )
+  })
+
+  it('escapes emphasis and code characters in text, but not in code', () => {
+    expect(notesMarkdown('<p>a * b and snake_case</p>')).toBe('a \\* b and snake\\_case')
+    expect(notesMarkdown('<p><code>a*b</code></p>')).toBe('`a*b`')
+  })
+
+  it('gives inline code that holds a backtick a longer fence', () => {
+    expect(notesMarkdown('<p>Use <code>a`b</code> here</p>')).toBe('Use ``a`b`` here')
+  })
+
   it('is empty for anything that is not notes', () => {
     expect(notesMarkdown(null)).toBe('')
     expect(notesMarkdown(undefined)).toBe('')

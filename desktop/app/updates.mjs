@@ -303,6 +303,25 @@ function htmlToMarkdown(html) {
 }
 
 /**
+ * Escapes what release text would otherwise read as markdown: emphasis, code, links and the escape itself.
+ * @param {string} text
+ */
+const escapeMarkdown = (text) => text.replace(/[\\`*_[\]]/g, '\\$&')
+
+/**
+ * A code span for `content`: its fence is one backtick longer than the longest run in it, and it is padded
+ * with a space when the content starts or ends with a backtick, so the backticks stay part of the code.
+ * @param {string} content
+ */
+function codeSpan(content) {
+  if (content === '') return ''
+  const longest = Math.max(0, ...[...content.matchAll(/`+/g)].map((m) => m[0].length))
+  const pad = content.startsWith('`') || content.endsWith('`') ? ' ' : ''
+  const fence = '`'.repeat(longest + 1)
+  return `${fence}${pad}${content}${pad}${fence}`
+}
+
+/**
  * Replaces the tags release notes carry with their markdown, keeping the text between them (decoded).
  * Unknown tags are dropped; their text stays.
  * @param {string} html
@@ -310,12 +329,40 @@ function htmlToMarkdown(html) {
 function tagsToMarkdown(html) {
   /** @type {{ ordered: boolean, count: number }[]} */
   const lists = []
+  /** @type {{ header: boolean } | null} */
+  let table = null
+  /** @type {{ start: number, cells: number } | null} */
+  let row = null
+  let inCell = false
+  /** The output position of each open code element's backtick. @type {number[]} */
+  const codes = []
   /** @type {string | null} */
   let href = null
   let out = ''
   let last = 0
+
+  /**
+   * The text between two tags: decoded, escaped outside code, and kept on one line in a table. The whitespace
+   * between list items and table rows is layout, and goes: it would leave a bullet or a row empty.
+   * @param {string} raw
+   */
+  const text = (raw) => {
+    const blank = /^\s*$/.test(raw)
+    if (blank && ((table && !inCell) || (lists.length > 0 && raw.includes('\n')))) return ''
+    let decoded = decodeEntities(raw)
+    if (codes.length === 0) decoded = escapeMarkdown(decoded)
+    // A pipe would end its table cell, even inside code.
+    return table ? decoded.replace(/\|/g, '\\|') : decoded
+  }
+
+  /** Closes the innermost open code element: its text becomes a code span. */
+  const closeCode = () => {
+    const start = codes.pop()
+    if (start !== undefined) out = out.slice(0, start) + codeSpan(out.slice(start + 1))
+  }
+
   for (const m of html.matchAll(/<\/?([a-zA-Z][\w-]*)((?:\s[^>]*?)?)\/?>/g)) {
-    out += decodeEntities(html.slice(last, m.index))
+    out += text(html.slice(last, m.index))
     last = m.index + m[0].length
     const name = m[1].toLowerCase()
     const closing = m[0].startsWith('</')
@@ -327,9 +374,46 @@ function tagsToMarkdown(html) {
       out += closing ? '\n\n' : `\n\n${'#'.repeat(Number(name[1]))} `
       continue
     }
+    if (name === 'table') {
+      table = closing ? null : { header: false }
+      out += '\n\n'
+      continue
+    }
+    if (name === 'tr') {
+      if (closing && row) {
+        if (row.cells > 0) {
+          // The row is one line: a break inside a cell would end the table.
+          const line = out.slice(row.start).replace(/\s*\n\s*/g, ' ')
+          out = `${out.slice(0, row.start)}${line}|\n`
+          if (table && !table.header) {
+            table.header = true
+            // The separator under the first row makes it the table's header.
+            out += `|${' --- |'.repeat(row.cells)}\n`
+          }
+        } else out = out.slice(0, row.start)
+      }
+      row = closing ? null : { start: out.length, cells: 0 }
+      continue
+    }
+    if (name === 'td' || name === 'th') {
+      if (!row) continue
+      inCell = !closing
+      if (closing) out += ' '
+      else {
+        row.cells += 1
+        out += '| '
+      }
+      continue
+    }
     if (name === 'ul' || name === 'ol') {
       if (closing) lists.pop()
-      else lists.push({ ordered: name === 'ol', count: 0 })
+      else {
+        // An ordered list's start attribute numbers its first item.
+        const start = attributes(m[2] ?? '').start
+        const number = start !== undefined && /^\s*-?\d+\s*$/.test(start) ? Number(start) : NaN
+        const first = name === 'ol' && Number.isSafeInteger(number) ? number : 1
+        lists.push({ ordered: name === 'ol', count: first - 1 })
+      }
       out += '\n\n'
       continue
     }
@@ -353,7 +437,11 @@ function tagsToMarkdown(html) {
       continue
     }
     if (name === 'code') {
-      out += '`'
+      if (closing) closeCode()
+      else {
+        codes.push(out.length)
+        out += '`'
+      }
       continue
     }
     if (name === 'a') {
@@ -379,7 +467,9 @@ function tagsToMarkdown(html) {
     // Paragraphs and divisions end a block; every other tag only wraps its text.
     if (closing && (name === 'p' || name === 'div' || name === 'blockquote')) out += '\n\n'
   }
-  return out + decodeEntities(html.slice(last))
+  out += text(html.slice(last))
+  while (codes.length > 0) closeCode()
+  return out
 }
 
 /**
