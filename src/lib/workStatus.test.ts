@@ -392,7 +392,7 @@ describe('workLine: the one work-state line', () => {
       state: 'waiting',
       text: 'Waiting on you',
     })
-    // Lost outranks the day-long quiet and the stall.
+    // Lost outranks the day-long quiet and the stall, with or without a progress post in 25 h.
     expect(
       workLine(
         timeline({
@@ -403,7 +403,17 @@ describe('workLine: the one work-state line', () => {
         NOW,
       ),
     ).toMatchObject({ state: 'lost', text: 'Lost contact · 46m' })
-    // Nothing open, silent past stallMinutes: today's stall, now No word.
+    expect(
+      workLine(
+        timeline({
+          stage: stage('active'),
+          liveness: liveness({ state: 'lost', since: at('11:44'), lastWordAt: at('12:10') }),
+          progressAt: '2026-10-19T11:30:00.000Z',
+        }),
+        NOW,
+      ),
+    ).toMatchObject({ state: 'lost' })
+    // Nothing open, silent past stallMinutes: today's stall, now No word, even with an old progress post.
     expect(
       workLine(
         timeline({
@@ -413,6 +423,16 @@ describe('workLine: the one work-state line', () => {
         NOW,
       ),
     ).toMatchObject({ state: 'no-word', text: 'No word 47m' })
+    expect(
+      workLine(
+        timeline({
+          stage: stage('active'),
+          liveness: liveness({ state: 'stalled', lastSignalAt: at('11:43'), spans: [] }),
+          progressAt: '2026-10-19T11:30:00.000Z',
+        }),
+        NOW,
+      ),
+    ).toMatchObject({ state: 'no-word' })
     // A live lease with no progress post in over a day reads Quiet, never Working now.
     expect(
       workLine(
