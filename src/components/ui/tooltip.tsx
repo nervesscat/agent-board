@@ -90,14 +90,26 @@ function TooltipContent({
  * wrapped in another): it becomes the trigger through `render`, so it must take a ref and spread the
  * props it is given. With no `content` the tooltip is off and nothing shows. Like a native title it
  * closes as the pointer leaves the element, and never catches the pointer itself. Line breaks in the
- * text are kept, and a long path or URL wraps inside the bubble.
+ * text are kept, and a long path or URL wraps inside the bubble. `open` and `onOpenChange` hold it open
+ * from outside, for a surface that opens it on a tap.
  */
-function Tip({ content, children }: { content: React.ReactNode; children: React.ReactElement }) {
+function Tip({
+  content,
+  children,
+  open,
+  onOpenChange,
+}: {
+  content: React.ReactNode
+  children: React.ReactElement
+  /** Held by the caller when it opens the tip itself (a touch tap); uncontrolled otherwise. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
   const off = content === undefined || content === null || content === false || content === ''
   // The trigger takes the element's own id if it has one: base-ui tells its triggers apart by it.
   const { id } = children.props as { id?: string }
   return (
-    <Tooltip disabled={off} disableHoverablePopup>
+    <Tooltip disabled={off} disableHoverablePopup open={open} onOpenChange={onOpenChange}>
       <TooltipTrigger id={id} data-tip={off ? undefined : ''} render={children} />
       {!off && <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>}
     </Tooltip>

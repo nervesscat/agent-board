@@ -1,4 +1,17 @@
-import { Hammer, Hourglass, UserRound } from 'lucide-react'
+import {
+  Activity,
+  CircleDashed,
+  ClockAlert,
+  Eye,
+  Hammer,
+  Hand,
+  Hourglass,
+  type LucideIcon,
+  Moon,
+  Unplug,
+  UserRound,
+} from 'lucide-react'
+import { useState } from 'react'
 
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
@@ -17,21 +30,29 @@ import type { WorkTotals as Totals } from '#/lib/workTimeline'
 /** A duration in words for the summary: `43 min`, `1 h 5 min`; `0` for none. */
 const dur = (ms: number) => (ms > 0 ? spokenDuration(ms) : '0')
 
-/** The colour and weight of a state's one line: the words carry the state, the tone agrees with it. */
-const STATE_TONE: Record<WorkLineState, string> = {
-  working: 'text-foreground',
-  'no-word': 'text-amber-800 dark:text-amber-300',
-  quiet: 'text-amber-800 dark:text-amber-300',
-  'your-turn': 'text-amber-800 dark:text-amber-300',
-  waiting: 'text-amber-800 dark:text-amber-300',
-  lost: 'text-rose-800 dark:text-rose-300',
-  nothing: 'text-muted-foreground',
+/**
+ * Each state's icon, its colour and its name (the words its line starts with, and what the State filter
+ * calls it). The shape carries the state; the colour only agrees with it, so no state is told by colour
+ * alone. `lost` (an unplugged cable) and `no-word` (a clock with an alert) are told apart by shape too.
+ */
+export const WORK_STATE_ICON: Record<WorkLineState, { Icon: LucideIcon; tone: string; name: string }> = {
+  waiting: { Icon: Hand, tone: 'text-amber-700 dark:text-amber-400', name: 'Waiting on you' },
+  'your-turn': { Icon: Eye, tone: 'text-violet-700 dark:text-violet-400', name: 'Your turn' },
+  lost: { Icon: Unplug, tone: 'text-rose-700 dark:text-rose-400', name: 'Lost contact' },
+  'no-word': { Icon: ClockAlert, tone: 'text-orange-700 dark:text-orange-400', name: 'No word' },
+  quiet: { Icon: Moon, tone: 'text-muted-foreground', name: 'Quiet' },
+  working: { Icon: Activity, tone: 'text-emerald-700 dark:text-emerald-400', name: 'Working now' },
+  nothing: { Icon: CircleDashed, tone: 'text-muted-foreground', name: 'Nothing open' },
 }
 
+/** The duration a line ends with (`40m`, `2d`), which a surface with room keeps beside the icon. */
+const measureOf = (text: string) => text.match(/(\d+[mhd])$/)?.[1] ?? ''
+
 /**
- * One ticket's work-state line: the one answer to what it is doing now, in the human's words. One element
- * per ticket row (`data-testid="work-line"`, `data-state` one of the seven), its tooltip the why, and the
- * per-agent detail under it where the surface has room. The clock correction to the server's happens once,
+ * One ticket's work-state line, as its state's icon: one element per ticket row (`data-testid="work-line"`,
+ * `data-state` one of the seven). Its accessible name is the line's text, and its tooltip the full line,
+ * the per-agent detail and the why, opened by focus, hover or a tap. A state with nothing to add to its
+ * line has no tooltip and is not a keyboard stop. The clock correction to the server's happens once,
  * inside: a caller passes the server's own time or nothing, never a time already put on it.
  */
 export function WorkLine({
@@ -49,9 +70,9 @@ export function WorkLine({
   now?: Date | number
   /** The active stage's name when it is not the project's default one: the why then names it. */
   stage?: string | null
-  /** `badge` for a card or a list row, `inline` for a line. */
+  /** `badge` for a card or a list row (the icon alone), `inline` for a line (the icon and its duration). */
   variant?: 'inline' | 'badge'
-  /** Draw the per-agent lines under the word: the ticket page, In progress and the Roadmap have room. */
+  /** Draw the per-agent lines under the icon: the ticket page, In progress and the Roadmap have room. */
   detail?: boolean
   tooltip?: boolean
   focusable?: boolean
@@ -59,6 +80,7 @@ export function WorkLine({
 }) {
   const tick = useNow(60_000)
   const offset = useServerOffset(timeline.now)
+  const [open, setOpen] = useState(false)
   const at = now === undefined ? onServerClock(tick, offset) : +now
   const line = workLine(timeline, at, stage)
   if (!line) return null
@@ -67,22 +89,33 @@ export function WorkLine({
   // it. Either way the detail is in the tooltip once, and on screen once where the surface has room.
   const why = [line.why, ...line.detail.filter((d) => !line.why.includes(d))].filter(Boolean).join('\n')
   const tipped = tooltip && why !== ''
-  const base =
-    variant === 'badge'
-      ? 'inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] leading-none font-medium tabular-nums'
-      : 'text-sm font-medium tabular-nums'
-  const word = (
+  const { Icon, tone } = WORK_STATE_ICON[line.state]
+  const measure = variant === 'inline' ? measureOf(line.text) : ''
+  const icon = (
     <span
+      role="img"
+      aria-label={line.text}
       data-testid="work-line"
       data-state={line.state}
-      // A keyboard stop only where a tooltip really opens: a line with nothing to add is just words.
+      // A keyboard stop only where a tooltip really opens: a line with nothing to add is just its icon.
       tabIndex={tipped && focusable ? 0 : undefined}
-      className={`${base} ${STATE_TONE[line.state]} ${variant === 'badge' ? 'outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring' : ''}`}
+      // Hover does not exist on a touch screen: a tap opens the tooltip there.
+      onPointerUp={(e) => {
+        if (tipped && e.pointerType === 'touch') setOpen(true)
+      }}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-sm text-sm font-medium tabular-nums outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${tone}`}
     >
-      {line.text}
+      <Icon aria-hidden className={`size-4 ${line.state === 'working' ? 'motion-safe:animate-pulse' : ''}`} />
+      {measure && <span>{measure}</span>}
     </span>
   )
-  const shown = tipped ? <Tip content={why}>{word}</Tip> : word
+  const shown = tipped ? (
+    <Tip content={`${line.text}\n${why}`} open={open} onOpenChange={setOpen}>
+      {icon}
+    </Tip>
+  ) : (
+    icon
+  )
   if (!detail || !line.detail.length) return <span className={className}>{shown}</span>
   return (
     <div className={`${className} grid gap-0.5`}>
