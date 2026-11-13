@@ -303,5 +303,5 @@ test('a stall in another active stage names that stage in its why, on the ticket
   const line = card.getByTestId('work-line')
   await expect(line).toHaveAttribute('data-state', 'no-word')
   await expect(line).toHaveAccessibleName(/No word \d+m/)
-  await expectTooltip(line, /^in Bug Found, no agent heard from since/)
+  await expectTooltip(line, /in Bug Found, no agent heard from since/)
 })

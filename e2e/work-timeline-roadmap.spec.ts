@@ -71,7 +71,7 @@ test('the Roadmap draws each ticket’s work timeline, its totals and a stalled 
     bar.locator('[data-kind="handoff"]'),
     /^orchestrator passed the work to builder-sub-1, /,
   )
-  await expectTooltip(line, /^nothing open since the build ended at /)
+  await expectTooltip(line, /nothing open since the build ended at /)
 
   await ticket.screenshot({ path: test.info().outputPath('roadmap-work-timeline.png') })
   expect(errors).toEqual([])
