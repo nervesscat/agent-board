@@ -205,11 +205,13 @@ test('no sideways scroll at 390px on the Overview, Daily (with a report), Previe
   await expect(page.getByRole('heading', { name: 'Cleanup' })).toBeVisible()
   expect(await scrollsSideways(page)).toBe(false)
 
-  for (const agents of ['/agents', `/projects/${project.id}/agents`]) {
-    await page.goto(agents)
-    await expect(page.getByText(/^\$t = Join-Path|^mkdir -p/).first()).toBeVisible()
-    expect(await scrollsSideways(page), agents).toBe(false)
-  }
+  // Connect an agent draws its install lines; the project's Team page draws its roles instead.
+  await page.goto('/agents')
+  await expect(page.getByText(/^\$t = Join-Path|^mkdir -p/).first()).toBeVisible()
+  expect(await scrollsSideways(page), '/agents').toBe(false)
+  await page.goto(`/projects/${project.id}/agents`)
+  await expect(page.getByRole('heading', { name: 'Team', exact: true })).toBeVisible()
+  expect(await scrollsSideways(page), 'Team').toBe(false)
 })
 
 test("a project's whole Daily page and the reports-due banner fit 390px and answer taps", async ({
