@@ -392,7 +392,7 @@ describe('notesMarkdown', () => {
     ).toBe(
       "## What's new\n\n- one\n- two\n\n1. first\n2. second\n\n" +
         '**bold** and **also**, *italic*, `npm i`\n\n' +
-        '[Details](https://example.com/a?b=1&c=2)\n\none\ntwo',
+        '[Details](https://example.com/a?b=1&c=2)\n\none\\\ntwo',
     )
   })
 
@@ -513,6 +513,46 @@ describe('notesMarkdown', () => {
 
   it('keeps the line breaks of a code block that has a br', () => {
     expect(notesMarkdown('<pre><code>line1<br>line2\n</code></pre>')).toBe('```\nline1\nline2\n```')
+  })
+
+  it('does not turn a ! before an autolink into an image', () => {
+    expect(notesMarkdown('<p>Done!<a href="https://x.y/z">https://x.y/z</a></p>')).toBe(
+      'Done\\![https://x.y/z](https://x.y/z)',
+    )
+  })
+
+  it('keeps the heading of a list item apart from the text after it, with and without a colon', () => {
+    expect(notesMarkdown('<ul>\n<li>\n<h3>Fixed:</h3>\n<p>text</p>\n</li>\n</ul>')).toBe(
+      '- **Fixed:**\n\n  text',
+    )
+    expect(notesMarkdown('<ul>\n<li>\n<h3>Fixed</h3>\n<p>The thing.</p>\n</li>\n<li>B</li>\n</ul>')).toBe(
+      '- **Fixed**\n\n  The thing.\n- B',
+    )
+  })
+
+  it('percent-encodes the parentheses of a link destination so the link stays whole', () => {
+    expect(notesMarkdown('<p><a href="https://x.y/a_(b">t</a></p>')).toBe('[t](https://x.y/a_%28b)')
+  })
+
+  it('keeps a line break inside a list item or a paragraph as a line break, not a new block', () => {
+    expect(notesMarkdown('<ul>\n<li>line one<br />\nline two</li>\n</ul>')).toBe('- line one\\\n  line two')
+    expect(notesMarkdown('<p>line one<br />\nline two</p>')).toBe('line one\\\nline two')
+  })
+
+  it('keeps the two paragraphs of a loose list item on separate lines under its bullet', () => {
+    expect(notesMarkdown('<ul>\n<li>\n<p>One</p>\n<p>Two</p>\n</li>\n</ul>')).toBe('- One\n\n  Two')
+  })
+
+  it('keeps nested lists nested, and numbers each ordered list on its own', () => {
+    expect(notesMarkdown('<ul><li>Parent<ul><li>Child</li></ul></li><li>Next</li></ul>')).toBe(
+      '- Parent\n  - Child\n- Next',
+    )
+    expect(notesMarkdown('<ol><li>a<ol><li>x</li></ol></li><li>b</li></ol>')).toBe('1. a\n   1. x\n2. b')
+  })
+
+  it('escapes a block marker that starts a wrapped line, not only the first line of text', () => {
+    expect(notesMarkdown('<p>Changes:\n- added a thing</p>')).toBe('Changes:\n\\- added a thing')
+    expect(notesMarkdown('<p>Foo\n---</p>')).toBe('Foo\n\\---')
   })
 
   it('is empty for anything that is not notes', () => {

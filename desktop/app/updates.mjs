@@ -297,7 +297,8 @@ function htmlToMarkdown(html) {
   // The collapse runs on the text alone: the code blocks go back in after it, with their spaces and blank lines.
   text = tagsToMarkdown(text)
     .replace(/[ \t]+\n/g, '\n')
-    .replace(/[ \t]{2,}/g, ' ')
+    // Runs of spaces inside a line become one; a line's indentation (a nested list's column) stays.
+    .replace(/(?<=\S)[ \t]{2,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/[ \t\n]*\uF8FF(\d+)\uF8FF[ \t\n]*/g, (_whole, i) => `\n\n${fences[Number(i)] ?? ''}\n\n`)
   return text.trim()
@@ -315,6 +316,15 @@ const ENTITY_START = /&(?=#?\w+;)/g
 
 /** The output is at the start of a line (after its indentation). */
 const LINE_START = /(^|\n)[ \t]*$/
+
+/** A block marker at the start of a line of text: a heading, quote, bullet, or ordered-list number. */
+const BLOCK_MARKER = /^([ \t]*)(?:([#>+-])|(\d+)([.)]))/
+
+/** @param {string} line */
+const escapeBlockMarker = (line) =>
+  line.replace(BLOCK_MARKER, (_whole, space, sign, digits, delimiter) =>
+    sign ? `${space}\\${sign}` : `${space}${digits}\\${delimiter}`,
+  )
 
 /** The output ends with a list item's marker (`- `, `1. `): what follows it starts the item's text. */
 const ITEM_START = /(^|\n)[ \t]*(?:\d+\.|-)[ \t]+$/
@@ -353,8 +363,14 @@ function codeSpan(content) {
  * @param {string} html
  */
 function tagsToMarkdown(html) {
-  /** @type {{ ordered: boolean, count: number }[]} */
+  /**
+   * The open lists. `base` is the column their markers start at (the content column of the item they nest
+   * in, 0 at the top), `content` the column of the text of the item now open, where its continuation lines go.
+   * @type {{ ordered: boolean, count: number, base: number, content: number }[]}
+   */
   const lists = []
+  /** The column a line of the innermost list item's text starts at. */
+  const contentColumn = () => (lists.length > 0 ? lists[lists.length - 1].content : 0)
   /** @type {{ header: boolean } | null} */
   let table = null
   /** @type {{ start: number, cells: number } | null} */
@@ -386,19 +402,33 @@ function tagsToMarkdown(html) {
     let chunk = raw
     if (after?.closing && after.name === 'li') chunk = chunk.replace(/\s+$/, '')
     if (ITEM_START.test(out)) chunk = chunk.replace(/^\s+/, '')
+    // The text after a `<br>` starts its own line, indented under the item: the source's own line break goes.
+    let lineStart = ''
+    if (before?.name === 'br' && out.endsWith('\\\n')) {
+      chunk = chunk.replace(/^\s+/, '')
+      lineStart = ' '.repeat(contentColumn())
+    }
     let decoded = decodeEntities(chunk)
     if (codes.length === 0) {
       decoded = escapeMarkdown(decoded).replace(ENTITY_START, '\\&')
-      // A block marker at the start of a line would make a list, heading or quote: escape it.
-      if (LINE_START.test(out) || ITEM_START.test(out))
-        decoded = decoded.replace(
-          /^([ \t]*)(?:([#>+-])|(\d+)([.)]))/,
-          (_whole, space, sign, digits, delimiter) =>
-            sign ? `${space}\\${sign}` : `${space}${digits}\\${delimiter}`,
-        )
+      // A block marker at the start of a line would make a list, heading or quote: escape it, on every line
+      // of the text (the first only when the output is at a line start).
+      const startsLine = LINE_START.test(out) || ITEM_START.test(out)
+      decoded = decoded
+        .split('\n')
+        .map((line, i) => (i === 0 && !startsLine ? line : escapeBlockMarker(line)))
+        .join('\n')
     }
     // A pipe would end its table cell, even inside code.
-    return table ? decoded.replace(/\|/g, '\\|') : decoded
+    return lineStart + (table ? decoded.replace(/\|/g, '\\|') : decoded)
+  }
+
+  /**
+   * A hard break at the end of its line (nothing but whitespace after it) becomes a plain line break before a block tag.
+   * @param {string} name the block tag that ends the line
+   */
+  const dropBreakBefore = (name) => {
+    if (BLOCK_TAGS.test(name) && out.endsWith('\\\n')) out = `${out.slice(0, -2)}\n`
   }
 
   /** Closes the innermost open code element: its text becomes a code span. */
@@ -442,18 +472,24 @@ function tagsToMarkdown(html) {
   for (const m of html.matchAll(/<\/?([a-zA-Z][\w-]*)((?:\s[^>]*?)?)\/?>/g)) {
     const name = m[1].toLowerCase()
     const closing = m[0].startsWith('</')
-    out += text(html.slice(last, m.index), previous, { name, closing })
+    const piece = text(html.slice(last, m.index), previous, { name, closing })
+    out += piece
+    // A hard break is only a break when text follows it: before a block tag it would end the line with a backslash.
+    if (piece === '') dropBreakBefore(name)
     previous = { name, closing }
     last = m.index + m[0].length
     if (name === 'br') {
-      out += '\n'
+      out += '\\\n'
       continue
     }
     if (/^h[1-6]$/.test(name)) {
       // In a list item a heading is bold text on the bullet's line: a block break would end the item.
       if (lists.length > 0) {
-        if (closing) closeEmphasis('**')
-        else openEmphasis('**')
+        if (closing) {
+          closeEmphasis('**')
+          // The text after the heading (a paragraph of the item) must not run into its closing asterisks.
+          out += ' '
+        } else openEmphasis('**')
         continue
       }
       out += closing ? '\n\n' : `\n\n${'#'.repeat(Number(name[1]))} `
@@ -491,26 +527,34 @@ function tagsToMarkdown(html) {
       continue
     }
     if (name === 'ul' || name === 'ol') {
-      if (closing) lists.pop()
-      else {
-        // An ordered list's start attribute numbers its first item.
-        const start = attributes(m[2] ?? '').start
-        const number = start !== undefined && /^\s*-?\d+\s*$/.test(start) ? Number(start) : NaN
-        const first = name === 'ol' && Number.isSafeInteger(number) ? number : 1
-        lists.push({ ordered: name === 'ol', count: first - 1 })
+      if (closing) {
+        lists.pop()
+        // A nested list ends with its item's line; only a top-level list is followed by a block break.
+        if (lists.length === 0) out += '\n\n'
+        continue
       }
-      out += '\n\n'
+      // An ordered list's start attribute numbers its first item.
+      const start = attributes(m[2] ?? '').start
+      const number = start !== undefined && /^\s*-?\d+\s*$/.test(start) ? Number(start) : NaN
+      const first = name === 'ol' && Number.isSafeInteger(number) ? number : 1
+      const base = contentColumn()
+      // A list inside an item starts on the next line, indented under the item's text.
+      out += lists.length > 0 ? '\n' : '\n\n'
+      lists.push({ ordered: name === 'ol', count: first - 1, base, content: base })
       continue
     }
     if (name === 'li') {
-      if (closing) out += '\n'
-      else {
-        const list = lists[lists.length - 1]
-        if (list?.ordered) {
-          list.count += 1
-          out += `${list.count}. `
-        } else out += '- '
-      }
+      const list = lists[lists.length - 1]
+      if (closing) {
+        // A nested list's last item already ended its line.
+        if (!out.endsWith('\n')) out += '\n'
+      } else if (list) {
+        const marker = list.ordered ? `${(list.count += 1)}. ` : '- '
+        // A new line starts at the list's column; the first item of a list after text is on a line of its own.
+        const lead = out === '' || out.endsWith('\n') ? ' '.repeat(list.base) : ''
+        out += `${lead}${marker}`
+        list.content = list.base + marker.length
+      } else out += '- '
       continue
     }
     if (name === 'strong' || name === 'b' || name === 'em' || name === 'i') {
@@ -532,9 +576,16 @@ function tagsToMarkdown(html) {
         if (href !== null) out += `](${href})`
         href = null
       } else {
-        const url = decodeEntities(attributes(m[2] ?? '').href ?? '').trim()
+        // A destination's parentheses and spaces would end the link early: they are percent-encoded.
+        const url = decodeEntities(attributes(m[2] ?? '').href ?? '')
+          .trim()
+          .replace(/[()\s]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`)
         href = url ? url : null
-        if (href !== null) out += '['
+        if (href !== null) {
+          // A `!` right before a link would make it an image: it is escaped, as its text is.
+          if (codes.length === 0 && out.endsWith('!')) out = `${out.slice(0, -1)}\\!`
+          out += '['
+        }
       }
       continue
     }
@@ -545,12 +596,17 @@ function tagsToMarkdown(html) {
     // A loose item's paragraph (`<li><p>…</p></li>`) stays on the bullet's line: a break here would leave the bullet empty.
     if (name === 'p' && lists.length > 0) {
       if (closing) out += ' '
+      // A second paragraph of the item starts a new paragraph on the item's column, not on the same line.
+      else if (out.endsWith(' ') && !ITEM_START.test(out)) {
+        out = `${out.slice(0, -1)}\n\n${' '.repeat(contentColumn())}`
+      }
       continue
     }
     // Paragraphs and divisions end a block; every other tag only wraps its text.
     if (closing && (name === 'p' || name === 'div' || name === 'blockquote')) out += '\n\n'
   }
   out += text(html.slice(last), previous, null)
+  if (out.endsWith('\\\n')) out = `${out.slice(0, -2)}\n`
   while (codes.length > 0) closeCode()
   return out
 }
