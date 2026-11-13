@@ -115,7 +115,7 @@ const TicketPatch = z.object({
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(50_000).optional(),
   status: Status.optional(),
-  // Exactly low, mid or high; a lane created without one copies its parent's (features.ts createTicket).
+  // Exactly low, mid, high or max; a lane created without one copies its parent's (features.ts createTicket).
   complexity: z.enum(COMPLEXITIES).optional(),
   assignee: z.string().max(80).optional(),
   branch: z.string().max(200).optional(),
@@ -238,6 +238,12 @@ api.get('/api/agent-setup/skill', ({ request, url }) => {
     headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
   })
 })
+// The session skill (`/session`): the same text for every client, served as it is, no parameters.
+api.get('/api/agent-setup/session-skill', () => {
+  return new Response(agents.sessionSkill(), {
+    headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' },
+  })
+})
 // The stdio MCP bridge (scripts/board-mcp.mjs) a cloud session saves as board-mcp.mjs and runs with node.
 api.get('/api/agent-setup/board-mcp', () => {
   return new Response(agents.boardMcpBridge(), {
@@ -273,8 +279,8 @@ api.get('/api/agent-setup/review-skills/diff', async ({ url }) => {
   const diff = await agents.reviewSkillDiff(file, repo === null ? undefined : intParam(repo, 'repoId'))
   return Response.json(diff, { headers: { 'cache-control': 'no-store' } })
 })
-// A short-lived credential for the install lines, minted when one is copied: it downloads the board skill
-// and the review bundle, and reaches no other route (auth.ts admit). The human's alone.
+// A short-lived credential for the install lines, minted when one is copied: it downloads the board skill,
+// the session skill and the review bundle, and reaches no other route (auth.ts admit). The human's alone.
 api.post('/api/agent-setup/skill-token', ({ request }) => {
   if (isAgent(request)) throw new HttpError(403, 'only the human makes a skill download token')
   return json(skillTokens.mintSkillToken(), 201)
@@ -1159,7 +1165,19 @@ api.post('/api/uploads', async ({ request, actor }) => {
     const form = await request.formData()
     const file = form.get('file')
     if (!(file instanceof File)) throw new HttpError(400, 'multipart field "file" is required')
-    const a = await uploads.saveUpload(file, actor)
+    // Beside the file: what the canvas drew on it, as JSON. Absent for a file that was not drawn on.
+    const annotations = form.get('annotations')
+    if (annotations !== null && typeof annotations !== 'string')
+      throw new HttpError(400, 'multipart field "annotations" must be JSON text')
+    let document: unknown
+    if (typeof annotations === 'string') {
+      try {
+        document = JSON.parse(annotations)
+      } catch {
+        throw new HttpError(400, 'multipart field "annotations" is not JSON')
+      }
+    }
+    const a = await uploads.saveUpload(file, actor, document)
     return json({ ...a, url: uploads.attachmentUrl(a) }, 201)
   }
   const body = await readJson(
