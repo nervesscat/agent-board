@@ -61,7 +61,6 @@ export function WorkLine({
   variant = 'inline',
   detail = false,
   tooltip = true,
-  focusable = true,
   className = '',
 }: {
   timeline: WorkTimelineLike
@@ -73,8 +72,8 @@ export function WorkLine({
   variant?: 'inline' | 'badge'
   /** Draw the per-agent lines under the icon: the ticket page, In progress and the Roadmap have room. */
   detail?: boolean
+  /** Off, the icon has no tooltip and is not a keyboard stop. */
   tooltip?: boolean
-  focusable?: boolean
   className?: string
 }) {
   const tick = useNow(60_000)
@@ -87,7 +86,7 @@ export function WorkLine({
   // a lost run); a state whose why says something else (a stall, a quiet day) keeps the detail beside
   // it. Either way the detail is in the tooltip once, and on screen once where the surface has room.
   const why = [line.why, ...line.detail.filter((d) => !line.why.includes(d))].filter(Boolean).join('\n')
-  const tipped = tooltip && why !== ''
+  const tipped = tooltip
   const { Icon, tone } = WORK_STATE_ICON[line.state]
   const measure = variant === 'inline' ? measureOf(line.text) : ''
   const icon = (
@@ -96,8 +95,8 @@ export function WorkLine({
       aria-label={line.text}
       data-testid="work-line"
       data-state={line.state}
-      // A keyboard stop only where a tooltip really opens: a line with nothing to add is just its icon.
-      tabIndex={tipped && focusable ? 0 : undefined}
+      // Every state's icon is a keyboard stop: focus opens its tooltip, the full line and what it adds.
+      tabIndex={tipped ? 0 : undefined}
       // Hover does not exist on a touch screen: a tap opens the tooltip there.
       onPointerUp={(e) => {
         if (tipped && e.pointerType === 'touch') setOpen(true)
@@ -109,7 +108,7 @@ export function WorkLine({
     </span>
   )
   const shown = tipped ? (
-    <Tip content={`${line.text}\n${why}`} open={open} onOpenChange={setOpen}>
+    <Tip content={[line.text, why].filter(Boolean).join('\n')} open={open} onOpenChange={setOpen}>
       {icon}
     </Tip>
   ) : (
