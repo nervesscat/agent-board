@@ -98,19 +98,22 @@ function Tip({
   children,
   open,
   onOpenChange,
+  keepOnClick = false,
 }: {
   content: React.ReactNode
   children: React.ReactElement
   /** Held by the caller when it opens the tip itself (a touch tap); uncontrolled otherwise. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** A click (the one a tap sends) leaves the tip open: the caller opened it, so the click does not dismiss it. */
+  keepOnClick?: boolean
 }) {
   const off = content === undefined || content === null || content === false || content === ''
   // The trigger takes the element's own id if it has one: base-ui tells its triggers apart by it.
   const { id } = children.props as { id?: string }
   return (
     <Tooltip disabled={off} disableHoverablePopup open={open} onOpenChange={onOpenChange}>
-      <TooltipTrigger id={id} data-tip={off ? undefined : ''} render={children} />
+      <TooltipTrigger id={id} data-tip={off ? undefined : ''} closeOnClick={!keepOnClick} render={children} />
       {!off && <TooltipContent className="whitespace-pre-line wrap-anywhere">{content}</TooltipContent>}
     </Tooltip>
   )

@@ -101,14 +101,17 @@ export function WorkLine({
       onPointerUp={(e) => {
         if (tipped && e.pointerType === 'touch') setOpen(true)
       }}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-sm text-sm font-medium tabular-nums outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${tone}`}
+      className={`rounded-sm text-sm font-medium tabular-nums outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${tone}`}
     >
-      <Icon aria-hidden className={`size-4 ${line.state === 'working' ? 'motion-safe:animate-pulse' : ''}`} />
-      {measure && <span>{measure}</span>}
+      <Icon
+        aria-hidden
+        className={`inline-block size-4 align-[-0.125em] ${line.state === 'working' ? 'motion-safe:animate-pulse' : ''}`}
+      />
+      {measure && <span className="ml-1">{measure}</span>}
     </span>
   )
   const shown = tipped ? (
-    <Tip content={[line.text, why].filter(Boolean).join('\n')} open={open} onOpenChange={setOpen}>
+    <Tip content={[line.text, why].filter(Boolean).join('\n')} open={open} onOpenChange={setOpen} keepOnClick>
       {icon}
     </Tip>
   ) : (
