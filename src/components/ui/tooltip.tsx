@@ -104,7 +104,7 @@ function Tip({
   children: React.ReactElement
   /** Held by the caller when it opens the tip itself (a touch tap); uncontrolled otherwise. */
   open?: boolean
-  onOpenChange?: (open: boolean) => void
+  onOpenChange?: (open: boolean, details: { reason: string }) => void
   /** A click (the one a tap sends) leaves the tip open: the caller opened it, so the click does not dismiss it. */
   keepOnClick?: boolean
 }) {

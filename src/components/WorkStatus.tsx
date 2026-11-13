@@ -11,7 +11,7 @@ import {
   Unplug,
   UserRound,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
@@ -79,6 +79,25 @@ export function WorkLine({
   const tick = useNow(60_000)
   const offset = useServerOffset(timeline.now)
   const [open, setOpen] = useState(false)
+  // A tip a tap opened stays while the pointer or the focus moves on (base-ui closes a tip on those): a tap
+  // elsewhere, Escape or a scroll closes it instead.
+  const [byTap, setByTap] = useState(false)
+  useEffect(() => {
+    if (!byTap) return
+    const outside = (e: PointerEvent) => {
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('[data-tip], [data-slot="tooltip-content"]')) return
+      setOpen(false)
+      setByTap(false)
+    }
+    document.addEventListener('pointerdown', outside)
+    return () => document.removeEventListener('pointerdown', outside)
+  }, [byTap])
+  const onOpenChange = (next: boolean, details: { reason: string }) => {
+    if (!next && byTap && ['trigger-hover', 'trigger-focus', 'trigger-press'].includes(details.reason)) return
+    if (!next) setByTap(false)
+    setOpen(next)
+  }
   const at = now === undefined ? onServerClock(tick, offset) : +now
   const line = workLine(timeline, at, stage)
   if (!line) return null
@@ -99,7 +118,10 @@ export function WorkLine({
       tabIndex={tipped ? 0 : undefined}
       // Hover does not exist on a touch screen: a tap opens the tooltip there.
       onPointerUp={(e) => {
-        if (tipped && e.pointerType === 'touch') setOpen(true)
+        if (tipped && e.pointerType === 'touch') {
+          setOpen(true)
+          setByTap(true)
+        }
       }}
       className={`rounded-sm text-sm font-medium tabular-nums outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${tone}`}
     >
@@ -111,7 +133,12 @@ export function WorkLine({
     </span>
   )
   const shown = tipped ? (
-    <Tip content={[line.text, why].filter(Boolean).join('\n')} open={open} onOpenChange={setOpen} keepOnClick>
+    <Tip
+      content={[line.text, why].filter(Boolean).join('\n')}
+      open={open}
+      onOpenChange={onOpenChange}
+      keepOnClick
+    >
       {icon}
     </Tip>
   ) : (
