@@ -415,9 +415,14 @@ export function timelinesFor(
     const kind = kindOf(projectOf(lane.projectId).stages, lane.status)
     return kind === 'cancelled' || kind === 'done'
   }
-  const blockedNext = (id: number): boolean =>
-    nextBlocked.get(id) === true ||
-    (lanes.get(id) ?? []).some((lane) => !closedLane(lane) && blockedNext(lane.id))
+  const blockedNext = (id: number, seen = new Set<number>()): boolean => {
+    if (seen.has(id)) return false
+    seen.add(id)
+    return (
+      nextBlocked.get(id) === true ||
+      (lanes.get(id) ?? []).some((lane) => !closedLane(lane) && blockedNext(lane.id, seen))
+    )
+  }
   // The latest progress post on a ticket or any of its lanes: what a parent's day-long quiet counts from.
   const progressPosts = family.size
     ? db
@@ -432,13 +437,18 @@ export function timelinesFor(
     if (!seen || Date.parse(p.createdAt) > Date.parse(seen)) progressOf.set(p.ticketId, p.createdAt)
   }
   const familyProgress = new Map<number, string | null>()
+  const visiting = new Set<number>()
   const progressAt = (id: number): string | null => {
     if (familyProgress.has(id)) return familyProgress.get(id)!
+    // A parent cycle in bad data must not hang the read.
+    if (visiting.has(id)) return null
+    visiting.add(id)
     let at = progressOf.get(id) ?? null
     for (const lane of lanes.get(id) ?? []) {
       const child = progressAt(lane.id)
       if (child && (!at || Date.parse(child) > Date.parse(at))) at = child
     }
+    visiting.delete(id)
     familyProgress.set(id, at)
     return at
   }
