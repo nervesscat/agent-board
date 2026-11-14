@@ -326,13 +326,29 @@ test('a removal that fails part-way keeps the worktree it removed and its restor
       }),
     )
 
-  // Git reports nothing changed in wtB (the folder is ignored), but it may not write there: the
-  // board removes wtA, then fails on wtB, and wtA is really gone.
+  // Root ignores a folder's mode, so a `0500` folder does not stop `git worktree remove` there: an
+  // immutable folder (`chattr +i`) does, as no process may delete it until the flag is cleared.
+  const asRoot = process.getuid?.() === 0
+  const lockFolder = (folder: string) =>
+    asRoot ? execFileSync('chattr', ['+i', folder]) : fs.chmodSync(folder, 0o500)
+  const unlockFolder = (folder: string) =>
+    asRoot ? execFileSync('chattr', ['-i', folder]) : fs.chmodSync(folder, 0o700)
+
+  // Git reports nothing changed in wtB (the folder is ignored), but it still cannot delete it there:
+  // the board removes wtA, then fails on wtB, and wtA is really gone.
   fs.writeFileSync(path.join(dir, '.git', 'info', 'exclude'), 'locked/\n')
   const locked = path.join(wtB, 'locked')
   fs.mkdirSync(locked)
   fs.writeFileSync(path.join(locked, 'file'), 'x\n')
-  fs.chmodSync(locked, 0o500)
+  try {
+    lockFolder(locked)
+  } catch (error) {
+    // Only a filesystem that has no immutable folders (tmpfs, Windows, macOS) may skip this test. Any other
+    // failure (no chattr on PATH, a refused +i) is a broken runner and must fail the test, not hide it.
+    const message = error instanceof Error ? error.message : String(error)
+    if (!/Inappropriate ioctl|Operation not supported/i.test(message)) throw error
+    test.skip(true, 'this filesystem has no immutable folders: the part-way removal cannot be staged as root')
+  }
 
   try {
     await page.goto(`/projects/${id}/cleanup`)
@@ -351,8 +367,9 @@ test('a removal that fails part-way keeps the worktree it removed and its restor
     await expect(results).toContainText(wtB.replace(/\\/g, '/'))
     expect(fs.existsSync(wtA)).toBe(false)
     expect(fs.existsSync(wtB)).toBe(true)
+    expect(repo.hasRef(`refs/heads/${branch}`)).toBe(true)
   } finally {
-    fs.chmodSync(locked, 0o700)
+    unlockFolder(locked)
     fs.rmSync(wtB, { recursive: true, force: true })
     repo.git('worktree', 'prune')
   }

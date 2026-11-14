@@ -14,11 +14,19 @@ permissions:
 
 jobs:
   check:
-    # The job runs on the self-hosted runner (`self-hosted`, `vps`): the owner's own server, as root.
-    # A pull request from a fork carries code nobody here wrote, so it runs on GitHub's runner instead
-    # and that server never executes it.
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","vps"]') }}
-    timeout-minutes: 20
+    # The job runs on GitHub's hosted runner (`ubuntu-latest`): a fresh VM for each run, as a
+    # non-root user with passwordless sudo, with nothing installed beyond the image. The steps below
+    # install what they need (node and pnpm via actions, dependencies, Playwright's Chromium with its
+    # system libraries). Nothing here runs on the owner's own server, so the job runs the same for a
+    # pull request from a fork, from a branch and from a push.
+    runs-on: ubuntu-latest
+    # The e2e suite is the long part of this job: about 8 minutes of install, typecheck, lint,
+    # migrations, unit tests and build come first, then the suite's 497 tests. The 70-minute limit was
+    # set on the old self-hosted box, where the e2e step measured 31 minutes with another suite
+    # sharing the machine. The hosted runner's own timing is what the first runs here must show; the
+    # limit is kept until a measured run says otherwise. No matrix: one job keeps the install and the
+    # build to one copy, and the suite's workers already use the runner's cores.
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -100,7 +108,10 @@ jobs:
       - name: Install Playwright's Chromium
         run: pnpm exec playwright install --with-deps chromium
 
+      # Its own timeout, so a suite that hangs fails this step and the Playwright report still
+      # uploads below (`if: failure()`) instead of the job's timeout cancelling it all.
       - name: End-to-end tests
+        timeout-minutes: 45
         run: pnpm test:e2e
         env:
           E2E_SKIP_BUILD: '1'

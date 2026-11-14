@@ -113,10 +113,11 @@ function App() {
           <Tip content="Home">
             <Link to="/" className="flex shrink-0 items-center gap-2">
               <CrossBoardMark className="size-[22px] shrink-0" />
-              {/* Below 360 px the wordmark leaves the row (the mark alone links home, its name kept
-                  for screen readers): with the test mode badge, the switcher, the search button and
-                  the Pages menu, the row would otherwise push the page wider than the screen. */}
-              <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap max-[359px]:sr-only">
+              {/* Below 390 px the wordmark leaves the row (the mark alone links home, its name kept
+                  for screen readers): with the test mode badge, the switcher, the search button, the
+                  notifications and the Pages menu, the row would otherwise push the page wider than
+                  the screen at 360 and 375 px. */}
+              <span className="font-brand text-[17px] leading-none font-bold tracking-[-0.035em] whitespace-nowrap max-[389px]:sr-only">
                 CrossBoard
               </span>
             </Link>

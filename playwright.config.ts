@@ -1,3 +1,4 @@
+import os from 'node:os'
 import path from 'node:path'
 
 import { defineConfig, devices } from '@playwright/test'
@@ -44,7 +45,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
-  workers: process.env.CI ? 2 : 4,
+  // The suite's 497 tests need more than 2 workers to fit the job's timeout on CI (ci.yml). On CI, one
+  // worker per core, from 2 up to 4: GitHub's hosted runner has 2 to 4 cores, so this stays within them.
+  workers: process.env.CI ? Math.min(4, Math.max(2, os.cpus().length)) : 4,
   timeout: 30_000,
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
