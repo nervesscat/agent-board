@@ -10,7 +10,7 @@ import { asSubIdentity, type Caller, callerInfo } from './auth'
 import { previewBranch } from './branchPreview'
 import { linkFor } from './previewProxy'
 import { cleanupReport } from './cleanup'
-import { AgentDeleteItems, deleteLeftovers } from './cleanupActions'
+import { AgentDeleteItems, startCleanupDelete } from './cleanupActions'
 import { dailyReport, today } from './daily'
 import * as features from './features'
 import { findProject } from './findProject'
@@ -1030,7 +1030,7 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
     'cleanup_delete',
     "Delete closed tickets' (done, cancelled or archived) landed local branches, as cleanup_report lists them (kind local). Each item as the report gives it: ticketId, branch, kind local and sha (the branch's local sha you read there, null when it had none; one that moved since is not deleted). The board checks each item again first, as for the human on the Cleanup page: the ticket is still closed, the work landed (reach merged, rebased or edited, never unique), the branch is not protected, and no worktree has it checked out. Never a worktree, never origin: removing worktrees and deleting branches on origin are the human's, from the Cleanup page; list them for them. Returns each item, in the order asked, with ok, outcome (deleted; gone: it was gone already; refused or failed, with the reason; one refused does not stop the next) and restore: the command that puts the branch back (git branch <name> <sha>). Post the deleted branch @ sha lines on the ticket (post_update).",
     { projectId: z.number().int(), items: AgentDeleteItems },
-    ({ projectId, items }) => deleteLeftovers(projectId, items, actor, { agent: true }),
+    ({ projectId, items }) => startCleanupDelete(projectId, items, actor, { agent: true }).results,
   )
 
   // threads

@@ -34,7 +34,7 @@ import { callerInfo, isAgent } from './auth'
 import { authRoutes } from './authApi'
 import { previewBranch } from './branchPreview'
 import { cleanupReport } from './cleanup'
-import { DeleteItems, deleteLeftovers } from './cleanupActions'
+import { DeleteItems, startCleanupDelete } from './cleanupActions'
 import { authMode, servedEntrance } from './config'
 import { dailyReport, today } from './daily'
 import * as features from './features'
@@ -841,10 +841,12 @@ api.get('/api/projects/:id/cleanup', async ({ params, url }) =>
 // Deletes closed tickets' worked branches, here or on origin, or with their worktrees: the human's,
 // once confirmed on the Cleanup page, and an agent's (also MCP `cleanup_delete`) for local branches
 // alone: a request of theirs with a worktree or an origin branch in it gets 403 whole. Each item is
-// checked again first.
+// checked again first. Answers the job the work runs under at once (202): it reports each item as it
+// lands and ends with the items' outcomes as its result; `GET /api/projects/:id/jobs` follows it.
 api.post('/api/projects/:id/cleanup/delete', async ({ request, params, actor }) => {
   const body = await readJson(request, z.object({ items: DeleteItems }))
-  return json(await deleteLeftovers(id(params), body.items, actor, { agent: isAgent(request) }))
+  const { job } = startCleanupDelete(id(params), body.items, actor, { agent: isAgent(request) })
+  return json(job, 202)
 })
 
 // --- jobs: long operations reporting their progress, for the top bar to poll (jobs.ts) ---

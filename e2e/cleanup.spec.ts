@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { CleanupReport, DailyPayload, TicketFull } from '#/lib/api'
+import type { CleanupReport, DailyPayload, JobState, TicketFull } from '#/lib/api'
 import { AGENT, commitFile, e2eEnv, git } from './env'
 import { expect, ok, test } from './fixtures'
 
@@ -375,6 +375,219 @@ test('a removal that fails part-way keeps the worktree it removed and its restor
   }
 })
 
+test('the bulk delete is a job: determinate progress, and the report refreshed by itself', async ({
+  page,
+  human,
+}) => {
+  // The wait for the job to finish is 60 s on its own, so this test's budget covers it.
+  test.setTimeout(90_000)
+  // A project on a repository of its own, with its branches' work landed in bases of their own.
+  const { id } = await ok<{ id: number }>(
+    human.post('/api/projects', { data: { name: 'A delete with progress' } }),
+  )
+  const dir = path.join(e2eEnv().root, `job-repo-${id}`)
+  const repo = ownRepo(dir)
+  await ok(human.post('/api/repos', { data: { projectId: id, repoPath: dir, name: 'repo' } }))
+  const landed = (branch: string) => {
+    const sha = repo.git('commit-tree', 'main^{tree}', '-p', 'main', '-m', `${branch} work`)
+    repo.git('update-ref', `refs/heads/${branch}`, sha)
+    repo.git('update-ref', `refs/heads/${branch}-base`, sha)
+    return sha
+  }
+  const done = (title: string, branch: string) =>
+    ok<TicketFull>(
+      human.post(`/api/projects/${id}/tickets`, {
+        data: { title, status: 'done', branch, baseBranch: `${branch}-base` },
+      }),
+    )
+
+  // Enough branches that the run outlasts the page's 500 ms poll of its job, so the bar is seen on the
+  // way with its item: 8 finished inside one poll on a warm git listing, and the item never rendered.
+  const BULK = 24
+  const names = Array.from({ length: BULK }, (_, i) => `bulk-${i}`)
+  for (const name of names) {
+    landed(name)
+    await done(name, name)
+  }
+  // One with a worktree: the job deletes local branches, so its removal is another kind of work and
+  // stays usable while the job runs.
+  const treeName = 'bulk-tree'
+  landed(treeName)
+  const tree = path.join(e2eEnv().root, `wt-bulk-${id}`)
+  repo.git('worktree', 'add', '-q', tree, treeName)
+  await done('Kept in a worktree', treeName)
+
+  await page.goto(`/projects/${id}/cleanup`)
+  const row = (branch: string) => page.locator(`tr[data-branch="${branch}"]`)
+  const bulk = page.getByRole('button', {
+    name: new RegExp(`^Delete every eligible local branch \\(${BULK}\\)`),
+  })
+  await expect(bulk).toBeVisible()
+  await bulk.click()
+  const dialog = page.getByRole('alertdialog')
+  await dialog.getByRole('button', { name: `Delete ${BULK} local branches` }).click()
+
+  // Determinate progress, with the item being handled, in the page's own bulk area.
+  const progress = page.getByRole('region', { name: 'Delete progress' })
+  const bar = progress.getByRole('progressbar')
+  await expect(bar).toHaveAttribute('aria-valuemax', String(BULK))
+  await expect(progress).toContainText(new RegExp(`\\d+ of ${BULK}`))
+  await expect(progress).toContainText(/#\d+ \S+: (deleted|refused|failed|gone)/)
+  // Only the job's own items are off meanwhile: another kind's removal and Refresh stay usable.
+  await expect(page.getByRole('button', { name: 'Refresh' })).toBeEnabled()
+  await expect(row(treeName).getByRole('button', { name: 'Remove worktree + branch' })).toBeEnabled()
+
+  // It ends on its own, and what it did is read in counts rather than raw items.
+  const status = progress.getByRole('status')
+  await expect(status).toContainText(`${BULK} of ${BULK}`, { timeout: 60_000 })
+  await expect(status).toContainText('Succeeded')
+  await expect(status).toContainText(`${BULK} deleted`)
+  await expect(status).not.toContainText('kept')
+  // The running indicator is gone, and the outcomes read as they did before.
+  await expect(progress.getByRole('progressbar')).toHaveCount(0)
+  const results = page.getByRole('region', { name: 'Deletion results' })
+  await expect(results.locator('[data-outcome="deleted"]')).toHaveCount(BULK)
+  await expect(results.getByRole('button', { name: /^Copy: git branch / }).first()).toBeVisible()
+
+  // No Refresh pressed: the deleted ones are gone from the report by itself…
+  for (const name of names) await expect(row(name)).toHaveCount(0)
+  // …the worktree's ticket is still there, and the rows are the report's own.
+  await expect(row(treeName)).toHaveCount(1)
+  const report = await ok<CleanupReport>(human.get(`/api/projects/${id}/cleanup`))
+  const shown = await page
+    .locator('tr[data-branch]')
+    .evaluateAll((rows) => rows.map((r) => r.getAttribute('data-branch')))
+  expect(shown.sort()).toEqual(report.tickets.flatMap((t) => t.branches.map((b) => b.name)).sort())
+  // The landed branches are really gone, and the worktree's branch is still where it was.
+  for (const name of names) expect(repo.hasRef(`refs/heads/${name}`)).toBe(false)
+  expect(repo.hasRef(`refs/heads/${treeName}`)).toBe(true)
+})
+
+test('the toast and the top-bar card say the counts, and both retries send only the kept items', async ({
+  page,
+  human,
+}) => {
+  const { id } = await ok<{ id: number }>(
+    human.post('/api/projects', { data: { name: 'Kept items, retried' } }),
+  )
+  const dir = path.join(e2eEnv().root, `kept-repo-${id}`)
+  const repo = ownRepo(dir)
+  await ok(human.post('/api/repos', { data: { projectId: id, repoPath: dir, name: 'repo' } }))
+  const landed = (branch: string) => {
+    const sha = repo.git('commit-tree', 'main^{tree}', '-p', 'main', '-m', `${branch} work`)
+    repo.git('update-ref', `refs/heads/${branch}`, sha)
+    repo.git('update-ref', `refs/heads/${branch}-base`, sha)
+    return sha
+  }
+  const ticket = (title: string, branch: string) =>
+    ok<TicketFull>(
+      human.post(`/api/projects/${id}/tickets`, {
+        data: { title, status: 'done', branch, baseBranch: `${branch}-base` },
+      }),
+    )
+
+  const deletedName = 'kept-deleted'
+  const deletedSha = landed(deletedName)
+  const deletedTicket = await ticket('One that goes', deletedName)
+  const movedName = 'kept-moved'
+  const movedSeen = landed(movedName)
+  const movedTicket = await ticket('One that moved', movedName)
+
+  const sent: { items: { ticketId: number; branch: string; kind: string; sha: string }[] }[] = []
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().endsWith('/cleanup/delete'))
+      sent.push(r.postDataJSON() as (typeof sent)[number])
+  })
+  await page.goto(`/projects/${id}/cleanup`)
+  const bulk = page.getByRole('button', { name: /^Delete every eligible local branch \(2\)/ })
+  // The page has read the report: both branches are there to be asked for.
+  await expect(bulk).toBeVisible()
+  const moved = repo.git('commit-tree', 'main^{tree}', '-p', movedSeen, '-m', 'more work')
+  repo.git('update-ref', `refs/heads/${movedName}`, moved)
+  // The board lists the refs again before a delete, but reuses a listing a few seconds old.
+  await page.waitForTimeout(3_500)
+
+  await bulk.click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete 2 local branches' }).click()
+
+  const progress = page.getByRole('region', { name: 'Delete progress' })
+  await expect(progress.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '2')
+  const status = progress.getByRole('status')
+  await expect(status).toContainText('2 of 2', { timeout: 60_000 })
+  await expect(status).toContainText('1 deleted, 1 kept')
+  // A toast states both counts.
+  await expect(
+    page.locator('[data-sonner-toast]').filter({ hasText: '1 deleted, 1 kept' }).first(),
+  ).toBeVisible()
+  // The results list what went and what stayed, and offer the kept one again.
+  const results = page.getByRole('region', { name: 'Deletion results' })
+  await expect(results.locator('[data-outcome="deleted"]')).toHaveCount(1)
+  await expect(results.locator('[data-outcome="refused"]')).toHaveCount(1)
+  expect(sent).toHaveLength(1)
+  expect(sent[0]!.items).toHaveLength(2)
+  expect(sent[0]!.items).toEqual(
+    expect.arrayContaining([
+      { ticketId: deletedTicket.id, branch: deletedName, kind: 'local', sha: deletedSha },
+      { ticketId: movedTicket.id, branch: movedName, kind: 'local', sha: movedSeen },
+    ]),
+  )
+
+  // The page's retry: exactly the item that was kept, as it was asked for.
+  await results.getByRole('button', { name: 'Retry kept items' }).click()
+  await expect.poll(() => sent.length).toBe(2)
+  expect(sent[1]).toEqual({
+    items: [{ ticketId: movedTicket.id, branch: movedName, kind: 'local', sha: movedSeen }],
+  })
+  // That is a job of its own, and the page follows it the same way.
+  await expect(status).toContainText('1 of 1', { timeout: 60_000 })
+  await expect(status).toContainText('0 deleted, 1 kept')
+  await expect(results.locator('[data-outcome="refused"]')).toHaveCount(1)
+
+  // The top bar's card of the finished run says the same, and its retry sends the same one item.
+  const bell = page.getByRole('button', { name: 'Notifications' })
+  await bell.click()
+  const panel = page.getByRole('dialog')
+  const card = panel.getByRole('listitem').filter({ hasText: 'Delete 2 branches' }).first()
+  const cardStatus = card.getByRole('status')
+  await expect(cardStatus).toContainText('Succeeded')
+  await expect(cardStatus).toContainText('1 deleted, 1 kept')
+  await expect(card.getByRole('link', { name: 'Delete 2 branches' })).toHaveAttribute(
+    'href',
+    `/projects/${id}/cleanup`,
+  )
+  await card.getByRole('button', { name: 'Retry kept items' }).click()
+  await expect.poll(() => sent.length).toBe(3)
+  expect(sent[2]).toEqual({
+    items: [{ ticketId: movedTicket.id, branch: movedName, kind: 'local', sha: movedSeen }],
+  })
+  await page.keyboard.press('Escape')
+  await expect(panel).toHaveCount(0)
+
+  // With every item deleted, both say the deleted count alone and nothing offers a retry.
+  await page.reload()
+  await page.getByRole('button', { name: /^Delete every eligible local branch \(1\)/ }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete 1 local branch' }).click()
+  const last = page.getByRole('region', { name: 'Delete progress' })
+  await expect(last.getByRole('status')).toContainText('1 of 1', { timeout: 60_000 })
+  await expect(last.getByRole('status')).toContainText('Succeeded · 1 deleted')
+  await expect(last.getByRole('status')).not.toContainText('kept')
+  await expect(page.locator('[data-sonner-toast]').filter({ hasText: '1 deleted' }).first()).toBeVisible()
+  await expect(
+    page.getByRole('region', { name: 'Deletion results' }).getByRole('button', { name: 'Retry kept items' }),
+  ).toHaveCount(0)
+  await bell.click()
+  const newest = page.getByRole('dialog').getByRole('listitem').first()
+  await expect(newest.getByRole('status')).toContainText('Succeeded')
+  await expect(newest.getByRole('status')).toContainText('1 deleted')
+  await expect(newest.getByRole('status')).not.toContainText('kept')
+  await expect(newest.getByRole('button', { name: 'Retry kept items' })).toHaveCount(0)
+
+  // The kept item went on the second run of the page's retry; the first one was deleted.
+  expect(repo.hasRef(`refs/heads/${deletedName}`)).toBe(false)
+  expect(repo.hasRef(`refs/heads/${movedName}`)).toBe(false)
+  expect(deletedTicket.id).not.toBe(movedTicket.id)
+})
+
 test('an agent deletes landed local branches alone: a request with a worktree or a branch on origin is 403 whole', async ({
   agent,
   human,
@@ -440,8 +653,15 @@ test('an agent deletes landed local branches alone: a request with a worktree or
 
   const since = new Date()
   const res = await agent.post(`/api/projects/${id}/cleanup/delete`, { data: { items: [local] } })
-  expect(res.status()).toBe(200)
-  expect(await res.json()).toEqual([
+  expect(res.status()).toBe(202)
+  // The agent follows its own job, as the page does: the work is the same.
+  const started = (await res.json()) as JobState
+  expect(started).toMatchObject({ kind: 'cleanup-delete', actor: AGENT, total: 1, state: 'running' })
+  const jobs = async () => ok<JobState[]>(agent.get(`/api/projects/${id}/jobs`))
+  await expect.poll(async () => (await jobs()).find((job) => job.id === started.id)?.state).toBe('succeeded')
+  const job = (await jobs()).find((job) => job.id === started.id)!
+  expect(job).toMatchObject({ done: 1, total: 1, step: null, reason: null })
+  expect(job.result).toEqual([
     expect.objectContaining({
       branch,
       ok: true,
