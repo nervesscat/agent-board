@@ -4,3 +4,12 @@ src/server/skill/review/
 # The generated route tree, which asks for it in its header: a reformat is a diff against what
 # `pnpm generate-routes` writes.
 src/routeTree.gen.ts
+
+# Release artwork: written byte for byte by scripts/release-art/contour-field.mjs, and its test
+# regenerates it and compares. A reformat would break that, as the route tree's would.
+src/assets/release-art/**/*.svg
+src/assets/release-art/**/manifest.json
+
+# Release notes kept exactly as GitHub published them: they are the input the artwork is read from,
+# so reformatting them would quietly change the record the generator derives a release's field from.
+scripts/release-art/notes/
