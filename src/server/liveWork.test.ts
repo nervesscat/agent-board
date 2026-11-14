@@ -310,7 +310,8 @@ describe('recently active, nothing running', () => {
     expect(one).toMatchObject({
       title: 'Reviewed already',
       lastHeardAt: iso(ago(130)),
-      lastSignalAt: iso(ago(130)),
+      // The lease's clock counts an agent's post too: the summary was written at ago(120).
+      lastSignalAt: iso(ago(120)),
       silentMinutes: 130,
       state: 'Waiting on the parser review',
     })
