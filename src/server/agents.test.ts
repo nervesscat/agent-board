@@ -149,6 +149,29 @@ describe('the session skill', () => {
       expect(skill, text).toContain(text)
   })
 
+  it('opens with step 0: look at what is live before picking anything up, and stay visible', () => {
+    const skill = agents.sessionSkill()
+    const step = skill.indexOf('## Step 0')
+    const brief = skill.indexOf('## Opening: the brief')
+    // Before the opening brief, early in the skill.
+    expect(step).toBeGreaterThan(skill.indexOf('# Session'))
+    expect(step).toBeLessThan(brief)
+    const stepText = skill.slice(step, brief)
+    // The tool, and the four things to do with it.
+    expect(stepText).toContain('get_live_work')
+    expect(stepText).toContain('Before anything else, call it')
+    expect(stepText).toContain('Do not take or duplicate a ticket a live entry names')
+    expect(stepText).toContain('Pick up what nobody holds')
+    expect(stepText).toContain('Say in your first message')
+    // And that silence in it is not proof nobody is working.
+    expect(stepText).toContain('not proof that nobody is working')
+    // The timeline is what makes a session visible to the next one.
+    expect(skill.slice(step)).toContain('heartbeat')
+    expect(skill.slice(step)).toContain('visible to the next one')
+    // Served as it is on disk.
+    expect(skill).toBe(onDisk())
+  })
+
   it('is served to the human and to agents alike, verbatim and never cached, with no parameters', async () => {
     const { api } = await import('./api')
     const route = 'http://localhost/api/agent-setup/session-skill'

@@ -16,6 +16,7 @@ export const TOOL_ROUTES: Record<string, string> = {
   update_note: 'PATCH /api/projects/:id/notes/:noteId `{label?, body?, pinned?}`',
   delete_note: 'DELETE /api/projects/:id/notes/:noteId',
   get_summary: 'GET /api/summary?projectId=',
+  get_live_work: 'GET /api/projects/:id/live-work?windowMinutes=',
   list_notifications: 'GET /api/projects/:id/agent-cards',
   start_tracked_request: 'POST /api/projects/:id/agent-cards `{title, request, total?, href?}`',
   tracked_request_progress: 'POST /api/projects/:id/agent-cards/:cardId/progress `{done?, step?}`',

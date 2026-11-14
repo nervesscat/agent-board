@@ -613,7 +613,7 @@ export function progressSince(
 }
 
 /** Each ticket's newest progress post (gist, author, when), in two reads whatever the number of tickets. */
-function lastProgressPosts(ids: number[]): Map<number, Post> {
+export function lastProgressPosts(ids: number[]): Map<number, Post> {
   const out = new Map<number, Post>()
   if (!ids.length) return out
   const newest = db
@@ -656,7 +656,7 @@ function lastProgressPosts(ids: number[]): Map<number, Post> {
 }
 
 /** The first workspace preview registered on each ticket, if any. */
-function previewsOf(ids: number[]) {
+export function previewsOf(ids: number[]) {
   const out = new Map<number, { url: string; workspace: string }>()
   if (!ids.length) return out
   const rows = db
