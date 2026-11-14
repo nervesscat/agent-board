@@ -53,6 +53,7 @@ import type { ProjectFull, listProjects } from '#/server/projects'
 import type { PrRow } from '#/server/prs'
 import type { ProjectPush, Push } from '#/server/push'
 import type { ProjectAgent } from '#/server/projectAgents'
+import type { ProjectNote } from '#/server/notes'
 import type { CarryOver, ProjectSummary, Summary } from '#/server/summary'
 import type { ActorRole, ActorRow } from '#/server/actors'
 import type { AgentTokenRow } from '#/server/tokens'
@@ -85,6 +86,7 @@ export type {
   OpencodeConfig,
   PreviewState,
   ProjectAgent,
+  ProjectNote,
   RunConfig,
   RunOutcome,
   RunState,

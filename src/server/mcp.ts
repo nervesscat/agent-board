@@ -18,6 +18,7 @@ import { galleryShape, listGallery } from './gallery'
 import { HttpError } from './http'
 import { setInstructions } from './instructionsHistory'
 import * as needs from './needs'
+import * as notes from './notes'
 import { isActive, managedPreview, restartPreview, startPreview, stopPreview } from './managedPreview'
 import * as runConfig from './runConfig'
 import { removeRunConfig } from './runs'
@@ -199,7 +200,7 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
   )
   tool(
     'get_project',
-    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, and a picture; tickets can be reserved for them), defaultPhases (the top-level phases every new ticket starts with, in order; built in: Implementation, Pushed, PR, CI, Preview, Summary, Merged; [] when the project seeds none; only the human changes the list; a top-level task named Pushed, PR, CI, Preview, Summary or Merged is ticked by the board, never by hand), tagSuggestions (the tags the human offers for tickets; built in: Bug, UI, Implementation, Report), usedTags (the tags its tickets carry, most used first, each in the casing to reuse), stallMinutes (how many minutes an active ticket may go without a work-timeline event before it reads as stalled; only the human changes it), workStage (the key of the active stage claim_ticket and a status of in_progress or active go to; null for the first active stage; only the human changes it), hostTools (the board's last check of the tools on its machine: checkedAt, and for each of git, gh, claude, node and pnpm its name, found, version, signedIn for gh, ok and optional; one not ok also says what it breaks, the problem and the fix: a feature that needs it fails until the human fixes it; optional is true for claude, which only the board's own report generation needs, never ticket or project agents; null before the first check ends) and the instructions agents must follow when working on it (only the human and an orchestrator change them: set_project_instructions; a worker asks its orchestrator). Read this before touching a project.",
+    "One project with its repos, its stages (the board's columns in order: key, name, kind), its agents (personas with a name, instructions, delegation notes saying when the orchestrator should call them, and a picture; tickets can be reserved for them), notes (the project's short shared facts, each {id, label, body, createdBy, createdAt, updatedAt, position} in order: a pinned note first; read them before starting and add one for anything a future session must not rediscover; list_notes, add_note, update_note and delete_note), defaultPhases (the top-level phases every new ticket starts with, in order; built in: Implementation, Pushed, PR, CI, Preview, Summary, Merged; [] when the project seeds none; only the human changes the list; a top-level task named Pushed, PR, CI, Preview, Summary or Merged is ticked by the board, never by hand), tagSuggestions (the tags the human offers for tickets; built in: Bug, UI, Implementation, Report), usedTags (the tags its tickets carry, most used first, each in the casing to reuse), stallMinutes (how many minutes an active ticket may go without a work-timeline event before it reads as stalled; only the human changes it), workStage (the key of the active stage claim_ticket and a status of in_progress or active go to; null for the first active stage; only the human changes it), hostTools (the board's last check of the tools on its machine: checkedAt, and for each of git, gh, claude, node and pnpm its name, found, version, signedIn for gh, ok and optional; one not ok also says what it breaks, the problem and the fix: a feature that needs it fails until the human fixes it; optional is true for claude, which only the board's own report generation needs, never ticket or project agents; null before the first check ends) and the instructions agents must follow when working on it (only the human and an orchestrator change them: set_project_instructions; a worker asks its orchestrator). Read this before touching a project.",
     { projectId: z.number().int() },
     ({ projectId }) => projects.getProjectFull(projectId),
   )
@@ -221,6 +222,43 @@ function buildServer(caller: Caller, refused: HttpError | null, request: Request
       const { tagSuggestions, usedTags } = projects.getProjectFull(projectId)
       return { tagSuggestions, usedTags }
     },
+  )
+
+  // The project's notes: the short facts every session must not rediscover.
+  tool(
+    'list_notes',
+    "The project's notes in order, a pinned one first: {id, projectId, label, body, createdBy, createdAt, updatedAt, position}. Each is one short fact a future session must not rediscover (a command, a path, a rule, a reminder), not a document.",
+    { projectId: z.number().int() },
+    ({ projectId }) => notes.listNotes(projectId),
+  )
+  tool(
+    'add_note',
+    "Add a short note to the project: label (a few words saying why it is there, 1 to 60 characters) and body (the fact itself, plain text, 1 to 500 characters). One fact per note; if it needs paragraphs it is a doc, not a note. Anyone signed in on the project may add one; it goes after the last note. Returns the stored note. Read the project's notes before starting and add one for anything a future session must not rediscover.",
+    {
+      projectId: z.number().int(),
+      label: z.string().describe('a few words saying why the note is there, 1 to 60 characters'),
+      body: z.string().describe('the fact itself, plain text, 1 to 500 characters'),
+    },
+    ({ projectId, label, body }) => notes.createNote(projectId, { label, body }, caller),
+  )
+  tool(
+    'update_note',
+    "Change a note of the project (noteId from list_notes or get_project): only the fields you give change; label and body are trimmed and held to 60 and 500 characters. pinned: true puts it above the unpinned notes, false moves it back after them. A note's author, an orchestrator or the human changes a note; another worker is refused. Returns the stored note.",
+    {
+      projectId: z.number().int(),
+      noteId: z.number().int(),
+      label: z.string().optional().describe('1 to 60 characters'),
+      body: z.string().optional().describe('1 to 500 characters'),
+      pinned: z.boolean().optional().describe('above the unpinned notes (true) or after them (false)'),
+    },
+    ({ projectId, noteId, label, body, pinned }) =>
+      notes.updateNote(projectId, noteId, { label, body, pinned }, caller),
+  )
+  tool(
+    'delete_note',
+    "Delete a note of the project (noteId from list_notes or get_project). A note's author, an orchestrator or the human deletes a note; another worker is refused. Returns the deleted note.",
+    { projectId: z.number().int(), noteId: z.number().int() },
+    ({ projectId, noteId }) => notes.deleteNote(projectId, noteId, caller),
   )
 
   tool(

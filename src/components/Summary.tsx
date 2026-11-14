@@ -25,6 +25,7 @@ import { AgentAvatar } from '#/components/AgentAvatar'
 import { Empty } from '#/components/Empty'
 import { GettingStarted } from '#/components/GettingStarted'
 import { useSettleInstructions } from '#/components/InstructionsHistory'
+import { Notes } from '#/components/Notes'
 import { BlockedTasksBadge, DecisionBadge, Progress } from '#/components/TicketBoard'
 import { Button } from '#/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
@@ -126,6 +127,7 @@ const CARDS: Record<AreaId<'overview'>, (props: CardProps) => ReactNode> = {
   'overview.doneToday': DoneToday,
   'overview.next': Next,
   'overview.carryingOver': CarryingOver,
+  'overview.notes': Notes,
 }
 
 function ProjectBlock({ p, now, dismiss }: CardProps) {
