@@ -20,6 +20,7 @@ import { getRepo } from './repos'
 import rawTemplate from './skill/board.md?raw'
 import rawSessionSkill from './skill/session.md?raw'
 import boardMcpScript from '../../scripts/board-mcp.mjs?raw'
+import boardBeatScript from '../../scripts/board-beat.mjs?raw'
 import { restSection } from './skill/rest'
 
 // Agents get the skill with LF line endings, also from a Windows checkout where the file has CRLF.
@@ -121,6 +122,9 @@ export type SkillTransport = (typeof SKILL_TRANSPORTS)[number]
 
 /** `scripts/board-mcp.mjs`: the board's MCP tools over stdio, for a client that reaches the board through a proxy. */
 export const boardMcpBridge = (): string => boardMcpScript.replace(/\r\n/g, '\n')
+
+/** `scripts/board-beat.mjs`: the runtime beater that keeps a long tool call's lease alive. */
+export const boardBeat = (): string => boardBeatScript.replace(/\r\n/g, '\n')
 
 /** What the Connect an agent page builds its commands from, and OpenCode's subagent depth. */
 export function agentSetup(projectDirs: string[] = []) {

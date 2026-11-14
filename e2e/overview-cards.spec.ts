@@ -1,8 +1,8 @@
 import type { Locator, Page } from '@playwright/test'
 
 import { startedAt, yesterdayNoon } from './db'
-import { expect, ok, section, test } from './fixtures'
-import { create, record, workedTicket } from './workTimeline'
+import { expect, expectTooltip, ok, section, test } from './fixtures'
+import { create, quietTicket, record, reviewTicket, stalledTicket } from './workTimeline'
 
 /**
  * On a desktop the Overview's first row is Needs you alone, and the second row is Next, In progress
@@ -130,36 +130,69 @@ test('a stalled ticket says why and since when, in the same words on Needs you, 
   human,
   agent,
 }) => {
-  const { t } = await workedTicket(human, agent, project)
+  const { t } = await stalledTicket(human, agent, project)
+  const quiet = await quietTicket(human, agent, project)
+  const turn = await reviewTicket(human, project)
   const title = new RegExp(`#${t.id} Ship the importer`)
-  // The ticket's open build and the agent that has it, as the why names them everywhere.
-  const why = /Stalled \d+ min: claude has a build open, nobody heard from since \d{1,2}:\d{2}\s*[AP]M/
+  // Nothing is open: the why is the build that ended 40 minutes ago.
 
   await page.goto(`/projects/${project.id}`)
-  const row = section(page, 'Needs you')
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` }) })
-  await expect(row).toContainText(why)
+  const needsYou = section(page, 'Needs you')
+  const row = needsYou.getByRole('listitem').filter({
+    has: page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Ship the importer`) }),
+  })
+  const rowLine = row.getByTestId('work-line')
+  await expect(rowLine).toHaveAttribute('data-state', 'no-word')
+  await expect(rowLine).toContainText(/No word \d+m/)
+  await expectTooltip(rowLine, /nothing open since the build ended at \d{1,2}:\d{2}\s*[AP]M/)
   await expect(row).toContainText(/last\s*claude/)
   await expect(row).not.toContainText('silent')
-  // In progress: what the ticket is doing now, a line on when an agent was last heard, and the same stall.
+  // A review ticket's row carries its turn, counted from the stage it entered.
+  const turnRow = needsYou
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('link', { name: new RegExp(`#${turn.t.id} Waiting for a look`) }) })
+  await expect(turnRow.getByTestId('work-line')).toHaveAttribute('data-state', 'your-turn')
+  await expect(turnRow.getByTestId('work-line')).toContainText('Your turn · waiting 2d')
+  // In progress: the one line, a line on when an agent was last heard, and the per-agent detail.
   const progress = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${t.id} Ship the importer` })
-  await expect(progress.getByTestId('now-line')).toContainText(/Building · claude · \d+ min/)
+  await expect(progress.getByTestId('work-line')).toHaveAttribute('data-state', 'no-word')
+  await expect(progress.getByTestId('work-line')).toContainText(/No word \d+m/)
   await expect(progress.getByTestId('last-heard')).toContainText(/Last heard \d+ min ago/)
-  await expect(progress.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
+  // A live agent with no progress post in over a day reads Quiet, and a lane's post lifts it out.
+  const quietRow = section(page, 'In progress')
+    .getByRole('listitem')
+    .filter({ hasText: `#${quiet.t.id} Quiet importer` })
+  await expect(quietRow.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
+  await expect(quietRow.getByTestId('work-line')).toContainText('Quiet 1d')
+  // It started yesterday, so Carrying over draws the same line for it.
+  const carried = section(page, 'Carrying over')
+    .getByRole('listitem')
+    .filter({ hasText: `#${quiet.t.id} Quiet importer` })
+  await expect(carried.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
+  await expect(carried.getByTestId('work-line')).toContainText('Quiet 1d')
+  await ok(
+    agent.post(`/api/tickets/${quiet.lane.id}/updates`, {
+      data: { body: 'lane: tests pass', progress: true },
+    }),
+  )
+  await page.reload()
+  const quietAgain = section(page, 'In progress')
+    .getByRole('listitem')
+    .filter({ hasText: `#${quiet.t.id} Quiet importer` })
+  await expect(quietAgain.getByTestId('work-line')).not.toContainText('Quiet')
 
-  // The board card and the list row: the stall's badge, and on the list the now line too.
+  // The board card and the list row: the same one line, no second badged one.
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.getByRole('link', { name: title })
-  await expect(card.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
-  // A stalled card's badge is its why: the card's now is left off where another badge is shown.
-  await expect(card.getByTestId('card-now')).toHaveCount(0)
+  await expect(card.getByTestId('work-line')).toHaveAttribute('data-state', 'no-word')
+  await expect(card.getByTestId('work-line')).toContainText(/No word \d+m/)
+  await expect(card.getByTestId('work-line')).toHaveCount(1)
   await page.getByRole('tab', { name: 'List' }).click()
   const listRow = page.getByRole('link', { name: title })
-  await expect(listRow.getByTestId('stall-notice')).toContainText(/Stalled \d+ min/)
-  await expect(listRow.getByTestId('now-line')).toContainText(/Building · claude · \d+ min/)
+  await expect(listRow.getByTestId('work-line')).toContainText(/No word \d+m/)
+  await expect(listRow.getByTestId('work-line')).toHaveCount(1)
 })
 
 test('In progress says what a ticket waits on and since when, when a person has to act', async ({
@@ -176,10 +209,9 @@ test('In progress says what a ticket waits on and since when, when a person has 
   const row = section(page, 'In progress')
     .getByRole('listitem')
     .filter({ hasText: `#${t.id} Approve the copy` })
-  await expect(row.getByTestId('now-line')).toContainText(
-    /Waiting on you for [^·]+ since \d{1,2}:\d{2}\s*[AP]M/,
-  )
-  await expect(row.getByTestId('stall-notice')).toHaveCount(0)
+  await expect(row.getByTestId('work-line')).toHaveAttribute('data-state', 'waiting')
+  await expect(row.getByTestId('work-line')).toContainText('Waiting on you')
+  await expect(row.getByText(/^since \d{1,2}:\d{2}\s*[AP]M$/).first()).toBeVisible()
 })
 
 test('Needs you lists a ticket whose agent is waiting on the human, and links to it', async ({
@@ -253,8 +285,10 @@ test('a busy card with no other badge shows what it is doing now, as icon and ti
 
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.getByRole('link', { name: new RegExp(`#${t.id} Building right now`) })
-  await expect(card.getByTestId('card-now')).toContainText(/^\s*\d+ min|under a minute\s*$/)
-  await expect(card.getByTestId('stall-notice')).toHaveCount(0)
+  const line = card.getByTestId('work-line')
+  await expect(line).toHaveAttribute('data-state', 'working')
+  await expect(line).toContainText(/Working now · last word \d+m/)
+  await expect(card.getByTestId('work-line')).toHaveCount(1)
 })
 
 test('Carrying over is a full row of its own and caps the same way, at desktop and on a phone', async ({
@@ -276,6 +310,8 @@ test('Carrying over is a full row of its own and caps the same way, at desktop a
   const doneToday = section(page, 'Done today')
   const next = section(page, 'Next: To do')
   await expect(carrying).toContainText('Carried over 12')
+  // One line per carried-over ticket, the same one every row draws.
+  await expect(carrying.getByTestId('work-line')).toHaveCount(12)
 
   // Its own row, below every other card.
   const box = (await carrying.boundingBox())!

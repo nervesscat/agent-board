@@ -75,8 +75,13 @@ const timeline = (more: Partial<WorkTimeline> = {}): WorkTimeline => ({
   blockedStretches: [],
   totals: { workingMs: 0, waitingMs: 0, blockedOnHumanMs: 0 },
   lastSignalAt: iso('10:00'),
+  lastWordAt: iso('10:00'),
+  liveness: null,
   lastHeard: null,
   stalled: null,
+  stage: { key: 'in_progress', kind: 'active', since: iso('10:00') },
+  progressAt: iso('10:00'),
+  waitingOnHuman: false,
   ...more,
 })
 

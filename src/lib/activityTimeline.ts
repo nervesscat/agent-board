@@ -1,8 +1,6 @@
 import type { StageKind } from './constants'
-import { clock } from './format'
 import type { StageLike } from './stages'
-import { spokenDuration } from './timelineRows'
-import { currentActivity, type CurrentActivity, type WorkTimelineLike } from './workStatus'
+import type { WorkTimelineLike } from './workStatus'
 import type { Activity, Stalled } from './workTimeline'
 
 /**
@@ -63,6 +61,11 @@ export function timelineFromActivity(
     end: null,
     lastHeard: activity?.lastHeard ?? null,
     now: activity?.now,
+    liveness: activity?.liveness ?? null,
+    // The other facts the one work-state line reads, carried beside the activity by the same read.
+    stage: activity?.stage,
+    progressAt: activity?.progressAt ?? null,
+    waitingOnHuman: activity?.waitingOnHuman ?? false,
   }
 }
 
@@ -78,26 +81,4 @@ export function stallStage(stages: StageLike[], status: string): string | null {
   const stage = stages.find((s) => s.key === status)
   if (!stage || !first || stage.key === first.key) return null
   return stage.name
-}
-
-const dur = (ms: number) => (ms > 0 ? spokenDuration(ms) : '0')
-
-/** What is going on now, in words: the same line the Now line shows, for a tooltip or a title. */
-export function nowWords(t: WorkTimelineLike, now: Date | number): string {
-  const a = currentActivity(t, now)
-  if (a.kind === 'building') return `${a.verb} · ${a.agent} · ${dur(a.ms)}`
-  if (a.kind === 'waiting-agent') return `Waiting on ${a.agent} · ${dur(a.ms)}`
-  if (a.kind === 'waiting-human') return `Waiting on you for ${dur(a.ms)} since ${clock(a.since)}`
-  return 'Nothing open'
-}
-
-/** The compact now of a card: which kind it is and how long, `null` when nothing is open. */
-export function nowBrief(
-  t: WorkTimelineLike,
-  now: Date | number,
-): { kind: Exclude<CurrentActivity['kind'], 'nothing'>; text: string } | null {
-  const a = currentActivity(t, now)
-  if (a.kind === 'nothing') return null
-  if (a.kind === 'waiting-human') return { kind: a.kind, text: dur(Math.max(0, +now - Date.parse(a.since))) }
-  return { kind: a.kind, text: dur(a.ms) }
 }

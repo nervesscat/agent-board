@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { timelineFromActivity } from '#/lib/activityTimeline'
 import { clock } from '#/lib/format'
 import type { WorkTimelineLike } from '#/lib/workStatus'
-import type { WorkTotals } from '#/lib/workTimeline'
+import type { Liveness, Stalled, WorkTotals } from '#/lib/workTimeline'
 
-import { LastHeard, NowLine, StallNotice, WorkSummary } from './WorkStatus'
+import { LastHeard, WorkLine, WorkSummary } from './WorkStatus'
 
 const at = (hhmm: string) => `2026-10-20T${hhmm}:00.000Z`
 const NOW = Date.parse(at('12:30'))
@@ -22,90 +22,176 @@ const timeline = (more: Partial<WorkTimelineLike> = {}): WorkTimelineLike => ({
   start: at('12:00'),
   end: at('12:30'),
   lastHeard: null,
+  lastWordAt: null,
+  stage: { key: 'in_progress', kind: 'active', since: at('11:00') },
+  progressAt: at('12:18'),
+  waitingOnHuman: false,
   ...more,
 })
 
-const span = (more: Record<string, unknown> = {}) => ({
-  id: 1,
+const liveness = (more: Partial<Liveness> = {}): Liveness => ({
+  state: 'working',
+  agent: 'claude',
   phase: 'build',
-  round: null,
-  agent: 'builder',
-  by: 'builder',
-  start: at('11:47'),
-  end: at('12:30'),
-  open: true,
+  since: at('11:47'),
+  lastSignalAt: at('12:28'),
+  lastWordAt: at('12:18'),
+  silentMinutes: 12,
+  spans: [
+    { phase: 'build', agent: 'claude', since: at('11:47'), lastWordAt: at('12:18'), silentMinutes: 12 },
+  ],
   ...more,
 })
 
 const html = (el: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(el)
 const text = (markup: string) => markup.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'")
 
-describe('NowLine', () => {
-  it('reads a delegated build as building, with the agent and the time', () => {
-    const t = timeline({
-      spans: [span()],
-      waits: [
-        {
-          id: 2,
-          reason: 'delegate',
-          agent: 'orch',
-          note: '',
-          start: at('11:47'),
-          end: at('12:30'),
-          open: true,
-          on: 'builder',
-        },
-      ],
-    })
-    const out = html(createElement(NowLine, { timeline: t, now: NOW }))
-    expect(text(out)).toContain('Building · builder · 43 min')
-    expect(out).not.toContain('Waiting')
+describe('WorkLine', () => {
+  it('words a working ticket on its agent’s last word, with the per-agent detail under it', () => {
+    const out = html(
+      createElement(WorkLine, {
+        timeline: timeline({ liveness: liveness(), progressAt: at('12:18') }),
+        now: NOW,
+        detail: true,
+      }),
+    )
+    expect(text(out)).toContain('Working now · last word 12m')
+    expect(text(out)).toContain('claude · build · 43 min · last word 12 min ago')
+    expect(out).toContain('data-testid="work-line"')
+    expect(out).toContain('data-state="working"')
+    // The agent, phase and span age live in the detail, not in the line.
+    expect(text(out)).not.toContain('Working now · claude')
   })
 
-  it('reads an open human wait as waiting on you since, in amber, with an icon and words', () => {
-    const t = timeline({
-      waits: [
-        {
-          id: 2,
-          reason: 'human',
-          agent: 'builder',
-          on: null,
-          note: '',
-          start: at('12:09'),
-          end: at('12:30'),
-          open: true,
-        },
-      ],
-    })
-    const out = html(createElement(NowLine, { timeline: t, now: NOW }))
-    expect(text(out)).toBe(`Waiting on you for 21 min since ${clock(at('12:09'))}`)
+  it('words a human wait as Waiting on you, in amber, with no invented measure', () => {
+    const out = html(
+      createElement(WorkLine, {
+        timeline: timeline({
+          waits: [
+            {
+              id: 2,
+              reason: 'human',
+              agent: 'builder',
+              on: null,
+              note: '',
+              start: at('12:09'),
+              end: at('12:30'),
+              open: true,
+            },
+          ],
+          liveness: liveness({ state: 'waiting', since: at('12:09') }),
+          waitingOnHuman: true,
+        }),
+        now: NOW,
+      }),
+    )
+    expect(text(out)).toBe('Waiting on you')
     expect(out).toContain('text-amber-800')
     expect(out).toContain('dark:text-amber-300')
-    expect(out).toContain('<svg')
+    expect(out).toContain('data-state="waiting"')
   })
 
-  it('reads nothing open in words, muted', () => {
-    const out = html(createElement(NowLine, { timeline: timeline(), now: NOW }))
+  it('words a stall as No word and keeps its why, with the stage when it is not the default one', () => {
+    const out = html(
+      createElement(WorkLine, {
+        timeline: timeline({
+          liveness: liveness({ state: 'stalled', lastSignalAt: at('11:43'), spans: [] }),
+          stalled: { since: at('11:43'), minutes: 47, lastAgent: 'claude', lastBy: '', lastFrom: 'event' },
+          progressAt: at('10:00'),
+        }),
+        now: NOW,
+        stage: 'Bug Found',
+      }),
+    )
+    expect(text(out)).toBe('No word 47m')
+    expect(out).toContain('data-state="no-word"')
+    // The why is the tooltip's (asserted on the answer itself); the row's words are exact.
+    expect(text(out)).not.toContain('Stalled')
+  })
+
+  it('words a lost run as Lost contact with its detail, and never as a stall', () => {
+    const out = html(
+      createElement(WorkLine, {
+        timeline: timeline({
+          liveness: liveness({
+            state: 'lost',
+            since: at('11:44'),
+            spans: [
+              {
+                phase: 'build',
+                agent: 'claude',
+                since: at('11:44'),
+                lastWordAt: at('12:18'),
+                silentMinutes: 12,
+              },
+            ],
+          }),
+          progressAt: at('12:18'),
+        }),
+        now: NOW,
+        detail: true,
+      }),
+    )
+    expect(text(out)).toContain('Lost contact · 46m')
+    expect(text(out)).toContain('claude · build · 46 min · last word 12 min ago')
+    expect(out).toContain('data-state="lost"')
+    expect(text(out)).not.toContain('No word')
+  })
+
+  it('words the neutral gap as Nothing open, and draws nothing for a row that is not live', () => {
+    const out = html(
+      createElement(WorkLine, {
+        timeline: timeline({
+          liveness: liveness({
+            state: 'idle',
+            lastSignalAt: at('12:20'),
+            lastWordAt: at('12:20'),
+            spans: [],
+          }),
+          progressAt: at('12:20'),
+        }),
+        now: NOW,
+      }),
+    )
     expect(text(out)).toBe('Nothing open')
-    expect(out).toContain('text-muted-foreground')
+    expect(out).toContain('data-state="nothing"')
+    expect(html(createElement(WorkLine, { timeline: timeline({ live: false }), now: NOW }))).toBe('')
+  })
+
+  it('words a review ticket Your turn from its stage, never from the work', () => {
+    const out = html(
+      createElement(WorkLine, {
+        timeline: timeline({ stage: { key: 'review', kind: 'review', since: at('10:30') } }),
+        now: NOW,
+      }),
+    )
+    expect(text(out)).toBe('Your turn · waiting 2h')
+    expect(out).toContain('data-state="your-turn"')
   })
 
   describe('on the server clock', () => {
     afterEach(() => vi.useRealTimers())
 
     it('counts the elapsed time on the server clock when the browser clock runs behind it', () => {
-      // The browser reads 12:25 while the server stamped 12:30 (its span began at 12:20): 10 minutes, not 5.
+      // The browser reads 12:20 while the server stamped 12:30 (the last word was 12:10): 20 minutes, not 10.
       vi.useFakeTimers({ toFake: ['Date'] })
-      vi.setSystemTime(Date.parse(at('12:25')))
-      const t = timeline({ now: at('12:30'), spans: [span({ start: at('12:20') })] })
-      expect(text(html(createElement(NowLine, { timeline: t })))).toBe('Building · builder · 10 min')
+      vi.setSystemTime(Date.parse(at('12:20')))
+      const t = timeline({ now: at('12:30'), liveness: liveness(), progressAt: at('12:18') })
+      expect(text(html(createElement(WorkLine, { timeline: t })))).toBe('Working now · last word 12m')
     })
 
     it('counts the same time when the browser clock runs ahead of the server', () => {
       vi.useFakeTimers({ toFake: ['Date'] })
-      vi.setSystemTime(Date.parse(at('12:35')))
-      const t = timeline({ now: at('12:30'), spans: [span({ start: at('12:20') })] })
-      expect(text(html(createElement(NowLine, { timeline: t })))).toBe('Building · builder · 10 min')
+      vi.setSystemTime(Date.parse(at('12:40')))
+      const t = timeline({ now: at('12:30'), liveness: liveness(), progressAt: at('12:18') })
+      expect(text(html(createElement(WorkLine, { timeline: t })))).toBe('Working now · last word 12m')
+    })
+
+    it('corrects a lost contact line too, not only the working one', () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(Date.parse(at('12:20')))
+      const t = timeline({ now: at('12:30'), liveness: liveness({ state: 'lost', since: at('11:44') }) })
+      expect(text(html(createElement(WorkLine, { timeline: t })))).toBe('Lost contact · 46m')
     })
   })
 })
@@ -140,39 +226,7 @@ describe('LastHeard', () => {
   })
 })
 
-describe('StallNotice', () => {
-  const closed = timeline({
-    stalled: { since: at('12:08'), minutes: 33, lastAgent: 'builder', lastBy: 'builder', lastFrom: 'event' },
-    spans: [span({ start: at('11:50'), end: at('12:08'), open: false })],
-    lastHeard: {
-      at: at('12:08'),
-      agent: 'builder',
-      by: 'builder',
-      kind: 'span_end',
-      phase: 'build',
-      reason: 'run returned before the builder reported',
-      note: '',
-    },
-  })
-
-  it('gives a badge with the same head as the sentence, the why in its tooltip, and the why in the sentence', () => {
-    const badge = html(createElement(StallNotice, { timeline: closed }))
-    expect(text(badge)).toBe('Stalled 33 min')
-    expect(badge).toContain('data-testid="stall-notice"')
-    expect(badge).toContain('dark:text-amber-300')
-    const inline = html(createElement(StallNotice, { timeline: closed, variant: 'inline' }))
-    expect(text(inline)).toBe(
-      `Stalled 33 min: nothing open since the build ended at ${clock(at('12:08'))} ('run returned before the builder reported')`,
-    )
-  })
-
-  it('says the stage in the why when the stage is not the default one', () => {
-    const inline = html(
-      createElement(StallNotice, { timeline: closed, variant: 'inline', stage: 'Bug Found' }),
-    )
-    expect(text(inline)).toBe(`Stalled 33 min: in Bug Found, no agent heard from since ${clock(at('12:08'))}`)
-  })
-
+describe('WorkLine from an activity', () => {
   it('dates a stall with nothing open by the span that ended last, when the activity names it', () => {
     const t = timelineFromActivity(
       {
@@ -180,16 +234,22 @@ describe('StallNotice', () => {
         waits: [],
         lastHeard: null,
         lastClosedSpan: { phase: 'build', agent: 'builder', start: at('11:50'), end: at('12:08') },
+        stage: { key: 'in_progress', kind: 'active', since: at('10:00') },
+        liveness: {
+          state: 'stalled',
+          agent: 'builder',
+          phase: 'build',
+          since: at('12:08'),
+          lastSignalAt: at('12:08'),
+          lastWordAt: at('12:08'),
+          silentMinutes: 22,
+          spans: [],
+        },
+        progressAt: at('12:08'),
       },
-      { since: at('12:08'), minutes: 22, lastAgent: 'builder', lastBy: '', lastFrom: 'event' },
+      { since: at('12:08'), minutes: 22, lastAgent: 'builder', lastBy: '', lastFrom: 'event' } as Stalled,
     )
-    expect(text(html(createElement(StallNotice, { timeline: t, variant: 'inline' })))).toBe(
-      `Stalled 22 min: nothing open since the build ended at ${clock(at('12:08'))}`,
-    )
-  })
-
-  it('renders nothing when the ticket is not stalled', () => {
-    expect(html(createElement(StallNotice, { timeline: timeline() }))).toBe('')
+    expect(text(html(createElement(WorkLine, { timeline: t, now: NOW })))).toBe('No word 22m')
   })
 })
 

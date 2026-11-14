@@ -1,6 +1,16 @@
 import { expect, expectTooltip, ok, test } from './fixtures'
 import { inDatabase } from './db'
-import { age, as, create, errorsOn, record, scrollsSideways, workedTicket } from './workTimeline'
+import {
+  age,
+  as,
+  create,
+  errorsOn,
+  quietTicket,
+  record,
+  reviewTicket,
+  scrollsSideways,
+  workedTicket,
+} from './workTimeline'
 
 /**
  * The work timeline on the ticket page: the Timeline card's header (what is open, stalled and why, last
@@ -15,6 +25,8 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   agent,
 }) => {
   const errors = errorsOn(page)
+  // The browser clock runs ten minutes behind the server's: the one line still counts on the server's, once.
+  await page.clock.setFixedTime(new Date(Date.now() - 10 * 60_000))
   const { t } = await workedTicket(human, agent, project)
   await record(agent, project, t.id, { kind: 'heartbeat', note: 'reading the importer' })
   await record(agent, project, t.id, { kind: 'heartbeat', note: 'writing the parser' })
@@ -28,12 +40,15 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   ).toBeVisible()
 
   // The header: what is open now, the worked and waited summary, the last heartbeat. A heartbeat just now:
-  // not stalled, and the story is folded away until it is asked for.
-  await expect(card.getByTestId('now-line')).toContainText('Building · claude')
+  // not No word, and the story is folded away until it is asked for.
+  const line = card.getByTestId('work-line')
+  await expect(line).toHaveAttribute('data-state', 'working')
+  await expect(line).toContainText(/Working now · last word [01]m/)
+  await expect(card.getByText(/^claude · build · \d+ min · last word \d+ min ago$/)).toBeVisible()
   await expect(card.getByTestId('work-summary')).toContainText('Waited 20 min')
   // The legend is gone: no key in the card, and no toggle for one.
   await expect(card.getByText('Key', { exact: true })).toHaveCount(0)
-  await expect(card.getByTestId('stall-notice')).toHaveCount(0)
+  await expect(card.locator('[data-state="no-word"]')).toHaveCount(0)
   await expect(card.getByTestId('last-heard')).toContainText('claude: running the tests')
   await expect(card.getByRole('list', { name: 'Timeline story' })).toHaveCount(0)
   const more = card.getByRole('button', { name: 'Show more' })
@@ -91,6 +106,17 @@ test('the ticket page has a Timeline card: what is open, the story, heartbeats f
   // Its creation is an event: the story has that one line, behind Show more.
   await empty.getByRole('button', { name: 'Show more' }).click()
   await expect(empty.getByRole('list', { name: 'Timeline story' })).toContainText('created in To do')
+  // The ticket page draws the same one line: a day-long quiet and a review stage's turn.
+  const quiet = await quietTicket(human, agent, project)
+  await page.goto(`/projects/${project.id}/features/${quiet.t.id}`)
+  const quietCard = page.getByRole('region', { name: 'Timeline' })
+  await expect(quietCard.getByTestId('work-line')).toHaveAttribute('data-state', 'quiet')
+  await expect(quietCard.getByTestId('work-line')).toContainText('Quiet 1d')
+  const turn = await reviewTicket(human, project)
+  await page.goto(`/projects/${project.id}/features/${turn.t.id}`)
+  const turnCard = page.getByRole('region', { name: 'Timeline' })
+  await expect(turnCard.getByTestId('work-line')).toHaveAttribute('data-state', 'your-turn')
+  await expect(turnCard.getByTestId('work-line')).toContainText('Your turn · waiting 2d')
   expect(errors).toEqual([])
 })
 
@@ -183,9 +209,10 @@ test('a stalled build says why, and a wait pairs into one row with its duration'
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const card = page.getByRole('region', { name: 'Timeline' })
-  await expect(card.getByTestId('now-line')).toContainText('Nothing open')
-  await expect(card.getByTestId('stall-notice')).toContainText(/Stalled (39|40) min/)
-  await expect(card.getByTestId('stall-notice')).toContainText('nothing open since the build ended at')
+  const line = card.getByTestId('work-line')
+  await expect(line).toHaveAttribute('data-state', 'no-word')
+  await expect(line).toContainText(/No word (39|40)m/)
+  await expectTooltip(line, /nothing open since the build ended at/)
   await card.getByRole('button', { name: 'Show more' }).click()
   const events = card.getByRole('list', { name: 'Timeline story' })
   await expect(events).toContainText('waited for spec · 1 min 25 s: spec approved')
@@ -273,7 +300,8 @@ test('a stall in another active stage names that stage in its why, on the ticket
 
   await page.goto(`/projects/${project.id}/features/${t.id}`)
   const card = page.getByRole('region', { name: 'Timeline' })
-  await expect(card.getByTestId('stall-notice')).toContainText(
-    /Stalled \d+ min: in Bug Found, no agent heard from since/,
-  )
+  const line = card.getByTestId('work-line')
+  await expect(line).toHaveAttribute('data-state', 'no-word')
+  await expect(line).toContainText(/No word \d+m/)
+  await expectTooltip(line, /^in Bug Found, no agent heard from since/)
 })

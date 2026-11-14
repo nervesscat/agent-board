@@ -4,7 +4,8 @@ import { db, schema } from '#/db'
 import { retryWhileLocked } from '#/db/busy'
 import { COMMENT_PARENTS, type Complexity, DEFAULT_COMPLEXITY, type FeedTab } from '#/lib/constants'
 import { AUTO_PHASE_RULE, autoPhaseOf } from '#/lib/autoPhases'
-import { columnOrder, placeInColumn, stageColumn } from '#/lib/stages'
+import { columnOrder, isClosed, placeInColumn, stageColumn } from '#/lib/stages'
+import { nextTask, treeTasks } from '#/lib/tasks'
 import { MAX_TAG_LENGTH, MAX_TAGS } from '#/lib/tags'
 import { logActivity } from './activity'
 import { reconcileTicket } from './autoPhases'
@@ -72,32 +73,6 @@ export type LaneCounts = {
 }
 
 /**
- * The ticket's tasks as one flat list in tree order: each top-level task, then its subtasks, by
- * ascending position (id breaks a tie) — the order `getTicketFull` hands them out in.
- */
-function treeTasks<T extends Pick<schema.Task, 'id' | 'parentId' | 'position'>>(tasks: T[]): T[] {
-  const rank = (a: T, b: T) => a.position - b.position || a.id - b.id
-  return tasks
-    .filter((task) => task.parentId === null)
-    .sort(rank)
-    .flatMap((task) => [task, ...tasks.filter((sub) => sub.parentId === task.id).sort(rank)])
-}
-
-/**
- * The task a ticket works next: the first open one in tree order that is no container. An open parent
- * with open subtasks is skipped in favour of its subtasks (its last one ticked settles it done), so a
- * blocked parent surfaces only once it is its own first open task. Null when every task is done.
- */
-export function nextTask<T extends Pick<schema.Task, 'id' | 'parentId' | 'position' | 'done'>>(
-  tasks: T[],
-): T | null {
-  const openParents = new Set(
-    tasks.flatMap((task) => (!task.done && task.parentId !== null ? [task.parentId] : [])),
-  )
-  return treeTasks(tasks).find((task) => !task.done && !openParents.has(task.id)) ?? null
-}
-
-/**
  * Every ticket of a project with its own task progress, the progress rolled up over its lanes (and
  * theirs), how many of those tasks are blocked on the human and whether one of them is the step the
  * ticket (or a lane of it) works next, and how many lanes it has in each stage. One pass over the
@@ -146,9 +121,11 @@ function projectTickets(projectId: number, opts: { prTickets?: boolean } = {}) {
       openDecisions.set(u.ticketId, (openDecisions.get(u.ticketId) ?? 0) + 1)
   const children = new Map<number, schema.Ticket[]>()
   for (const t of rows) if (t.parentId) children.set(t.parentId, [...(children.get(t.parentId) ?? []), t])
-  // A cancelled lane's tasks are no longer part of the work.
+  // A lane that finished or was dropped is no longer part of the work: the same scope the liveness
+  // roll-up (a closed lane's blocked step is not the step it works next) and the summary's blocked
+  // tasks use, so a card's badge, its count and its progress cannot say what the one line does not.
   const workingLanes = (id: number) =>
-    (children.get(id) ?? []).filter((lane) => kindOf(stages, lane.status) !== 'cancelled')
+    (children.get(id) ?? []).filter((lane) => !isClosed(kindOf(stages, lane.status)))
   const rollup = (id: number): Progress =>
     workingLanes(id).reduce(
       (acc, lane) => {
