@@ -94,6 +94,21 @@ Edit `src/db/schema.ts`, then `pnpm db:generate`. Give the generated migration a
 - Keep personal data out of the repository: no real names of private projects, local paths, machine or
   tailnet names, tokens or email addresses in code, tests, docs or screenshots.
 
+### Branch protection
+
+`dev` and `main` only take changes through a pull request: a direct push is refused, for maintainers too,
+and so is a force-push or a branch deletion. A pull request merges once `check`, `desktop` and
+`desktop-linux` pass on it, and again on the branch as it stands, so a branch that falls behind or takes
+a new commit waits for a green run. No approval is required, since pull requests are often pushed with the
+maintainer's own account: the checks are the gate.
+
+`dev` is the default branch and everything lands through it, so a change that reaches it with a red CI
+leaves every pull request after it to inherit the failure.
+
+Only in an emergency, when `dev` is broken and there is no green way out, may a repository admin turn the
+rule off on the branch's protection settings, land the fix through a normal pull request with green
+checks, and turn the rule back on at once, saying in that pull request why it was bypassed.
+
 ## Releases
 
 Maintainers publish the desktop installers as described in `docs/releasing.md`.
