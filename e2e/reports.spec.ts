@@ -79,7 +79,7 @@ test('sets the report prompt and a daily cadence, posts today’s report; an age
   await expect(thumb).toContainText('1 page')
   // The text report before it is kept as an earlier version.
   await expect(card.getByText('Shipped the parser. Next: tests.')).toHaveCount(0)
-  await card.getByRole('button', { name: 'show 1 earlier version' }).click()
+  await card.getByRole('button', { name: 'History (1)' }).click()
   await expect(card.getByText('Shipped the parser. Next: tests.')).toBeVisible()
 
   // A click opens it in the gallery; the file itself is served as a PDF.
