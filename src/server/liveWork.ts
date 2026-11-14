@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or } from 'drizzle-orm'
 
 import { db, schema } from '#/db'
-import { gist, listTickets, nextTask } from './features'
+import { nextTask } from '#/lib/tasks'
+import { gist, listTickets } from './features'
 import { listRepos } from './repos'
 import { getProject } from './projects'
 import { listStages, type Stage } from './stages'
