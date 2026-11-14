@@ -32,7 +32,7 @@ import { cn } from 'cn'
 import { Skeleton } from '#/components/ui/skeleton'
 import { Tip } from '#/components/ui/tooltip'
 import { stallFor } from '#/components/StallLine'
-import { NowLine, StallNotice } from '#/components/WorkStatus'
+import { WorkLine } from '#/components/WorkStatus'
 import { timelineFromActivity, stallStage } from '#/lib/activityTimeline'
 import { threadAnchor } from '#/lib/anchors'
 import type { AreaId } from '#/lib/layout'
@@ -153,6 +153,7 @@ function ProjectBlock({ p, now, dismiss }: CardProps) {
         const Shown = CARDS[card]
         return <Shown key={card} p={p} now={now} dismiss={dismiss} />
       })}
+      {p.lostContact.length > 0 && <LostContactCard p={p} />}
     </div>
   )
 }
@@ -354,16 +355,6 @@ function HeardLine({ timeline }: { timeline: WorkTimelineLike }) {
         <span className="min-w-0 truncate">{`· ${h.agent}${h.summary ? `: ${h.summary}` : ''}`}</span>
       )}
     </p>
-  )
-}
-
-function Stale() {
-  return (
-    <Tip content="No progress post in over 24 hours">
-      <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] leading-none font-medium text-amber-700 dark:text-amber-400">
-        <Hourglass className="size-3" /> stale
-      </span>
-    </Tip>
   )
 }
 
@@ -612,19 +603,20 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                     className="hover:underline"
                     onClick={() => dismiss(needKeys.stalled(s))}
                   >
-                    Stalled: #{s.ticketId} {s.title}
+                    <WorkLine
+                      timeline={timeline}
+                      now={now}
+                      stage={stallStage(p.stages, s.status)}
+                      variant="inline"
+                      className="inline"
+                    />
+                    {`: #${s.ticketId} ${s.title}`}
                   </Link>
                 }
                 meta={
                   <>
                     <StageBadge p={p} status={s.status} />
                     {s.parent && <span className="truncate">lane of #{s.parent.id}</span>}
-                    <StallNotice
-                      timeline={timeline}
-                      stage={stallStage(p.stages, s.status)}
-                      variant="inline"
-                      className="w-full"
-                    />
                     {s.lastAgent && (
                       <span className="min-w-0 wrap-anywhere">
                         last{' '}
@@ -662,7 +654,15 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                   {t.parent && <span className="truncate">lane of #{t.parent.id}</span>}
                   {t.assignee && <Who p={p} name={t.assignee} />}
                   {t.prNumber && <span>PR #{t.prNumber}</span>}
-                  <span>{ago(t.updatedAt)}</span>
+                  <WorkLine
+                    timeline={{
+                      ...timelineFromActivity(null, null),
+                      stage: t.stage,
+                      waitingOnHuman: t.waitingOnHuman,
+                    }}
+                    now={now}
+                    variant="inline"
+                  />
                 </>
               }
             />
@@ -673,7 +673,52 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
   )
 }
 
-function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
+/**
+ * Lost contact: the agents whose lease expired with their span still open. Its own block, outside
+ * Needs you (that is the human's turn), naming each agent, its phase, since when and its last word.
+ */
+function LostContactCard({ p }: { p: ProjectSummary }) {
+  const rows = p.lostContact
+  return (
+    <Section
+      icon={AlertTriangle}
+      title="Lost contact"
+      count={rows.length}
+      scroll
+      className="lg:order-2 lg:col-span-full"
+    >
+      <Rows>
+        {rows.map((l) => (
+          <Row
+            key={l.ticketId}
+            icon={<AlertTriangle className="text-rose-600 dark:text-rose-400" />}
+            title={
+              <Link
+                to="/projects/$id/features/$ticketId"
+                params={{ id: String(p.project.id), ticketId: String(l.ticketId) }}
+                className="hover:underline"
+              >
+                Lost contact: <span className="text-muted-foreground">#{l.ticketId}</span> {l.title}
+              </Link>
+            }
+            meta={
+              <>
+                <StageBadge p={p} status={l.status} />
+                {l.parent && <span className="truncate">lane of #{l.parent.id}</span>}
+                <span className="min-w-0 wrap-anywhere">
+                  {l.agent} · {l.phase} · {since(l.since)} · last word {l.silentMinutes} min ago
+                </span>
+              </>
+            }
+          />
+        ))}
+      </Rows>
+    </Section>
+  )
+}
+
+/** The Overview's in-progress rows: each ticket's now line, the agent's last word and how long on it. */
+export function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
   const items = p.inProgress
   return (
     <Section icon={Play} title="In progress" count={items.length} scroll className="lg:order-3">
@@ -687,18 +732,10 @@ function InProgress({ p, now }: { p: ProjectSummary; now: number }) {
               <Row
                 key={t.id}
                 title={<TicketLink p={p} id={t.id} title={t.title} />}
-                side={
-                  <>
-                    {t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}
-                    {timeline.stalled && (
-                      <StallNotice timeline={timeline} stage={stallStage(p.stages, t.status)} />
-                    )}
-                    {t.stale && <Stale />}
-                  </>
-                }
+                side={<>{t.kind === 'blocked' && <StageBadge p={p} status={t.status} />}</>}
                 meta={
                   <div className="w-full min-w-0">
-                    <NowLine timeline={timeline} />
+                    <WorkLine timeline={timeline} now={now} stage={stallStage(p.stages, t.status)} detail />
                     <HeardLine timeline={timeline} />
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <Who p={p} name={t.assignee} />
@@ -857,7 +894,7 @@ function Next({ p }: { p: ProjectSummary }) {
   )
 }
 
-function CarryingOver({ p }: { p: ProjectSummary }) {
+function CarryingOver({ p, now }: CardProps) {
   const items = p.carryingOver
   return (
     <Section
@@ -871,29 +908,28 @@ function CarryingOver({ p }: { p: ProjectSummary }) {
         <Quiet>Nothing carried over from before today.</Quiet>
       ) : (
         <Rows>
-          {items.map((t) => (
-            <Row
-              key={t.id}
-              title={<TicketLink p={p} id={t.id} title={t.title} />}
-              side={
-                <>
-                  <StageBadge p={p} status={t.status} />
-                  {t.stale && <Stale />}
-                </>
-              }
-              meta={
-                <div className="w-full min-w-0">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <Who p={p} name={t.assignee} />
-                    <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
-                      <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
-                    </Tip>
+          {items.map((t) => {
+            const timeline = timelineFromActivity(t.activity, t.stalled ? stalledOf(p, t.id, now) : null)
+            return (
+              <Row
+                key={t.id}
+                title={<TicketLink p={p} id={t.id} title={t.title} />}
+                side={<StageBadge p={p} status={t.status} />}
+                meta={
+                  <div className="w-full min-w-0">
+                    <WorkLine timeline={timeline} now={now} stage={stallStage(p.stages, t.status)} detail />
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <Who p={p} name={t.assignee} />
+                      <Tip content={`Work on it started ${new Date(t.since).toLocaleString()}`}>
+                        <span>{t.days ? `${plural(t.days, 'day')} in progress` : since(t.since)}</span>
+                      </Tip>
+                    </div>
+                    <LastPost post={t.lastPost} />
                   </div>
-                  <LastPost post={t.lastPost} />
-                </div>
-              }
-            />
-          ))}
+                }
+              />
+            )
+          })}
         </Rows>
       )}
     </Section>

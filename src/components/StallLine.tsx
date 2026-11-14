@@ -2,8 +2,8 @@ import type { Stalled } from '#/lib/workTimeline'
 
 /**
  * A stall from the summary's fields, with its minutes counted up to now on the server's clock: the
- * summary carries the moment, the page counts up to now. How the stall reads (its notice, its why) is
- * `StallNotice` in WorkStatus.
+ * summary carries the moment, the page counts up to now. How the stall reads (its line and why) is
+ * `workLine` in src/lib/workStatus.ts, drawn by `WorkLine` in WorkStatus.
  */
 
 /**

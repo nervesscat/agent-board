@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { StageLike } from './stages'
 import type { Activity, Stalled } from './workTimeline'
-import { hasWork, nowBrief, nowWords, stallStage, timelineFromActivity } from './activityTimeline'
-import { stallReason } from './workStatus'
+import { hasWork, rowWorkLine, stallStage, timelineFromActivity } from './activityTimeline'
+import { lostContact, stallReason, workLine } from './workStatus'
 
 const at = (hhmm: string) => `2026-10-20T${hhmm}:00.000Z`
 const NOW = Date.parse(at('12:30'))
@@ -57,12 +57,39 @@ describe('the why of a stall comes from the activity', () => {
     expect(stallReason(t)).toMatchObject({ kind: 'waiting', on: 'builder-1', reason: 'lock' })
   })
 
-  it('an open span with its agent silent is the why when nothing waits', () => {
+  it('an open span is never a stall: with an expired lease it reads Lost contact', () => {
     const t = timelineFromActivity(
       { ...NONE, spans: [{ phase: 'build', agent: 'claude', since: at('11:00') }] },
       stalled(at('11:00')),
     )
-    expect(stallReason(t)).toMatchObject({ kind: 'working', agent: 'claude', phase: 'build' })
+    // A stalled activity has nothing open, so the why cannot name a working span.
+    expect(stallReason(t)).toMatchObject({ kind: 'nothing-open' })
+    const lost = timelineFromActivity(
+      {
+        ...NONE,
+        spans: [{ phase: 'build', agent: 'claude', since: at('11:00') }],
+        liveness: {
+          state: 'lost',
+          agent: 'claude',
+          phase: 'build',
+          since: at('11:00'),
+          lastSignalAt: at('11:00'),
+          lastWordAt: at('11:30'),
+          silentMinutes: 26,
+          spans: [
+            {
+              phase: 'build',
+              agent: 'claude',
+              since: at('11:00'),
+              lastWordAt: at('11:30'),
+              silentMinutes: 26,
+            },
+          ],
+        },
+      },
+      null,
+    )
+    expect(lostContact(lost)).toMatchObject({ agent: 'claude', phase: 'build', silentMinutes: 26 })
   })
 
   it('with nothing open, the why says nothing is open since the last signal', () => {
@@ -84,29 +111,89 @@ describe('the why of a stall comes from the activity', () => {
   })
 })
 
-describe('nowWords and nowBrief', () => {
-  it('a building span reads as the verb, the agent and how long', () => {
+describe('the facts the one work-state line reads', () => {
+  it('a building activity words Working now on its own agent’s last word', () => {
     const t = timelineFromActivity(
-      { ...NONE, spans: [{ phase: 'build', agent: 'claude', since: at('11:47') }] },
+      {
+        ...NONE,
+        spans: [{ phase: 'build', agent: 'claude', since: at('11:47') }],
+        liveness: {
+          state: 'working',
+          agent: 'claude',
+          phase: 'build',
+          since: at('11:47'),
+          lastSignalAt: at('12:28'),
+          lastWordAt: at('12:18'),
+          silentMinutes: 12,
+          spans: [
+            {
+              phase: 'build',
+              agent: 'claude',
+              since: at('11:47'),
+              lastWordAt: at('12:18'),
+              silentMinutes: 12,
+            },
+          ],
+        },
+        stage: { key: 'in_progress', kind: 'active', since: at('11:00') },
+        progressAt: at('12:18'),
+        waitingOnHuman: false,
+      },
       null,
     )
-    expect(nowWords(t, NOW)).toBe('Building · claude · 43 min')
-    expect(nowBrief(t, NOW)).toEqual({ kind: 'building', text: '43 min' })
+    expect(workLine(t, NOW)).toMatchObject({ state: 'working', text: 'Working now · last word 12m' })
+    expect(workLine(t, NOW)?.detail).toEqual(['claude · build · 43 min · last word 12 min ago'])
   })
 
-  it('a human wait reads as waiting on you since its start, timed as how long it has run', () => {
+  it('an open human wait carried on the activity words Waiting on you', () => {
     const t = timelineFromActivity(
-      { ...NONE, waits: [{ reason: 'human', agent: 'claude', on: null, since: at('12:00') }] },
+      {
+        ...NONE,
+        waits: [{ reason: 'human', agent: 'claude', on: null, since: at('12:00') }],
+        liveness: {
+          state: 'waiting',
+          agent: 'claude',
+          phase: 'spec',
+          since: at('12:00'),
+          lastSignalAt: at('12:00'),
+          lastWordAt: at('12:00'),
+          silentMinutes: 30,
+          spans: [],
+        },
+        stage: { key: 'in_progress', kind: 'active', since: at('11:00') },
+        progressAt: at('12:00'),
+        waitingOnHuman: true,
+      },
       null,
     )
-    expect(nowWords(t, NOW)).toMatch(/^Waiting on you for 30 min since /)
-    expect(nowBrief(t, NOW)).toEqual({ kind: 'waiting-human', text: '30 min' })
+    expect(workLine(t, NOW)).toMatchObject({ state: 'waiting', text: 'Waiting on you' })
   })
 
-  it('nothing open reads as nothing, with no compact mark', () => {
-    const t = timelineFromActivity(NONE, null)
-    expect(nowWords(t, NOW)).toBe('Nothing open')
-    expect(nowBrief(t, NOW)).toBeNull()
+  it('carries a review stage into Your turn, and says nothing open for an idle activity', () => {
+    const review = timelineFromActivity(
+      { ...NONE, stage: { key: 'review', kind: 'review', since: at('10:30') } },
+      null,
+    )
+    expect(workLine(review, NOW)).toMatchObject({ state: 'your-turn', text: 'Your turn · waiting 2h' })
+    const idle = timelineFromActivity(
+      {
+        ...NONE,
+        stage: { key: 'in_progress', kind: 'active', since: at('11:00') },
+        liveness: {
+          state: 'idle',
+          agent: 'claude',
+          phase: '',
+          since: at('12:20'),
+          lastSignalAt: at('12:20'),
+          lastWordAt: at('12:20'),
+          silentMinutes: 10,
+          spans: [],
+        },
+        progressAt: at('12:20'),
+      },
+      null,
+    )
+    expect(workLine(idle, NOW)).toMatchObject({ state: 'nothing', text: 'Nothing open' })
   })
 })
 
@@ -135,5 +222,19 @@ describe('stallStage and hasWork', () => {
     expect(hasWork('review')).toBe(true)
     expect(hasWork('open')).toBe(false)
     expect(hasWork('done')).toBe(false)
+  })
+})
+
+describe('rowWorkLine', () => {
+  const stages: StageLike[] = [
+    { key: 'todo', name: 'To do', kind: 'open', color: 'gray' },
+    { key: 'in_progress', name: 'In progress', kind: 'active', color: 'gray' },
+    { key: 'done', name: 'Done', kind: 'done', color: 'gray' },
+  ]
+  it('has no line for a row whose stage is not open work, and a line for one in progress', () => {
+    const row = { activity: null, stalled: null }
+    expect(rowWorkLine({ ...row, status: 'done' }, stages)).toBeNull()
+    expect(rowWorkLine({ ...row, status: 'todo' }, stages)).toBeNull()
+    expect(rowWorkLine({ ...row, status: 'in_progress' }, stages)?.state).toBe('nothing')
   })
 })

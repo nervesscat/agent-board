@@ -1,7 +1,16 @@
 import type { Project } from '#/lib/api'
 import { HUMAN } from './env'
 import { expect, expectTooltip, ok, section, test } from './fixtures'
-import { as, age, create, record, workedTicket } from './workTimeline'
+import {
+  as,
+  age,
+  create,
+  quietTicket,
+  record,
+  reviewTicket,
+  stalledTicket,
+  workedTicket,
+} from './workTimeline'
 
 /**
  * Stalled tickets: the warning on a card, a list row and Needs you (its why and since when, in the same words
@@ -14,37 +23,59 @@ test('a stalled ticket shows on its card, in the list and in Needs you, linking 
   human,
   agent,
 }) => {
-  const { t } = await workedTicket(human, agent, project)
+  const { t } = await stalledTicket(human, agent, project)
   const other = await create(human, project, { title: 'All quiet', status: 'in_progress' })
   await record(agent, project, other.id, { kind: 'heartbeat' })
+  const quiet = await quietTicket(human, agent, project)
+  const turn = await reviewTicket(human, project)
 
   await page.goto(`/projects/${project.id}/features?view=board`)
   const card = page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) })
-  await expect(card).toContainText('Stalled')
-  // The badge's tooltip: the Now line, then the why.
-  await expectTooltip(
-    card.getByTestId('stall-notice'),
-    /Building · claude · \d+ min\nclaude has a build open/,
-  )
-  await expect(page.getByRole('link', { name: /All quiet/ })).not.toContainText('Stalled')
+  const line = card.getByTestId('work-line')
+  await expect(line).toHaveAttribute('data-state', 'no-word')
+  await expect(line).toHaveAccessibleName(/No word \d+m/)
+  // The line's tooltip keeps the why.
+  await expectTooltip(line, /nothing open since the build ended/)
+  await expect(
+    page.getByRole('link', { name: /All quiet/ }).getByRole('img', { name: /No word/ }),
+  ).toHaveCount(0)
+  // A live agent with no progress post in over a day reads Quiet, and a review ticket reads Your turn.
+  const quietLine = page
+    .getByRole('link', { name: new RegExp(`#${quiet.t.id} Quiet importer`) })
+    .getByTestId('work-line')
+  await expect(quietLine).toHaveAttribute('data-state', 'quiet')
+  await expect(quietLine).toHaveAccessibleName(/Quiet 1d/)
+  const turnLine = page
+    .getByRole('link', { name: new RegExp(`#${turn.t.id} Waiting for a look`) })
+    .getByTestId('work-line')
+  await expect(turnLine).toHaveAttribute('data-state', 'your-turn')
+  await expect(turnLine).toHaveAccessibleName(/Your turn · waiting 2d/)
   await page.getByRole('tab', { name: 'List' }).click()
-  await expect(page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) })).toContainText(
-    'Stalled',
-  )
-  await expect(page.getByRole('link', { name: /All quiet/ })).not.toContainText('Stalled')
+  await expect(
+    page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) }).getByTestId('work-line'),
+  ).toHaveAccessibleName(/No word \d+m/)
+  await expect(
+    page.getByRole('link', { name: /All quiet/ }).getByRole('img', { name: /No word/ }),
+  ).toHaveCount(0)
+  await expect(
+    page.getByRole('link', { name: new RegExp(`#${quiet.t.id} Quiet importer`) }).getByTestId('work-line'),
+  ).toHaveAccessibleName('Quiet 1d')
+  await expect(
+    page.getByRole('link', { name: new RegExp(`#${turn.t.id} Waiting for a look`) }).getByTestId('work-line'),
+  ).toHaveAccessibleName('Your turn · waiting 2d')
 
   await page.goto(`/projects/${project.id}`)
   const needsYou = section(page, 'Needs you')
-  const link = needsYou.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` })
+  const link = needsYou.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Ship the importer`) })
   await expect(link).toBeVisible()
   // `has` is matched inside each row, so it takes the link alone, not one scoped to the section.
-  const row = needsYou
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Ship the importer` }) })
-  await expect(row).toContainText(
-    /Stalled \d+ min: claude has a build open, nobody heard from since .*last\s*claude/,
-  )
-  await expect(needsYou.getByRole('link', { name: /Stalled: .*All quiet/ })).toHaveCount(0)
+  const row = needsYou.getByRole('listitem').filter({
+    has: page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Ship the importer`) }),
+  })
+  await expect(row.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
+  await expectTooltip(row.getByTestId('work-line'), /nothing open since the build ended/)
+  await expect(row).toContainText(/last\s*claude/)
+  await expect(needsYou.getByRole('link', { name: /No word \d+m: .*All quiet/ })).toHaveCount(0)
   await link.click()
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}/features/${t.id}$`))
   await expect(page.getByRole('region', { name: 'Timeline' })).toBeVisible()
@@ -63,12 +94,11 @@ test('a stalled row names who recorded the last event: a claimed name gets no ba
 
   await page.goto(`/projects/${project.id}`)
   const needsYou = section(page, 'Needs you')
-  const row = needsYou
-    .getByRole('listitem')
-    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Claimed heartbeat` }) })
-  await expect(row).toContainText(
-    new RegExp(`Stalled \\d+ min: nothing open since .*last ${HUMAN}\\s*by\\s*claude\\s*Agent`),
-  )
+  const row = needsYou.getByRole('listitem').filter({
+    has: page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Claimed heartbeat`) }),
+  })
+  await expect(row.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
+  await expect(row).toContainText(new RegExp(`\\d+m: .*last ${HUMAN}\\s*by\\s*claude\\s*Agent`))
   await expect(row.getByTestId('claimed-name')).toHaveText(HUMAN)
   await expect(row.locator('[data-role="human"]')).toHaveCount(0)
   await expect(row.getByTestId('event-by').locator('[data-role="worker"]')).not.toHaveCount(0)
@@ -122,8 +152,11 @@ test("a stalled row names a worker's event under the name 'board' as a claim, wi
   await page.goto(`/projects/${project.id}`)
   const row = section(page, 'Needs you')
     .getByRole('listitem')
-    .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Board-named heartbeat` }) })
-  await expect(row).toContainText(/Stalled \d+ min: nothing open since .*last board\s*by\s*claude\s*Agent/)
+    .filter({
+      has: page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Board-named heartbeat`) }),
+    })
+  await expect(row.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
+  await expect(row).toContainText(/\d+m: .*last board\s*by\s*claude\s*Agent/)
   await expect(row.getByTestId('claimed-name')).toHaveText('board')
   await expect(row.getByTestId('last-assignee')).toHaveCount(0)
   await expect(row.locator('[data-role="board"]')).toHaveCount(0)
@@ -152,8 +185,11 @@ test('a stalled row with no agent heard from names the assignee as plain text, w
     await page.goto(`/projects/${project.id}`)
     const row = section(page, 'Needs you')
       .getByRole('listitem')
-      .filter({ has: page.getByRole('link', { name: `Stalled: #${t.id} Assigned, silent` }) })
-    await expect(row).toContainText(new RegExp(`Stalled \\d+ min: nothing open since .*last ${name}$`))
+      .filter({
+        has: page.getByRole('link', { name: new RegExp(`No word \\d+m: #${t.id} Assigned, silent`) }),
+      })
+    await expect(row.getByTestId('work-line')).toHaveAccessibleName(/No word \d+m/)
+    await expect(row).toContainText(new RegExp(`\\d+m: .*last ${name}$`))
     await expect(row.getByTestId('last-assignee')).toHaveText(name)
     await expect(row.locator('[data-role]')).toHaveCount(0)
     await expect(row.getByTestId('event-by')).toHaveCount(0)
@@ -170,6 +206,9 @@ test('the human sets after how many minutes a ticket reads as stalled', async ({
 }) => {
   await page.goto(`/projects/${project.id}/settings`)
   const settings = page.getByRole('region', { name: 'Stalled tickets' })
+  // The settings copy names both clocks: the fixed lease and the human's stall threshold.
+  await expect(settings).toContainText('Lost contact')
+  await expect(settings).toContainText(/lease/i)
   const minutes = settings.getByLabel('Stalled after (minutes)')
   await expect(minutes).toHaveValue('30')
   await minutes.fill('45')
@@ -183,4 +222,67 @@ test('the human sets after how many minutes a ticket reads as stalled', async ({
   // An agent cannot change it.
   const refused = await agent.patch(`/api/projects/${project.id}`, { data: { stallMinutes: 5 } })
   expect(refused.status()).toBe(403)
+})
+
+test('a run whose lease expired mid-span reads Lost contact, never Stalled and never in Needs you', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  // The build span is 40 minutes old with nothing heard since: the agent is gone, its span still open.
+  const { t } = await workedTicket(human, agent, project)
+
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  const card = page.getByRole('link', { name: new RegExp(`#${t.id} Ship the importer`) })
+  const line = card.getByTestId('work-line')
+  await expect(line).toHaveAttribute('data-state', 'lost')
+  await expect(line).toHaveAccessibleName(/Lost contact/)
+  await expectTooltip(line, /claude · build · \d+ min · last word \d+ min ago/)
+  await expect(card.getByTestId('work-line')).toHaveCount(1)
+  await expect(card.getByRole('img', { name: /No word/ })).toHaveCount(0)
+
+  // The ticket card says whose span is open and when it last spoke, the detail under the one line.
+  await page.goto(`/projects/${project.id}/features/${t.id}`)
+  const timeline = page.getByRole('region', { name: 'Timeline' })
+  await expect(timeline.getByTestId('work-line')).toHaveAccessibleName(/Lost contact/)
+  await expect(timeline.getByText(/^claude · build · \d+ min · last word \d+ min ago$/)).toBeVisible()
+
+  // Needs you is the human's turn: the ticket is in the Overview's own Lost contact block instead.
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  await expect(needsYou.getByRole('link', { name: /Lost contact: .*Ship the importer/ })).toHaveCount(0)
+  await expect(needsYou.getByRole('link', { name: /No word \d+m: .*Ship the importer/ })).toHaveCount(0)
+  const lost = section(page, 'Lost contact')
+  const row = lost.getByRole('listitem').filter({ hasText: `#${t.id} Ship the importer` })
+  await expect(row).toContainText(/claude · build · since .* · last word \d+ min ago/)
+})
+
+test('a long span kept alive by the agent’s posts reads Working, and stays out of Needs you', async ({
+  page,
+  project,
+  human,
+  agent,
+}) => {
+  const t = await create(human, project, { title: 'Review round four', status: 'in_progress' })
+  await record(agent, project, t.id, { kind: 'span_start', phase: 'review', round: 4 })
+  // The span opened 49 minutes ago; the posts came 6 to 31 minutes ago, inside the ten-minute lease.
+  age(t.id, 49)
+  for (const body of ['hunt: two candidates', 'verify: 25/25 pass', 'refute: neither holds'])
+    await ok(agent.post(`/api/tickets/${t.id}/updates`, { data: { body, progress: true } }))
+  await ok(agent.post(`/api/projects/${project.id}/tickets/${t.id}/events`, { data: { kind: 'heartbeat' } }))
+
+  await page.goto(`/projects/${project.id}/features?view=board`)
+  const card = page.getByRole('link', { name: new RegExp(`#${t.id} Review round four`) })
+  const line = card.getByTestId('work-line')
+  await expect(line).toHaveAttribute('data-state', 'working')
+  await expect(line).toHaveAccessibleName(/Working now · last word \d+m/)
+  await expect(card.getByTestId('work-line')).toHaveCount(1)
+  await expect(card.getByRole('img', { name: /No word/ })).toHaveCount(0)
+  await expect(card.getByRole('img', { name: /Lost contact/ })).toHaveCount(0)
+
+  await page.goto(`/projects/${project.id}`)
+  const needsYou = section(page, 'Needs you')
+  await expect(needsYou.getByRole('link', { name: /Review round four/ })).toHaveCount(0)
+  await expect(section(page, 'In progress').getByRole('link', { name: /Review round four/ })).toBeVisible()
 })

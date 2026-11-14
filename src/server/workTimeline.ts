@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
@@ -6,18 +6,22 @@ import {
   type AgentEventKind,
   type BoardEventKind,
   KNOWN_PHASES,
+  LEASE_TTL_MINUTES,
   WAIT_REASONS,
   type WaitReason,
 } from '#/lib/constants'
+import { nextTask } from '#/lib/tasks'
 import {
   buildTimeline,
   sumTotals,
   type TimelineEvent,
+  type TimelinePost,
   type WorkTimeline,
   type WorkTotals,
 } from '#/lib/workTimeline'
+import { listActors } from './actors'
 import { HttpError, notFound } from './http'
-import { listStages, type Stage } from './stages'
+import { kindOf, listStages, type Stage } from './stages'
 
 /**
  * A ticket's work timeline: what its agents record as they work it (a span of a phase, a hand-off to
@@ -247,7 +251,8 @@ export function heartbeat(projectId: number, ticketId: number, input: EventBase,
   const lastSignalAt = [t.createdAt, t.startedAt, event.at]
     .filter((x): x is string => !!x)
     .reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a))
-  return { at: event.at, lastSignalAt }
+  const leaseUntil = new Date(Date.parse(event.at) + LEASE_TTL_MINUTES * 60_000).toISOString()
+  return { at: event.at, lastSignalAt, leaseUntil }
 }
 
 // --- what the board sees itself ---
@@ -289,12 +294,17 @@ export function noteStageMove(ticketId: number, from: string | null, to: string)
 
 type TimelineTicket = Pick<
   schema.Ticket,
-  'id' | 'projectId' | 'status' | 'archivedAt' | 'prId' | 'assignee' | 'createdAt' | 'startedAt'
+  'id' | 'projectId' | 'status' | 'archivedAt' | 'prId' | 'assignee' | 'createdAt' | 'startedAt' | 'parentId'
 >
 
 const asTimelineEvent = ({ ticketId: _t, projectId: _p, ...e }: TicketEvent): TimelineEvent => e
 
-/** Each ticket's timeline, from one read of their events; the tickets may be of several projects. */
+/**
+ * Each ticket's timeline, from one read of their events, posts, decisions and tasks; the tickets may be
+ * of several projects. An agent's post refreshes the lease a heartbeat does; a human's does not. A
+ * pending decision card, or a blocked task that is the step the ticket (or one of its lanes) works next,
+ * makes it wait on the human.
+ */
 export function timelinesFor(
   tickets: TimelineTicket[],
   now: Date = new Date(),
@@ -305,6 +315,41 @@ export function timelinesFor(
     : []
   const byTicket = new Map<number, TicketEvent[]>()
   for (const r of rows) byTicket.set(r.ticketId, [...(byTicket.get(r.ticketId) ?? []), r])
+  // Posts: an agent's (or the board's own) refresh the lease; a human's do not.
+  const humans = new Set(listActors().flatMap((a) => (a.kind === 'human' ? [a.name] : [])))
+  const posts = new Map<number, TimelinePost[]>()
+  const postRows = ids.length
+    ? db
+        .select({
+          ticketId: schema.updates.ticketId,
+          author: schema.updates.author,
+          createdAt: schema.updates.createdAt,
+        })
+        .from(schema.updates)
+        .where(inArray(schema.updates.ticketId, ids))
+        .all()
+    : []
+  for (const p of postRows)
+    posts.set(p.ticketId, [
+      ...(posts.get(p.ticketId) ?? []),
+      { at: p.createdAt, agent: p.author, human: humans.has(p.author) },
+    ])
+  const deciding = new Set(
+    ids.length
+      ? db
+          .select({ ticketId: schema.updates.ticketId })
+          .from(schema.updates)
+          .where(
+            and(
+              inArray(schema.updates.ticketId, ids),
+              isNotNull(schema.updates.decision),
+              isNull(schema.updates.decidedAt),
+            ),
+          )
+          .all()
+          .map((r) => r.ticketId)
+      : [],
+  )
   const projects = new Map<number, { stages: Stage[]; stallMinutes: number }>()
   const projectOf = (id: number) => {
     let p = projects.get(id)
@@ -319,11 +364,107 @@ export function timelinesFor(
     }
     return p
   }
+  // Whether the step a ticket works next is blocked on the human: its own next step's, and a lane's own
+  // next step rolled up into its parent, as the card's badge and Needs you count them. A lane reads its
+  // own tree alone: its parent's blocked step is not the lane's, so a lane's row and its page agree.
+  const lanes = new Map<number, { id: number; status: string; projectId: number }[]>()
+  const family = new Set(ids)
+  // Every child is registered in its parent's `lanes` once, whether or not the read already loaded it as
+  // a row: a lane that is itself a row still rolls its next step up into its parent. The sets only decide
+  // what to expand next, never what to register.
+  const registered = new Set<number>()
+  const expanded = new Set<number>()
+  let level = [...ids]
+  while (level.length) {
+    const parents = level.filter((id) => !expanded.has(id))
+    if (!parents.length) break
+    for (const id of parents) expanded.add(id)
+    const children = db
+      .select({
+        id: schema.tickets.id,
+        parentId: schema.tickets.parentId,
+        status: schema.tickets.status,
+        projectId: schema.tickets.projectId,
+      })
+      .from(schema.tickets)
+      .where(inArray(schema.tickets.parentId, parents))
+      .all()
+    level = []
+    for (const lane of children) {
+      family.add(lane.id)
+      if (!registered.has(lane.id)) {
+        registered.add(lane.id)
+        lanes.set(lane.parentId!, [...(lanes.get(lane.parentId!) ?? []), lane])
+      }
+      if (!expanded.has(lane.id)) level.push(lane.id)
+    }
+  }
+  const ownTasks = new Map<number, (typeof schema.tasks.$inferSelect)[]>()
+  if (family.size)
+    for (const task of db
+      .select()
+      .from(schema.tasks)
+      .where(inArray(schema.tasks.ticketId, [...family]))
+      .all())
+      ownTasks.set(task.ticketId, [...(ownTasks.get(task.ticketId) ?? []), task])
+  const nextBlocked = new Map(
+    [...family].map((id) => [id, nextTask(ownTasks.get(id) ?? [])?.blocked === true]),
+  )
+  // A cancelled or done lane's tasks are out of the work, as they are out of the rolled-up progress.
+  const closedLane = (lane: { status: string; projectId: number }) => {
+    const kind = kindOf(projectOf(lane.projectId).stages, lane.status)
+    return kind === 'cancelled' || kind === 'done'
+  }
+  const blockedNext = (id: number, seen = new Set<number>()): boolean => {
+    if (seen.has(id)) return false
+    seen.add(id)
+    return (
+      nextBlocked.get(id) === true ||
+      (lanes.get(id) ?? []).some((lane) => !closedLane(lane) && blockedNext(lane.id, seen))
+    )
+  }
+  // The latest progress post on a ticket or any of its lanes: what a parent's day-long quiet counts from.
+  const progressPosts = family.size
+    ? db
+        .select({ ticketId: schema.updates.ticketId, createdAt: schema.updates.createdAt })
+        .from(schema.updates)
+        .where(and(inArray(schema.updates.ticketId, [...family]), eq(schema.updates.progress, true)))
+        .all()
+    : []
+  const progressOf = new Map<number, string>()
+  for (const p of progressPosts) {
+    const seen = progressOf.get(p.ticketId)
+    if (!seen || Date.parse(p.createdAt) > Date.parse(seen)) progressOf.set(p.ticketId, p.createdAt)
+  }
+  const familyProgress = new Map<number, string | null>()
+  const visiting = new Set<number>()
+  const progressAt = (id: number): string | null => {
+    if (familyProgress.has(id)) return familyProgress.get(id)!
+    // A parent cycle in bad data must not hang the read.
+    if (visiting.has(id)) return null
+    visiting.add(id)
+    let at = progressOf.get(id) ?? null
+    for (const lane of lanes.get(id) ?? []) {
+      const child = progressAt(lane.id)
+      if (child && (!at || Date.parse(child) > Date.parse(at))) at = child
+    }
+    visiting.delete(id)
+    familyProgress.set(id, at)
+    return at
+  }
   return new Map(
     tickets.map((t) => {
       const events = byTicket.get(t.id) ?? []
       const { stages, stallMinutes } = projectOf(t.projectId)
-      const timeline = buildTimeline(events.map(asTimelineEvent), { now, stages, ticket: t, stallMinutes })
+      const timeline = buildTimeline(events.map(asTimelineEvent), {
+        now,
+        stages,
+        ticket: t,
+        stallMinutes,
+        posts: posts.get(t.id) ?? [],
+        waiting: { decision: deciding.has(t.id), blockedTask: blockedNext(t.id) },
+        progressAt: progressAt(t.id),
+      })
       return [t.id, { events, timeline }] as const
     }),
   )
@@ -338,13 +479,18 @@ export function ticketTimeline(ticketId: number, now: Date = new Date()) {
   return { events: newest, timeline }
 }
 
-/** What `get_ticket` carries: the totals, the stalled flag, who was last heard from, and the open spans and waits. */
+/** What `get_ticket` carries: the totals, the state, who was last heard from, and the open spans and waits. */
 export function workOf(timeline: WorkTimeline) {
   return {
     totals: timeline.totals,
+    liveness: timeline.liveness,
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
+    lastWordAt: timeline.lastWordAt,
     lastHeard: timeline.lastHeard,
+    stage: timeline.stage,
+    progressAt: timeline.progressAt,
+    waitingOnHuman: timeline.waitingOnHuman,
     open: {
       spans: timeline.spans.filter((s) => s.open),
       waits: timeline.waits.filter((w) => w.open),
@@ -357,12 +503,20 @@ export type ProjectWork = {
   now: string
   stallMinutes: number
   totals: WorkTotals
-  tickets: { id: number; totals: WorkTotals; stalled: WorkTimeline['stalled'] }[]
+  tickets: {
+    id: number
+    totals: WorkTotals
+    liveness: WorkTimeline['liveness']
+    stalled: WorkTimeline['stalled']
+    stage: WorkTimeline['stage']
+    progressAt: WorkTimeline['progressAt']
+    waitingOnHuman: WorkTimeline['waitingOnHuman']
+  }[]
 }
 
 /**
  * The project's totals: every ticket and lane added up, archived tickets and PR tickets left out; with
- * each one's totals and stalled flag.
+ * each one's totals, state and stalled flag.
  */
 export function projectWork(projectId: number, now: Date = new Date()): ProjectWork {
   const project = db.select().from(schema.projects).where(eq(schema.projects.id, projectId)).get()
@@ -381,7 +535,15 @@ export function projectWork(projectId: number, now: Date = new Date()): ProjectW
   const all = timelinesFor(tickets, now)
   const rows = tickets.map((t) => {
     const { timeline } = all.get(t.id)!
-    return { id: t.id, totals: timeline.totals, stalled: timeline.stalled }
+    return {
+      id: t.id,
+      totals: timeline.totals,
+      liveness: timeline.liveness,
+      stalled: timeline.stalled,
+      stage: timeline.stage,
+      progressAt: timeline.progressAt,
+      waitingOnHuman: timeline.waitingOnHuman,
+    }
   })
   return {
     now: now.toISOString(),

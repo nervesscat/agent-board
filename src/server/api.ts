@@ -255,6 +255,16 @@ api.get('/api/agent-setup/board-mcp', () => {
     },
   })
 })
+// The runtime beater (scripts/board-beat.mjs) a session saves as board-beat.mjs and wraps a long tool with.
+api.get('/api/agent-setup/board-beat', () => {
+  return new Response(agents.boardBeat(), {
+    headers: {
+      'content-type': 'text/javascript; charset=utf-8',
+      'content-disposition': 'attachment; filename="board-beat.mjs"',
+      'cache-control': 'no-store',
+    },
+  })
+})
 // feature-review, review-queue, todo-review and their agents, as a tar to extract into ~/.claude.
 api.get('/api/agent-setup/review-skills', ({ url }) => {
   if (url.searchParams.get('list') !== null) return json(agents.reviewBundlePaths())
