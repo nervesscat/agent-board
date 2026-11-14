@@ -14,7 +14,20 @@ import {
 import { endConnectionGone } from './src/server/connectionGone.ts'
 import { adoptCheckedEnv } from './src/server/devEnv.ts'
 import { entranceGuard } from './src/server/devEntrance.ts'
+import { keepAliveLonger } from './src/server/keepAlive.ts'
 import { useAppBase } from './src/server/previewPaths.ts'
+
+/**
+ * The HTTP server `vite dev` listens on keeps idle connections as the built board does (keepAlive.ts): Node's
+ * 5 s default would close one a client is about to reuse, and that client (an agent, a browser) gets a reset.
+ */
+const keepAliveIsLonger = (): Plugin => ({
+  name: 'agent-board:keep-alive-is-longer',
+  apply: 'serve',
+  configureServer(server) {
+    if (server.httpServer && 'keepAliveTimeout' in server.httpServer) keepAliveLonger(server.httpServer)
+  },
+})
 
 /**
  * In dev, Nitro hands a request the browser marks as an image, video or embed (`Sec-Fetch-Dest`) to
@@ -116,6 +129,7 @@ export default defineConfig(({ mode }) => {
           // First, so that even a refusal to start (startup.ts) leaves its exit line.
           './src/server/plugins/processLog.ts',
           './src/server/startup.ts',
+          './src/server/plugins/keepAlive.ts',
           './src/server/plugins/previewUpgrade.ts',
           './src/server/plugins/uploadSweep.ts',
           './src/server/plugins/hostTools.ts',
@@ -137,6 +151,7 @@ export default defineConfig(({ mode }) => {
       tanstackStart({ dev: { ssrStyles: { enabled: false } } }),
       viteReact(),
       connectionGoneIsNotAnError(),
+      keepAliveIsLonger(),
     ],
     ssr: { noExternal: ['react-markdown', 'remark-gfm'] },
     server: {

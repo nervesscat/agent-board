@@ -21,11 +21,11 @@ jobs:
     # pull request from a fork, from a branch and from a push.
     runs-on: ubuntu-latest
     # The e2e suite is the long part of this job: about 8 minutes of install, typecheck, lint,
-    # migrations, unit tests and build come first, then the suite's 497 tests. The 70-minute limit was
-    # set on the old self-hosted box, where the e2e step measured 31 minutes with another suite
-    # sharing the machine. The hosted runner's own timing is what the first runs here must show; the
-    # limit is kept until a measured run says otherwise. No matrix: one job keeps the install and the
-    # build to one copy, and the suite's workers already use the runner's cores.
+    # migrations, unit tests and build come first, then the suite's tests. The
+    # 70-minute limit was set on the old self-hosted box, where the e2e step measured 31 minutes with
+    # another suite sharing the machine. The suite runs 2 workers here (playwright.config.ts): the
+    # hosted runner's own timing is what the runs must show; the limit is kept until a measured run
+    # says otherwise. No matrix: one job keeps the install and the build to one copy.
     timeout-minutes: 70
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
