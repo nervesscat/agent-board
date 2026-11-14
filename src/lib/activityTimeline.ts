@@ -1,6 +1,12 @@
 import type { StageKind } from './constants'
-import type { StageLike } from './stages'
-import type { WorkTimelineLike } from './workStatus'
+import { type StageLike, stageOf } from './stages'
+import {
+  measureOffset,
+  onServerClock,
+  workLine,
+  type WorkLineAnswer,
+  type WorkTimelineLike,
+} from './workStatus'
 import type { Activity, Stalled } from './workTimeline'
 
 /**
@@ -71,6 +77,21 @@ export function timelineFromActivity(
 
 /** Whether a stage's kind has work to show: open, done and cancelled stages have none. */
 export const hasWork = (kind: StageKind) => kind === 'active' || kind === 'blocked' || kind === 'review'
+
+/**
+ * A board row's work-state line (its state is what the State filter matches), built the way the card or
+ * list row builds it: its stage decides whether work is open, and the server's clock is taken from the
+ * activity's own time. Null when the row has no line (open, done, cancelled, archived).
+ */
+export function rowWorkLine(
+  t: { activity: Activity | null | undefined; stalled: Stalled | null | undefined; status: string },
+  stages: StageLike[],
+  browserNow: number = Date.now(),
+): WorkLineAnswer | null {
+  const timeline = timelineFromActivity(t.activity, t.stalled, hasWork(stageOf(stages, t.status).kind))
+  const offset = timeline.now ? measureOffset(timeline.now, browserNow) : 0
+  return workLine(timeline, onServerClock(browserNow, offset), stallStage(stages, t.status))
+}
 
 /**
  * The stage a stall names when it is not the project's first active stage (where work is claimed by default),

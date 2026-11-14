@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { StageLike } from './stages'
 import type { Activity, Stalled } from './workTimeline'
-import { hasWork, stallStage, timelineFromActivity } from './activityTimeline'
+import { hasWork, rowWorkLine, stallStage, timelineFromActivity } from './activityTimeline'
 import { lostContact, stallReason, workLine } from './workStatus'
 
 const at = (hhmm: string) => `2026-10-20T${hhmm}:00.000Z`
@@ -222,5 +222,19 @@ describe('stallStage and hasWork', () => {
     expect(hasWork('review')).toBe(true)
     expect(hasWork('open')).toBe(false)
     expect(hasWork('done')).toBe(false)
+  })
+})
+
+describe('rowWorkLine', () => {
+  const stages: StageLike[] = [
+    { key: 'todo', name: 'To do', kind: 'open', color: 'gray' },
+    { key: 'in_progress', name: 'In progress', kind: 'active', color: 'gray' },
+    { key: 'done', name: 'Done', kind: 'done', color: 'gray' },
+  ]
+  it('has no line for a row whose stage is not open work, and a line for one in progress', () => {
+    const row = { activity: null, stalled: null }
+    expect(rowWorkLine({ ...row, status: 'done' }, stages)).toBeNull()
+    expect(rowWorkLine({ ...row, status: 'todo' }, stages)).toBeNull()
+    expect(rowWorkLine({ ...row, status: 'in_progress' }, stages)?.state).toBe('nothing')
   })
 })

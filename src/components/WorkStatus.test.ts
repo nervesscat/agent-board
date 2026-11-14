@@ -45,6 +45,8 @@ const liveness = (more: Partial<Liveness> = {}): Liveness => ({
 
 const html = (el: Parameters<typeof renderToStaticMarkup>[0]) => renderToStaticMarkup(el)
 const text = (markup: string) => markup.replace(/<[^>]+>/g, '').replace(/&#x27;/g, "'")
+/** The work-state icon's accessible name: the line's text, as a screen reader reads it. */
+const name = (markup: string) => markup.match(/aria-label="([^"]*)"/)?.[1]?.replace(/&#x27;/g, "'") ?? ''
 
 describe('WorkLine', () => {
   it('words a working ticket on its agent’s last word, with the per-agent detail under it', () => {
@@ -55,7 +57,7 @@ describe('WorkLine', () => {
         detail: true,
       }),
     )
-    expect(text(out)).toContain('Working now · last word 12m')
+    expect(name(out)).toContain('Working now · last word 12m')
     expect(text(out)).toContain('claude · build · 43 min · last word 12 min ago')
     expect(out).toContain('data-testid="work-line"')
     expect(out).toContain('data-state="working"')
@@ -85,9 +87,9 @@ describe('WorkLine', () => {
         now: NOW,
       }),
     )
-    expect(text(out)).toBe('Waiting on you')
-    expect(out).toContain('text-amber-800')
-    expect(out).toContain('dark:text-amber-300')
+    expect(name(out)).toBe('Waiting on you')
+    expect(out).toContain('text-amber-700')
+    expect(out).toContain('dark:text-amber-400')
     expect(out).toContain('data-state="waiting"')
   })
 
@@ -103,7 +105,7 @@ describe('WorkLine', () => {
         stage: 'Bug Found',
       }),
     )
-    expect(text(out)).toBe('No word 47m')
+    expect(name(out)).toBe('No word 47m')
     expect(out).toContain('data-state="no-word"')
     // The why is the tooltip's (asserted on the answer itself); the row's words are exact.
     expect(text(out)).not.toContain('Stalled')
@@ -132,7 +134,7 @@ describe('WorkLine', () => {
         detail: true,
       }),
     )
-    expect(text(out)).toContain('Lost contact · 46m')
+    expect(name(out)).toContain('Lost contact · 46m')
     expect(text(out)).toContain('claude · build · 46 min · last word 12 min ago')
     expect(out).toContain('data-state="lost"')
     expect(text(out)).not.toContain('No word')
@@ -153,7 +155,7 @@ describe('WorkLine', () => {
         now: NOW,
       }),
     )
-    expect(text(out)).toBe('Nothing open')
+    expect(name(out)).toBe('Nothing open')
     expect(out).toContain('data-state="nothing"')
     expect(html(createElement(WorkLine, { timeline: timeline({ live: false }), now: NOW }))).toBe('')
   })
@@ -165,7 +167,7 @@ describe('WorkLine', () => {
         now: NOW,
       }),
     )
-    expect(text(out)).toBe('Your turn · waiting 2h')
+    expect(name(out)).toBe('Your turn · waiting 2h')
     expect(out).toContain('data-state="your-turn"')
   })
 
@@ -177,21 +179,21 @@ describe('WorkLine', () => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(Date.parse(at('12:20')))
       const t = timeline({ now: at('12:30'), liveness: liveness(), progressAt: at('12:18') })
-      expect(text(html(createElement(WorkLine, { timeline: t })))).toBe('Working now · last word 12m')
+      expect(name(html(createElement(WorkLine, { timeline: t })))).toBe('Working now · last word 12m')
     })
 
     it('counts the same time when the browser clock runs ahead of the server', () => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(Date.parse(at('12:40')))
       const t = timeline({ now: at('12:30'), liveness: liveness(), progressAt: at('12:18') })
-      expect(text(html(createElement(WorkLine, { timeline: t })))).toBe('Working now · last word 12m')
+      expect(name(html(createElement(WorkLine, { timeline: t })))).toBe('Working now · last word 12m')
     })
 
     it('corrects a lost contact line too, not only the working one', () => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(Date.parse(at('12:20')))
       const t = timeline({ now: at('12:30'), liveness: liveness({ state: 'lost', since: at('11:44') }) })
-      expect(text(html(createElement(WorkLine, { timeline: t })))).toBe('Lost contact · 46m')
+      expect(name(html(createElement(WorkLine, { timeline: t })))).toBe('Lost contact · 46m')
     })
   })
 })
@@ -249,7 +251,7 @@ describe('WorkLine from an activity', () => {
       },
       { since: at('12:08'), minutes: 22, lastAgent: 'builder', lastBy: '', lastFrom: 'event' } as Stalled,
     )
-    expect(text(html(createElement(WorkLine, { timeline: t, now: NOW })))).toBe('No word 22m')
+    expect(name(html(createElement(WorkLine, { timeline: t, now: NOW })))).toBe('No word 22m')
   })
 })
 

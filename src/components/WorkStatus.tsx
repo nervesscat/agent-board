@@ -1,4 +1,17 @@
-import { Hammer, Hourglass, UserRound } from 'lucide-react'
+import {
+  Activity,
+  CircleDashed,
+  ClockAlert,
+  Eye,
+  Hammer,
+  Hand,
+  Hourglass,
+  type LucideIcon,
+  Moon,
+  Unplug,
+  UserRound,
+} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { spokenDuration } from '#/components/WorkTimeline'
 import { Tip } from '#/components/ui/tooltip'
@@ -17,21 +30,28 @@ import type { WorkTotals as Totals } from '#/lib/workTimeline'
 /** A duration in words for the summary: `43 min`, `1 h 5 min`; `0` for none. */
 const dur = (ms: number) => (ms > 0 ? spokenDuration(ms) : '0')
 
-/** The colour and weight of a state's one line: the words carry the state, the tone agrees with it. */
-const STATE_TONE: Record<WorkLineState, string> = {
-  working: 'text-foreground',
-  'no-word': 'text-amber-800 dark:text-amber-300',
-  quiet: 'text-amber-800 dark:text-amber-300',
-  'your-turn': 'text-amber-800 dark:text-amber-300',
-  waiting: 'text-amber-800 dark:text-amber-300',
-  lost: 'text-rose-800 dark:text-rose-300',
-  nothing: 'text-muted-foreground',
+/**
+ * Each state's icon and its colour. The shape carries the state; the colour only agrees with it, so no state is told by colour
+ * alone. `lost` (an unplugged cable) and `no-word` (a clock with an alert) are told apart by shape too.
+ */
+export const WORK_STATE_ICON: Record<WorkLineState, { Icon: LucideIcon; tone: string }> = {
+  waiting: { Icon: Hand, tone: 'text-amber-700 dark:text-amber-400' },
+  'your-turn': { Icon: Eye, tone: 'text-violet-700 dark:text-violet-400' },
+  lost: { Icon: Unplug, tone: 'text-rose-700 dark:text-rose-400' },
+  'no-word': { Icon: ClockAlert, tone: 'text-orange-700 dark:text-orange-400' },
+  quiet: { Icon: Moon, tone: 'text-muted-foreground' },
+  working: { Icon: Activity, tone: 'text-emerald-700 dark:text-emerald-400' },
+  nothing: { Icon: CircleDashed, tone: 'text-muted-foreground' },
 }
 
+/** The duration a line ends with (`40m`, `2d`), which a surface with room keeps beside the icon. */
+const measureOf = (text: string) => text.match(/(\d+[mhd])$/)?.[1] ?? ''
+
 /**
- * One ticket's work-state line: the one answer to what it is doing now, in the human's words. One element
- * per ticket row (`data-testid="work-line"`, `data-state` one of the seven), its tooltip the why, and the
- * per-agent detail under it where the surface has room. The clock correction to the server's happens once,
+ * One ticket's work-state line, as its state's icon: one element per ticket row (`data-testid="work-line"`,
+ * `data-state` one of the seven). Its accessible name is the line's text, and its tooltip the full line,
+ * the per-agent detail and the why, opened by focus, hover or a tap. A state with nothing to add to its
+ * line has no tooltip and is not a keyboard stop. The clock correction to the server's happens once,
  * inside: a caller passes the server's own time or nothing, never a time already put on it.
  */
 export function WorkLine({
@@ -41,7 +61,6 @@ export function WorkLine({
   variant = 'inline',
   detail = false,
   tooltip = true,
-  focusable = true,
   className = '',
 }: {
   timeline: WorkTimelineLike
@@ -49,16 +68,49 @@ export function WorkLine({
   now?: Date | number
   /** The active stage's name when it is not the project's default one: the why then names it. */
   stage?: string | null
-  /** `badge` for a card or a list row, `inline` for a line. */
+  /** `badge` for a card or a list row (the icon alone), `inline` for a line (the icon and its duration). */
   variant?: 'inline' | 'badge'
-  /** Draw the per-agent lines under the word: the ticket page, In progress and the Roadmap have room. */
+  /** Draw the per-agent lines under the icon: the ticket page, In progress and the Roadmap have room. */
   detail?: boolean
+  /** Off, the icon has no tooltip and is not a keyboard stop. */
   tooltip?: boolean
-  focusable?: boolean
   className?: string
 }) {
   const tick = useNow(60_000)
   const offset = useServerOffset(timeline.now)
+  const [open, setOpen] = useState(false)
+  // A tip a tap opened stays while the pointer or the focus moves on (base-ui closes a tip on those): a tap
+  // elsewhere, Escape or a scroll closes it instead.
+  const [byTap, setByTap] = useState(false)
+  // The click a tap sends after opening the tip: it is the icon's own, not the enclosing link's.
+  const tapClick = useRef(false)
+  useEffect(() => {
+    if (!byTap) return
+    const close = () => {
+      setOpen(false)
+      setByTap(false)
+    }
+    const outside = (e: PointerEvent) => {
+      const target = e.target instanceof Element ? e.target : null
+      if (target?.closest('[data-tip], [data-slot="tooltip-content"]')) return
+      close()
+    }
+    document.addEventListener('pointerdown', outside)
+    // From the next frame on, as the tooltip's own scroll close: a scroll that comes with the tap is not one to close for.
+    const frame = requestAnimationFrame(() =>
+      window.addEventListener('scroll', close, { capture: true, passive: true }),
+    )
+    return () => {
+      cancelAnimationFrame(frame)
+      document.removeEventListener('pointerdown', outside)
+      window.removeEventListener('scroll', close, { capture: true })
+    }
+  }, [byTap])
+  const onOpenChange = (next: boolean, details: { reason: string }) => {
+    if (!next && byTap && ['trigger-hover', 'trigger-focus', 'trigger-press'].includes(details.reason)) return
+    if (!next) setByTap(false)
+    setOpen(next)
+  }
   const at = now === undefined ? onServerClock(tick, offset) : +now
   const line = workLine(timeline, at, stage)
   if (!line) return null
@@ -66,23 +118,56 @@ export function WorkLine({
   // a lost run); a state whose why says something else (a stall, a quiet day) keeps the detail beside
   // it. Either way the detail is in the tooltip once, and on screen once where the surface has room.
   const why = [line.why, ...line.detail.filter((d) => !line.why.includes(d))].filter(Boolean).join('\n')
-  const tipped = tooltip && why !== ''
-  const base =
-    variant === 'badge'
-      ? 'inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] leading-none font-medium tabular-nums'
-      : 'text-sm font-medium tabular-nums'
-  const word = (
+  const tipped = tooltip
+  const { Icon, tone } = WORK_STATE_ICON[line.state]
+  const measure = variant === 'inline' ? measureOf(line.text) : ''
+  const icon = (
     <span
+      role="img"
+      aria-label={line.text}
       data-testid="work-line"
       data-state={line.state}
-      // A keyboard stop only where a tooltip really opens: a line with nothing to add is just words.
-      tabIndex={tipped && focusable ? 0 : undefined}
-      className={`${base} ${STATE_TONE[line.state]} ${variant === 'badge' ? 'outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring' : ''}`}
+      // Every state's icon is a keyboard stop: focus opens its tooltip, the full line and what it adds.
+      tabIndex={tipped ? 0 : undefined}
+      // Hover does not exist on a touch screen: a tap opens the tooltip there.
+      onPointerDown={() => {
+        tapClick.current = false
+      }}
+      onPointerUp={(e) => {
+        if (tipped && e.pointerType === 'touch') {
+          tapClick.current = true
+          setOpen(true)
+          setByTap(true)
+        }
+      }}
+      // A tap on the icon opens its tooltip and goes no further: an enclosing link (a card, a row) keeps it.
+      onClick={(e) => {
+        if (!tapClick.current) return
+        tapClick.current = false
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      className={`rounded-sm text-sm font-medium tabular-nums outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring ${tone}`}
     >
-      {line.text}
+      <Icon
+        aria-hidden
+        className={`inline-block size-4 align-[-0.125em] ${line.state === 'working' ? 'motion-safe:animate-pulse' : ''}`}
+      />
+      {measure && <span className="ml-1">{measure}</span>}
     </span>
   )
-  const shown = tipped ? <Tip content={why}>{word}</Tip> : word
+  const shown = tipped ? (
+    <Tip
+      content={[line.text, why].filter(Boolean).join('\n')}
+      open={open}
+      onOpenChange={onOpenChange}
+      keepOnClick
+    >
+      {icon}
+    </Tip>
+  ) : (
+    icon
+  )
   if (!detail || !line.detail.length) return <span className={className}>{shown}</span>
   return (
     <div className={`${className} grid gap-0.5`}>

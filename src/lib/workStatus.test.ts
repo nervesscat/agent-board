@@ -16,8 +16,11 @@ import {
   onServerClock,
   stallReason,
   workDuration,
+  parseWorkStates,
+  stateMatches,
   workLine,
   workShares,
+  WORK_LINE_STATES,
   type WorkTimelineLike,
 } from './workStatus'
 import type { TimelineStage } from './workTimeline'
@@ -589,5 +592,26 @@ describe('the server clock', () => {
       kind: 'building',
       ms: 20 * 60_000,
     })
+  })
+})
+
+describe('the State filter’s choice', () => {
+  it('reads the states from the URL value once each, in list order, and drops what it does not know', () => {
+    expect(parseWorkStates('lost,waiting')).toEqual(['waiting', 'lost'])
+    expect(parseWorkStates('lost,lost,nonsense')).toEqual(['lost'])
+    expect(parseWorkStates('')).toEqual([])
+    expect(parseWorkStates(undefined)).toEqual([])
+  })
+
+  it('keeps every row when nothing is chosen, and only the chosen states otherwise', () => {
+    for (const s of WORK_LINE_STATES) expect(stateMatches(s, [])).toBe(true)
+    expect(stateMatches('lost', ['lost', 'waiting'])).toBe(true)
+    expect(stateMatches('quiet', ['lost', 'waiting'])).toBe(false)
+  })
+
+  it('keeps no row that has no line, once a state is chosen', () => {
+    expect(stateMatches(null, [])).toBe(true)
+    expect(stateMatches(null, ['nothing'])).toBe(false)
+    expect(stateMatches(null, WORK_LINE_STATES)).toBe(false)
   })
 })

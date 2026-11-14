@@ -608,7 +608,6 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                       now={now}
                       stage={stallStage(p.stages, s.status)}
                       variant="inline"
-                      focusable={false}
                       className="inline"
                     />
                     {`: #${s.ticketId} ${s.title}`}
@@ -663,7 +662,6 @@ function NeedsYou({ p, now, dismiss }: CardProps) {
                     }}
                     now={now}
                     variant="inline"
-                    focusable={false}
                   />
                 </>
               }

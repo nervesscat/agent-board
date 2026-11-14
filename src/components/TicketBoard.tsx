@@ -237,7 +237,6 @@ export function TicketBoard({
                                 timeline={work}
                                 stage={stallStage(stages, t.status)}
                                 variant="badge"
-                                focusable={false}
                               />
                               {t.decisions > 0 && <DecisionBadge n={t.decisions} />}
                               {after?.has(t.id) && <MergeAfterBadge ids={after.get(t.id)!} />}
@@ -654,7 +653,6 @@ export function TicketList({ projectId, items }: { projectId: string; items: Tic
                     timeline={work}
                     stage={stallStage(stages, t.status)}
                     variant="badge"
-                    focusable={false}
                     className="ml-2 align-[1px]"
                   />
                   <NeedsBadge needs={t.needs} className="ml-2 align-[1px]" />
