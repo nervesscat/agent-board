@@ -1,0 +1,125 @@
+{
+  "direction": "retro-crt",
+  "generator": "scripts/release-art/retro-crt.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900
+  },
+  "palette": {
+    "ground": "#0B1A12",
+    "phosphor": "#7CFFA8",
+    "highlight": "#E8FFE9",
+    "shadow": "#04100A"
+  },
+  "roles": {
+    "dark": {
+      "field": "ground",
+      "trace": "phosphor",
+      "hot": "highlight",
+      "bloom": "phosphor",
+      "trail": "phosphor",
+      "glass": "shadow"
+    },
+    "light": {
+      "field": "highlight",
+      "trace": "ground",
+      "hot": "ground",
+      "bloom": "phosphor",
+      "trail": "phosphor",
+      "glass": "shadow"
+    }
+  },
+  "scanlinePitch": 6,
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "seed": 721210724,
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "themes": {
+        "density": 0.958,
+        "hands": 0.896,
+        "precision": 0.365,
+        "wayfinding": 0.416
+      },
+      "field": {
+        "summits": 16,
+        "levels": 19,
+        "interval": 0.05,
+        "wobble": 1.608,
+        "jitter": 3.061,
+        "ridge": false,
+        "cleared": false
+      },
+      "screen": {
+        "bloom": 7.545,
+        "gap": 72.098,
+        "dropouts": 48,
+        "scanlinePitch": 6
+      },
+      "files": {
+        "light": "v0.2.2-light.svg",
+        "dark": "v0.2.2-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "seed": 737988343,
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "themes": {
+        "density": 0.534,
+        "hands": 0.393,
+        "precision": 0.583,
+        "wayfinding": 0
+      },
+      "field": {
+        "summits": 8,
+        "levels": 18,
+        "interval": 0.053,
+        "wobble": 1.433,
+        "jitter": 1.35,
+        "ridge": true,
+        "cleared": false
+      },
+      "screen": {
+        "bloom": 6.606,
+        "gap": 30,
+        "dropouts": 33,
+        "scanlinePitch": 6
+      },
+      "files": {
+        "light": "v0.2.3-light.svg",
+        "dark": "v0.2.3-dark.svg"
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "seed": 687655486,
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "themes": {
+        "density": 0.511,
+        "hands": 0.459,
+        "precision": 0,
+        "wayfinding": 0.501
+      },
+      "field": {
+        "summits": 11,
+        "levels": 12,
+        "interval": 0.082,
+        "wobble": 1.9,
+        "jitter": 2.525,
+        "ridge": false,
+        "cleared": true
+      },
+      "screen": {
+        "bloom": 8.877,
+        "gap": 92.806,
+        "dropouts": 32,
+        "scanlinePitch": 6
+      },
+      "files": {
+        "light": "v0.2.4-light.svg",
+        "dark": "v0.2.4-dark.svg"
+      }
+    }
+  ]
+}
