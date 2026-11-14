@@ -21,7 +21,7 @@ jobs:
     # pull request from a fork, from a branch and from a push.
     runs-on: ubuntu-latest
     # The e2e suite is the long part of this job: about 8 minutes of install, typecheck, lint,
-    # migrations, unit tests and build come first, then the suite's tests (582 at the last count). The
+    # migrations, unit tests and build come first, then the suite's tests. The
     # 70-minute limit was set on the old self-hosted box, where the e2e step measured 31 minutes with
     # another suite sharing the machine. The suite runs 2 workers here (playwright.config.ts): the
     # hosted runner's own timing is what the runs must show; the limit is kept until a measured run
