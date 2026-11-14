@@ -49,6 +49,23 @@ and one that does not match is refused and nothing is installed (README: "Updati
 The updater follows `releases/latest` and so offers only stable releases; a pre-release (a version
 with a suffix) is offered only to an app whose Updates section has **Include pre-releases** on.
 
+## Release artwork
+
+The card that greets the app at start shows a picture of the release above its notes. The board serves it
+from `public/release-art/`, one file per theme:
+
+- `public/release-art/<version>-light.svg`
+- `public/release-art/<version>-dark.svg`
+
+`<version>` is the release's version without the tag's `v` (`v0.3.0` → `0.3.0-light.svg`). The card
+picks the file by the page's theme, and falls back to the light one on a dark page, so a release may
+ship one variant only. Each is a 16:9 SVG (1600×900, say), drawn to sit edge to edge and purely
+decorative: the card gives it an empty `alt`.
+
+Artwork is optional and never required for a release. Put the files in `public/` before running
+`pnpm desktop:package`, and they are packaged with the board's other public assets; a release without
+them gets the card's placeholder header instead of a broken image.
+
 **Trying an update before it is released.** Never publish a release to test one. Serve a folder with a
 `latest-linux.yml` (or `latest.yml`) and the packages it names over HTTP, e.g. the `desktop/dist` of a
 build with a higher version (`python3 -m http.server 8120 --bind 127.0.0.1 --directory desktop/dist`),

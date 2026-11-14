@@ -34,8 +34,8 @@ export interface DesktopUpdates {
   installed: string
   packageType: 'nsis' | 'appimage' | 'deb' | 'rpm' | 'pacman' | null
   status: UpdateStatus
-  /** The newer release offered, its notes as plain text; null when none is. */
-  newest: { version: string; notes: string; date: string | null } | null
+  /** The newer release offered, its notes as plain text and as markdown; null when none is. */
+  newest: { version: string; notes: string; notesMarkdown: string; date: string | null } | null
   progress: { percent: number; transferred: number; total: number } | null
   error: string | null
   /** The command that installs the downloaded package, and that file's absolute path. */

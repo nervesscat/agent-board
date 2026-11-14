@@ -18,6 +18,7 @@ import {
   handleBridgeMessage,
   isPrerelease,
   manualCommand,
+  notesMarkdown,
   notesText,
   packageManager,
   packageType,
@@ -379,6 +380,211 @@ describe('notes and versions', () => {
   })
 })
 
+describe('notesMarkdown', () => {
+  it('turns headings, lists, emphasis, code and links into markdown', () => {
+    expect(
+      notesMarkdown(
+        '<h2>What&#39;s new</h2><ul><li>one</li><li>two</li></ul><ol><li>first</li><li>second</li></ol>' +
+          '<p><strong>bold</strong> and <b>also</b>, <em>italic</em>, <code>npm i</code></p>' +
+          '<p><a href="https://example.com/a?b=1&amp;c=2">Details</a></p>' +
+          '<p>one<br>two</p>',
+      ),
+    ).toBe(
+      "## What's new\n\n- one\n- two\n\n1. first\n2. second\n\n" +
+        '**bold** and **also**, *italic*, `npm i`\n\n' +
+        '[Details](https://example.com/a?b=1&c=2)\n\none\\\ntwo',
+    )
+  })
+
+  it('decodes the common entities', () => {
+    expect(notesMarkdown('<p>&amp; &lt; &gt; &quot; &#39; &nbsp; end</p>')).toBe('& < > " \' end')
+  })
+
+  it('fences a code block as it is, without its tags', () => {
+    expect(notesMarkdown('<p>Run</p><pre><code>npm i &amp;&amp; pnpm build\n</code></pre>')).toBe(
+      'Run\n\n```\nnpm i && pnpm build\n```',
+    )
+  })
+
+  it('keeps the indentation and the blank lines of a code block', () => {
+    expect(notesMarkdown('<pre><code>def f():\n    return 1\n\n    # end\n</code></pre>')).toBe(
+      '```\ndef f():\n    return 1\n\n    # end\n```',
+    )
+  })
+
+  it('fences a code block with a longer fence when its code has backticks', () => {
+    expect(notesMarkdown('<pre><code>```js\nx\n```\n</code></pre>')).toBe('````\n```js\nx\n```\n````')
+  })
+
+  it('keeps the text of a loose list item on its bullet', () => {
+    expect(
+      notesMarkdown('<ul><li><p>One</p></li><li><p>Two <a href="https://x.y">link</a></p></li></ul>'),
+    ).toBe('- One\n- Two [link](https://x.y)')
+  })
+
+  it('drops script and style with their contents, and every tag of the body', () => {
+    const markdown = notesMarkdown(
+      '<div><span>a</span></div><script>document.title = "pwned"</script>' +
+        '<style>p { color: red }</style><p>b &lt;b&gt;</p>',
+    )
+    expect(markdown).toBe('a\n\nb <b>')
+    expect(markdown).not.toMatch(/<(div|span|script|style|p)\b/)
+  })
+
+  it('mirrors a feed’s per-version notes as a heading per entry', () => {
+    expect(
+      notesMarkdown([
+        { version: '0.3.0', note: '<p>x</p>' },
+        { version: '0.4.0', note: '<ul><li>y</li></ul>' },
+      ]),
+    ).toBe('## 0.3.0\n\nx\n\n## 0.4.0\n\n- y')
+    // A version alone yields its heading.
+    expect(notesMarkdown([{ version: '0.5.0' }])).toBe('## 0.5.0')
+    expect(notesMarkdown([null, 'x'])).toBe('')
+  })
+
+  it('numbers an ordered list from its start attribute', () => {
+    expect(notesMarkdown('<ol start="3"><li>a</li><li>b</li></ol>')).toBe('3. a\n4. b')
+  })
+
+  it('puts a table on lines of its own, with the separator under the first row', () => {
+    expect(
+      notesMarkdown('<table><tr><th>Name</th><th>Size</th></tr><tr><td>a</td><td>1</td></tr></table>'),
+    ).toBe('| Name | Size |\n| --- | --- |\n| a | 1 |')
+  })
+
+  it('keeps the bullet of a newline-formatted loose list item', () => {
+    expect(notesMarkdown('<ul>\n<li>\n<p>One</p>\n</li>\n<li>\n<p>Two</p>\n</li>\n</ul>')).toBe(
+      '- One\n- Two',
+    )
+  })
+
+  it('escapes emphasis and code characters in text, but not in code', () => {
+    expect(notesMarkdown('<p>a * b and snake_case</p>')).toBe('a \\* b and snake\\_case')
+    expect(notesMarkdown('<p><code>a*b</code></p>')).toBe('`a*b`')
+  })
+
+  it('gives inline code that holds a backtick a longer fence', () => {
+    expect(notesMarkdown('<p>Use <code>a`b</code> here</p>')).toBe('Use ``a`b`` here')
+  })
+
+  it('keeps a space between two links split only by a newline in a list item', () => {
+    expect(
+      notesMarkdown('<ul><li><a href="https://x.y/1">One</a>\n<a href="https://x.y/2">Two</a></li></ul>'),
+    ).toBe('- [One](https://x.y/1) [Two](https://x.y/2)')
+  })
+
+  it('keeps a space between two code spans split only by a newline in a list item', () => {
+    expect(notesMarkdown('<ul><li><code>a</code>\n<code>b</code></li></ul>')).toBe('- `a` `b`')
+  })
+
+  it('escapes a block marker that starts a line of text', () => {
+    expect(notesMarkdown('<p>- not a list</p>')).toBe('\\- not a list')
+    expect(notesMarkdown('<p># not a heading</p>')).toBe('\\# not a heading')
+    expect(notesMarkdown('<p>&gt; not a quote</p>')).toBe('\\> not a quote')
+    expect(notesMarkdown('<p>+ not a list</p>')).toBe('\\+ not a list')
+    expect(notesMarkdown('<p>2024. was a year</p>')).toBe('2024\\. was a year')
+    expect(notesMarkdown('<p>3) not a list</p>')).toBe('3\\) not a list')
+    // Not at the start of a line: unchanged.
+    expect(notesMarkdown('<p>a - b</p>')).toBe('a - b')
+  })
+
+  it('escapes a tilde so it does not make strikethrough', () => {
+    expect(notesMarkdown('<p>~2x faster~</p>')).toBe('\\~2x faster\\~')
+  })
+
+  it('does not decode an entity that its text already spells out', () => {
+    expect(notesMarkdown('<p>&amp;lt; and &amp;copy;</p>')).toBe('\\&lt; and \\&copy;')
+    expect(notesMarkdown('<p>Tom &amp; Jerry</p>')).toBe('Tom & Jerry')
+  })
+
+  it('shows a heading inside a list item as bold text on the bullet', () => {
+    expect(notesMarkdown('<ul><li><h3>Title</h3></li><li>Two</li></ul>')).toBe('- **Title**\n- Two')
+  })
+
+  it('moves the edge spaces of emphasis outside its markers', () => {
+    expect(notesMarkdown('<p><b>Fixed </b>now</p>')).toBe('**Fixed** now')
+    expect(notesMarkdown('<p>was<em> fast</em>.</p>')).toBe('was *fast*.')
+  })
+
+  it('drops the newlines at the start and end of a list item', () => {
+    expect(notesMarkdown('<ul><li>\nOne\n</li><li>Two</li></ul>')).toBe('- One\n- Two')
+  })
+
+  it('keeps the line breaks of a code block that has a br', () => {
+    expect(notesMarkdown('<pre><code>line1<br>line2\n</code></pre>')).toBe('```\nline1\nline2\n```')
+  })
+
+  it('does not turn a ! before an autolink into an image', () => {
+    expect(notesMarkdown('<p>Done!<a href="https://x.y/z">https://x.y/z</a></p>')).toBe(
+      'Done\\![https://x.y/z](https://x.y/z)',
+    )
+  })
+
+  it('keeps the heading of a list item apart from the text after it, with and without a colon', () => {
+    expect(notesMarkdown('<ul>\n<li>\n<h3>Fixed:</h3>\n<p>text</p>\n</li>\n</ul>')).toBe(
+      '- **Fixed:**\n\n  text',
+    )
+    expect(notesMarkdown('<ul>\n<li>\n<h3>Fixed</h3>\n<p>The thing.</p>\n</li>\n<li>B</li>\n</ul>')).toBe(
+      '- **Fixed**\n\n  The thing.\n- B',
+    )
+  })
+
+  it('percent-encodes the parentheses of a link destination so the link stays whole', () => {
+    expect(notesMarkdown('<p><a href="https://x.y/a_(b">t</a></p>')).toBe('[t](https://x.y/a_%28b)')
+  })
+
+  it('keeps a line break inside a list item or a paragraph as a line break, not a new block', () => {
+    expect(notesMarkdown('<ul>\n<li>line one<br />\nline two</li>\n</ul>')).toBe('- line one\\\n  line two')
+    expect(notesMarkdown('<p>line one<br />\nline two</p>')).toBe('line one\\\nline two')
+  })
+
+  it('keeps the two paragraphs of a loose list item on separate lines under its bullet', () => {
+    expect(notesMarkdown('<ul>\n<li>\n<p>One</p>\n<p>Two</p>\n</li>\n</ul>')).toBe('- One\n\n  Two')
+  })
+
+  it('keeps nested lists nested, and numbers each ordered list on its own', () => {
+    expect(notesMarkdown('<ul><li>Parent<ul><li>Child</li></ul></li><li>Next</li></ul>')).toBe(
+      '- Parent\n  - Child\n- Next',
+    )
+    expect(notesMarkdown('<ol><li>a<ol><li>x</li></ol></li><li>b</li></ol>')).toBe('1. a\n   1. x\n2. b')
+  })
+
+  it('escapes a block marker that starts a wrapped line, not only the first line of text', () => {
+    expect(notesMarkdown('<p>Changes:\n- added a thing</p>')).toBe('Changes:\n\\- added a thing')
+    expect(notesMarkdown('<p>Foo\n---</p>')).toBe('Foo\n\\---')
+  })
+
+  it('keeps a break in a table cell, a heading or a code span a space, not a backslash', () => {
+    expect(notesMarkdown('<table><tr><th>A</th></tr><tr><td>a<br>b</td></tr></table>')).toBe(
+      '| A |\n| --- |\n| a b |',
+    )
+    expect(notesMarkdown('<h2>Release<br>notes</h2>')).toBe('## Release notes')
+    expect(notesMarkdown('<p><code>a<br>b</code></p>')).toBe('`a b`')
+  })
+
+  it('drops a break at the end of emphasis, so its markers still close', () => {
+    expect(notesMarkdown('<p><strong>Changes:<br></strong>x</p>')).toBe('**Changes:**x')
+  })
+
+  it('keeps a paragraph after a nested list in the item that holds the list', () => {
+    expect(notesMarkdown('<ul><li><p>A</p><ul><li>x</li></ul><p>B</p></li></ul>')).toBe('- A\n  - x\n\n  B')
+  })
+
+  it('keeps the indentation of raw text as text, not as a code block', () => {
+    expect(notesMarkdown('<div align="center">\n    <h2>Release 2.0</h2>\n    Some text here\n</div>')).toBe(
+      '## Release 2.0\n\n Some text here',
+    )
+  })
+
+  it('is empty for anything that is not notes', () => {
+    expect(notesMarkdown(null)).toBe('')
+    expect(notesMarkdown(undefined)).toBe('')
+    expect(notesMarkdown(42)).toBe('')
+    expect(notesMarkdown('')).toBe('')
+  })
+})
+
 describe('checking against a feed', () => {
   it('Check now finds the feed’s newer version and its notes, and downloads nothing', async () => {
     release({ version: '0.3.0', files: linuxFiles('0.3.0') })
@@ -393,7 +599,12 @@ describe('checking against a feed', () => {
       mode: 'desktop',
       installed: '0.2.0',
       status: 'available',
-      newest: { version: '0.3.0', notes: 'Fixes & more', date: '2026-11-01T10:00:00.000Z' },
+      newest: {
+        version: '0.3.0',
+        notes: 'Fixes & more',
+        notesMarkdown: 'Fixes & **more**',
+        date: '2026-11-01T10:00:00.000Z',
+      },
       error: null,
     })
     expect(updates.state().checkedAt).not.toBeNull()
