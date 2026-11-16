@@ -605,19 +605,26 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
   return (
     <h1 className="text-xl font-semibold tracking-tight">
       <span className="text-muted-foreground">#{t.id}</span>{' '}
+      {/* A span with the button's role, not a button: browsers draw a button as an inline-block, which drops a
+            title too wide for the line under the #id, while a span wraps its text in the heading's own flow. */}
       <Tip content="Click to rename">
-        <button
-          type="button"
+        <span
+          role="button"
+          tabIndex={0}
           onClick={() => {
             setValue(t.title)
             setEditing(true)
           }}
-          // Inline, not an inline-block: a block-level button drops its whole title under the #id when
-          // the title is too wide for the line, and an inline one wraps its text in the heading's flow.
-          className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return
+            e.preventDefault()
+            setValue(t.title)
+            setEditing(true)
+          }}
+          className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {t.title}
-        </button>
+        </span>
       </Tip>
     </h1>
   )
