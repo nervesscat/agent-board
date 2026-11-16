@@ -96,11 +96,16 @@ Edit `src/db/schema.ts`, then `pnpm db:generate`. Give the generated migration a
 
 ### Branch protection
 
-`dev` and `main` only take changes through a pull request: a direct push is refused, for maintainers too,
-and so is a force-push or a branch deletion. A pull request merges once `check`, `desktop` and
-`desktop-linux` pass on it, and again on the branch as it stands, so a branch that falls behind or takes
-a new commit waits for a green run. No approval is required, since pull requests are often pushed with the
-maintainer's own account: the checks are the gate.
+`dev` and `main` only take changes through a pull request. A direct push is refused, admins included, and so
+are a force-push and a branch deletion. The three checks `check`, `desktop` and `desktop-linux` run on
+GitHub's hosted runners, and a pull request merges only when all three are green on its head and its
+branch is up to date with its base (`dev` for a normal change, `main` for a release).
+
+Because each pull request must be up to date with its base, pull requests merge one at a time. To merge
+one, merge its base into its branch, push, and wait for the three checks to go green again on the new
+head; then merge. A pull request that is behind or red cannot merge, so the next one waits its turn.
+No approval is required, since pull requests are often pushed with the maintainer's own account: the
+checks are the gate.
 
 `dev` is the default branch and everything lands through it, so a change that reaches it with a red CI
 leaves every pull request after it to inherit the failure.
