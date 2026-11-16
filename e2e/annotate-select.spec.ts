@@ -114,6 +114,8 @@ test('the Select tool picks one mark, adds and takes away with Shift, and a drag
 
   await control(canvas, 'Select').click()
   await expect(control(canvas, 'Select')).toHaveAttribute('aria-pressed', 'true')
+  // The toolbar has no Delete button: the Delete key and Clear are the ways to remove marks.
+  await expect(control(canvas, 'Delete')).toHaveCount(0)
 
   // A click on a mark picks it: its note is editable and the Delete button follows the selection.
   await click(page, canvas, [60, 60])
