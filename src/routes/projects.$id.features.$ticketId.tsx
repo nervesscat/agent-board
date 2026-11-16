@@ -589,6 +589,21 @@ function measureHeader(header: HTMLElement | null) {
 function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => void }) {
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(t.title)
+  const titleRef = useRef<HTMLSpanElement>(null)
+  // Enter or Escape closes the field from the keyboard: the focus goes back to the title, not the page.
+  const returnFocus = useRef(false)
+  // A Space pressed on the title, so that its keyup opens the field.
+  const spaceDown = useRef(false)
+  useEffect(() => {
+    if (!editing && returnFocus.current) {
+      returnFocus.current = false
+      titleRef.current?.focus()
+    }
+  }, [editing])
+  const open = () => {
+    setValue(t.title)
+    setEditing(true)
+  }
   const done = (save: boolean) => {
     setEditing(false)
     const title = value.trim()
@@ -603,6 +618,9 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
         onChange={(e) => setValue(e.target.value)}
         onBlur={() => done(true)}
         onKeyDown={(e) => {
+          // A held Enter that opened the field must not close it again through its repeats.
+          if (e.key === 'Enter' && e.repeat) return
+          if (e.key === 'Enter' || e.key === 'Escape') returnFocus.current = true
           if (e.key === 'Enter') done(true)
           if (e.key === 'Escape') done(false)
         }}
@@ -612,17 +630,39 @@ function InlineTitle({ t, onSave }: { t: TicketFull; onSave: (title: string) => 
   return (
     <h1 className="text-xl font-semibold tracking-tight">
       <span className="text-muted-foreground">#{t.id}</span>{' '}
+      {/* A span with the button's role, not a button: browsers draw a button as an inline-block, which drops a
+            title too wide for the line under the #id, while a span wraps its text in the heading's own flow.
+            Like a button, Space opens the field on its keyup, so a held Space does not type into it. */}
       <Tip content="Click to rename">
-        <button
-          type="button"
-          onClick={() => {
-            setValue(t.title)
-            setEditing(true)
+        <span
+          ref={titleRef}
+          role="button"
+          tabIndex={0}
+          onClick={open}
+          onKeyDown={(e) => {
+            if (e.key === ' ') {
+              e.preventDefault()
+              spaceDown.current = true
+            }
+            if (e.key === 'Enter' && !e.repeat) {
+              e.preventDefault()
+              open()
+            }
           }}
-          className="cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
+          onKeyUp={(e) => {
+            // Only a Space that went down on the title opens the field, as a button's does.
+            if (e.key !== ' ' || !spaceDown.current) return
+            spaceDown.current = false
+            open()
+          }}
+          // A Space held across a Tab must not leave its press behind for the next keyup on the title.
+          onBlur={() => {
+            spaceDown.current = false
+          }}
+          className="inline cursor-text text-left decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:underline"
         >
           {t.title}
-        </button>
+        </span>
       </Tip>
     </h1>
   )
