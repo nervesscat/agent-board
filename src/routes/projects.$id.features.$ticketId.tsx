@@ -1,5 +1,12 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type HistoryState, Link, createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
+import {
+  type HistoryState,
+  Link,
+  createFileRoute,
+  useLocation,
+  useNavigate,
+  useRouter,
+} from '@tanstack/react-router'
 import {
   Archive,
   ArchiveRestore,
@@ -123,7 +130,7 @@ import {
 } from '#/lib/lanes'
 import { type AreaId, type Layout, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { useProject, useStages } from '#/lib/project'
-import { type Anchor, anchorId, useAnchor, useReveal } from '#/lib/reveal'
+import { type Anchor, anchorId, cameBack, useAnchor, useReveal } from '#/lib/reveal'
 import { addTags, overTagLimits } from '#/lib/tags'
 import { type StepList, columnNeighbours, isClosed, stageBadge, stageOf } from '#/lib/stages'
 import { ticketsKey, ticketsQuery } from '#/lib/tickets'
@@ -132,6 +139,12 @@ export const Route = createFileRoute('/projects/$id/features/$ticketId')({
   component: TicketPage,
   validateSearch: validateLaneSearch,
 })
+
+/**
+ * The window's scroll on each ticket the reader left, by ticket id. Stepping or following a link back to
+ * a ticket lands where it was, as Back does (the router keeps that place for Back itself).
+ */
+const leftAt = new Map<string, number>()
 
 function TicketPage() {
   const { id, ticketId } = Route.useParams()
@@ -253,6 +266,39 @@ function TicketPage() {
   const linkedTo = useLocation({ select: (l) => l.pathname.split('/').at(-1) })
   const drawn = t !== undefined && String(t.id) === ticketId && ticketId === linkedTo
   useReveal(anchor, { page: ticketId, ready: drawn && layout !== undefined })
+  // Before a move, the window still shows the ticket being left: its scroll is kept for it.
+  const router = useRouter()
+  useEffect(
+    () =>
+      router.subscribe('onBeforeNavigate', ({ fromLocation }) => {
+        const from = /\/projects\/[^/]+\/features\/([^/]+)$/.exec(fromLocation?.pathname ?? '')
+        if (from) leftAt.set(from[1], window.scrollY)
+      }),
+    [router],
+  )
+  // Arriving at a ticket left before (a step, a link; Back and an anchor are the router's and reveal's):
+  // the page goes back to where it was, once it is drawn and tall enough. The reader turning the wheel,
+  // touching or typing takes the page back.
+  useEffect(() => {
+    const at = leftAt.get(ticketId)
+    if (!drawn || at === undefined || window.location.hash || cameBack()) return
+    let frame = 0
+    let tries = 0
+    const step = () => {
+      if (Math.abs(window.scrollY - at) < 1 || tries++ > 90) return
+      window.scrollTo(0, at)
+      frame = requestAnimationFrame(step)
+    }
+    const stop = () => {
+      cancelAnimationFrame(frame)
+      for (const e of ['wheel', 'touchstart', 'keydown', 'mousedown'] as const)
+        window.removeEventListener(e, stop)
+    }
+    for (const e of ['wheel', 'touchstart', 'keydown', 'mousedown'] as const)
+      window.addEventListener(e, stop, { passive: true })
+    frame = requestAnimationFrame(step)
+    return stop
+  }, [drawn, ticketId])
   // A lane's post linked to on this ticket is in the feed with the lanes' posts folded in: folded in
   // once per anchor, so turning it off again stays off.
   const anchoredPost = anchorId(anchor?.holder ?? anchor?.target, 'post')
