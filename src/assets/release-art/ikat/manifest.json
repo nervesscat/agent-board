@@ -1,0 +1,155 @@
+{
+  "direction": "ikat",
+  "madeBy": "Claude Fable 5.2",
+  "generator": "scripts/release-art/ikat.mjs",
+  "canvas": {
+    "width": 1600,
+    "height": 900,
+    "threads": 200
+  },
+  "palette": {
+    "hexes": ["#EAE2D1", "#1A2036", "#2C3E6E", "#B9492D", "#C9A03C"],
+    "light": {
+      "ground": "#EAE2D1",
+      "hues": ["#2C3E6E", "#B9492D", "#C9A03C"]
+    },
+    "dark": {
+      "ground": "#1A2036",
+      "hues": ["#EAE2D1", "#B9492D", "#C9A03C"]
+    }
+  },
+  "releases": [
+    {
+      "version": "v0.2.2",
+      "notes": "scripts/release-art/notes/v0.2.2.md",
+      "seed": 167720200,
+      "themes": {
+        "items": 155,
+        "hands": 0.342,
+        "hold": 0.187,
+        "way": 0.206,
+        "removed": 0.116,
+        "repair": 0.065
+      },
+      "binding": {
+        "courses": 16,
+        "rows": 3,
+        "stagger": 0.551,
+        "drift": 0.41,
+        "slip": 22.2,
+        "ghosts": 4,
+        "ties": 1
+      },
+      "blocks": 48,
+      "files": {
+        "light": {
+          "file": "v0.2.2-light.svg",
+          "bytes": 81979
+        },
+        "dark": {
+          "file": "v0.2.2-dark.svg",
+          "bytes": 82027
+        }
+      }
+    },
+    {
+      "version": "v0.2.3",
+      "notes": "scripts/release-art/notes/v0.2.3.md",
+      "seed": 184497819,
+      "themes": {
+        "items": 15,
+        "hands": 0.067,
+        "hold": 0.667,
+        "way": 0.2,
+        "removed": 0.067,
+        "repair": 0.067
+      },
+      "binding": {
+        "courses": 8,
+        "rows": 1,
+        "stagger": 0,
+        "drift": 0,
+        "slip": 9.5,
+        "ghosts": 1,
+        "ties": 3
+      },
+      "blocks": 8,
+      "files": {
+        "light": {
+          "file": "v0.2.3-light.svg",
+          "bytes": 52423
+        },
+        "dark": {
+          "file": "v0.2.3-dark.svg",
+          "bytes": 52454
+        }
+      }
+    },
+    {
+      "version": "v0.2.4",
+      "notes": "scripts/release-art/notes/v0.2.4.md",
+      "seed": 268385914,
+      "themes": {
+        "items": 13,
+        "hands": 0.385,
+        "hold": 0.154,
+        "way": 0.462,
+        "removed": 0.231,
+        "repair": 0
+      },
+      "binding": {
+        "courses": 9,
+        "rows": 1,
+        "stagger": 0.277,
+        "drift": 0.862,
+        "slip": 10.9,
+        "ghosts": 2,
+        "ties": 0
+      },
+      "blocks": 9,
+      "files": {
+        "light": {
+          "file": "v0.2.4-light.svg",
+          "bytes": 19665
+        },
+        "dark": {
+          "file": "v0.2.4-dark.svg",
+          "bytes": 19687
+        }
+      }
+    },
+    {
+      "version": "v0.2.5",
+      "notes": "scripts/release-art/notes/v0.2.5.md",
+      "seed": 285163533,
+      "themes": {
+        "items": 31,
+        "hands": 0.258,
+        "hold": 0.323,
+        "way": 0.129,
+        "removed": 0.065,
+        "repair": 0.129
+      },
+      "binding": {
+        "courses": 11,
+        "rows": 2,
+        "stagger": 0.336,
+        "drift": 0.063,
+        "slip": 20.7,
+        "ghosts": 1,
+        "ties": 1
+      },
+      "blocks": 22,
+      "files": {
+        "light": {
+          "file": "v0.2.5-light.svg",
+          "bytes": 52725
+        },
+        "dark": {
+          "file": "v0.2.5-dark.svg",
+          "bytes": 52773
+        }
+      }
+    }
+  ]
+}
