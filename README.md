@@ -245,8 +245,11 @@ over it by hand works too, and the data stays.
 **Updating.** Settings has an Updates section: the installed version, the newest release on
 [GitHub Releases](https://github.com/nervesscat/agent-board/releases) and **Check now**. The app also
 checks as it starts and every six hours (a switch there turns that off); when a newer version is out, a
-small **Update** badge shows in the top bar, and the section shows its release notes and **Download and
-install**. Nothing is downloaded or installed until you press it. Only stable releases are offered;
+small **Update** badge shows in the top bar, the section shows its release notes and **Download and
+install**, and a card over the board shows the release's artwork and notes with **Install now** and
+**Skip this version**. Nothing is downloaded or installed until you press one of them. Each release is
+announced once per browser: one this browser has seen is not offered again, and one that was skipped is
+listed in Settings, Updates, with **Undo**, which offers it again. Only stable releases are offered;
 **Include pre-releases** there offers `0.3.0-beta.1` and the like too. The download is checked against
 the sha512 in the release's `latest.yml` (Linux: `latest-linux.yml`), and one that does not match is
 refused with nothing installed. Then the app stops its board server (as Quit does), runs the new
