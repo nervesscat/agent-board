@@ -364,6 +364,19 @@ name>"` (e.g. `orch/builder-1`) on every board tool call, so what it posts is fi
   in its brief too: the `projectId` and `ticketId`, a `heartbeat` every few minutes, `start_span` /
   `end_span` around its phase, `start_wait` / `end_wait` with the reason while it waits (a lock,
   the builder, the MCP server down).
+- One report per subagent run, written before the hand-off: it is part of finishing, not a step
+  after it, and the orchestrator writes none. Its template ships with the
+  review bundle as `run-reports/<agent>.md` for `spec`, `builder`, `runner`, `env`, `verify`, `hunt`,
+  `refute` and `merge`; a project agent's own is on the Team page (`get_project` →
+  `agents[].reportTemplate`, the common part until the human writes one). The report is
+  `write_run_report` with structured fields (identity, start, end, duration, where the time went,
+  difficulty and confidence, steps as `{name, done, note}`, counts) and its prose in named sections
+  (`brief`, `readRan`, `problems`, `gaps`, `moreTime`, `improvements`, then the ones of that agent).
+  One report per run: a ticket with three review rounds has three `hunt` reports, each with its
+  round. The ticket's Agents side shows them and `list_run_reports` reads one kind across tickets.
+  Put this in every brief. `update_ticket` → `review` answers with `missingRunReports` for each run
+  the work timeline records with no report — a span, a hand-off, or a second run of one agent and
+  round that only one report covers: flagged, not refused; get them written before the hand-off.
 
 ### Watch for feedback
 
@@ -408,7 +421,9 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
    unmerged work your branch holds: each one belongs in `needs`. The PR queue then marks your PR
    "merge after #<its PR>", and the ticket cannot go to `done` until those branches are merged into
    its base: `update_ticket` to `done` is refused with which one (`get_ticket` → `needs[].merged`).
-   Only the human can mark it done anyway.
+   Only the human can mark it done anyway; in Approved, where an orchestrator merges the PR without
+   asking again, it moves the ticket to done after the merge (see
+   [Approved](#approved-the-go-ahead-to-merge)).
    `needs` is the enforced rule; the review column's order is the merge order the agents propose,
    read top to bottom (top merges first). Moving your ticket to review, place it with
    `update_ticket` → `position` (1 is the top of its stage's column; with `status`, in the new
@@ -443,7 +458,8 @@ Preview, Summary and Merged as their facts hold; Implementation and its steps ar
 
 `update_ticket` → `review` then answers with `open`: every task and subtask still open, the
 ticket's and its lanes' that are not cancelled, in tree order, each `{taskId, ticketId, text, auto}`.
-Merged is left out: merging is the human's. `auto: true` marks a phase the board ticks from its fact
+Merged is left out: merging is the human's, except on a ticket in Approved (below). `auto: true`
+marks a phase the board ticks from its fact
 (Pushed, PR, CI, Preview, Summary): settle it by making the fact hold (push, open the PR, get CI
 green, start the preview, rewrite the summary after your last commit), never by a tick. The move goes
 through anyway: fix each one; `open: []` means nothing is left. `get_ticket` returns the same `open`
@@ -451,7 +467,9 @@ while the ticket is in review, and its page shows them on the Tasks card.
 
 After that:
 
-1. `done` is the human's call unless the project instructions say otherwise.
+1. `done` is the human's call unless the project instructions say otherwise, or the ticket is in
+   Approved, where an orchestrator merges the PR and then moves it: see
+   [Approved](#approved-the-go-ahead-to-merge).
 2. A ticket with lanes goes to `review` once its lanes are in `review`, `done` or `cancelled`; the
    board flags a ticket that is further along than its lanes. Say in the summary which lanes it
    covers.
@@ -631,6 +649,33 @@ Without those skills, or for one ticket, orchestrate by hand:
 
 Never two builders on one branch; when no agent's notes fit a step, ask in a post rather than
 doing it yourself.
+
+## Approved: the go-ahead to merge
+
+Moving a ticket to **Approved** is the human's go-ahead to merge it. Only the human puts a ticket there:
+the approval verdict on a ticket in In review does it, or their move. An agent never does, and a worker
+(a sub-identity) never merges. Taking the approval back returns the ticket to In review. Approved is a
+review-kind stage, so no stage kind sends a ticket there.
+
+An orchestrator that finds a ticket in Approved merges its PR(s) without asking again, once the facts
+allow it:
+
+1. **Every task done but Merged**: Implementation and its steps, and the hand-off phases; `get_ticket`
+   → `open` is empty.
+2. **No open decision card** on the ticket.
+3. **The PR open, up to date with its base, and its checks green.** When the branch is behind its base
+   or conflicts, that comes first. It is the ticket's own work, done by an agent on its branch: merge the
+   base in, resolve the conflicts, push, and wait for CI green on the new head.
+4. **Merge the PR**, then **move the ticket to the project's first done stage** (the first stage of kind
+   done in `get_project`; Done in the default layout) and post on the ticket, naming the PR and the merge commit.
+
+When something keeps it from merging (red checks, a conflict that needs a product call), say exactly
+what on the ticket, and leave it in Approved. It does not merge around it, and it does not ask whether
+it may merge. `get_summary` and `get_live_work` list these tickets as "approved, to merge".
+
+Merging is the human's everywhere except on a ticket in Approved, where an orchestrator merges its PR(s)
+without asking again once the facts allow it. The board never merges a PR itself and no code path in it
+does.
 
 ## Reviews and the PR queue
 

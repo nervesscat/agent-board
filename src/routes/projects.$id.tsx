@@ -1,10 +1,8 @@
 import { Link, Outlet, createFileRoute, useRouterState } from '@tanstack/react-router'
-import { FolderGit2 } from 'lucide-react'
 import { useEffect } from 'react'
 
 import { LAYOUT_ICONS } from '#/components/layoutIcons'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '#/components/ui/select'
-import { Tip } from '#/components/ui/tooltip'
 import { type AreaId, defaultLayout, layoutElement, shownIn } from '#/lib/layout'
 import { rememberCurrentProject, useProject } from '#/lib/project'
 import { useHydrated } from '#/lib/useHydrated'
@@ -23,6 +21,7 @@ const MODULES = {
   'nav.previews': '/projects/$id/previews',
   'nav.gallery': '/projects/$id/gallery',
   'nav.agents': '/projects/$id/agents',
+  'nav.runReports': '/projects/$id/run-reports',
   'nav.daily': '/projects/$id/daily',
   'nav.cleanup': '/projects/$id/cleanup',
   'nav.repositories': '/projects/$id/repositories',
@@ -57,26 +56,6 @@ function ProjectLayout() {
           keeps scrolling (not the content pane), so the header, other sticky bars and the
           browser's scroll restoration keep working as on every other page. */}
       <aside className="md:sticky md:top-[calc(4.5rem+1px+env(safe-area-inset-top))] md:max-h-[calc(100vh-6rem-1px-env(safe-area-inset-top))] md:w-52 md:shrink-0 md:self-start md:overflow-y-auto">
-        <div className="mb-3 px-2">
-          <div className="truncate font-semibold">{project?.name ?? '…'}</div>
-          <ul className="mt-1 space-y-0.5">
-            {project?.repos.map((r) => (
-              <Tip key={r.id} content={r.repoPath}>
-                <li className="flex items-center gap-1.5 truncate font-mono text-xs text-muted-foreground">
-                  <FolderGit2 className="size-3 shrink-0" /> {r.githubRepo ?? r.name}
-                </li>
-              </Tip>
-            ))}
-            {project && !project.repos.length && (
-              <li className="text-xs text-muted-foreground">
-                No repos yet.{' '}
-                <Link to="/projects/$id/repositories" params={{ id }} className="underline">
-                  Add one
-                </Link>
-              </li>
-            )}
-          </ul>
-        </div>
         {pages.length > 0 && current && (
           <div className="mb-2 px-2 md:hidden">
             <Select

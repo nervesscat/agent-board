@@ -11,6 +11,7 @@ import { type OpenTask, openTasks } from './openTasks'
 import { HttpError } from './http'
 import { getProject } from './projects'
 import { listRepos } from './repos'
+import { missingReports, ticketReports } from './runReports'
 import {
   deleteStage,
   firstOfKind,
@@ -237,14 +238,17 @@ export async function ticketView(id: number, opts: { laneUpdates?: boolean } = {
       return t ? [{ id: t.id, title: t.title, branch: t.branch, prNumber: t.prNumber, status: t.status }] : []
     })
   // A PR's own ticket has no hand-off: its PR is reviewed on the queue, not handed off.
-  const open: OpenTask[] | null =
-    kindOf(ctx.stages, full.status) === 'review' && !full.prId ? openTasks(full.id) : null
+  const inReview = kindOf(ctx.stages, full.status) === 'review'
+  const open: OpenTask[] | null = inReview && !full.prId ? openTasks(full.id) : null
   const { timeline } = timelinesFor([full]).get(full.id)!
   return {
     ...full,
     needs,
     neededBy,
     open,
+    // The reports of each subagent run, newest first; in review, the runs the timeline records with none.
+    runReports: ticketReports(full.id),
+    missingRunReports: inReview && !full.prId ? missingReports(full.id) : [],
     stalled: timeline.stalled,
     lastSignalAt: timeline.lastSignalAt,
     liveness: timeline.liveness,
@@ -413,6 +417,17 @@ function logOverride(t: Ticket, unmet: Need[], actor: string) {
   })
 }
 
+/** Refuses an agent's move or create into Approved: only the human's verdict or a move puts a ticket there. */
+function refuseAgentApproved(projectId: number, status: string | undefined) {
+  if (status === undefined) return
+  const stages = listStages(projectId)
+  if (resolveStage(stages, status).key === 'approved')
+    throw new HttpError(
+      403,
+      'only the human puts a ticket in Approved: a verdict or a move by the human does',
+    )
+}
+
 type Patch = Parameters<typeof features.updateTicket>[1]
 
 /**
@@ -431,6 +446,8 @@ export async function changeTicket(
   const { needs, force, position, ...patch } = input
   const before = features.getTicket(id)
   if (position !== undefined) features.checkPlacement(before, position)
+  // An agent never puts a ticket in Approved: the orchestrator reads that stage as the human's go-ahead.
+  if (opts.agent && before.status !== 'approved') refuseAgentApproved(before.projectId, patch.status)
   const ids = needs !== undefined ? checkNeeds(before, needs) : needIds(id)
   // Judged against the primary the write produces: a swap or a reordered list brings that repo's base.
   const { repos, ...fields } = patch
@@ -459,12 +476,13 @@ export async function changeTicket(
     { behavior: 'immediate' },
   )
   logOverride(row, unmet, actor)
-  // Into review: the phases the board ticks are read first, so what is still open is up to date.
+  // Into review: the phases the board ticks are read first, so what is still open is up to date. The
+  // subagent runs the timeline records with no run report are flagged here, never refused.
   if (patch.status && !row.prId && kindOf(listStages(row.projectId), row.status) === 'review') {
     await features.getTicketWithPush(id)
-    return { ...row, open: openTasks(id) }
+    return { ...row, open: openTasks(id), missingRunReports: missingReports(id) }
   }
-  return row
+  return { ...row, missingRunReports: [] }
 }
 
 /**
@@ -492,6 +510,7 @@ export async function newTicket(
   opts: { agent: boolean },
 ) {
   const { needs = [], defaultPhases, ...rest } = input
+  if (opts.agent) refuseAgentApproved(projectId, rest.status)
   const ids = checkNeeds({ id: null, projectId }, needs)
   if (ids.length && rest.status) {
     // Judged against the repo and base the ticket is created with.
