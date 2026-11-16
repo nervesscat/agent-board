@@ -522,6 +522,15 @@ function projectSummary(project: schema.Project, ctx: { now: Date; date: string;
         instructionChanges.length +
         stalled.length,
     },
+    // The tickets in Approved: the human's go-ahead to merge, which an orchestrator merges without asking again.
+    approvedToMerge: tickets
+      .filter((t) => t.status === 'approved' && kind(t.status) === 'review')
+      .map((t) => ({
+        ticketId: t.id,
+        title: t.title,
+        prNumber: t.prNumber,
+        label: 'approved, to merge' as const,
+      })),
     inProgress: progress.filter((t) => t.kind !== 'review'),
     // Lost contact: outside Needs you and its count (the facts are per agent, not per ticket).
     lostContact,
