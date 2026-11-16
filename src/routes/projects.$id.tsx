@@ -40,7 +40,7 @@ const TOGGLE_ICON = { expanded: PanelLeftClose, shrunk: PanelLeft, hidden: Panel
 /** How long a hidden sidebar stays open after the mouse leaves it, so a small move off its edge does not close it. */
 const PEEK_CLOSE_MS = 250
 
-/** The sidebar's place under the sticky header, shared by the sidebar and the toggle beside it. */
+/** The sidebar's place under the sticky header, shared by the sidebar and the toggle column beside it. */
 const STICKY_TOP = 'md:top-[calc(4.5rem+1px+env(safe-area-inset-top))]'
 
 function ProjectLayout() {
@@ -61,6 +61,14 @@ function ProjectLayout() {
   const closeTimer = useRef<number | undefined>(undefined)
   const asideRef = useRef<HTMLElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
+  // A press moves the toggle to another place when the mode crosses 'hidden' (the sidebar's row, or the column
+  // beside it), so the button that was pressed unmounts: the one that replaces it takes the focus.
+  const focusToggleAfterChange = useRef(false)
+  useEffect(() => {
+    if (!focusToggleAfterChange.current) return
+    focusToggleAfterChange.current = false
+    toggleRef.current?.focus()
+  }, [mode])
   // A link was clicked in this peek. Some browsers (Safari) do not focus a link on a mouse click, so focus
   // may be on the page body although the click was in the sidebar.
   const linkClickedInPeek = useRef(false)
@@ -96,32 +104,40 @@ function ProjectLayout() {
     }) ?? pages[0]
   const pageItems = Object.fromEntries(pages.map((page) => [page, layoutElement(page).label]))
   const ToggleIcon = TOGGLE_ICON[mode]
+  // The one toggle, rendered in one place only: the first row of the sidebar, or while the sidebar is hidden,
+  // the column beside it.
+  const toggle = (
+    <Tip content={SIDEBAR_TOGGLE_LABEL[mode]}>
+      <Button
+        ref={toggleRef}
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={SIDEBAR_TOGGLE_LABEL[mode]}
+        onClick={() => {
+          setPeeking(false)
+          focusToggleAfterChange.current = true
+          chooseMode(nextSidebarMode(mode))
+        }}
+      >
+        <ToggleIcon className="size-4" />
+      </Button>
+    </Tip>
+  )
   return (
     <div className="flex flex-col gap-6 md:flex-row">
-      {/* The toggle has its own column beside the sidebar, so it stays reachable while the sidebar is hidden.
-          Desktop only: the phone layout has no toggle. */}
-      <div
-        className={cn(
-          'hidden md:flex md:w-8 md:shrink-0 md:justify-center md:self-start md:sticky',
-          STICKY_TOP,
-        )}
-      >
-        <Tip content={SIDEBAR_TOGGLE_LABEL[mode]}>
-          <Button
-            ref={toggleRef}
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={SIDEBAR_TOGGLE_LABEL[mode]}
-            onClick={() => {
-              setPeeking(false)
-              chooseMode(nextSidebarMode(mode))
-            }}
-          >
-            <ToggleIcon className="size-4" />
-          </Button>
-        </Tip>
-      </div>
+      {/* While the sidebar is hidden the toggle has its own column at the left edge, above the strip that shows
+          the sidebar, so it stays reachable. Desktop only: the phone layout has no toggle. */}
+      {hiddenNow && (
+        <div
+          className={cn(
+            'hidden md:sticky md:z-40 md:flex md:w-8 md:shrink-0 md:justify-center md:self-start',
+            STICKY_TOP,
+          )}
+        >
+          {toggle}
+        </div>
+      )}
       {/* From md up the sidebar sticks below the sticky header (3rem + its 1px border) and main's
           1.5rem top padding, and scrolls on its own when taller than the window. The page itself
           keeps scrolling (not the content pane), so the header, other sticky bars and the
@@ -144,6 +160,13 @@ function ProjectLayout() {
           showPeek && 'md:fixed md:left-0 md:z-40 md:w-52 md:bg-background md:shadow-lg',
         )}
       >
+        {/* Expanded and shrunk: the toggle is the sidebar's first row, above Overview, right-aligned when
+            expanded and centred when shrunk. Desktop only. */}
+        {!hiddenNow && (
+          <div className={cn('mb-1 hidden md:flex', shrunk ? 'md:justify-center' : 'md:justify-end')}>
+            {toggle}
+          </div>
+        )}
         {pages.length > 0 && current && (
           <div className="mb-2 px-2 md:hidden">
             <Select
@@ -197,7 +220,8 @@ function ProjectLayout() {
         </nav>
       </aside>
       {hiddenNow && (
-        // The strip along the left border, where the mouse shows the hidden sidebar. Desktop only.
+        // The strip along the left border, about 40px wide, where the mouse shows the hidden sidebar. Desktop only.
+        // It sits under the toggle column (z-40), so the toggle stays clickable above it.
         <div
           aria-hidden="true"
           onMouseEnter={openPeek}
@@ -205,7 +229,7 @@ function ProjectLayout() {
           // enter to it, and moving into the sidebar opens it again (cancelling this close).
           onMouseLeave={closePeekSoon}
           className={cn(
-            'fixed bottom-0 left-0 z-30 hidden w-1.5 md:block',
+            'fixed bottom-0 left-0 z-30 hidden w-10 md:block',
             'top-[calc(4.5rem+1px+env(safe-area-inset-top))]',
           )}
         />

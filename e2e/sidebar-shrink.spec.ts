@@ -154,3 +154,45 @@ test('on a phone there is no toggle and the page picker is unchanged', async ({ 
       .evaluate((el) => getComputedStyle(el).position),
   ).toBe('static')
 })
+
+test('the toggle sits at the top of the Overview module in expanded and in shrunk', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  const aside = sidebar(page)
+  for (const label of ['Shrink sidebar', 'Hide sidebar']) {
+    const button = page.getByRole('button', { name: label })
+    await expect(button).toBeVisible()
+    const toggleBox = (await button.boundingBox())!
+    const overviewBox = (await aside.getByRole('link', { name: 'Overview' }).boundingBox())!
+    const asideBox = (await aside.boundingBox())!
+    // Inside the sidebar, as its first row: above the Overview link, which is above every other link.
+    expect(toggleBox.x).toBeGreaterThanOrEqual(asideBox.x)
+    expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(asideBox.x + asideBox.width)
+    expect(toggleBox.y + toggleBox.height).toBeLessThanOrEqual(overviewBox.y)
+    expect(toggleBox.y).toBeGreaterThanOrEqual(asideBox.y)
+    if (label === 'Shrink sidebar') await button.click()
+  }
+})
+
+test('a hidden sidebar shows when the mouse comes near where it was, not only at the screen edge', async ({
+  page,
+  project,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto(`/projects/${project.id}/prs`)
+  await page.getByRole('button', { name: 'Shrink sidebar' }).click()
+  await page.getByRole('button', { name: 'Hide sidebar' }).click()
+  const aside = sidebar(page)
+  await expect(aside).toBeHidden()
+
+  // Inside the 40px strip, away from the very edge.
+  await page.mouse.move(640, 400)
+  await page.mouse.move(20, 400)
+  await expect(aside.getByRole('link', { name: 'Overview' })).toBeVisible()
+
+  await page.mouse.move(640, 400)
+  await expect(aside).toBeHidden()
+})
