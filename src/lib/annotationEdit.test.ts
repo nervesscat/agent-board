@@ -108,6 +108,14 @@ describe('markAt', () => {
     expect(markAt([arrow], 50, 11)).toBeUndefined()
   })
 
+  it('does not pick a diagonal line or arrow by the empty corners of its box', () => {
+    const under = rect('under', 100, 300, 100, 100)
+    const arrow = line('a', [0, 0], [400, 400], 'arrow')
+    // (150, 350) is inside the box of the arrow and about 141 px from its segment: the rect under it is picked.
+    expect(markAt([under, arrow], 150, 350)?.id).toBe('under')
+    expect(markAt([arrow], 150, 350)).toBeUndefined()
+  })
+
   it('reaches a box or an ellipse by its bounds, with the reach around them', () => {
     expect(markAt([rect('r', 20, 20, 40, 40)], 15, 40)?.id).toBe('r')
     expect(markAt([ellipse('e', 20, 20, 40, 40)], 70, 40)?.id).toBe('e')
@@ -330,7 +338,12 @@ describe('isTinyDrag', () => {
 
 describe('handleAt and turnBetween', () => {
   it('puts the rotate handle above the top edge, at its middle', () => {
-    expect(handleAt({ x: 0, y: 0, w: 100, h: 40 }, 20)).toEqual([50, -20])
+    expect(handleAt({ x: 0, y: 100, w: 100, h: 40 }, 20)).toEqual([50, 80])
+  })
+
+  it('keeps the rotate handle on the picture when there is no room above the box', () => {
+    // Above the box would be y = -20, off the picture: the handle goes below the bottom edge instead.
+    expect(handleAt({ x: 0, y: 0, w: 100, h: 40 }, 20)).toEqual([50, 60])
   })
 
   it('reads the angle a pointer turns through, seen from the centre', () => {

@@ -103,6 +103,8 @@ export function markAt(items: Annotation[], x: number, y: number): Annotation | 
     if ((a.kind === 'line' || a.kind === 'arrow') && a.from && a.to) {
       const [start, end] = points
       if (start && end && distanceToSegment(x, y, start, end) <= reach) return a
+      // A line or an arrow is picked by its segment only: its box would catch the empty corners of a diagonal.
+      continue
     }
     const b = markBounds(a)
     const inside = x >= b.x - reach && x <= b.x + b.w + reach && y >= b.y - reach && y <= b.y + b.h + reach
@@ -142,9 +144,13 @@ export function marqueeIds(items: Annotation[], from: Point, to: Point): string[
     .map((a) => a.id)
 }
 
-/** The rotate handle: above the top edge of the box, at its middle, `gap` away. */
+/**
+ * The rotate handle: above the top edge of the box, at its middle, `gap` away. Near the top edge of the
+ * picture there is no room above, so the handle goes below the box instead, where it stays on the picture.
+ */
 export function handleAt(box: Box, gap: number): Point {
-  return [box.x + box.w / 2, box.y - gap]
+  const above = box.y - gap
+  return [box.x + box.w / 2, above >= 0 ? above : box.y + box.h + gap]
 }
 
 /** The angle a point sits at, seen from `centre`. */

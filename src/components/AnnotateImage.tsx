@@ -409,7 +409,8 @@ export function AnnotateImage({
   }
 
   const onPointerDown = (e: PointerEvent<HTMLCanvasElement>) => {
-    if (!bitmap || busy) return
+    // A second pointer during a gesture (a second finger) is ignored: the first gesture owns the picture.
+    if (!bitmap || busy || gesture.current) return
     const point = at(e)
     if (tool === 'select') return startSelect(e, point)
     if (tool === 'note') {
@@ -431,7 +432,9 @@ export function AnnotateImage({
         setMarquee([g.start, p])
         return
       }
-      if (g.mode === 'move') {
+      // A press that has not moved past the click reach is a pick on release: it changes nothing.
+      if (isTinyDrag(g.start, p)) g.next = null
+      else if (g.mode === 'move') {
         const dx = p[0] - g.start[0]
         const dy = p[1] - g.start[1]
         g.next = g.base.map((a) => (g.ids.has(a.id) ? translateMark(a, dx, dy) : a))
@@ -537,7 +540,8 @@ export function AnnotateImage({
   // before the dialog would close, and the other keys act unless a field has the focus, which keeps
   // its own typing and undo.
   const onKeyDown = (e: globalThis.KeyboardEvent) => {
-    if (busy) return
+    // A key pressed during a pointer gesture waits: the gesture commits its own step on release.
+    if (busy || gesture.current) return
     if (e.key === 'Escape') {
       if (!picked.length) return
       e.preventDefault()
