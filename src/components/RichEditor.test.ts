@@ -248,6 +248,27 @@ describe('RichEditor styles on a partial selection', () => {
     ).toBe('## a\n\n## Hello brave\n\n-  world')
   })
 
+  it('keeps a nested list in its item when a numbered item is turned into a bullet item', () => {
+    // The whole text of "a" is selected: the item becomes a bullet item and "- b" stays nested in it.
+    expect(
+      after('1. a\n   - b', 3, 4, (e) => toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList')),
+    ).toBe('- a\n  - b')
+  })
+
+  it('takes the block of a toggle-off out of the item and no further, when the selection runs into the nested item', () => {
+    expect(
+      after('- one two\n  - nested three\n- last', 3, 22, (e) =>
+        toggleBlock(e, (c) => c.toggleBulletList(), 'bulletList'),
+      ),
+    ).toBe('one two\n\nnested t\n\n- hree\n\n- last')
+  })
+
+  it('applies a heading to the paragraph a selection across a paragraph break starts in, and no other', () => {
+    expect(
+      after('one two\n\nthree', 8, 10, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 }))),
+    ).toBe('## one two\n\nthree')
+  })
+
   it('leaves a collapsed caret on its whole paragraph, as before', () => {
     expect(after(sentence, 7, 7, (e) => toggleBlock(e, (c) => c.toggleHeading({ level: 2 })))).toBe(
       '## Hello brave world',

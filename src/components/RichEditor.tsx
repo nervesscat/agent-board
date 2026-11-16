@@ -4,6 +4,7 @@ import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { TableKit } from '@tiptap/extension-table'
 import { Placeholder } from '@tiptap/extensions'
 import { Markdown } from '@tiptap/markdown'
+import { type NodeType, type ResolvedPos } from '@tiptap/pm/model'
 import { TextSelection, type Transaction } from '@tiptap/pm/state'
 import { liftTarget } from '@tiptap/pm/transform'
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
@@ -221,8 +222,8 @@ export type Keep = { list?: string; once?: boolean }
  * only touches at its edge (one that starts where the selection ends) is left alone. A collapsed caret is
  * left alone, and so is a selection that is not text.
  */
-export function narrowBlocks(tr: Transaction, keep: Keep = {}): boolean {
-  if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return true
+export function narrowBlocks(tr: Transaction, keep: Keep = {}): { converted: boolean } {
+  if (!(tr.selection instanceof TextSelection) || tr.selection.empty) return { converted: false }
   const { from, to } = tr.selection
   // Both checks read the document before either split, so they are about the same paragraphs.
   const inside = (pos: number) => {
@@ -247,16 +248,27 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): boolean {
     if (contentStart < end && contentEnd > start) blocks.push({ pos, size: node.nodeSize, contentEnd })
     return false
   })
-  if (!blocks.length) return true
-  // From the last block back, so each lift leaves the positions of the blocks before it as they are.
-  for (let i = blocks.length - 1; i >= 0; i--) {
+  if (!blocks.length) return { converted: false }
+  const listType = keep.list ? tr.doc.type.schema.nodes[keep.list] : undefined
+  let converted = false
+  // From the first block on. A block's lift leaves the blocks before it where they are, and the blocks
+  // after it are found again by mapping their positions through every step since `mark`.
+  for (let i = 0; i < blocks.length; i++) {
     const { size } = blocks[i]
-    let pos = blocks[i].pos
+    let pos = tr.mapping.slice(mark).map(blocks[i].pos, 1)
+    const $pos = tr.doc.resolve(pos)
+    if (listType && !keep.once && isWholeItemOf(tr, $pos, size, keep.list)) {
+      // The item is only this block and nested lists: the item itself moves into a list of the style's
+      // type, its nested lists stay inside it.
+      convertItemTo(tr, $pos.before(), listType)
+      converted = true
+      continue
+    }
     // Out of the list items it sits in, the innermost first, so a block of a nested list ends up outside the lists.
     for (;;) {
-      const $pos = tr.doc.resolve(pos)
-      if (!listItemTypes.includes($pos.parent.type.name)) break
-      if ($pos.node($pos.depth - 1).type.name === keep.list) break
+      const $inner = tr.doc.resolve(pos)
+      if (!listItemTypes.includes($inner.parent.type.name)) break
+      if ($inner.node($inner.depth - 1).type.name === keep.list) break
       const next = liftOutOfItem(tr, pos, size)
       if (next === null) break
       pos = next
@@ -271,7 +283,40 @@ export function narrowBlocks(tr: Transaction, keep: Keep = {}): boolean {
       map.map(blocks[blocks.length - 1].contentEnd, -1),
     ),
   )
-  return true
+  return { converted }
+}
+
+/**
+ * Moves the list item at `itemPos` into a list of `listType` of its own, in its place: its list is split
+ * around it, and only that piece changes type. Its nested lists stay inside it.
+ */
+function convertItemTo(tr: Transaction, itemPos: number, listType: NodeType): void {
+  const $item = tr.doc.resolve(itemPos)
+  const list = $item.parent
+  const index = $item.index()
+  const size = $item.nodeAfter?.nodeSize ?? 0
+  let p = itemPos
+  if (index > 0) {
+    tr.split(p, 1)
+    p += 2 // the split put a closing and an opening token of the list in front of the item
+  }
+  if (index < list.childCount - 1) tr.split(p + size, 1)
+  tr.setNodeMarkup(tr.doc.resolve(p).before(), listType)
+}
+
+/**
+ * True when the item at `$pos` (a block of `size` at its start) is that block and nested lists of `list`'s
+ * kind and no other text: the whole item is what the style applies to, and the item is `listItem`.
+ */
+function isWholeItemOf(tr: Transaction, $pos: ResolvedPos, size: number, list: string | undefined): boolean {
+  const item = $pos.parent
+  if (item.type.name !== 'listItem' || $pos.index() !== 0 || !list) return false
+  if (item.childCount < 2 || item.child(0).nodeSize !== size || !item.child(0).isTextblock) return false
+  for (let i = 1; i < item.childCount; i++) {
+    const name = item.child(i).type.name
+    if (name !== 'bulletList' && name !== 'orderedList') return false
+  }
+  return $pos.node($pos.depth - 1).type.name !== list && tr.doc.type.schema.nodes[list] !== undefined
 }
 
 /**
@@ -296,19 +341,27 @@ export function toggleBlock(
   toggle: (chain: ChainedCommands) => ChainedCommands,
   list?: 'bulletList' | 'orderedList' | 'taskList',
 ) {
-  if (editor.state.selection.empty) {
+  const { from, to } = editor.state.selection
+  if (editor.state.selection.empty || editor.state.doc.textBetween(from, to).length === 0) {
+    // No character is selected (a caret, or a selection that only crosses a paragraph break): the style
+    // goes on the paragraph the selection starts in, as for a caret.
+    editor.chain().focus().setTextSelection(from).run()
     toggle(editor.chain().focus()).run()
     return
   }
   // The narrowing is a transaction of its own: the commands of one chain read the state from before it.
   const wasOn = list !== undefined && innermostList(editor) === list
   const keep: Keep = list === undefined ? {} : wasOn ? { once: true } : { list }
+  let converted = false
   editor
     .chain()
     .focus()
-    .command(({ tr }) => narrowBlocks(tr, keep))
+    .command(({ tr }) => {
+      converted = narrowBlocks(tr, keep).converted
+      return true
+    })
     .run()
-  if (wasOn) return
+  if (wasOn || converted) return
   if (list && innermostList(editor)) {
     // The selected text is still inside another list (a bullet item in a numbered one): the list is made
     // around it, nested there. A toggle would take it for the outer list and undo that list instead.
