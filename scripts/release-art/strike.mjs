@@ -336,7 +336,7 @@ function makeRun(random, options) {
 export function planPiece(version, themes, seed) {
   const random = mulberry32(seed)
   const lead = leadingTheme(themes)
-  const { hands, precision, wayfinding, momentum, density } = themes
+  const { hands, precision, momentum, density } = themes
 
   // How true the press is: a release about precision registers every strike; a release about many
   // hands or about long work lets the block wander.
