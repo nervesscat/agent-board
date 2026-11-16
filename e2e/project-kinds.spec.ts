@@ -1,5 +1,9 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 import type { APIRequestContext } from '@playwright/test'
 
+import { e2eEnv } from './env'
 import { expect, ok, test } from './fixtures'
 
 /** A project of the given kinds, with no repo of its own. */
@@ -96,4 +100,18 @@ test('a ticket of a project with no software kind shows no git panels, and softw
   await page.reload()
   await expect(details.getByText('Base branch', { exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible()
+})
+
+test('a project with no software kind has a plain work folder under the data folder; software has none', async ({
+  human,
+}) => {
+  const music = await createProject(human, `Folder ${Date.now()}`, ['music'])
+  const row = await ok<{ workFolder: string | null }>(human.get(`/api/projects/${music.id}`))
+  expect(row.workFolder).toBe(path.join(e2eEnv().dataDir, 'projects', String(music.id)))
+  expect(fs.statSync(row.workFolder!).isDirectory()).toBe(true)
+  expect(fs.existsSync(path.join(row.workFolder!, '.git'))).toBe(false)
+
+  const software = await createProject(human, 'Folder software')
+  const soft = await ok<{ workFolder: string | null }>(human.get(`/api/projects/${software.id}`))
+  expect(soft.workFolder).toBeNull()
 })

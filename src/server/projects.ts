@@ -4,7 +4,7 @@ import { asc, count, eq, isNull, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { db, schema } from '#/db'
-import { cleanKinds, DEFAULT_KINDS, type Kind, presetPhases } from '#/lib/kinds'
+import { cleanKinds, DEFAULT_KINDS, hasGitSide, type Kind, presetPhases } from '#/lib/kinds'
 import { LAYOUT_AREAS, LAYOUT_ELEMENTS, mergeLayout } from '#/lib/layout'
 import { MAX_TAG_LENGTH, cleanSuggestions, matchTags, tagChoices, usedTags } from '#/lib/tags'
 import { logActivity } from './activity'
@@ -15,6 +15,7 @@ import { listNotes } from './notes'
 import { listAgents } from './projectAgents'
 import { listRepos } from './repos'
 import { listStages } from './stages'
+import { ensureProjectWorkFolder } from './workFolder'
 
 /**
  * The top-level phases a new ticket starts with when its project keeps no list of its own: the
@@ -86,8 +87,11 @@ export function getProject(id: number) {
  check of the tools on this machine the board runs (null before the first one ends).
  */
 export function getProjectFull(id: number) {
+  const project = getProject(id)
   return {
-    ...getProject(id),
+    ...project,
+    // Where the work of a project with no git side is kept: a plain folder, no repo.
+    workFolder: hasGitSide(project.kinds) ? null : ensureProjectWorkFolder(id),
     usedTags: projectUsedTags(id),
     repos: listRepos(id),
     stages: listStages(id),
